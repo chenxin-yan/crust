@@ -1,0 +1,24 @@
+{
+	"name": "@crust/core",
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@crust/config": "*",
+		"@types/bun": "latest",
+		"bunup": "^0.16.26"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}
