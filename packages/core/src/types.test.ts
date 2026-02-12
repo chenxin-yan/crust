@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type {
 	ArgDef,
 	ArgsDef,
+	CheckFlagAliasCollisions,
+	CheckVariadicArgs,
 	Command,
 	CommandContext,
 	CommandDef,
@@ -32,7 +34,7 @@ type Equal<A, B> =
 
 describe("InferArgs type inference", () => {
 	it("maps basic String arg to string | undefined", () => {
-		type Args = { name: { type: StringConstructor } };
+		type Args = readonly [{ name: "name"; type: StringConstructor }];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { name: string | undefined }>>;
 
@@ -42,7 +44,7 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps basic Number arg to number | undefined", () => {
-		type Args = { port: { type: NumberConstructor } };
+		type Args = readonly [{ name: "port"; type: NumberConstructor }];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { port: number | undefined }>>;
 
@@ -51,7 +53,7 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps basic Boolean arg to boolean | undefined", () => {
-		type Args = { flag: { type: BooleanConstructor } };
+		type Args = readonly [{ name: "flag"; type: BooleanConstructor }];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { flag: boolean | undefined }>>;
 
@@ -60,7 +62,9 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps required arg to non-optional type", () => {
-		type Args = { name: { type: StringConstructor; required: true } };
+		type Args = readonly [
+			{ name: "name"; type: StringConstructor; required: true },
+		];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { name: string }>>;
 
@@ -69,7 +73,9 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps arg with default to non-optional type", () => {
-		type Args = { port: { type: NumberConstructor; default: 3000 } };
+		type Args = readonly [
+			{ name: "port"; type: NumberConstructor; default: 3000 },
+		];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { port: number }>>;
 
@@ -78,7 +84,9 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps variadic arg to array type", () => {
-		type Args = { files: { type: StringConstructor; variadic: true } };
+		type Args = readonly [
+			{ name: "files"; type: StringConstructor; variadic: true },
+		];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { files: string[] }>>;
 
@@ -87,7 +95,9 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps variadic Number arg to number[]", () => {
-		type Args = { ports: { type: NumberConstructor; variadic: true } };
+		type Args = readonly [
+			{ name: "ports"; type: NumberConstructor; variadic: true },
+		];
 		type Result = InferArgs<Args>;
 		type _check = Expect<Equal<Result, { ports: number[] }>>;
 
@@ -96,12 +106,12 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("maps multiple args together", () => {
-		type Args = {
-			name: { type: StringConstructor; required: true };
-			port: { type: NumberConstructor; default: 3000 };
-			verbose: { type: BooleanConstructor };
-			files: { type: StringConstructor; variadic: true };
-		};
+		type Args = readonly [
+			{ name: "name"; type: StringConstructor; required: true },
+			{ name: "port"; type: NumberConstructor; default: 3000 },
+			{ name: "verbose"; type: BooleanConstructor },
+			{ name: "files"; type: StringConstructor; variadic: true },
+		];
 		type Result = InferArgs<Args>;
 		type _check = Expect<
 			Equal<
@@ -199,6 +209,76 @@ describe("InferFlags type inference", () => {
 		type _check = Expect<Equal<Result, Record<string, never>>>;
 		expect(true).toBe(true);
 	});
+
+	it("maps multiple String flag to string[] | undefined", () => {
+		type Flags = { file: { type: StringConstructor; multiple: true } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { file: string[] | undefined }>>;
+
+		const val: Result = { file: undefined };
+		expect(val).toBeDefined();
+	});
+
+	it("maps multiple Number flag with required to number[]", () => {
+		type Flags = {
+			port: { type: NumberConstructor; multiple: true; required: true };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { port: number[] }>>;
+
+		const val: Result = { port: [80, 443] };
+		expect(val.port).toEqual([80, 443]);
+	});
+
+	it("maps multiple Boolean flag to boolean[] | undefined", () => {
+		type Flags = { verbose: { type: BooleanConstructor; multiple: true } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { verbose: boolean[] | undefined }>>;
+
+		const val: Result = { verbose: [true, true] };
+		expect(val).toBeDefined();
+	});
+
+	it("maps multiple flag with default to non-optional array type", () => {
+		type Flags = {
+			file: {
+				type: StringConstructor;
+				multiple: true;
+				default: ["default.ts"];
+			};
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { file: string[] }>>;
+
+		const val: Result = { file: ["default.ts"] };
+		expect(val.file).toEqual(["default.ts"]);
+	});
+
+	it("maps mixed multiple and non-multiple flags together", () => {
+		type Flags = {
+			file: { type: StringConstructor; multiple: true };
+			verbose: { type: BooleanConstructor };
+			port: { type: NumberConstructor; multiple: true; required: true };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					file: string[] | undefined;
+					verbose: boolean | undefined;
+					port: number[];
+				}
+			>
+		>;
+
+		const val: Result = {
+			file: undefined,
+			verbose: undefined,
+			port: [80],
+		};
+		expect(val).toBeDefined();
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -207,14 +287,15 @@ describe("InferFlags type inference", () => {
 
 describe("ArgDef interface", () => {
 	it("accepts valid arg definitions", () => {
-		const stringArg: ArgDef = { type: String };
-		const numberArg: ArgDef = { type: Number, default: 3000 };
+		const stringArg: ArgDef = { name: "str", type: String };
+		const numberArg: ArgDef = { name: "port", type: Number, default: 3000 };
 		const boolArg: ArgDef = {
+			name: "flag",
 			type: Boolean,
 			description: "A flag",
 			required: true,
 		};
-		const variadicArg: ArgDef = { type: String, variadic: true };
+		const variadicArg: ArgDef = { name: "files", type: String, variadic: true };
 
 		expect(stringArg.type).toBe(String);
 		expect(numberArg.default).toBe(3000);
@@ -222,14 +303,14 @@ describe("ArgDef interface", () => {
 		expect(variadicArg.variadic).toBe(true);
 	});
 
-	it("allows ArgsDef record", () => {
-		const args: ArgsDef = {
-			name: { type: String, required: true },
-			port: { type: Number, default: 3000 },
-			files: { type: String, variadic: true },
-		};
+	it("allows ArgsDef array", () => {
+		const args: ArgsDef = [
+			{ name: "name", type: String, required: true },
+			{ name: "port", type: Number, default: 3000 },
+			{ name: "files", type: String, variadic: true },
+		];
 
-		expect(Object.keys(args)).toEqual(["name", "port", "files"]);
+		expect(args.map((a) => a.name)).toEqual(["name", "port", "files"]);
 	});
 });
 
@@ -242,10 +323,12 @@ describe("FlagDef interface", () => {
 			required: true,
 		};
 		const numberFlag: FlagDef = { type: Number, default: 8080 };
+		const multipleFlag: FlagDef = { type: String, multiple: true };
 
 		expect(boolFlag.alias).toBe("v");
 		expect(stringFlag.required).toBe(true);
 		expect(numberFlag.default).toBe(8080);
+		expect(multipleFlag.multiple).toBe(true);
 	});
 
 	it("allows FlagsDef record", () => {
@@ -290,9 +373,7 @@ describe("CommandDef interface", () => {
 	it("accepts a full definition with args, flags, and lifecycle hooks", () => {
 		const cmd: CommandDef = {
 			meta: { name: "serve", description: "Start server" },
-			args: {
-				path: { type: String, required: true },
-			},
+			args: [{ name: "path", type: String, required: true }],
 			flags: {
 				port: { type: Number, default: 3000 },
 				verbose: { type: Boolean, alias: "v" },
@@ -347,7 +428,9 @@ describe("CommandContext interface", () => {
 	});
 
 	it("infers typed args and flags from generics", () => {
-		type MyArgs = { name: { type: StringConstructor; required: true } };
+		type MyArgs = readonly [
+			{ name: "name"; type: StringConstructor; required: true },
+		];
 		type MyFlags = { verbose: { type: BooleanConstructor } };
 
 		const ctx: CommandContext<MyArgs, MyFlags> = {
@@ -365,5 +448,124 @@ describe("CommandContext interface", () => {
 
 		expect(ctx.args.name).toBe("hello");
 		expect(ctx.flags.verbose).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CheckFlagAliasCollisions type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("CheckFlagAliasCollisions type inference", () => {
+	it("resolves to unknown when no aliases collide with flag names", () => {
+		type Flags = {
+			output: { type: StringConstructor; alias: ["o"] };
+			verbose: { type: BooleanConstructor; alias: "v" };
+		};
+		type Result = CheckFlagAliasCollisions<Flags>;
+		type _check = Expect<Equal<Result, unknown>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to unknown when no aliases are defined", () => {
+		type Flags = {
+			verbose: { type: BooleanConstructor };
+			port: { type: NumberConstructor };
+		};
+		type Result = CheckFlagAliasCollisions<Flags>;
+		type _check = Expect<Equal<Result, unknown>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to error tuple when a long alias shadows a flag name", () => {
+		type Flags = {
+			out: { type: StringConstructor };
+			output: { type: StringConstructor; alias: ["o", "out"] };
+		};
+		type Result = CheckFlagAliasCollisions<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				[
+					"ERROR: Flag alias collides with a flag name. Colliding name(s):",
+					"out",
+				]
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to error tuple when two flags share the same alias", () => {
+		type Flags = {
+			verbose: { type: BooleanConstructor; alias: "v" };
+			version: { type: BooleanConstructor; alias: "v" };
+		};
+		type Result = CheckFlagAliasCollisions<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				[
+					"ERROR: Duplicate flag alias across different flags. Colliding alias(es):",
+					"v",
+				]
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to unknown for single-char aliases that don't match flag names", () => {
+		type Flags = {
+			verbose: { type: BooleanConstructor; alias: "v" };
+			port: { type: NumberConstructor; alias: "p" };
+			output: { type: StringConstructor; alias: "o" };
+		};
+		type Result = CheckFlagAliasCollisions<Flags>;
+		type _check = Expect<Equal<Result, unknown>>;
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CheckVariadicArgs type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("CheckVariadicArgs type inference", () => {
+	it("resolves to unknown when variadic is the last arg", () => {
+		type Args = readonly [
+			{ name: "name"; type: StringConstructor; required: true },
+			{ name: "files"; type: StringConstructor; variadic: true },
+		];
+		type Result = CheckVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, unknown>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to unknown when no args are variadic", () => {
+		type Args = readonly [
+			{ name: "name"; type: StringConstructor; required: true },
+			{ name: "port"; type: NumberConstructor; default: 3000 },
+		];
+		type Result = CheckVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, unknown>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to error string when a non-last arg is variadic", () => {
+		type Args = readonly [
+			{ name: "files"; type: StringConstructor; variadic: true },
+			{ name: "name"; type: StringConstructor; required: true },
+		];
+		type Result = CheckVariadicArgs<Args>;
+		type _check = Expect<
+			Equal<Result, "ERROR: Only the last positional argument can be variadic">
+		>;
+
+		expect(true).toBe(true);
 	});
 });

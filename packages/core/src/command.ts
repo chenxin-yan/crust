@@ -1,4 +1,12 @@
-import type { ArgsDef, Command, CommandDef, FlagsDef } from "./types.ts";
+import { CrustError } from "./errors.ts";
+import type {
+	ArgsDef,
+	CheckFlagAliasCollisions,
+	CheckVariadicArgs,
+	Command,
+	CommandDef,
+	FlagsDef,
+} from "./types.ts";
 
 /**
  * Define a CLI command with full type inference.
@@ -9,15 +17,15 @@ import type { ArgsDef, Command, CommandDef, FlagsDef } from "./types.ts";
  *
  * @param config - The command definition config object
  * @returns A frozen, readonly Command object
- * @throws {Error} If `meta.name` is missing or empty
+ * @throws {CrustError} `DEFINITION` if `meta.name` is missing or empty
  *
  * @example
  * ```ts
  * const cmd = defineCommand({
  *   meta: { name: "serve", description: "Start dev server" },
- *   args: {
- *     port: { type: Number, description: "Port number", default: 3000 },
- *   },
+ *   args: [
+ *     { name: "port", type: Number, description: "Port number", default: 3000 },
+ *   ],
  *   flags: {
  *     verbose: { type: Boolean, description: "Enable verbose logging", alias: "v" },
  *   },
@@ -31,10 +39,16 @@ import type { ArgsDef, Command, CommandDef, FlagsDef } from "./types.ts";
 export function defineCommand<
 	const A extends ArgsDef = ArgsDef,
 	const F extends FlagsDef = FlagsDef,
->(config: CommandDef<A, F>): Command<A, F> {
+>(
+	config: CommandDef<A, F> & {
+		args?: A & CheckVariadicArgs<A>;
+		flags?: F & CheckFlagAliasCollisions<F>;
+	},
+): Command<A, F> {
 	// Validate required meta.name
 	if (!config.meta.name.trim()) {
-		throw new Error(
+		throw new CrustError(
+			"DEFINITION",
 			"defineCommand: meta.name is required and must be a non-empty string",
 		);
 	}
@@ -46,9 +60,7 @@ export function defineCommand<
 		...config,
 		meta: { ...config.meta },
 		...(config.args && {
-			args: Object.fromEntries(
-				Object.entries(config.args).map(([k, v]) => [k, { ...v }]),
-			) as A,
+			args: config.args.map((def) => ({ ...def })) as unknown as A,
 		}),
 		...(config.flags && {
 			flags: Object.fromEntries(

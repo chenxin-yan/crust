@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defineCommand } from "./command.ts";
+import { CrustError } from "./errors.ts";
 import type { AnyCommand, CommandContext } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -39,20 +40,26 @@ describe("defineCommand", () => {
 		expect(cmd.meta.usage).toBe("serve [options]");
 	});
 
-	it("throws on missing meta.name", () => {
-		expect(() => {
-			defineCommand({
-				meta: { name: "" },
-			});
-		}).toThrow("meta.name is required");
+	it("throws CrustError with DEFINITION code on missing meta.name", () => {
+		try {
+			defineCommand({ meta: { name: "" } });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("meta.name is required");
+		}
 	});
 
-	it("throws on whitespace-only meta.name", () => {
-		expect(() => {
-			defineCommand({
-				meta: { name: "   " },
-			});
-		}).toThrow("meta.name is required");
+	it("throws CrustError with DEFINITION code on whitespace-only meta.name", () => {
+		try {
+			defineCommand({ meta: { name: "   " } });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("meta.name is required");
+		}
 	});
 
 	it("run callback receives correct context shape", () => {
@@ -115,17 +122,22 @@ describe("defineCommand", () => {
 	it("preserves args definitions", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: {
-				file: { type: String, required: true, description: "File path" },
-				count: { type: Number, default: 1 },
-			},
+			args: [
+				{
+					name: "file",
+					type: String,
+					required: true,
+					description: "File path",
+				},
+				{ name: "count", type: Number, default: 1 },
+			],
 		});
 
 		expect(cmd.args).toBeDefined();
-		expect(cmd.args?.file.type).toBe(String);
-		expect(cmd.args?.file.required).toBe(true);
-		expect(cmd.args?.count.type).toBe(Number);
-		expect(cmd.args?.count.default).toBe(1);
+		expect(cmd.args?.[0].type).toBe(String);
+		expect(cmd.args?.[0].required).toBe(true);
+		expect(cmd.args?.[1].type).toBe(Number);
+		expect(cmd.args?.[1].default).toBe(1);
 	});
 
 	it("preserves flags definitions", () => {
@@ -195,13 +207,14 @@ describe("defineCommand", () => {
 	it("does not mutate the original config", () => {
 		const config = {
 			meta: { name: "test", description: "original" },
-			args: {
-				file: {
+			args: [
+				{
+					name: "file" as const,
 					type: String as StringConstructor,
 					required: true as const,
 					description: "original arg",
 				},
-			},
+			],
 			flags: {
 				verbose: {
 					type: Boolean as BooleanConstructor,
@@ -224,8 +237,9 @@ describe("defineCommand", () => {
 		config.flags.verbose.description = "mutated flag";
 		expect(cmd.flags?.verbose.description).toBe("original flag");
 
-		config.args.file.description = "mutated arg";
-		expect(cmd.args?.file.description).toBe("original arg");
+		const firstArg = config.args[0];
+		if (firstArg) firstArg.description = "mutated arg";
+		expect(cmd.args?.[0]?.description).toBe("original arg");
 	});
 });
 
@@ -237,10 +251,15 @@ describe("defineCommand type inference", () => {
 	it("infers correct types for args and flags in run()", () => {
 		const cmd = defineCommand({
 			meta: { name: "serve" },
-			args: {
-				port: { type: Number, description: "Port number", default: 3000 },
-				host: { type: String, required: true },
-			},
+			args: [
+				{
+					name: "port",
+					type: Number,
+					description: "Port number",
+					default: 3000,
+				},
+				{ name: "host", type: String, required: true },
+			],
 			flags: {
 				verbose: { type: Boolean, description: "Verbose logging", alias: "v" },
 				output: { type: String, default: "./dist" },
@@ -274,9 +293,7 @@ describe("defineCommand type inference", () => {
 	it("infers variadic args as arrays", () => {
 		defineCommand({
 			meta: { name: "test" },
-			args: {
-				files: { type: String, variadic: true },
-			},
+			args: [{ name: "files", type: String, variadic: true }],
 			run({ args }) {
 				type _checkFiles = Expect<Equal<typeof args.files, string[]>>;
 				expect(Array.isArray(args.files)).toBe(true);
@@ -287,9 +304,7 @@ describe("defineCommand type inference", () => {
 	it("infers optional args as T | undefined", () => {
 		defineCommand({
 			meta: { name: "test" },
-			args: {
-				name: { type: String },
-			},
+			args: [{ name: "name", type: String }],
 			flags: {
 				debug: { type: Boolean },
 			},
@@ -307,14 +322,12 @@ describe("defineCommand type inference", () => {
 		defineCommand({
 			meta: { name: "test" },
 			run({ args, flags }) {
-				// When args/flags are omitted, A defaults to ArgsDef (broad record),
-				// so InferArgs<ArgsDef> = { [x: string]: string | number | boolean | undefined }
-				type _checkArgs = Expect<
-					Equal<
-						typeof args,
-						{ [x: string]: string | number | boolean | undefined }
-					>
-				>;
+				// When args are omitted, A defaults to ArgsDef (readonly ArgDef[]),
+				// InferArgsTuple on a non-tuple array resolves to {}, so InferArgs<ArgsDef> = {}
+				// biome-ignore lint/complexity/noBannedTypes: InferArgsTuple on non-const ArgsDef resolves to {}
+				type _checkArgs = Expect<Equal<typeof args, {}>>;
+				// When flags are omitted, F defaults to FlagsDef (broad record),
+				// so InferFlags<FlagsDef> = { [x: string]: string | number | boolean | undefined }
 				type _checkFlags = Expect<
 					Equal<
 						typeof flags,
@@ -329,9 +342,7 @@ describe("defineCommand type inference", () => {
 	it("returns Command type that preserves generic params", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: {
-				name: { type: String, required: true },
-			},
+			args: [{ name: "name", type: String, required: true }],
 			flags: {
 				port: { type: Number, default: 3000 },
 			},

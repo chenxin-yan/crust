@@ -30,21 +30,27 @@ type ResolvePrimitive<T extends TypeConstructor> = T extends StringConstructor
 /**
  * Defines a single positional argument for a CLI command.
  *
+ * Args are defined as an ordered tuple so that positional ordering is explicit
+ * and the type system can enforce that only the last arg may be variadic.
+ *
  * @example
  * ```ts
- * const args = {
- *   port: { type: Number, description: "Port number", default: 3000 },
- *   name: { type: String, required: true },
- *   files: { type: String, variadic: true },
- * } satisfies ArgsDef;
+ * const args = [
+ *   { name: "port", type: Number, description: "Port number", default: 3000 },
+ *   { name: "name", type: String, required: true },
+ *   { name: "files", type: String, variadic: true },
+ * ] as const satisfies ArgsDef;
  * ```
  */
 export interface ArgDef<
+	N extends string = string,
 	T extends TypeConstructor = TypeConstructor,
 	D extends ResolvePrimitive<T> | undefined = ResolvePrimitive<T> | undefined,
 	R extends boolean = boolean,
 	V extends boolean = boolean,
 > {
+	/** The argument name (used as the key in the parsed result and in help text) */
+	name: N;
 	/** Constructor function indicating the argument's type: `String`, `Number`, or `Boolean` */
 	type: T;
 	/** Human-readable description for help text */
@@ -57,8 +63,8 @@ export interface ArgDef<
 	variadic?: V;
 }
 
-/** Record mapping argument names to their definitions */
-export type ArgsDef = Record<string, ArgDef>;
+/** Ordered tuple of positional argument definitions */
+export type ArgsDef = readonly ArgDef[];
 
 // ────────────────────────────────────────────────────────────────────────────
 // FlagDef — Named flag definition
@@ -77,23 +83,122 @@ export type ArgsDef = Record<string, ArgDef>;
  */
 export interface FlagDef<
 	T extends TypeConstructor = TypeConstructor,
-	D extends ResolvePrimitive<T> | undefined = ResolvePrimitive<T> | undefined,
 	R extends boolean = boolean,
+	M extends boolean = boolean,
 > {
 	/** Constructor function indicating the flag's type: `String`, `Number`, or `Boolean` */
 	type: T;
 	/** Human-readable description for help text */
 	description?: string;
-	/** Default value when the flag is not provided */
-	default?: D;
+	/** Default value when the flag is not provided. Must be an array when `multiple: true`. */
+	default?: M extends true ? ResolvePrimitive<T>[] : ResolvePrimitive<T>;
 	/** Whether this flag must be provided (errors if missing) */
 	required?: R;
 	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`) */
 	alias?: string | string[];
+	/** Whether this flag can be provided multiple times, collecting values into an array */
+	multiple?: M;
 }
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flag alias collision detection (compile-time)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Extract alias string literals from a single FlagDef */
+type ExtractAliases<F extends FlagDef> = F extends { alias: infer A }
+	? A extends string
+		? A
+		: A extends readonly string[]
+			? A[number]
+			: never
+	: never;
+
+/**
+ * Collects all alias literals across a FlagsDef, then intersects with `keyof F`.
+ * Resolves to `never` when no alias matches a flag name, or the colliding
+ * name(s) when a match exists.
+ */
+type FlagAliasNameCollision<F extends FlagsDef> = {
+	[K in keyof F & string]: ExtractAliases<F[K]>;
+}[keyof F & string] &
+	keyof F;
+
+/**
+ * Collects aliases from every flag *except* flag K.
+ * Used to detect alias→alias duplicates across different flags.
+ */
+type AliasesExcluding<F extends FlagsDef, K extends keyof F & string> = {
+	[J in Exclude<keyof F & string, K>]: ExtractAliases<F[J]>;
+}[Exclude<keyof F & string, K>];
+
+/**
+ * Resolves to the alias literal(s) that appear in more than one flag's
+ * alias list, or `never` when no duplicate aliases exist.
+ */
+type FlagAliasAliasCollision<F extends FlagsDef> = {
+	[K in keyof F & string]: ExtractAliases<F[K]> & AliasesExcluding<F, K>;
+}[keyof F & string];
+
+/**
+ * Compile-time check that no flag alias collides with another flag's name
+ * or another flag's alias.
+ *
+ * - Resolves to `unknown` (no-op intersection) when no collision exists.
+ * - Resolves to a descriptive error tuple when a collision is found,
+ *   causing a type error on the `flags` property.
+ */
+export type CheckFlagAliasCollisions<F extends FlagsDef> =
+	FlagAliasNameCollision<F> extends never
+		? FlagAliasAliasCollision<F> extends never
+			? unknown
+			: [
+					"ERROR: Duplicate flag alias across different flags. Colliding alias(es):",
+					FlagAliasAliasCollision<F>,
+				]
+		: [
+				"ERROR: Flag alias collides with a flag name. Colliding name(s):",
+				FlagAliasNameCollision<F>,
+			];
+
+// ────────────────────────────────────────────────────────────────────────────
+// Variadic arg validation (compile-time)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Checks whether any element in `Init` (all elements except the last) has
+ * `variadic: true`. Used by {@link CheckVariadicArgs} to ensure only the
+ * last positional arg can be variadic.
+ */
+type InitHasVariadic<T extends readonly ArgDef[]> = T extends readonly [
+	infer Head,
+	...infer Tail extends readonly ArgDef[],
+]
+	? Head extends { variadic: true }
+		? true
+		: InitHasVariadic<Tail>
+	: false;
+
+/**
+ * Compile-time check that only the last positional arg has `variadic: true`.
+ *
+ * Since args are now an ordered tuple, we can split it into `[...Init, Last]`
+ * and verify that no element in `Init` is variadic.
+ *
+ * - Resolves to `unknown` (no-op intersection) when the constraint is satisfied.
+ * - Resolves to a descriptive error string when a non-last arg is variadic,
+ *   causing a type error on the `args` property.
+ */
+export type CheckVariadicArgs<A extends ArgsDef> = A extends readonly [
+	...infer Init extends readonly ArgDef[],
+	ArgDef,
+]
+	? InitHasVariadic<Init> extends true
+		? "ERROR: Only the last positional argument can be variadic"
+		: unknown
+	: unknown;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
@@ -118,33 +223,57 @@ type InferArgValue<A extends ArgDef> =
 				: ResolvePrimitive<A["type"]> | undefined;
 
 /**
- * Maps a full ArgsDef record to resolved arg types.
+ * Recursively converts an ArgsDef tuple into a named object type.
+ *
+ * Each element's `name` literal becomes a key, and its value is resolved
+ * via {@link InferArgValue}. Uses intersection + `Simplify` to flatten.
+ */
+type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
+	infer Head extends ArgDef,
+	...infer Tail extends readonly ArgDef[],
+]
+	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
+	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
+		{};
+
+/** Flattens an intersection of objects into a single object type for readability */
+type Simplify<T> = { [K in keyof T]: T[K] };
+
+/**
+ * Maps an ArgsDef tuple to resolved arg types keyed by each arg's `name`.
  *
  * @example
  * ```ts
- * type Result = InferArgs<{
- *   port: { type: NumberConstructor, default: 3000 };
- *   name: { type: StringConstructor, required: true };
- *   files: { type: StringConstructor, variadic: true };
- * }>;
+ * type Result = InferArgs<readonly [
+ *   { name: "port"; type: NumberConstructor; default: 3000 },
+ *   { name: "name"; type: StringConstructor; required: true },
+ *   { name: "files"; type: StringConstructor; variadic: true },
+ * ]>;
  * // Result = { port: number; name: string; files: string[] }
  * ```
  */
 export type InferArgs<A> = A extends ArgsDef
-	? { [K in keyof A]: InferArgValue<A[K]> }
+	? Simplify<InferArgsTuple<A>>
 	: Record<string, never>;
 
 /**
  * Infer the resolved type for a single FlagDef:
  *
+ * - **multiple** → wraps the resolved type in an array
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
-type InferFlagValue<F extends FlagDef> = F extends { required: true }
-	? ResolvePrimitive<F["type"]>
-	: F extends { default: ResolvePrimitive<F["type"]> }
+type InferFlagValue<F extends FlagDef> = F extends { multiple: true }
+	? F extends { required: true }
+		? ResolvePrimitive<F["type"]>[]
+		: F extends { default: ResolvePrimitive<F["type"]>[] }
+			? ResolvePrimitive<F["type"]>[]
+			: ResolvePrimitive<F["type"]>[] | undefined
+	: F extends { required: true }
 		? ResolvePrimitive<F["type"]>
-		: ResolvePrimitive<F["type"]> | undefined;
+		: F extends { default: ResolvePrimitive<F["type"]> }
+			? ResolvePrimitive<F["type"]>
+			: ResolvePrimitive<F["type"]> | undefined;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.
@@ -177,24 +306,40 @@ export interface CommandMeta {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// ParsedResult — Output of parseArgs
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The result of parsing argv against a command's arg/flag definitions.
+ *
+ * Generic parameters flow from the command definition to provide
+ * strongly-typed `args` and `flags` objects.
+ */
+export interface ParsedResult<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+> {
+	/** Resolved positional arguments, keyed by arg name */
+	args: InferArgs<A>;
+	/** Resolved flags, keyed by flag name */
+	flags: InferFlags<F>;
+	/** Raw arguments that appeared after the `--` separator */
+	rawArgs: string[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // CommandContext — Runtime context passed to lifecycle hooks
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
  * The runtime context object passed to `setup()`, `run()`, and `cleanup()` hooks.
  *
- * Contains the parsed args/flags, the raw argv, and a reference to the resolved command.
+ * Extends {@link ParsedResult} with a back-reference to the resolved command.
  */
 export interface CommandContext<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
-> {
-	/** Parsed positional arguments, typed according to the command's arg definitions */
-	args: InferArgs<A>;
-	/** Parsed flags, typed according to the command's flag definitions */
-	flags: InferFlags<F>;
-	/** The original argv array (unparsed) */
-	rawArgs: string[];
+> extends ParsedResult<A, F> {
 	/** The resolved command that is being executed */
 	cmd: AnyCommand;
 }
