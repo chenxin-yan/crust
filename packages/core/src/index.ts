@@ -1,10 +1,13 @@
 // command
 export { defineCommand } from "./command.ts";
-export type { CrustErrorCode } from "./errors.ts";
-
 // errors
+export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 // parser
+// Help
+export { formatHelp, formatVersion } from "./help.ts";
+
+// Parser
 export { parseArgs } from "./parser.ts";
 
 // types
