@@ -340,8 +340,10 @@ export interface CommandContext<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 > extends ParsedResult<A, F> {
+	/** Parsed global flags from RunOptions.globalFlags */
+	globalFlags: Record<string, unknown>;
 	/** The resolved command that is being executed */
-	cmd: AnyCommand;
+	cmd: CommandRef;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -358,14 +360,14 @@ export interface CommandDef<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 > {
-	/** Command metadata (name, version, description) */
+	/** Command metadata (name, description, usage) */
 	meta: CommandMeta;
 	/** Positional argument definitions */
 	args?: A;
 	/** Flag definitions */
 	flags?: F;
 	/** Named subcommands */
-	subCommands?: Record<string, AnyCommand>;
+	subCommands?: Record<string, CommandRef>;
 	/** Called before `run()` — useful for initialization */
 	setup?: (context: CommandContext<A, F>) => void | Promise<void>;
 	/** The main command handler */
@@ -390,18 +392,15 @@ export type Command<
 > = Readonly<CommandDef<A, F>>;
 
 /**
- * A type-erased command reference used in places where the exact arg/flag
- * generics don't matter (e.g. `cmd` back-reference, `subCommands` map).
- *
- * Includes only the non-callback properties to avoid generic variance issues
- * that arise from lifecycle hooks being contravariant on their context parameter.
+ * A structural command reference used where command metadata and tree shape are
+ * needed, but lifecycle callbacks and arg/flag generics are irrelevant.
  */
-export interface AnyCommand {
+export interface CommandRef {
 	readonly meta: CommandMeta;
 	readonly args?: ArgsDef;
 	readonly flags?: FlagsDef;
-	readonly subCommands?: Record<string, AnyCommand>;
-	readonly setup?: (context: never) => void | Promise<void>;
-	readonly run?: (context: never) => void | Promise<void>;
-	readonly cleanup?: (context: never) => void | Promise<void>;
+	readonly subCommands?: Record<string, CommandRef>;
 }
+
+// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
+export type AnyCommand = Command<any, any>;

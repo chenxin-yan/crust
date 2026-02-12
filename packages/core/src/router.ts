@@ -1,4 +1,4 @@
-import type { Command } from "./types.ts";
+import type { AnyCommand } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // ResolveResult — Output of resolveCommand
@@ -12,8 +12,7 @@ import type { Command } from "./types.ts";
  */
 export interface ResolveResult {
 	/** The resolved command (may be a subcommand of the original) */
-	// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-	resolved: Command<any, any>;
+	resolved: AnyCommand;
 	/** The remaining argv after subcommand names have been consumed */
 	argv: string[];
 	/** The command path for help text (e.g. ["crust", "generate", "command"]) */
@@ -111,14 +110,12 @@ function findSuggestions(input: string, candidates: string[]): string[] {
  * @throws {Error} When an unknown subcommand is given and the parent has no run()
  */
 export function resolveCommand(
-	// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-	command: Command<any, any>,
+	command: AnyCommand,
 	argv: string[],
 ): ResolveResult {
-	const path: string[] = [command.meta.name];
+	const path = [command.meta.name];
 
-	// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-	let current: Command<any, any> = command;
+	let current: AnyCommand = command;
 	let remainingArgv = argv;
 
 	while (remainingArgv.length > 0) {
@@ -128,17 +125,16 @@ export function resolveCommand(
 			break;
 		}
 
-		const candidate = remainingArgv[0] as string;
+		const candidate = remainingArgv[0];
 
-		// Skip if the candidate looks like a flag (starts with -)
-		if (candidate.startsWith("-")) {
+		// Skip if the candidate looks like a flag (starts with -) or doesn't exists
+		if (!candidate || candidate.startsWith("-")) {
 			break;
 		}
 
 		// Check if it matches a known subcommand
 		if (candidate in subCommands) {
-			// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-			current = subCommands[candidate] as Command<any, any>;
+			current = subCommands[candidate] as AnyCommand;
 			path.push(candidate);
 			remainingArgv = remainingArgv.slice(1);
 			continue;

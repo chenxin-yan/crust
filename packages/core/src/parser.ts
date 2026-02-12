@@ -9,6 +9,7 @@ import type {
 	Command,
 	FlagDef,
 	FlagsDef,
+	InferFlags,
 	ParsedResult,
 	TypeConstructor,
 } from "./types.ts";
@@ -214,13 +215,33 @@ function resolveFlags(
 	for (const [name, def] of Object.entries(flagsDef)) {
 		const parsedValue = canonical[name];
 
-		resolved[name] =
-			parsedValue !== undefined
-				? coerceFlagValue(name, def, parsedValue)
-				: applyDefaultOrThrow(def, `flag "--${name}"`);
+		if (parsedValue !== undefined) {
+			resolved[name] = coerceFlagValue(name, def, parsedValue);
+			continue;
+		}
+
+		resolved[name] = def.default ?? undefined;
 	}
 
 	return resolved;
+}
+
+/**
+ * Validate required flags against already-resolved flag values.
+ */
+export function validateRequiredFlags(
+	flagsDef: FlagsDef | undefined,
+	resolvedFlags: Record<string, unknown>,
+): void {
+	if (!flagsDef) return;
+
+	for (const [name, def] of Object.entries(flagsDef)) {
+		if (def.required === true && def.default === undefined) {
+			if (resolvedFlags[name] === undefined) {
+				throw new CrustError("VALIDATION", `Missing required flag "--${name}"`);
+			}
+		}
+	}
 }
 
 /**
@@ -337,6 +358,7 @@ export function parseArgs<
 
 	// ── Resolve flags and args ─────────────────────────────────────────
 	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
+	validateRequiredFlags(flagsDef, resolvedFlags);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and
@@ -347,4 +369,59 @@ export function parseArgs<
 		flags: resolvedFlags,
 		rawArgs,
 	} as ParsedResult<A, F>;
+}
+
+/**
+ * Parse and remove known global flags from argv.
+ *
+ * Unknown flags are preserved for command-level parsing.
+ *
+ * This function intentionally does NOT enforce required global flags.
+ * Use {@link validateRequiredFlags} later on the execution path.
+ */
+export function parseGlobalFlags<F extends FlagsDef = FlagsDef>(
+	flagsDef: F | undefined,
+	argv: string[],
+): { flags: InferFlags<F>; argv: string[] } {
+	if (!flagsDef || Object.keys(flagsDef).length === 0) {
+		return {
+			flags: {} as InferFlags<F>,
+			argv: [...argv],
+		};
+	}
+
+	const { options, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
+	const parsed = nodeParseArgs({
+		args: argv,
+		options,
+		strict: false,
+		allowPositionals: true,
+		allowNegative: true,
+		tokens: true,
+	});
+
+	const stripIndexes = new Set<number>();
+	if (parsed.tokens) {
+		for (const token of parsed.tokens) {
+			if (token.kind !== "option") continue;
+
+			const option = token;
+			const canonicalName = aliasToName[option.name] ?? option.name;
+			if (!(canonicalName in flagsDef)) continue;
+
+			stripIndexes.add(option.index);
+
+			if (option.value !== undefined && option.inlineValue === false) {
+				stripIndexes.add(option.index + 1);
+			}
+		}
+	}
+
+	const remainingArgv = argv.filter((_, index) => !stripIndexes.has(index));
+	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
+
+	return {
+		flags: resolvedFlags as InferFlags<F>,
+		argv: remainingArgv,
+	};
 }

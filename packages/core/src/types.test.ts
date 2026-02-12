@@ -419,6 +419,7 @@ describe("CommandContext interface", () => {
 		const ctx: CommandContext = {
 			args: {},
 			flags: {},
+			globalFlags: {},
 			rawArgs: ["--verbose"],
 			cmd: { meta: { name: "test" } },
 		};
@@ -436,6 +437,7 @@ describe("CommandContext interface", () => {
 		const ctx: CommandContext<MyArgs, MyFlags> = {
 			args: { name: "hello" },
 			flags: { verbose: true },
+			globalFlags: {},
 			rawArgs: [],
 			cmd: { meta: { name: "test" } },
 		};

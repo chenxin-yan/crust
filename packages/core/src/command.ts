@@ -44,7 +44,7 @@ export function defineCommand<
 		args?: A & CheckVariadicArgs<A>;
 		flags?: F & CheckFlagAliasCollisions<F>;
 	},
-): Command<A, F> {
+) {
 	// Validate required meta.name
 	if (!config.meta.name.trim()) {
 		throw new CrustError(

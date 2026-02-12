@@ -76,6 +76,7 @@ describe("defineCommand", () => {
 		cmd.run?.({
 			args: {} as never,
 			flags: {} as never,
+			globalFlags: {},
 			rawArgs: ["--verbose"],
 			cmd,
 		});
@@ -193,6 +194,7 @@ describe("defineCommand", () => {
 		const ctx = {
 			args: {} as never,
 			flags: {} as never,
+			globalFlags: {},
 			rawArgs: [],
 			cmd,
 		};
@@ -285,6 +287,7 @@ describe("defineCommand type inference", () => {
 		cmd.run?.({
 			args: { port: 8080, host: "localhost" },
 			flags: { verbose: true, output: "./build", count: 5 },
+			globalFlags: {},
 			rawArgs: [],
 			cmd,
 		});

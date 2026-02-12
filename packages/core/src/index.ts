@@ -5,15 +5,15 @@ export { defineCommand } from "./command.ts";
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 
-// Help
-export { formatHelp, formatVersion } from "./help.ts";
-
 // Parser
-export { parseArgs } from "./parser.ts";
+export { parseArgs, parseGlobalFlags } from "./parser.ts";
 
 // Router
-export type { ResolveResult } from "./router.ts";
 export { resolveCommand } from "./router.ts";
+
+// Runner
+export type { RunOptions } from "./run.ts";
+export { runCommand, runMain } from "./run.ts";
 
 // Types
 export type {
@@ -24,6 +24,7 @@ export type {
 	CommandContext,
 	CommandDef,
 	CommandMeta,
+	CommandRef,
 	FlagDef,
 	FlagsDef,
 	InferArgs,

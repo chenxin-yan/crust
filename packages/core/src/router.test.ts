@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "../src/command.ts";
-import { resolveCommand } from "../src/router.ts";
+import { defineCommand } from "./command.ts";
+import { resolveCommand } from "./router.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test fixtures
