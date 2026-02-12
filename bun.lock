@@ -27,6 +27,20 @@
         "typescript": "catalog:",
       },
     },
+    "packages/create-crust": {
+      "name": "create-crust",
+      "version": "0.0.0",
+      "bin": {
+        "create-crust": "dist/index.js",
+      },
+      "devDependencies": {
+        "@crust/config": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
     "packages/crust": {
       "name": "crust",
       "version": "0.0.0",
@@ -205,6 +219,8 @@
     "chokidar": ["chokidar@5.0.0", "", { "dependencies": { "readdirp": "^5.0.0" } }, "sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw=="],
 
     "coffi": ["coffi@0.1.37", "", { "dependencies": { "strip-json-comments": "^5.0.3" } }, "sha512-ewO5Xis7sw7g54yI/3lJ/nNV90Er4ZnENeDORZjrs58T70MmwKFLZgevraNCz+RmB4KDKsYT1ui1wDB36iPWqQ=="],
+
+    "create-crust": ["create-crust@workspace:packages/create-crust"],
 
     "crust": ["crust@workspace:packages/crust"],
 

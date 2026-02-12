@@ -1,0 +1,21 @@
+{
+	"name": "create-crust",
+	"version": "0.0.0",
+	"type": "module",
+	"bin": {
+		"create-crust": "dist/index.js"
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@crust/config": "workspace:*",
+		"bunup": "catalog:"
+	},
+	"peerDependencies": {
+		"typescript": "catalog:"
+	}
+}
