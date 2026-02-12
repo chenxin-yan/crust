@@ -196,7 +196,7 @@ export interface CommandContext<
 	/** The original argv array (unparsed) */
 	rawArgs: string[];
 	/** The resolved command that is being executed */
-	cmd: Command;
+	cmd: AnyCommand;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ export interface CommandDef<
 	/** Flag definitions */
 	flags?: F;
 	/** Named subcommands */
-	subCommands?: Record<string, Command>;
+	subCommands?: Record<string, AnyCommand>;
 	/** Called before `run()` — useful for initialization */
 	setup?: (context: CommandContext<A, F>) => void | Promise<void>;
 	/** The main command handler */
@@ -243,3 +243,20 @@ export type Command<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 > = Readonly<CommandDef<A, F>>;
+
+/**
+ * A type-erased command reference used in places where the exact arg/flag
+ * generics don't matter (e.g. `cmd` back-reference, `subCommands` map).
+ *
+ * Includes only the non-callback properties to avoid generic variance issues
+ * that arise from lifecycle hooks being contravariant on their context parameter.
+ */
+export interface AnyCommand {
+	readonly meta: CommandMeta;
+	readonly args?: ArgsDef;
+	readonly flags?: FlagsDef;
+	readonly subCommands?: Record<string, AnyCommand>;
+	readonly setup?: (context: never) => void | Promise<void>;
+	readonly run?: (context: never) => void | Promise<void>;
+	readonly cleanup?: (context: never) => void | Promise<void>;
+}

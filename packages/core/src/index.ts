@@ -1,4 +1,7 @@
+export { defineCommand } from "./command.ts";
+
 export type {
+	AnyCommand,
 	ArgDef,
 	ArgsDef,
 	Command,
