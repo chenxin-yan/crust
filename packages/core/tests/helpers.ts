@@ -3,14 +3,9 @@
  *
  * Accepts a Command + argv array, captures stdout/stderr via mocked console,
  * and returns { stdout, stderr, exitCode }.
- *
- * Note: The Command type here is a placeholder — it will be replaced with the
- * real Command type from @crust/core once Task 2 (types) is complete.
  */
 
-/** Placeholder Command type — will be replaced by the real Command type in Task 2 */
-// biome-ignore lint/suspicious/noExplicitAny: placeholder type for future Command definition
-export type Command = Record<string, any>;
+import type { Command } from "../src/types.ts";
 
 export interface RunResult {
 	stdout: string;
