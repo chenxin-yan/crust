@@ -9,6 +9,9 @@
 		},
 		"//#check": {},
 		"//#check:fix": { "cache": false },
+		"test": {
+			"dependsOn": ["^build"]
+		},
 		"check:types": {
 			"dependsOn": ["^build"]
 		},

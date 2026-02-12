@@ -14,7 +14,8 @@
 	"scripts": {
 		"build": "bunup",
 		"dev": "bunup --watch",
-		"check:types": "tsc --noEmit"
+		"check:types": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"@crust/core": "workspace:*"
