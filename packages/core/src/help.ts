@@ -1,4 +1,10 @@
-import type { ArgDef, ArgsDef, Command, FlagDef, FlagsDef } from "./types.ts";
+import type {
+	AnyCommand,
+	ArgsDef,
+	Command,
+	FlagDef,
+	FlagsDef,
+} from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatVersion
@@ -7,16 +13,18 @@ import type { ArgDef, ArgsDef, Command, FlagDef, FlagsDef } from "./types.ts";
 /**
  * Format the version string for a command.
  *
- * Returns `"<name> v<version>"` if version is set, otherwise `"<name> (no version)"`.
+ * Returns `"<name> v<version>"` when a version string is provided,
+ * otherwise `"<name> (no version)"`.
  *
- * @param command - The command to format the version for
+ * The version is an app-level concern and should be passed from the CLI
+ * configuration rather than read from individual command metadata.
+ *
+ * @param command - The command whose name is used in the output
+ * @param version - The application version string (e.g. "1.0.0")
  * @returns The formatted version string
  */
-export function formatVersion(
-	// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-	command: Command<any, any>,
-): string {
-	const { name, version } = command.meta;
+export function formatVersion(command: AnyCommand, version?: string): string {
+	const { name } = command.meta;
 	if (version) {
 		return `${name} v${version}`;
 	}
@@ -164,15 +172,15 @@ export function formatHelp(
 
 		// Positional args in usage
 		if (args) {
-			for (const [name, def] of Object.entries(args) as [string, ArgDef][]) {
+			for (const def of args) {
 				if (def.variadic) {
 					usageParts.push(
-						def.required !== false ? `<${name}...>` : `[${name}...]`,
+						def.required !== false ? `<${def.name}...>` : `[${def.name}...]`,
 					);
 				} else if (def.required === true) {
-					usageParts.push(`<${name}>`);
+					usageParts.push(`<${def.name}>`);
 				} else {
-					usageParts.push(`[${name}]`);
+					usageParts.push(`[${def.name}]`);
 				}
 			}
 		}
@@ -185,12 +193,12 @@ export function formatHelp(
 	lines.push("");
 
 	// ── Arguments section ────────────────────────────────────────────
-	if (args && Object.keys(args).length > 0) {
+	if (args && args.length > 0) {
 		lines.push("ARGUMENTS:");
 
 		const argRows: string[][] = [];
-		for (const [name, def] of Object.entries(args) as [string, ArgDef][]) {
-			const nameCol = def.variadic ? `  ${name}...` : `  ${name}`;
+		for (const def of args) {
+			const nameCol = def.variadic ? `  ${def.name}...` : `  ${def.name}`;
 			const parts: string[] = [];
 
 			if (def.description) {

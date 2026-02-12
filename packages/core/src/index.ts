@@ -1,16 +1,21 @@
-// command
+// Command
 export { defineCommand } from "./command.ts";
-// errors
+
+// Errors
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
-// parser
+
 // Help
 export { formatHelp, formatVersion } from "./help.ts";
 
 // Parser
 export { parseArgs } from "./parser.ts";
 
-// types
+// Router
+export type { ResolveResult } from "./router.ts";
+export { resolveCommand } from "./router.ts";
+
+// Types
 export type {
 	AnyCommand,
 	ArgDef,

@@ -7,14 +7,14 @@ import { formatHelp, formatVersion } from "../src/help.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("formatVersion", () => {
-	it("returns name and version when version is set", () => {
+	it("returns name and version when version is provided", () => {
 		const cmd = defineCommand({
-			meta: { name: "mycli", version: "1.2.3" },
+			meta: { name: "mycli" },
 		});
-		expect(formatVersion(cmd)).toBe("mycli v1.2.3");
+		expect(formatVersion(cmd, "1.2.3")).toBe("mycli v1.2.3");
 	});
 
-	it("returns '(no version)' when version is not set", () => {
+	it("returns '(no version)' when version is not provided", () => {
 		const cmd = defineCommand({
 			meta: { name: "mycli" },
 		});
@@ -23,9 +23,9 @@ describe("formatVersion", () => {
 
 	it("handles pre-release versions", () => {
 		const cmd = defineCommand({
-			meta: { name: "mycli", version: "2.0.0-beta.1" },
+			meta: { name: "mycli" },
 		});
-		expect(formatVersion(cmd)).toBe("mycli v2.0.0-beta.1");
+		expect(formatVersion(cmd, "2.0.0-beta.1")).toBe("mycli v2.0.0-beta.1");
 	});
 });
 
@@ -81,13 +81,14 @@ describe("formatHelp — with args and flags", () => {
 	it("shows positional args in usage and ARGUMENTS section", () => {
 		const cmd = defineCommand({
 			meta: { name: "serve" },
-			args: {
-				port: {
+			args: [
+				{
+					name: "port",
 					type: Number,
 					description: "Port number",
 					default: 3000,
 				},
-			},
+			],
 		});
 		const help = formatHelp(cmd);
 
@@ -105,9 +106,14 @@ describe("formatHelp — with args and flags", () => {
 	it("shows required args with angle brackets in usage", () => {
 		const cmd = defineCommand({
 			meta: { name: "greet" },
-			args: {
-				name: { type: String, description: "Who to greet", required: true },
-			},
+			args: [
+				{
+					name: "name",
+					type: String,
+					description: "Who to greet",
+					required: true,
+				},
+			],
 		});
 		const help = formatHelp(cmd);
 		expect(help).toContain("USAGE: greet <name> [options]");
@@ -117,13 +123,14 @@ describe("formatHelp — with args and flags", () => {
 	it("shows variadic args with ... suffix in usage", () => {
 		const cmd = defineCommand({
 			meta: { name: "bundle" },
-			args: {
-				files: {
+			args: [
+				{
+					name: "files",
 					type: String,
 					description: "Files to bundle",
 					variadic: true,
 				},
-			},
+			],
 		});
 		const help = formatHelp(cmd);
 		expect(help).toContain("<files...>");
@@ -305,9 +312,9 @@ describe("formatHelp — defaults display", () => {
 	it("shows default values for positional args", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: {
-				port: { type: Number, description: "Port", default: 3000 },
-			},
+			args: [
+				{ name: "port", type: Number, description: "Port", default: 3000 },
+			],
 		});
 		const help = formatHelp(cmd);
 		expect(help).toContain("(default: 3000)");
@@ -322,9 +329,14 @@ describe("formatHelp — subcommand path", () => {
 	it("shows full command path when commandPath is provided", () => {
 		const cmd = defineCommand({
 			meta: { name: "command", description: "Generate a command" },
-			args: {
-				name: { type: String, description: "Command name", required: true },
-			},
+			args: [
+				{
+					name: "name",
+					type: String,
+					description: "Command name",
+					required: true,
+				},
+			],
 		});
 		const help = formatHelp(cmd, ["crust", "generate", "command"]);
 		expect(help).toContain("USAGE: crust generate command <name>");
@@ -532,16 +544,16 @@ describe("formatHelp — full integration", () => {
 		const cmd = defineCommand({
 			meta: {
 				name: "serve",
-				version: "1.0.0",
 				description: "Start the development server",
 			},
-			args: {
-				entry: {
+			args: [
+				{
+					name: "entry",
 					type: String,
 					description: "Entry file",
 					default: "src/index.ts",
 				},
-			},
+			],
 			flags: {
 				port: {
 					type: Number,
