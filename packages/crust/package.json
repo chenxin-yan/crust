@@ -1,5 +1,5 @@
 {
-	"name": "@crust/core",
+	"name": "crust",
 	"version": "0.0.0",
 	"type": "module",
 	"exports": {
@@ -8,13 +8,19 @@
 			"types": "./dist/index.d.ts"
 		}
 	},
+	"bin": {
+		"crust": "dist/cli.js"
+	},
 	"scripts": {
 		"build": "bunup",
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit"
 	},
+	"dependencies": {
+		"@crust/core": "workspace:*"
+	},
 	"devDependencies": {
-		"@crust/config": "*",
+		"@crust/config": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
