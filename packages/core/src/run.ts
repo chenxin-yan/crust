@@ -1,11 +1,6 @@
-import { CrustError } from "./errors.ts";
-import {
-	parseArgs,
-	parseGlobalFlags,
-	validateRequiredFlags,
-} from "./parser.ts";
+import { parseRunArgs, stripGlobalFlags } from "./parser.ts";
 import { resolveCommand } from "./router.ts";
-import type { AnyCommand, CommandContext, FlagDef, FlagsDef } from "./types.ts";
+import type { AnyCommand, CommandContext, FlagsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // RunOptions — Configuration for runCommand / runMain
@@ -25,65 +20,14 @@ export interface RunOptions {
 	/** argv array to parse. Defaults to `process.argv.slice(2)` */
 	argv?: string[];
 	/**
-	 * Global flags parsed before subcommand routing.
+	 * Global flags available to all commands.
 	 *
-	 * Required global flags are validated only on the command execution path.
+	 * Global flags are stripped from argv before subcommand routing, then
+	 * merged with the resolved command's local flags for a single parse pass.
+	 * Name or alias collisions between global and local flags are rejected
+	 * as definition errors.
 	 */
 	globalFlags?: FlagsDef;
-}
-
-function normalizeAliases(def: FlagDef) {
-	if (!def.alias) return [];
-	return Array.isArray(def.alias) ? [...def.alias] : [def.alias];
-}
-
-function validateGlobalFlagCollisions(
-	globalFlags: FlagsDef | undefined,
-	localFlags: FlagsDef | undefined,
-	commandName: string,
-): void {
-	if (!globalFlags || !localFlags) return;
-
-	const localAliasToName = new Map<string, string>();
-	for (const [localName, localDef] of Object.entries(localFlags)) {
-		for (const alias of normalizeAliases(localDef)) {
-			localAliasToName.set(alias, localName);
-		}
-	}
-
-	for (const [globalName, globalDef] of Object.entries(globalFlags)) {
-		if (globalName in localFlags) {
-			throw new CrustError(
-				"DEFINITION",
-				`Global/local flag collision on command "${commandName}": "--${globalName}" is defined in both globalFlags and command.flags`,
-			);
-		}
-
-		const localAliasOwner = localAliasToName.get(globalName);
-		if (localAliasOwner) {
-			throw new CrustError(
-				"DEFINITION",
-				`Global/local flag collision on command "${commandName}": global flag "--${globalName}" conflicts with alias of local flag "--${localAliasOwner}"`,
-			);
-		}
-
-		for (const globalAlias of normalizeAliases(globalDef)) {
-			if (globalAlias in localFlags) {
-				throw new CrustError(
-					"DEFINITION",
-					`Global/local flag collision on command "${commandName}": alias "--${globalAlias}" of global flag "--${globalName}" conflicts with local flag name`,
-				);
-			}
-
-			const owner = localAliasToName.get(globalAlias);
-			if (owner) {
-				throw new CrustError(
-					"DEFINITION",
-					`Global/local flag collision on command "${commandName}": alias "--${globalAlias}" of global flag "--${globalName}" conflicts with alias of local flag "--${owner}"`,
-				);
-			}
-		}
-	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -94,15 +38,14 @@ function validateGlobalFlagCollisions(
  * Execute a command with the given options.
  *
  * The execution pipeline:
- * 1. Parse known global flags (without required validation) and strip them from argv
+ * 1. Strip known global flags from argv (so their values aren't mistaken for subcommands)
  * 2. Resolve subcommand via router
- * 3. Validate global/local flag collisions for the resolved command
- * 4. Validate required global flags (execution path only)
- * 5. Parse command-local args/flags
- * 6. Build CommandContext
- * 7. Call setup() if defined
- * 8. Call run() if defined
- * 9. Call cleanup() if defined (always runs, even if run() throws)
+ * 3. Parse args/flags for the resolved command in a single pass
+ *    (global + local flags merged; collisions detected as definition errors)
+ * 4. Build CommandContext
+ * 5. Call setup() if defined
+ * 6. Call run() if defined
+ * 7. Call cleanup() if defined (always runs, even if run() throws)
  *
  * @param command - The root command to execute
  * @param options - Run configuration (argv)
@@ -129,19 +72,17 @@ export async function runCommand(
 ): Promise<void> {
 	const effectiveArgv = options?.argv ?? process.argv.slice(2);
 	const globalFlagsDef = options?.globalFlags;
-	const { flags: resolvedGlobalFlags, argv: argvWithoutGlobals } =
-		parseGlobalFlags(globalFlagsDef, effectiveArgv);
 
-	// Step 1: Resolve subcommand via router
-	const { resolved, argv: remainingArgv } = resolveCommand(
-		command,
-		argvWithoutGlobals,
+	// Step 1: Strip global flags for clean routing
+	const { argv: argvForRouting, globalTokens } = stripGlobalFlags(
+		globalFlagsDef,
+		effectiveArgv,
 	);
 
-	validateGlobalFlagCollisions(
-		globalFlagsDef,
-		resolved.flags,
-		resolved.meta.name,
+	// Step 2: Resolve subcommand via router
+	const { resolved, argv: remainingArgv } = resolveCommand(
+		command,
+		argvForRouting,
 	);
 
 	// If the resolved command has no run(), silently noop.
@@ -149,34 +90,33 @@ export async function runCommand(
 		return;
 	}
 
-	validateRequiredFlags(
-		globalFlagsDef,
-		resolvedGlobalFlags as Record<string, unknown>,
-	);
+	// Step 3: parse args + local flags + global flags.
+	// Re-add global flag tokens so the merged parser can resolve them.
+	// Global and local flag defs are merged; collisions (name or alias
+	// overlap) are caught here as DEFINITION errors.
+	const mergedArgv = [...globalTokens, ...remainingArgv];
+	const parsed = parseRunArgs(resolved, mergedArgv, globalFlagsDef);
 
-	// Step 4: Parse args/flags for the resolved command
-	const parsed = parseArgs(resolved, remainingArgv);
-
-	// Step 5: Build CommandContext
+	// Step 4: Build CommandContext
 	const context: CommandContext = {
 		args: parsed.args as CommandContext["args"],
 		flags: parsed.flags as CommandContext["flags"],
-		globalFlags: resolvedGlobalFlags as CommandContext["globalFlags"],
+		globalFlags: parsed.globalFlags as CommandContext["globalFlags"],
 		rawArgs: parsed.rawArgs,
 		cmd: resolved,
 	};
 
-	// Step 6-8: Execute lifecycle hooks with try/finally for cleanup
+	// Step 5-7: Execute lifecycle hooks with try/finally for cleanup
 	try {
-		// Step 6: Call setup() if defined
+		// Step 5: Call setup() if defined
 		if (resolved.setup) {
 			await resolved.setup(context);
 		}
 
-		// Step 7: Call run()
+		// Step 6: Call run()
 		await resolved.run(context);
 	} finally {
-		// Step 8: Call cleanup() if defined — always runs, even if run() throws
+		// Step 7: Call cleanup() if defined — always runs, even if run() throws
 		if (resolved.cleanup) {
 			await resolved.cleanup(context);
 		}

@@ -9,7 +9,6 @@ import type {
 	Command,
 	FlagDef,
 	FlagsDef,
-	InferFlags,
 	ParsedResult,
 	TypeConstructor,
 } from "./types.ts";
@@ -206,7 +205,7 @@ function resolveFlags(
 	flagsDef: FlagsDef | undefined,
 	parsedValues: Record<string, unknown>,
 	aliasToName: Record<string, string>,
-): Record<string, unknown> {
+) {
 	if (!flagsDef) return {};
 
 	const canonical = resolveAliases(parsedValues, aliasToName, flagsDef);
@@ -286,39 +285,60 @@ function resolveArgs(
 	return resolved;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// parseArgs — Main parsing function
-// ────────────────────────────────────────────────────────────────────────────
+/**
+ * Merge global and local flag definitions, detecting collisions.
+ *
+ * A collision occurs when a global flag name or alias overlaps with a local
+ * flag name or alias. This is a definition-time error — the CLI author must
+ * resolve it by renaming one of the flags.
+ *
+ * @throws {CrustError} On any name or alias collision between global and local flags
+ */
+function mergeGlobalAndLocalFlags(
+	globalFlagsDef: FlagsDef,
+	localFlagsDef: FlagsDef,
+): FlagsDef {
+	// Check for direct name collisions
+	for (const globalName of Object.keys(globalFlagsDef)) {
+		if (globalName in localFlagsDef) {
+			throw new CrustError(
+				"DEFINITION",
+				`Global/local flag collision: "--${globalName}" is defined in both globalFlags and command flags`,
+			);
+		}
+	}
+
+	// Merged result — safe after name collision check
+	// The alias registry in buildParseArgsOptionDescriptor will catch any
+	// remaining cross-set alias collisions (global alias vs local name,
+	// global name vs local alias, global alias vs local alias).
+	return { ...globalFlagsDef, ...localFlagsDef };
+}
 
 /**
- * Parse argv against a command's arg and flag definitions.
+ * Parse argv against provided arg/flag definitions.
  *
- * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
- * positional arg mapping, type coercion, alias expansion, default values,
- * required validation, variadic args, and strict mode.
- *
- * @param command - The command whose arg/flag definitions drive the parsing
- * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
- * @returns Parsed args, flags, and rawArgs (everything after `--`)
- * @throws {CrustError} On unknown flags, missing required args/flags, type coercion failure, or alias collisions
+ * Shared internal parser used by both local-only parsing (`parseArgs`) and
+ * run-pipeline parsing with merged global+local flags (`parseRunArgs`).
  */
-export function parseArgs<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
->(command: Command<A, F>, argv: string[]) {
-	const argsDef = command.args as ArgsDef | undefined;
-	const flagsDef = command.flags as FlagsDef | undefined;
+function parseWithDefinitions(
+	argv: string[],
+	argsDef: ArgsDef | undefined,
+	flagsDef: FlagsDef | undefined,
+): {
+	args: Record<string, unknown>;
+	flags: Record<string, unknown>;
+	rawArgs: string[];
+} {
+	const { options: parseOptions, aliasToName } =
+		buildParseArgsOptionDescriptor(flagsDef);
 
-	// Build util.parseArgs config from flag definitions
-	const { options, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
-
-	// Call util.parseArgs with strict: true to catch unknown flags
 	let parsed: ReturnType<typeof nodeParseArgs>;
 
 	try {
 		parsed = nodeParseArgs({
 			args: argv,
-			options,
+			options: parseOptions,
 			strict: true,
 			allowPositionals: true,
 			allowNegative: true,
@@ -326,7 +346,6 @@ export function parseArgs<
 		});
 	} catch (error) {
 		if (error instanceof Error) {
-			// Rewrite util.parseArgs error messages to be more user-friendly
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
 			if (unknownMatch) {
 				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`);
@@ -335,7 +354,6 @@ export function parseArgs<
 		throw error;
 	}
 
-	// ── Extract positionals and rawArgs ───
 	const rawArgs: string[] = [];
 	const preSeparatorPositionals: string[] = [];
 
@@ -356,38 +374,129 @@ export function parseArgs<
 		preSeparatorPositionals.push(...parsed.positionals);
 	}
 
-	// ── Resolve flags and args ─────────────────────────────────────────
 	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
-	validateRequiredFlags(flagsDef, resolvedFlags);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
+
+	return {
+		args: resolvedArgs,
+		flags: resolvedFlags,
+		rawArgs,
+	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// parseArgs — Main parsing function
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse argv against a command's local arg/flag definitions.
+ *
+ * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
+ * positional arg mapping, type coercion, alias expansion, default values,
+ * required validation, variadic args, and strict mode.
+ *
+ * @param command - The command whose arg/flag definitions drive the parsing
+ * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
+ * @returns Parsed args, local flags, and rawArgs (everything after `--`)
+ * @throws {CrustError} On unknown flags, missing required args/flags, type coercion failure, or alias collisions
+ */
+export function parseArgs<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+>(command: Command<A, F>, argv: string[]) {
+	const argsDef = command.args as ArgsDef | undefined;
+	const flagsDef = command.flags as FlagsDef | undefined;
+	const parsed = parseWithDefinitions(argv, argsDef, flagsDef);
+
+	validateRequiredFlags(flagsDef, parsed.flags);
 
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and
 	// InferFlags<F>, but TypeScript can't verify this statically since values
 	// are assembled dynamically from definitions. The assertion is safe here.
 	return {
-		args: resolvedArgs,
-		flags: resolvedFlags,
-		rawArgs,
+		args: parsed.args,
+		flags: parsed.flags,
+		rawArgs: parsed.rawArgs,
 	} as ParsedResult<A, F>;
 }
 
 /**
- * Parse and remove known global flags from argv.
+ * Parse argv for command execution with merged local + global flags.
  *
- * Unknown flags are preserved for command-level parsing.
+ * This function is run-pipeline specific:
+ * - global/local flag defs are merged into a single parse pass
+ * - global/local collisions are rejected as definition errors
+ * - parsed flags are split back into `flags` (local) and `globalFlags` (global)
  *
- * This function intentionally does NOT enforce required global flags.
- * Use {@link validateRequiredFlags} later on the execution path.
+ * @param command - The resolved command to parse for
+ * @param argv - Argv to parse (typically `globalTokens + remainingArgv`)
+ * @param globalFlagsDef - Optional global flag definitions
  */
-export function parseGlobalFlags<F extends FlagsDef = FlagsDef>(
-	flagsDef: F | undefined,
+export function parseRunArgs<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+>(
+	command: Command<A, F>,
 	argv: string[],
-): { flags: InferFlags<F>; argv: string[] } {
+	globalFlagsDef?: FlagsDef,
+): ParsedResult<A, F> & { globalFlags: Record<string, unknown> } {
+	const argsDef = command.args as ArgsDef | undefined;
+	const localFlagsDef = command.flags as FlagsDef | undefined;
+
+	const mergedFlagsDef =
+		globalFlagsDef && localFlagsDef
+			? mergeGlobalAndLocalFlags(globalFlagsDef, localFlagsDef)
+			: (localFlagsDef ?? globalFlagsDef);
+
+	const parsed = parseWithDefinitions(argv, argsDef, mergedFlagsDef);
+	const allResolvedFlags = parsed.flags;
+
+	const resolvedLocalFlags: Record<string, unknown> = {};
+	const resolvedGlobalFlags: Record<string, unknown> = {};
+
+	if (localFlagsDef) {
+		for (const name of Object.keys(localFlagsDef)) {
+			resolvedLocalFlags[name] = allResolvedFlags[name];
+		}
+	}
+	if (globalFlagsDef) {
+		for (const name of Object.keys(globalFlagsDef)) {
+			resolvedGlobalFlags[name] = allResolvedFlags[name];
+		}
+	}
+
+	validateRequiredFlags(localFlagsDef, resolvedLocalFlags);
+	validateRequiredFlags(globalFlagsDef, resolvedGlobalFlags);
+
+	return {
+		args: parsed.args,
+		flags: resolvedLocalFlags,
+		globalFlags: resolvedGlobalFlags,
+		rawArgs: parsed.rawArgs,
+	} as ParsedResult<A, F> & { globalFlags: Record<string, unknown> };
+}
+
+/**
+ * Strip known global flag tokens from argv for subcommand routing.
+ *
+ * This is a lightweight pre-routing pass that removes global flag tokens
+ * (and their values) so the router doesn't mistake flag values for subcommand
+ * names. No coercion, defaults, or required validation is performed here —
+ * that happens later in {@link parseRunArgs}.
+ *
+ * Returns both the stripped argv (for routing) and the extracted global flag
+ * tokens (to be re-added for the merged parse pass).
+ *
+ * @param flagsDef - Global flag definitions to recognize
+ * @param argv - The raw argv array
+ * @returns `argv` without global flags, plus the extracted global flag tokens
+ */
+export function stripGlobalFlags(
+	flagsDef: FlagsDef | undefined,
+	argv: string[],
+): { argv: string[]; globalTokens: string[] } {
 	if (!flagsDef || Object.keys(flagsDef).length === 0) {
-		return {
-			flags: {} as InferFlags<F>,
-			argv: [...argv],
-		};
+		return { argv: [...argv], globalTokens: [] };
 	}
 
 	const { options, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
@@ -405,23 +514,22 @@ export function parseGlobalFlags<F extends FlagsDef = FlagsDef>(
 		for (const token of parsed.tokens) {
 			if (token.kind !== "option") continue;
 
-			const option = token;
-			const canonicalName = aliasToName[option.name] ?? option.name;
+			const canonicalName = aliasToName[token.name] ?? token.name;
 			if (!(canonicalName in flagsDef)) continue;
 
-			stripIndexes.add(option.index);
+			stripIndexes.add(token.index);
 
-			if (option.value !== undefined && option.inlineValue === false) {
-				stripIndexes.add(option.index + 1);
+			if (token.value !== undefined && token.inlineValue === false) {
+				stripIndexes.add(token.index + 1);
 			}
 		}
 	}
 
-	const remainingArgv = argv.filter((_, index) => !stripIndexes.has(index));
-	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
+	const remaining: string[] = [];
+	const globalTokens: string[] = [];
+	for (let i = 0; i < argv.length; i++) {
+		(stripIndexes.has(i) ? globalTokens : remaining).push(argv[i] as string);
+	}
 
-	return {
-		flags: resolvedFlags as InferFlags<F>,
-		argv: remainingArgv,
-	};
+	return { argv: remaining, globalTokens };
 }

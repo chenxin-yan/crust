@@ -403,7 +403,7 @@ describe("runCommand", () => {
 					verbose: { type: Boolean },
 				},
 			}),
-		).rejects.toThrow('Global/local flag collision on command "test"');
+		).rejects.toThrow("Global/local flag collision");
 	});
 
 	it("throws on global alias collision with local flag name", async () => {
@@ -422,7 +422,7 @@ describe("runCommand", () => {
 					config: { type: String, alias: "cwd" },
 				},
 			}),
-		).rejects.toThrow('Global/local flag collision on command "test"');
+		).rejects.toThrow("Alias collision");
 	});
 
 	it("propagates missing required arg errors", async () => {
