@@ -5,10 +5,10 @@ import type {
 	Command,
 	CommandDef,
 	CommandMeta,
+	CommandRoute,
 	FlagDef,
 	FlagsDef,
-	ParsedResult,
-	ResolveResult,
+	ParseResult,
 	TypeConstructor,
 } from "@crust/core";
 import {
@@ -54,9 +54,9 @@ describe("crust package integration", () => {
 		});
 
 		const result = resolveCommand(root, ["sub", "--flag"]);
-		expect(result.resolved.meta.name).toBe("sub");
+		expect(result.command.meta.name).toBe("sub");
 		expect(result.argv).toEqual(["--flag"]);
-		expect(result.path).toEqual(["root", "sub"]);
+		expect(result.commandPath).toEqual(["root", "sub"]);
 	});
 
 	it("runCommand executes through re-export", async () => {
@@ -81,11 +81,11 @@ describe("crust package integration", () => {
 		const tc: TypeConstructor = Number;
 		const cmdDef: CommandDef = { meta };
 		const cmd: Command = defineCommand({ meta: { name: "typed-test" } });
-		const parsed: ParsedResult = { args: {}, flags: {}, rawArgs: [] };
-		const resolved: ResolveResult = {
-			resolved: cmd,
+		const parsed: ParseResult = { args: {}, flags: {}, rawArgs: [] };
+		const resolved: CommandRoute = {
+			command: cmd,
 			argv: [],
-			path: ["typed-test"],
+			commandPath: ["typed-test"],
 		};
 
 		void meta;

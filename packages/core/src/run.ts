@@ -1,153 +1,178 @@
-import { parseRunArgs, stripGlobalFlags } from "./parser.ts";
+import { CrustError } from "./errors.ts";
+import { parseArgs } from "./parser.ts";
+import type {
+	CrustPlugin,
+	MiddlewareContext,
+	PluginState,
+	SetupActions,
+	SetupContext,
+} from "./plugins.ts";
 import { resolveCommand } from "./router.ts";
-import type { AnyCommand, CommandContext, FlagsDef } from "./types.ts";
+import type { AnyCommand, CommandContext, ParseResult } from "./types.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// RunOptions — Configuration for runCommand / runMain
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Options for `runCommand` and `runMain`.
- *
- * @example
- * ```ts
- * runMain(cmd, {
- *   argv: process.argv.slice(2),
- * });
- * ```
- */
 export interface RunOptions {
-	/** argv array to parse. Defaults to `process.argv.slice(2)` */
 	argv?: string[];
-	/**
-	 * Global flags available to all commands.
-	 *
-	 * Global flags are stripped from argv before subcommand routing, then
-	 * merged with the resolved command's local flags for a single parse pass.
-	 * Name or alias collisions between global and local flags are rejected
-	 * as definition errors.
-	 */
-	globalFlags?: FlagsDef;
+	plugins?: CrustPlugin[];
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// runCommand — Core execution pipeline
-// ────────────────────────────────────────────────────────────────────────────
+function createPluginState(): PluginState {
+	const map = new Map<string, unknown>();
+	return {
+		get<T = unknown>(key: string): T | undefined {
+			return map.get(key) as T | undefined;
+		},
+		has(key: string): boolean {
+			return map.has(key);
+		},
+		set(key: string, value: unknown): void {
+			map.set(key, value);
+		},
+		delete(key: string): boolean {
+			return map.delete(key);
+		},
+	};
+}
 
-/**
- * Execute a command with the given options.
- *
- * The execution pipeline:
- * 1. Strip known global flags from argv (so their values aren't mistaken for subcommands)
- * 2. Resolve subcommand via router
- * 3. Parse args/flags for the resolved command in a single pass
- *    (global + local flags merged; collisions detected as definition errors)
- * 4. Build CommandContext
- * 5. Call setup() if defined
- * 6. Call run() if defined
- * 7. Call cleanup() if defined (always runs, even if run() throws)
- *
- * @param command - The root command to execute
- * @param options - Run configuration (argv)
- * @throws {Error} On parsing errors, missing required args/flags, unknown subcommands
- *
- * @example
- * ```ts
- * import { defineCommand, runCommand } from "@crust/core";
- *
- * const cmd = defineCommand({
- *   meta: { name: "serve" },
- *   args: [{ name: "port", type: Number, default: 3000 }],
- *   run({ args }) {
- *     console.log(`Serving on port ${args.port}`);
- *   },
- * });
- *
- * await runCommand(cmd, { argv: ["8080"] });
- * ```
- */
+async function runSetupHooks(
+	plugins: readonly CrustPlugin[],
+	context: SetupContext,
+	actions: SetupActions,
+): Promise<void> {
+	for (const plugin of plugins) {
+		if (!plugin.setup) continue;
+		await plugin.setup(context, actions);
+	}
+}
+
+async function executeCommand(
+	command: AnyCommand,
+	parsed: ReturnType<typeof parseArgs>,
+): Promise<void> {
+	if (!command.run) return;
+
+	const context: CommandContext = {
+		args: parsed.args,
+		flags: parsed.flags,
+		rawArgs: parsed.rawArgs,
+		command,
+	};
+
+	try {
+		if (command.preRun) {
+			await command.preRun(context);
+		}
+
+		await command.run(context);
+	} finally {
+		if (command.postRun) {
+			await command.postRun(context);
+		}
+	}
+}
+
+async function runMiddlewareChain(
+	plugins: readonly CrustPlugin[],
+	context: MiddlewareContext,
+	terminal: () => Promise<void>,
+): Promise<void> {
+	const stack = plugins
+		.map((plugin) => plugin.middleware)
+		.filter((middleware): middleware is NonNullable<typeof middleware> =>
+			Boolean(middleware),
+		);
+	let index = -1;
+
+	const dispatch = async (i: number): Promise<void> => {
+		if (i <= index) {
+			throw new CrustError(
+				"DEFINITION",
+				"Plugin middleware called next() multiple times",
+			);
+		}
+		index = i;
+
+		if (i === stack.length) {
+			await terminal();
+			return;
+		}
+
+		const middleware = stack[i];
+		if (!middleware) {
+			throw new CrustError("DEFINITION", "Plugin middleware stack is invalid");
+		}
+
+		await middleware(context, () => dispatch(i + 1));
+	};
+
+	await dispatch(0);
+}
+
 export async function runCommand(
 	command: AnyCommand,
 	options?: RunOptions,
 ): Promise<void> {
-	const effectiveArgv = options?.argv ?? process.argv.slice(2);
-	const globalFlagsDef = options?.globalFlags;
+	const argv = options?.argv ?? process.argv.slice(2);
+	const plugins = options?.plugins ?? [];
 
-	// Step 1: Strip global flags for clean routing
-	const { argv: argvForRouting, globalTokens } = stripGlobalFlags(
-		globalFlagsDef,
-		effectiveArgv,
-	);
-
-	// Step 2: Resolve subcommand via router
-	const { resolved, argv: remainingArgv } = resolveCommand(
-		command,
-		argvForRouting,
-	);
-
-	// If the resolved command has no run(), silently noop.
-	if (!resolved.run) {
-		return;
-	}
-
-	// Step 3: parse args + local flags + global flags.
-	// Re-add global flag tokens so the merged parser can resolve them.
-	// Global and local flag defs are merged; collisions (name or alias
-	// overlap) are caught here as DEFINITION errors.
-	const mergedArgv = [...globalTokens, ...remainingArgv];
-	const parsed = parseRunArgs(resolved, mergedArgv, globalFlagsDef);
-
-	// Step 4: Build CommandContext
-	const context: CommandContext = {
-		args: parsed.args as CommandContext["args"],
-		flags: parsed.flags as CommandContext["flags"],
-		globalFlags: parsed.globalFlags as CommandContext["globalFlags"],
-		rawArgs: parsed.rawArgs,
-		cmd: resolved,
+	const actions: SetupActions = {
+		addFlag(target, name, def) {
+			if (!target.flags) {
+				throw new CrustError(
+					"DEFINITION",
+					`Cannot add flag "${name}": command "${target.meta.name}" has no flags object.`,
+				);
+			}
+			target.flags[name] = def;
+		},
 	};
 
-	// Step 5-7: Execute lifecycle hooks with try/finally for cleanup
+	const middlewareContext: MiddlewareContext = {
+		argv: [...argv] as readonly string[],
+		rootCommand: command,
+		state: createPluginState(),
+		route: null,
+		input: null,
+	};
+
 	try {
-		// Step 5: Call setup() if defined
-		if (resolved.setup) {
-			await resolved.setup(context);
+		await runSetupHooks(plugins, middlewareContext, actions);
+
+		let parsed: ParseResult;
+		let resolvedCommand: AnyCommand;
+
+		try {
+			const resolved = resolveCommand(command, [...argv]);
+			middlewareContext.route = resolved;
+
+			parsed = parseArgs(resolved.command, resolved.argv);
+
+			middlewareContext.input = {
+				args: parsed.args,
+				flags: parsed.flags,
+				rawArgs: parsed.rawArgs,
+			};
+			resolvedCommand = resolved.command;
+		} catch (error) {
+			await runMiddlewareChain(plugins, middlewareContext, async () => {
+				throw error;
+			});
+			return;
 		}
 
-		// Step 6: Call run()
-		await resolved.run(context);
-	} finally {
-		// Step 7: Call cleanup() if defined — always runs, even if run() throws
-		if (resolved.cleanup) {
-			await resolved.cleanup(context);
+		await runMiddlewareChain(plugins, middlewareContext, async () => {
+			await executeCommand(resolvedCommand, parsed);
+		});
+	} catch (error) {
+		if (error instanceof CrustError) {
+			throw error;
 		}
+		if (error instanceof Error) {
+			throw new CrustError("EXECUTION", error.message).withCause(error);
+		}
+		throw new CrustError("EXECUTION", String(error)).withCause(error);
 	}
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// runMain — Top-level entry point with error handling
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Execute a command as the main entry point of a CLI application.
- *
- * Wraps `runCommand` with top-level error handling: catches all errors,
- * prints a formatted error message to stderr, and sets `process.exitCode = 1`.
- *
- * This is the recommended way to run a CLI command in production:
- * ```ts
- * const cmd = defineCommand({
- *   meta: { name: "my-cli" },
- *   run() {
- *     console.log("Hello from my CLI!");
- *   },
- * });
- *
- * runMain(cmd);
- * ```
- *
- * @param command - The root command to execute
- * @param options - Run configuration (argv)
- */
 export async function runMain(
 	command: AnyCommand,
 	options?: RunOptions,

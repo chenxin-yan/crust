@@ -378,13 +378,13 @@ describe("CommandDef interface", () => {
 				port: { type: Number, default: 3000 },
 				verbose: { type: Boolean, alias: "v" },
 			},
-			setup: (_ctx) => {
+			preRun: (_ctx) => {
 				/* init */
 			},
 			run: (_ctx) => {
 				/* execute */
 			},
-			cleanup: (_ctx) => {
+			postRun: (_ctx) => {
 				/* teardown */
 			},
 		};
@@ -419,13 +419,12 @@ describe("CommandContext interface", () => {
 		const ctx: CommandContext = {
 			args: {},
 			flags: {},
-			globalFlags: {},
 			rawArgs: ["--verbose"],
-			cmd: { meta: { name: "test" } },
+			command: { meta: { name: "test" } },
 		};
 
 		expect(ctx.rawArgs).toEqual(["--verbose"]);
-		expect(ctx.cmd.meta.name).toBe("test");
+		expect(ctx.command.meta.name).toBe("test");
 	});
 
 	it("infers typed args and flags from generics", () => {
@@ -437,9 +436,8 @@ describe("CommandContext interface", () => {
 		const ctx: CommandContext<MyArgs, MyFlags> = {
 			args: { name: "hello" },
 			flags: { verbose: true },
-			globalFlags: {},
 			rawArgs: [],
-			cmd: { meta: { name: "test" } },
+			command: { meta: { name: "test" } },
 		};
 
 		// These are compile-time verified type checks

@@ -2,12 +2,12 @@
 export { defineCommand } from "./command.ts";
 
 // Errors
-export type { CrustErrorCode } from "./errors.ts";
+export type { CommandNotFoundErrorDetails, CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 
 // Argument & flag parsing
 export { parseArgs } from "./parser.ts";
-export type { ResolveResult } from "./router.ts";
+export type { CommandRoute } from "./router.ts";
 
 // Subcommand routing
 export { resolveCommand } from "./router.ts";
@@ -30,6 +30,6 @@ export type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
-	ParsedResult,
+	ParseResult,
 	TypeConstructor,
 } from "./types.ts";

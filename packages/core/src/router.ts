@@ -1,89 +1,23 @@
+import { CrustError } from "./errors.ts";
 import type { AnyCommand } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// ResolveResult — Output of resolveCommand
+// CommandRoute — Output of resolveCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
  * The result of resolving a command from an argv array.
  *
- * Contains the resolved (sub)command, the remaining argv after subcommand
+ * Contains the resolved (sub)command and argv after subcommand
  * resolution, and the full command path for help text rendering.
  */
-export interface ResolveResult {
-	/** The resolved command (may be a subcommand of the original) */
-	resolved: AnyCommand;
-	/** The remaining argv after subcommand names have been consumed */
+export interface CommandRoute {
+	/** The routed command (may be a subcommand of the original) */
+	command: AnyCommand;
+	/** The argv after subcommand names have been consumed */
 	argv: string[];
 	/** The command path for help text (e.g. ["crust", "generate", "command"]) */
-	path: string[];
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Compute the Levenshtein distance between two strings.
- * Used for "Did you mean?" suggestions on unknown subcommands.
- */
-function levenshtein(a: string, b: string): number {
-	const aLen = a.length;
-	const bLen = b.length;
-
-	// Quick exits
-	if (aLen === 0) return bLen;
-	if (bLen === 0) return aLen;
-
-	// Use a single-row DP approach for space efficiency
-	const row: number[] = Array.from({ length: bLen + 1 }, (_, i) => i);
-
-	for (let i = 1; i <= aLen; i++) {
-		let prev = i;
-		for (let j = 1; j <= bLen; j++) {
-			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-			const val = Math.min(
-				(row[j] as number) + 1, // deletion
-				prev + 1, // insertion
-				(row[j - 1] as number) + cost, // substitution
-			);
-			row[j - 1] = prev;
-			prev = val;
-		}
-		row[bLen] = prev;
-	}
-
-	return row[bLen] as number;
-}
-
-/**
- * Find the closest matching subcommand names for a given input.
- * Returns suggestions sorted by relevance (Levenshtein distance ≤ 3 or startsWith match).
- */
-function findSuggestions(input: string, candidates: string[]): string[] {
-	const suggestions: { name: string; distance: number }[] = [];
-
-	for (const candidate of candidates) {
-		// startsWith match (prefix)
-		if (candidate.startsWith(input) || input.startsWith(candidate)) {
-			suggestions.push({ name: candidate, distance: 0 });
-			continue;
-		}
-
-		// Levenshtein distance
-		const distance = levenshtein(input, candidate);
-		if (distance <= 3) {
-			suggestions.push({ name: candidate, distance });
-		}
-	}
-
-	// Sort by distance (closest first), then alphabetically for ties
-	suggestions.sort((a, b) => {
-		if (a.distance !== b.distance) return a.distance - b.distance;
-		return a.name.localeCompare(b.name);
-	});
-
-	return suggestions.map((s) => s.name);
+	commandPath: string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -102,30 +36,30 @@ function findSuggestions(input: string, candidates: string[]): string[] {
  * 2. If no match and the current command has `run()`, return it (args passed to parser)
  * 3. If no match and the current command has NO `run()`, it signals the caller
  *    should show help (the `showHelp` flag is set in the result)
- * 4. Unknown subcommands produce an error with "Did you mean?" suggestions
+ * 4. Unknown subcommands produce a structured COMMAND_NOT_FOUND error
  *
  * @param command - The root command to resolve from
  * @param argv - The argv array to resolve against
- * @returns The resolved command, remaining argv, and the command path
- * @throws {Error} When an unknown subcommand is given and the parent has no run()
+ * @returns The resolved command, argv, and the command path
+ * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  */
 export function resolveCommand(
 	command: AnyCommand,
 	argv: string[],
-): ResolveResult {
+): CommandRoute {
 	const path = [command.meta.name];
 
 	let current: AnyCommand = command;
-	let remainingArgv = argv;
+	let routedArgv = argv;
 
-	while (remainingArgv.length > 0) {
+	while (routedArgv.length > 0) {
 		const subCommands = current.subCommands;
 		if (!subCommands || Object.keys(subCommands).length === 0) {
-			// No subcommands defined — remaining argv goes to the parser
+			// No subcommands defined — argv goes to the parser
 			break;
 		}
 
-		const candidate = remainingArgv[0];
+		const candidate = routedArgv[0];
 
 		// Skip if the candidate looks like a flag (starts with -) or doesn't exists
 		if (!candidate || candidate.startsWith("-")) {
@@ -136,7 +70,7 @@ export function resolveCommand(
 		if (candidate in subCommands) {
 			current = subCommands[candidate] as AnyCommand;
 			path.push(candidate);
-			remainingArgv = remainingArgv.slice(1);
+			routedArgv = routedArgv.slice(1);
 			continue;
 		}
 
@@ -148,20 +82,21 @@ export function resolveCommand(
 
 		// Parent has no run() — this is an unknown subcommand error
 		const available = Object.keys(subCommands);
-		const suggestions = findSuggestions(candidate, available);
-
-		let message = `Unknown command "${candidate}".`;
-		if (suggestions.length > 0) {
-			message += ` Did you mean "${suggestions[0]}"?`;
-		}
-		message += `\n\nAvailable commands: ${available.join(", ")}`;
-
-		throw new Error(message);
+		throw new CrustError(
+			"COMMAND_NOT_FOUND",
+			`Unknown command "${candidate}".`,
+			{
+				input: candidate,
+				available,
+				commandPath: [...path],
+				parentCommand: current,
+			},
+		);
 	}
 
 	return {
-		resolved: current,
-		argv: remainingArgv,
-		path,
+		command: current,
+		argv: routedArgv,
+		commandPath: path,
 	};
 }

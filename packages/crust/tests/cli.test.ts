@@ -9,6 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runCommand } from "@crust/core";
+import {
+	autoCompletePlugin,
+	helpPlugin,
+	versionPlugin,
+} from "@crust/core/plugins";
 import { crustCommand } from "../src/cli.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,6 +73,11 @@ const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
 	version: string;
 };
 const expectedVersion = pkg.version;
+const plugins = [
+	versionPlugin(expectedVersion),
+	helpPlugin(),
+	autoCompletePlugin({ mode: "help" }),
+];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -86,8 +96,8 @@ describe("crust CLI entry point", () => {
 			expect(Object.isFrozen(crustCommand)).toBe(true);
 		});
 
-		it("should have a root run() handler", () => {
-			expect(typeof crustCommand.run).toBe("function");
+		it("should use plugins for root behavior", () => {
+			expect(crustCommand.run).toBeUndefined();
 		});
 
 		it("should have build and dev as subcommands", () => {
@@ -101,7 +111,7 @@ describe("crust CLI entry point", () => {
 
 	describe("crust --help", () => {
 		it("should show help text with build and dev listed", async () => {
-			await runCommand(crustCommand, { argv: ["--help"] });
+			await runCommand(crustCommand, { argv: ["--help"], plugins });
 			const output = getStdout();
 
 			expect(output).toContain("crust");
@@ -117,7 +127,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show --help and --version in options", async () => {
-			await runCommand(crustCommand, { argv: ["--help"] });
+			await runCommand(crustCommand, { argv: ["--help"], plugins });
 			const output = getStdout();
 
 			expect(output).toContain("--help");
@@ -127,7 +137,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show help with -h alias", async () => {
-			await runCommand(crustCommand, { argv: ["-h"] });
+			await runCommand(crustCommand, { argv: ["-h"], plugins });
 			const output = getStdout();
 
 			expect(output).toContain("USAGE:");
@@ -137,14 +147,14 @@ describe("crust CLI entry point", () => {
 
 	describe("crust --version", () => {
 		it("should show version from package.json", async () => {
-			await runCommand(crustCommand, { argv: ["--version"] });
+			await runCommand(crustCommand, { argv: ["--version"], plugins });
 			const output = getStdout();
 
 			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 
 		it("should show version with -v alias", async () => {
-			await runCommand(crustCommand, { argv: ["-v"] });
+			await runCommand(crustCommand, { argv: ["-v"], plugins });
 			const output = getStdout();
 
 			expect(output).toContain(`crust v${expectedVersion}`);
@@ -153,7 +163,7 @@ describe("crust CLI entry point", () => {
 
 	describe("crust (no args)", () => {
 		it("should show help when invoked without a subcommand", async () => {
-			await runCommand(crustCommand, { argv: [] });
+			await runCommand(crustCommand, { argv: [], plugins });
 			const output = getStdout();
 
 			expect(output).toContain("USAGE:");
@@ -165,7 +175,7 @@ describe("crust CLI entry point", () => {
 
 	describe("crust unknown", () => {
 		it("shows root help for unknown input", async () => {
-			await runCommand(crustCommand, { argv: ["unknown"] });
+			await runCommand(crustCommand, { argv: ["unknown"], plugins });
 			const output = getStdout();
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("build");
@@ -173,13 +183,13 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("shows root help for partial command input", async () => {
-			await runCommand(crustCommand, { argv: ["buil"] });
+			await runCommand(crustCommand, { argv: ["buil"], plugins });
 			const output = getStdout();
 			expect(output).toContain("COMMANDS:");
 		});
 
 		it("shows root help for short command input", async () => {
-			await runCommand(crustCommand, { argv: ["de"] });
+			await runCommand(crustCommand, { argv: ["de"], plugins });
 			const output = getStdout();
 			expect(output).toContain("COMMANDS:");
 		});

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { defineCommand } from "../src/command.ts";
 import { runCommand, runMain } from "../src/run.ts";
+import type { CrustPlugin } from "./plugins.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers — capture console output
@@ -114,13 +115,13 @@ describe("runCommand", () => {
 		expect(receivedRawArgs).toEqual(["foo", "bar"]);
 	});
 
-	it("provides the resolved command as cmd in context", async () => {
+	it("provides the resolved command as command in context", async () => {
 		let receivedCmd: unknown;
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			run({ cmd }) {
-				receivedCmd = cmd;
+			run({ command }) {
+				receivedCmd = command;
 			},
 		});
 
@@ -131,13 +132,13 @@ describe("runCommand", () => {
 
 	// ── Lifecycle hooks ──────────────────────────────────────────────────
 
-	it("calls setup() before run()", async () => {
+	it("calls preRun() before run()", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			setup() {
-				order.push("setup");
+			preRun() {
+				order.push("preRun");
 			},
 			run() {
 				order.push("run");
@@ -146,10 +147,10 @@ describe("runCommand", () => {
 
 		await runCommand(cmd, { argv: [] });
 
-		expect(order).toEqual(["setup", "run"]);
+		expect(order).toEqual(["preRun", "run"]);
 	});
 
-	it("calls cleanup() after run()", async () => {
+	it("calls postRun() after run()", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
@@ -157,81 +158,83 @@ describe("runCommand", () => {
 			run() {
 				order.push("run");
 			},
-			cleanup() {
-				order.push("cleanup");
+			postRun() {
+				order.push("postRun");
 			},
 		});
 
 		await runCommand(cmd, { argv: [] });
 
-		expect(order).toEqual(["run", "cleanup"]);
+		expect(order).toEqual(["run", "postRun"]);
 	});
 
-	it("calls full lifecycle: setup → run → cleanup", async () => {
+	it("calls full lifecycle: preRun → run → postRun", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			setup() {
-				order.push("setup");
+			preRun() {
+				order.push("preRun");
 			},
 			run() {
 				order.push("run");
 			},
-			cleanup() {
-				order.push("cleanup");
+			postRun() {
+				order.push("postRun");
 			},
 		});
 
 		await runCommand(cmd, { argv: [] });
 
-		expect(order).toEqual(["setup", "run", "cleanup"]);
+		expect(order).toEqual(["preRun", "run", "postRun"]);
 	});
 
-	it("calls cleanup() even when run() throws", async () => {
+	it("calls postRun() even when run() throws", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			setup() {
-				order.push("setup");
+			preRun() {
+				order.push("preRun");
 			},
 			run() {
 				order.push("run");
 				throw new Error("run failed");
 			},
-			cleanup() {
-				order.push("cleanup");
+			postRun() {
+				order.push("postRun");
 			},
 		});
 
 		await expect(runCommand(cmd, { argv: [] })).rejects.toThrow("run failed");
 
-		expect(order).toEqual(["setup", "run", "cleanup"]);
+		expect(order).toEqual(["preRun", "run", "postRun"]);
 	});
 
-	it("calls cleanup() even when setup() throws", async () => {
+	it("calls postRun() even when preRun() throws", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			setup() {
-				order.push("setup");
-				throw new Error("setup failed");
+			preRun() {
+				order.push("preRun");
+				throw new Error("preRun failed");
 			},
 			run() {
 				order.push("run");
 			},
-			cleanup() {
-				order.push("cleanup");
+			postRun() {
+				order.push("postRun");
 			},
 		});
 
-		await expect(runCommand(cmd, { argv: [] })).rejects.toThrow("setup failed");
+		await expect(runCommand(cmd, { argv: [] })).rejects.toThrow(
+			"preRun failed",
+		);
 
-		// run() should NOT have been called since setup() threw
-		// but cleanup() should still run
-		expect(order).toEqual(["setup", "cleanup"]);
+		// run() should NOT have been called since preRun() threw
+		// but postRun() should still run
+		expect(order).toEqual(["preRun", "postRun"]);
 	});
 
 	// ── Async support ───────────────────────────────────────────────────
@@ -252,30 +255,28 @@ describe("runCommand", () => {
 		expect(completed).toBe(true);
 	});
 
-	it("awaits async setup() and cleanup()", async () => {
+	it("awaits async preRun() and postRun()", async () => {
 		const order: string[] = [];
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			async setup() {
+			async preRun() {
 				await new Promise((resolve) => setTimeout(resolve, 5));
-				order.push("setup");
+				order.push("preRun");
 			},
 			async run() {
 				order.push("run");
 			},
-			async cleanup() {
+			async postRun() {
 				await new Promise((resolve) => setTimeout(resolve, 5));
-				order.push("cleanup");
+				order.push("postRun");
 			},
 		});
 
 		await runCommand(cmd, { argv: [] });
 
-		expect(order).toEqual(["setup", "run", "cleanup"]);
+		expect(order).toEqual(["preRun", "run", "postRun"]);
 	});
-
-	// ── Missing run() behavior ─────────────────────────────────────────-
 
 	// ── Missing run() behavior ──────────────────────────────────────────
 
@@ -289,32 +290,64 @@ describe("runCommand", () => {
 		expect(getStdout()).toBe("");
 	});
 
-	it("parses global flags before routing", async () => {
-		let receivedCmd = "";
-		let receivedGlobalFlags: Record<string, unknown> = {};
+	it("runs setup and middleware in order", async () => {
+		const observed: string[] = [];
 
-		const subCmd = defineCommand({
-			meta: { name: "build" },
-			run({ cmd, globalFlags }) {
-				receivedCmd = cmd.meta.name;
-				receivedGlobalFlags = globalFlags;
+		const cmd = defineCommand({
+			meta: { name: "app" },
+			run() {
+				observed.push("run");
 			},
 		});
 
-		const rootCmd = defineCommand({
-			meta: { name: "cli" },
-			subCommands: { build: subCmd },
+		const plugin: CrustPlugin = {
+			name: "lifecycle-plugin",
+			setup() {
+				observed.push("setup");
+			},
+			async middleware(_context, next) {
+				observed.push("middleware:before");
+				await next();
+				observed.push("middleware:after");
+			},
+		};
+
+		await runCommand(cmd, {
+			argv: [],
+			plugins: [plugin],
 		});
 
-		await runCommand(rootCmd, {
-			argv: ["--cwd", "./app", "build"],
-			globalFlags: {
-				cwd: { type: String },
+		expect(observed).toEqual([
+			"setup",
+			"middleware:before",
+			"run",
+			"middleware:after",
+		]);
+	});
+
+	it("short-circuits when middleware does not call next", async () => {
+		let didRun = false;
+
+		const cmd = defineCommand({
+			meta: { name: "app" },
+			run() {
+				didRun = true;
 			},
 		});
 
-		expect(receivedCmd).toBe("build");
-		expect(receivedGlobalFlags.cwd).toBe("./app");
+		const plugin: CrustPlugin = {
+			name: "short-circuit-plugin",
+			async middleware() {
+				return;
+			},
+		};
+
+		await runCommand(cmd, {
+			argv: [],
+			plugins: [plugin],
+		});
+
+		expect(didRun).toBe(false);
 	});
 
 	// ── Subcommand routing ──────────────────────────────────────────────
@@ -387,44 +420,6 @@ describe("runCommand", () => {
 		);
 	});
 
-	it("throws on global/local flag name collision", async () => {
-		const cmd = defineCommand({
-			meta: { name: "test" },
-			flags: {
-				verbose: { type: Boolean },
-			},
-			run() {},
-		});
-
-		await expect(
-			runCommand(cmd, {
-				argv: [],
-				globalFlags: {
-					verbose: { type: Boolean },
-				},
-			}),
-		).rejects.toThrow("Global/local flag collision");
-	});
-
-	it("throws on global alias collision with local flag name", async () => {
-		const cmd = defineCommand({
-			meta: { name: "test" },
-			flags: {
-				cwd: { type: String },
-			},
-			run() {},
-		});
-
-		await expect(
-			runCommand(cmd, {
-				argv: [],
-				globalFlags: {
-					config: { type: String, alias: "cwd" },
-				},
-			}),
-		).rejects.toThrow("Alias collision");
-	});
-
 	it("propagates missing required arg errors", async () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
@@ -435,22 +430,6 @@ describe("runCommand", () => {
 		await expect(runCommand(cmd, { argv: [] })).rejects.toThrow(
 			'Missing required argument "<file>"',
 		);
-	});
-
-	it("still validates required global flags before command run", async () => {
-		const cmd = defineCommand({
-			meta: { name: "test" },
-			run() {},
-		});
-
-		await expect(
-			runCommand(cmd, {
-				argv: [],
-				globalFlags: {
-					cwd: { type: String, required: true },
-				},
-			}),
-		).rejects.toThrow('Missing required flag "--cwd"');
 	});
 
 	it("propagates unknown subcommand errors", async () => {

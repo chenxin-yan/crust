@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defineCommand } from "./command.ts";
+import { CrustError } from "./errors.ts";
 import { resolveCommand } from "./router.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -63,36 +64,36 @@ describe("resolveCommand", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, []);
 
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual([]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 
 		it("resolves single-level subcommand", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["build"]);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual([]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("resolves single-level subcommand with remaining flags", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["build", "--entry", "src/index.ts"]);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["--entry", "src/index.ts"]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("resolves single-level subcommand with remaining positionals and flags", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["dev", "--port", "8080"]);
 
-			expect(result.resolved.meta.name).toBe("dev");
+			expect(result.command.meta.name).toBe("dev");
 			expect(result.argv).toEqual(["--port", "8080"]);
-			expect(result.path).toEqual(["crust", "dev"]);
+			expect(result.commandPath).toEqual(["crust", "dev"]);
 		});
 	});
 
@@ -113,9 +114,9 @@ describe("resolveCommand", () => {
 
 			const result = resolveCommand(root, ["generate", "command"]);
 
-			expect(result.resolved.meta.name).toBe("command");
+			expect(result.command.meta.name).toBe("command");
 			expect(result.argv).toEqual([]);
-			expect(result.path).toEqual(["crust", "generate", "command"]);
+			expect(result.commandPath).toEqual(["crust", "generate", "command"]);
 		});
 
 		it("resolves deeply nested subcommand (3+ levels)", () => {
@@ -138,9 +139,9 @@ describe("resolveCommand", () => {
 
 			const result = resolveCommand(root, ["level1", "level2", "deep"]);
 
-			expect(result.resolved.meta.name).toBe("deep");
+			expect(result.command.meta.name).toBe("deep");
 			expect(result.argv).toEqual([]);
-			expect(result.path).toEqual(["root", "level1", "level2", "deep"]);
+			expect(result.commandPath).toEqual(["root", "level1", "level2", "deep"]);
 		});
 
 		it("resolves nested subcommand with remaining argv", () => {
@@ -169,9 +170,9 @@ describe("resolveCommand", () => {
 				"--verbose",
 			]);
 
-			expect(result.resolved.meta.name).toBe("command");
+			expect(result.command.meta.name).toBe("command");
 			expect(result.argv).toEqual(["my-cmd", "--verbose"]);
-			expect(result.path).toEqual(["crust", "generate", "command"]);
+			expect(result.commandPath).toEqual(["crust", "generate", "command"]);
 		});
 	});
 
@@ -181,27 +182,27 @@ describe("resolveCommand", () => {
 			const result = resolveCommand(root, ["unknown-positional"]);
 
 			// When parent has run(), unknown candidates are treated as positionals
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["unknown-positional"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 
 		it("falls back to parent when argv starts with a flag", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["--help"]);
 
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["--help"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 
 		it("falls back to parent when argv starts with short flag", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["-h"]);
 
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["-h"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 	});
 
@@ -214,42 +215,22 @@ describe("resolveCommand", () => {
 			);
 		});
 
-		it("includes 'Did you mean?' suggestion for close matches", () => {
+		it("throws CrustError with structured details", () => {
 			const root = createRootWithSubcommands(); // no run()
 
 			try {
 				resolveCommand(root, ["buld"]);
 				expect(true).toBe(false); // Should not reach here
 			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Unknown command "buld"');
-				expect(message).toContain('Did you mean "build"?');
-				expect(message).toContain("Available commands: build, dev");
-			}
-		});
-
-		it("suggests based on prefix match", () => {
-			const root = createRootWithSubcommands(); // no run()
-
-			try {
-				resolveCommand(root, ["bui"]);
-				expect(true).toBe(false); // Should not reach here
-			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Did you mean "build"?');
-			}
-		});
-
-		it("lists available commands when no suggestion found", () => {
-			const root = createRootWithSubcommands(); // no run()
-
-			try {
-				resolveCommand(root, ["zzzzz"]);
-				expect(true).toBe(false); // Should not reach here
-			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Unknown command "zzzzz"');
-				expect(message).toContain("Available commands: build, dev");
+				expect(error).toBeInstanceOf(CrustError);
+				const crustError = error as CrustError;
+				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
+				expect(crustError.message).toContain('Unknown command "buld"');
+				expect(crustError.details).toMatchObject({
+					input: "buld",
+					available: ["build", "dev"],
+					commandPath: ["crust"],
+				});
 			}
 		});
 
@@ -270,9 +251,13 @@ describe("resolveCommand", () => {
 				resolveCommand(root, ["generate", "unknown"]);
 				expect(true).toBe(false); // Should not reach here
 			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Unknown command "unknown"');
-				expect(message).toContain("Available commands: command");
+				const crustError = error as CrustError;
+				expect(crustError.message).toContain('Unknown command "unknown"');
+				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
+				expect(crustError.details).toMatchObject({
+					available: ["command"],
+					commandPath: ["crust", "generate"],
+				});
 			}
 		});
 	});
@@ -282,36 +267,36 @@ describe("resolveCommand", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["--help"]);
 
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["--help"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 
 		it("--help at subcmd level passes through in argv", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["build", "--help"]);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["--help"]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("-h at subcmd level passes through in argv", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["build", "-h"]);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["-h"]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("--version at root level passes through in argv", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["--version"]);
 
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["--version"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 	});
 
@@ -320,9 +305,9 @@ describe("resolveCommand", () => {
 			const cmd = createLeafCommand("serve");
 			const result = resolveCommand(cmd, ["--port", "3000"]);
 
-			expect(result.resolved).toBe(cmd);
+			expect(result.command).toBe(cmd);
 			expect(result.argv).toEqual(["--port", "3000"]);
-			expect(result.path).toEqual(["serve"]);
+			expect(result.commandPath).toEqual(["serve"]);
 		});
 
 		it("handles positional arguments correctly", () => {
@@ -335,9 +320,9 @@ describe("resolveCommand", () => {
 			});
 			const result = resolveCommand(cmd, ["world"]);
 
-			expect(result.resolved).toBe(cmd);
+			expect(result.command).toBe(cmd);
 			expect(result.argv).toEqual(["world"]);
-			expect(result.path).toEqual(["greet"]);
+			expect(result.commandPath).toEqual(["greet"]);
 		});
 	});
 
@@ -352,9 +337,9 @@ describe("resolveCommand", () => {
 			});
 
 			const result = resolveCommand(cmd, ["something"]);
-			expect(result.resolved).toBe(cmd);
+			expect(result.command).toBe(cmd);
 			expect(result.argv).toEqual(["something"]);
-			expect(result.path).toEqual(["empty"]);
+			expect(result.commandPath).toEqual(["empty"]);
 		});
 
 		it("stops at flag even if it looks like a subcommand name", () => {
@@ -362,18 +347,18 @@ describe("resolveCommand", () => {
 			const result = resolveCommand(root, ["--build"]);
 
 			// --build starts with -, so it's treated as a flag, not a subcommand
-			expect(result.resolved).toBe(root);
+			expect(result.command).toBe(root);
 			expect(result.argv).toEqual(["--build"]);
-			expect(result.path).toEqual(["crust"]);
+			expect(result.commandPath).toEqual(["crust"]);
 		});
 
 		it("handles subcommand followed by -- separator", () => {
 			const root = createRootWithSubcommands();
 			const result = resolveCommand(root, ["build", "--", "extra"]);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["--", "extra"]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("multiple subcommand candidates where first wins", () => {
@@ -382,9 +367,9 @@ describe("resolveCommand", () => {
 			const result = resolveCommand(root, ["build", "dev"]);
 
 			// "build" resolves, then "dev" is remaining argv (since build has no subcommands)
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual(["dev"]);
-			expect(result.path).toEqual(["crust", "build"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
 		});
 
 		it("mid-level subcommand with no run and no matching child throws error", () => {
@@ -412,7 +397,7 @@ describe("resolveCommand", () => {
 			const argv = ["build", "src/index.ts", "--entry", "main.ts", "--minify"];
 			const result = resolveCommand(root, argv);
 
-			expect(result.resolved.meta.name).toBe("build");
+			expect(result.command.meta.name).toBe("build");
 			expect(result.argv).toEqual([
 				"src/index.ts",
 				"--entry",
@@ -422,53 +407,19 @@ describe("resolveCommand", () => {
 		});
 	});
 
-	describe("Levenshtein suggestions quality", () => {
-		it("suggests exact prefix matches", () => {
-			const fooCmd = createLeafCommand("foobar");
-			const bazCmd = createLeafCommand("bazqux");
-
-			const root = defineCommand({
-				meta: { name: "root" },
-				subCommands: { foobar: fooCmd, bazqux: bazCmd },
-			});
-
-			try {
-				resolveCommand(root, ["foo"]);
-				expect(true).toBe(false);
-			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Did you mean "foobar"?');
-			}
-		});
-
-		it("suggests based on small edit distance", () => {
-			const installCmd = createLeafCommand("install");
-			const initCmd = createLeafCommand("init");
-
-			const root = defineCommand({
-				meta: { name: "root" },
-				subCommands: { install: installCmd, init: initCmd },
-			});
-
-			try {
-				resolveCommand(root, ["instal"]);
-				expect(true).toBe(false);
-			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).toContain('Did you mean "install"?');
-			}
-		});
-
-		it("does not suggest when distance is too large", () => {
-			const root = createRootWithSubcommands(); // has build, dev
+	describe("error shape", () => {
+		it("captures available command names in details", () => {
+			const root = createRootWithSubcommands();
 
 			try {
 				resolveCommand(root, ["completely-different"]);
 				expect(true).toBe(false);
 			} catch (error) {
-				const message = (error as Error).message;
-				expect(message).not.toContain("Did you mean");
-				expect(message).toContain("Available commands: build, dev");
+				const crustError = error as CrustError;
+				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
+				expect(crustError.details).toMatchObject({
+					available: ["build", "dev"],
+				});
 			}
 		});
 	});

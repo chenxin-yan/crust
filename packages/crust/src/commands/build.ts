@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { type Command, defineCommand } from "@crust/core";
+import { defineCommand } from "@crust/core";
 
 /**
  * Resolve the output file path for the compiled binary.
@@ -65,8 +65,7 @@ export function resolveOutfile(
  * crust build --no-minify              # Disable minification
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: Exported command uses wide type for isolatedDeclarations compatibility
-export const buildCommand: Command<any, any> = defineCommand({
+export const buildCommand = defineCommand({
 	meta: {
 		name: "build",
 		description: "Compile your CLI to a standalone executable",

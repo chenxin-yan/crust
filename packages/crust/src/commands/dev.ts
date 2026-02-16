@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { type Command, defineCommand } from "@crust/core";
+import { defineCommand } from "@crust/core";
 
 /**
  * The `crust dev` command.
@@ -15,8 +15,7 @@ import { type Command, defineCommand } from "@crust/core";
  * crust dev -- serve --port 3000     # Forward args to your CLI
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: Exported command uses wide type for isolatedDeclarations compatibility
-export const devCommand: Command<any, any> = defineCommand({
+export const devCommand = defineCommand({
 	meta: {
 		name: "dev",
 		description: "Start your CLI in development mode with hot reload",

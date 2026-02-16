@@ -13,7 +13,7 @@
 	},
 	"scripts": {
 		"build": "bunup",
-		"dev": "bunup --watch",
+		"dev": "bun ./src/cli.ts",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},

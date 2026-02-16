@@ -5,6 +5,7 @@ import type {
 	CheckVariadicArgs,
 	Command,
 	CommandDef,
+	CommandRef,
 	FlagsDef,
 } from "./types.ts";
 
@@ -12,7 +13,7 @@ import type {
  * Define a CLI command with full type inference.
  *
  * The returned command object is frozen (immutable) and typed so that
- * `run()`, `setup()`, and `cleanup()` callbacks receive correctly-typed
+ * `run()`, `preRun()`, and `postRun()` callbacks receive correctly-typed
  * `args` and `flags` based on the definitions provided.
  *
  * @param config - The command definition config object
@@ -39,8 +40,9 @@ import type {
 export function defineCommand<
 	const A extends ArgsDef = ArgsDef,
 	const F extends FlagsDef = FlagsDef,
+	const S extends Record<string, CommandRef> = Record<string, CommandRef>,
 >(
-	config: CommandDef<A, F> & {
+	config: CommandDef<A, F, S> & {
 		args?: A & CheckVariadicArgs<A>;
 		flags?: F & CheckFlagAliasCollisions<F>;
 	},
@@ -54,24 +56,24 @@ export function defineCommand<
 	}
 
 	// Deep copy data objects to decouple from the original config.
-	// Functions (setup, run, cleanup) are kept as-is since they can't be cloned.
+	// Functions (preRun, run, postRun) are kept as-is since they can't be cloned.
 	// subCommands values are already frozen Command objects, so shallow copy is sufficient.
-	const copy: CommandDef<A, F> = {
+	const copy: CommandDef<A, F, S> = {
 		...config,
 		meta: { ...config.meta },
 		...(config.args && {
 			args: config.args.map((def) => ({ ...def })) as unknown as A,
 		}),
-		...(config.flags && {
-			flags: Object.fromEntries(
-				Object.entries(config.flags).map(([k, v]) => [k, { ...v }]),
-			) as F,
-		}),
+		flags: config.flags
+			? (Object.fromEntries(
+					Object.entries(config.flags).map(([k, v]) => [k, { ...v }]),
+				) as F)
+			: ({} as F),
 		...(config.subCommands && {
 			subCommands: { ...config.subCommands },
 		}),
 	};
 
 	// Freeze and return as immutable Command
-	return Object.freeze(copy) as Command<A, F>;
+	return Object.freeze(copy) as Command<A, F, S>;
 }

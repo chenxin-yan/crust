@@ -76,14 +76,13 @@ describe("defineCommand", () => {
 		cmd.run?.({
 			args: {} as never,
 			flags: {} as never,
-			globalFlags: {},
 			rawArgs: ["--verbose"],
-			cmd,
+			command: cmd,
 		});
 
 		expect(receivedContext).toBeDefined();
 		expect(receivedContext?.rawArgs).toEqual(["--verbose"]);
-		expect(receivedContext?.cmd).toBeDefined();
+		expect(receivedContext?.command).toBeDefined();
 	});
 
 	it("includes subCommands in output", () => {
@@ -113,11 +112,11 @@ describe("defineCommand", () => {
 
 		expect(cmd.meta.name).toBe("minimal");
 		expect(cmd.args).toBeUndefined();
-		expect(cmd.flags).toBeUndefined();
+		expect(cmd.flags).toEqual({});
 		expect(cmd.subCommands).toBeUndefined();
-		expect(cmd.setup).toBeUndefined();
+		expect(cmd.preRun).toBeUndefined();
 		expect(cmd.run).toBeUndefined();
-		expect(cmd.cleanup).toBeUndefined();
+		expect(cmd.postRun).toBeUndefined();
 	});
 
 	it("preserves args definitions", () => {
@@ -159,20 +158,20 @@ describe("defineCommand", () => {
 	});
 
 	it("preserves all lifecycle hooks", () => {
-		const setupFn = () => {};
+		const preRunFn = () => {};
 		const runFn = () => {};
-		const cleanupFn = () => {};
+		const postRunFn = () => {};
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			setup: setupFn,
+			preRun: preRunFn,
 			run: runFn,
-			cleanup: cleanupFn,
+			postRun: postRunFn,
 		});
 
-		expect(cmd.setup).toBe(setupFn);
+		expect(cmd.preRun).toBe(preRunFn);
 		expect(cmd.run).toBe(runFn);
-		expect(cmd.cleanup).toBe(cleanupFn);
+		expect(cmd.postRun).toBe(postRunFn);
 	});
 
 	it("allows async lifecycle hooks", async () => {
@@ -180,30 +179,29 @@ describe("defineCommand", () => {
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			async setup() {
-				order.push("setup");
+			async preRun() {
+				order.push("preRun");
 			},
 			async run() {
 				order.push("run");
 			},
-			async cleanup() {
-				order.push("cleanup");
+			async postRun() {
+				order.push("postRun");
 			},
 		});
 
 		const ctx = {
 			args: {} as never,
 			flags: {} as never,
-			globalFlags: {},
 			rawArgs: [],
-			cmd,
+			command: cmd,
 		};
 
-		await cmd.setup?.(ctx);
+		await cmd.preRun?.(ctx);
 		await cmd.run?.(ctx);
-		await cmd.cleanup?.(ctx);
+		await cmd.postRun?.(ctx);
 
-		expect(order).toEqual(["setup", "run", "cleanup"]);
+		expect(order).toEqual(["preRun", "run", "postRun"]);
 	});
 
 	it("does not mutate the original config", () => {
@@ -287,9 +285,8 @@ describe("defineCommand type inference", () => {
 		cmd.run?.({
 			args: { port: 8080, host: "localhost" },
 			flags: { verbose: true, output: "./build", count: 5 },
-			globalFlags: {},
 			rawArgs: [],
-			cmd,
+			command: cmd,
 		});
 	});
 

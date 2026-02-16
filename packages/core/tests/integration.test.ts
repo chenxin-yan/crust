@@ -5,18 +5,17 @@ import type {
 	Command,
 	CommandDef,
 	CommandMeta,
+	CommandRoute,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
-	ParsedResult,
-	ResolveResult,
+	ParseResult,
 	TypeConstructor,
 } from "../src/index";
 import {
 	defineCommand,
 	parseArgs,
 	resolveCommand,
-	runCommand,
 	runMain,
 } from "../src/index";
 import { runCommand as runTestCommand } from "./helpers";
@@ -54,9 +53,9 @@ describe("integration: core APIs", () => {
 
 	it("resolveCommand resolves subcommands", () => {
 		const result = resolveCommand(rootCmd, ["serve", "--port", "9000"]);
-		expect(result.resolved.meta.name).toBe("serve");
+		expect(result.command.meta.name).toBe("serve");
 		expect(result.argv).toEqual(["--port", "9000"]);
-		expect(result.path).toEqual(["myapp", "serve"]);
+		expect(result.commandPath).toEqual(["myapp", "serve"]);
 	});
 
 	it("runCommand executes using options.argv", async () => {
@@ -65,24 +64,6 @@ describe("integration: core APIs", () => {
 		});
 		expect(result.stdout).toContain("serve src on 4000");
 		expect(result.exitCode).toBe(0);
-	});
-
-	it("runCommand supports globalFlags", async () => {
-		let globalVerbose: unknown;
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			flags: { local: { type: Boolean } },
-			run({ globalFlags }) {
-				globalVerbose = globalFlags.verbose;
-			},
-		});
-
-		await runCommand(cmd, {
-			argv: ["--verbose"],
-			globalFlags: { verbose: { type: Boolean } },
-		});
-
-		expect(globalVerbose).toBe(true);
 	});
 
 	it("runMain catches errors and sets exit code", async () => {
@@ -119,15 +100,15 @@ describe("integration: exported types", () => {
 		const cmdDef: CommandDef = { meta, args: argsDef, flags: flagsDef };
 		const cmd: Command = defineCommand({ meta: { name: "typed-cmd" } });
 
-		const parsed: ParsedResult = {
+		const parsed: ParseResult = {
 			args: {},
 			flags: {},
 			rawArgs: [],
 		};
-		const resolved: ResolveResult = {
-			resolved: cmd,
+		const resolved: CommandRoute = {
+			command: cmd,
 			argv: [],
-			path: ["typed-cmd"],
+			commandPath: ["typed-cmd"],
 		};
 
 		type TestArgs = [{ name: "file"; type: StringConstructor; required: true }];

@@ -306,7 +306,7 @@ export interface CommandMeta {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// ParsedResult — Output of parseArgs
+// ParseResult — Output of parseArgs
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -315,7 +315,7 @@ export interface CommandMeta {
  * Generic parameters flow from the command definition to provide
  * strongly-typed `args` and `flags` objects.
  */
-export interface ParsedResult<
+export interface ParseResult<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 > {
@@ -332,18 +332,16 @@ export interface ParsedResult<
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The runtime context object passed to `setup()`, `run()`, and `cleanup()` hooks.
+ * The runtime context object passed to `preRun()`, `run()`, and `postRun()` hooks.
  *
- * Extends {@link ParsedResult} with a back-reference to the resolved command.
+ * Extends {@link ParseResult} with a back-reference to the resolved command.
  */
 export interface CommandContext<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
-> extends ParsedResult<A, F> {
-	/** Parsed global flags from RunOptions.globalFlags */
-	globalFlags: Record<string, unknown>;
+> extends ParseResult<A, F> {
 	/** The resolved command that is being executed */
-	cmd: CommandRef;
+	command: CommandRef;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -359,6 +357,7 @@ export interface CommandContext<
 export interface CommandDef<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
+	S extends Record<string, CommandRef> = Record<string, CommandRef>,
 > {
 	/** Command metadata (name, description, usage) */
 	meta: CommandMeta;
@@ -367,13 +366,13 @@ export interface CommandDef<
 	/** Flag definitions */
 	flags?: F;
 	/** Named subcommands */
-	subCommands?: Record<string, CommandRef>;
+	subCommands?: S;
 	/** Called before `run()` — useful for initialization */
-	setup?: (context: CommandContext<A, F>) => void | Promise<void>;
+	preRun?: (context: CommandContext<A, F>) => void | Promise<void>;
 	/** The main command handler */
 	run?: (context: CommandContext<A, F>) => void | Promise<void>;
-	/** Called after `run()` (even if it throws) — useful for cleanup */
-	cleanup?: (context: CommandContext<A, F>) => void | Promise<void>;
+	/** Called after `run()` (even if it throws) — useful for teardown */
+	postRun?: (context: CommandContext<A, F>) => void | Promise<void>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -389,7 +388,8 @@ export interface CommandDef<
 export type Command<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
-> = Readonly<CommandDef<A, F>>;
+	S extends Record<string, CommandRef> = Record<string, CommandRef>,
+> = Readonly<CommandDef<A, F, S>>;
 
 /**
  * A structural command reference used where command metadata and tree shape are
@@ -402,5 +402,19 @@ export interface CommandRef {
 	readonly subCommands?: Record<string, CommandRef>;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: works with any command generics
-export type AnyCommand = Command<any, any>;
+/**
+ * A type-erased command reference that includes lifecycle hooks.
+ *
+ * Extends {@link CommandRef} (metadata + args/flags/subCommands) with optional
+ * `preRun`, `run`, and `postRun` hooks typed at the widest `CommandContext`.
+ *
+ * The hooks are declared with **method syntax** so that TypeScript applies
+ * bivariant parameter checking — this allows any `Command<A, F, S>` (whose
+ * hooks accept a *narrower* context) to be safely assigned to `AnyCommand`
+ * without resorting to `any`.
+ */
+export interface AnyCommand extends CommandRef {
+	preRun?(context: CommandContext): void | Promise<void>;
+	run?(context: CommandContext): void | Promise<void>;
+	postRun?(context: CommandContext): void | Promise<void>;
+}
