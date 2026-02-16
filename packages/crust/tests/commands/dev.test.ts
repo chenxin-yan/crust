@@ -72,7 +72,7 @@ describe("devCommand error handling", () => {
 
 		try {
 			await expect(
-				runCommand(devCommand, ["--entry", "nonexistent.ts"]),
+				runCommand(devCommand, { argv: ["--entry", "nonexistent.ts"] }),
 			).rejects.toThrow(/Entry file not found/);
 		} finally {
 			process.cwd = originalCwd;
@@ -96,7 +96,7 @@ describe("devCommand error handling", () => {
 
 		try {
 			await expect(
-				runCommand(devCommand, ["--entry", "nonexistent.ts"]),
+				runCommand(devCommand, { argv: ["--entry", "nonexistent.ts"] }),
 			).rejects.toThrow(resolve(tmpDir, "nonexistent.ts"));
 		} finally {
 			process.cwd = originalCwd;
@@ -120,7 +120,7 @@ describe("devCommand error handling", () => {
 
 		try {
 			await expect(
-				runCommand(devCommand, ["--entry", "nonexistent.ts"]),
+				runCommand(devCommand, { argv: ["--entry", "nonexistent.ts"] }),
 			).rejects.toThrow(/--entry/);
 		} finally {
 			process.cwd = originalCwd;
@@ -182,7 +182,7 @@ process.exit(0);
 		console.log = () => {};
 
 		try {
-			await runCommand(devCommand, ["--entry", "src/cli.ts"]);
+			await runCommand(devCommand, { argv: ["--entry", "src/cli.ts"] });
 
 			expect(spawnedArgs[0]).toBe("bun");
 			expect(spawnedArgs[1]).toBe("--hot");
@@ -215,14 +215,9 @@ process.exit(0);
 		console.log = () => {};
 
 		try {
-			await runCommand(devCommand, [
-				"--entry",
-				"src/cli.ts",
-				"--",
-				"serve",
-				"--port",
-				"3000",
-			]);
+			await runCommand(devCommand, {
+				argv: ["--entry", "src/cli.ts", "--", "serve", "--port", "3000"],
+			});
 
 			expect(spawnedArgs[0]).toBe("bun");
 			expect(spawnedArgs[1]).toBe("--hot");
@@ -258,7 +253,7 @@ process.exit(0);
 		console.log = () => {};
 
 		try {
-			await runCommand(devCommand, []);
+			await runCommand(devCommand, { argv: [] });
 
 			expect(spawnedArgs[0]).toBe("bun");
 			expect(spawnedArgs[1]).toBe("--hot");
@@ -291,7 +286,7 @@ process.exit(0);
 		};
 
 		try {
-			await runCommand(devCommand, ["--entry", "src/cli.ts"]);
+			await runCommand(devCommand, { argv: ["--entry", "src/cli.ts"] });
 
 			expect(
 				logs.some((l) => l.includes("Starting dev server with hot reload")),
@@ -327,7 +322,7 @@ process.exit(0);
 
 		try {
 			await expect(
-				runCommand(devCommand, ["--entry", "src/cli.ts"]),
+				runCommand(devCommand, { argv: ["--entry", "src/cli.ts"] }),
 			).rejects.toThrow(/Dev process exited with code 1/);
 		} finally {
 			Bun.spawn = originalSpawn;
@@ -358,7 +353,7 @@ process.exit(0);
 		console.log = () => {};
 
 		try {
-			await runCommand(devCommand, ["--entry", "src/cli.ts"]);
+			await runCommand(devCommand, { argv: ["--entry", "src/cli.ts"] });
 
 			expect(spawnOpts.stdout).toBe("inherit");
 			expect(spawnOpts.stderr).toBe("inherit");

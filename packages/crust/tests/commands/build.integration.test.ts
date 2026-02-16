@@ -112,6 +112,7 @@ console.log("hello from crust build test");
 
 	it("uses package.json name for output when no --outfile or --name", async () => {
 		process.cwd = () => tmpDir;
+		mkdirSync(join(tmpDir, "dist"), { recursive: true });
 
 		const logs: string[] = [];
 		const originalLog = console.log;

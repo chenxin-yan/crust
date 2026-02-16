@@ -164,37 +164,24 @@ describe("crust CLI entry point", () => {
 	});
 
 	describe("crust unknown", () => {
-		it("should show error with available commands for unknown subcommand", async () => {
-			try {
-				await runCommand(crustCommand, { argv: ["unknown"] });
-				// Should not reach here — unknown subcommand should throw
-				expect(true).toBe(false);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				expect(message).toContain("unknown");
-				expect(message).toContain("build");
-				expect(message).toContain("dev");
-			}
+		it("shows root help for unknown input", async () => {
+			await runCommand(crustCommand, { argv: ["unknown"] });
+			const output = getStdout();
+			expect(output).toContain("USAGE:");
+			expect(output).toContain("build");
+			expect(output).toContain("dev");
 		});
 
-		it("should suggest 'build' for 'buil' typo", async () => {
-			try {
-				await runCommand(crustCommand, { argv: ["buil"] });
-				expect(true).toBe(false);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				expect(message).toContain("build");
-			}
+		it("shows root help for partial command input", async () => {
+			await runCommand(crustCommand, { argv: ["buil"] });
+			const output = getStdout();
+			expect(output).toContain("COMMANDS:");
 		});
 
-		it("should suggest 'dev' for 'de' typo", async () => {
-			try {
-				await runCommand(crustCommand, { argv: ["de"] });
-				expect(true).toBe(false);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				expect(message).toContain("dev");
-			}
+		it("shows root help for short command input", async () => {
+			await runCommand(crustCommand, { argv: ["de"] });
+			const output = getStdout();
+			expect(output).toContain("COMMANDS:");
 		});
 	});
 

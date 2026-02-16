@@ -1,11 +1,3 @@
-/**
- * Integration test that imports from the 'crust' package (not @crust/core)
- * and verifies all public APIs are available through the re-export.
- *
- * NOTE: The 'crust' package re-exports from the @crust/core built dist/.
- * This test validates the built output works correctly.
- */
-
 import { describe, expect, it } from "bun:test";
 import type {
 	ArgDef,
@@ -21,8 +13,6 @@ import type {
 } from "@crust/core";
 import {
 	defineCommand,
-	formatHelp,
-	formatVersion,
 	parseArgs,
 	resolveCommand,
 	runCommand,
@@ -30,41 +20,18 @@ import {
 } from "@crust/core";
 
 describe("crust package integration", () => {
-	it("re-exports all functions from @crust/core", () => {
+	it("re-exports all core runtime APIs used by crust", () => {
 		expect(typeof defineCommand).toBe("function");
 		expect(typeof parseArgs).toBe("function");
-		expect(typeof formatHelp).toBe("function");
-		expect(typeof formatVersion).toBe("function");
 		expect(typeof resolveCommand).toBe("function");
 		expect(typeof runCommand).toBe("function");
 		expect(typeof runMain).toBe("function");
 	});
 
-	it("defineCommand works through the crust package", () => {
-		const cmd = defineCommand({
-			meta: { name: "test-crust-pkg", version: "0.1.0", description: "Test" },
-			args: {
-				name: { type: String, required: true },
-			},
-			flags: {
-				verbose: { type: Boolean, alias: "v" },
-			},
-			run({ args }) {
-				console.log(`Hello ${args.name}!`);
-			},
-		});
-
-		expect(cmd.meta.name).toBe("test-crust-pkg");
-		expect(cmd.meta.version).toBe("0.1.0");
-		expect(Object.isFrozen(cmd)).toBe(true);
-	});
-
-	it("parseArgs works through the crust package", () => {
+	it("defineCommand + parseArgs work through re-export", () => {
 		const cmd = defineCommand({
 			meta: { name: "parse-test" },
-			args: {
-				file: { type: String, required: true },
-			},
+			args: [{ name: "file", type: String, required: true }],
 			flags: {
 				output: { type: String, default: "dist", alias: "o" },
 			},
@@ -75,34 +42,10 @@ describe("crust package integration", () => {
 		expect(result.flags.output).toBe("build");
 	});
 
-	it("formatHelp works through the crust package", () => {
-		const cmd = defineCommand({
-			meta: { name: "help-test", description: "A test command" },
-			flags: {
-				debug: { type: Boolean },
-			},
-		});
-
-		const help = formatHelp(cmd);
-		expect(help).toContain("A test command");
-		expect(help).toContain("USAGE:");
-		expect(help).toContain("--debug");
-	});
-
-	it("formatVersion works through the crust package", () => {
-		const cmd = defineCommand({
-			meta: { name: "version-test", version: "2.0.0" },
-		});
-
-		expect(formatVersion(cmd)).toBe("version-test v2.0.0");
-	});
-
-	it("resolveCommand works through the crust package", () => {
+	it("resolveCommand works through re-export", () => {
 		const sub = defineCommand({
-			meta: { name: "sub", description: "A subcommand" },
-			run() {
-				console.log("sub ran");
-			},
+			meta: { name: "sub" },
+			run() {},
 		});
 
 		const root = defineCommand({
@@ -116,7 +59,7 @@ describe("crust package integration", () => {
 		expect(result.path).toEqual(["root", "sub"]);
 	});
 
-	it("runCommand works through the crust package", async () => {
+	it("runCommand executes through re-export", async () => {
 		let ran = false;
 		const cmd = defineCommand({
 			meta: { name: "run-test" },
@@ -125,16 +68,15 @@ describe("crust package integration", () => {
 			},
 		});
 
-		await runCommand(cmd, []);
+		await runCommand(cmd, { argv: [] });
 		expect(ran).toBe(true);
 	});
 
-	it("all types are importable and usable", () => {
-		// Type-level verification — if this compiles, all types are exported
+	it("exported types are importable", () => {
 		const meta: CommandMeta = { name: "typed" };
-		const argDef: ArgDef = { type: String };
+		const argDef: ArgDef = { name: "name", type: String };
 		const flagDef: FlagDef = { type: Boolean };
-		const argsDef: ArgsDef = { name: argDef };
+		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 		const tc: TypeConstructor = Number;
 		const cmdDef: CommandDef = { meta };
@@ -153,10 +95,8 @@ describe("crust package integration", () => {
 		void flagsDef;
 		void tc;
 		void cmdDef;
-		void cmd;
 		void parsed;
 		void resolved;
-
 		expect(true).toBe(true);
 	});
 });

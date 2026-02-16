@@ -9,7 +9,7 @@
 
 import type { RunOptions } from "../src/run.ts";
 import { runCommand as coreRunCommand } from "../src/run.ts";
-import type { Command } from "../src/types.ts";
+import type { AnyCommand } from "../src/types.ts";
 
 export interface RunResult {
 	stdout: string;
@@ -26,7 +26,7 @@ export interface RunResult {
  *   expect(result.exitCode).toBe(0);
  */
 export async function runCommand(
-	_command: Command,
+	_command: AnyCommand,
 	_options?: RunOptions,
 ): Promise<RunResult> {
 	const stdoutChunks: string[] = [];
