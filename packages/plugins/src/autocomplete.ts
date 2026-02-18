@@ -1,5 +1,5 @@
-import { CrustError } from "../errors.ts";
-import type { CrustPlugin } from "../plugins.ts";
+import type { CrustPlugin } from "@crust/core";
+import { CrustError } from "@crust/core";
 import { renderHelp } from "./help.ts";
 
 export interface AutoCompletePluginOptions {

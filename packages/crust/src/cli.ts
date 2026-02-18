@@ -1,11 +1,7 @@
 #!/usr/bin/env bun
 
 import { defineCommand, runMain } from "@crust/core";
-import {
-	autoCompletePlugin,
-	helpPlugin,
-	versionPlugin,
-} from "@crust/core/plugins";
+import { autoCompletePlugin, helpPlugin, versionPlugin } from "@crust/plugins";
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";
 import { devCommand } from "./commands/dev.ts";

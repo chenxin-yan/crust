@@ -52,9 +52,8 @@ describe("scaffold", () => {
 		expect(pkg.description).toBe("An awesome CLI tool");
 		expect(pkg.author).toBe("Jane Doe");
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli.js" });
-		expect(pkg.dependencies).toEqual({ "@crust/core": "latest" });
+		expect(pkg.dependencies).toEqual({ crust: "latest" });
 		expect(pkg.devDependencies).toEqual({
-			crust: "latest",
 			typescript: "^5",
 		});
 		expect(pkg.scripts).toEqual({
@@ -118,11 +117,14 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("defineCommand");
 		// Uses runMain
 		expect(cliContent).toContain("runMain");
-		// Imports from @crust/core
-		expect(cliContent).toContain("@crust/core");
+		// Uses help/version plugins
+		expect(cliContent).toContain("helpPlugin");
+		expect(cliContent).toContain("versionPlugin");
+		// Imports from crust
+		expect(cliContent).toContain('"crust"');
 		// Contains command name
 		expect(cliContent).toContain('"test-cli"');
-		// Has a --name flag with String type
+		// Has a positional name argument with String type
 		expect(cliContent).toContain("type: String");
 		// Has a run function
 		expect(cliContent).toContain("run(");
@@ -164,10 +166,11 @@ describe("scaffold", () => {
 		// (We can't run tsc without dependencies installed, but we can verify syntax)
 		expect(cliContent).toContain("import {");
 		expect(cliContent).toContain("const main = defineCommand({");
-		expect(cliContent).toContain("runMain(main)");
-		// Has proper structure: meta, args, flags, run
+		expect(cliContent).toContain("runMain(main, {");
+		expect(cliContent).toContain("plugins: [versionPlugin");
+		// Has proper structure: meta, args tuple, flags, run
 		expect(cliContent).toContain("meta:");
-		expect(cliContent).toContain("args:");
+		expect(cliContent).toContain("args: [");
 		expect(cliContent).toContain("flags:");
 		expect(cliContent).toContain("run(");
 	});

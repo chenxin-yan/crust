@@ -10,7 +10,6 @@ import type {
 	FlagsDef,
 	InferArgs,
 	ParseResult,
-	TypeConstructor,
 } from "../src/index";
 import {
 	defineCommand,
@@ -95,7 +94,6 @@ describe("integration: exported types", () => {
 		const flagDef: FlagDef = { type: Boolean };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
-		const tc: TypeConstructor = Number;
 
 		const cmdDef: CommandDef = { meta, args: argsDef, flags: flagsDef };
 		const cmd: Command = defineCommand({ meta: { name: "typed-cmd" } });
@@ -120,7 +118,6 @@ describe("integration: exported types", () => {
 		void flagDef;
 		void argsDef;
 		void flagsDef;
-		void tc;
 		void cmdDef;
 		void parsed;
 		void resolved;

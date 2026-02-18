@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { defineCommand } from "./command.ts";
-import { autoCompletePlugin } from "./plugins/autocomplete.ts";
-import { helpPlugin } from "./plugins/help.ts";
-import { versionPlugin } from "./plugins/version.ts";
-import { runCommand } from "./run.ts";
+import { defineCommand, runCommand } from "@crust/core";
+import { autoCompletePlugin } from "./autocomplete.ts";
+import { helpPlugin } from "./help.ts";
+import { versionPlugin } from "./version.ts";
 
 let stdoutChunks: string[];
 let stderrChunks: string[];
@@ -148,7 +147,6 @@ describe("built-in plugins", () => {
 			},
 		});
 
-		// Running a subcommand without --version should not trigger version output
 		await runCommand(cmd, {
 			argv: ["build"],
 			plugins: [versionPlugin("1.0.0")],

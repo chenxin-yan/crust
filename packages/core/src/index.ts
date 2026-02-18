@@ -7,9 +7,17 @@ export { CrustError } from "./errors.ts";
 
 // Argument & flag parsing
 export { parseArgs } from "./parser.ts";
-export type { CommandRoute } from "./router.ts";
+
+// Plugin runtime contracts
+export type {
+	CrustPlugin,
+	MiddlewareContext,
+	PluginMiddleware,
+	SetupContext,
+} from "./plugins.ts";
 
 // Subcommand routing
+export type { CommandRoute } from "./router.ts";
 export { resolveCommand } from "./router.ts";
 
 // Command execution
@@ -25,11 +33,9 @@ export type {
 	CommandContext,
 	CommandDef,
 	CommandMeta,
-	CommandRef,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
 	ParseResult,
-	TypeConstructor,
 } from "./types.ts";

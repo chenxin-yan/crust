@@ -9,11 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runCommand } from "@crust/core";
-import {
-	autoCompletePlugin,
-	helpPlugin,
-	versionPlugin,
-} from "@crust/core/plugins";
+import { autoCompletePlugin, helpPlugin, versionPlugin } from "@crust/plugins";
 import { crustCommand } from "../src/cli.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

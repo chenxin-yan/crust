@@ -1,11 +1,11 @@
-import type { CrustPlugin } from "../plugins.ts";
 import type {
 	AnyCommand,
 	ArgDef,
 	CommandMeta,
+	CrustPlugin,
 	FlagDef,
 	FlagsDef,
-} from "../types.ts";
+} from "@crust/core";
 
 function formatArgToken(arg: ArgDef): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;

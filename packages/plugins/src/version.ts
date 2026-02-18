@@ -1,4 +1,4 @@
-import type { CrustPlugin } from "../plugins.ts";
+import type { CrustPlugin } from "@crust/core";
 
 export type VersionValue = string | (() => string);
 
@@ -15,13 +15,11 @@ export function versionPlugin(
 			});
 		},
 		async middleware(context, next) {
-			// Only handle when the routed command is the root command
 			if (!context.route || context.route.command !== context.rootCommand) {
 				await next();
 				return;
 			}
 
-			// Check the parsed flag (-- separator handled by parser)
 			if (!context.input?.flags.version) {
 				await next();
 				return;

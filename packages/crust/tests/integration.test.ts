@@ -9,7 +9,6 @@ import type {
 	FlagDef,
 	FlagsDef,
 	ParseResult,
-	TypeConstructor,
 } from "@crust/core";
 import {
 	defineCommand,
@@ -78,7 +77,6 @@ describe("crust package integration", () => {
 		const flagDef: FlagDef = { type: Boolean };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
-		const tc: TypeConstructor = Number;
 		const cmdDef: CommandDef = { meta };
 		const cmd: Command = defineCommand({ meta: { name: "typed-test" } });
 		const parsed: ParseResult = { args: {}, flags: {}, rawArgs: [] };
@@ -93,7 +91,6 @@ describe("crust package integration", () => {
 		void flagDef;
 		void argsDef;
 		void flagsDef;
-		void tc;
 		void cmdDef;
 		void parsed;
 		void resolved;

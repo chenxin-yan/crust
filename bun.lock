@@ -49,12 +49,26 @@
       },
       "dependencies": {
         "@crust/core": "workspace:*",
+        "@crust/plugins": "workspace:*",
       },
       "devDependencies": {
         "@crust/config": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
+    "packages/plugins": {
+      "name": "@crust/plugins",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@crust/config": "workspace:*",
+        "@crust/core": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "@crust/core": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -97,6 +111,8 @@
     "@crust/config": ["@crust/config@workspace:packages/config"],
 
     "@crust/core": ["@crust/core@workspace:packages/core"],
+
+    "@crust/plugins": ["@crust/plugins@workspace:packages/plugins"],
 
     "@emnapi/core": ["@emnapi/core@1.8.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg=="],
 

@@ -61,7 +61,3 @@ export interface CrustPlugin {
 	) => void | Promise<void>;
 	middleware?: PluginMiddleware;
 }
-
-export { autoCompletePlugin } from "./plugins/autocomplete.ts";
-export { helpPlugin } from "./plugins/help.ts";
-export { versionPlugin } from "./plugins/version.ts";

@@ -25,10 +25,9 @@ function templatePackageJson(
 			dev: "crust dev",
 		},
 		dependencies: {
-			"@crust/core": "latest",
+			crust: "latest",
 		},
 		devDependencies: {
-			crust: "latest",
 			typescript: "^5",
 		},
 	};
@@ -70,20 +69,21 @@ function templateTsconfig(): string {
 function templateCliTs(name: string): string {
 	return `#!/usr/bin/env bun
 
-import { defineCommand, runMain } from "@crust/core";
+import { defineCommand, helpPlugin, runMain, versionPlugin } from "crust";
 
 const main = defineCommand({
 \tmeta: {
 \t\tname: "${name}",
 \t\tdescription: "A CLI built with Crust",
 \t},
-\targs: {
-\t\tname: {
+\targs: [
+\t\t{
+\t\t\tname: "name",
 \t\t\ttype: String,
 \t\t\tdescription: "Your name",
 \t\t\tdefault: "world",
 \t\t},
-\t},
+\t],
 \tflags: {
 \t\tgreet: {
 \t\t\ttype: String,
@@ -97,7 +97,9 @@ const main = defineCommand({
 \t},
 });
 
-runMain(main);
+runMain(main, {
+	plugins: [versionPlugin("0.0.0"), helpPlugin()],
+});
 `;
 }
 
