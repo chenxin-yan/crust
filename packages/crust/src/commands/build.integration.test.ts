@@ -76,24 +76,29 @@ console.log("hello from crust build test");
 		expect(logs.some((l) => l.includes("Built successfully"))).toBe(true);
 	});
 
-	it("built binary is executable and produces correct output", async () => {
-		const outPath = join(tmpDir, "dist", "test-cli");
-		if (!existsSync(outPath)) {
-			// Skip if previous test didn't produce the binary
-			return;
-		}
+	// This test can only run when the host matches the build target (darwin-arm64).
+	// On CI (Linux), the cross-compiled binary exists but cannot be executed.
+	it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")(
+		"built binary is executable and produces correct output",
+		async () => {
+			const outPath = join(tmpDir, "dist", "test-cli");
+			if (!existsSync(outPath)) {
+				// Skip if previous test didn't produce the binary
+				return;
+			}
 
-		const proc = Bun.spawn([outPath], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
+			const proc = Bun.spawn([outPath], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
 
-		const exitCode = await proc.exited;
-		const stdout = await new Response(proc.stdout).text();
+			const exitCode = await proc.exited;
+			const stdout = await new Response(proc.stdout).text();
 
-		expect(exitCode).toBe(0);
-		expect(stdout.trim()).toBe("hello from crust build test");
-	});
+			expect(exitCode).toBe(0);
+			expect(stdout.trim()).toBe("hello from crust build test");
+		},
+	);
 
 	it("builds without --minify when --no-minify is passed", async () => {
 		process.cwd = () => tmpDir;
