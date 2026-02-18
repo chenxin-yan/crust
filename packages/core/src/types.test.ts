@@ -6,7 +6,6 @@ import type {
 	CheckVariadicArgs,
 	Command,
 	CommandContext,
-	CommandDef,
 	CommandMeta,
 	FlagDef,
 	FlagsDef,
@@ -342,7 +341,7 @@ describe("FlagDef interface", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// CommandMeta / CommandDef / Command tests
+// CommandMeta / Command tests
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("CommandMeta interface", () => {
@@ -362,16 +361,16 @@ describe("CommandMeta interface", () => {
 	});
 });
 
-describe("CommandDef interface", () => {
+describe("Command interface", () => {
 	it("accepts a minimal definition (meta only)", () => {
-		const cmd: CommandDef = {
+		const cmd: Command = {
 			meta: { name: "test" },
 		};
 		expect(cmd.meta.name).toBe("test");
 	});
 
 	it("accepts a full definition with args, flags, and lifecycle hooks", () => {
-		const cmd: CommandDef = {
+		const cmd: Command = {
 			meta: { name: "serve", description: "Start server" },
 			args: [{ name: "path", type: String, required: true }],
 			flags: {
@@ -396,8 +395,8 @@ describe("CommandDef interface", () => {
 	});
 });
 
-describe("Command type", () => {
-	it("is a readonly version of CommandDef", () => {
+describe("Command runtime shape", () => {
+	it("accepts a command value used at runtime", () => {
 		const cmd: Command = {
 			meta: { name: "test" },
 			run: (_ctx) => {

@@ -139,7 +139,7 @@ function injectHelpFlags(
 
 	if (command.subCommands) {
 		for (const sub of Object.values(command.subCommands)) {
-			injectHelpFlags(sub as AnyCommand, addFlag);
+			injectHelpFlags(sub, addFlag);
 		}
 	}
 }

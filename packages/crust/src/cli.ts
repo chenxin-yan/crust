@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
-import type { AnyCommand } from "@crustjs/core";
-import { defineCommand, runMain } from "@crustjs/core";
+import { type Command, defineCommand, runMain } from "@crustjs/core";
 import {
 	autoCompletePlugin,
 	helpPlugin,
@@ -19,7 +18,7 @@ import { buildCommand } from "./commands/build.ts";
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
  */
-export const crustCommand: AnyCommand = defineCommand({
+export const crustCommand: Command = defineCommand({
 	meta: {
 		name: pkg.name,
 		description: pkg.description,

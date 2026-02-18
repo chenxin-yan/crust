@@ -4,8 +4,6 @@ import type {
 	CheckFlagAliasCollisions,
 	CheckVariadicArgs,
 	Command,
-	CommandDef,
-	CommandRef,
 	FlagsDef,
 } from "./types.ts";
 
@@ -40,9 +38,8 @@ import type {
 export function defineCommand<
 	const A extends ArgsDef = ArgsDef,
 	const F extends FlagsDef = FlagsDef,
-	const S extends Record<string, CommandRef> = Record<string, CommandRef>,
 >(
-	config: CommandDef<A, F, S> & {
+	config: Command<A, F> & {
 		args?: A & CheckVariadicArgs<A>;
 		flags?: F & CheckFlagAliasCollisions<F>;
 	},
@@ -58,7 +55,7 @@ export function defineCommand<
 	// Deep copy data objects to decouple from the original config.
 	// Functions (preRun, run, postRun) are kept as-is since they can't be cloned.
 	// subCommands values are already frozen Command objects, so shallow copy is sufficient.
-	const copy: CommandDef<A, F, S> = {
+	const copy: Command<A, F> = {
 		...config,
 		meta: { ...config.meta },
 		...(config.args && {
@@ -75,5 +72,5 @@ export function defineCommand<
 	};
 
 	// Freeze and return as immutable Command
-	return Object.freeze(copy) as Command<A, F, S>;
+	return Object.freeze(copy) as Command<A, F>;
 }

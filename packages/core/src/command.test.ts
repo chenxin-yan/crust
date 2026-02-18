@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { defineCommand } from "./command.ts";
 import { CrustError } from "./errors.ts";
-import type { AnyCommand, CommandContext } from "./types.ts";
+import type { Command, CommandContext } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
@@ -348,8 +348,8 @@ describe("defineCommand type inference", () => {
 			},
 		});
 
-		// The command should be assignable to AnyCommand (type-erased reference)
-		const _broadCmd: AnyCommand = cmd;
+		// The command should be assignable to the broad Command reference type
+		const _broadCmd: Command = cmd;
 		expect(_broadCmd).toBeDefined();
 	});
 });

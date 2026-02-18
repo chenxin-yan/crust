@@ -3,7 +3,6 @@ import type {
 	ArgDef,
 	ArgsDef,
 	Command,
-	CommandDef,
 	CommandMeta,
 	CommandRoute,
 	FlagDef,
@@ -77,7 +76,7 @@ describe("crust package integration", () => {
 		const flagDef: FlagDef = { type: Boolean };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
-		const cmdDef: CommandDef = { meta };
+		const cmdDef: Command = { meta };
 		const cmd: Command = defineCommand({ meta: { name: "typed-test" } });
 		const parsed: ParseResult = { args: {}, flags: {}, rawArgs: [] };
 		const resolved: CommandRoute = {

@@ -3,7 +3,6 @@ import type {
 	ArgDef,
 	ArgsDef,
 	Command,
-	CommandDef,
 	CommandMeta,
 	CommandRoute,
 	FlagDef,
@@ -95,7 +94,7 @@ describe("integration: exported types", () => {
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 
-		const cmdDef: CommandDef = { meta, args: argsDef, flags: flagsDef };
+		const cmdDef: Command = { meta, args: argsDef, flags: flagsDef };
 		const cmd: Command = defineCommand({ meta: { name: "typed-cmd" } });
 
 		const parsed: ParseResult = {

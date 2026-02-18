@@ -341,80 +341,33 @@ export interface CommandContext<
 	F extends FlagsDef = FlagsDef,
 > extends ParseResult<A, F> {
 	/** The resolved command that is being executed */
-	command: CommandRef;
+	command: AnyCommand;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// CommandDef — Command definition (input to defineCommand)
+// Command — Unified command shape
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * The configuration object accepted by `defineCommand()`.
- *
- * This is the user-facing API for defining CLI commands. Generic type parameters
- * are automatically inferred from the config — no manual type annotations needed.
- */
-export interface CommandDef<
+/** Unified command shape used for both command definitions and resolved commands. */
+export interface Command<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
-	S extends Record<string, CommandRef> = Record<string, CommandRef>,
 > {
 	/** Command metadata (name, description, usage) */
-	meta: CommandMeta;
-	/** Positional argument definitions */
-	args?: A;
-	/** Flag definitions */
-	flags?: F;
-	/** Named subcommands */
-	subCommands?: S;
-	/** Called before `run()` — useful for initialization */
-	preRun?: (context: CommandContext<A, F>) => void | Promise<void>;
-	/** The main command handler */
-	run?: (context: CommandContext<A, F>) => void | Promise<void>;
-	/** Called after `run()` (even if it throws) — useful for teardown */
-	postRun?: (context: CommandContext<A, F>) => void | Promise<void>;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Command — Resolved command (output of defineCommand)
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * A fully resolved, frozen command object.
- *
- * This is the output of `defineCommand()`. It has the same shape as `CommandDef`
- * but is deeply readonly to prevent mutation.
- */
-export type Command<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-	S extends Record<string, CommandRef> = Record<string, CommandRef>,
-> = Readonly<CommandDef<A, F, S>>;
-
-/**
- * A structural command reference used where command metadata and tree shape are
- * needed, but lifecycle callbacks and arg/flag generics are irrelevant.
- */
-export interface CommandRef {
 	readonly meta: CommandMeta;
-	readonly args?: ArgsDef;
-	readonly flags?: FlagsDef;
-	readonly subCommands?: Record<string, CommandRef>;
+	/** Positional argument definitions */
+	readonly args?: A;
+	/** Flag definitions */
+	readonly flags?: F;
+	/** Named subcommands */
+	readonly subCommands?: Record<string, AnyCommand>;
+	/** Called before `run()` — useful for initialization */
+	preRun?(context: CommandContext<A, F>): void | Promise<void>;
+	/** The main command handler */
+	run?(context: CommandContext<A, F>): void | Promise<void>;
+	/** Called after `run()` (even if it throws) — useful for teardown */
+	postRun?(context: CommandContext<A, F>): void | Promise<void>;
 }
 
-/**
- * A type-erased command reference that includes lifecycle hooks.
- *
- * Extends {@link CommandRef} (metadata + args/flags/subCommands) with optional
- * `preRun`, `run`, and `postRun` hooks typed at the widest `CommandContext`.
- *
- * The hooks are declared with **method syntax** so that TypeScript applies
- * bivariant parameter checking — this allows any `Command<A, F, S>` (whose
- * hooks accept a *narrower* context) to be safely assigned to `AnyCommand`
- * without resorting to `any`.
- */
-export interface AnyCommand extends CommandRef {
-	preRun?(context: CommandContext): void | Promise<void>;
-	run?(context: CommandContext): void | Promise<void>;
-	postRun?(context: CommandContext): void | Promise<void>;
-}
+// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased command boundaries
+export type AnyCommand = Command<any, any>;
