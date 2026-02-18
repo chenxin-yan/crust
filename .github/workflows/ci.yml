@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  build:
+  ci:
     name: build
     runs-on: ubuntu-latest
     steps:
