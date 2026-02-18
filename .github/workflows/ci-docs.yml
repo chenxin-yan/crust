@@ -1,0 +1,40 @@
+name: CI Docs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/docs/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - "biome.json"
+      - ".github/workflows/ci-docs.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Check Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Lint and format check (docs)
+        run: bun run check apps/docs
+
+      - name: Type check (docs)
+        run: bun run check:types --filter=./apps/docs
+
+      - name: Build (docs)
+        run: bun run build --filter=./apps/docs
