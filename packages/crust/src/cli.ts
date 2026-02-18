@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import type { AnyCommand } from "@crust/core";
 import { defineCommand, runMain } from "@crust/core";
 import { autoCompletePlugin, helpPlugin, versionPlugin } from "@crust/plugins";
 import pkg from "../package.json";
@@ -16,7 +17,7 @@ import { devCommand } from "./commands/dev.ts";
  * - `crust build` - Compile your CLI to a standalone Bun executable
  * - `crust dev` - Start your CLI in development mode with hot reload
  */
-export const crustCommand = defineCommand({
+export const crustCommand: AnyCommand = defineCommand({
 	meta: {
 		name: pkg.name,
 		description: pkg.description,

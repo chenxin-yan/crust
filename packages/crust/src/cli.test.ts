@@ -100,8 +100,8 @@ describe("crust CLI entry point", () => {
 			expect(crustCommand.subCommands).toBeDefined();
 			expect(crustCommand.subCommands?.build).toBeDefined();
 			expect(crustCommand.subCommands?.dev).toBeDefined();
-			expect(crustCommand.subCommands?.build.meta.name).toBe("build");
-			expect(crustCommand.subCommands?.dev.meta.name).toBe("dev");
+			expect(crustCommand.subCommands?.build?.meta.name).toBe("build");
+			expect(crustCommand.subCommands?.dev?.meta.name).toBe("dev");
 		});
 	});
 
