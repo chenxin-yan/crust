@@ -120,6 +120,8 @@ describe("scaffold", () => {
 		// Uses help/version plugins
 		expect(cliContent).toContain("helpPlugin");
 		expect(cliContent).toContain("versionPlugin");
+		expect(cliContent).toContain('import pkg from "../package.json"');
+		expect(cliContent).toContain("versionPlugin(pkg.version)");
 		// Imports from crust
 		expect(cliContent).toContain('"crust"');
 		// Contains command name

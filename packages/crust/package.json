@@ -1,7 +1,31 @@
 {
 	"name": "crust",
-	"version": "0.0.0",
+	"version": "0.0.1",
+	"description": "A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.",
 	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/crust"
+	},
+	"homepage": "https://crust.cyanlabs.co",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"command",
+		"framework",
+		"parser",
+		"bun",
+		"typescript",
+		"plugin"
+	],
+	"files": [
+		"dist"
+	],
 	"exports": {
 		".": {
 			"import": "./dist/index.js",

@@ -84,7 +84,7 @@ describe("crust CLI entry point", () => {
 		it("should have correct meta", () => {
 			expect(crustCommand.meta.name).toBe("crust");
 			expect(crustCommand.meta.description).toBe(
-				"A Bun-native, TypeScript-first CLI framework",
+				"A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.",
 			);
 		});
 

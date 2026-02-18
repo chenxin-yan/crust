@@ -1,7 +1,31 @@
 {
 	"name": "create-crust",
-	"version": "0.0.0",
+	"version": "0.0.1",
+	"description": "Scaffold a new Crust CLI project.",
 	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/create-crust"
+	},
+	"homepage": "https://crust.cyanlabs.co",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"scaffold",
+		"create",
+		"generator",
+		"bun",
+		"typescript",
+		"crust"
+	],
+	"files": [
+		"dist"
+	],
 	"bin": {
 		"create-crust": "dist/index.js"
 	},

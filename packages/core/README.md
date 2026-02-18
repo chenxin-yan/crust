@@ -1,15 +1,39 @@
-# crust
+# @crust/core
 
-To install dependencies:
+The core library for the [Crust](https://crust.cyanlabs.co) CLI framework.
 
-```bash
-bun install
+Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, and a plugin system — with **zero runtime dependencies**.
+
+## Install
+
+```sh
+bun add @crust/core
 ```
 
-To run:
+## Quick Example
 
-```bash
-bun run index.ts
+```ts
+import { defineCommand, runMain } from "@crust/core";
+
+const main = defineCommand({
+  meta: { name: "greet", description: "Say hello" },
+  args: [{ name: "name", type: String, default: "world" }],
+  flags: {
+    loud: { type: Boolean, description: "Shout it", alias: "l" },
+  },
+  run({ args, flags }) {
+    const msg = `Hello, ${args.name}!`;
+    console.log(flags.loud ? msg.toUpperCase() : msg);
+  },
+});
+
+runMain(main);
 ```
 
-This project was created using `bun init` in bun v1.3.8. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Documentation
+
+See the full docs at [crust.cyanlabs.co](https://crust.cyanlabs.co).
+
+## License
+
+MIT

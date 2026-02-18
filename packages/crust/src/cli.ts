@@ -18,8 +18,8 @@ import { devCommand } from "./commands/dev.ts";
  */
 export const crustCommand = defineCommand({
 	meta: {
-		name: "crust",
-		description: "A Bun-native, TypeScript-first CLI framework",
+		name: pkg.name,
+		description: pkg.description,
 	},
 	subCommands: {
 		build: buildCommand,

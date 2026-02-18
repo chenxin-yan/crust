@@ -1,12 +1,38 @@
 {
 	"name": "@crust/core",
-	"version": "0.0.0",
+	"version": "0.0.1",
+	"description": "Core library for the Crust CLI framework",
 	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/core"
+	},
+	"homepage": "https://crust.cyanlabs.co",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"command",
+		"framework",
+		"parser",
+		"bun",
+		"typescript"
+	],
+	"files": [
+		"dist"
+	],
 	"exports": {
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
 		}
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"build": "bunup",
@@ -15,7 +41,7 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
-		"@crust/config": "*",
+		"@crust/config": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {

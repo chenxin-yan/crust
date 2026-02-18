@@ -70,6 +70,7 @@ function templateCliTs(name: string): string {
 	return `#!/usr/bin/env bun
 
 import { defineCommand, helpPlugin, runMain, versionPlugin } from "crust";
+import pkg from "../package.json";
 
 const main = defineCommand({
 \tmeta: {
@@ -98,7 +99,7 @@ const main = defineCommand({
 });
 
 runMain(main, {
-	plugins: [versionPlugin("0.0.0"), helpPlugin()],
+	plugins: [versionPlugin(pkg.version), helpPlugin()],
 });
 `;
 }
