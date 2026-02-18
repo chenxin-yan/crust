@@ -1,2 +1,2 @@
-export * from "@crust/core";
-export * from "@crust/plugins";
+export * from "@crustjs/core";
+export * from "@crustjs/plugins";

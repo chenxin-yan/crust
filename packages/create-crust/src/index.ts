@@ -25,7 +25,7 @@ function templatePackageJson(
 			dev: "bun run src/cli.ts",
 		},
 		dependencies: {
-			crust: "latest",
+			"@crustjs/crust": "latest",
 		},
 		devDependencies: {
 			typescript: "^5",
@@ -69,7 +69,7 @@ function templateTsconfig(): string {
 function templateCliTs(name: string): string {
 	return `#!/usr/bin/env bun
 
-import { defineCommand, helpPlugin, runMain, versionPlugin } from "crust";
+import { defineCommand, helpPlugin, runMain, versionPlugin } from "@crustjs/crust";
 import pkg from "../package.json";
 
 const main = defineCommand({

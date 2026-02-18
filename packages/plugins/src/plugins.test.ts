@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { defineCommand, runCommand } from "@crust/core";
+import { defineCommand, runCommand } from "@crustjs/core";
 import { autoCompletePlugin } from "./autocomplete.ts";
 import { helpPlugin } from "./help.ts";
 import { versionPlugin } from "./version.ts";

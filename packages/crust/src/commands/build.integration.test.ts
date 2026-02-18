@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { runCommand } from "@crust/core";
+import { runCommand } from "@crustjs/core";
 import { buildCommand } from "../../src/commands/build.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

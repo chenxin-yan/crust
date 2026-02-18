@@ -9,14 +9,14 @@ import type {
 	FlagDef,
 	FlagsDef,
 	ParseResult,
-} from "@crust/core";
+} from "@crustjs/core";
 import {
 	defineCommand,
 	parseArgs,
 	resolveCommand,
 	runCommand,
 	runMain,
-} from "@crust/core";
+} from "@crustjs/core";
 
 describe("crust package integration", () => {
 	it("re-exports all core runtime APIs used by crust", () => {

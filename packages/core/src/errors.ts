@@ -62,7 +62,7 @@ export type CrustErrorDetails<C extends CrustErrorCode> =
  *
  * @example
  * ```ts
- * import { CrustError, parseArgs } from "@crust/core";
+ * import { CrustError, parseArgs } from "@crustjs/core";
  *
  * try {
  *   const result = parseArgs(cmd, process.argv.slice(2));

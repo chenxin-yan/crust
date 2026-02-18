@@ -42,13 +42,13 @@ Crust sits in the sweet spot — more feature rich than a parser, lighter than a
 
 | Package           | Description                                 |
 | ----------------- | ------------------------------------------- |
-| `@crust/core`     | Core library                                |
-| `@crust/plugins`  | Official plugins                            |
-| `@crust/validate` | Input validation & coercion _(coming soon)_ |
-| `@crust/prompt`   | Interactive prompts _(coming soon)_         |
-| `@crust/color`    | Terminal styling & colors _(coming soon)_   |
-| `crust`           | all-in-one package with CLI tooling         |
-| `create-crust`    | Project scaffolder                          |
+| `@crustjs/core`     | Core library                                |
+| `@crustjs/plugins`  | Official plugins                            |
+| `@crustjs/validate` | Input validation & coercion _(coming soon)_ |
+| `@crustjs/prompt`   | Interactive prompts _(coming soon)_         |
+| `@crustjs/color`    | Terminal styling & colors _(coming soon)_   |
+| `@crustjs/crust`     | all-in-one package with CLI tooling         |
+| `@crustjs/create-crust` | Project scaffolder                      |
 
 ## License
 

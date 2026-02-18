@@ -1,5 +1,5 @@
 {
-	"name": "@crust/plugins",
+	"name": "@crustjs/plugins",
 	"version": "0.0.1",
 	"description": "Official plugins for the Crust CLI framework",
 	"type": "module",
@@ -42,12 +42,12 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
-		"@crust/config": "workspace:*",
-		"@crust/core": "workspace:*",
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crust/core": "workspace:*",
+		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
 	}
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@crust/docs",
+  "name": "@crustjs/docs",
   "private": true,
   "type": "module",
   "sideEffects": false,

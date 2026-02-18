@@ -8,8 +8,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { runCommand } from "@crust/core";
-import { autoCompletePlugin, helpPlugin, versionPlugin } from "@crust/plugins";
+import { runCommand } from "@crustjs/core";
+import {
+	autoCompletePlugin,
+	helpPlugin,
+	versionPlugin,
+} from "@crustjs/plugins";
 import { crustCommand } from "../src/cli.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -82,7 +86,7 @@ const plugins = [
 describe("crust CLI entry point", () => {
 	describe("root command", () => {
 		it("should have correct meta", () => {
-			expect(crustCommand.meta.name).toBe("crust");
+			expect(crustCommand.meta.name).toBe("@crustjs/crust");
 			expect(crustCommand.meta.description).toBe(
 				"A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.",
 			);
@@ -140,14 +144,14 @@ describe("crust CLI entry point", () => {
 			await runCommand(crustCommand, { argv: ["--version"], plugins });
 			const output = getStdout();
 
-			expect(output).toContain(`crust v${expectedVersion}`);
+			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
 		});
 
 		it("should show version with -v alias", async () => {
 			await runCommand(crustCommand, { argv: ["-v"], plugins });
 			const output = getStdout();
 
-			expect(output).toContain(`crust v${expectedVersion}`);
+			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
 		});
 	});
 
@@ -178,8 +182,8 @@ describe("crust CLI entry point", () => {
 	});
 
 	describe("self-hosting verification", () => {
-		it("should use defineCommand from @crust/core (dogfooding)", () => {
-			// The crustCommand is built entirely with @crust/core's defineCommand.
+		it("should use defineCommand from @crustjs/core (dogfooding)", () => {
+			// The crustCommand is built entirely with @crustjs/core's defineCommand.
 			// If it wasn't, it wouldn't be a frozen Command object with proper structure.
 			expect(Object.isFrozen(crustCommand)).toBe(true);
 			expect(crustCommand.meta).toBeDefined();

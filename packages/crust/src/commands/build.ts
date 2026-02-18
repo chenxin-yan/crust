@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { defineCommand } from "@crust/core";
+import { defineCommand } from "@crustjs/core";
 
 /**
  * Resolve the output file path for the compiled binary.

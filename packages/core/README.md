@@ -1,4 +1,4 @@
-# @crust/core
+# @crustjs/core
 
 The core library for the [Crust](https://crust.cyanlabs.co) CLI framework.
 
@@ -7,13 +7,13 @@ Provides command definition, argument/flag parsing, subcommand routing, lifecycl
 ## Install
 
 ```sh
-bun add @crust/core
+bun add @crustjs/core
 ```
 
 ## Quick Example
 
 ```ts
-import { defineCommand, runMain } from "@crust/core";
+import { defineCommand, runMain } from "@crustjs/core";
 
 const main = defineCommand({
   meta: { name: "greet", description: "Say hello" },

@@ -1,4 +1,4 @@
-# create-crust
+# @crustjs/create-crust
 
 Scaffold a new [Crust](https://crust.cyanlabs.co) CLI project in seconds.
 

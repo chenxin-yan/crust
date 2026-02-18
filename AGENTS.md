@@ -8,11 +8,11 @@ Crust is a Bun-native, TypeScript-first CLI framework. It is a **Turborepo monor
 
 | Package | Path | Description |
 |---------|------|-------------|
-| `@crust/core` | `packages/core` | Core library: command definition, argument parsing, routing, plugin system, error types |
-| `@crust/plugins` | `packages/plugins` | Official plugins: help, version, autocomplete |
-| `crust` | `packages/crust` | The `crust` CLI binary (self-hosted, built with `@crust/core`) |
-| `create-crust` | `packages/create-crust` | Project scaffolding tool |
-| `@crust/config` | `packages/config` | Shared TypeScript config (`tsconfig.base.json`) |
+| `@crustjs/core` | `packages/core` | Core library: command definition, argument parsing, routing, plugin system, error types |
+| `@crustjs/plugins` | `packages/plugins` | Official plugins: help, version, autocomplete |
+| `@crustjs/crust` | `packages/crust` | The `crust` CLI binary (self-hosted, built with `@crustjs/core`) |
+| `@crustjs/create-crust` | `packages/create-crust` | Project scaffolding tool |
+| `@crustjs/config` | `packages/config` | Shared TypeScript config (`tsconfig.base.json`) |
 
 ## Build / Lint / Test Commands
 
@@ -25,11 +25,11 @@ bun run check:types                  # TypeScript type check all packages
 bun run test                         # Run all tests across all packages
 
 # ── Single package (from root, using turbo filter) ──────────────────────
-bun run build --filter=@crust/core   # Build a specific package
-bun run test --filter=@crust/core    # Test a specific package
+bun run build --filter=@crustjs/core   # Build a specific package
+bun run test --filter=@crustjs/core    # Test a specific package
 
 # ── Single package (from package directory) ─────────────────────────────
-cd packages/core && bun test                     # Run all tests in @crust/core
+cd packages/core && bun test                     # Run all tests in @crustjs/core
 cd packages/core && bun test src/parser.test.ts  # Run a single test file
 cd packages/core && bun test --test-name-pattern "executes run"  # Run by test name
 
@@ -83,7 +83,7 @@ Strict mode is enabled with these notable settings:
   import type { AnyCommand, CommandContext } from "./types.ts";
   import { CrustError } from "./errors.ts";
   ```
-- **Workspace imports** use package names: `import { defineCommand } from "@crust/core"`
+- **Workspace imports** use package names: `import { defineCommand } from "@crustjs/core"`
 - **Node built-ins** use `node:` prefix: `import { resolve } from "node:path"`
 - Biome auto-sorts imports — let it handle ordering
 

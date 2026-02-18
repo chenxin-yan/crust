@@ -51,7 +51,7 @@ describe("scaffold", () => {
 		expect(pkg.description).toBe("An awesome CLI tool");
 		expect(pkg.author).toBe("Jane Doe");
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli.js" });
-		expect(pkg.dependencies).toEqual({ crust: "latest" });
+		expect(pkg.dependencies).toEqual({ "@crustjs/crust": "latest" });
 		expect(pkg.devDependencies).toEqual({
 			typescript: "^5",
 		});
@@ -121,8 +121,8 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("versionPlugin");
 		expect(cliContent).toContain('import pkg from "../package.json"');
 		expect(cliContent).toContain("versionPlugin(pkg.version)");
-		// Imports from crust
-		expect(cliContent).toContain('"crust"');
+		// Imports from @crustjs/crust
+		expect(cliContent).toContain('"@crustjs/crust"');
 		// Contains command name
 		expect(cliContent).toContain('"test-cli"');
 		// Has a positional name argument with String type
@@ -139,7 +139,7 @@ describe("scaffold", () => {
 			author: "",
 		});
 
-		// Install @crust/core so the compile check can resolve the import
+		// Install @crustjs/core so the compile check can resolve the import
 		// Instead of a full install, we just check the syntax is valid TypeScript
 		// by running bun's TypeScript parser on it
 		const cliContent = readFileSync(

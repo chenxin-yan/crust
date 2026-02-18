@@ -1,5 +1,5 @@
 {
-	"extends": "@crust/config/tsconfig.base.json",
+	"extends": "@crustjs/config/tsconfig.base.json",
 	"compilerOptions": {
 		"declaration": false
 	},

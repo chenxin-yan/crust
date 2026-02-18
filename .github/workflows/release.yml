@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: bun ci
 
+      - name: Build packages
+        run: bun run build
+
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:

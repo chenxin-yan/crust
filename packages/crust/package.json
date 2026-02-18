@@ -1,5 +1,5 @@
 {
-	"name": "crust",
+	"name": "@crustjs/crust",
 	"version": "0.0.1",
 	"description": "A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.",
 	"type": "module",
@@ -32,6 +32,9 @@
 			"types": "./dist/index.d.ts"
 		}
 	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"bin": {
 		"crust": "dist/cli.js"
 	},
@@ -42,11 +45,11 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@crust/core": "workspace:*",
-		"@crust/plugins": "workspace:*"
+		"@crustjs/core": "workspace:*",
+		"@crustjs/plugins": "workspace:*"
 	},
 	"devDependencies": {
-		"@crust/config": "workspace:*",
+		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {

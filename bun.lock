@@ -14,7 +14,7 @@
       },
     },
     "apps/docs": {
-      "name": "@crust/docs",
+      "name": "@crustjs/docs",
       "dependencies": {
         "@tanstack/react-router": "1.160.2",
         "@tanstack/react-router-devtools": "1.160.2",
@@ -74,7 +74,7 @@
       },
     },
     "packages/crust": {
-      "name": "@crustjs/cli",
+      "name": "@crustjs/crust",
       "version": "0.0.1",
       "bin": {
         "crust": "dist/cli.js",
@@ -210,15 +210,15 @@
 
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
-    "@crust/docs": ["@crust/docs@workspace:apps/docs"],
-
-    "@crustjs/cli": ["@crustjs/cli@workspace:packages/crust"],
-
     "@crustjs/config": ["@crustjs/config@workspace:packages/config"],
 
     "@crustjs/core": ["@crustjs/core@workspace:packages/core"],
 
     "@crustjs/create-crust": ["@crustjs/create-crust@workspace:packages/create-crust"],
+
+    "@crustjs/crust": ["@crustjs/crust@workspace:packages/crust"],
+
+    "@crustjs/docs": ["@crustjs/docs@workspace:apps/docs"],
 
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 

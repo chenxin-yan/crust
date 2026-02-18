@@ -1,11 +1,11 @@
-# @crust/plugins
+# @crustjs/plugins
 
 Official plugins for the [Crust](https://crust.cyanlabs.co) CLI framework.
 
 ## Install
 
 ```sh
-bun add @crust/plugins
+bun add @crustjs/plugins
 ```
 
 ## Plugins
@@ -19,8 +19,8 @@ bun add @crust/plugins
 ## Usage
 
 ```ts
-import { defineCommand, runMain } from "@crust/core";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crust/plugins";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },

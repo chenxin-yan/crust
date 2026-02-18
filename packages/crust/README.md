@@ -1,21 +1,21 @@
-# crust
+# @crustjs/crust
 
 The all-in-one package for the [Crust](https://crust.cyanlabs.co) CLI framework.
 
-Re-exports everything from `@crust/core` and `@crust/plugins`, plus provides CLI tooling for building Crust-powered CLIs.
+Re-exports everything from `@crustjs/core` and `@crustjs/plugins`, plus provides CLI tooling for building Crust-powered CLIs.
 
 ## Install
 
 ```sh
-bun add crust
+bun add @crustjs/crust
 ```
 
 ## Framework API
 
-The `crust` package gives you the full framework API in a single import:
+The `@crustjs/crust` package gives you the full framework API in a single import:
 
 ```ts
-import { defineCommand, runMain, helpPlugin, versionPlugin } from "crust";
+import { defineCommand, runMain, helpPlugin, versionPlugin } from "@crustjs/crust";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },
@@ -29,7 +29,7 @@ runMain(main, {
 });
 ```
 
-> For granular control, you can install `@crust/core` and `@crust/plugins` separately.
+> For granular control, you can install `@crustjs/core` and `@crustjs/plugins` separately.
 
 ## CLI Commands
 

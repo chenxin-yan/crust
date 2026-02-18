@@ -4,7 +4,7 @@
  * Accepts a Command + RunOptions, captures stdout/stderr via mocked console,
  * and returns { stdout, stderr, exitCode }.
  *
- * Uses the real runCommand execution pipeline from @crust/core.
+ * Uses the real runCommand execution pipeline from @crustjs/core.
  */
 
 import type { RunOptions } from "../src/run.ts";

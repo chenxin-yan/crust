@@ -5,7 +5,7 @@ import type {
 	CrustPlugin,
 	FlagDef,
 	FlagsDef,
-} from "@crust/core";
+} from "@crustjs/core";
 
 function formatArgToken(arg: ArgDef): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;

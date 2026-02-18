@@ -1,5 +1,5 @@
 {
-	"name": "create-crust",
+	"name": "@crustjs/create-crust",
 	"version": "0.0.1",
 	"description": "Scaffold a new Crust CLI project.",
 	"type": "module",
@@ -26,6 +26,9 @@
 	"files": [
 		"dist"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"bin": {
 		"create-crust": "dist/index.js"
 	},
@@ -36,7 +39,7 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
-		"@crust/config": "workspace:*",
+		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
