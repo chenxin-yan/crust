@@ -2,7 +2,7 @@
 
 The all-in-one package for the [Crust](https://crust.cyanlabs.co) CLI framework.
 
-Re-exports everything from `@crust/core` and `@crust/plugins`, plus provides CLI tooling for building and developing Crust-powered CLIs.
+Re-exports everything from `@crust/core` and `@crust/plugins`, plus provides CLI tooling for building Crust-powered CLIs.
 
 ## Install
 
@@ -38,7 +38,6 @@ When installed, the `crust` binary provides tooling for your project:
 | Command | Description |
 | --- | --- |
 | `crust build` | Compile your CLI to a standalone Bun executable |
-| `crust dev` | Start your CLI in development mode with hot reload |
 
 ## Documentation
 

@@ -58,7 +58,7 @@ describe("scaffold", () => {
 		});
 		expect(pkg.scripts).toEqual({
 			build: "crust build",
-			dev: "crust dev",
+			dev: "bun run src/cli.ts",
 		});
 	});
 

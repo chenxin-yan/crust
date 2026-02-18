@@ -1,7 +1,7 @@
 /**
  * Integration tests for the crust CLI entry point.
  *
- * Tests the root crust command with build and dev subcommands wired up,
+ * Tests the root crust command with the build subcommand wired up,
  * verifying help output, version output, subcommand help, and error handling.
  */
 
@@ -96,17 +96,15 @@ describe("crust CLI entry point", () => {
 			expect(crustCommand.run).toBeUndefined();
 		});
 
-		it("should have build and dev as subcommands", () => {
+		it("should have build as a subcommand", () => {
 			expect(crustCommand.subCommands).toBeDefined();
 			expect(crustCommand.subCommands?.build).toBeDefined();
-			expect(crustCommand.subCommands?.dev).toBeDefined();
 			expect(crustCommand.subCommands?.build?.meta.name).toBe("build");
-			expect(crustCommand.subCommands?.dev?.meta.name).toBe("dev");
 		});
 	});
 
 	describe("crust --help", () => {
-		it("should show help text with build and dev listed", async () => {
+		it("should show help text with build listed", async () => {
 			await runCommand(crustCommand, { argv: ["--help"], plugins });
 			const output = getStdout();
 
@@ -116,10 +114,6 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
 			expect(output).toContain("Compile your CLI to a standalone executable");
-			expect(output).toContain("dev");
-			expect(output).toContain(
-				"Start your CLI in development mode with hot reload",
-			);
 		});
 
 		it("should show --help and --version in options", async () => {
@@ -165,7 +159,6 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
-			expect(output).toContain("dev");
 		});
 	});
 
@@ -175,17 +168,10 @@ describe("crust CLI entry point", () => {
 			const output = getStdout();
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("build");
-			expect(output).toContain("dev");
 		});
 
 		it("shows root help for partial command input", async () => {
 			await runCommand(crustCommand, { argv: ["buil"], plugins });
-			const output = getStdout();
-			expect(output).toContain("COMMANDS:");
-		});
-
-		it("shows root help for short command input", async () => {
-			await runCommand(crustCommand, { argv: ["de"], plugins });
 			const output = getStdout();
 			expect(output).toContain("COMMANDS:");
 		});

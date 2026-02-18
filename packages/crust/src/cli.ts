@@ -5,7 +5,6 @@ import { defineCommand, runMain } from "@crust/core";
 import { autoCompletePlugin, helpPlugin, versionPlugin } from "@crust/plugins";
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";
-import { devCommand } from "./commands/dev.ts";
 
 /**
  * The root `crust` CLI command.
@@ -15,7 +14,6 @@ import { devCommand } from "./commands/dev.ts";
  *
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
- * - `crust dev` - Start your CLI in development mode with hot reload
  */
 export const crustCommand: AnyCommand = defineCommand({
 	meta: {
@@ -24,7 +22,6 @@ export const crustCommand: AnyCommand = defineCommand({
 	},
 	subCommands: {
 		build: buildCommand,
-		dev: devCommand,
 	},
 });
 

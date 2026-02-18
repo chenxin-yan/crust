@@ -22,7 +22,7 @@ function templatePackageJson(
 		},
 		scripts: {
 			build: "crust build",
-			dev: "crust dev",
+			dev: "bun run src/cli.ts",
 		},
 		dependencies: {
 			crust: "latest",

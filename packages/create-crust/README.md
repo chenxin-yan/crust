@@ -11,7 +11,7 @@ bun create crust my-cli
 This will prompt for project details and generate a ready-to-go project with:
 
 - `src/cli.ts` — entry point with a sample command
-- `package.json` — configured with `crust build` and `crust dev` scripts
+- `package.json` — configured with `crust build` and `bun run` dev scripts
 - `tsconfig.json` — strict TypeScript config
 
 ## Documentation
