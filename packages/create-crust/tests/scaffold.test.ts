@@ -31,7 +31,6 @@ describe("scaffold", () => {
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "tsconfig.json"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "index.ts"))).toBe(true);
 	});
 
 	it("generates package.json with correct name and dependencies", () => {
@@ -130,22 +129,6 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("type: String");
 		// Has a run function
 		expect(cliContent).toContain("run(");
-	});
-
-	it("generates src/index.ts that re-exports cli", () => {
-		scaffold({
-			dir: TEST_DIR,
-			name: "my-cli",
-			description: "",
-			author: "",
-		});
-
-		const indexContent = readFileSync(
-			resolve(TEST_DIR, "src", "index.ts"),
-			"utf-8",
-		);
-
-		expect(indexContent).toContain("./cli.ts");
 	});
 
 	it("generates CLI file that is valid TypeScript (compile check)", () => {

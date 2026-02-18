@@ -6,8 +6,8 @@
       "name": "crust",
       "devDependencies": {
         "@biomejs/biome": "2.4.2",
-        "@changesets/cli": "^2.29.7",
-        "@types/bun": "^1.3.8",
+        "@changesets/cli": "^2.29.8",
+        "@types/bun": "^1.3.9",
         "@types/node": "^25.2.3",
         "turbo": "^2.8.9",
         "typescript": "5.9.3",
@@ -44,14 +44,14 @@
       },
     },
     "packages/config": {
-      "name": "@crust/config",
+      "name": "@crustjs/config",
       "version": "0.0.0",
     },
     "packages/core": {
-      "name": "@crust/core",
+      "name": "@crustjs/core",
       "version": "0.0.1",
       "devDependencies": {
-        "@crust/config": "workspace:*",
+        "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
@@ -59,13 +59,14 @@
       },
     },
     "packages/create-crust": {
-      "name": "create-crust",
+      "name": "@crustjs/create-crust",
       "version": "0.0.1",
       "bin": {
         "create-crust": "dist/index.js",
+        "@crustjs/create-crust": "dist/index.js",
       },
       "devDependencies": {
-        "@crust/config": "workspace:*",
+        "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
@@ -73,17 +74,17 @@
       },
     },
     "packages/crust": {
-      "name": "crust",
+      "name": "@crustjs/cli",
       "version": "0.0.1",
       "bin": {
         "crust": "dist/cli.js",
       },
       "dependencies": {
-        "@crust/core": "workspace:*",
-        "@crust/plugins": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "@crustjs/plugins": "workspace:*",
       },
       "devDependencies": {
-        "@crust/config": "workspace:*",
+        "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
@@ -91,15 +92,15 @@
       },
     },
     "packages/plugins": {
-      "name": "@crust/plugins",
+      "name": "@crustjs/plugins",
       "version": "0.0.1",
       "devDependencies": {
-        "@crust/config": "workspace:*",
-        "@crust/core": "workspace:*",
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crust/core": "workspace:*",
+        "@crustjs/core": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -209,13 +210,17 @@
 
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
-    "@crust/config": ["@crust/config@workspace:packages/config"],
-
-    "@crust/core": ["@crust/core@workspace:packages/core"],
-
     "@crust/docs": ["@crust/docs@workspace:apps/docs"],
 
-    "@crust/plugins": ["@crust/plugins@workspace:packages/plugins"],
+    "@crustjs/cli": ["@crustjs/cli@workspace:packages/crust"],
+
+    "@crustjs/config": ["@crustjs/config@workspace:packages/config"],
+
+    "@crustjs/core": ["@crustjs/core@workspace:packages/core"],
+
+    "@crustjs/create-crust": ["@crustjs/create-crust@workspace:packages/create-crust"],
+
+    "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 
     "@emnapi/core": ["@emnapi/core@1.8.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg=="],
 
@@ -773,13 +778,9 @@
 
     "cookie-es": ["cookie-es@2.0.0", "", {}, "sha512-RAj4E421UYRgqokKUmotqAwuplYw15qtdXfY+hGzgCJ/MBjCVZcSoHK/kH9kocfjRjcDME7IiDWR/1WX1TM2Pg=="],
 
-    "create-crust": ["create-crust@workspace:packages/create-crust"],
-
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
     "crossws": ["crossws@0.4.4", "", { "peerDependencies": { "srvx": ">=0.7.1" }, "optionalPeers": ["srvx"] }, "sha512-w6c4OdpRNnudVmcgr7brb/+/HmYjMQvYToO/oTrprTwxRUiom3LYWU1PMWuD006okbUWpII1Ea9/+kwpUfmyRg=="],
-
-    "crust": ["crust@workspace:packages/crust"],
 
     "css-select": ["css-select@5.2.2", "", { "dependencies": { "boolbase": "^1.0.0", "css-what": "^6.1.0", "domhandler": "^5.0.2", "domutils": "^3.0.1", "nth-check": "^2.0.1" } }, "sha512-TizTzUddG/xYLA3NXodFM0fSbNizXjOKhqiQQwvhlspadZokn1KDy0NZFS0wuEubIYAV5/c1/lAr0TaaFXEXzw=="],
 

@@ -104,11 +104,6 @@ runMain(main, {
 `;
 }
 
-function templateIndexTs(): string {
-	return `export * from "./cli.ts";
-`;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Interactive prompts (readline-based, zero dependencies)
 // ────────────────────────────────────────────────────────────────────────────
@@ -163,7 +158,6 @@ export function scaffold(options: ScaffoldOptions): void {
 	);
 	writeFileSync(resolve(dir, "tsconfig.json"), `${templateTsconfig()}\n`);
 	writeFileSync(resolve(dir, "src", "cli.ts"), templateCliTs(name));
-	writeFileSync(resolve(dir, "src", "index.ts"), templateIndexTs());
 }
 
 // ────────────────────────────────────────────────────────────────────────────
