@@ -1,20 +1,19 @@
 # Crust
 
-A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.
-
 > [!WARNING]
 > Crust is **beta-quality** until v1.0. Versions before 1.0 do not strictly follow semantic versioning. The core API should be relatively stable after 0.1, but expect breaking changes between minor releases.
 
-## Documentation
+> Visit [crust.cyanlabs.co](https://crust.cyanlabs.co) for full documentation, guides, and API reference.
 
-Visit [crust.cyanlabs.co](https://crust.cyanlabs.co) for full documentation, guides, and API reference.
+A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.
 
-## Features
+## Getting Started
 
-- **Zero runtime dependencies** — the main packages have no external dependencies
-- **Subcommand routing** — nested command trees with automatic resolution
-- **Plugins** — middleware-based plugins system
-- **Lifecycle hooks** — `preRun`, `run`, `postRun` with async support
+```sh
+bun create crust my-cli
+cd my-cli
+bun run dev
+```
 
 ## Why Crust?
 
@@ -30,6 +29,13 @@ Most CLI tools in the JavaScript ecosystem fall into two camps: **minimal arg pa
 
 Crust sits in the sweet spot — more feature rich than a parser, lighter than a full framework, and because every capability ships as its own composable package, you only pull in what you actually use.
 
+## Features
+
+- **Zero runtime dependencies** — the main packages have no external dependencies
+- **Subcommand routing** — nested command trees with automatic resolution
+- **Plugins** — middleware-based plugins system
+- **Lifecycle hooks** — `preRun`, `run`, `postRun` with async support
+
 ## Philosophy
 
 - **Declarative** — Define commands as plain objects. Crust handles parsing, validation, and routing for you.
@@ -40,15 +46,15 @@ Crust sits in the sweet spot — more feature rich than a parser, lighter than a
 
 ## Packages
 
-| Package           | Description                                 |
-| ----------------- | ------------------------------------------- |
-| `@crustjs/core`     | Core library                                |
-| `@crustjs/plugins`  | Official plugins                            |
-| `@crustjs/validate` | Input validation & coercion _(coming soon)_ |
-| `@crustjs/prompt`   | Interactive prompts _(coming soon)_         |
-| `@crustjs/color`    | Terminal styling & colors _(coming soon)_   |
-| `@crustjs/crust`     | all-in-one package with CLI tooling         |
-| `@crustjs/create-crust` | Project scaffolder                      |
+| Package                 | Description                                 |
+| ----------------------- | ------------------------------------------- |
+| `@crustjs/core`         | Core library                                |
+| `@crustjs/plugins`      | Official plugins                            |
+| `@crustjs/validate`     | Input validation & coercion _(coming soon)_ |
+| `@crustjs/prompt`       | Interactive prompts _(coming soon)_         |
+| `@crustjs/color`        | Terminal styling & colors _(coming soon)_   |
+| `@crustjs/crust`        | all-in-one package with CLI tooling         |
+| `@crustjs/create-crust` | Project scaffolder                          |
 
 ## License
 

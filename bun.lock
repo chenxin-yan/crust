@@ -59,11 +59,10 @@
       },
     },
     "packages/create-crust": {
-      "name": "@crustjs/create-crust",
+      "name": "create-crust",
       "version": "0.0.1",
       "bin": {
         "create-crust": "dist/index.js",
-        "@crustjs/create-crust": "dist/index.js",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -213,8 +212,6 @@
     "@crustjs/config": ["@crustjs/config@workspace:packages/config"],
 
     "@crustjs/core": ["@crustjs/core@workspace:packages/core"],
-
-    "@crustjs/create-crust": ["@crustjs/create-crust@workspace:packages/create-crust"],
 
     "@crustjs/crust": ["@crustjs/crust@workspace:packages/crust"],
 
@@ -777,6 +774,8 @@
     "convert-source-map": ["convert-source-map@2.0.0", "", {}, "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="],
 
     "cookie-es": ["cookie-es@2.0.0", "", {}, "sha512-RAj4E421UYRgqokKUmotqAwuplYw15qtdXfY+hGzgCJ/MBjCVZcSoHK/kH9kocfjRjcDME7IiDWR/1WX1TM2Pg=="],
+
+    "create-crust": ["create-crust@workspace:packages/create-crust"],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
