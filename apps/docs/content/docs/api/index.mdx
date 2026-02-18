@@ -1,0 +1,23 @@
+---
+title: "Overview"
+description: Complete API reference for every function, type, and error in Crust.
+---
+
+All exports listed here come from `@crustjs/core` and are re-exported by `@crustjs/crust`.
+
+## Functions
+
+| Function | Description |
+| --- | --- |
+| [`defineCommand()`](/docs/api/define-command) | Define a CLI command with full type inference |
+| [`parseArgs()`](/docs/api/parse-args) | Parse argv against arg/flag definitions |
+| [`resolveCommand()`](/docs/api/resolve-command) | Resolve a subcommand from an argv array |
+| [`runCommand()`](/docs/api/run-command) | Execute a command with plugins (throws on error) |
+| [`runMain()`](/docs/api/run-main) | Top-level CLI entry point (catches errors, sets exit code) |
+
+## Types & Errors
+
+| Page | Description |
+| --- | --- |
+| [Types](/docs/api/types) | All type definitions — ArgDef, FlagDef, Command, InferArgs, InferFlags, and more |
+| [Errors](/docs/api/errors) | CrustError class, error codes, and structured error details |

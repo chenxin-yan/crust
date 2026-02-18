@@ -1,0 +1,111 @@
+---
+title: runCommand()
+description: Execute a command with plugin support. Throws on error.
+---
+
+Executes a command through the full lifecycle: plugin setup, routing, parsing, middleware chain, and hook execution. Errors are thrown to the caller.
+
+## Signature
+
+```ts
+async function runCommand(
+  command: AnyCommand,
+  options?: RunOptions,
+): Promise<void>;
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `command` | `AnyCommand` | The root command to execute |
+| `options` | `RunOptions` | Optional configuration |
+
+### RunOptions
+
+```ts
+interface RunOptions {
+  argv?: string[];           // Default: process.argv.slice(2)
+  plugins?: CrustPlugin[];   // Default: []
+}
+```
+
+## Throws
+
+- **`CrustError`** — All framework errors (definition, validation, parse, command_not_found)
+- **`CrustError("EXECUTION")`** — Non-CrustError exceptions from command handlers are wrapped
+
+## Execution Flow
+
+```
+1. Run plugin setup hooks (in order)
+2. Resolve subcommand (resolveCommand)
+3. Parse args/flags (parseArgs)
+4. Run plugin middleware chain (in order)
+   └─ Terminal function:
+      ├─ command.preRun()
+      ├─ command.run()
+      └─ command.postRun()  (in finally block)
+```
+
+### Error Handling
+
+If routing or parsing fails, the error is re-thrown **inside** the middleware chain. This allows middleware (like the autocomplete plugin) to catch and handle the error:
+
+```ts
+// Autocomplete plugin catches COMMAND_NOT_FOUND inside the middleware chain
+plugins: [autoCompletePlugin({ mode: "help" })]
+```
+
+Non-`CrustError` exceptions thrown by command handlers are wrapped:
+
+```ts
+// Original: throw new Error("oops")
+// Becomes: CrustError("EXECUTION", "oops") with cause set to original error
+```
+
+## Example
+
+### Basic Usage
+
+```ts
+import { defineCommand, runCommand } from "@crustjs/crust";
+
+const cmd = defineCommand({
+  meta: { name: "greet" },
+  args: [{ name: "name", type: String, default: "world" }] as const,
+  run({ args }) {
+    console.log(`Hello, ${args.name}!`);
+  },
+});
+
+await runCommand(cmd, { argv: ["Alice"] });
+// Output: Hello, Alice!
+```
+
+### With Error Handling
+
+```ts
+import { CrustError } from "@crustjs/crust";
+
+try {
+  await runCommand(cmd, { argv: ["--unknown"] });
+} catch (error) {
+  if (error instanceof CrustError) {
+    console.error(`[${error.code}] ${error.message}`);
+  }
+}
+```
+
+### With Plugins
+
+```ts
+await runCommand(cmd, {
+  argv: ["--help"],
+  plugins: [helpPlugin(), versionPlugin("1.0.0")],
+});
+```
+
+## vs `runMain`
+
+Use `runCommand` for programmatic execution where you want to handle errors yourself. Use [`runMain`](/docs/api/run-main) as the top-level entry point that catches errors automatically.

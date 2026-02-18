@@ -1,0 +1,135 @@
+---
+title: Lifecycle & Hooks
+description: Understand the command execution lifecycle and preRun, run, postRun hooks.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Every command supports three lifecycle hooks: `preRun`, `run`, and `postRun`. These let you add initialization and cleanup logic around your main command handler.
+
+## Lifecycle Hooks
+
+```ts
+import { defineCommand } from "@crustjs/crust";
+
+const cmd = defineCommand({
+  meta: { name: "deploy" },
+  preRun({ args, flags }) {
+    console.log("Validating configuration...");
+  },
+  run({ args, flags }) {
+    console.log("Deploying...");
+  },
+  postRun({ args, flags }) {
+    console.log("Cleaning up...");
+  },
+});
+```
+
+### Execution Order
+
+```
+preRun  →  run  →  postRun
+```
+
+1. **`preRun`** — Called before `run()`. Use for initialization, validation, or setup
+2. **`run`** — The main command handler
+3. **`postRun`** — Called after `run()`, **even if `run()` throws**. Use for cleanup or teardown
+
+<Callout>
+  `postRun` runs in a `finally` block, so it executes even when `run()` throws an error. The error is still re-thrown after `postRun` completes.
+</Callout>
+
+### Async Support
+
+All hooks support async functions:
+
+```ts
+defineCommand({
+  meta: { name: "migrate" },
+  async preRun() {
+    await checkDatabaseConnection();
+  },
+  async run() {
+    await runMigrations();
+  },
+  async postRun() {
+    await closeDatabaseConnection();
+  },
+});
+```
+
+### Hook Context
+
+Each hook receives the same `CommandContext` object:
+
+```ts
+interface CommandContext<A, F> {
+  args: InferArgs<A>;       // Parsed positional arguments
+  flags: InferFlags<F>;     // Parsed flags
+  rawArgs: string[];         // Arguments after `--`
+  command: AnyCommand;       // The resolved command
+}
+```
+
+All hooks see the same parsed input — there's no data transformation between hooks.
+
+## Full Execution Lifecycle
+
+The complete lifecycle includes plugin middleware, routing, parsing, and hook execution:
+
+```
+1. Plugin setup phase (one-time)
+   └─ Each plugin.setup() runs in order
+
+2. Command routing
+   └─ resolveCommand() walks the subcommand tree
+
+3. Argument parsing
+   └─ parseArgs() validates and coerces args/flags
+
+4. Plugin middleware chain
+   └─ Each plugin.middleware() wraps the next
+      └─ Terminal: command execution
+         ├─ preRun()
+         ├─ run()
+         └─ postRun()  (always runs, even on error)
+```
+
+### Error Handling in the Lifecycle
+
+- If `preRun()` throws, `run()` is skipped but `postRun()` still runs
+- If `run()` throws, `postRun()` still runs
+- If `postRun()` throws, the original error (if any) is replaced by the `postRun` error
+- Plugin middleware can catch errors thrown during command execution
+- `runMain()` catches all uncaught errors and prints them to stderr
+
+## Practical Example
+
+```ts
+const deploy = defineCommand({
+  meta: { name: "deploy", description: "Deploy to production" },
+  flags: {
+    env: { type: String, required: true, description: "Target environment" },
+    dryRun: { type: Boolean, description: "Simulate without deploying", alias: "d" },
+  },
+  async preRun({ flags }) {
+    // Validate before running
+    if (flags.env === "production" && flags.dryRun) {
+      console.log("Dry run for production deployment");
+    }
+  },
+  async run({ flags }) {
+    if (flags.dryRun) {
+      console.log(`[DRY RUN] Would deploy to ${flags.env}`);
+      return;
+    }
+    console.log(`Deploying to ${flags.env}...`);
+    // deployment logic
+  },
+  async postRun({ flags }) {
+    // Always runs — send notification regardless of success/failure
+    console.log(`Deployment to ${flags.env} finished`);
+  },
+});
+```

@@ -1,0 +1,14 @@
+{
+  "title": "Guide",
+  "icon": "Book",
+  "pages": [
+    "commands",
+    "arguments",
+    "flags",
+    "subcommands",
+    "plugins",
+    "lifecycle",
+    "error-handling",
+    "build"
+  ]
+}

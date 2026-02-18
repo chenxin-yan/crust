@@ -1,0 +1,188 @@
+---
+title: Plugins
+description: Extend your CLI with the middleware-based plugin system.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Crust's plugin system lets you extend CLI behavior through two phases: **setup** (one-time initialization) and **middleware** (per-execution interception).
+
+## Using Plugins
+
+Pass plugins to `runMain` or `runCommand`:
+
+```ts
+import { defineCommand, runMain } from "@crustjs/crust";
+import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/crust";
+
+const main = defineCommand({
+  meta: { name: "my-cli", description: "My CLI" },
+  run() {
+    console.log("Running!");
+  },
+});
+
+runMain(main, {
+  plugins: [
+    versionPlugin("1.0.0"),
+    autoCompletePlugin({ mode: "help" }),
+    helpPlugin(),
+  ],
+});
+```
+
+Crust ships with three official plugins:
+
+| Plugin | Description |
+| --- | --- |
+| [`helpPlugin()`](/docs/modules/plugins/help) | Adds `--help` / `-h` and auto-generates help text |
+| [`versionPlugin()`](/docs/modules/plugins/version) | Adds `--version` / `-v` to the root command |
+| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete) | Suggests corrections for mistyped subcommands |
+
+## Plugin Order
+
+Plugins execute in the order they're listed. Each middleware wraps the next in a chain, so the first plugin in the array is the outermost wrapper:
+
+```ts
+plugins: [
+  versionPlugin("1.0.0"),    // Runs first, can intercept early
+  autoCompletePlugin(),        // Runs second, catches routing errors
+  helpPlugin(),                // Runs third, handles --help
+]
+```
+
+A typical order is: **version** → **autocomplete** → **help**.
+
+## Plugin Lifecycle
+
+### Setup Phase
+
+The `setup` function runs once during CLI initialization, before any command parsing. It's used to register flags or perform one-time configuration:
+
+```ts
+const myPlugin: CrustPlugin = {
+  name: "my-plugin",
+  setup(context, actions) {
+    // context.rootCommand — the root command
+    // context.argv — raw argv
+    // context.state — plugin state store
+
+    // Inject a flag into the root command
+    actions.addFlag(context.rootCommand, "debug", {
+      type: Boolean,
+      description: "Enable debug mode",
+    });
+  },
+};
+```
+
+Available setup actions:
+
+| Action | Description |
+| --- | --- |
+| `addFlag(command, name, def)` | Inject a flag into a command's flags object |
+
+### Middleware Phase
+
+The `middleware` function runs for each CLI invocation. It receives a context and a `next` function to pass control to the next middleware (or the command itself):
+
+```ts
+const myPlugin: CrustPlugin = {
+  name: "my-plugin",
+  middleware(context, next) {
+    // context.route — resolved command route (or null)
+    // context.input — parsed args/flags (or null)
+    // context.rootCommand — the root command
+    // context.argv — raw argv
+    // context.state — plugin state store
+
+    if (context.input?.flags.debug) {
+      console.log("[debug] Route:", context.route?.commandPath);
+    }
+
+    // Pass control to the next middleware or command execution
+    return next();
+  },
+};
+```
+
+<Callout type="warn">
+  Always call `next()` unless you intentionally want to prevent the command from running (e.g., when the help plugin intercepts `--help`).
+</Callout>
+
+## Writing a Custom Plugin
+
+A `CrustPlugin` is a plain object with optional `name`, `setup`, and `middleware`:
+
+```ts
+import type { CrustPlugin } from "@crustjs/crust";
+
+function timingPlugin(): CrustPlugin {
+  return {
+    name: "timing",
+    async middleware(context, next) {
+      const start = performance.now();
+      await next();
+      const duration = (performance.now() - start).toFixed(2);
+      console.log(`Completed in ${duration}ms`);
+    },
+  };
+}
+```
+
+Use it like any other plugin:
+
+```ts
+runMain(main, {
+  plugins: [timingPlugin(), helpPlugin()],
+});
+```
+
+### Plugin State
+
+Plugins can share state via `context.state`, a key-value store available in both setup and middleware phases:
+
+```ts
+function authPlugin(): CrustPlugin {
+  return {
+    name: "auth",
+    setup(context) {
+      context.state.set("auth.token", process.env.API_TOKEN);
+    },
+    async middleware(context, next) {
+      const token = context.state.get<string>("auth.token");
+      if (!token) {
+        console.error("No API token found");
+        process.exitCode = 1;
+        return;
+      }
+      await next();
+    },
+  };
+}
+```
+
+The state API:
+
+| Method | Description |
+| --- | --- |
+| `state.get<T>(key)` | Get a value (returns `T \| undefined`) |
+| `state.set(key, value)` | Set a value |
+| `state.has(key)` | Check if a key exists |
+| `state.delete(key)` | Delete a key |
+
+## Middleware Context
+
+The full middleware context:
+
+```ts
+interface MiddlewareContext {
+  readonly argv: readonly string[];       // Raw argv
+  readonly rootCommand: AnyCommand;       // Root command
+  readonly state: PluginState;            // Plugin state store
+  route: CommandRoute | null;              // Resolved route (null if routing failed)
+  input: ParseResult | null;               // Parsed input (null if parsing failed)
+}
+```
+
+`route` and `input` may be `null` if routing or parsing failed — the error is re-thrown inside the middleware chain, allowing error-handling plugins (like autocomplete) to catch it.

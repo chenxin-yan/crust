@@ -1,0 +1,79 @@
+---
+title: "Crust"
+description: Core + plugins bundle with CLI tooling.
+---
+
+The `@crustjs/crust` package is the recommended way to use Crust. It re-exports everything from `@crustjs/core` and `@crustjs/plugins` through a single import, and provides the `crust` CLI binary.
+
+## Install
+
+```sh
+bun add @crustjs/crust
+```
+
+## What's Included
+
+### Re-exports
+
+Everything from `@crustjs/core` and `@crustjs/plugins` is available under one import:
+
+```ts
+// All of these come from a single package
+import {
+  // From @crustjs/core
+  defineCommand,
+  parseArgs,
+  resolveCommand,
+  runCommand,
+  runMain,
+  CrustError,
+
+  // From @crustjs/plugins
+  helpPlugin,
+  versionPlugin,
+  autoCompletePlugin,
+  renderHelp,
+} from "@crustjs/crust";
+```
+
+### CLI Binary
+
+The package includes the `crust` CLI, which provides:
+
+| Command | Description |
+| --- | --- |
+| [`crust build`](/docs/guide/build) | Compile your CLI to standalone executables |
+
+The `crust` CLI is itself built with Crust (self-hosted), demonstrating the framework in action.
+
+## Usage
+
+```ts title="src/cli.ts"
+#!/usr/bin/env bun
+
+import { defineCommand, helpPlugin, runMain, versionPlugin } from "@crustjs/crust";
+import pkg from "../package.json";
+
+const main = defineCommand({
+  meta: {
+    name: "my-cli",
+    description: "My CLI tool",
+  },
+  run() {
+    console.log("Hello!");
+  },
+});
+
+runMain(main, {
+  plugins: [versionPlugin(pkg.version), helpPlugin()],
+});
+```
+
+## When to Use
+
+`@crustjs/crust` is recommended for:
+- All CLI application projects
+- The simplest possible setup with a single dependency
+- Projects that need the `crust build` command for distribution
+
+Use the individual modules (`@crustjs/core`, `@crustjs/plugins`) if you're building a library on top of Crust or need minimal dependencies.

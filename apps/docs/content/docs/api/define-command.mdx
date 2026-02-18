@@ -1,0 +1,124 @@
+---
+title: defineCommand()
+description: Define a CLI command with full type inference.
+---
+
+Creates a frozen, immutable command object from a definition. Arguments, flags, and lifecycle hooks are fully typed based on the definitions provided.
+
+## Signature
+
+```ts
+function defineCommand<
+  const A extends ArgsDef = ArgsDef,
+  const F extends FlagsDef = FlagsDef,
+>(
+  config: Command<A, F> & {
+    args?: A & CheckVariadicArgs<A>;
+    flags?: F & CheckFlagAliasCollisions<F>;
+  },
+): Command<A, F>;
+```
+
+## Parameters
+
+### `config`
+
+The command definition object.
+
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `meta` | `CommandMeta` | Yes | Command metadata |
+| `meta.name` | `string` | Yes | Command name (must be non-empty) |
+| `meta.description` | `string` | No | Description for help text |
+| `meta.usage` | `string` | No | Custom usage string |
+| `args` | `ArgsDef` | No | Positional argument definitions (ordered tuple) |
+| `flags` | `FlagsDef` | No | Named flag definitions (record) |
+| `subCommands` | `Record<string, AnyCommand>` | No | Named subcommands |
+| `preRun` | `(ctx: CommandContext) => void \| Promise<void>` | No | Called before `run()` |
+| `run` | `(ctx: CommandContext) => void \| Promise<void>` | No | Main command handler |
+| `postRun` | `(ctx: CommandContext) => void \| Promise<void>` | No | Called after `run()` (always, even on error) |
+
+## Returns
+
+A frozen `Command<A, F>` object. The returned object is immutable via `Object.freeze`.
+
+## Throws
+
+- **`CrustError("DEFINITION")`** — If `meta.name` is empty or whitespace-only
+
+## Compile-Time Checks
+
+`defineCommand` performs two compile-time validations via conditional types:
+
+1. **`CheckVariadicArgs<A>`** — Ensures only the last positional argument has `variadic: true`
+2. **`CheckFlagAliasCollisions<F>`** — Ensures no flag alias collides with another flag name or alias
+
+These resolve to error tuples at compile time, producing TypeScript errors if violated.
+
+## Examples
+
+### Basic Command
+
+```ts
+const greet = defineCommand({
+  meta: { name: "greet", description: "Say hello" },
+  run() {
+    console.log("Hello!");
+  },
+});
+```
+
+### With Arguments and Flags
+
+```ts
+const serve = defineCommand({
+  meta: { name: "serve", description: "Start server" },
+  args: [
+    { name: "port", type: Number, default: 3000 },
+  ] as const,
+  flags: {
+    host: { type: String, default: "localhost" },
+    verbose: { type: Boolean, alias: "v" },
+  },
+  run({ args, flags }) {
+    // args.port: number
+    // flags.host: string
+    // flags.verbose: boolean | undefined
+    console.log(`Listening on ${flags.host}:${args.port}`);
+  },
+});
+```
+
+### With Subcommands
+
+```ts
+const main = defineCommand({
+  meta: { name: "my-cli" },
+  subCommands: {
+    serve,
+    build: defineCommand({
+      meta: { name: "build", description: "Build project" },
+      run() {
+        console.log("Building...");
+      },
+    }),
+  },
+});
+```
+
+### With Lifecycle Hooks
+
+```ts
+const deploy = defineCommand({
+  meta: { name: "deploy" },
+  async preRun() {
+    await validateConfig();
+  },
+  async run({ flags }) {
+    await deployToEnvironment(flags.env);
+  },
+  async postRun() {
+    await cleanup();
+  },
+});
+```

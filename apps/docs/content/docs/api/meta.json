@@ -1,0 +1,13 @@
+{
+  "title": "API Reference",
+  "icon": "FileCode",
+  "pages": [
+    "define-command",
+    "parse-args",
+    "resolve-command",
+    "run-command",
+    "run-main",
+    "types",
+    "errors"
+  ]
+}

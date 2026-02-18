@@ -1,0 +1,150 @@
+---
+title: Arguments
+description: Define positional arguments with types, defaults, and validation.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Arguments are positional values passed to your CLI without a flag name. They're defined as an ordered array, and Crust maps them to named, typed values.
+
+```sh
+my-cli serve 3000 localhost
+#            ^^^^  ^^^^^^^^^
+#            arg 1  arg 2
+```
+
+## Defining Arguments
+
+Arguments are defined in the `args` array. Order matters — the first argument definition maps to the first positional value:
+
+```ts
+const cmd = defineCommand({
+  meta: { name: "serve" },
+  args: [
+    { name: "port", type: Number, default: 3000 },
+    { name: "host", type: String, default: "localhost" },
+  ] as const,
+  run({ args }) {
+    console.log(`Listening on ${args.host}:${args.port}`);
+  },
+});
+```
+
+<Callout>
+  Use `as const` on the `args` array to get full type inference. Without it, TypeScript can't infer the literal types of argument names.
+</Callout>
+
+## Argument Properties
+
+Each argument is an `ArgDef` object with properties like `name`, `type`, `description`, `default`, `required`, and `variadic`. See the [ArgDef reference](/docs/api/types#argdef) for the full property table.
+
+## Types
+
+Crust supports three argument types using JavaScript constructors:
+
+```ts
+args: [
+  { name: "port", type: Number },    // Coerced to number
+  { name: "host", type: String },    // Kept as string
+  { name: "verbose", type: Boolean }, // Coerced to boolean
+] as const,
+```
+
+- **`String`** — The value is kept as-is
+- **`Number`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
+- **`Boolean`** — The value is coerced to a boolean (`"true"` / `"1"` → `true`)
+
+## Required Arguments
+
+Mark an argument as `required` to error when it's missing:
+
+```ts
+args: [
+  { name: "name", type: String, required: true },
+] as const,
+```
+
+```sh
+$ my-cli
+# Error: Missing required argument "<name>"
+```
+
+When required is `true`, the inferred type is guaranteed (no `| undefined`).
+
+## Default Values
+
+Provide a `default` for optional arguments:
+
+```ts
+args: [
+  { name: "port", type: Number, default: 3000 },
+] as const,
+```
+
+When a default is set, the argument is always present in `args` — the inferred type is guaranteed (no `| undefined`).
+
+## Optional Arguments
+
+Arguments without `required` or `default` are optional. Their type includes `| undefined`:
+
+```ts
+args: [
+  { name: "name", type: String },
+] as const,
+run({ args }) {
+  args.name; // string | undefined
+}
+```
+
+## Variadic Arguments
+
+The last argument can be `variadic`, collecting all remaining positional values into an array:
+
+```ts
+const cmd = defineCommand({
+  meta: { name: "copy" },
+  args: [
+    { name: "destination", type: String, required: true },
+    { name: "files", type: String, variadic: true },
+  ] as const,
+  run({ args }) {
+    args.destination; // string
+    args.files;       // string[]
+    for (const file of args.files) {
+      console.log(`Copying ${file} to ${args.destination}`);
+    }
+  },
+});
+```
+
+```sh
+my-cli /output file1.txt file2.txt file3.txt
+```
+
+<Callout type="warn">
+  Only the **last** argument can be variadic. Crust enforces this at both compile time and runtime. Placing `variadic: true` on a non-last argument produces a type error.
+</Callout>
+
+Variadic arguments with `required: true` error when no values are provided. Without `required`, an empty array is returned.
+
+## The `--` Separator
+
+Arguments after `--` are collected into `rawArgs` and **not** processed as positional arguments or flags:
+
+```ts
+run({ args, rawArgs }) {
+  // rawArgs contains everything after --
+  console.log("Raw args:", rawArgs);
+}
+```
+
+```sh
+my-cli build -- --some-flag --passed-through
+# rawArgs: ["--some-flag", "--passed-through"]
+```
+
+This is useful for forwarding arguments to child processes.
+
+## Type Inference
+
+Crust infers argument types from your definitions — `required` and `default` guarantee the value, otherwise it's `T | undefined`. Variadic arguments always return an array. See the [full inference rules](/docs/api/types#inferargsa) for all cases.

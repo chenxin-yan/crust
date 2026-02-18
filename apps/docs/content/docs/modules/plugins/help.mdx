@@ -1,0 +1,139 @@
+---
+title: Help
+description: Auto-generate help text for your CLI commands.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The help plugin adds `--help` / `-h` to all commands and auto-generates formatted help output.
+
+## Usage
+
+```ts
+import { helpPlugin, runMain } from "@crustjs/crust";
+
+runMain(main, {
+  plugins: [helpPlugin()],
+});
+```
+
+No configuration needed. The plugin injects a `--help` flag into every command (including subcommands) during the setup phase.
+
+## What It Does
+
+### Flag Injection
+
+During setup, the plugin adds the following flag to the root command and all subcommands recursively:
+
+```ts
+help: {
+  type: Boolean,
+  alias: "h",
+  description: "Show help",
+}
+```
+
+### Help Display
+
+The middleware intercepts execution in two cases:
+
+1. **`--help` is passed** — Renders help and stops execution
+2. **Container command** — A command with subcommands but no `run()` handler automatically shows help
+
+### Help Output Format
+
+```
+my-cli - My CLI tool
+
+USAGE:
+  my-cli <command> [options]
+
+COMMANDS:
+  build     Build the project
+  dev       Start dev server
+
+OPTIONS:
+  -h, --help        Show help
+  -v, --version     Show version number
+```
+
+The help text includes these sections (when applicable):
+
+| Section      | When shown                                     |
+| ------------ | ---------------------------------------------- |
+| **Header**   | Always — `command-path - description`          |
+| **USAGE**    | Always — auto-generated or custom `meta.usage` |
+| **COMMANDS** | When the command has subcommands               |
+| **ARGS**     | When the command has positional arguments      |
+| **OPTIONS**  | When the command has flags                     |
+
+## Usage Line
+
+The usage line is auto-generated from the command definition:
+
+```
+my-cli <command> [name] [options]
+```
+
+- `<command>` — shown for container commands (subcommands exist, no `run`)
+- `<arg>` — required positional argument
+- `[arg]` — optional positional argument
+- `arg...` — variadic argument
+- `[options]` — shown when flags exist
+
+Override the auto-generated usage with `meta.usage`:
+
+```ts
+defineCommand({
+  meta: {
+    name: "deploy",
+    usage: "deploy <env> [--dry-run]",
+  },
+  // ...
+});
+```
+
+## `renderHelp` Function
+
+The `renderHelp` function is exported separately for generating help text programmatically:
+
+```ts
+import { renderHelp } from "@crustjs/crust";
+
+const helpText = renderHelp(myCommand, ["my-cli", "deploy"]);
+console.log(helpText);
+```
+
+**Parameters:**
+
+- `command` — The command to render help for
+- `path` — The command path array (e.g., `["my-cli", "deploy"]`)
+
+**Returns:** A formatted help string.
+
+## The `--` Separator
+
+`--help` is not recognized after the `--` separator — arguments after `--` are treated as raw args. See [the `--` separator](/docs/guide/arguments#the----separator) for details.
+
+## Subcommand Help
+
+Each subcommand gets its own `--help`:
+
+```sh
+my-cli --help              # Help for root command
+my-cli build --help        # Help for build subcommand
+my-cli create plugin --help # Help for nested subcommand
+```
+
+The help output includes the full command path:
+
+```
+my-cli build - Build the project
+
+USAGE:
+  my-cli build [options]
+
+OPTIONS:
+  --no-minify       Disable minification
+  -h, --help        Show help
+```

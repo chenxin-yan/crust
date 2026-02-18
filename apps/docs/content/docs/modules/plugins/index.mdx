@@ -1,0 +1,67 @@
+---
+title: "Overview"
+description: Official plugins — help, version, and autocomplete.
+---
+
+The plugins package provides official plugins for common CLI features. It depends on `@crustjs/core`.
+
+## Install
+
+```sh
+bun add @crustjs/plugins
+```
+
+## Exports
+
+### Plugin Factories
+
+| Export                                                        | Description                                       |
+| ------------------------------------------------------------- | ------------------------------------------------- |
+| [`helpPlugin()`](/docs/modules/plugins/help)                 | Adds `--help` / `-h` and auto-generates help text |
+| [`versionPlugin()`](/docs/modules/plugins/version)           | Adds `--version` / `-v` to display version        |
+| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete) | Suggests corrections for mistyped subcommands     |
+
+### Utilities
+
+| Export                      | Description                         |
+| --------------------------- | ----------------------------------- |
+| `renderHelp(command, path)` | Generate help text programmatically |
+
+### Types
+
+| Type                        | Description                                       |
+| --------------------------- | ------------------------------------------------- |
+| `VersionValue`              | `string \| (() => string)` — version plugin input |
+| `AutoCompletePluginOptions` | Options for the autocomplete plugin               |
+
+## Usage
+
+```ts
+import {
+  helpPlugin,
+  versionPlugin,
+  autoCompletePlugin,
+} from "@crustjs/plugins";
+import { defineCommand, runMain } from "@crustjs/core";
+
+const main = defineCommand({
+  meta: { name: "my-cli", description: "My CLI" },
+  run() {
+    console.log("Hello!");
+  },
+});
+
+runMain(main, {
+  plugins: [
+    versionPlugin("1.0.0"),
+    autoCompletePlugin({ mode: "help" }),
+    helpPlugin(),
+  ],
+});
+```
+
+## When to Use Directly
+
+Use `@crustjs/plugins` directly when you're already importing from `@crustjs/core` and want to add official plugins without the `crust` CLI binary.
+
+For most CLI applications, [`@crustjs/crust`](/docs/modules/crust) (which bundles core + plugins) is recommended instead.

@@ -1,0 +1,163 @@
+---
+title: Flags
+description: Define named flags with types, aliases, defaults, and multiple values.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Flags are named options passed with `--` (long form) or `-` (short alias). They're defined as a record of flag names to definitions.
+
+```sh
+my-cli --port 3000 --verbose -o dist
+#      ^^^^^^^^^^^  ^^^^^^^^^  ^^^^^^
+#      flag         flag       alias
+```
+
+## Defining Flags
+
+Flags are defined in the `flags` object:
+
+```ts
+const cmd = defineCommand({
+  meta: { name: "serve" },
+  flags: {
+    port: {
+      type: Number,
+      description: "Port to listen on",
+      default: 3000,
+      alias: "p",
+    },
+    verbose: {
+      type: Boolean,
+      description: "Enable verbose logging",
+      alias: "v",
+    },
+  },
+  run({ flags }) {
+    console.log(`Port: ${flags.port}`);       // number (has default)
+    console.log(`Verbose: ${flags.verbose}`); // boolean | undefined
+  },
+});
+```
+
+## Flag Properties
+
+Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `alias`, and `multiple`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
+
+## Types
+
+Crust supports three flag types:
+
+```ts
+flags: {
+  output: { type: String },   // --output value (string)
+  port: { type: Number },      // --port 3000 (coerced to number)
+  verbose: { type: Boolean },  // --verbose (boolean toggle)
+}
+```
+
+- **`String`** — Requires a value: `--output dist`
+- **`Number`** — Requires a value, coerced to number: `--port 3000`. Throws a `PARSE` error if the value isn't a valid number
+- **`Boolean`** — Toggle flag, no value needed: `--verbose`
+
+### Boolean Negation
+
+Boolean flags support `--no-` prefix negation:
+
+```sh
+my-cli --no-minify  # flags.minify === false
+```
+
+This works automatically for any Boolean flag.
+
+## Aliases
+
+Provide short aliases with the `alias` property:
+
+```ts
+flags: {
+  output: { type: String, alias: "o" },       // -o dist
+  verbose: { type: Boolean, alias: "v" },      // -v
+  target: { type: String, alias: ["t", "T"] }, // -t or -T
+}
+```
+
+Single-character aliases use the `-x` short form. You can provide multiple aliases as an array.
+
+<Callout type="warn">
+  Alias collisions are caught at **compile time** and **runtime**. If an alias conflicts with another flag name or another alias, you'll get an error.
+</Callout>
+
+## Required Flags
+
+Mark a flag as `required` to error when it's missing:
+
+```ts
+flags: {
+  config: { type: String, required: true },
+}
+```
+
+```sh
+$ my-cli
+# Error: Missing required flag "--config"
+```
+
+## Default Values
+
+Provide a `default` to use when the flag isn't passed:
+
+```ts
+flags: {
+  port: { type: Number, default: 3000 },
+  format: { type: String, default: "json" },
+  minify: { type: Boolean, default: true },
+}
+```
+
+When a default is set, the inferred type is guaranteed (no `| undefined`).
+
+## Multiple Values
+
+Set `multiple: true` to collect repeated flag values into an array:
+
+```ts
+flags: {
+  target: {
+    type: String,
+    multiple: true,
+    description: "Target platform(s)",
+    alias: "t",
+  },
+}
+```
+
+```sh
+my-cli --target linux-x64 --target darwin-arm64
+# flags.target === ["linux-x64", "darwin-arm64"]
+```
+
+You can also provide a default array:
+
+```ts
+flags: {
+  include: {
+    type: String,
+    multiple: true,
+    default: ["src/**"],
+  },
+}
+```
+
+## Unknown Flags
+
+Crust uses **strict mode** for flag parsing. Unknown flags immediately produce a `PARSE` error:
+
+```sh
+$ my-cli --unknown-flag
+# Error: Unknown flag "--unknown-flag"
+```
+
+## Type Inference
+
+Crust infers flag types from your definitions — `required` and `default` guarantee the value, otherwise it's `T | undefined`. Flags with `multiple: true` resolve to arrays. See the [full inference rules](/docs/api/types#inferflagsf) for all cases.

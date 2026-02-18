@@ -1,31 +1,104 @@
 ---
-title: Hello World
-description: Your favourite docs framework.
-icon: Rocket
+title: What is Crust?
+description: A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.
+icon: House
 ---
 
-Hey there! Fumadocs is the docs framework that also works on Tanstack Start!
+import { Cards, Card } from "fumadocs-ui/components/card";
 
-## Heading
+## Why Crust?
 
-Hello World!
+Most CLI tools in the JavaScript ecosystem are either **minimal arg parsers** that leave you wiring everything together, or **heavyweight frameworks** that bring more complexity than you need.
 
-<Cards>
-  <Card title="Learn more about Tanstack Start" href="https://tanstack.com/start" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.dev" />
-</Cards>
+Crust sits in the sweet spot: more structured than a bare parser, lighter than a full framework, and designed so you only pull in what you actually use.
 
-### CodeBlock
+- **Functional, declarative API** — plain objects and functions instead of class hierarchies
+- **TypeScript-first** — Args and flags are fully inferred from your definitions. No manual type annotations, just autocomplete that works.
+- **Composable, not monolithic** — Every capability ships as its own module. `@crustjs/crust` bundles the core framework and official plugins for convenience, or you can pick only the modules you need.
+- **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
 
-```ts
-console.log('Hello World');
+## Features
+
+- **Compile-time validation** catches flag alias collisions and variadic arg mistakes before your code runs
+- **Zero runtime dependencies** — Core modules have no external dependencies
+- **Subcommand routing** — Nested command trees with automatic resolution
+- **Plugin system** — Middleware-based architecture with lifecycle hooks
+
+## Quick Example
+
+```ts title="src/cli.ts"
+import {
+  defineCommand,
+  helpPlugin,
+  runMain,
+  versionPlugin,
+} from "@crustjs/crust";
+
+const main = defineCommand({
+  meta: {
+    name: "greet",
+    description: "A friendly greeter CLI",
+  },
+  args: [
+    {
+      name: "name",
+      type: String,
+      description: "Who to greet",
+      default: "world",
+    },
+  ],
+  flags: {
+    shout: { type: Boolean, description: "SHOUT the greeting", alias: "s" },
+  },
+  run({ args, flags }) {
+    const message = `Hello, ${args.name}!`;
+    console.log(flags.shout ? message.toUpperCase() : message);
+  },
+});
+
+runMain(main, {
+  plugins: [versionPlugin("1.0.0"), helpPlugin()],
+});
 ```
 
-#### Table
+```sh
+$ bun run src/cli.ts world --shout
+HELLO, WORLD!
 
-| Head                            | Description                         |
-| ------------------------------- | ----------------------------------- |
-| `hello`                         | Hello World                         |
-| very **important**              | Hey                                 |
-| _Surprisingly_                  | Fumadocs                            |
-| very long text that looks weird | hello world hello world hello world |
+$ bun run src/cli.ts --help
+greet - A friendly greeter CLI
+
+USAGE:
+  greet [name] [options]
+
+ARGS:
+  [name]            Who to greet
+
+OPTIONS:
+  -s, --shout       SHOUT the greeting
+  -h, --help        Show help
+  -v, --version     Show version number
+```
+
+<Cards>
+  <Card
+    title="Quick Start"
+    description="Build your first CLI in 2 minutes"
+    href="/docs/quick-start"
+  />
+  <Card
+    title="Guide"
+    description="Learn how to define commands, arguments, flags, and more"
+    href="/docs/guide"
+  />
+  <Card
+    title="Modules"
+    description="Explore the composable module ecosystem"
+    href="/docs/modules"
+  />
+  <Card
+    title="API Reference"
+    description="Full API signatures and types"
+    href="/docs/api"
+  />
+</Cards>

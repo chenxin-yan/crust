@@ -1,0 +1,155 @@
+---
+title: CrustError
+description: Typed error class with error codes and structured details.
+---
+
+`CrustError` is the custom error class used by all Crust framework-level errors. It extends `Error` with a typed `code` for programmatic handling.
+
+## Class Definition
+
+```ts
+class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
+  readonly code: C;
+  readonly details: CrustErrorDetails<C>;
+  cause?: unknown;
+
+  constructor(
+    code: C,
+    message: string,
+    ...details: CrustErrorDetails<C> extends undefined ? [] : [CrustErrorDetails<C>]
+  );
+
+  is<T extends CrustErrorCode>(code: T): this is CrustError<T>;
+  withCause(cause: unknown): this;
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `code` | `CrustErrorCode` | Machine-readable error code |
+| `message` | `string` | Human-readable error message |
+| `details` | `CrustErrorDetails<C>` | Structured payload (typed per error code) |
+| `cause` | `unknown` | Optional chained original error |
+| `name` | `string` | Always `"CrustError"` |
+
+## Error Codes
+
+```ts
+type CrustErrorCode =
+  | "DEFINITION"
+  | "VALIDATION"
+  | "PARSE"
+  | "EXECUTION"
+  | "COMMAND_NOT_FOUND";
+```
+
+| Code | When Thrown | Details Type |
+| --- | --- | --- |
+| `DEFINITION` | Invalid command configuration (empty name, alias collision) | `undefined` |
+| `VALIDATION` | Missing required argument or flag | `undefined` |
+| `PARSE` | Argv parsing failure (unknown flag, type coercion) | `undefined` |
+| `EXECUTION` | Runtime command/middleware failure | `undefined` |
+| `COMMAND_NOT_FOUND` | Unknown subcommand | `CommandNotFoundErrorDetails` |
+
+## Methods
+
+### `.is(code)`
+
+Type-narrowing method that checks the error code:
+
+```ts
+if (error instanceof CrustError) {
+  if (error.is("COMMAND_NOT_FOUND")) {
+    // error.details is now CommandNotFoundErrorDetails
+    console.log(error.details.input);
+    console.log(error.details.available);
+  }
+
+  if (error.is("VALIDATION")) {
+    // error.details is undefined
+    console.log(error.message);
+  }
+}
+```
+
+### `.withCause(cause)`
+
+Chains an original error for debugging. Returns `this` for fluent API:
+
+```ts
+throw new CrustError("EXECUTION", "Operation failed")
+  .withCause(originalError);
+```
+
+## CommandNotFoundErrorDetails
+
+Structured details included with `COMMAND_NOT_FOUND` errors:
+
+```ts
+interface CommandNotFoundErrorDetails {
+  input: string;              // What the user typed
+  available: string[];         // Valid subcommand names
+  commandPath: string[];       // Path to the parent command
+  parentCommand: AnyCommand;   // The parent command object
+}
+```
+
+## Creating Errors
+
+### Framework Errors
+
+```ts
+import { CrustError } from "@crustjs/crust";
+
+throw new CrustError("VALIDATION", `Invalid value for --port: "${value}"`);
+```
+
+### With Details
+
+```ts
+throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${name}".`, {
+  input: name,
+  available: ["build", "dev"],
+  commandPath: ["my-cli"],
+  parentCommand: rootCmd,
+});
+```
+
+### With Cause Chain
+
+```ts
+try {
+  await riskyOperation();
+} catch (err) {
+  throw new CrustError("EXECUTION", "Operation failed").withCause(err);
+}
+```
+
+## Catching Errors
+
+```ts
+import { CrustError } from "@crustjs/crust";
+
+try {
+  await runCommand(cmd, { argv });
+} catch (error) {
+  if (!(error instanceof CrustError)) throw error;
+
+  switch (error.code) {
+    case "VALIDATION":
+      console.error(error.message);
+      // Show help text
+      break;
+    case "PARSE":
+      console.error(error.message);
+      break;
+    case "COMMAND_NOT_FOUND":
+      console.error(`Unknown: ${error.details.input}`);
+      break;
+    default:
+      console.error(`[${error.code}] ${error.message}`);
+  }
+}
+```

@@ -1,0 +1,102 @@
+---
+title: resolveCommand()
+description: Resolve a subcommand from an argv array by walking the command tree.
+---
+
+Walks the subcommand tree to find the target command for the given argv. Subcommand matching happens **before** flag parsing.
+
+## Signature
+
+```ts
+function resolveCommand(
+  command: AnyCommand,
+  argv: string[],
+): CommandRoute;
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `command` | `AnyCommand` | The root command to resolve from |
+| `argv` | `string[]` | The argv array to resolve against |
+
+## Returns
+
+```ts
+interface CommandRoute {
+  command: AnyCommand;     // The resolved (sub)command
+  argv: string[];           // Remaining argv after subcommand names consumed
+  commandPath: string[];    // Full command path (e.g., ["my-cli", "build"])
+}
+```
+
+## Throws
+
+- **`CrustError("COMMAND_NOT_FOUND")`** — When an unknown subcommand is given on a container command (no `run`)
+
+The error includes structured details:
+
+```ts
+interface CommandNotFoundErrorDetails {
+  input: string;              // The unknown subcommand name
+  available: string[];         // Valid subcommand names
+  commandPath: string[];       // Path to the parent command
+  parentCommand: AnyCommand;   // The parent command object
+}
+```
+
+## Resolution Algorithm
+
+1. Start at the root command
+2. Take the first token from `argv`
+3. If it starts with `-`, stop (it's a flag, not a subcommand)
+4. If it matches a subcommand key, recurse into that subcommand
+5. If no match and the current command has `run()`, stop (token is a positional arg)
+6. If no match and the current command has no `run()`, throw `COMMAND_NOT_FOUND`
+7. Repeat until no more subcommand matches
+
+## Examples
+
+### Basic Resolution
+
+```ts
+import { defineCommand, resolveCommand } from "@crustjs/crust";
+
+const build = defineCommand({
+  meta: { name: "build" },
+  run() {},
+});
+
+const main = defineCommand({
+  meta: { name: "my-cli" },
+  subCommands: { build },
+});
+
+const route = resolveCommand(main, ["build", "--minify"]);
+// route.command === build
+// route.argv === ["--minify"]
+// route.commandPath === ["my-cli", "build"]
+```
+
+### Nested Subcommands
+
+```ts
+const route = resolveCommand(main, ["create", "component", "Button"]);
+// route.command === createComponent
+// route.argv === ["Button"]
+// route.commandPath === ["my-cli", "create", "component"]
+```
+
+### No Subcommand Match
+
+```ts
+// If main has run(), unknown tokens are positional args
+const route = resolveCommand(main, ["readme.md"]);
+// route.command === main
+// route.argv === ["readme.md"]
+
+// If main has NO run(), unknown tokens throw COMMAND_NOT_FOUND
+resolveCommand(containerCmd, ["unknown"]);
+// Throws: CrustError("COMMAND_NOT_FOUND", ...)
+```

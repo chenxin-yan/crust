@@ -1,0 +1,155 @@
+---
+title: Commands
+description: Define CLI commands with full type inference using defineCommand.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Commands are the building blocks of every Crust CLI. You define them declaratively as plain objects, and Crust handles parsing, validation, and execution.
+
+## Defining a Command
+
+Use `defineCommand` to create a command:
+
+```ts
+import { defineCommand } from "@crustjs/crust";
+
+const serve = defineCommand({
+  meta: {
+    name: "serve",
+    description: "Start the development server",
+  },
+  run() {
+    console.log("Server started!");
+  },
+});
+```
+
+Every command requires a `meta` object with at least a `name`. The `description` is optional but recommended — it appears in help output.
+
+## Command Metadata
+
+The `meta` object describes the command:
+
+```ts
+defineCommand({
+  meta: {
+    name: "serve",                          // Required: command name
+    description: "Start the dev server",    // Optional: shown in help text
+    usage: "serve [port] [options]",        // Optional: overrides auto-generated usage
+  },
+  // ...
+});
+```
+
+See the [defineCommand() reference](/docs/api/define-command#parameters) for the full list of command properties.
+
+## The `run` Handler
+
+The `run` function is the command's main logic. It receives a `CommandContext` with parsed `args`, `flags`, and `rawArgs`:
+
+```ts
+defineCommand({
+  meta: { name: "greet" },
+  args: [
+    { name: "name", type: String, required: true },
+  ],
+  flags: {
+    loud: { type: Boolean, alias: "l" },
+  },
+  run({ args, flags, rawArgs }) {
+    // args.name is typed as `string` (required)
+    // flags.loud is typed as `boolean | undefined`
+    // rawArgs contains everything after `--`
+    console.log(`Hello, ${args.name}!`);
+  },
+});
+```
+
+The `run` handler can be `async`:
+
+```ts
+defineCommand({
+  meta: { name: "fetch" },
+  async run() {
+    const data = await fetch("https://api.example.com/data");
+    console.log(await data.json());
+  },
+});
+```
+
+## Running Commands
+
+### `runMain` — Top-Level Entry Point
+
+`runMain` is the recommended way to run your CLI. It catches all errors and prints them to stderr:
+
+```ts
+import { defineCommand, runMain, helpPlugin } from "@crustjs/crust";
+
+const main = defineCommand({
+  meta: { name: "my-cli" },
+  run() {
+    console.log("Running!");
+  },
+});
+
+runMain(main, {
+  plugins: [helpPlugin()],
+});
+```
+
+For programmatic execution where you handle errors yourself, use [`runCommand`](/docs/api/run-command). See [`runMain` vs `runCommand`](/docs/api/run-main#vs-runcommand) for a comparison.
+
+## Immutable Commands
+
+Commands returned by `defineCommand` are frozen with `Object.freeze`. This prevents accidental mutation and ensures commands are safe to share across your application.
+
+```ts
+const cmd = defineCommand({
+  meta: { name: "test" },
+  run() {},
+});
+
+cmd.meta.name = "other"; // TypeError: Cannot assign to read only property
+```
+
+<Callout>
+  Plugins can still inject flags during the setup phase via the `addFlag` action. This is the only sanctioned way to modify a command's flags after creation.
+</Callout>
+
+## Type Inference
+
+Crust infers the types of your `args` and `flags` from their definitions. No manual type annotations needed:
+
+```ts
+const cmd = defineCommand({
+  meta: { name: "example" },
+  args: [
+    { name: "port", type: Number, default: 3000 },
+    { name: "host", type: String, required: true },
+  ] as const,
+  flags: {
+    verbose: { type: Boolean },
+    output: { type: String, default: "dist" },
+    count: { type: Number, required: true },
+  },
+  run({ args, flags }) {
+    args.port;    // number (has default → guaranteed)
+    args.host;    // string (required → guaranteed)
+    flags.verbose; // boolean | undefined
+    flags.output;  // string (has default → guaranteed)
+    flags.count;   // number (required → guaranteed)
+  },
+});
+```
+
+<Callout>
+  Use `as const` on the `args` array for full tuple type inference. Without it, TypeScript may widen the types.
+</Callout>
+
+## Next Steps
+
+- [Arguments](/docs/guide/arguments) — positional argument definitions
+- [Flags](/docs/guide/flags) — named flag definitions
+- [Subcommands](/docs/guide/subcommands) — nested command trees

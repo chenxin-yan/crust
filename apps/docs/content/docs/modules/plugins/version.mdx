@@ -1,0 +1,93 @@
+---
+title: Version
+description: Add --version / -v to display your CLI's version number.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The version plugin adds `--version` / `-v` to the root command, printing the CLI name and version.
+
+## Usage
+
+```ts
+import { versionPlugin, runMain } from "@crustjs/crust";
+
+runMain(main, {
+  plugins: [versionPlugin("1.0.0")],
+});
+```
+
+```sh
+$ my-cli --version
+my-cli v1.0.0
+
+$ my-cli -v
+my-cli v1.0.0
+```
+
+## Configuration
+
+### Static Version
+
+Pass a string literal:
+
+```ts
+versionPlugin("1.0.0")
+```
+
+### Dynamic Version
+
+Pass a function that returns the version string. The function is called lazily — only when `--version` is actually used:
+
+```ts
+import pkg from "../package.json";
+
+versionPlugin(() => pkg.version)
+```
+
+Or read it at import time:
+
+```ts
+import pkg from "../package.json";
+
+versionPlugin(pkg.version)
+```
+
+### Default Version
+
+If no version is provided, it defaults to `"0.0.0"`:
+
+```ts
+versionPlugin()  // Outputs: my-cli v0.0.0
+```
+
+## Behavior
+
+### Root Command Only
+
+The `--version` flag is only registered on the root command. Using `--version` on a subcommand has no effect:
+
+```sh
+$ my-cli --version        # Shows version
+$ my-cli build --version  # Does NOT show version (parsed as a build flag)
+```
+
+### Output Format
+
+```
+<command-name> v<version>
+```
+
+The command name comes from `meta.name` of the root command.
+
+### The `--` Separator
+
+Like the help plugin, `--version` is not recognized after `--`. See [the `--` separator](/docs/guide/arguments#the----separator) for details.
+
+## Type
+
+```ts
+type VersionValue = string | (() => string);
+
+function versionPlugin(versionValue?: VersionValue): CrustPlugin;
+```

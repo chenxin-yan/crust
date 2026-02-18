@@ -1,14 +1,7 @@
-# docs
+# Crust Docs
 
-This is a Tanstack Start application generated with
-[Create Fumadocs](https://github.com/fuma-nama/fumadocs).
-
-Run development server:
+Documentation site for the Crust CLI framework, built with [Fumadocs](https://fumadocs.vercel.app) + TanStack Start.
 
 ```bash
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+bun run dev
 ```

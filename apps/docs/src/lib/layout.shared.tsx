@@ -1,6 +1,6 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
-// fill this with your actual GitHub info, for example:
+// GitHub repository configuration
 export const gitConfig = {
   user: "chenxin-yan",
   repo: "crust",

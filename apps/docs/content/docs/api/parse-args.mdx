@@ -1,0 +1,116 @@
+---
+title: parseArgs()
+description: Parse argv against a command's arg and flag definitions.
+---
+
+Parses an argv array against a command's definitions, performing type coercion, alias expansion, default value resolution, and required validation.
+
+## Signature
+
+```ts
+function parseArgs<
+  A extends ArgsDef = ArgsDef,
+  F extends FlagsDef = FlagsDef,
+>(
+  command: Command<A, F>,
+  argv: string[],
+): ParseResult<A, F>;
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `command` | `Command<A, F>` | The command whose definitions drive parsing |
+| `argv` | `string[]` | The argument array to parse (typically `process.argv.slice(2)`) |
+
+## Returns
+
+```ts
+interface ParseResult<A, F> {
+  args: InferArgs<A>;     // Resolved positional arguments
+  flags: InferFlags<F>;   // Resolved flags
+  rawArgs: string[];       // Everything after the `--` separator
+}
+```
+
+## Throws
+
+- **`CrustError("PARSE")`** — Unknown flag, number coercion failure
+- **`CrustError("VALIDATION")`** — Missing required argument or flag
+- **`CrustError("DEFINITION")`** — Flag alias collision (runtime defense-in-depth)
+
+## Behavior
+
+### Parsing Engine
+
+`parseArgs` wraps Node's `util.parseArgs` with Crust-specific semantics:
+
+- **Strict mode** — Unknown flags immediately produce a `PARSE` error
+- **Positionals allowed** — Positional arguments are captured and mapped
+- **Negative flags** — `--no-<flag>` syntax is supported for boolean flags
+- **Token-based** — Uses `util.parseArgs` tokens for accurate `--` separator handling
+
+### Type Coercion
+
+| Definition Type | Parser Behavior |
+| --- | --- |
+| `String` | Kept as-is |
+| `Number` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
+| `Boolean` | Toggle flags. `--flag` → `true`, `--no-flag` → `false` |
+
+### Alias Resolution
+
+Aliases are resolved to their canonical flag names:
+
+```ts
+flags: {
+  verbose: { type: Boolean, alias: "v" },
+}
+// --verbose and -v both resolve to flags.verbose
+```
+
+Multiple aliases (including long aliases) are supported:
+
+```ts
+flags: {
+  target: { type: String, alias: ["t", "T"] },
+}
+```
+
+### Default Values
+
+Flags and arguments without values fall back to their `default`. If no default is set and the definition isn't `required`, the value is `undefined`.
+
+### The `--` Separator
+
+Everything after `--` is collected into `rawArgs` and excluded from positional/flag parsing. See [Arguments — the `--` separator](/docs/guide/arguments#the----separator) for more.
+
+```ts
+parseArgs(cmd, ["file.txt", "--", "--verbose"]);
+// result.args → { file: "file.txt" }
+// result.rawArgs → ["--verbose"]
+```
+
+## Example
+
+```ts
+import { defineCommand, parseArgs } from "@crustjs/crust";
+
+const cmd = defineCommand({
+  meta: { name: "example" },
+  args: [
+    { name: "file", type: String, required: true },
+  ] as const,
+  flags: {
+    output: { type: String, default: "dist", alias: "o" },
+    verbose: { type: Boolean, alias: "v" },
+  },
+});
+
+const result = parseArgs(cmd, ["input.ts", "-o", "build", "--verbose"]);
+// result.args.file === "input.ts"
+// result.flags.output === "build"
+// result.flags.verbose === true
+// result.rawArgs === []
+```

@@ -1,0 +1,59 @@
+---
+title: "Core"
+description: Core framework library — command definition, parsing, routing, plugins, and errors.
+---
+
+The core package provides everything needed to define and run CLI commands. It has **zero runtime dependencies**.
+
+## Install
+
+```sh
+bun add @crustjs/core
+```
+
+## Exports
+
+### Functions
+
+| Function | Description |
+| --- | --- |
+| [`defineCommand`](/docs/api/define-command) | Define a CLI command with full type inference |
+| [`parseArgs`](/docs/api/parse-args) | Parse argv against a command's arg/flag definitions |
+| [`resolveCommand`](/docs/api/resolve-command) | Resolve a subcommand from an argv array |
+| [`runCommand`](/docs/api/run-command) | Execute a command with plugins (throws on error) |
+| [`runMain`](/docs/api/run-main) | Top-level CLI entry point (catches errors) |
+
+### Types
+
+| Type | Description |
+| --- | --- |
+| `Command<A, F>` | The command object shape |
+| `AnyCommand` | Type-erased command (for collections and routing) |
+| `CommandMeta` | Command metadata (name, description, usage) |
+| `CommandContext<A, F>` | Runtime context passed to lifecycle hooks |
+| `ArgDef` | Positional argument definition |
+| `ArgsDef` | Tuple of argument definitions |
+| `FlagDef` | Named flag definition |
+| `FlagsDef` | Record of flag definitions |
+| `InferArgs<A>` | Infer resolved arg types from definitions |
+| `InferFlags<F>` | Infer resolved flag types from definitions |
+| `ParseResult<A, F>` | Output of `parseArgs` |
+| `CommandRoute` | Output of `resolveCommand` |
+| `RunOptions` | Options for `runCommand`/`runMain` |
+| `CrustPlugin` | Plugin interface |
+| `SetupContext` | Context passed to plugin setup hooks |
+| `MiddlewareContext` | Context passed to plugin middleware |
+| `PluginMiddleware` | Middleware function type |
+| `CrustError` | Typed error class |
+| `CrustErrorCode` | Error code union |
+| `CommandNotFoundErrorDetails` | Structured details for COMMAND_NOT_FOUND errors |
+
+## When to Use Directly
+
+Use `@crustjs/core` directly when:
+
+- You don't need the official plugins (help, version, autocomplete)
+- You're building a library that wraps Crust's core functionality
+- You want the smallest possible dependency footprint
+
+For most CLI applications, [`@crustjs/crust`](/docs/modules/crust) (which bundles core + plugins) is recommended instead.

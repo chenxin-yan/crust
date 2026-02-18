@@ -1,0 +1,268 @@
+---
+title: Types Reference
+description: All exported types and interfaces from @crustjs/core.
+---
+
+Complete reference of all types exported from `@crustjs/core`.
+
+## Command Types
+
+### `Command<A, F>`
+
+The unified command shape. Both command definitions and resolved commands use this interface.
+
+```ts
+interface Command<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
+  readonly meta: CommandMeta;
+  readonly args?: A;
+  readonly flags?: F;
+  readonly subCommands?: Record<string, AnyCommand>;
+  preRun?(context: CommandContext<A, F>): void | Promise<void>;
+  run?(context: CommandContext<A, F>): void | Promise<void>;
+  postRun?(context: CommandContext<A, F>): void | Promise<void>;
+}
+```
+
+### `AnyCommand`
+
+Type-erased command for collections and routing. Uses `any` for type parameters to enable bivariant checking:
+
+```ts
+type AnyCommand = Command<any, any>;
+```
+
+### `CommandMeta`
+
+Metadata describing a command:
+
+```ts
+interface CommandMeta {
+  name: string;          // Command name (required)
+  description?: string;  // Help text description
+  usage?: string;        // Custom usage string
+}
+```
+
+### `CommandContext<A, F>`
+
+Runtime context passed to `preRun`, `run`, and `postRun` hooks:
+
+```ts
+interface CommandContext<A extends ArgsDef, F extends FlagsDef>
+  extends ParseResult<A, F> {
+  command: AnyCommand;  // The resolved command being executed
+}
+```
+
+## Argument Types
+
+### `ArgDef`
+
+Defines a single positional argument:
+
+```ts
+interface ArgDef<N, T, D, R, V> {
+  name: N;               // Argument name
+  type: T;               // String, Number, or Boolean constructor
+  description?: string;  // Help text
+  default?: D;           // Default value
+  required?: R;          // Error if missing
+  variadic?: V;          // Collect remaining into array
+}
+```
+
+### `ArgsDef`
+
+Ordered tuple of argument definitions:
+
+```ts
+type ArgsDef = readonly ArgDef[];
+```
+
+## Flag Types
+
+### `FlagDef`
+
+Defines a single named flag:
+
+```ts
+interface FlagDef<T, R, M> {
+  type: T;               // String, Number, or Boolean constructor
+  description?: string;  // Help text
+  default?: /* ... */;   // Default value (array when multiple: true)
+  required?: R;          // Error if missing
+  alias?: string | string[];  // Short alias(es)
+  multiple?: M;          // Collect repeated values into array
+}
+```
+
+### `FlagsDef`
+
+Record mapping flag names to definitions:
+
+```ts
+type FlagsDef = Record<string, FlagDef>;
+```
+
+## Inference Types
+
+### `InferArgs<A>`
+
+Maps an `ArgsDef` tuple to resolved arg types:
+
+```ts
+type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, never>;
+```
+
+**Resolution rules:**
+
+| Definition | Inferred Type |
+| --- | --- |
+| `{ type: String }` | `string \| undefined` |
+| `{ type: String, required: true }` | `string` |
+| `{ type: String, default: "hi" }` | `string` |
+| `{ type: Number }` | `number \| undefined` |
+| `{ type: Number, default: 3000 }` | `number` |
+| `{ type: String, variadic: true }` | `string[]` |
+
+### `InferFlags<F>`
+
+Maps a `FlagsDef` record to resolved flag types:
+
+```ts
+type InferFlags<F> = F extends FlagsDef ? /* resolved types */ : Record<string, never>;
+```
+
+**Resolution rules:**
+
+| Definition | Inferred Type |
+| --- | --- |
+| `{ type: String }` | `string \| undefined` |
+| `{ type: String, required: true }` | `string` |
+| `{ type: String, default: "hi" }` | `string` |
+| `{ type: Boolean }` | `boolean \| undefined` |
+| `{ type: String, multiple: true }` | `string[] \| undefined` |
+| `{ type: String, multiple: true, required: true }` | `string[]` |
+
+## Parse Types
+
+### `ParseResult<A, F>`
+
+Output of `parseArgs`:
+
+```ts
+interface ParseResult<A extends ArgsDef, F extends FlagsDef> {
+  args: InferArgs<A>;     // Resolved positional arguments
+  flags: InferFlags<F>;   // Resolved flags
+  rawArgs: string[];       // Arguments after `--`
+}
+```
+
+## Routing Types
+
+### `CommandRoute`
+
+Output of `resolveCommand`:
+
+```ts
+interface CommandRoute {
+  command: AnyCommand;     // The resolved command
+  argv: string[];           // Remaining argv
+  commandPath: string[];    // Full command path
+}
+```
+
+## Plugin Types
+
+### `CrustPlugin`
+
+The plugin interface:
+
+```ts
+interface CrustPlugin {
+  name?: string;
+  setup?: (context: SetupContext, actions: SetupActions) => void | Promise<void>;
+  middleware?: PluginMiddleware;
+}
+```
+
+### `SetupContext`
+
+Context available during plugin setup:
+
+```ts
+interface SetupContext {
+  readonly argv: readonly string[];
+  readonly rootCommand: AnyCommand;
+  readonly state: PluginState;
+}
+```
+
+### `SetupActions`
+
+Actions available during plugin setup:
+
+```ts
+interface SetupActions {
+  addFlag(command: AnyCommand, name: string, def: FlagDef): void;
+}
+```
+
+### `MiddlewareContext`
+
+Context available during middleware execution:
+
+```ts
+interface MiddlewareContext {
+  readonly argv: readonly string[];
+  readonly rootCommand: AnyCommand;
+  readonly state: PluginState;
+  route: Readonly<CommandRoute> | null;
+  input: ParseResult | null;
+}
+```
+
+### `PluginMiddleware`
+
+Middleware function type:
+
+```ts
+type PluginMiddleware = (
+  context: MiddlewareContext,
+  next: () => Promise<void>,
+) => void | Promise<void>;
+```
+
+## Run Types
+
+### `RunOptions`
+
+Options for `runCommand` and `runMain`:
+
+```ts
+interface RunOptions {
+  argv?: string[];
+  plugins?: CrustPlugin[];
+}
+```
+
+## Compile-Time Validation Types
+
+### `CheckVariadicArgs<A>`
+
+Resolves to `unknown` if valid, or an error string if a non-last argument has `variadic: true`:
+
+```ts
+type CheckVariadicArgs<A extends ArgsDef> = /* ... */;
+// On error: "ERROR: Only the last positional argument can be variadic"
+```
+
+### `CheckFlagAliasCollisions<F>`
+
+Resolves to `unknown` if valid, or an error tuple if aliases collide:
+
+```ts
+type CheckFlagAliasCollisions<F extends FlagsDef> = /* ... */;
+// On error: ["ERROR: Flag alias collides with a flag name. Colliding name(s):", ...]
+// On error: ["ERROR: Duplicate flag alias across different flags. Colliding alias(es):", ...]
+```

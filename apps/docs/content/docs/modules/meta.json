@@ -1,0 +1,5 @@
+{
+  "title": "Modules",
+  "icon": "Blocks",
+  "pages": ["crust", "core", "plugins", "validate", "prompt", "color"]
+}

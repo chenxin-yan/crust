@@ -1,0 +1,86 @@
+---
+title: runMain()
+description: Top-level CLI entry point that catches errors gracefully.
+---
+
+The recommended entry point for CLI applications. Wraps `runCommand` with error handling that prints to stderr and sets the exit code.
+
+## Signature
+
+```ts
+async function runMain(
+  command: AnyCommand,
+  options?: RunOptions,
+): Promise<void>;
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `command` | `AnyCommand` | The root command to execute |
+| `options` | `RunOptions` | Optional configuration |
+
+### RunOptions
+
+```ts
+interface RunOptions {
+  argv?: string[];           // Default: process.argv.slice(2)
+  plugins?: CrustPlugin[];   // Default: []
+}
+```
+
+## Behavior
+
+`runMain` calls `runCommand` and catches any thrown error:
+
+```ts
+async function runMain(command, options) {
+  try {
+    await runCommand(command, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message}`);
+    process.exitCode = 1;
+  }
+}
+```
+
+- Errors are printed to **stderr** as `Error: <message>`
+- `process.exitCode` is set to `1` (does not call `process.exit()`)
+- The function never throws
+
+## Example
+
+```ts
+import { defineCommand, runMain, helpPlugin, versionPlugin } from "@crustjs/crust";
+
+const main = defineCommand({
+  meta: { name: "my-cli", description: "My CLI tool" },
+  run() {
+    console.log("Running!");
+  },
+});
+
+runMain(main, {
+  plugins: [
+    versionPlugin("1.0.0"),
+    helpPlugin(),
+  ],
+});
+```
+
+This is typically the last line in your CLI entry file. It handles:
+- Normal execution
+- `--help` and `--version` (via plugins)
+- Validation errors (missing args/flags)
+- Parse errors (unknown flags, bad types)
+- Runtime errors (exceptions in command handlers)
+
+## vs `runCommand`
+
+| | `runMain` | `runCommand` |
+| --- | --- | --- |
+| Error handling | Catches all, prints to stderr | Throws to caller |
+| Exit code | Sets `process.exitCode = 1` | Does not set exit code |
+| Use case | CLI entry point | Programmatic / testing |

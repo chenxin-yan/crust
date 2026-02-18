@@ -1,0 +1,80 @@
+---
+title: Quick Start
+description: Create your first Crust CLI in under 2 minutes.
+icon: Rocket
+---
+
+import { Steps, Step } from "fumadocs-ui/components/steps";
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+## Scaffold a New Project
+
+The fastest way to start is with `create-crust`:
+
+```sh
+bun create crust my-cli
+```
+
+This runs an interactive setup that prompts for your project name, description, and author, then scaffolds a ready-to-run project.
+
+<Steps>
+<Step>
+### Create the project
+
+```sh
+bun create crust my-cli
+```
+
+Answer the prompts (or press Enter to accept defaults). The scaffolder creates your project and runs `bun install` automatically.
+
+</Step>
+<Step>
+### Run in development mode
+
+```sh
+cd my-cli
+bun run dev
+```
+
+You should see:
+
+```
+Hello, world!
+```
+
+</Step>
+<Step>
+### Try it out
+
+```sh
+# Pass an argument
+bun run src/cli.ts Alice
+
+# Use a flag
+bun run src/cli.ts Alice --greet Hey
+
+# View the help
+bun run src/cli.ts --help
+```
+
+</Step>
+</Steps>
+
+## Building for Production
+
+When you're ready to distribute your CLI:
+
+```sh
+bun run build
+```
+
+This runs `crust build`, which compiles your CLI to standalone executables for all platforms using `bun build --compile`. See the [Building & Distribution](/docs/guide/build) guide for details.
+
+## Next Steps
+
+- [Installation](/docs/installation) — manual setup and composable modules
+- [Commands](/docs/guide/commands) — learn how `defineCommand` works
+- [Arguments](/docs/guide/arguments) — positional arguments in depth
+- [Flags](/docs/guide/flags) — named flags and options
+- [Plugins](/docs/guide/plugins) — add help, version, and more

@@ -1,0 +1,109 @@
+---
+title: Autocomplete
+description: Suggest corrections when users mistype subcommand names.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The autocomplete plugin catches `COMMAND_NOT_FOUND` errors and provides "Did you mean?" suggestions based on Levenshtein distance.
+
+## Usage
+
+```ts
+import { autoCompletePlugin, runMain } from "@crustjs/crust";
+
+runMain(main, {
+  plugins: [autoCompletePlugin()],
+});
+```
+
+```sh
+$ my-cli buld
+Unknown command "buld". Did you mean "build"?
+
+Available commands: build, dev, deploy
+```
+
+## Configuration
+
+### Error Mode (Default)
+
+Prints the error to stderr and sets exit code to 1:
+
+```ts
+autoCompletePlugin()
+// or
+autoCompletePlugin({ mode: "error" })
+```
+
+Output (to stderr):
+
+```
+Unknown command "buld". Did you mean "build"?
+
+Available commands: build, dev, deploy
+```
+
+### Help Mode
+
+Prints the suggestion and the parent command's help text to stdout:
+
+```ts
+autoCompletePlugin({ mode: "help" })
+```
+
+Output (to stdout):
+
+```
+Unknown command "buld". Did you mean "build"?
+
+my-cli - My CLI tool
+
+USAGE:
+  my-cli <command> [options]
+
+COMMANDS:
+  build     Build the project
+  dev       Start dev server
+  deploy    Deploy to production
+
+OPTIONS:
+  -h, --help        Show help
+  -v, --version     Show version number
+```
+
+## How Suggestions Work
+
+The plugin uses Levenshtein distance to find similar commands:
+
+1. **Prefix matches** — If the input is a prefix of a command (or vice versa), it's considered a match with distance 0
+2. **Fuzzy matches** — Commands within a Levenshtein distance of 3 are included
+3. **Sorting** — Results are sorted by distance (closest first), then alphabetically
+
+Only the top suggestion appears in the "Did you mean?" message. All available commands are listed separately (in error mode).
+
+## Plugin Order
+
+The autocomplete plugin wraps the middleware chain in a try/catch. Place it **before** the help plugin so it can catch routing errors:
+
+```ts
+plugins: [
+  versionPlugin("1.0.0"),
+  autoCompletePlugin({ mode: "help" }),
+  helpPlugin(),
+]
+```
+
+## Non-Matching Errors
+
+The plugin only handles `COMMAND_NOT_FOUND` errors. All other errors are re-thrown and handled normally by the middleware chain or `runMain`.
+
+## Type
+
+```ts
+interface AutoCompletePluginOptions {
+  mode?: "error" | "help";  // Default: "error"
+}
+
+function autoCompletePlugin(options?: AutoCompletePluginOptions): CrustPlugin;
+```

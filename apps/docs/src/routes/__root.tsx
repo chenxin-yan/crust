@@ -19,7 +19,12 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Fumadocs on TanStack Start",
+        title: "Crust Docs",
+      },
+      {
+        name: "description",
+        content:
+          "Documentation for Crust, A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

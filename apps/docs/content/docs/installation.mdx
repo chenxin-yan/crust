@@ -1,0 +1,111 @@
+---
+title: Manual Installation
+description: Install Crust manually with the unified package or individual composable modules.
+icon: Download
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+<Callout>
+  If you're starting a new project, the easiest way is `bun create crust my-cli`. See the [Quick Start](/docs/quick-start) guide.
+</Callout>
+
+## Unified Package (Recommended)
+
+The `@crustjs/crust` package re-exports everything from `@crustjs/core` and `@crustjs/plugins` in a single import, plus provides the `crust` CLI binary for building.
+
+```sh
+bun add @crustjs/crust
+```
+
+```ts title="src/cli.ts"
+// Everything from one import
+import { defineCommand, helpPlugin, runMain, versionPlugin } from "@crustjs/crust";
+```
+
+This is the recommended approach for most projects. You get the core framework, official plugins, and the `crust` CLI binary in a single dependency.
+
+## Composable Modules
+
+If you want finer control over your dependencies, install the individual modules:
+
+```sh
+# Core framework only (commands, parsing, routing, errors)
+bun add @crustjs/core
+
+# Add official plugins (help, version, autocomplete)
+bun add @crustjs/plugins
+
+# Add CLI tooling (crust build) as a dev dependency
+bun add -d @crustjs/crust
+```
+
+```ts title="src/cli.ts"
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+```
+
+<Callout>
+  Even with composable modules, you'll want `@crustjs/crust` as a **dev dependency** for the CLI toolings. It's only needed at build time, not at runtime.
+</Callout>
+
+This is useful when you:
+- Only need the core framework without plugins
+- Want to minimize your runtime dependency footprint
+- Are building a library on top of Crust's core
+
+## Minimal Setup
+
+Here's the minimal code to create a working CLI:
+
+```ts title="src/cli.ts"
+#!/usr/bin/env bun
+
+import { defineCommand, runMain } from "@crustjs/crust";
+
+const main = defineCommand({
+  meta: { name: "my-cli", description: "My CLI tool" },
+  run() {
+    console.log("Hello from my CLI!");
+  },
+});
+
+runMain(main);
+```
+
+Run it:
+
+```sh
+bun run src/cli.ts
+```
+
+## Adding to package.json
+
+For a distributable CLI, configure your `package.json`:
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "my-cli": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "crust build",
+    "dev": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@crustjs/crust": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
+```
+
+## Requirements
+
+- **Bun** — Crust is built for the Bun runtime. Install from [bun.sh](https://bun.sh).
+- **TypeScript** — Recommended for full type inference. Crust works with plain JavaScript, but you'll miss out on typed args and flags.

@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "quick-start",
+    "installation",
+    "comparisons",
+    "guide",
+    "---Advanced---",
+    "modules",
+    "api"
+  ]
+}

@@ -1,0 +1,149 @@
+---
+title: Building & Distribution
+description: Compile your CLI to standalone executables with crust build.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The `crust build` command compiles your CLI entry file into standalone Bun executables using `bun build --compile`. It supports cross-platform compilation and generates a platform-detecting resolver script for multi-target distribution.
+
+## Basic Usage
+
+```sh
+# Build for all platforms (default)
+crust build
+
+# Build with a custom entry point
+crust build --entry src/main.ts
+
+# Build for a specific platform
+crust build --target darwin-arm64
+```
+
+## Flags
+
+| Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--entry` | `-e` | String | `src/cli.ts` | Entry file path |
+| `--outfile` | `-o` | String | — | Output file path (single-target only) |
+| `--name` | `-n` | String | auto-detected | Binary name |
+| `--minify` | — | Boolean | `true` | Minify the output |
+| `--target` | `-t` | String (repeatable) | all platforms | Target platform(s) |
+
+## Supported Targets
+
+| Target Alias | Bun Target | Platform |
+| --- | --- | --- |
+| `linux-x64` | `bun-linux-x64-baseline` | Linux x86_64 |
+| `linux-arm64` | `bun-linux-arm64` | Linux ARM64 |
+| `darwin-x64` | `bun-darwin-x64` | macOS Intel |
+| `darwin-arm64` | `bun-darwin-arm64` | macOS Apple Silicon |
+| `windows-x64` | `bun-windows-x64-baseline` | Windows x86_64 |
+
+You can use either the short alias (e.g., `linux-x64`) or the full Bun target name (e.g., `bun-linux-x64-baseline`).
+
+## Multi-Target Build (Default)
+
+When no `--target` is specified (or multiple targets are given), `crust build` produces:
+
+1. **A binary for each platform** — named `dist/<name>-<target>` (e.g., `dist/my-cli-bun-darwin-arm64`)
+2. **A JS resolver script** — `dist/<name>.js` that detects the host platform and spawns the correct binary
+
+```sh
+crust build
+```
+
+Output:
+
+```
+dist/
+├── my-cli.js                            # JS resolver (entry point)
+├── my-cli-bun-linux-x64-baseline        # Linux x64 binary
+├── my-cli-bun-linux-arm64               # Linux ARM64 binary
+├── my-cli-bun-darwin-x64                # macOS Intel binary
+├── my-cli-bun-darwin-arm64              # macOS Apple Silicon binary
+└── my-cli-bun-windows-x64-baseline.exe  # Windows x64 binary
+```
+
+### The Resolver Script
+
+The JS resolver (`dist/<name>.js`) is a `#!/usr/bin/env node` script that:
+
+1. Detects `process.platform` and `process.arch` at runtime
+2. Maps to the correct prebuilt binary
+3. Ensures execute permissions on Unix
+4. Spawns the binary with inherited stdio and exit code propagation
+
+This script is what you point to in your `package.json`'s `bin` field. It uses Node's `#!/usr/bin/env node` shebang so end users don't need Bun installed.
+
+## Single-Target Build
+
+When exactly one `--target` is specified, `crust build` produces a single binary without a resolver:
+
+```sh
+crust build --target darwin-arm64
+```
+
+Output:
+
+```
+dist/
+└── my-cli    # Single binary for macOS Apple Silicon
+```
+
+### Custom Output Path
+
+Use `--outfile` for single-target builds:
+
+```sh
+crust build --target linux-x64 --outfile ./bin/my-cli
+```
+
+<Callout type="warn">
+  `--outfile` can only be used with exactly one target. Use `--name` to set the base binary name when building for multiple targets.
+</Callout>
+
+## Binary Naming
+
+The binary name is resolved in this priority:
+
+1. **`--name` flag** — Explicit name
+2. **`package.json` name** — Read from `package.json` in the current directory (scoped names like `@scope/name` are stripped to `name`)
+3. **Entry filename** — The entry file name without extension (e.g., `cli.ts` → `cli`)
+
+```sh
+# Explicit name
+crust build --name my-tool
+
+# From package.json
+crust build  # Uses package.json "name" field
+
+# From entry
+crust build --entry src/main.ts  # Uses "main" as the name
+```
+
+## Disabling Minification
+
+Minification is enabled by default. Disable it with:
+
+```sh
+crust build --no-minify
+```
+
+## package.json Setup
+
+For a distributable CLI package:
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "bin": {
+    "my-cli": "dist/my-cli.js"
+  },
+  "scripts": {
+    "build": "crust build"
+  }
+}
+```
+
+The `bin` field points to the JS resolver, which handles platform detection and binary execution.

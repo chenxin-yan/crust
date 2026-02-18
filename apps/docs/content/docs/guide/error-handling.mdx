@@ -1,0 +1,111 @@
+---
+title: Error Handling
+description: Handle errors with typed error codes and structured details.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Crust uses a custom `CrustError` class with typed error codes for all framework-level errors. This lets you handle errors programmatically without parsing error messages.
+
+## CrustError
+
+Every error thrown by Crust is an instance of `CrustError`:
+
+```ts
+import { CrustError } from "@crustjs/crust";
+
+try {
+  await runCommand(cmd, { argv: ["--unknown"] });
+} catch (error) {
+  if (error instanceof CrustError) {
+    console.log(error.code);    // "PARSE"
+    console.log(error.message); // 'Unknown flag "--unknown"'
+  }
+}
+```
+
+## Error Codes
+
+Crust defines five error codes — `DEFINITION`, `VALIDATION`, `PARSE`, `EXECUTION`, and `COMMAND_NOT_FOUND`. See the [CrustError reference](/docs/api/errors#error-codes) for when each is thrown.
+
+## Type Narrowing with `.is()`
+
+Use `.is()` to narrow the error type:
+
+```ts
+if (error instanceof CrustError) {
+  if (error.is("COMMAND_NOT_FOUND")) {
+    // error.details is now typed as CommandNotFoundErrorDetails
+    console.log(`Unknown: ${error.details.input}`);
+    console.log(`Available: ${error.details.available.join(", ")}`);
+  }
+
+  if (error.is("VALIDATION")) {
+    console.log("Missing required input:", error.message);
+  }
+}
+```
+
+## COMMAND_NOT_FOUND Details
+
+The `COMMAND_NOT_FOUND` error includes structured details for building helpful error messages:
+
+```ts
+interface CommandNotFoundErrorDetails {
+  input: string;              // What the user typed
+  available: string[];         // Valid subcommand names
+  commandPath: string[];       // Path to the parent command
+  parentCommand: AnyCommand;   // The parent command object
+}
+```
+
+The [Autocomplete Plugin](/docs/modules/plugins/autocomplete) uses these details to suggest corrections.
+
+## Error Chaining with `.withCause()`
+
+Chain an original error for debugging:
+
+```ts
+try {
+  await someOperation();
+} catch (originalError) {
+  throw new CrustError("EXECUTION", "Operation failed").withCause(originalError);
+}
+```
+
+Access the original via `error.cause`.
+
+## runMain vs runCommand
+
+`runMain` catches all errors, prints them to stderr, and sets `process.exitCode = 1`. `runCommand` throws errors to the caller for programmatic handling. See the [comparison table](/docs/api/run-main#vs-runcommand) for details.
+
+## Error Wrapping
+
+When a non-`CrustError` is thrown inside a command handler, `runCommand` automatically wraps it in a `CrustError("EXECUTION", ...)` with the original error set as the cause. This ensures all errors from `runCommand` are `CrustError` instances. See [runCommand() error handling](/docs/api/run-command#error-handling) for details.
+
+## Throwing Errors in Commands
+
+For framework-level errors, throw `CrustError`:
+
+```ts
+import { CrustError } from "@crustjs/crust";
+
+run({ flags }) {
+  if (!isValidConfig(flags.config)) {
+    throw new CrustError("VALIDATION", `Invalid config file: ${flags.config}`);
+  }
+}
+```
+
+For application-level errors, throw plain `Error`:
+
+```ts
+run({ flags }) {
+  const result = await deploy(flags.env);
+  if (!result.ok) {
+    throw new Error(`Deployment failed: ${result.message}`);
+  }
+}
+```
+
+Both are handled correctly — plain errors get wrapped in `CrustError("EXECUTION", ...)` automatically.
