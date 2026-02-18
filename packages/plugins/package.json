@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/plugins",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Official plugins for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
