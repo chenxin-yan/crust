@@ -13,8 +13,8 @@ export default defineConfig({
   mdxOptions: {
     rehypeCodeOptions: {
       themes: {
-        light: "vitesse-light",
-        dark: "vitesse-dark",
+        light: "gruvbox-light-hard",
+        dark: "gruvbox-dark-hard",
       },
     },
   },

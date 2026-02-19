@@ -5,22 +5,22 @@ import { useCallback, useState } from "react";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import langTypescript from "shiki/langs/typescript.mjs";
-import vitesseDark from "shiki/themes/vitesse-dark.mjs";
-import vitesseLight from "shiki/themes/vitesse-light.mjs";
+import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
+import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import { baseOptions } from "@/lib/layout.shared";
 
 const getHighlightedCode = createServerFn({ method: "GET" }).handler(
   async () => {
     const highlighter = await createHighlighterCore({
-      themes: [vitesseLight, vitesseDark],
+      themes: [gruvboxLightHard, gruvboxDarkHard],
       langs: [langTypescript],
       engine: createJavaScriptRegexEngine(),
     });
     const html = highlighter.codeToHtml(CODE_EXAMPLE, {
       lang: "typescript",
       themes: {
-        light: "vitesse-light",
-        dark: "vitesse-dark",
+        light: "gruvbox-light-hard",
+        dark: "gruvbox-dark-hard",
       },
       defaultColor: false,
     });
