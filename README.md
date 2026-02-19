@@ -5,7 +5,7 @@
 
 > Visit [crust.cyanlabs.co](https://crust.cyanlabs.co) for full documentation, guides, and API reference.
 
-A Bun-native, TypeScript-first CLI framework with a composable package ecosystem.
+A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.
 
 ## Getting Started
 

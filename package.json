@@ -15,12 +15,12 @@
 		"@changesets/cli": "^2.29.8",
 		"@biomejs/biome": "2.4.2",
 		"@types/bun": "^1.3.9",
-		"@types/node": "^25.2.3",
-		"turbo": "^2.8.9",
+		"@types/node": "^25.3.0",
+		"turbo": "^2.8.10",
 		"typescript": "5.9.3"
 	},
 	"catalog": {
-		"bunup": "^0.16.26",
+		"bunup": "^0.16.28",
 		"typescript": "^5.9.3"
 	},
 	"engines": {
