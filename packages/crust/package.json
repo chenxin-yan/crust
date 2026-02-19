@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/crust",
 	"version": "0.0.2",
-	"description": "A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.",
+	"description": "A TypeScript-first, Bun-native CLI framework with composable modules.",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",

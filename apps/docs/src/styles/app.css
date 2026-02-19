@@ -1,6 +1,90 @@
+@import url("https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@300;400;600;700;800&family=Saira:wght@300;400;500;600&family=Fira+Code:wght@400;500&display=swap");
+
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Furnace Theme — Warm industrial aesthetic for Crust CLI docs
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Light Mode (warm parchment) ───────────────────────────────────────────── */
+@theme {
+  --color-fd-background: #f5f0eb;
+  --color-fd-foreground: #1a1410;
+  --color-fd-muted: #ede8e2;
+  --color-fd-muted-foreground: #8a7a68;
+  --color-fd-popover: #f0ebe5;
+  --color-fd-popover-foreground: #1a1410;
+  --color-fd-card: #ebe5de;
+  --color-fd-card-foreground: #1a1410;
+  --color-fd-border: #d8d0c6;
+  --color-fd-primary: #d45400;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #e4ddd5;
+  --color-fd-secondary-foreground: #1a1410;
+  --color-fd-accent: #e8dfd6;
+  --color-fd-accent-foreground: #c04800;
+  --color-fd-ring: #c0b0a0;
+  --color-fd-overlay: rgba(26, 20, 16, 0.2);
+}
+
+/* ── Dark Mode (charred black + molten orange) ─────────────────────────────── */
+.dark {
+  --color-fd-background: #0c0806;
+  --color-fd-foreground: #e8d8c8;
+  --color-fd-muted: #1a1614;
+  --color-fd-muted-foreground: #6a5848;
+  --color-fd-popover: #1e1a16;
+  --color-fd-popover-foreground: #e8d8c8;
+  --color-fd-card: #161210;
+  --color-fd-card-foreground: #e8d8c8;
+  --color-fd-border: #2a2220;
+  --color-fd-primary: #ff6a10;
+  --color-fd-primary-foreground: #0c0806;
+  --color-fd-secondary: #1e1a16;
+  --color-fd-secondary-foreground: #e8d8c8;
+  --color-fd-accent: #2a2220;
+  --color-fd-accent-foreground: #ffb848;
+  --color-fd-ring: #6a5848;
+  --color-fd-overlay: rgba(0, 0, 0, 0.4);
+}
+
+/* ── Sidebar overrides ─────────────────────────────────────────────────────── */
+#nd-sidebar {
+  --color-fd-muted: #e4ddd5;
+  --color-fd-secondary: #ddd5cc;
+  --color-fd-muted-foreground: #8a7a68;
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: #1e1a16;
+  --color-fd-secondary: #241f1b;
+  --color-fd-muted-foreground: #7a6858;
+}
+
+/* ── Global typography ─────────────────────────────────────────────────────── */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: "Saira", sans-serif;
+}
+
+/* ── Code blocks ───────────────────────────────────────────────────────────── */
+code,
+pre,
+.fd-codeblock,
+code.shiki {
+  font-family: "Fira Code", monospace;
+}
+
+/* Code block container styling */
+pre:has(> code.shiki) {
+  border: 1px solid var(--color-fd-border);
+}
 
 :root {
   --fd-layout-width: 100vw;

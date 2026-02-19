@@ -5,7 +5,7 @@
 
 > Visit [crustjs.com](https://crustjs.com) for full documentation, guides, and API reference.
 
-A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.
+A TypeScript-first, Bun-native CLI framework with composable modules.
 
 ## Getting Started
 

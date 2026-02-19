@@ -24,7 +24,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Documentation for Crust, A Bun-native, TypeScript-first CLI framework with a composable module ecosystem.",
+          "Documentation for Crust, a TypeScript-first, Bun-native CLI framework with composable modules.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
