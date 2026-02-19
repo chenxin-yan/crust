@@ -6,7 +6,7 @@
   "main": "@tanstack/react-start/server-entry",
   "routes": [
     {
-      "pattern": "crust.cyanlabs.co",
+      "pattern": "crustjs.com",
       "custom_domain": true
     }
   ]

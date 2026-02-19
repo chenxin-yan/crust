@@ -10,7 +10,7 @@
 		"url": "git+https://github.com/chenxin-yan/crust.git",
 		"directory": "packages/plugins"
 	},
-	"homepage": "https://crust.cyanlabs.co",
+	"homepage": "https://crustjs.com",
 	"bugs": {
 		"url": "https://github.com/chenxin-yan/crust/issues"
 	},

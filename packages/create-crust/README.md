@@ -1,6 +1,6 @@
 # @crustjs/create-crust
 
-Scaffold a new [Crust](https://crust.cyanlabs.co) CLI project in seconds.
+Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
 
 ## Usage
 
@@ -16,7 +16,7 @@ This will prompt for project details and generate a ready-to-go project with:
 
 ## Documentation
 
-See the full docs at [crust.cyanlabs.co](https://crust.cyanlabs.co).
+See the full docs at [crustjs.com](https://crustjs.com).
 
 ## License
 

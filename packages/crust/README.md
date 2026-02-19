@@ -1,6 +1,6 @@
 # @crustjs/crust
 
-The all-in-one package for the [Crust](https://crust.cyanlabs.co) CLI framework.
+The all-in-one package for the [Crust](https://crustjs.com) CLI framework.
 
 Re-exports everything from `@crustjs/core` and `@crustjs/plugins`, plus provides CLI tooling for building Crust-powered CLIs.
 
@@ -124,7 +124,7 @@ The resolver uses `#!/usr/bin/env node` for maximum compatibility when installed
 
 ## Documentation
 
-See the full docs at [crust.cyanlabs.co](https://crust.cyanlabs.co).
+See the full docs at [crustjs.com](https://crustjs.com).
 
 ## License
 

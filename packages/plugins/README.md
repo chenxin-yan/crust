@@ -1,6 +1,6 @@
 # @crustjs/plugins
 
-Official plugins for the [Crust](https://crust.cyanlabs.co) CLI framework.
+Official plugins for the [Crust](https://crustjs.com) CLI framework.
 
 ## Install
 
@@ -36,7 +36,7 @@ runMain(main, {
 
 ## Documentation
 
-See the full docs at [crust.cyanlabs.co](https://crust.cyanlabs.co).
+See the full docs at [crustjs.com](https://crustjs.com).
 
 ## License
 

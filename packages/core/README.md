@@ -1,6 +1,6 @@
 # @crustjs/core
 
-The core library for the [Crust](https://crust.cyanlabs.co) CLI framework.
+The core library for the [Crust](https://crustjs.com) CLI framework.
 
 Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, and a plugin system — with **zero runtime dependencies**.
 
@@ -32,7 +32,7 @@ runMain(main);
 
 ## Documentation
 
-See the full docs at [crust.cyanlabs.co](https://crust.cyanlabs.co).
+See the full docs at [crustjs.com](https://crustjs.com).
 
 ## License
 
