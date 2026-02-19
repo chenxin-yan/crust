@@ -16,14 +16,13 @@ on:
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   ci:
     name: Check Packages
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-packages-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
