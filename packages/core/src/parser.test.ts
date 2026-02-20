@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { defineCommand } from "./command.ts";
 import { CrustError } from "./errors.ts";
 import { parseArgs } from "./parser.ts";
+import type { AnyCommand } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Boolean flags
@@ -171,14 +172,13 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on alias collision", () => {
-		const cmd = defineCommand({
+		const cmd: AnyCommand = {
 			meta: { name: "test" },
-			// @ts-expect-error — intentional alias→alias collision to test runtime check
 			flags: {
 				verbose: { type: "boolean", alias: "v" },
 				version: { type: "boolean", alias: "v" },
 			},
-		});
+		};
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -192,14 +192,13 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on long alias shadowing flag name", () => {
-		const cmd = defineCommand({
+		const cmd: AnyCommand = {
 			meta: { name: "test" },
-			// @ts-expect-error — alias "out" collides with flag name "out" (compile-time error)
 			flags: {
 				out: { type: "string", description: "Output format" },
 				output: { type: "string", alias: ["o", "out"] },
 			},
-		});
+		};
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -272,6 +271,28 @@ describe("parseArgs — multiple flags", () => {
 		});
 		const result = parseArgs(cmd, ["--verbose", "--verbose", "--verbose"]);
 		expect(result.flags.verbose).toEqual([true, true, true]);
+	});
+
+	it("collects mixed --flag and --no-flag into array with multiple: true", () => {
+		const cmd = defineCommand({
+			meta: { name: "test" },
+			flags: {
+				verbose: { type: "boolean", multiple: true },
+			},
+		});
+		const result = parseArgs(cmd, ["--verbose", "--no-verbose", "--verbose"]);
+		expect(result.flags.verbose).toEqual([true, false, true]);
+	});
+
+	it("collects only --no-flag values into array with multiple: true", () => {
+		const cmd = defineCommand({
+			meta: { name: "test" },
+			flags: {
+				verbose: { type: "boolean", multiple: true },
+			},
+		});
+		const result = parseArgs(cmd, ["--no-verbose", "--no-verbose"]);
+		expect(result.flags.verbose).toEqual([false, false]);
 	});
 
 	it("returns undefined when multiple flag is not provided and has no default", () => {
