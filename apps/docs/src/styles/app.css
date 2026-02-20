@@ -69,10 +69,6 @@ body {
   overscroll-behavior: none;
 }
 
-body {
-  font-family: "Saira", sans-serif;
-}
-
 /* ── Code blocks ───────────────────────────────────────────────────────────── */
 code,
 pre,
