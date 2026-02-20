@@ -69,7 +69,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 				if (existing) {
 					throw new CrustError(
 						"DEFINITION",
-						`Alias collision: "-${alias}" is used by both "--${existing}" and "--${name}"`,
+						`Alias collision: "${alias.length === 1 ? "-" : "--"}${alias}" is used by both "--${existing}" and "--${name}"`,
 					);
 				}
 				aliasRegistry.set(alias, name);
@@ -121,7 +121,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
  * Shared fallback logic for both flags and positional args.
  */
 function applyDefaultOrThrow(
-	def: { default?: unknown; required?: boolean },
+	def: { default?: unknown; required?: true },
 	label: string,
 ) {
 	if (def.default !== undefined) return def.default;

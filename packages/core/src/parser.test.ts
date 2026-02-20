@@ -206,7 +206,7 @@ describe("parseArgs — aliases", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toBe(
-				'Alias collision: "-out" is used by both "--out" and "--output"',
+				'Alias collision: "--out" is used by both "--out" and "--output"',
 			);
 		}
 	});
