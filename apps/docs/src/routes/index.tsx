@@ -238,6 +238,7 @@ function FurnaceHome() {
           overflow: hidden;
           display: flex;
           flex-direction: column;
+          min-width: 0;
         }
         .fn-code-header {
           padding: 10px 16px;
@@ -254,7 +255,8 @@ function FurnaceHome() {
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
-          overflow: hidden;
+          overflow-x: auto;
+          overflow-y: hidden;
           flex: 1;
           display: flex;
           align-items: center;
@@ -413,10 +415,76 @@ function FurnaceHome() {
           align-items: stretch;
         }
 
+        /* Hero section */
+        .fn-hero-section {
+          padding: 80px 40px 80px;
+          max-width: 1100px;
+          margin: 0 auto;
+          position: relative;
+          z-index: 2;
+        }
+
+        /* Content section (features, modules) */
+        .fn-content-section {
+          padding: 0 40px 64px;
+          max-width: 1100px;
+          margin: 0 auto;
+          position: relative;
+          z-index: 2;
+        }
+
+        /* Features grid */
+        .fn-features-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+
+        /* Module info row (pkg name + desc) */
+        .fn-module-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        /* Footer */
+        .fn-footer {
+          padding: 20px 40px;
+          border-top: 1px solid var(--fn-border);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          position: relative;
+          z-index: 2;
+        }
+
         @media (max-width: 860px) {
           .fn-hero-grid {
             grid-template-columns: 1fr;
             gap: 32px;
+          }
+          .fn-features-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 640px) {
+          .fn-hero-section {
+            padding: 48px 20px 48px;
+          }
+          .fn-content-section {
+            padding: 0 20px 48px;
+          }
+          .fn-features-grid {
+            grid-template-columns: 1fr;
+          }
+          .fn-footer {
+            padding: 16px 20px;
+          }
+          .fn-module-info {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
           }
         }
       `}</style>
@@ -424,15 +492,7 @@ function FurnaceHome() {
       <HomeLayout {...baseOptions()}>
         <div className="furnace-home">
           {/* Hero */}
-          <section
-            style={{
-              padding: "80px 40px 80px",
-              maxWidth: 1100,
-              margin: "0 auto",
-              position: "relative",
-              zIndex: 2,
-            }}
-          >
+          <section className="fn-hero-section">
             <p
               className="fn-mono"
               style={{
@@ -545,15 +605,7 @@ function FurnaceHome() {
           </section>
 
           {/* Features */}
-          <section
-            style={{
-              padding: "0 40px 64px",
-              maxWidth: 1100,
-              margin: "0 auto",
-              position: "relative",
-              zIndex: 2,
-            }}
-          >
+          <section className="fn-content-section">
             <p
               className="fn-mono"
               style={{
@@ -567,13 +619,7 @@ function FurnaceHome() {
               Features
             </p>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 12,
-              }}
-            >
+            <div className="fn-features-grid">
               {FEATURES.map((f) => (
                 <div key={f.id} className="fn-feature">
                   <h3
@@ -604,15 +650,7 @@ function FurnaceHome() {
           </section>
 
           {/* Modules */}
-          <section
-            style={{
-              padding: "0 40px 64px",
-              maxWidth: 1100,
-              margin: "0 auto",
-              position: "relative",
-              zIndex: 2,
-            }}
-          >
+          <section className="fn-content-section">
             <p
               className="fn-mono"
               style={{
@@ -629,13 +667,7 @@ function FurnaceHome() {
             {MODULES.map((m) =>
               m.upcoming ? (
                 <div key={m.pkg} className="fn-module-upcoming">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
+                  <div className="fn-module-info">
                     <code
                       className="fn-mono"
                       style={{
@@ -658,13 +690,7 @@ function FurnaceHome() {
                   params={{ _splat: m.doc }}
                   className="fn-module-row"
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
+                  <div className="fn-module-info">
                     <code
                       className="fn-mono fn-module-name"
                       style={{
@@ -686,17 +712,7 @@ function FurnaceHome() {
           </section>
 
           {/* Footer */}
-          <footer
-            style={{
-              padding: "20px 40px",
-              borderTop: "1px solid var(--fn-border)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              position: "relative",
-              zIndex: 2,
-            }}
-          >
+          <footer className="fn-footer">
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="fn-dot" />
               <span
