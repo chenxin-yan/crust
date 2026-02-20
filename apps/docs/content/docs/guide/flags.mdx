@@ -68,7 +68,12 @@ Boolean flags support `--no-` prefix negation:
 my-cli --no-minify  # flags.minify === false
 ```
 
-This works automatically for any Boolean flag.
+This works automatically for any boolean flag. When a boolean flag is repeated, the **last occurrence wins**:
+
+```sh
+my-cli --verbose --no-verbose   # flags.verbose === false
+my-cli --no-verbose --verbose   # flags.verbose === true
+```
 
 ## Aliases
 
@@ -135,6 +140,13 @@ flags: {
 ```sh
 my-cli --target linux-x64 --target darwin-arm64
 # flags.target === ["linux-x64", "darwin-arm64"]
+```
+
+Boolean flags with `multiple: true` collect each occurrence (including `--no-` negations) into the array:
+
+```sh
+my-cli --verbose --no-verbose --verbose
+# flags.verbose === [true, false, true]
 ```
 
 You can also provide a default array:
