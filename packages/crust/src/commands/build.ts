@@ -384,29 +384,29 @@ export const buildCommand = defineCommand({
 	},
 	flags: {
 		entry: {
-			type: String,
+			type: "string",
 			description: "Entry file path",
 			default: "src/cli.ts",
 			alias: "e",
 		},
 		outfile: {
-			type: String,
+			type: "string",
 			description: "Output file path (single-target builds only)",
 			alias: "o",
 		},
 		name: {
-			type: String,
+			type: "string",
 			description:
 				"Binary name (defaults to package.json name or entry filename)",
 			alias: "n",
 		},
 		minify: {
-			type: Boolean,
+			type: "boolean",
 			description: "Minify the output",
 			default: true,
 		},
 		target: {
-			type: String,
+			type: "string",
 			multiple: true,
 			description:
 				"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",

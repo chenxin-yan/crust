@@ -126,7 +126,7 @@ export function renderHelp(command: AnyCommand, path: string[]): string {
 }
 
 const helpFlagDef: FlagDef = {
-	type: Boolean,
+	type: "boolean",
 	alias: "h",
 	description: "Show help",
 };

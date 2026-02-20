@@ -22,13 +22,13 @@ const cmd = defineCommand({
   meta: { name: "serve" },
   flags: {
     port: {
-      type: Number,
+      type: "number",
       description: "Port to listen on",
       default: 3000,
       alias: "p",
     },
     verbose: {
-      type: Boolean,
+      type: "boolean",
       description: "Enable verbose logging",
       alias: "v",
     },
@@ -46,19 +46,19 @@ Each flag is a `FlagDef` object with properties like `type`, `description`, `def
 
 ## Types
 
-Crust supports three flag types:
+Crust supports three flag type literals:
 
 ```ts
 flags: {
-  output: { type: String },   // --output value (string)
-  port: { type: Number },      // --port 3000 (coerced to number)
-  verbose: { type: Boolean },  // --verbose (boolean toggle)
+  output: { type: "string" },   // --output value (string)
+  port: { type: "number" },      // --port 3000 (coerced to number)
+  verbose: { type: "boolean" },  // --verbose (boolean toggle)
 }
 ```
 
-- **`String`** — Requires a value: `--output dist`
-- **`Number`** — Requires a value, coerced to number: `--port 3000`. Throws a `PARSE` error if the value isn't a valid number
-- **`Boolean`** — Toggle flag, no value needed: `--verbose`
+- **`"string"`** — Requires a value: `--output dist`
+- **`"number"`** — Requires a value, coerced to number: `--port 3000`. Throws a `PARSE` error if the value isn't a valid number
+- **`"boolean"`** — Toggle flag, no value needed: `--verbose`
 
 ### Boolean Negation
 
@@ -76,9 +76,9 @@ Provide short aliases with the `alias` property:
 
 ```ts
 flags: {
-  output: { type: String, alias: "o" },       // -o dist
-  verbose: { type: Boolean, alias: "v" },      // -v
-  target: { type: String, alias: ["t", "T"] }, // -t or -T
+  output: { type: "string", alias: "o" },       // -o dist
+  verbose: { type: "boolean", alias: "v" },      // -v
+  target: { type: "string", alias: ["t", "T"] }, // -t or -T
 }
 ```
 
@@ -94,7 +94,7 @@ Mark a flag as `required` to error when it's missing:
 
 ```ts
 flags: {
-  config: { type: String, required: true },
+  config: { type: "string", required: true },
 }
 ```
 
@@ -109,9 +109,9 @@ Provide a `default` to use when the flag isn't passed:
 
 ```ts
 flags: {
-  port: { type: Number, default: 3000 },
-  format: { type: String, default: "json" },
-  minify: { type: Boolean, default: true },
+  port: { type: "number", default: 3000 },
+  format: { type: "string", default: "json" },
+  minify: { type: "boolean", default: true },
 }
 ```
 
@@ -124,7 +124,7 @@ Set `multiple: true` to collect repeated flag values into an array:
 ```ts
 flags: {
   target: {
-    type: String,
+    type: "string",
     multiple: true,
     description: "Target platform(s)",
     alias: "t",
@@ -142,7 +142,7 @@ You can also provide a default array:
 ```ts
 flags: {
   include: {
-    type: String,
+    type: "string",
     multiple: true,
     default: ["src/**"],
   },

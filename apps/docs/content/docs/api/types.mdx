@@ -63,7 +63,7 @@ Defines a single positional argument:
 ```ts
 interface ArgDef<N, T, D, R, V> {
   name: N;               // Argument name
-  type: T;               // String, Number, or Boolean constructor
+  type: T;               // "string", "number", or "boolean" literal
   description?: string;  // Help text
   default?: D;           // Default value
   required?: R;          // Error if missing
@@ -87,7 +87,7 @@ Defines a single named flag:
 
 ```ts
 interface FlagDef<T, R, M> {
-  type: T;               // String, Number, or Boolean constructor
+  type: T;               // "string", "number", or "boolean" literal
   description?: string;  // Help text
   default?: /* ... */;   // Default value (array when multiple: true)
   required?: R;          // Error if missing
@@ -118,12 +118,12 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 
 | Definition | Inferred Type |
 | --- | --- |
-| `{ type: String }` | `string \| undefined` |
-| `{ type: String, required: true }` | `string` |
-| `{ type: String, default: "hi" }` | `string` |
-| `{ type: Number }` | `number \| undefined` |
-| `{ type: Number, default: 3000 }` | `number` |
-| `{ type: String, variadic: true }` | `string[]` |
+| `{ type: "string" }` | `string \| undefined` |
+| `{ type: "string", required: true }` | `string` |
+| `{ type: "string", default: "hi" }` | `string` |
+| `{ type: "number" }` | `number \| undefined` |
+| `{ type: "number", default: 3000 }` | `number` |
+| `{ type: "string", variadic: true }` | `string[]` |
 
 ### `InferFlags<F>`
 
@@ -137,12 +137,12 @@ type InferFlags<F> = F extends FlagsDef ? /* resolved types */ : Record<string, 
 
 | Definition | Inferred Type |
 | --- | --- |
-| `{ type: String }` | `string \| undefined` |
-| `{ type: String, required: true }` | `string` |
-| `{ type: String, default: "hi" }` | `string` |
-| `{ type: Boolean }` | `boolean \| undefined` |
-| `{ type: String, multiple: true }` | `string[] \| undefined` |
-| `{ type: String, multiple: true, required: true }` | `string[]` |
+| `{ type: "string" }` | `string \| undefined` |
+| `{ type: "string", required: true }` | `string` |
+| `{ type: "string", default: "hi" }` | `string` |
+| `{ type: "boolean" }` | `boolean \| undefined` |
+| `{ type: "string", multiple: true }` | `string[] \| undefined` |
+| `{ type: "string", multiple: true, required: true }` | `string[]` |
 
 ## Parse Types
 

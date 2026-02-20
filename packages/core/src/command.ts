@@ -23,10 +23,10 @@ import type {
  * const cmd = defineCommand({
  *   meta: { name: "serve", description: "Start dev server" },
  *   args: [
- *     { name: "port", type: Number, description: "Port number", default: 3000 },
+ *     { name: "port", type: "number", description: "Port number", default: 3000 },
  *   ],
  *   flags: {
- *     verbose: { type: Boolean, description: "Enable verbose logging", alias: "v" },
+ *     verbose: { type: "boolean", description: "Enable verbose logging", alias: "v" },
  *   },
  *   run({ args, flags }) {
  *     // args.port is typed as number, flags.verbose is typed as boolean | undefined

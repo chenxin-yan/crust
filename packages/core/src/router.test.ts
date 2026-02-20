@@ -24,7 +24,11 @@ function createRootWithSubcommands(hasRun = false) {
 	const buildCmd = defineCommand({
 		meta: { name: "build", description: "Build the project" },
 		flags: {
-			entry: { type: String, description: "Entry file", default: "src/cli.ts" },
+			entry: {
+				type: "string",
+				description: "Entry file",
+				default: "src/cli.ts",
+			},
 		},
 		run() {
 			/* noop */
@@ -34,7 +38,7 @@ function createRootWithSubcommands(hasRun = false) {
 	const devCmd = defineCommand({
 		meta: { name: "dev", description: "Start dev server" },
 		flags: {
-			port: { type: Number, description: "Port number", default: 3000 },
+			port: { type: "number", description: "Port number", default: 3000 },
 		},
 		run() {
 			/* noop */
@@ -147,7 +151,7 @@ describe("resolveCommand", () => {
 		it("resolves nested subcommand with remaining argv", () => {
 			const commandCmd = defineCommand({
 				meta: { name: "command", description: "Generate a command" },
-				args: [{ name: "name", type: String, required: true }],
+				args: [{ name: "name", type: "string", required: true }],
 				run() {
 					/* noop */
 				},
@@ -313,7 +317,7 @@ describe("resolveCommand", () => {
 		it("handles positional arguments correctly", () => {
 			const cmd = defineCommand({
 				meta: { name: "greet" },
-				args: [{ name: "name", type: String, required: true }],
+				args: [{ name: "name", type: "string", required: true }],
 				run() {
 					/* noop */
 				},

@@ -20,9 +20,9 @@ import { runCommand as runTestCommand } from "./helpers";
 
 const serveCmd = defineCommand({
 	meta: { name: "serve", description: "Start the dev server" },
-	args: [{ name: "dir", type: String, default: "." }],
+	args: [{ name: "dir", type: "string", default: "." }],
 	flags: {
-		port: { type: Number, default: 3000, alias: "p" },
+		port: { type: "number", default: 3000, alias: "p" },
 	},
 	run({ args, flags }) {
 		console.log(`serve ${args.dir} on ${flags.port}`);
@@ -32,7 +32,7 @@ const serveCmd = defineCommand({
 const rootCmd = defineCommand({
 	meta: { name: "myapp", description: "Integration test app" },
 	flags: {
-		help: { type: Boolean, alias: "h" },
+		help: { type: "boolean", alias: "h" },
 	},
 	subCommands: { serve: serveCmd },
 	run({ flags }) {
@@ -89,8 +89,8 @@ describe("integration: core APIs", () => {
 describe("integration: exported types", () => {
 	it("types are importable and usable", () => {
 		const meta: CommandMeta = { name: "typed" };
-		const argDef: ArgDef = { name: "name", type: String };
-		const flagDef: FlagDef = { type: Boolean };
+		const argDef: ArgDef = { name: "name", type: "string" };
+		const flagDef: FlagDef = { type: "boolean" };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 
@@ -108,7 +108,7 @@ describe("integration: exported types", () => {
 			commandPath: ["typed-cmd"],
 		};
 
-		type TestArgs = [{ name: "file"; type: StringConstructor; required: true }];
+		type TestArgs = [{ name: "file"; type: "string"; required: true }];
 		type ResolvedArgs = InferArgs<TestArgs>;
 		const inferred: ResolvedArgs = { file: "index.ts" };
 

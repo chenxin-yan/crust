@@ -52,10 +52,10 @@ The `run` function is the command's main logic. It receives a `CommandContext` w
 defineCommand({
   meta: { name: "greet" },
   args: [
-    { name: "name", type: String, required: true },
+    { name: "name", type: "string", required: true },
   ],
   flags: {
-    loud: { type: Boolean, alias: "l" },
+    loud: { type: "boolean", alias: "l" },
   },
   run({ args, flags, rawArgs }) {
     // args.name is typed as `string` (required)
@@ -126,13 +126,13 @@ Crust infers the types of your `args` and `flags` from their definitions. No man
 const cmd = defineCommand({
   meta: { name: "example" },
   args: [
-    { name: "port", type: Number, default: 3000 },
-    { name: "host", type: String, required: true },
+    { name: "port", type: "number", default: 3000 },
+    { name: "host", type: "string", required: true },
   ] as const,
   flags: {
-    verbose: { type: Boolean },
-    output: { type: String, default: "dist" },
-    count: { type: Number, required: true },
+    verbose: { type: "boolean" },
+    output: { type: "string", default: "dist" },
+    count: { type: "number", required: true },
   },
   run({ args, flags }) {
     args.port;    // number (has default → guaranteed)

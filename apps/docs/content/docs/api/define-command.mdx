@@ -74,11 +74,11 @@ const greet = defineCommand({
 const serve = defineCommand({
   meta: { name: "serve", description: "Start server" },
   args: [
-    { name: "port", type: Number, default: 3000 },
+    { name: "port", type: "number", default: 3000 },
   ] as const,
   flags: {
-    host: { type: String, default: "localhost" },
-    verbose: { type: Boolean, alias: "v" },
+    host: { type: "string", default: "localhost" },
+    verbose: { type: "boolean", alias: "v" },
   },
   run({ args, flags }) {
     // args.port: number

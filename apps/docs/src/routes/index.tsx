@@ -131,8 +131,8 @@ const CODE_EXAMPLE = `import { defineCommand, runMain } from "@crustjs/crust";
 
 const cli = defineCommand({
   meta: { name: "greet" },
-  args: { name: { type: String, default: "world" } },
-  flags: { shout: { type: Boolean, alias: "s" } },
+  args: [{ name: "name", type: "string", default: "world" }],
+  flags: { shout: { type: "boolean", alias: "s" } },
   run({ args, flags }) {
     const msg = \`Hello, \${args.name}!\`;
     console.log(flags.shout ? msg.toUpperCase() : msg);

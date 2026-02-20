@@ -29,9 +29,9 @@ describe("crust package integration", () => {
 	it("defineCommand + parseArgs work through re-export", () => {
 		const cmd = defineCommand({
 			meta: { name: "parse-test" },
-			args: [{ name: "file", type: String, required: true }],
+			args: [{ name: "file", type: "string", required: true }],
 			flags: {
-				output: { type: String, default: "dist", alias: "o" },
+				output: { type: "string", default: "dist", alias: "o" },
 			},
 		});
 
@@ -72,8 +72,8 @@ describe("crust package integration", () => {
 
 	it("exported types are importable", () => {
 		const meta: CommandMeta = { name: "typed" };
-		const argDef: ArgDef = { name: "name", type: String };
-		const flagDef: FlagDef = { type: Boolean };
+		const argDef: ArgDef = { name: "name", type: "string" };
+		const flagDef: FlagDef = { type: "boolean" };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 		const cmdDef: Command = { meta };

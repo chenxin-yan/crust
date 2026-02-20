@@ -24,11 +24,11 @@ crust build --target darwin-arm64
 
 | Flag | Alias | Type | Default | Description |
 | --- | --- | --- | --- | --- |
-| `--entry` | `-e` | String | `src/cli.ts` | Entry file path |
-| `--outfile` | `-o` | String | — | Output file path (single-target only) |
-| `--name` | `-n` | String | auto-detected | Binary name |
-| `--minify` | — | Boolean | `true` | Minify the output |
-| `--target` | `-t` | String (repeatable) | all platforms | Target platform(s) |
+| `--entry` | `-e` | `"string"` | `src/cli.ts` | Entry file path |
+| `--outfile` | `-o` | `"string"` | — | Output file path (single-target only) |
+| `--name` | `-n` | `"string"` | auto-detected | Binary name |
+| `--minify` | — | `"boolean"` | `true` | Minify the output |
+| `--target` | `-t` | `"string"` (repeatable) | all platforms | Target platform(s) |
 
 ## Supported Targets
 

@@ -21,8 +21,8 @@ Arguments are defined in the `args` array. Order matters — the first argument 
 const cmd = defineCommand({
   meta: { name: "serve" },
   args: [
-    { name: "port", type: Number, default: 3000 },
-    { name: "host", type: String, default: "localhost" },
+    { name: "port", type: "number", default: 3000 },
+    { name: "host", type: "string", default: "localhost" },
   ] as const,
   run({ args }) {
     console.log(`Listening on ${args.host}:${args.port}`);
@@ -40,19 +40,19 @@ Each argument is an `ArgDef` object with properties like `name`, `type`, `descri
 
 ## Types
 
-Crust supports three argument types using JavaScript constructors:
+Crust supports three argument type literals:
 
 ```ts
 args: [
-  { name: "port", type: Number },    // Coerced to number
-  { name: "host", type: String },    // Kept as string
-  { name: "verbose", type: Boolean }, // Coerced to boolean
+  { name: "port", type: "number" },    // Coerced to number
+  { name: "host", type: "string" },    // Kept as string
+  { name: "verbose", type: "boolean" }, // Coerced to boolean
 ] as const,
 ```
 
-- **`String`** — The value is kept as-is
-- **`Number`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
-- **`Boolean`** — The value is coerced to a boolean (`"true"` / `"1"` → `true`)
+- **`"string"`** — The value is kept as-is
+- **`"number"`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
+- **`"boolean"`** — The value is coerced to a boolean (`"true"` / `"1"` → `true`)
 
 ## Required Arguments
 
@@ -60,7 +60,7 @@ Mark an argument as `required` to error when it's missing:
 
 ```ts
 args: [
-  { name: "name", type: String, required: true },
+  { name: "name", type: "string", required: true },
 ] as const,
 ```
 
@@ -77,7 +77,7 @@ Provide a `default` for optional arguments:
 
 ```ts
 args: [
-  { name: "port", type: Number, default: 3000 },
+  { name: "port", type: "number", default: 3000 },
 ] as const,
 ```
 
@@ -89,7 +89,7 @@ Arguments without `required` or `default` are optional. Their type includes `| u
 
 ```ts
 args: [
-  { name: "name", type: String },
+  { name: "name", type: "string" },
 ] as const,
 run({ args }) {
   args.name; // string | undefined
@@ -104,8 +104,8 @@ The last argument can be `variadic`, collecting all remaining positional values 
 const cmd = defineCommand({
   meta: { name: "copy" },
   args: [
-    { name: "destination", type: String, required: true },
-    { name: "files", type: String, variadic: true },
+    { name: "destination", type: "string", required: true },
+    { name: "files", type: "string", variadic: true },
   ] as const,
   run({ args }) {
     args.destination; // string

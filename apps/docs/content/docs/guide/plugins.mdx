@@ -69,7 +69,7 @@ const myPlugin: CrustPlugin = {
 
     // Inject a flag into the root command
     actions.addFlag(context.rootCommand, "debug", {
-      type: Boolean,
+      type: "boolean",
       description: "Enable debug mode",
     });
   },

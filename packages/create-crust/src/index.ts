@@ -80,14 +80,14 @@ const main = defineCommand({
 \targs: [
 \t\t{
 \t\t\tname: "name",
-\t\t\ttype: String,
+\t\t\ttype: "string",
 \t\t\tdescription: "Your name",
 \t\t\tdefault: "world",
 \t\t},
 \t],
 \tflags: {
 \t\tgreet: {
-\t\t\ttype: String,
+\t\t\ttype: "string",
 \t\t\tdescription: "Greeting to use",
 \t\t\tdefault: "Hello",
 \t\t\talias: "g",

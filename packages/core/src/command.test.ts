@@ -125,18 +125,18 @@ describe("defineCommand", () => {
 			args: [
 				{
 					name: "file",
-					type: String,
+					type: "string",
 					required: true,
 					description: "File path",
 				},
-				{ name: "count", type: Number, default: 1 },
+				{ name: "count", type: "number", default: 1 },
 			],
 		});
 
 		expect(cmd.args).toBeDefined();
-		expect(cmd.args?.[0].type).toBe(String);
+		expect(cmd.args?.[0].type).toBe("string");
 		expect(cmd.args?.[0].required).toBe(true);
-		expect(cmd.args?.[1].type).toBe(Number);
+		expect(cmd.args?.[1].type).toBe("number");
 		expect(cmd.args?.[1].default).toBe(1);
 	});
 
@@ -144,14 +144,14 @@ describe("defineCommand", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean, alias: "v", description: "Verbose output" },
-				port: { type: Number, default: 3000 },
-				output: { type: String, alias: ["o", "out"] },
+				verbose: { type: "boolean", alias: "v", description: "Verbose output" },
+				port: { type: "number", default: 3000 },
+				output: { type: "string", alias: ["o", "out"] },
 			},
 		});
 
 		expect(cmd.flags).toBeDefined();
-		expect(cmd.flags?.verbose.type).toBe(Boolean);
+		expect(cmd.flags?.verbose.type).toBe("boolean");
 		expect(cmd.flags?.verbose.alias).toBe("v");
 		expect(cmd.flags?.port.default).toBe(3000);
 		expect(cmd.flags?.output.alias).toEqual(["o", "out"]);
@@ -210,14 +210,14 @@ describe("defineCommand", () => {
 			args: [
 				{
 					name: "file" as const,
-					type: String as StringConstructor,
+					type: "string" as const,
 					required: true as const,
 					description: "original arg",
 				},
 			],
 			flags: {
 				verbose: {
-					type: Boolean as BooleanConstructor,
+					type: "boolean" as const,
 					description: "original flag",
 				},
 			},
@@ -254,16 +254,20 @@ describe("defineCommand type inference", () => {
 			args: [
 				{
 					name: "port",
-					type: Number,
+					type: "number",
 					description: "Port number",
 					default: 3000,
 				},
-				{ name: "host", type: String, required: true },
+				{ name: "host", type: "string", required: true },
 			],
 			flags: {
-				verbose: { type: Boolean, description: "Verbose logging", alias: "v" },
-				output: { type: String, default: "./dist" },
-				count: { type: Number, required: true },
+				verbose: {
+					type: "boolean",
+					description: "Verbose logging",
+					alias: "v",
+				},
+				output: { type: "string", default: "./dist" },
+				count: { type: "number", required: true },
 			},
 			run({ args, flags }) {
 				// Compile-time type checks — these lines fail to compile if types are wrong
@@ -293,7 +297,7 @@ describe("defineCommand type inference", () => {
 	it("infers variadic args as arrays", () => {
 		defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "files", type: String, variadic: true }],
+			args: [{ name: "files", type: "string", variadic: true }],
 			run({ args }) {
 				type _checkFiles = Expect<Equal<typeof args.files, string[]>>;
 				expect(Array.isArray(args.files)).toBe(true);
@@ -304,9 +308,9 @@ describe("defineCommand type inference", () => {
 	it("infers optional args as T | undefined", () => {
 		defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "name", type: String }],
+			args: [{ name: "name", type: "string" }],
 			flags: {
-				debug: { type: Boolean },
+				debug: { type: "boolean" },
 			},
 			run({ args, flags }) {
 				type _checkName = Expect<Equal<typeof args.name, string | undefined>>;
@@ -342,9 +346,9 @@ describe("defineCommand type inference", () => {
 	it("returns Command type that preserves generic params", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "name", type: String, required: true }],
+			args: [{ name: "name", type: "string", required: true }],
 			flags: {
-				port: { type: Number, default: 3000 },
+				port: { type: "number", default: 3000 },
 			},
 		});
 

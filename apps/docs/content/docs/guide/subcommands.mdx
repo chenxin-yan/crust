@@ -17,7 +17,7 @@ import { defineCommand, runMain, helpPlugin } from "@crustjs/crust";
 const build = defineCommand({
   meta: { name: "build", description: "Build the project" },
   flags: {
-    minify: { type: Boolean, default: true },
+    minify: { type: "boolean", default: true },
   },
   run({ flags }) {
     console.log(`Building... (minify: ${flags.minify})`);
@@ -27,7 +27,7 @@ const build = defineCommand({
 const dev = defineCommand({
   meta: { name: "dev", description: "Start dev server" },
   flags: {
-    port: { type: Number, default: 3000, alias: "p" },
+    port: { type: "number", default: 3000, alias: "p" },
   },
   run({ flags }) {
     console.log(`Dev server on port ${flags.port}`);
@@ -61,7 +61,7 @@ Subcommands can be nested arbitrarily deep:
 ```ts
 const createComponent = defineCommand({
   meta: { name: "component", description: "Create a component" },
-  args: [{ name: "name", type: String, required: true }] as const,
+  args: [{ name: "name", type: "string", required: true }] as const,
   run({ args }) {
     console.log(`Creating component: ${args.name}`);
   },
@@ -69,7 +69,7 @@ const createComponent = defineCommand({
 
 const createPlugin = defineCommand({
   meta: { name: "plugin", description: "Create a plugin" },
-  args: [{ name: "name", type: String, required: true }] as const,
+  args: [{ name: "name", type: "string", required: true }] as const,
   run({ args }) {
     console.log(`Creating plugin: ${args.name}`);
   },
@@ -117,7 +117,7 @@ A command can have both `run()` and `subCommands`. In this case:
 ```ts
 const main = defineCommand({
   meta: { name: "my-cli" },
-  args: [{ name: "file", type: String }] as const,
+  args: [{ name: "file", type: "string" }] as const,
   subCommands: { build, dev },
   run({ args }) {
     // Runs when no subcommand matches

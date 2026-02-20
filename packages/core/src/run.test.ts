@@ -62,9 +62,9 @@ describe("runCommand", () => {
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "name", type: String, required: true }],
+			args: [{ name: "name", type: "string", required: true }],
 			flags: {
-				verbose: { type: Boolean, alias: "v" },
+				verbose: { type: "boolean", alias: "v" },
 			},
 			run({ args, flags }) {
 				receivedArgs = args as unknown as Record<string, unknown>;
@@ -84,9 +84,9 @@ describe("runCommand", () => {
 
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "port", type: Number, default: 3000 }],
+			args: [{ name: "port", type: "number", default: 3000 }],
 			flags: {
-				host: { type: String, default: "localhost" },
+				host: { type: "string", default: "localhost" },
 			},
 			run({ args, flags }) {
 				receivedArgs = args as unknown as Record<string, unknown>;
@@ -358,7 +358,7 @@ describe("runCommand", () => {
 		const subCmd = defineCommand({
 			meta: { name: "build" },
 			flags: {
-				minify: { type: Boolean },
+				minify: { type: "boolean" },
 			},
 			run({ flags }) {
 				subRan = true;
@@ -382,7 +382,7 @@ describe("runCommand", () => {
 
 		const deepCmd = defineCommand({
 			meta: { name: "component" },
-			args: [{ name: "name", type: String, required: true }],
+			args: [{ name: "name", type: "string", required: true }],
 			run({ args }) {
 				deepRan = true;
 				console.log(`generate component: ${args.name}`);
@@ -423,7 +423,7 @@ describe("runCommand", () => {
 	it("propagates missing required arg errors", async () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String, required: true }],
+			args: [{ name: "file", type: "string", required: true }],
 			run() {},
 		});
 
@@ -460,7 +460,7 @@ describe("runCommand", () => {
 
 			const cmd = defineCommand({
 				meta: { name: "test" },
-				args: [{ name: "name", type: String, required: true }],
+				args: [{ name: "name", type: "string", required: true }],
 				run({ args }) {
 					receivedName = args.name as string;
 				},

@@ -79,11 +79,11 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 
 | Flag        | Alias | Type      | Default             | Description                                  |
 | ----------- | ----- | --------- | ------------------- | -------------------------------------------- |
-| `--entry`   | `-e`  | `String`  | `src/cli.ts`        | Entry file path                              |
-| `--outfile` | `-o`  | `String`  | —                   | Output file path (single-target builds only) |
-| `--name`    | `-n`  | `String`  | package.json `name` | Base binary name                             |
-| `--minify`  | —     | `Boolean` | `true`              | Minify the output                            |
-| `--target`  | `-t`  | `String`  | _(all platforms)_   | Target platform(s); repeatable               |
+| `--entry`   | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                              |
+| `--outfile` | `-o`  | `"string"`  | —                   | Output file path (single-target builds only) |
+| `--name`    | `-n`  | `"string"`  | package.json `name` | Base binary name                             |
+| `--minify`  | —     | `"boolean"` | `true`              | Minify the output                            |
+| `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
 
 #### Output
 

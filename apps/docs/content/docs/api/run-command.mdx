@@ -73,7 +73,7 @@ import { defineCommand, runCommand } from "@crustjs/crust";
 
 const cmd = defineCommand({
   meta: { name: "greet" },
-  args: [{ name: "name", type: String, default: "world" }] as const,
+  args: [{ name: "name", type: "string", default: "world" }] as const,
   run({ args }) {
     console.log(`Hello, ${args.name}!`);
   },

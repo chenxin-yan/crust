@@ -42,13 +42,13 @@ const main = defineCommand({
   args: [
     {
       name: "name",
-      type: String,
+      type: "string",
       description: "Who to greet",
       default: "world",
     },
   ],
   flags: {
-    shout: { type: Boolean, description: "SHOUT the greeting", alias: "s" },
+    shout: { type: "boolean", description: "SHOUT the greeting", alias: "s" },
   },
   run({ args, flags }) {
     const message = `Hello, ${args.name}!`;

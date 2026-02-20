@@ -110,8 +110,8 @@ The complete lifecycle includes plugin middleware, routing, parsing, and hook ex
 const deploy = defineCommand({
   meta: { name: "deploy", description: "Deploy to production" },
   flags: {
-    env: { type: String, required: true, description: "Target environment" },
-    dryRun: { type: Boolean, description: "Simulate without deploying", alias: "d" },
+    env: { type: "string", required: true, description: "Target environment" },
+    dryRun: { type: "boolean", description: "Simulate without deploying", alias: "d" },
   },
   async preRun({ flags }) {
     // Validate before running

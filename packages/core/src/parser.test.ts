@@ -11,7 +11,7 @@ describe("parseArgs — boolean flags", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
 		flags: {
-			verbose: { type: Boolean, description: "Enable verbose logging" },
+			verbose: { type: "boolean", description: "Enable verbose logging" },
 		},
 	});
 
@@ -29,7 +29,7 @@ describe("parseArgs — boolean flags", () => {
 		const cmdWithDefault = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean, default: true },
+				verbose: { type: "boolean", default: true },
 			},
 		});
 		const result = parseArgs(cmdWithDefault, ["--no-verbose"]);
@@ -45,7 +45,7 @@ describe("parseArgs — string flags", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
 		flags: {
-			output: { type: String, description: "Output directory" },
+			output: { type: "string", description: "Output directory" },
 		},
 	});
 
@@ -73,7 +73,7 @@ describe("parseArgs — number flags", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
 		flags: {
-			port: { type: Number, description: "Port number" },
+			port: { type: "number", description: "Port number" },
 		},
 	});
 
@@ -135,7 +135,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean, alias: "v" },
+				verbose: { type: "boolean", alias: "v" },
 			},
 		});
 		const result = parseArgs(cmd, ["-v"]);
@@ -146,7 +146,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				port: { type: Number, alias: "p" },
+				port: { type: "number", alias: "p" },
 			},
 		});
 		const result = parseArgs(cmd, ["-p", "3000"]);
@@ -157,7 +157,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				output: { type: String, alias: ["o", "out"] },
+				output: { type: "string", alias: ["o", "out"] },
 			},
 		});
 
@@ -175,8 +175,8 @@ describe("parseArgs — aliases", () => {
 			meta: { name: "test" },
 			// @ts-expect-error — intentional alias→alias collision to test runtime check
 			flags: {
-				verbose: { type: Boolean, alias: "v" },
-				version: { type: Boolean, alias: "v" },
+				verbose: { type: "boolean", alias: "v" },
+				version: { type: "boolean", alias: "v" },
 			},
 		});
 		try {
@@ -196,8 +196,8 @@ describe("parseArgs — aliases", () => {
 			meta: { name: "test" },
 			// @ts-expect-error — alias "out" collides with flag name "out" (compile-time error)
 			flags: {
-				out: { type: String, description: "Output format" },
-				output: { type: String, alias: ["o", "out"] },
+				out: { type: "string", description: "Output format" },
+				output: { type: "string", alias: ["o", "out"] },
 			},
 		});
 		try {
@@ -222,7 +222,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true },
+				file: { type: "string", multiple: true },
 			},
 		});
 		const result = parseArgs(cmd, ["--file", "a.ts", "--file", "b.ts"]);
@@ -233,7 +233,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true },
+				file: { type: "string", multiple: true },
 			},
 		});
 		const result = parseArgs(cmd, ["--file", "a.ts"]);
@@ -244,7 +244,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				port: { type: Number, multiple: true },
+				port: { type: "number", multiple: true },
 			},
 		});
 		const result = parseArgs(cmd, ["--port", "80", "--port", "443"]);
@@ -255,7 +255,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				port: { type: Number, multiple: true },
+				port: { type: "number", multiple: true },
 			},
 		});
 		expect(() => parseArgs(cmd, ["--port", "80", "--port", "abc"])).toThrow(
@@ -267,7 +267,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean, multiple: true },
+				verbose: { type: "boolean", multiple: true },
 			},
 		});
 		const result = parseArgs(cmd, ["--verbose", "--verbose", "--verbose"]);
@@ -278,7 +278,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true },
+				file: { type: "string", multiple: true },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -289,7 +289,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true, default: ["default.ts"] },
+				file: { type: "string", multiple: true, default: ["default.ts"] },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -300,7 +300,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true, required: true },
+				file: { type: "string", multiple: true, required: true },
 			},
 		});
 		expect(() => parseArgs(cmd, [])).toThrow('Missing required flag "--file"');
@@ -310,7 +310,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true, alias: "f" },
+				file: { type: "string", multiple: true, alias: "f" },
 			},
 		});
 		const result = parseArgs(cmd, ["-f", "a.ts", "-f", "b.ts"]);
@@ -321,7 +321,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true, alias: ["f", "input"] },
+				file: { type: "string", multiple: true, alias: ["f", "input"] },
 			},
 		});
 		const result = parseArgs(cmd, ["--input", "a.ts", "--input", "b.ts"]);
@@ -332,7 +332,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				file: { type: String, multiple: true, alias: ["f", "input"] },
+				file: { type: "string", multiple: true, alias: ["f", "input"] },
 			},
 		});
 		const result = parseArgs(cmd, [
@@ -356,7 +356,7 @@ describe("parseArgs — default values", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				port: { type: Number, default: 3000 },
+				port: { type: "number", default: 3000 },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -366,7 +366,7 @@ describe("parseArgs — default values", () => {
 	it("applies default arg value when not provided", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String, default: "index.ts" }],
+			args: [{ name: "file", type: "string", default: "index.ts" }],
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.args.file).toBe("index.ts");
@@ -376,7 +376,7 @@ describe("parseArgs — default values", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				port: { type: Number, default: 3000 },
+				port: { type: "number", default: 3000 },
 			},
 		});
 		const result = parseArgs(cmd, ["--port", "8080"]);
@@ -387,7 +387,7 @@ describe("parseArgs — default values", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				minify: { type: Boolean, default: true },
+				minify: { type: "boolean", default: true },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -397,11 +397,11 @@ describe("parseArgs — default values", () => {
 	it("all-defaults scenario", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String, default: "src/cli.ts" }],
+			args: [{ name: "file", type: "string", default: "src/cli.ts" }],
 			flags: {
-				port: { type: Number, default: 3000 },
-				verbose: { type: Boolean, default: false },
-				output: { type: String, default: "./dist" },
+				port: { type: "number", default: 3000 },
+				verbose: { type: "boolean", default: false },
+				output: { type: "string", default: "./dist" },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -419,7 +419,7 @@ describe("parseArgs — default values", () => {
 describe("parseArgs — required args", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
-		args: [{ name: "file", type: String, required: true }],
+		args: [{ name: "file", type: "string", required: true }],
 	});
 
 	it("succeeds when required arg is provided", () => {
@@ -444,7 +444,7 @@ describe("parseArgs — required args", () => {
 		const cmdWithDefault = defineCommand({
 			meta: { name: "test" },
 			args: [
-				{ name: "file", type: String, required: true, default: "index.ts" },
+				{ name: "file", type: "string", required: true, default: "index.ts" },
 			],
 		});
 		// When default is present, it should be applied even if required
@@ -462,7 +462,7 @@ describe("parseArgs — required flags", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
 		flags: {
-			name: { type: String, required: true },
+			name: { type: "string", required: true },
 		},
 	});
 
@@ -493,7 +493,7 @@ describe("parseArgs — variadic args", () => {
 	it("collects remaining positionals into an array", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "files", type: String, variadic: true }],
+			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts", "c.ts"]);
 		expect(result.args.files).toEqual(["a.ts", "b.ts", "c.ts"]);
@@ -503,8 +503,8 @@ describe("parseArgs — variadic args", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			args: [
-				{ name: "target", type: String, required: true },
-				{ name: "files", type: String, variadic: true },
+				{ name: "target", type: "string", required: true },
+				{ name: "files", type: "string", variadic: true },
 			],
 		});
 		const result = parseArgs(cmd, ["build", "a.ts", "b.ts"]);
@@ -515,7 +515,7 @@ describe("parseArgs — variadic args", () => {
 	it("variadic with no remaining args produces empty array", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "files", type: String, variadic: true }],
+			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.args.files).toEqual([]);
@@ -524,7 +524,7 @@ describe("parseArgs — variadic args", () => {
 	it("variadic with number coercion", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "numbers", type: Number, variadic: true }],
+			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["1", "2", "3"]);
 		expect(result.args.numbers).toEqual([1, 2, 3]);
@@ -533,7 +533,7 @@ describe("parseArgs — variadic args", () => {
 	it("throws CrustError with PARSE code on variadic non-numeric value", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "numbers", type: Number, variadic: true }],
+			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
 		try {
 			parseArgs(cmd, ["1", "abc", "3"]);
@@ -550,7 +550,7 @@ describe("parseArgs — variadic args", () => {
 	it("throws CrustError with VALIDATION code when required variadic arg receives no values", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "files", type: String, variadic: true, required: true }],
+			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		try {
 			parseArgs(cmd, []);
@@ -567,7 +567,7 @@ describe("parseArgs — variadic args", () => {
 	it("required variadic succeeds when at least one value is provided", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "files", type: String, variadic: true, required: true }],
+			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts"]);
 		expect(result.args.files).toEqual(["a.ts"]);
@@ -583,7 +583,7 @@ describe("parseArgs — '--' separator", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean },
+				verbose: { type: "boolean" },
 			},
 		});
 		const result = parseArgs(cmd, ["--verbose", "--", "extra1", "extra2"]);
@@ -595,7 +595,7 @@ describe("parseArgs — '--' separator", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: Boolean },
+				verbose: { type: "boolean" },
 			},
 		});
 		// --unknown after -- should NOT throw
@@ -622,7 +622,7 @@ describe("parseArgs — '--' separator", () => {
 	it("positional args before -- are parsed, after -- go to rawArgs", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String, required: true }],
+			args: [{ name: "file", type: "string", required: true }],
 		});
 		const result = parseArgs(cmd, ["input.ts", "--", "--extra"]);
 		expect(result.args.file).toBe("input.ts");
@@ -638,7 +638,7 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 	const cmd = defineCommand({
 		meta: { name: "test" },
 		flags: {
-			verbose: { type: Boolean },
+			verbose: { type: "boolean" },
 		},
 	});
 
@@ -687,9 +687,9 @@ describe("parseArgs — empty argv", () => {
 	it("handles empty argv with optional args/flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String }],
+			args: [{ name: "file", type: "string" }],
 			flags: {
-				verbose: { type: Boolean },
+				verbose: { type: "boolean" },
 			},
 		});
 		const result = parseArgs(cmd, []);
@@ -706,10 +706,10 @@ describe("parseArgs — complex scenarios", () => {
 	it("parses mixed positionals and flags", () => {
 		const cmd = defineCommand({
 			meta: { name: "serve" },
-			args: [{ name: "entry", type: String, required: true }],
+			args: [{ name: "entry", type: "string", required: true }],
 			flags: {
-				port: { type: Number, default: 3000, alias: "p" },
-				verbose: { type: Boolean, alias: "v" },
+				port: { type: "number", default: 3000, alias: "p" },
+				verbose: { type: "boolean", alias: "v" },
 			},
 		});
 		const result = parseArgs(cmd, ["src/cli.ts", "-p", "8080", "-v"]);
@@ -721,9 +721,9 @@ describe("parseArgs — complex scenarios", () => {
 	it("parses positionals and flags in any order", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "file", type: String, required: true }],
+			args: [{ name: "file", type: "string", required: true }],
 			flags: {
-				output: { type: String, default: "./dist" },
+				output: { type: "string", default: "./dist" },
 			},
 		});
 		// Flags before positionals
@@ -735,7 +735,7 @@ describe("parseArgs — complex scenarios", () => {
 	it("number arg coercion", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "count", type: Number, required: true }],
+			args: [{ name: "count", type: "number", required: true }],
 		});
 		const result = parseArgs(cmd, ["42"]);
 		expect(result.args.count).toBe(42);
@@ -744,7 +744,7 @@ describe("parseArgs — complex scenarios", () => {
 	it("boolean arg coercion", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
-			args: [{ name: "force", type: Boolean }],
+			args: [{ name: "force", type: "boolean" }],
 		});
 		const result = parseArgs(cmd, ["true"]);
 		expect(result.args.force).toBe(true);
@@ -754,14 +754,14 @@ describe("parseArgs — complex scenarios", () => {
 		const cmd = defineCommand({
 			meta: { name: "build" },
 			args: [
-				{ name: "entry", type: String, default: "src/cli.ts" },
-				{ name: "extras", type: String, variadic: true },
+				{ name: "entry", type: "string", default: "src/cli.ts" },
+				{ name: "extras", type: "string", variadic: true },
 			],
 			flags: {
-				output: { type: String, alias: "o", default: "./dist" },
-				port: { type: Number, alias: "p" },
-				minify: { type: Boolean, default: true },
-				verbose: { type: Boolean, alias: "v" },
+				output: { type: "string", alias: "o", default: "./dist" },
+				port: { type: "number", alias: "p" },
+				minify: { type: "boolean", default: true },
+				verbose: { type: "boolean", alias: "v" },
 			},
 		});
 		const result = parseArgs(cmd, [
@@ -789,8 +789,8 @@ describe("parseArgs — complex scenarios", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			args: [
-				{ name: "source", type: String, required: true },
-				{ name: "destination", type: String, required: true },
+				{ name: "source", type: "string", required: true },
+				{ name: "destination", type: "string", required: true },
 			],
 		});
 		const result = parseArgs(cmd, ["./src", "./dest"]);

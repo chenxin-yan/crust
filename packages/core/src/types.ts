@@ -1,25 +1,22 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Constructor-to-primitive mapping
+// Literal-to-primitive mapping
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Maps a constructor function (String, Number, Boolean) to its primitive type */
-export type TypeConstructor =
-	| StringConstructor
-	| NumberConstructor
-	| BooleanConstructor;
+/** Supported type literals for args and flags */
+export type ValueType = "string" | "number" | "boolean";
 
 /**
- * Resolves a constructor function to its corresponding TypeScript primitive type.
+ * Resolves a type literal to its corresponding TypeScript primitive type.
  *
- * - `StringConstructor` → `string`
- * - `NumberConstructor` → `number`
- * - `BooleanConstructor` → `boolean`
+ * - `"string"` → `string`
+ * - `"number"` → `number`
+ * - `"boolean"` → `boolean`
  */
-type ResolvePrimitive<T extends TypeConstructor> = T extends StringConstructor
+type ResolvePrimitive<T extends ValueType> = T extends "string"
 	? string
-	: T extends NumberConstructor
+	: T extends "number"
 		? number
-		: T extends BooleanConstructor
+		: T extends "boolean"
 			? boolean
 			: never;
 
@@ -36,22 +33,22 @@ type ResolvePrimitive<T extends TypeConstructor> = T extends StringConstructor
  * @example
  * ```ts
  * const args = [
- *   { name: "port", type: Number, description: "Port number", default: 3000 },
- *   { name: "name", type: String, required: true },
- *   { name: "files", type: String, variadic: true },
+ *   { name: "port", type: "number", description: "Port number", default: 3000 },
+ *   { name: "name", type: "string", required: true },
+ *   { name: "files", type: "string", variadic: true },
  * ] as const satisfies ArgsDef;
  * ```
  */
 export interface ArgDef<
 	N extends string = string,
-	T extends TypeConstructor = TypeConstructor,
+	T extends ValueType = ValueType,
 	D extends ResolvePrimitive<T> | undefined = ResolvePrimitive<T> | undefined,
 	R extends boolean = boolean,
 	V extends boolean = boolean,
 > {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: N;
-	/** Constructor function indicating the argument's type: `String`, `Number`, or `Boolean` */
+	/** Type literal indicating the argument's type: `"string"`, `"number"`, or `"boolean"` */
 	type: T;
 	/** Human-readable description for help text */
 	description?: string;
@@ -76,17 +73,17 @@ export type ArgsDef = readonly ArgDef[];
  * @example
  * ```ts
  * const flags = {
- *   verbose: { type: Boolean, description: "Enable verbose logging", alias: "v" },
- *   port: { type: Number, description: "Port number", default: 3000 },
+ *   verbose: { type: "boolean", description: "Enable verbose logging", alias: "v" },
+ *   port: { type: "number", description: "Port number", default: 3000 },
  * } satisfies FlagsDef;
  * ```
  */
 export interface FlagDef<
-	T extends TypeConstructor = TypeConstructor,
+	T extends ValueType = ValueType,
 	R extends boolean = boolean,
 	M extends boolean = boolean,
 > {
-	/** Constructor function indicating the flag's type: `String`, `Number`, or `Boolean` */
+	/** Type literal indicating the flag's type: `"string"`, `"number"`, or `"boolean"` */
 	type: T;
 	/** Human-readable description for help text */
 	description?: string;
@@ -245,9 +242,9 @@ type Simplify<T> = { [K in keyof T]: T[K] };
  * @example
  * ```ts
  * type Result = InferArgs<readonly [
- *   { name: "port"; type: NumberConstructor; default: 3000 },
- *   { name: "name"; type: StringConstructor; required: true },
- *   { name: "files"; type: StringConstructor; variadic: true },
+ *   { name: "port"; type: "number"; default: 3000 },
+ *   { name: "name"; type: "string"; required: true },
+ *   { name: "files"; type: "string"; variadic: true },
  * ]>;
  * // Result = { port: number; name: string; files: string[] }
  * ```
@@ -281,8 +278,8 @@ type InferFlagValue<F extends FlagDef> = F extends { multiple: true }
  * @example
  * ```ts
  * type Result = InferFlags<{
- *   verbose: { type: BooleanConstructor };
- *   port: { type: NumberConstructor, default: 3000 };
+ *   verbose: { type: "boolean" };
+ *   port: { type: "number", default: 3000 };
  * }>;
  * // Result = { verbose: boolean | undefined; port: number }
  * ```

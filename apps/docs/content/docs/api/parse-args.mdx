@@ -55,9 +55,9 @@ interface ParseResult<A, F> {
 
 | Definition Type | Parser Behavior |
 | --- | --- |
-| `String` | Kept as-is |
-| `Number` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
-| `Boolean` | Toggle flags. `--flag` → `true`, `--no-flag` → `false` |
+| `"string"` | Kept as-is |
+| `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
+| `"boolean"` | Toggle flags. `--flag` → `true`, `--no-flag` → `false` |
 
 ### Alias Resolution
 
@@ -65,7 +65,7 @@ Aliases are resolved to their canonical flag names:
 
 ```ts
 flags: {
-  verbose: { type: Boolean, alias: "v" },
+  verbose: { type: "boolean", alias: "v" },
 }
 // --verbose and -v both resolve to flags.verbose
 ```
@@ -74,7 +74,7 @@ Multiple aliases (including long aliases) are supported:
 
 ```ts
 flags: {
-  target: { type: String, alias: ["t", "T"] },
+  target: { type: "string", alias: ["t", "T"] },
 }
 ```
 
@@ -100,11 +100,11 @@ import { defineCommand, parseArgs } from "@crustjs/crust";
 const cmd = defineCommand({
   meta: { name: "example" },
   args: [
-    { name: "file", type: String, required: true },
+    { name: "file", type: "string", required: true },
   ] as const,
   flags: {
-    output: { type: String, default: "dist", alias: "o" },
-    verbose: { type: Boolean, alias: "v" },
+    output: { type: "string", default: "dist", alias: "o" },
+    verbose: { type: "boolean", alias: "v" },
   },
 });
 

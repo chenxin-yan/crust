@@ -125,8 +125,8 @@ describe("scaffold", () => {
 		expect(cliContent).toContain('"@crustjs/crust"');
 		// Contains command name
 		expect(cliContent).toContain('"test-cli"');
-		// Has a positional name argument with String type
-		expect(cliContent).toContain("type: String");
+		// Has a positional name argument with string literal type
+		expect(cliContent).toContain('type: "string"');
 		// Has a run function
 		expect(cliContent).toContain("run(");
 	});

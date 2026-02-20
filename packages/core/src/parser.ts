@@ -10,7 +10,7 @@ import type {
 	FlagDef,
 	FlagsDef,
 	ParseResult,
-	TypeConstructor,
+	ValueType,
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -50,8 +50,8 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	for (const [name, def] of Object.entries(flagsDef)) {
 		// Map Crust types to util.parseArgs types
 		// util.parseArgs only supports "string" and "boolean"
-		// Number types are parsed as "string" then coerced
-		const parseType = def.type === Boolean ? "boolean" : "string";
+		// "number" types are parsed as "string" then coerced
+		const parseType = def.type === "boolean" ? "boolean" : "string";
 
 		const opt: ParseArgsOptionDescriptor = { type: parseType };
 
@@ -96,10 +96,10 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 }
 
 /**
- * Coerce a string value to the expected type based on the constructor.
+ * Coerce a string value to the expected type based on the type literal.
  */
-function coerceValue(value: string, type: TypeConstructor, label: string) {
-	if (type === Number) {
+function coerceValue(value: string, type: ValueType, label: string) {
+	if (type === "number") {
 		const num = Number(value);
 		if (Number.isNaN(num)) {
 			throw new CrustError(
@@ -109,7 +109,7 @@ function coerceValue(value: string, type: TypeConstructor, label: string) {
 		}
 		return num;
 	}
-	if (type === Boolean) {
+	if (type === "boolean") {
 		// util.parseArgs handles boolean flags natively, but in case we receive a string
 		return value === "true" || value === "1";
 	}
@@ -142,12 +142,12 @@ function coerceFlagValue(
 	const label = `--${name}`;
 
 	if (def.multiple && Array.isArray(parsedValue)) {
-		return def.type === Boolean
+		return def.type === "boolean"
 			? parsedValue.map((v) => (typeof v === "boolean" ? v : Boolean(v)))
 			: (parsedValue as string[]).map((v) => coerceValue(v, def.type, label));
 	}
 
-	if (def.type === Boolean) {
+	if (def.type === "boolean") {
 		return typeof parsedValue === "boolean"
 			? parsedValue
 			: Boolean(parsedValue);
@@ -157,7 +157,7 @@ function coerceFlagValue(
 		return coerceValue(parsedValue, def.type, label);
 	}
 
-	// Boolean `true` for a non-boolean flag shouldn't normally happen with
+	// "boolean" true for a non-boolean flag shouldn't normally happen with
 	// strict parsing, but handle gracefully by falling back to the default.
 	if (parsedValue === true) {
 		return def.default ?? undefined;
@@ -266,9 +266,9 @@ function resolveArgs(
 				throw new CrustError("VALIDATION", `Missing required ${label}`);
 			}
 			resolved[name] =
-				def.type === Number
-					? remaining.map((v) => coerceValue(v, Number, `<${name}>`))
-					: remaining;
+				def.type === "string"
+					? remaining
+					: remaining.map((v) => coerceValue(v, def.type, `<${name}>`));
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			resolved[name] = coerceValue(

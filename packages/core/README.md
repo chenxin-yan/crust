@@ -17,9 +17,9 @@ import { defineCommand, runMain } from "@crustjs/core";
 
 const main = defineCommand({
   meta: { name: "greet", description: "Say hello" },
-  args: [{ name: "name", type: String, default: "world" }],
+  args: [{ name: "name", type: "string", default: "world" }],
   flags: {
-    loud: { type: Boolean, description: "Shout it", alias: "l" },
+    loud: { type: "boolean", description: "Shout it", alias: "l" },
   },
   run({ args, flags }) {
     const msg = `Hello, ${args.name}!`;
