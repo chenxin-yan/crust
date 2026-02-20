@@ -9,30 +9,70 @@ import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import { baseOptions } from "@/lib/layout.shared";
 
-const getHighlightedCode = createServerFn({ method: "GET" }).handler(
-  async () => {
-    const highlighter = await createHighlighterCore({
+let highlighterPromise: Promise<
+  Awaited<ReturnType<typeof createHighlighterCore>>
+> | null = null;
+
+function getHighlighter() {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighterCore({
       themes: [gruvboxLightHard, gruvboxDarkHard],
       langs: [langTypescript],
       engine: createJavaScriptRegexEngine(),
     });
-    const html = highlighter.codeToHtml(CODE_EXAMPLE, {
-      lang: "typescript",
-      themes: {
-        light: "gruvbox-light-hard",
-        dark: "gruvbox-dark-hard",
-      },
-      defaultColor: false,
-    });
-    highlighter.dispose();
-    return html;
+  }
+
+  return highlighterPromise;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function createFallbackHighlightedCode(code: string) {
+  const lines = code
+    .split("\n")
+    .map((line) => `<span class="line">${escapeHtml(line)}</span>`)
+    .join("\n");
+
+  return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
+}
+
+const getHighlightedCode = createServerFn({ method: "GET" }).handler(
+  async () => {
+    try {
+      const highlighter = await getHighlighter();
+      return highlighter.codeToHtml(CODE_EXAMPLE, {
+        lang: "typescript",
+        themes: {
+          light: "gruvbox-light-hard",
+          dark: "gruvbox-dark-hard",
+        },
+        defaultColor: false,
+      });
+    } catch (error) {
+      console.error("[docs] Failed to render highlighted code", error);
+      return FALLBACK_HIGHLIGHTED_CODE;
+    }
   },
 );
 
 export const Route = createFileRoute("/")({
   component: FurnaceHome,
   loader: async () => {
-    const highlightedCode = await getHighlightedCode();
+    let highlightedCode = FALLBACK_HIGHLIGHTED_CODE;
+
+    try {
+      highlightedCode = await getHighlightedCode();
+    } catch (error) {
+      console.error("[docs] Failed to load highlighted code", error);
+    }
+
     return { highlightedCode };
   },
 });
@@ -100,6 +140,8 @@ const cli = defineCommand({
 });
 
 runMain(cli);`;
+
+const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
   const { highlightedCode } = Route.useLoaderData();
