@@ -21,14 +21,47 @@ type ResolvePrimitive<T extends ValueType> = T extends "string"
 			: never;
 
 // ────────────────────────────────────────────────────────────────────────────
-// ArgDef — Positional argument definition
+// ArgDef — Positional argument definition (discriminated by `type`)
 // ────────────────────────────────────────────────────────────────────────────
+
+/** Shared fields present on every positional argument definition */
+interface ArgDefBase {
+	/** The argument name (used as the key in the parsed result and in help text) */
+	name: string;
+	/** Human-readable description for help text */
+	description?: string;
+	/** When `true`, the parser throws if the argument is not provided */
+	required?: true;
+	/** When `true`, collects all remaining positional values into an array */
+	variadic?: true;
+}
+
+/** A positional argument whose value is a string */
+interface StringArgDef extends ArgDefBase {
+	type: "string";
+	/** Default string value when the argument is not provided */
+	default?: string;
+}
+
+/** A positional argument whose value is a number */
+interface NumberArgDef extends ArgDefBase {
+	type: "number";
+	/** Default number value when the argument is not provided */
+	default?: number;
+}
+
+/** A positional argument whose value is a boolean */
+interface BooleanArgDef extends ArgDefBase {
+	type: "boolean";
+	/** Default boolean value when the argument is not provided */
+	default?: boolean;
+}
 
 /**
  * Defines a single positional argument for a CLI command.
  *
- * Args are defined as an ordered tuple so that positional ordering is explicit
- * and the type system can enforce that only the last arg may be variadic.
+ * Discriminated by `type` for type-safe `default` values. Boolean toggle
+ * fields (`required`, `variadic`) only accept `true`.
  *
  * @example
  * ```ts
@@ -39,63 +72,105 @@ type ResolvePrimitive<T extends ValueType> = T extends "string"
  * ] as const satisfies ArgsDef;
  * ```
  */
-export interface ArgDef<
-	N extends string = string,
-	T extends ValueType = ValueType,
-	D extends ResolvePrimitive<T> | undefined = ResolvePrimitive<T> | undefined,
-	R extends boolean = boolean,
-	V extends boolean = boolean,
-> {
-	/** The argument name (used as the key in the parsed result and in help text) */
-	name: N;
-	/** Type literal indicating the argument's type: `"string"`, `"number"`, or `"boolean"` */
-	type: T;
-	/** Human-readable description for help text */
-	description?: string;
-	/** Default value when the argument is not provided */
-	default?: D;
-	/** Whether this argument must be provided (errors if missing) */
-	required?: R;
-	/** Whether this argument collects all remaining positionals into an array */
-	variadic?: V;
-}
+export type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
 
 /** Ordered tuple of positional argument definitions */
 export type ArgsDef = readonly ArgDef[];
 
 // ────────────────────────────────────────────────────────────────────────────
-// FlagDef — Named flag definition
+// FlagDef — Named flag definition (discriminated by `type` × `multiple`)
 // ────────────────────────────────────────────────────────────────────────────
+
+/** Shared fields present on every flag definition */
+interface FlagDefBase {
+	/** Human-readable description for help text */
+	description?: string;
+	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`) */
+	alias?: string | string[];
+	/** When `true`, the parser throws if the flag is not provided */
+	required?: true;
+}
+
+// ── Single-value flags ────────────────────────────────────────────────────
+
+/** Base for single-value flags — `multiple` must be omitted */
+interface SingleFlagBase extends FlagDefBase {
+	/** Must be omitted for single-value flags — set to `true` for multi-value */
+	multiple?: never;
+}
+
+/** A single-value string flag */
+interface StringFlagDef extends SingleFlagBase {
+	type: "string";
+	/** Default string value */
+	default?: string;
+}
+
+/** A single-value number flag */
+interface NumberFlagDef extends SingleFlagBase {
+	type: "number";
+	/** Default number value */
+	default?: number;
+}
+
+/** A single-value boolean flag */
+interface BooleanFlagDef extends SingleFlagBase {
+	type: "boolean";
+	/** Default boolean value */
+	default?: boolean;
+}
+
+// ── Multi-value flags ─────────────────────────────────────────────────────
+
+/** Base for multi-value flags — `multiple` is required as `true` */
+interface MultiFlagBase extends FlagDefBase {
+	/** Collect repeated values into an array */
+	multiple: true;
+}
+
+/** A multi-value string flag (collects repeated values into an array) */
+interface StringMultiFlagDef extends MultiFlagBase {
+	type: "string";
+	/** Default string array value */
+	default?: string[];
+}
+
+/** A multi-value number flag (collects repeated values into an array) */
+interface NumberMultiFlagDef extends MultiFlagBase {
+	type: "number";
+	/** Default number array value */
+	default?: number[];
+}
+
+/** A multi-value boolean flag (collects repeated values into an array) */
+interface BooleanMultiFlagDef extends MultiFlagBase {
+	type: "boolean";
+	/** Default boolean array value */
+	default?: boolean[];
+}
 
 /**
  * Defines a single named flag for a CLI command.
+ *
+ * Discriminated by `type` and `multiple` for type-safe `default` values.
+ * Boolean toggle fields (`required`, `multiple`) only accept `true`.
  *
  * @example
  * ```ts
  * const flags = {
  *   verbose: { type: "boolean", description: "Enable verbose logging", alias: "v" },
  *   port: { type: "number", description: "Port number", default: 3000 },
+ *   files: { type: "string", multiple: true, default: ["index.ts"] },
  * } satisfies FlagsDef;
  * ```
  */
-export interface FlagDef<
-	T extends ValueType = ValueType,
-	R extends boolean = boolean,
-	M extends boolean = boolean,
-> {
-	/** Type literal indicating the flag's type: `"string"`, `"number"`, or `"boolean"` */
-	type: T;
-	/** Human-readable description for help text */
-	description?: string;
-	/** Default value when the flag is not provided. Must be an array when `multiple: true`. */
-	default?: M extends true ? ResolvePrimitive<T>[] : ResolvePrimitive<T>;
-	/** Whether this flag must be provided (errors if missing) */
-	required?: R;
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`) */
-	alias?: string | string[];
-	/** Whether this flag can be provided multiple times, collecting values into an array */
-	multiple?: M;
-}
+export type FlagDef =
+	| StringFlagDef
+	| NumberFlagDef
+	| BooleanFlagDef
+	| StringMultiFlagDef
+	| NumberMultiFlagDef
+	| BooleanMultiFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -342,10 +417,49 @@ export interface CommandContext<
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// CommandDef — Input shape for defineCommand
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Configuration object accepted by `defineCommand()`.
+ *
+ * Identical shape to {@link Command} but uses `NoInfer` on lifecycle-hook
+ * parameters so TypeScript infers `A` and `F` solely from the `args` / `flags`
+ * data properties — not from callbacks. This ensures full contextual typing
+ * (e.g. `description` is `string`, not `any`) when writing command definitions.
+ *
+ * Compile-time validation for variadic args and flag alias collisions is
+ * enforced via parameter-level intersection in `defineCommand()`.
+ */
+export interface CommandDef<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+> {
+	/** Command metadata (name, description, usage) */
+	meta: CommandMeta;
+	/** Positional argument definitions */
+	args?: A;
+	/** Flag definitions */
+	flags?: F;
+	/** Named subcommands */
+	subCommands?: Record<string, AnyCommand>;
+	/** Called before `run()` — useful for initialization */
+	preRun?(
+		context: CommandContext<NoInfer<A>, NoInfer<F>>,
+	): void | Promise<void>;
+	/** The main command handler */
+	run?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
+	/** Called after `run()` (even if it throws) — useful for teardown */
+	postRun?(
+		context: CommandContext<NoInfer<A>, NoInfer<F>>,
+	): void | Promise<void>;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Command — Unified command shape
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Unified command shape used for both command definitions and resolved commands. */
+/** Frozen command object returned by `defineCommand()` and used at runtime. */
 export interface Command<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,

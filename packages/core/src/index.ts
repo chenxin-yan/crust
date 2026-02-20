@@ -31,6 +31,7 @@ export type {
 	ArgsDef,
 	Command,
 	CommandContext,
+	CommandDef,
 	CommandMeta,
 	FlagDef,
 	FlagsDef,

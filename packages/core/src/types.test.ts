@@ -337,6 +337,136 @@ describe("FlagDef interface", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// ArgDef / FlagDef discriminated union narrowing tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ArgDef discriminated union narrowing", () => {
+	it("rejects default type mismatch", () => {
+		// @ts-expect-error — default must be number when type is "number"
+		const _bad1: ArgDef = { name: "port", type: "number", default: "oops" };
+
+		// @ts-expect-error — default must be string when type is "string"
+		const _bad2: ArgDef = { name: "name", type: "string", default: 42 };
+
+		// @ts-expect-error — default must be boolean when type is "boolean"
+		const _bad3: ArgDef = { name: "flag", type: "boolean", default: "yes" };
+
+		expect(true).toBe(true);
+	});
+});
+
+describe("FlagDef discriminated union narrowing", () => {
+	it("rejects default type mismatch for single-value flags", () => {
+		// @ts-expect-error — default must be number when type is "number"
+		const _bad1: FlagDef = { type: "number", default: "oops" };
+
+		// @ts-expect-error — default must be string when type is "string"
+		const _bad2: FlagDef = { type: "string", default: 123 };
+
+		// @ts-expect-error — default must be boolean when type is "boolean"
+		const _bad3: FlagDef = { type: "boolean", default: "yes" };
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects scalar default for multi-value flags", () => {
+		// @ts-expect-error — default must be string[] when multiple is true
+		const _bad1: FlagDef = {
+			type: "string",
+			multiple: true,
+			default: "scalar",
+		};
+
+		// @ts-expect-error — default must be number[] when multiple is true
+		const _bad2: FlagDef = { type: "number", multiple: true, default: 42 };
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects array default for single-value flags", () => {
+		// @ts-expect-error — default must be string, not string[], for single-value
+		const _bad1: FlagDef = { type: "string", default: ["a", "b"] };
+
+		// @ts-expect-error — default must be number, not number[], for single-value
+		const _bad2: FlagDef = { type: "number", default: [1, 2] };
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects cross-type array defaults for multi-value flags", () => {
+		// @ts-expect-error — default must be number[], not string[]
+		const _bad1: FlagDef = { type: "number", multiple: true, default: ["a"] };
+
+		// @ts-expect-error — default must be boolean[], not number[]
+		const _bad2: FlagDef = { type: "boolean", multiple: true, default: [1, 2] };
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// ArgDef / FlagDef toggle field tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ArgDef toggle fields", () => {
+	it("accepts true for toggle fields", () => {
+		const _req: ArgDef = { name: "a", type: "string", required: true };
+		const _var: ArgDef = { name: "b", type: "string", variadic: true };
+		expect(_req.required).toBe(true);
+		expect(_var.variadic).toBe(true);
+	});
+
+	it("rejects false for toggle fields", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not `false`
+		const _bad1: ArgDef = { name: "a", type: "string", required: false };
+
+		// @ts-expect-error — toggle fields only accept `true`, not `false`
+		const _bad2: ArgDef = { name: "a", type: "string", variadic: false };
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects non-boolean values for toggle fields", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not string
+		const _bad1: ArgDef = { name: "a", type: "string", required: "yes" };
+
+		// @ts-expect-error — toggle fields only accept `true`, not number
+		const _bad2: ArgDef = { name: "a", type: "string", variadic: 1 };
+
+		expect(true).toBe(true);
+	});
+});
+
+describe("FlagDef toggle fields", () => {
+	it("accepts true for toggle fields", () => {
+		const _req: FlagDef = { type: "string", required: true };
+		const _multi: FlagDef = { type: "string", multiple: true };
+		expect(_req.required).toBe(true);
+		expect(_multi.multiple).toBe(true);
+	});
+
+	it("rejects false for toggle fields", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not `false`
+		const _bad1: FlagDef = { type: "string", required: false };
+
+		// @ts-expect-error — toggle fields only accept `true`, not `false`
+		const _bad2: FlagDef = { type: "string", multiple: false };
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects non-boolean values for toggle fields", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not string
+		const _bad1: FlagDef = { type: "string", required: "yes" };
+
+		// @ts-expect-error — toggle fields only accept `true`, not number
+		const _bad2: FlagDef = { type: "string", multiple: 1 };
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // CommandMeta / Command tests
 // ────────────────────────────────────────────────────────────────────────────
 

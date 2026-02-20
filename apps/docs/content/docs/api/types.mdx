@@ -58,16 +58,23 @@ interface CommandContext<A extends ArgsDef, F extends FlagsDef>
 
 ### `ArgDef`
 
-Defines a single positional argument:
+Defines a single positional argument. Discriminated union by `type` for type-safe defaults:
 
 ```ts
-interface ArgDef<N, T, D, R, V> {
-  name: N;               // Argument name
-  type: T;               // "string", "number", or "boolean" literal
+type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
+```
+
+Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
+
+```ts
+// String variant (Number and Boolean follow the same shape)
+interface StringArgDef {
+  name: string;          // Argument name
+  type: "string";        // Type discriminant
   description?: string;  // Help text
-  default?: D;           // Default value
-  required?: R;          // Error if missing
-  variadic?: V;          // Collect remaining into array
+  default?: string;      // Default value (type-safe)
+  required?: true;       // Error if missing
+  variadic?: true;       // Collect remaining into array
 }
 ```
 
@@ -83,18 +90,40 @@ type ArgsDef = readonly ArgDef[];
 
 ### `FlagDef`
 
-Defines a single named flag:
+Defines a single named flag. Discriminated union by `type` and `multiple`:
 
 ```ts
-interface FlagDef<T, R, M> {
-  type: T;               // "string", "number", or "boolean" literal
-  description?: string;  // Help text
-  default?: /* ... */;   // Default value (array when multiple: true)
-  required?: R;          // Error if missing
-  alias?: string | string[];  // Short alias(es)
-  multiple?: M;          // Collect repeated values into array
-}
+type FlagDef =
+  | StringFlagDef | NumberFlagDef | BooleanFlagDef           // single-value
+  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef; // multi-value
 ```
+
+Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
+
+```ts
+// Single-value string flag
+interface StringFlagDef {
+  type: "string";              // Type discriminant
+  description?: string;        // Help text
+  default?: string;            // Default value (type-safe)
+  required?: true;             // Error if missing
+  alias?: string | string[];   // Short alias(es)
+  multiple?: never;            // Absent for single-value flags
+}
+
+// Multi-value string flag
+interface StringMultiFlagDef {
+  type: "string";              // Type discriminant
+  description?: string;        // Help text
+  default?: string[];          // Default array value (type-safe)
+  required?: true;             // Error if missing
+  alias?: string | string[];   // Short alias(es)
+  multiple: true;              // Collect repeated values into array
+}
+// Number and boolean variants follow the same pattern
+```
+
+Boolean toggle fields (`required`, `multiple`) only accept `true` — passing `false` is a type error.
 
 ### `FlagsDef`
 

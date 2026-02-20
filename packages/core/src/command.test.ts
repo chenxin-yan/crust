@@ -331,11 +331,20 @@ describe("defineCommand type inference", () => {
 				// biome-ignore lint/complexity/noBannedTypes: InferArgsTuple on non-const ArgsDef resolves to {}
 				type _checkArgs = Expect<Equal<typeof args, {}>>;
 				// When flags are omitted, F defaults to FlagsDef (broad record),
-				// so InferFlags<FlagsDef> = { [x: string]: string | number | boolean | undefined }
+				// so InferFlags<FlagsDef> includes array types from multi-value flag variants
 				type _checkFlags = Expect<
 					Equal<
 						typeof flags,
-						{ [x: string]: string | number | boolean | undefined }
+						{
+							[x: string]:
+								| string
+								| number
+								| boolean
+								| string[]
+								| number[]
+								| boolean[]
+								| undefined;
+						}
 					>
 				>;
 				expect(true).toBe(true);

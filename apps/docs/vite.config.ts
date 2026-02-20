@@ -20,8 +20,6 @@ export default defineConfig({
     tanstackStart({
       prerender: {
         enabled: true,
-        retryCount: 2,
-        retryDelay: 500,
       },
     }),
     react(),

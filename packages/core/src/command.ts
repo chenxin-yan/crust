@@ -4,6 +4,7 @@ import type {
 	CheckFlagAliasCollisions,
 	CheckVariadicArgs,
 	Command,
+	CommandDef,
 	FlagsDef,
 } from "./types.ts";
 
@@ -39,11 +40,11 @@ export function defineCommand<
 	const A extends ArgsDef = ArgsDef,
 	const F extends FlagsDef = FlagsDef,
 >(
-	config: Command<A, F> & {
+	config: CommandDef<A, F> & {
 		args?: A & CheckVariadicArgs<A>;
 		flags?: F & CheckFlagAliasCollisions<F>;
 	},
-) {
+): Command<A, F> {
 	// Validate required meta.name
 	if (!config.meta.name.trim()) {
 		throw new CrustError(
