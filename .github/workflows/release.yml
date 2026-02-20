@@ -46,8 +46,16 @@ jobs:
       - name: Install dependencies
         run: bun ci
 
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-release-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-release-${{ runner.os }}-
+
       - name: Build packages
-        run: bun run build --filter=./packages/*
+        run: bun run build
 
       - name: Create release PR or publish
         uses: changesets/action@v1

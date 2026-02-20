@@ -33,14 +33,16 @@ jobs:
       - name: Install dependencies
         run: bun ci
 
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-packages-${{ runner.os }}-
+
       - name: Lint and format check (packages)
         run: bun run check packages
 
-      - name: Type check (packages)
-        run: bun run check:types --filter=./packages/*
-
-      - name: Test (packages)
-        run: bun run test --filter=./packages/*
-
-      - name: Build (packages)
-        run: bun run build --filter=./packages/*
+      - name: Build, type check, and test (packages)
+        run: bun turbo run build check:types test --filter='./packages/*'
