@@ -11,8 +11,6 @@
 <p align="center">
   <a href="https://crustjs.com">Documentation</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="https://github.com/chenxin-yan/crust">GitHub</a>
-  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://github.com/chenxin-yan/crust/issues">Issues</a>
 </p>
 

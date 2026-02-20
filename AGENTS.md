@@ -6,13 +6,13 @@ Crust is a Bun-native, TypeScript-first CLI framework. It is a **Turborepo monor
 
 ### Monorepo Packages
 
-| Package | Path | Description |
-|---------|------|-------------|
-| `@crustjs/core` | `packages/core` | Core library: command definition, argument parsing, routing, plugin system, error types |
-| `@crustjs/plugins` | `packages/plugins` | Official plugins: help, version, autocomplete |
-| `@crustjs/crust` | `packages/crust` | The `crust` CLI binary (self-hosted, built with `@crustjs/core`) |
-| `@crustjs/create-crust` | `packages/create-crust` | Project scaffolding tool |
-| `@crustjs/config` | `packages/config` | Shared TypeScript config (`tsconfig.base.json`) |
+| Package            | Path                    | Description                                                                             |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------------------- |
+| `@crustjs/core`    | `packages/core`         | Core library: command definition, argument parsing, routing, plugin system, error types |
+| `@crustjs/plugins` | `packages/plugins`      | Official plugins: help, version, autocomplete                                           |
+| `@crustjs/crust`   | `packages/crust`        | The `crust` CLI binary (self-hosted, built with `@crustjs/core`)                        |
+| `create-crust`     | `packages/create-crust` | Project scaffolding tool                                                                |
+| `@crustjs/config`  | `packages/config`       | Shared TypeScript config (`tsconfig.base.json`)                                         |
 
 ## Build / Lint / Test Commands
 
@@ -58,6 +58,7 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 ### Formatter & Linter (Biome)
 
 The project uses **Biome v2** with these settings:
+
 - **Indent**: Tabs (not spaces)
 - **Quotes**: Double quotes for JS/TS
 - **Linter**: Biome recommended rules enabled
@@ -68,6 +69,7 @@ Run `bun run check` before committing. Biome is the single source of truth for f
 ### TypeScript Configuration
 
 Strict mode is enabled with these notable settings:
+
 - `strict: true`
 - `noFallthroughCasesInSwitch: true`
 - `noUncheckedIndexedAccess: true` — indexed access returns `T | undefined`
@@ -79,10 +81,12 @@ Strict mode is enabled with these notable settings:
 
 - **Always use `.ts` extensions** in relative imports: `import { foo } from "./bar.ts"`
 - **Use `import type`** for type-only imports (enforced by `verbatimModuleSyntax`):
+
   ```ts
   import type { AnyCommand, CommandContext } from "./types.ts";
   import { CrustError } from "./errors.ts";
   ```
+
 - **Workspace imports** use package names: `import { defineCommand } from "@crustjs/core"`
 - **Node built-ins** use `node:` prefix: `import { resolve } from "node:path"`
 - Biome auto-sorts imports — let it handle ordering
@@ -115,7 +119,7 @@ throw new Error(`Entry file not found: ${entryPath}`);
 
 // Error narrowing
 if (error instanceof CrustError && error.is("COMMAND_NOT_FOUND")) {
-    const details = error.details; // typed as CommandNotFoundErrorDetails
+  const details = error.details; // typed as CommandNotFoundErrorDetails
 }
 ```
 
@@ -130,13 +134,15 @@ if (error instanceof CrustError && error.is("COMMAND_NOT_FOUND")) {
 ### Code Organization
 
 - **Section dividers**: Use the `────` comment pattern for major sections within files
+
   ```ts
   // ────────────────────────────────────────────────────────────────────────────
   // Section Name — Brief description
   // ────────────────────────────────────────────────────────────────────────────
   ```
+
 - **JSDoc**: Use `@example`, `@param`, `@returns`, `@throws` tags on public APIs
-- **Inline comments**: Explain *why*, not *what* — especially for non-obvious type assertions
+- **Inline comments**: Explain _why_, not _what_ — especially for non-obvious type assertions
 - Keep functions small and focused; extract helpers as `function` declarations (not arrow)
 
 ### Type Patterns
