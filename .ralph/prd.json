@@ -1,0 +1,141 @@
+{
+	"tasks": [
+		{
+			"description": "Initialize the @crustjs/create package with project scaffolding, build config, and barrel exports",
+			"subtasks": [
+				"Create packages/create/package.json with name @crustjs/create, type module, ESM exports, publishConfig access public, files: [dist], peerDependencies on @crustjs/core workspace:*, devDependencies on @crustjs/config workspace:* and bunup catalog:, peerDependencies on typescript catalog:",
+				"Create packages/create/tsconfig.json extending @crustjs/config/tsconfig.base.json with include: [src]",
+				"Create packages/create/bunup.config.ts with entry: [src/index.ts], format: [esm], target: bun, dts: true",
+				"Create packages/create/src/index.ts barrel file with section comments (empty exports for now, will be populated as features are built)",
+				"Create packages/create/src/types.ts with all public type definitions: ScaffoldOptions (template, dest, context, conflict, importMeta), ScaffoldResult (files: string[]), PostScaffoldStep union type (install | git-init | open-editor | command), and context type Record<string, string>",
+				"Run bun install from monorepo root to link the new workspace package",
+				"Run bun run build --filter=@crustjs/create to verify build succeeds",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "Follow the exact same package.json structure as packages/core and packages/plugins. Use section dividers in barrel file. Types should use readonly where appropriate. The conflict option should default to 'abort'. importMeta field is how users pass import.meta.url for template resolution. Refer to SPEC.md in packages/create/ for all type shapes.",
+			"passed": false
+		},
+		{
+			"description": "Implement the template interpolation engine with {{var}} replacement and binary file detection",
+			"subtasks": [
+				"Create packages/create/src/interpolate.ts with a function interpolate(content: string, context: Record<string, string>): string",
+				"Implement {{var}} replacement using a regex that matches {{identifier}} patterns (alphanumeric + underscore)",
+				"Handle missing variables gracefully — leave {{var}} untouched if var is not in context (do not throw)",
+				"Create packages/create/src/isBinary.ts with a function isBinary(buffer: Buffer): boolean that checks for null bytes in the first 8192 bytes",
+				"Write unit tests in packages/create/src/interpolate.test.ts: basic replacement, multiple variables, missing variables left untouched, empty context, no placeholders in content",
+				"Write unit tests in packages/create/src/isBinary.test.ts: text file returns false, binary file (with null bytes) returns true, empty buffer returns false",
+				"Export interpolate and isBinary from src/index.ts (isBinary as internal, interpolate as public)",
+				"Run bun test from packages/create to verify all tests pass",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "Regex pattern should be /\\{\\{\\s*(\\w+)\\s*\\}\\}/g to allow optional whitespace inside braces. Binary detection uses the null-byte heuristic — check for 0x00 in the first 8KB chunk. Only interpolate and types should be re-exported publicly; isBinary is internal.",
+			"passed": false
+		},
+		{
+			"description": "Implement the core scaffold() function with template copying, interpolation, dotfile renaming, and conflict resolution",
+			"subtasks": [
+				"Create packages/create/src/scaffold.ts with the async scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> function",
+				"Implement template path resolution: resolve options.template relative to options.importMeta using new URL() and node:url fileURLToPath",
+				"Implement recursive directory walking to collect all files from the resolved template directory",
+				"For each file: if binary (using isBinary), copy as-is; if text, read contents, run interpolate() with options.context, then write to dest",
+				"Implement dotfile renaming: files starting with _ have the leading _ replaced with . in the destination path (e.g., _gitignore -> .gitignore)",
+				"Implement conflict resolution: if options.conflict is 'abort' (default) and dest directory exists and is non-empty, throw an error; if 'overwrite', proceed and overwrite existing files",
+				"Return ScaffoldResult with the list of all written file paths (relative to dest)",
+				"Create packages/create/tests/ directory for integration tests",
+				"Write integration tests in packages/create/tests/scaffold.test.ts: scaffold a simple template dir with text files and verify output files exist with correct interpolated content",
+				"Test dotfile renaming: template with _gitignore produces .gitignore in output",
+				"Test conflict abort: calling scaffold on an existing non-empty dir with conflict 'abort' throws",
+				"Test conflict overwrite: calling scaffold on an existing dir with conflict 'overwrite' succeeds and overwrites files",
+				"Test binary file passthrough: a binary file in the template is copied without interpolation",
+				"Test composability: calling scaffold twice with different template dirs layers files correctly (second call adds/overwrites onto first)",
+				"Export scaffold from src/index.ts",
+				"Run bun test from packages/create to verify all tests pass",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "Use node:fs (readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync) and node:path (resolve, join, relative, dirname). Template resolution must handle import.meta.url correctly — use fileURLToPath(new URL(options.template, options.importMeta)) pattern. Integration tests should create temp directories with fixture templates, run scaffold, and assert output. Clean up temp dirs in afterEach. The second scaffold call for composability should use conflict: 'overwrite' since files from the first call already exist.",
+			"passed": false
+		},
+		{
+			"description": "Implement standalone utility functions: detectPackageManager, isGitInstalled, getGitUser",
+			"subtasks": [
+				"Create packages/create/src/utils.ts with all three utility functions",
+				"Implement detectPackageManager(cwd?: string): string — check for bun.lock/bun.lockb (bun), pnpm-lock.yaml (pnpm), yarn.lock (yarn), package-lock.json (npm) in cwd; fall back to checking npm_config_user_agent env var; default to 'npm'",
+				"Implement isGitInstalled(): boolean — use Bun.spawnSync or child_process.execSync to run 'git --version', return true if exit code 0, false otherwise",
+				"Implement getGitUser(): { name: string | null; email: string | null } — run 'git config user.name' and 'git config user.email', return results or null if not configured",
+				"Write unit tests in packages/create/src/utils.test.ts for detectPackageManager: test lockfile detection for each package manager, test fallback to npm_config_user_agent, test default to npm when no signals",
+				"Write unit tests for isGitInstalled (since git is available in test env, verify it returns true)",
+				"Write unit tests for getGitUser (verify it returns an object with name and email keys)",
+				"Export all three functions from src/index.ts",
+				"Run bun test from packages/create to verify all tests pass",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "detectPackageManager should check lockfiles in order: bun.lock/bun.lockb first (Bun-native project), then pnpm-lock.yaml, yarn.lock, package-lock.json. For git commands, use Bun.spawnSync for simplicity. Wrap in try/catch — if git is not installed, spawnSync will throw. For detectPackageManager tests, create temp dirs with specific lockfiles.",
+			"passed": false
+		},
+		{
+			"description": "Implement the declarative post-scaffold step runner with built-in and custom command steps",
+			"subtasks": [
+				"Create packages/create/src/steps.ts with the async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<void>",
+				"Implement the 'install' step: call detectPackageManager(cwd) then spawn the appropriate install command (bun install, npm install, pnpm install, yarn install)",
+				"Implement the 'git-init' step: run 'git init' in cwd; if commit message is provided, run 'git add .' and 'git commit -m <message>'",
+				"Implement the 'open-editor' step: check $EDITOR env var first, fall back to trying 'code' (VS Code); spawn the editor with cwd as argument; do not throw if editor is not found (log a warning instead)",
+				"Implement the 'command' step: run the provided cmd string using Bun.spawn with shell option, in the specified cwd (default to the scaffold dest)",
+				"All steps should propagate spawn errors with descriptive messages",
+				"Write integration tests in packages/create/tests/steps.test.ts: test git-init step creates a .git directory in a temp dir",
+				"Test git-init with commit: verify .git exists and git log shows the commit message",
+				"Test install step: mock or verify it attempts to run the correct package manager command (use a temp dir with a package.json)",
+				"Test command step: run a simple command like 'echo hello' and verify it completes without error",
+				"Export runSteps from src/index.ts",
+				"Run bun test from packages/create to verify all tests pass",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "Use Bun.spawn for all process spawning — it returns a Subprocess with an .exited promise. For the install step, pass stdout: 'inherit' and stderr: 'inherit' so users see install output. For the open-editor step, use spawn with detached-like behavior (don't wait for editor to close). The command step should use Bun.spawn with shell: true for the cmd string. Steps run sequentially in array order.",
+			"passed": false
+		},
+		{
+			"description": "Finalize public API, write comprehensive JSDoc, and add end-to-end integration test",
+			"subtasks": [
+				"Review and finalize src/index.ts barrel exports: scaffold, runSteps, detectPackageManager, isGitInstalled, getGitUser, interpolate, and all public types (ScaffoldOptions, ScaffoldResult, PostScaffoldStep)",
+				"Add JSDoc with @example blocks to scaffold() showing basic usage with import.meta.url, context variables, and conflict option",
+				"Add JSDoc with @example blocks to runSteps() showing a typical post-scaffold step array",
+				"Add JSDoc with @example to each utility function (detectPackageManager, isGitInstalled, getGitUser)",
+				"Add JSDoc with @example to interpolate() showing {{var}} replacement",
+				"Write an end-to-end integration test in packages/create/tests/e2e.test.ts that: creates a temp template dir with _gitignore, package.json with {{name}}, and src/index.ts with {{description}}; calls scaffold() with context; verifies all files are created with correct content and dotfile renamed; calls runSteps with git-init; verifies .git directory exists",
+				"Ensure all type exports use 'export type' where appropriate per verbatimModuleSyntax",
+				"Run bun test from packages/create to verify all tests pass",
+				"Run bun run check:types --filter=@crustjs/create to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "JSDoc examples should show realistic usage — e.g., a create-react-app style tool calling scaffold with import.meta.url. Use section dividers in barrel file to group: Template Engine, Scaffold, Steps, Utilities, Types. The e2e test validates the full workflow a consumer would use. Clean up temp dirs in afterEach/afterAll.",
+			"passed": false
+		},
+		{
+			"description": "Refactor create-crust to use @crustjs/create as dogfooding validation",
+			"subtasks": [
+				"Add @crustjs/create as a dependency in packages/create-crust/package.json (workspace:*)",
+				"Create packages/create-crust/templates/base/ directory with the template files currently generated as string constants in index.ts",
+				"Move package.json template to templates/base/package.json using {{name}}, {{description}}, {{author}} interpolation placeholders",
+				"Move tsconfig.json template to templates/base/tsconfig.json (static, no interpolation needed)",
+				"Move src/cli.ts template to templates/base/src/cli.ts using {{name}} interpolation placeholder",
+				"Add templates/base/_gitignore with node_modules and dist entries",
+				"Refactor packages/create-crust/src/index.ts: replace the templatePackageJson/templateTsconfig/templateCliTs functions and manual writeFileSync calls with scaffold() from @crustjs/create",
+				"Use import.meta.url to resolve the templates/base path",
+				"Replace the manual Bun.spawn(['bun', 'install']) with runSteps([{ type: 'install' }])",
+				"Keep the existing interactive prompt logic (readline) unchanged — only replace file generation and post-scaffold steps",
+				"Update the bunup.config.ts to include templates directory in the build output if needed, or configure package.json files field to include templates/",
+				"Ensure packages/create-crust/package.json files field includes both dist and templates directories",
+				"Run existing tests in packages/create-crust to verify scaffold still produces correct output",
+				"Run bun run build --filter=create-crust to verify build succeeds",
+				"Run bun run check:types --filter=create-crust to verify no type errors",
+				"Run bun run check to verify Biome formatting and linting pass"
+			],
+			"notes": "This is the dogfooding task — it validates that @crustjs/create works for a real use case. The key insight is that template files move from string constants to real files on disk in a templates/ directory. The interactive prompts (readline) stay as-is since @crustjs/prompts doesn't exist yet. Make sure the templates directory is included in the published package by adding it to the files field in package.json. The existing scaffold() function in create-crust and the one from @crustjs/create have different signatures — make sure to update all call sites.",
+			"passed": false
+		}
+	]
+}
