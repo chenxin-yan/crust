@@ -134,7 +134,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "The Choice<T> type supports both string[] and { label, value, hint? }[]. When T is string and choices are strings, label === value. The generic T flows through so select<number>({ choices: [{ label: 'One', value: 1 }] }) returns Promise<number>. Viewport scrolling is important for long lists — keep maxVisible configurable. Extract normalizeChoices into a utils file since multiselect and filter also need it.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the multiselect prompt (checkbox-style multi selection from a list)",
@@ -154,7 +154,7 @@
 				"Run 'bun run check:types' from packages/prompts to verify no type errors",
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
-			"notes": "Reuse normalizeChoices utility from select. The checkbox indicators should be clear: '[ ]' for unchecked, '[x]' or similar for checked, with color distinction. The 'a' (toggle all) and 'i' (invert) shortcuts are quality-of-life features inspired by gum. Display a hint line showing keybindings (Space to toggle, Enter to confirm).",
+			"notes": "Reuse normalizeChoices utility from select (`import { normalizeChoices } from './utils.ts'`). The `NormalizedChoice<T>` type is also available from utils.ts. The checkbox indicators should be clear: '[ ]' for unchecked, '[x]' or similar for checked, with color distinction. The 'a' (toggle all) and 'i' (invert) shortcuts are quality-of-life features inspired by gum. Display a hint line showing keybindings (Space to toggle, Enter to confirm). The viewport scrolling pattern from select.ts (calculateScrollOffset, rendering a window slice with '...' indicators) can be reused or duplicated for multiselect.",
 			"passed": false
 		},
 		{
@@ -177,7 +177,7 @@
 				"Run 'bun run check:types' from packages/prompts to verify no type errors",
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
-			"notes": "The fuzzy matcher is extracted into its own file for independent testing and potential reuse. Keep the algorithm simple — no need for fzf-level sophistication. Case-insensitive matching is essential. The filter prompt combines the text input behavior (for query) with the select behavior (for navigating results). Highlight matched characters in results using theme colors for a polished UX. Also export fuzzyMatch and fuzzyFilter as public utilities — they may be useful to users outside of the prompt context.",
+			"notes": "The fuzzy matcher is extracted into its own file for independent testing and potential reuse. Keep the algorithm simple — no need for fzf-level sophistication. Case-insensitive matching is essential. The filter prompt combines the text input behavior (for query) with the select behavior (for navigating results). Highlight matched characters in results using theme colors for a polished UX. Also export fuzzyMatch and fuzzyFilter as public utilities — they may be useful to users outside of the prompt context. Reuse `normalizeChoices` from `./utils.ts` to convert choices. The viewport scrolling pattern from select.ts can be reused for the filtered results list.",
 			"passed": false
 		},
 		{
