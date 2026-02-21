@@ -133,7 +133,6 @@ const MODULES: Array<{
     pkg: "@crustjs/style",
     desc: "Terminal styling",
     doc: "modules/style",
-    upcoming: true,
   },
   {
     pkg: "@crustjs/test",
