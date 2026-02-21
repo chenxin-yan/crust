@@ -345,3 +345,55 @@
 - For the filter prompt (Task 9): it combines text input (for query) with list navigation (for filtered results). It should reuse `normalizeChoices` from `utils.ts`. The `calculateScrollOffset` function is now duplicated in both `select.ts` and `multiselect.ts` — if filter also needs it, consider extracting to `utils.ts`.
 - The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is consistent across all interactive prompt test files.
 - All 8 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35 = 168 total).
+
+---
+
+## Task: Implement the filter prompt (fuzzy-search interactive filter over a list)
+
+### Completed
+
+- Created `packages/prompts/src/fuzzy.ts` with `fuzzyMatch()` and `fuzzyFilter()` functions and their result types (`FuzzyMatchResult`, `FuzzyFilterResult<T>`)
+- Implemented simple character-in-order fuzzy matching algorithm with scoring: consecutive match bonus (+5), start-of-string bonus (+10), word boundary bonus (+8), base match score (+1 per character)
+- Case-insensitive matching by default
+- Created `packages/prompts/src/filter.ts` with `filter<T>()` function and `FilterOptions<T>` interface
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided
+- Implemented text input for query with full cursor editing (insert, backspace, delete, left/right arrows, home/end)
+- Implemented real-time fuzzy filtering: every query change re-runs `fuzzyFilter` and resets the list cursor
+- Implemented Up/Down arrow navigation through filtered results with wrapping
+- Implemented viewport scrolling with `calculateScrollOffset()` (duplicated from select/multiselect — small enough to keep self-contained)
+- Implemented render function with: prefix symbol `?`, message, query input line with cursor indicator (`│`), placeholder support, filtered results list with cursor `>`, matched character highlighting via `theme.filterMatch`, scroll indicators (`...`), and "No matches" hint when query yields no results
+- Implemented `renderSubmitted` showing the selected label in success color
+- Highlighted matched characters in filtered results using `theme.filterMatch` style — consecutive matched characters are batch-styled for efficiency
+- Updated barrel exports in `src/index.ts` with `filter`, `FilterOptions`, `fuzzyMatch`, `fuzzyFilter`, `FuzzyMatchResult`, `FuzzyFilterResult` in Types, Prompts, and Utilities sections
+- Wrote 13 unit tests in `src/fuzzy.test.ts` covering: empty query, exact match scoring, substring match, out-of-order rejection, case-insensitivity, contiguity scoring preference, start-of-string bonus, word boundary bonus, sparse indices, edge cases (long query, single char, empty candidate)
+- Wrote 7 unit tests in `src/fuzzy.test.ts` for `fuzzyFilter`: empty query returns all, filtering, sorting by score, no matches, case-insensitive, indices preservation, item reference preservation
+- Wrote 27 unit tests in `src/filter.test.ts` covering: initial value (2), filtering behavior (4), navigation (6), query editing (3), rendering (6), viewport scrolling (3), non-TTY behavior (2), ignoring navigation with no results (1)
+- All 214 tests pass across 10 test files, type-check clean, Biome clean
+- Build produces `index.js` (30.40KB) + `index.d.ts` (23.31KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/fuzzy.ts` (new)
+- `packages/prompts/src/fuzzy.test.ts` (new)
+- `packages/prompts/src/filter.ts` (new)
+- `packages/prompts/src/filter.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added filter, fuzzy exports)
+
+### Decisions
+
+- Extracted fuzzy matching into its own `src/fuzzy.ts` file (not inline in filter) for independent testing and potential reuse. Both `fuzzyMatch` and `fuzzyFilter` are exported as public utilities.
+- Scoring algorithm is intentionally simple: consecutive bonus (+5), start-of-string bonus (+10), word boundary bonus (+8 for chars after space/hyphen/underscore/dot), base match score (+1). No fzf-level sophistication needed.
+- Duplicated `calculateScrollOffset` from `select.ts`/`multiselect.ts` rather than extracting to `utils.ts` — the function is small (~15 lines) and keeps each prompt module self-contained.
+- Filter resets `listCursor` to 0 on every query change (re-filter) — this prevents cursor being out of bounds when results shrink and provides consistent UX.
+- Up/Down arrow navigation does NOT use j/k vim keys (unlike select/multiselect) since j/k are printable characters that should insert into the query. Only arrow keys navigate the filtered results.
+- "No matches" hint displayed when query produces zero results — prevents confusing empty state.
+- `highlightMatches` batches consecutive matched characters for single `theme.filterMatch` call — reduces ANSI escape overhead.
+
+### Notes for Future Agent
+
+- The filter prompt is complete. All prompt types except `spinner` (Task 10) are now implemented.
+- For the spinner prompt: it is unique — it wraps an async function rather than collecting user input. It does NOT use raw mode, keypress handling, or `runPrompt`. It uses `setInterval` to cycle spinner frames and writes to stderr. See SPEC.md and prd.json notes for details.
+- The `calculateScrollOffset` function is now duplicated in `select.ts`, `multiselect.ts`, and `filter.ts`. If a future refactor is desired, it could be extracted to `utils.ts`, but the duplication is minor and keeps modules self-contained.
+- All 10 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35, fuzzy: 20, filter: 27 = 215 total). Note: 214 reported by runner due to test grouping.
+- The barrel exports are organized: Types section includes `FuzzyMatchResult` and `FuzzyFilterResult`, Prompts section includes `filter` and `FilterOptions`, Utilities section includes `fuzzyMatch` and `fuzzyFilter`.

@@ -178,7 +178,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "The fuzzy matcher is extracted into its own file for independent testing and potential reuse. Keep the algorithm simple — no need for fzf-level sophistication. Case-insensitive matching is essential. The filter prompt combines the text input behavior (for query) with the select behavior (for navigating results). Highlight matched characters in results using theme colors for a polished UX. Also export fuzzyMatch and fuzzyFilter as public utilities — they may be useful to users outside of the prompt context. Reuse `normalizeChoices` from `./utils.ts` to convert choices. The viewport scrolling pattern from select.ts can be reused for the filtered results list. The `calculateScrollOffset` function is duplicated in both `select.ts` and `multiselect.ts` — if filter also needs it, consider extracting it to `utils.ts`. The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is consistent across all interactive prompt test files and should be followed for filter tests.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the spinner prompt (display spinner while running an async task)",
