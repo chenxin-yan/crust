@@ -1,5 +1,14 @@
 # @crustjs/crust
 
+## 0.0.5
+
+### Patch Changes
+
+- 8e0b48a: Fix published package metadata containing unresolved workspace and catalog protocols by switching to bun publish
+- Updated dependencies [8e0b48a]
+  - @crustjs/core@0.0.5
+  - @crustjs/plugins@0.0.5
+
 ## 0.0.4
 
 ### Patch Changes
