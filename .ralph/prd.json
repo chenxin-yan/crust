@@ -200,7 +200,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "The spinner is unique among prompts — it wraps an async function rather than collecting user input. It does NOT use raw mode or keypress handling. Write to stderr like other prompts. The built-in spinner sets are inspired by gum/cli-spinners. Use setInterval (not requestAnimationFrame). The generic T flows through so the task's return type becomes the spinner's return type. Always cleanup (clearInterval, show cursor) in a finally block.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Finalize barrel exports, add integration tests, and verify full build pipeline",

@@ -397,3 +397,48 @@
 - The `calculateScrollOffset` function is now duplicated in `select.ts`, `multiselect.ts`, and `filter.ts`. If a future refactor is desired, it could be extracted to `utils.ts`, but the duplication is minor and keeps modules self-contained.
 - All 10 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35, fuzzy: 20, filter: 27 = 215 total). Note: 214 reported by runner due to test grouping.
 - The barrel exports are organized: Types section includes `FuzzyMatchResult` and `FuzzyFilterResult`, Prompts section includes `filter` and `FilterOptions`, Utilities section includes `fuzzyMatch` and `fuzzyFilter`.
+
+---
+
+## Task: Implement the spinner prompt (display spinner while running an async task)
+
+### Completed
+
+- Created `packages/prompts/src/spinner.ts` with `spinner<T>()` function, `SpinnerOptions<T>` interface, and `SpinnerType` type
+- Implemented 4 built-in spinner frame sets: `dots` (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏), `line` (-\|/), `arc` (◐◓◑◒), `bounce` (⠁⠂⠄⡀⢀⠠⠐⠈)
+- Implemented custom spinner support via `{ frames: string[]; interval: number }` object
+- Implemented spinner rendering with `setInterval` frame cycling, writing to stderr
+- Implemented success indicator (`✔` green) and error indicator (`✖` red) on task completion/failure
+- Implemented cursor visibility management (hide on start, show on cleanup)
+- Implemented cleanup in both success and error paths (clearInterval, show cursor)
+- Error re-throws the original error after cleanup
+- The spinner does NOT use raw mode or keypress handling — it is non-interactive (output only)
+- Updated barrel exports in `src/index.ts` with `spinner`, `SpinnerOptions`, `SpinnerType`
+- Wrote 23 unit tests in `src/spinner.test.ts` covering: task result (4), task error (2), stderr output (7), animation frames (6), cleanup (4)
+- All 237 tests pass across 11 test files, type-check clean, Biome clean
+- Build produces `index.js` (32.65KB) + `index.d.ts` (25.59KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/spinner.ts` (new)
+- `packages/prompts/src/spinner.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added spinner exports)
+
+### Decisions
+
+- The spinner does not use `runPrompt` from `renderer.ts` — it is a standalone implementation since it has fundamentally different behavior (non-interactive, no raw mode, no keypress handling, uses `setInterval` animation)
+- Built-in spinner frame sets are stored in a `BUILTIN_SPINNERS` record with `frames` and `interval` properties. Default is `dots` with 80ms interval
+- `SpinnerType` is a union of string literals (`"dots" | "line" | "arc" | "bounce"`) and a custom object type `{ frames: string[]; interval: number }`
+- Success uses `✔` (U+2714) and error uses `✖` (U+2716) — common terminal symbols for pass/fail
+- Frame rendering uses ANSI erase-line (`ESC[2K`) + carriage return (`\r`) to overwrite in place rather than cursor-up, since the spinner is always a single line
+- Final render (success/error) appends `\n` to move cursor to next line after the spinner line is complete
+- No `initial` value short-circuit — spinner always runs the task (unlike input prompts). There is no interactive UI to skip.
+
+### Notes for Future Agent
+
+- All prompt types are now implemented: `input`, `password`, `confirm`, `select`, `multiselect`, `filter`, `spinner`
+- The next task (Task 11) is the finalization task: review barrel exports, add integration tests, verify full build pipeline
+- The barrel exports now include: `spinner`, `SpinnerOptions` (type), `SpinnerType` (type) in the Prompts section
+- All 11 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35, fuzzy: 20, filter: 27, spinner: 23 = 238 total). Note: 237 reported by runner due to test grouping.
+- The spinner is the only prompt that doesn't support `initial` short-circuit since it wraps an async task rather than collecting user input
