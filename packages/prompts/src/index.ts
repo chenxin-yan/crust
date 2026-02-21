@@ -13,6 +13,7 @@ export type {
 	ValidateFn,
 	ValidateResult,
 } from "./types.ts";
+export type { NormalizedChoice } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -41,3 +42,11 @@ export type { InputOptions } from "./input.ts";
 export { input } from "./input.ts";
 export type { PasswordOptions } from "./password.ts";
 export { password } from "./password.ts";
+export type { SelectOptions } from "./select.ts";
+export { select } from "./select.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ────────────────────────────────────────────────────────────────────────────
+
+export { normalizeChoices } from "./utils.ts";

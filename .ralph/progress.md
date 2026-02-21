@@ -254,3 +254,50 @@
 - For select prompt: extract `normalizeChoices` utility into a shared `utils.ts` file. Both multiselect and filter will also need it.
 - The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is now consistent across input, password, and confirm tests.
 - All 5 test files pass together (theme: 14, renderer: 16+4, input: 23, password: 20, confirm: 23 = 100 total).
+
+---
+
+## Task: Implement the select prompt (single selection from a list of choices)
+
+### Completed
+
+- Created `packages/prompts/src/utils.ts` with `normalizeChoices<T>()` utility and `NormalizedChoice<T>` interface — shared helper for converting `Choice<T>[]` (string or object) into a uniform `{ label, value, hint? }[]` format
+- Created `packages/prompts/src/select.ts` with `select<T>()` function and `SelectOptions<T>` interface
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided
+- Implemented `default` value: sets initial cursor position to the matching choice via `findIndex`
+- Implemented Up/Down and k/j vim-style navigation with wrapping at list boundaries
+- Implemented viewport scrolling with `calculateScrollOffset()`: when choices exceed `maxVisible` (default 10), only a window is rendered with `...` scroll indicators at top/bottom
+- Implemented render function with prefix symbol `?`, cursor indicator `>`, theme-styled active/inactive items, hint text support, and scroll indicators
+- Implemented `renderSubmitted` showing the selected label in success color
+- Updated barrel exports in `src/index.ts` with `select`, `SelectOptions`, `NormalizedChoice`, `normalizeChoices` in Prompts and Utilities sections
+- Wrote 6 unit tests in `src/utils.test.ts` for `normalizeChoices`: string conversion, object passthrough, mixed types, empty array, hint preservation
+- Wrote 27 unit tests in `src/select.test.ts` covering: initial value (2), default cursor position (3), navigation with arrows/vim keys/wrapping (7), choice types with strings/objects/hints (3), rendering (5), viewport scrolling (5), non-TTY behavior (2)
+- All 133 tests pass across 7 test files, type-check clean, Biome clean
+- Build produces `index.js` (16.44KB) + `index.d.ts` (15.66KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/utils.ts` (new)
+- `packages/prompts/src/utils.test.ts` (new)
+- `packages/prompts/src/select.ts` (new)
+- `packages/prompts/src/select.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added select, utils exports)
+
+### Decisions
+
+- Extracted `normalizeChoices` into `src/utils.ts` (not inline in select) since multiselect and filter prompts will also need it. The `NormalizedChoice<T>` interface is also exported for reuse.
+- `calculateScrollOffset` is a pure function that adjusts scroll offset when cursor moves above/below the viewport — keeps scrolling logic isolated and testable.
+- `createHandleKey` is a factory that closes over `maxVisible` — the handler itself is synchronous since select has no async validation.
+- Cursor wraps: moving up from first item goes to last, moving down from last goes to first. Scroll offset adjusts accordingly.
+- Default `maxVisible` is 10 — a reasonable number for most terminal sizes. Configurable via `options.maxVisible`.
+- Scroll indicators use `"..."` styled with `theme.hint` (dim) to match the overall aesthetic.
+- The `>` cursor indicator is styled with `theme.cursor` (cyan by default), and active items use `theme.selected` (yellow). Non-active items are indented 2 spaces (no cursor) and use `theme.unselected` (dim).
+
+### Notes for Future Agent
+
+- `normalizeChoices` from `src/utils.ts` is ready for reuse by multiselect (Task 8) and filter (Task 9). Import as `import { normalizeChoices } from "./utils.ts"`.
+- The `NormalizedChoice<T>` type is exported from both `utils.ts` and the barrel. Multiselect's state will need `selected: Set<number>` in addition to the cursor/choices/scrollOffset from select.
+- The `calculateScrollOffset` function in `select.ts` is private but could be extracted to `utils.ts` if multiselect/filter need the same scrolling logic. Currently it's simple enough to duplicate or re-implement.
+- The viewport scrolling pattern: render only `state.choices.slice(scrollOffset, scrollOffset + maxVisible)`, show `...` above when `scrollOffset > 0`, show `...` below when `scrollOffset + maxVisible < total`.
+- All 7 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27 = 133 total).
