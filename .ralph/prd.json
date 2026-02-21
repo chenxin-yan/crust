@@ -93,7 +93,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "Password is essentially input with masked rendering. Reuse as much of the input implementation as possible — consider extracting shared text-editing logic into a helper if it reduces duplication. The mask character should be configurable but default to '*'. After submit, do NOT display the actual value length to prevent shoulder-surfing. The input prompt's `createHandleKey` in `src/input.ts` implements all the text-editing keypress logic (backspace, delete, left/right, home/end, printable char insertion). The password prompt can reuse this exact handler and only replace the render function. The `InputState` shape (`value`, `cursorPos`, `error`) is also directly reusable. See `input.ts` for the prefix symbol `?` and cursor character `│` (U+2502) conventions.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the confirm prompt (yes/no boolean confirmation)",
