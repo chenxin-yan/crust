@@ -49,6 +49,7 @@ export {
 	white as whiteCode,
 	yellow as yellowCode,
 } from "./ansiCodes.ts";
+export { resolveCapability } from "./capability.ts";
 // Style primitives — Colors
 export {
 	// Background
@@ -86,7 +87,7 @@ export {
 	white,
 	yellow,
 } from "./colors.ts";
-
+export { createStyle, style } from "./createStyle.ts";
 // Style primitives — Modifiers
 export {
 	bold,
@@ -99,11 +100,14 @@ export {
 } from "./modifiers.ts";
 // Style engine
 export { applyStyle, composeStyles } from "./styleEngine.ts";
-
 // Capability detection
-// export type { ColorMode, StyleOptions } from "./types.ts";
-// export { resolveCapability } from "./capability.ts";
-// export { createStyle } from "./createStyle.ts";
+export type {
+	CapabilityOverrides,
+	ColorMode,
+	StyleFn,
+	StyleInstance,
+	StyleOptions,
+} from "./types.ts";
 
 // Text utilities
 // export { stripAnsi } from "./text/stripAnsi.ts";
