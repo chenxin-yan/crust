@@ -4,7 +4,8 @@
 	"scripts": {
 		"build": "turbo run build --filter='./packages/*'",
 		"build:docs": "turbo run build --filter='./apps/docs'",
-		"dev": "turbo run dev",
+		"dev": "turbo run dev --filter='./packages/*'",
+		"dev:docs": "turbo run dev --filter='./apps/docs'",
 		"check": "biome check",
 		"check:types": "turbo run check:types",
 		"test": "turbo run test",
