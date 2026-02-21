@@ -100,6 +100,13 @@ export {
 } from "./modifiers.ts";
 // Style engine
 export { applyStyle, composeStyles } from "./styleEngine.ts";
+export { center, padEnd, padStart } from "./text/pad.ts";
+
+// Text utilities
+export { stripAnsi } from "./text/stripAnsi.ts";
+export { visibleWidth } from "./text/width.ts";
+export type { WrapOptions } from "./text/wrap.ts";
+export { wrapText } from "./text/wrap.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
@@ -108,12 +115,6 @@ export type {
 	StyleInstance,
 	StyleOptions,
 } from "./types.ts";
-
-// Text utilities
-// export { stripAnsi } from "./text/stripAnsi.ts";
-// export { visibleWidth } from "./text/width.ts";
-// export { wrapText } from "./text/wrap.ts";
-// export { padStart, padEnd, center } from "./text/pad.ts";
 
 // Block helpers
 // export { unorderedList, orderedList, taskList } from "./blocks/lists.ts";
