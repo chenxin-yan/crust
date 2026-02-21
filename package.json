@@ -9,8 +9,9 @@
 		"check:types": "turbo run check:types",
 		"test": "turbo run test",
 		"changeset": "changeset",
-		"version-packages": "changeset version",
-		"release": "changeset publish"
+		"packages:version": "changeset version && bun update",
+		"packages:release": "bun run publish-packages && changeset tag",
+		"packages:publish": "for dir in packages/*; do (cd \"$dir\" && bun publish --access public --no-git-checks || true); done"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.29.8",
