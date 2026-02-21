@@ -1,11 +1,11 @@
 import { CrustError } from "./errors.ts";
 import type {
 	ArgsDef,
-	CheckFlagAliasCollisions,
-	CheckVariadicArgs,
 	Command,
 	CommandDef,
 	FlagsDef,
+	ValidateFlagAliases,
+	ValidateVariadicArgs,
 } from "./types.ts";
 
 /**
@@ -41,8 +41,8 @@ export function defineCommand<
 	const F extends FlagsDef = FlagsDef,
 >(
 	config: CommandDef<A, F> & {
-		args?: A & CheckVariadicArgs<A>;
-		flags?: F & CheckFlagAliasCollisions<F>;
+		args?: ValidateVariadicArgs<A>;
+		flags?: ValidateFlagAliases<F>;
 	},
 ): Command<A, F> {
 	// Validate required meta.name
@@ -65,7 +65,7 @@ export function defineCommand<
 		flags: config.flags
 			? (Object.fromEntries(
 					Object.entries(config.flags).map(([k, v]) => [k, { ...v }]),
-				) as F)
+				) as unknown as F)
 			: ({} as F),
 		...(config.subCommands && {
 			subCommands: { ...config.subCommands },

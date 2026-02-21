@@ -176,7 +176,7 @@ export type FlagDef =
 export type FlagsDef = Record<string, FlagDef>;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Flag alias collision detection (compile-time)
+// Flag alias collision detection (compile-time, per-flag granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Extract alias string literals from a single FlagDef */
@@ -189,16 +189,6 @@ type ExtractAliases<F extends FlagDef> = F extends { alias: infer A }
 	: never;
 
 /**
- * Collects all alias literals across a FlagsDef, then intersects with `keyof F`.
- * Resolves to `never` when no alias matches a flag name, or the colliding
- * name(s) when a match exists.
- */
-type FlagAliasNameCollision<F extends FlagsDef> = {
-	[K in keyof F & string]: ExtractAliases<F[K]>;
-}[keyof F & string] &
-	keyof F;
-
-/**
  * Collects aliases from every flag *except* flag K.
  * Used to detect alias→alias duplicates across different flags.
  */
@@ -207,70 +197,63 @@ type AliasesExcluding<F extends FlagsDef, K extends keyof F & string> = {
 }[Exclude<keyof F & string, K>];
 
 /**
- * Resolves to the alias literal(s) that appear in more than one flag's
- * alias list, or `never` when no duplicate aliases exist.
+ * Per-flag collision detection: resolves to the alias literal(s) of flag K
+ * that collide with another flag's name or another flag's alias,
+ * or `never` when K's aliases are all unique.
  */
-type FlagAliasAliasCollision<F extends FlagsDef> = {
-	[K in keyof F & string]: ExtractAliases<F[K]> & AliasesExcluding<F, K>;
-}[keyof F & string];
+type CollidingAliases<F extends FlagsDef, K extends keyof F & string> =
+	| (ExtractAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
+	| (ExtractAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
 /**
- * Compile-time check that no flag alias collides with another flag's name
- * or another flag's alias.
+ * Per-flag validation mapped type. Resolves to `F` when no collisions exist.
+ * For flags with colliding aliases, adds a branded error property to the
+ * specific flag definition, causing a type error on that flag's value:
  *
- * - Resolves to `unknown` (no-op intersection) when no collision exists.
- * - Resolves to a descriptive error tuple when a collision is found,
- *   causing a type error on the `flags` property.
+ * ```
+ * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; alias: "minify" }'
+ *   but required in type
+ *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"minify\" collides with another flag name or alias" }'.
+ * ```
  */
-export type CheckFlagAliasCollisions<F extends FlagsDef> =
-	FlagAliasNameCollision<F> extends never
-		? FlagAliasAliasCollision<F> extends never
-			? unknown
-			: [
-					"ERROR: Duplicate flag alias across different flags. Colliding alias(es):",
-					FlagAliasAliasCollision<F>,
-				]
-		: [
-				"ERROR: Flag alias collides with a flag name. Colliding name(s):",
-				FlagAliasNameCollision<F>,
-			];
+export type ValidateFlagAliases<F extends FlagsDef> = {
+	[K in keyof F & string]: CollidingAliases<F, K> extends never
+		? F[K]
+		: F[K] & {
+				readonly FIX_ALIAS_COLLISION: `Alias "${CollidingAliases<F, K>}" collides with another flag name or alias`;
+			};
+};
 
 // ────────────────────────────────────────────────────────────────────────────
-// Variadic arg validation (compile-time)
+// Variadic arg validation (compile-time, per-arg granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Checks whether any element in `Init` (all elements except the last) has
- * `variadic: true`. Used by {@link CheckVariadicArgs} to ensure only the
- * last positional arg can be variadic.
+ * Per-arg validation tuple type. Resolves to `A` when the constraint is
+ * satisfied (only the last arg is variadic). For non-last args that have
+ * `variadic: true`, adds a branded error property to the specific arg:
+ *
+ * ```
+ * Property 'FIX_VARIADIC_POSITION' is missing in type '{ name: "files"; ... variadic: true }'
+ *   but required in type
+ *     '{ readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }'.
+ * ```
  */
-type InitHasVariadic<T extends readonly ArgDef[]> = T extends readonly [
-	infer Head,
+export type ValidateVariadicArgs<A extends ArgsDef> = A extends readonly [
+	infer Head extends ArgDef,
 	...infer Tail extends readonly ArgDef[],
 ]
-	? Head extends { variadic: true }
-		? true
-		: InitHasVariadic<Tail>
-	: false;
-
-/**
- * Compile-time check that only the last positional arg has `variadic: true`.
- *
- * Since args are now an ordered tuple, we can split it into `[...Init, Last]`
- * and verify that no element in `Init` is variadic.
- *
- * - Resolves to `unknown` (no-op intersection) when the constraint is satisfied.
- * - Resolves to a descriptive error string when a non-last arg is variadic,
- *   causing a type error on the `args` property.
- */
-export type CheckVariadicArgs<A extends ArgsDef> = A extends readonly [
-	...infer Init extends readonly ArgDef[],
-	ArgDef,
-]
-	? InitHasVariadic<Init> extends true
-		? "ERROR: Only the last positional argument can be variadic"
-		: unknown
-	: unknown;
+	? Tail extends readonly [ArgDef, ...ArgDef[]]
+		? Head extends { variadic: true }
+			? readonly [
+					Head & {
+						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+					},
+					...ValidateVariadicArgs<readonly [...Tail]>,
+				]
+			: readonly [Head, ...ValidateVariadicArgs<readonly [...Tail]>]
+		: readonly [Head]
+	: A;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

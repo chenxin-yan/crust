@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 import type {
 	ArgDef,
 	ArgsDef,
-	CheckFlagAliasCollisions,
-	CheckVariadicArgs,
 	Command,
 	CommandContext,
 	CommandMeta,
@@ -11,6 +9,8 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	ValidateFlagAliases,
+	ValidateVariadicArgs,
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -575,119 +575,152 @@ describe("CommandContext interface", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// CheckFlagAliasCollisions type-level tests
+// ValidateFlagAliases type-level tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("CheckFlagAliasCollisions type inference", () => {
-	it("resolves to unknown when no aliases collide with flag names", () => {
+describe("ValidateFlagAliases type inference", () => {
+	it("resolves to identity when no aliases collide with flag names", () => {
 		type Flags = {
 			output: { type: "string"; alias: ["o"] };
 			verbose: { type: "boolean"; alias: "v" };
 		};
-		type Result = CheckFlagAliasCollisions<Flags>;
-		type _check = Expect<Equal<Result, unknown>>;
+		type Result = ValidateFlagAliases<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to unknown when no aliases are defined", () => {
+	it("resolves to identity when no aliases are defined", () => {
 		type Flags = {
 			verbose: { type: "boolean" };
 			port: { type: "number" };
 		};
-		type Result = CheckFlagAliasCollisions<Flags>;
-		type _check = Expect<Equal<Result, unknown>>;
+		type Result = ValidateFlagAliases<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to error tuple when a long alias shadows a flag name", () => {
+	it("brands only the offending flag when a long alias shadows a flag name", () => {
 		type Flags = {
 			out: { type: "string" };
 			output: { type: "string"; alias: ["o", "out"] };
 		};
-		type Result = CheckFlagAliasCollisions<Flags>;
-		type _check = Expect<
+		type Result = ValidateFlagAliases<Flags>;
+		// "out" flag is innocent — its name was shadowed, not its alias
+		type _checkOut = Expect<Equal<Result["out"], Flags["out"]>>;
+		// "output" flag gets the branded error
+		type _checkOutput = Expect<
 			Equal<
-				Result,
-				[
-					"ERROR: Flag alias collides with a flag name. Colliding name(s):",
-					"out",
-				]
+				Result["output"],
+				Flags["output"] & {
+					readonly FIX_ALIAS_COLLISION: 'Alias "out" collides with another flag name or alias';
+				}
 			>
 		>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to error tuple when two flags share the same alias", () => {
+	it("brands both flags when two flags share the same alias", () => {
 		type Flags = {
 			verbose: { type: "boolean"; alias: "v" };
 			version: { type: "boolean"; alias: "v" };
 		};
-		type Result = CheckFlagAliasCollisions<Flags>;
-		type _check = Expect<
+		type Result = ValidateFlagAliases<Flags>;
+		type _checkVerbose = Expect<
 			Equal<
-				Result,
-				[
-					"ERROR: Duplicate flag alias across different flags. Colliding alias(es):",
-					"v",
-				]
+				Result["verbose"],
+				Flags["verbose"] & {
+					readonly FIX_ALIAS_COLLISION: 'Alias "v" collides with another flag name or alias';
+				}
+			>
+		>;
+		type _checkVersion = Expect<
+			Equal<
+				Result["version"],
+				Flags["version"] & {
+					readonly FIX_ALIAS_COLLISION: 'Alias "v" collides with another flag name or alias';
+				}
 			>
 		>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to unknown for single-char aliases that don't match flag names", () => {
+	it("resolves to identity for single-char aliases that don't match flag names", () => {
 		type Flags = {
 			verbose: { type: "boolean"; alias: "v" };
 			port: { type: "number"; alias: "p" };
 			output: { type: "string"; alias: "o" };
 		};
-		type Result = CheckFlagAliasCollisions<Flags>;
-		type _check = Expect<Equal<Result, unknown>>;
+		type Result = ValidateFlagAliases<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
 
 		expect(true).toBe(true);
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// CheckVariadicArgs type-level tests
+// ValidateVariadicArgs type-level tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("CheckVariadicArgs type inference", () => {
-	it("resolves to unknown when variadic is the last arg", () => {
+describe("ValidateVariadicArgs type inference", () => {
+	it("resolves to identity when variadic is the last arg", () => {
 		type Args = readonly [
 			{ name: "name"; type: "string"; required: true },
 			{ name: "files"; type: "string"; variadic: true },
 		];
-		type Result = CheckVariadicArgs<Args>;
-		type _check = Expect<Equal<Result, unknown>>;
+		type Result = ValidateVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, Args>>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to unknown when no args are variadic", () => {
+	it("resolves to identity when no args are variadic", () => {
 		type Args = readonly [
 			{ name: "name"; type: "string"; required: true },
 			{ name: "port"; type: "number"; default: 3000 },
 		];
-		type Result = CheckVariadicArgs<Args>;
-		type _check = Expect<Equal<Result, unknown>>;
+		type Result = ValidateVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, Args>>;
 
 		expect(true).toBe(true);
 	});
 
-	it("resolves to error string when a non-last arg is variadic", () => {
+	it("brands the specific non-last arg that is variadic", () => {
 		type Args = readonly [
 			{ name: "files"; type: "string"; variadic: true },
 			{ name: "name"; type: "string"; required: true },
 		];
-		type Result = CheckVariadicArgs<Args>;
-		type _check = Expect<
-			Equal<Result, "ERROR: Only the last positional argument can be variadic">
+		type Result = ValidateVariadicArgs<Args>;
+		// First arg (variadic, non-last) gets branded error
+		type _checkFirst = Expect<
+			Equal<
+				Result[0],
+				Args[0] & {
+					readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+				}
+			>
 		>;
+		// Second arg (last) is unchanged
+		type _checkSecond = Expect<Equal<Result[1], Args[1]>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to identity for a single arg", () => {
+		type Args = readonly [{ name: "file"; type: "string"; variadic: true }];
+		type Result = ValidateVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, Args>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to identity for empty args", () => {
+		type Args = readonly [];
+		type Result = ValidateVariadicArgs<Args>;
+		type _check = Expect<Equal<Result, Args>>;
 
 		expect(true).toBe(true);
 	});

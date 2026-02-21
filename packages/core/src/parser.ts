@@ -39,7 +39,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	if (!flagsDef) return { options, aliasToName };
 
 	// Runtime alias collision check — mirrors the compile-time
-	// CheckFlagAliasCollisions<F> type (which catches both alias→flag-name
+	// ValidateFlagAliases<F> type (which catches both alias→flag-name
 	// and alias→alias collisions). Kept as defense-in-depth against type
 	// erasure (dynamic construction, `as any` casts, widened generics).
 	const aliasRegistry = new Map<string, string>();
