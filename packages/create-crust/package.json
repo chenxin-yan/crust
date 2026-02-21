@@ -24,7 +24,8 @@
 		"crust"
 	],
 	"files": [
-		"dist"
+		"dist",
+		"templates"
 	],
 	"publishConfig": {
 		"access": "public"
@@ -37,6 +38,9 @@
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
+	},
+	"dependencies": {
+		"@crustjs/create": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

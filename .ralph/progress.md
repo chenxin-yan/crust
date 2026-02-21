@@ -246,3 +246,58 @@
 - The e2e test pattern can be reused for the dogfooding task (task 7) to verify `create-crust` produces the same output after refactoring
 - For the dogfooding task: `create-crust` templates should move from string constants to real files in `packages/create-crust/templates/base/`, using `import.meta.url` for resolution
 - Remember to add `templates/` to the `files` field in `packages/create-crust/package.json` so templates are included in the published package
+
+---
+
+## Task: Refactor create-crust to use @crustjs/create as dogfooding validation
+
+### Completed
+
+- Added `@crustjs/create` as a `dependency` in `packages/create-crust/package.json` (workspace:*)
+- Created `packages/create-crust/templates/base/` directory with real template files extracted from the old string-constant generators:
+  - `package.json` with `{{name}}`, `{{description}}`, `{{author}}` interpolation placeholders
+  - `tsconfig.json` (static, no interpolation)
+  - `src/cli.ts` with `{{name}}` interpolation placeholder
+  - `_gitignore` with `node_modules` and `dist` entries (renamed to `.gitignore` via dotfile convention)
+- Refactored `packages/create-crust/src/index.ts`:
+  - Removed `templatePackageJson()`, `templateTsconfig()`, `templateCliTs()` string generator functions
+  - Removed the old local `scaffold()` function and `ScaffoldOptions` interface
+  - Replaced with `scaffold()` from `@crustjs/create` using `import.meta.url` for template resolution
+  - Replaced manual `Bun.spawn(["bun", "install"])` with `runSteps([{ type: "install" }], resolvedDir)`
+  - Kept all interactive prompt logic (readline) unchanged
+- Updated `packages/create-crust/package.json` `files` field to include both `dist` and `templates`
+- Updated `packages/create-crust/tsconfig.json` to exclude `templates` directory from type checking
+- Updated `packages/create-crust/tests/scaffold.test.ts`:
+  - Tests now use `scaffold()` from `@crustjs/create` with the actual templates
+  - Simulated `import.meta.url` via `pathToFileURL` for template path resolution
+  - Updated the empty description/author test to expect empty strings instead of `undefined` (behavioral change from template interpolation)
+  - Added new test for `.gitignore` creation via dotfile renaming
+- All 10 create-crust tests pass, all 58 @crustjs/create tests pass, full monorepo test suite passes
+- Type check passes for all packages, build succeeds, Biome lint/format passes
+
+### Files Changed
+
+- `packages/create-crust/package.json` (modified — added @crustjs/create dependency, updated files field)
+- `packages/create-crust/tsconfig.json` (modified — added templates to exclude)
+- `packages/create-crust/src/index.ts` (rewritten — uses @crustjs/create scaffold/runSteps)
+- `packages/create-crust/tests/scaffold.test.ts` (rewritten — tests use @crustjs/create scaffold)
+- `packages/create-crust/templates/base/package.json` (new)
+- `packages/create-crust/templates/base/tsconfig.json` (new)
+- `packages/create-crust/templates/base/src/cli.ts` (new)
+- `packages/create-crust/templates/base/_gitignore` (new)
+
+### Decisions
+
+- Template `package.json` always includes `description` and `author` fields (even when empty string) — the old code conditionally omitted them. This is a minor behavioral change that simplifies the template and is standard for scaffolding tools.
+- `scaffold()` is called with `conflict: "overwrite"` since the existing prompt already handles the "directory exists" confirmation flow before scaffold is called.
+- `bunup.config.ts` was not modified — templates are static files shipped via the `files` field in package.json, not bundled code.
+- `@crustjs/create` is a runtime `dependency` (not `devDependency`) since it's used at runtime by the create-crust CLI binary.
+- Template files in `templates/base/` are excluded from TypeScript checking via tsconfig `exclude` since they contain placeholder imports (`@crustjs/crust`) that aren't available in the monorepo.
+
+### Notes for Future Agent
+
+- All 7 tasks in `prd.json` are now complete.
+- The `create-crust` package successfully dogfoods `@crustjs/create`'s `scaffold()` and `runSteps()` APIs.
+- The template resolution uses `import.meta.url` from `src/index.ts` with the relative path `"../templates/base"` — this works both in dev (running from src/) and production (running from dist/) because templates are a sibling directory.
+- If new template files are needed, add them to `packages/create-crust/templates/base/` — no code changes needed, `scaffold()` will automatically pick them up.
+- The interactive prompt logic (readline) is unchanged and ready to be migrated to `@crustjs/prompts` when that package is created.

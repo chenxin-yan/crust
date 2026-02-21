@@ -76,6 +76,9 @@
       "bin": {
         "create-crust": "dist/index.js",
       },
+      "dependencies": {
+        "@crustjs/create": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",

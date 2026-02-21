@@ -135,7 +135,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "This is the dogfooding task — it validates that @crustjs/create works for a real use case. The key insight is that template files move from string constants to real files on disk in a templates/ directory. The interactive prompts (readline) stay as-is since @crustjs/prompts doesn't exist yet. Make sure the templates directory is included in the published package by adding it to the files field in package.json. The existing scaffold() function in create-crust and the one from @crustjs/create have different signatures — make sure to update all call sites.",
-			"passed": false
+			"passed": true
 		}
 	]
 }
