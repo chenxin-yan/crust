@@ -56,7 +56,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "Use node:fs (readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync) and node:path (resolve, join, relative, dirname). Template resolution must handle import.meta.url correctly — use fileURLToPath(new URL(options.template, options.importMeta)) pattern. Integration tests should create temp directories with fixture templates, run scaffold, and assert output. Clean up temp dirs in afterEach. The second scaffold call for composability should use conflict: 'overwrite' since files from the first call already exist.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement standalone utility functions: detectPackageManager, isGitInstalled, getGitUser",

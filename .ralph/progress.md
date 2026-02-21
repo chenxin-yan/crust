@@ -74,3 +74,55 @@
 - `interpolate` is the only public export from the template engine — `isBinary` is internal
 - The `scaffold()` function (task 3) should import `isBinary` from `./isBinary.ts` and `interpolate` from `./interpolate.ts` directly
 - The barrel file now has two sections: "Template Engine" and "Types" — future sections to add: Scaffold, Steps, Utilities
+
+---
+
+## Task: Implement the core scaffold() function with template copying, interpolation, dotfile renaming, and conflict resolution
+
+### Completed
+
+- Created `packages/create/src/scaffold.ts` with `async scaffold(options: ScaffoldOptions): Promise<ScaffoldResult>`
+- Implemented template path resolution using `fileURLToPath(new URL(template, importMeta))` pattern
+- Implemented recursive directory walking via `walkDir()` helper using `readdirSync`/`statSync`
+- Text files get `interpolate()` applied; binary files (detected via `isBinary`) are copied as-is
+- Implemented dotfile renaming: files starting with `_` have the leading `_` replaced with `.` (e.g., `_gitignore` -> `.gitignore`)
+- Implemented conflict resolution: `"abort"` (default) throws if dest is non-empty; `"overwrite"` proceeds
+- Returns `ScaffoldResult` with list of all written file paths relative to dest
+- Created `packages/create/tests/` directory for integration tests
+- Wrote 13 integration tests in `packages/create/tests/scaffold.test.ts` covering:
+  - Basic template scaffolding with text files and interpolation
+  - Dotfile renaming (`_gitignore` -> `.gitignore`) including in subdirectories
+  - Conflict abort (throws on non-empty dest)
+  - Default conflict behavior is abort
+  - Conflict overwrite (proceeds and overwrites files)
+  - Binary file passthrough (copied without interpolation)
+  - Templates with no interpolation placeholders
+  - Scaffolding into non-existent dest (creates it)
+  - Empty existing directory with abort is allowed
+  - Composability: calling scaffold twice layers files correctly
+  - Nested directory structure preservation
+  - File listing in result
+- Exported `scaffold` from `src/index.ts` under a new "Scaffold" section
+- All 32 tests pass (19 existing + 13 new), type check passes, build succeeds, Biome lint/format passes
+
+### Files Changed
+
+- `packages/create/src/scaffold.ts` (new)
+- `packages/create/tests/scaffold.test.ts` (new)
+- `packages/create/src/index.ts` (modified — added Scaffold section with `scaffold` export)
+
+### Decisions
+
+- `scaffold()` is async even though current implementation uses sync fs operations — this matches the type signature in `types.ts` and allows future migration to async fs without breaking changes
+- Helper functions (`walkDir`, `renameDotfile`, `isNonEmptyDir`) are module-private, not exported
+- Dotfile renaming only affects the filename component, not parent directory names
+- An empty existing directory is NOT considered a conflict — only non-empty directories trigger the abort
+- The composability test uses `conflict: "overwrite"` for the second scaffold call since files from the first call already exist
+- Template path can be absolute (resolved via `new URL(template, importMeta)`) — tests use absolute paths directly
+
+### Notes for Future Agent
+
+- The barrel file now has three sections: "Template Engine", "Scaffold", and "Types" — still need "Steps" and "Utilities"
+- Integration tests create temp directories with unique names and clean up in `afterEach` — follow this pattern for future test files
+- The `scaffold()` function uses `dirname()` trick with `mkdirSync({ recursive: true })` to create nested output directories
+- For the dogfooding task (task 7), `create-crust` will need to use `import.meta.url` and a relative path to its `templates/` directory
