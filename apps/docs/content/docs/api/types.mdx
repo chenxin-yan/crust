@@ -7,9 +7,27 @@ Complete reference of all types exported from `@crustjs/core`.
 
 ## Command Types
 
+### `CommandDef<A, F>`
+
+The command definition input shape accepted by `defineCommand`.
+
+```ts
+interface CommandDef<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
+  meta: CommandMeta;
+  args?: A;
+  flags?: F;
+  subCommands?: Record<string, AnyCommand>;
+  preRun?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
+  run?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
+  postRun?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
+}
+```
+
+`NoInfer` ensures `A`/`F` are inferred from `args`/`flags` definitions (data properties), not from callback parameter annotations.
+
 ### `Command<A, F>`
 
-The unified command shape. Both command definitions and resolved commands use this interface.
+The frozen command shape returned by `defineCommand` and used at runtime.
 
 ```ts
 interface Command<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
@@ -277,21 +295,22 @@ interface RunOptions {
 
 ## Compile-Time Validation Types
 
-### `CheckVariadicArgs<A>`
+### `ValidateVariadicArgs<A>`
 
-Resolves to `unknown` if valid, or an error string if a non-last argument has `variadic: true`:
+Per-arg validation used by `defineCommand`. Enforces that only the last positional argument can use `variadic: true`.
 
 ```ts
-type CheckVariadicArgs<A extends ArgsDef> = /* ... */;
-// On error: "ERROR: Only the last positional argument can be variadic"
+type ValidateVariadicArgs<A extends ArgsDef> = /* ... */;
+// On error, the offending arg gets a branded property:
+// { readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }
 ```
 
-### `CheckFlagAliasCollisions<F>`
+### `ValidateFlagAliases<F>`
 
-Resolves to `unknown` if valid, or an error tuple if aliases collide:
+Per-flag validation used by `defineCommand`. Enforces that aliases do not collide with other flag names or aliases.
 
 ```ts
-type CheckFlagAliasCollisions<F extends FlagsDef> = /* ... */;
-// On error: ["ERROR: Flag alias collides with a flag name. Colliding name(s):", ...]
-// On error: ["ERROR: Duplicate flag alias across different flags. Colliding alias(es):", ...]
+type ValidateFlagAliases<F extends FlagsDef> = /* ... */;
+// On error, the offending flag gets a branded property:
+// { readonly FIX_ALIAS_COLLISION: `Alias "${...}" collides with another flag name or alias` }
 ```

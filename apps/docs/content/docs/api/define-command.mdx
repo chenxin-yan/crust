@@ -12,9 +12,9 @@ function defineCommand<
   const A extends ArgsDef = ArgsDef,
   const F extends FlagsDef = FlagsDef,
 >(
-  config: Command<A, F> & {
-    args?: A & CheckVariadicArgs<A>;
-    flags?: F & CheckFlagAliasCollisions<F>;
+  config: CommandDef<A, F> & {
+    args?: ValidateVariadicArgs<A>;
+    flags?: ValidateFlagAliases<F>;
   },
 ): Command<A, F>;
 ```
@@ -48,12 +48,12 @@ A frozen `Command<A, F>` object. The returned object is immutable via `Object.fr
 
 ## Compile-Time Checks
 
-`defineCommand` performs two compile-time validations via conditional types:
+`defineCommand` performs two compile-time validations with per-item error targeting:
 
-1. **`CheckVariadicArgs<A>`** — Ensures only the last positional argument has `variadic: true`
-2. **`CheckFlagAliasCollisions<F>`** — Ensures no flag alias collides with another flag name or alias
+1. **`ValidateVariadicArgs<A>`** — Ensures only the last positional argument has `variadic: true`
+2. **`ValidateFlagAliases<F>`** — Ensures no flag alias collides with another flag name or alias
 
-These resolve to error tuples at compile time, producing TypeScript errors if violated.
+On error, these types add branded properties (`FIX_VARIADIC_POSITION` or `FIX_ALIAS_COLLISION`) to the specific offending arg/flag so the TypeScript squiggle appears on the exact problematic item.
 
 ## Examples
 
