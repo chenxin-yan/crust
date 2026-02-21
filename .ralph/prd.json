@@ -74,7 +74,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "The input prompt is the simplest interactive prompt and serves as the template for all others. Test the handleKey reducer in isolation (pass mock key events, assert state changes) without needing real stdin. The cursor position should support full editing (insert anywhere, not just append). Use the theme's placeholder slot for dim placeholder text, error slot for red error messages. Use `runPrompt` from renderer.ts — create a PromptConfig with initialState, render, handleKey, and optionally renderSubmitted. Check for `initial` before calling runPrompt. For testing, mock isTTY=true, setRawMode, stderr.write, then emit keypress events on process.stdin. The handleKey can be async to support async validation.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the password prompt (masked text input)",
@@ -92,7 +92,7 @@
 				"Run 'bun run check:types' from packages/prompts to verify no type errors",
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
-			"notes": "Password is essentially input with masked rendering. Reuse as much of the input implementation as possible — consider extracting shared text-editing logic into a helper if it reduces duplication. The mask character should be configurable but default to '*'. After submit, do NOT display the actual value length to prevent shoulder-surfing.",
+			"notes": "Password is essentially input with masked rendering. Reuse as much of the input implementation as possible — consider extracting shared text-editing logic into a helper if it reduces duplication. The mask character should be configurable but default to '*'. After submit, do NOT display the actual value length to prevent shoulder-surfing. The input prompt's `createHandleKey` in `src/input.ts` implements all the text-editing keypress logic (backspace, delete, left/right, home/end, printable char insertion). The password prompt can reuse this exact handler and only replace the render function. The `InputState` shape (`value`, `cursorPos`, `error`) is also directly reusable. See `input.ts` for the prefix symbol `?` and cursor character `│` (U+2502) conventions.",
 			"passed": false
 		},
 		{

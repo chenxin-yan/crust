@@ -126,3 +126,47 @@
 - For list-style prompts, handle: up/down (and k/j), return for selection
 - The renderer automatically handles Ctrl+C (exits with code 0) — prompts don't need to handle it
 - Test pattern: mock `isTTY=true`, mock `setRawMode`, mock `stderr.write`, then emit `process.stdin.emit("keypress", char, keyObj)` to simulate user input
+
+---
+
+## Task: Implement the input prompt (single-line text input with placeholder, validation, and initial value support)
+
+### Completed
+
+- Created `packages/prompts/src/input.ts` with `input()` function and `InputOptions` interface
+- Implemented full cursor editing: insert at position, backspace, delete, left/right arrows, home/end
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided
+- Implemented `default` value: used when submitting with empty input, shown as hint `(defaultValue)` in the prompt
+- Implemented validation loop: on submit, runs `validate(value)`, shows inline error if it returns a string, continues prompting
+- Implemented async validation support
+- Implemented render function with prefix symbol, message, placeholder (dim), cursor indicator (│), default hint, and inline error display
+- Implemented `renderSubmitted` callback showing confirmed value in success color
+- Updated barrel exports in `src/index.ts` with Prompts section
+- Wrote 23 unit tests covering: initial value (2), interactive behavior (6), keypress editing (7), validation (4), non-TTY behavior (2), error rendering (2)
+- All 57 tests pass across 3 test files, type-check clean, Biome clean
+- Build produces `index.js` (7.26KB) + `index.d.ts` (8.74KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/input.ts` (new)
+- `packages/prompts/src/input.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added input exports in Prompts section)
+
+### Decisions
+
+- `handleKey` is created via a `createHandleKey` factory that closes over `validate` and `default` options — keeps the reducer pure while allowing access to prompt configuration
+- `handleKey` is async to support async `validate` functions (the renderer's `onKeypress` already awaits handleKey results)
+- Error state is cleared when the user types a new character or deletes, so the error message disappears naturally on any editing action
+- Cursor indicator uses `│` (U+2502, thin vertical bar) which renders well in most terminal fonts
+- Prefix symbol is `?` matching the clack/gum convention
+- The `renderSubmitted` function receives the `message` via closure, allowing it to display `? Message ConfirmedValue` on the final line
+- Ctrl and meta key combinations are ignored (not inserted as characters) to prevent accidental input of control characters
+
+### Notes for Future Agent
+
+- The `input` prompt is the template for `password`. The password prompt can reuse the same keypress handling but replace the render function to show mask characters instead of actual value.
+- The text-editing keypress logic (backspace, delete, left, right, home, end, printable char insertion at cursor position) is in `createHandleKey`. If significant duplication arises with password, consider extracting shared text-editing helpers into a utils file.
+- Test helpers `setupMocks`, `restoreMocks`, `pressKey`, and `tick` in `input.test.ts` are duplicated from the pattern in `renderer.test.ts`. Future prompts should follow the same pattern.
+- The barrel exports now have a "Prompts" section — future prompts (password, confirm, select, etc.) should be added to this section.
+- The `input` function signature is `input(options: InputOptions) => Promise<string>`. All prompt functions follow this async config-object pattern.
