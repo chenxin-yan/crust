@@ -76,8 +76,8 @@ bun add @crustjs/style
 | Export | Description |
 | --- | --- |
 | `defaultTheme` | Default auto-mode markdown theme |
-| `createTheme(options?)` | Create a theme with optional overrides |
-| `buildDefaultTheme(style)` | Build a default theme from a style instance |
+| `createMarkdownTheme(options?)` | Create a theme with optional overrides |
+| `buildDefaultMarkdownTheme(style)` | Build a default theme from a style instance |
 
 ### Types
 
@@ -99,7 +99,7 @@ bun add @crustjs/style
 | `MarkdownTheme` | Semantic theme contract with 30 GFM slots |
 | `PartialMarkdownTheme` | Partial override type for theme customization |
 | `ThemeSlotFn` | `(value: string) => string` theme slot function |
-| `CreateThemeOptions` | Options for `createTheme` |
+| `CreateMarkdownThemeOptions` | Options for `createMarkdownTheme` |
 
 ## Usage
 
@@ -163,7 +163,7 @@ console.log(output);
 ### Markdown Theme
 
 ```ts
-import { defaultTheme, createTheme } from "@crustjs/style";
+import { defaultTheme, createMarkdownTheme } from "@crustjs/style";
 
 // Use the default theme
 console.log(defaultTheme.heading1("Getting Started"));
@@ -171,7 +171,7 @@ console.log(defaultTheme.strong("important"));
 console.log(defaultTheme.inlineCode("bun install"));
 
 // Customize specific slots
-const custom = createTheme({
+const custom = createMarkdownTheme({
   style: { mode: "always" },
   overrides: {
     heading1: (text) => `# ${text.toUpperCase()}`,
