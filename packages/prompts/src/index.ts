@@ -19,3 +19,14 @@ export type {
 // ────────────────────────────────────────────────────────────────────────────
 
 export { createTheme, defaultTheme, getTheme, setTheme } from "./theme.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Renderer
+// ────────────────────────────────────────────────────────────────────────────
+
+export type {
+	HandleKeyResult,
+	KeypressEvent,
+	PromptConfig,
+} from "./renderer.ts";
+export { assertTTY, NonInteractiveError, runPrompt } from "./renderer.ts";
