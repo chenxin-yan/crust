@@ -40,6 +40,8 @@ export type { ConfirmOptions } from "./confirm.ts";
 export { confirm } from "./confirm.ts";
 export type { InputOptions } from "./input.ts";
 export { input } from "./input.ts";
+export type { MultiselectOptions } from "./multiselect.ts";
+export { multiselect } from "./multiselect.ts";
 export type { PasswordOptions } from "./password.ts";
 export { password } from "./password.ts";
 export type { SelectOptions } from "./select.ts";

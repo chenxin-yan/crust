@@ -301,3 +301,47 @@
 - The `calculateScrollOffset` function in `select.ts` is private but could be extracted to `utils.ts` if multiselect/filter need the same scrolling logic. Currently it's simple enough to duplicate or re-implement.
 - The viewport scrolling pattern: render only `state.choices.slice(scrollOffset, scrollOffset + maxVisible)`, show `...` above when `scrollOffset > 0`, show `...` below when `scrollOffset + maxVisible < total`.
 - All 7 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27 = 133 total).
+
+---
+
+## Task: Implement the multiselect prompt (checkbox-style multi selection from a list)
+
+### Completed
+
+- Created `packages/prompts/src/multiselect.ts` with `multiselect<T>()` function and `MultiselectOptions<T>` interface
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided (returns a copy of the array)
+- Implemented `default` value: pre-selects matching choices via `findIndex` on normalized choices
+- Implemented Space to toggle selection on current item, 'a' to toggle all, 'i' to invert selection
+- Implemented Up/Down and k/j vim-style navigation with wrapping at list boundaries
+- Implemented viewport scrolling with `calculateScrollOffset()` (duplicated from select — simple enough to not extract)
+- Implemented validation on submit: `required` (at least one), `min`, `max` constraints with inline error display
+- Implemented render function with checkbox indicators (`[ ]`/`[x]`), cursor indicator `>`, hint line showing keybindings, scroll indicators, and inline error messages
+- Implemented `renderSubmitted` showing comma-separated selected labels in success color
+- Updated barrel exports in `src/index.ts` with `multiselect` and `MultiselectOptions`
+- Wrote 35 unit tests covering: initial value (2), default value (3), Space toggle (3), navigation (6), toggle all/invert (5), validation (4), rendering (7), viewport scrolling (3), non-TTY behavior (2)
+- All 168 tests pass across 8 test files, type-check clean, Biome clean
+- Build produces `index.js` (22.17KB) + `index.d.ts` (18.49KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/multiselect.ts` (new)
+- `packages/prompts/src/multiselect.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added multiselect exports)
+
+### Decisions
+
+- Duplicated `calculateScrollOffset` from `select.ts` rather than extracting to `utils.ts` — the function is small (~15 lines) and keeps each prompt module self-contained. The filter prompt (Task 9) may want to extract it if a third copy arises.
+- `selected` state uses `ReadonlySet<number>` (indices into the choices array) for O(1) lookup/toggle and immutable state patterns. New sets are created on each toggle.
+- Error state (`error: string | null`) is cleared on any navigation or toggle action, so errors disappear naturally when the user interacts.
+- `handleKey` factory closes over validation options (`required`, `min`, `max`) — keeps the reducer pure while accessing prompt config.
+- A hint line with keybinding instructions is shown below the message: `(Space to toggle, a to toggle all, i to invert, Enter to confirm)`.
+- Toggle all (`a`) behavior: if all items are selected, deselect all; otherwise select all. This matches gum's behavior.
+- `initial` returns a copy (`[...options.initial]`) to prevent external mutation of the returned array.
+
+### Notes for Future Agent
+
+- The multiselect prompt reuses `normalizeChoices` from `utils.ts` and follows the same viewport scrolling pattern as `select.ts`.
+- For the filter prompt (Task 9): it combines text input (for query) with list navigation (for filtered results). It should reuse `normalizeChoices` from `utils.ts`. The `calculateScrollOffset` function is now duplicated in both `select.ts` and `multiselect.ts` — if filter also needs it, consider extracting to `utils.ts`.
+- The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is consistent across all interactive prompt test files.
+- All 8 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35 = 168 total).
