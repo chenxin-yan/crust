@@ -37,3 +37,6 @@ export { assertTTY, NonInteractiveError, runPrompt } from "./renderer.ts";
 
 export type { InputOptions } from "./input.ts";
 export { input } from "./input.ts";
+
+export type { PasswordOptions } from "./password.ts";
+export { password } from "./password.ts";

@@ -170,3 +170,44 @@
 - Test helpers `setupMocks`, `restoreMocks`, `pressKey`, and `tick` in `input.test.ts` are duplicated from the pattern in `renderer.test.ts`. Future prompts should follow the same pattern.
 - The barrel exports now have a "Prompts" section — future prompts (password, confirm, select, etc.) should be added to this section.
 - The `input` function signature is `input(options: InputOptions) => Promise<string>`. All prompt functions follow this async config-object pattern.
+
+---
+
+## Task: Implement the password prompt (masked text input)
+
+### Completed
+
+- Created `packages/prompts/src/password.ts` with `password()` function and `PasswordOptions` interface
+- Implemented masked rendering: characters shown as configurable mask character (default `"*"`) instead of actual value
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided
+- Implemented full cursor editing (same as input): insert at position, backspace, delete, left/right arrows, home/end
+- Implemented validation loop with inline error display (same pattern as input)
+- Implemented async validation support
+- Implemented `renderSubmitted` showing a fixed-length mask (4 characters) regardless of actual password length to prevent shoulder-surfing
+- Implemented custom mask character support via `mask` option (defaults to `"*"`)
+- Updated barrel exports in `src/index.ts` with `password` and `PasswordOptions`
+- Wrote 20 unit tests covering: initial value (2), masked rendering (5), keypress editing (8), validation (3), non-TTY behavior (2)
+- All 77 tests pass across 4 test files, type-check clean, Biome clean
+- Build produces `index.js` (10.54KB) + `index.d.ts` (10.52KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/password.ts` (new)
+- `packages/prompts/src/password.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added password exports)
+
+### Decisions
+
+- Duplicated the text-editing keypress logic from `input.ts` rather than extracting a shared helper — the duplication is minor (~50 lines) and keeps each prompt self-contained. If a third text-editing prompt arises, extraction would be warranted.
+- No `default` option for password (unlike input) — defaulting a password doesn't make semantic sense. Only `initial` (for CLI flag prefill) is supported.
+- No `placeholder` option for password — showing placeholder text in a password field could confuse users about whether text is entered.
+- Submitted state renders exactly 4 mask characters (`SUBMITTED_MASK_LENGTH = 4`) regardless of actual password length, preventing length leakage.
+- The `PasswordState` interface is identical to `InputState` (`value`, `cursorPos`, `error`) but defined separately for module independence.
+
+### Notes for Future Agent
+
+- The password prompt follows the exact same pattern as input. Future prompts (confirm, select, multiselect) follow a different pattern since they don't use text editing.
+- For confirm prompt: it needs a boolean state with toggle keys (left/right, y/n, tab) and two inline options rendered side-by-side. No text editing needed.
+- For select prompt: it needs a cursor index, list of normalized choices, viewport scrolling. The `normalizeChoices` utility should be extracted to a shared `utils.ts` file since multiselect and filter also need it.
+- All 4 test files (theme, renderer, input, password) pass together. The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is consistent across input and password tests.
