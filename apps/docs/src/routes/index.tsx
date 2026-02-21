@@ -120,9 +120,33 @@ const MODULES: Array<{
     upcoming: true,
   },
   {
-    pkg: "@crustjs/color",
-    desc: "Terminal styling and colors",
-    doc: "modules/color",
+    pkg: "@crustjs/style",
+    desc: "Terminal styling",
+    doc: "modules/style",
+    upcoming: true,
+  },
+  {
+    pkg: "@crustjs/test",
+    desc: "CLI testing helpers",
+    doc: "modules/test",
+    upcoming: true,
+  },
+  {
+    pkg: "@crustjs/render",
+    desc: "Terminal content rendering",
+    doc: "modules/render",
+    upcoming: true,
+  },
+  {
+    pkg: "@crustjs/store",
+    desc: "Persistent data storage",
+    doc: "modules/store",
+    upcoming: true,
+  },
+  {
+    pkg: "@crustjs/log",
+    desc: "Structured logging",
+    doc: "modules/log",
     upcoming: true,
   },
 ];

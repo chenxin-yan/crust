@@ -1,5 +1,16 @@
 {
   "title": "Modules",
   "icon": "Blocks",
-  "pages": ["crust", "core", "plugins", "validate", "prompt", "color"]
+  "pages": [
+    "crust",
+    "core",
+    "plugins",
+    "validate",
+    "prompt",
+    "style",
+    "test",
+    "render",
+    "store",
+    "log"
+  ]
 }
