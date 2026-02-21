@@ -21,6 +21,7 @@ import { style } from "@crustjs/style";
 console.log(style.bold("Build succeeded"));
 console.log(style.red("Error: missing argument"));
 console.log(style.dim("hint: use --help for usage"));
+console.log(style.bold.red("Critical failure"));
 ```
 
 ## Primitive Styling
@@ -70,6 +71,7 @@ const auto = createStyle({ mode: "auto" });
 // Always emit ANSI codes
 const color = createStyle({ mode: "always" });
 console.log(color.red("always red"));
+console.log(color.bold.red("always bold red"));
 
 // Never emit ANSI codes — returns plain text
 const plain = createStyle({ mode: "never" });

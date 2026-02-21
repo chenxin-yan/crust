@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
+import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
  * Color emission mode for the style engine.
@@ -55,13 +56,38 @@ export interface StyleOptions {
 export type StyleFn = (text: string) => string;
 
 /**
+ * Shared style method surface used by style instances and chainable style
+ * functions.
+ */
+export type StyleMethodMap = {
+	readonly [K in StyleMethodName]: ChainableStyleFn;
+};
+
+/**
+ * A callable style function that also exposes all style methods for chaining.
+ *
+ * @example
+ * ```ts
+ * style.bold.red("error");
+ * ```
+ */
+export interface ChainableStyleFn extends StyleMethodMap {
+	(text: string): string;
+}
+
+/**
+ * Style method name used by the chain builder implementation.
+ */
+export type StyleMethodName = RegisteredStyleMethodName;
+
+/**
  * A configured style instance with mode-aware styling functions.
  *
  * In `"never"` mode, all functions return plain text without ANSI codes.
  * In `"always"` mode, ANSI codes are always emitted.
  * In `"auto"` mode, behavior depends on terminal capability detection.
  */
-export interface StyleInstance {
+export interface StyleInstance extends StyleMethodMap {
 	/** Whether ANSI codes will be emitted by this instance. */
 	readonly enabled: boolean;
 
@@ -69,52 +95,4 @@ export interface StyleInstance {
 
 	/** Apply an arbitrary ANSI pair to text, respecting the color mode. */
 	readonly apply: (text: string, pair: AnsiPair) => string;
-
-	// ── Modifiers ─────────────────────────────────────────────────────────
-
-	readonly bold: StyleFn;
-	readonly dim: StyleFn;
-	readonly italic: StyleFn;
-	readonly underline: StyleFn;
-	readonly inverse: StyleFn;
-	readonly hidden: StyleFn;
-	readonly strikethrough: StyleFn;
-
-	// ── Foreground colors ─────────────────────────────────────────────────
-
-	readonly black: StyleFn;
-	readonly red: StyleFn;
-	readonly green: StyleFn;
-	readonly yellow: StyleFn;
-	readonly blue: StyleFn;
-	readonly magenta: StyleFn;
-	readonly cyan: StyleFn;
-	readonly white: StyleFn;
-	readonly gray: StyleFn;
-	readonly brightRed: StyleFn;
-	readonly brightGreen: StyleFn;
-	readonly brightYellow: StyleFn;
-	readonly brightBlue: StyleFn;
-	readonly brightMagenta: StyleFn;
-	readonly brightCyan: StyleFn;
-	readonly brightWhite: StyleFn;
-
-	// ── Background colors ─────────────────────────────────────────────────
-
-	readonly bgBlack: StyleFn;
-	readonly bgRed: StyleFn;
-	readonly bgGreen: StyleFn;
-	readonly bgYellow: StyleFn;
-	readonly bgBlue: StyleFn;
-	readonly bgMagenta: StyleFn;
-	readonly bgCyan: StyleFn;
-	readonly bgWhite: StyleFn;
-	readonly bgBrightBlack: StyleFn;
-	readonly bgBrightRed: StyleFn;
-	readonly bgBrightGreen: StyleFn;
-	readonly bgBrightYellow: StyleFn;
-	readonly bgBrightBlue: StyleFn;
-	readonly bgBrightMagenta: StyleFn;
-	readonly bgBrightCyan: StyleFn;
-	readonly bgBrightWhite: StyleFn;
 }

@@ -103,6 +103,16 @@ describe("createStyle — always mode", () => {
 		expect(s.bgBlue("text")).toBe("\x1b[44mtext\x1b[49m");
 	});
 
+	it("supports chainable styles", () => {
+		expect(s.bold.red("text")).toBe("\x1b[1m\x1b[31mtext\x1b[39m\x1b[22m");
+	});
+
+	it("last color in chain takes precedence", () => {
+		expect(s.red.blue("text")).toBe(
+			"\x1b[31m\x1b[34mtext\x1b[39m\x1b[31m\x1b[39m",
+		);
+	});
+
 	it("apply() applies arbitrary pair", () => {
 		expect(s.apply("text", codes.italic)).toBe("\x1b[3mtext\x1b[23m");
 	});
@@ -215,6 +225,11 @@ describe("createStyle — never mode", () => {
 		expect(s.apply("text", codes.bold)).toBe("text");
 		expect(s.apply("text", codes.red)).toBe("text");
 		expect(s.apply("text", codes.bgBlue)).toBe("text");
+	});
+
+	it("supports chainable styles without ANSI output", () => {
+		expect(s.bold.red("text")).toBe("text");
+		expect(s.bgBlue.underline("text")).toBe("text");
 	});
 
 	it("handles empty string", () => {

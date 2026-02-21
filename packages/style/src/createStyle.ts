@@ -3,22 +3,87 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
-import * as codes from "./ansiCodes.ts";
 import { resolveCapability } from "./capability.ts";
 import { applyStyle } from "./styleEngine.ts";
-import type { StyleInstance, StyleOptions } from "./types.ts";
+import { styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
+import type {
+	ChainableStyleFn,
+	StyleInstance,
+	StyleMethodMap,
+	StyleMethodName,
+	StyleOptions,
+} from "./types.ts";
 
-/**
- * Create a mode-aware style function from an ANSI pair.
- *
- * When `enabled` is `false`, returns the input text unchanged (plain text).
- * When `enabled` is `true`, delegates to `applyStyle` for ANSI emission.
- */
-function makeStyleFn(pair: AnsiPair, enabled: boolean) {
-	if (enabled) {
-		return (text: string) => applyStyle(text, pair);
+function applyChain(
+	text: string,
+	methodNames: readonly StyleMethodName[],
+	enabled: boolean,
+): string {
+	if (!enabled || text === "") {
+		return text;
 	}
-	return (text: string) => text;
+
+	let result = text;
+	for (let i = methodNames.length - 1; i >= 0; i--) {
+		const methodName = methodNames[i];
+		if (methodName === undefined) {
+			continue;
+		}
+		result = applyStyle(result, stylePairFor(methodName));
+	}
+
+	return result;
+}
+
+function buildChainableStyleFactory(enabled: boolean) {
+	const cache = new Map<string, ChainableStyleFn>();
+
+	function makeKey(methodNames: readonly StyleMethodName[]): string {
+		return methodNames.join("|");
+	}
+
+	function createChainableStyle(
+		methodNames: readonly StyleMethodName[],
+	): ChainableStyleFn {
+		const key = makeKey(methodNames);
+		const cached = cache.get(key);
+		if (cached) {
+			return cached;
+		}
+
+		const styleFn = ((text: string) =>
+			applyChain(text, methodNames, enabled)) as ChainableStyleFn;
+
+		cache.set(key, styleFn);
+
+		for (const name of styleMethodNames) {
+			Object.defineProperty(styleFn, name, {
+				configurable: false,
+				enumerable: true,
+				get() {
+					return createChainableStyle([...methodNames, name]);
+				},
+			});
+		}
+
+		return Object.freeze(styleFn);
+	}
+
+	return createChainableStyle;
+}
+
+function buildStyleMethods(
+	createChainableStyle: (
+		methodNames: readonly StyleMethodName[],
+	) => ChainableStyleFn,
+): StyleMethodMap {
+	const methods = {} as { [K in StyleMethodName]: ChainableStyleFn };
+
+	for (const methodName of styleMethodNames) {
+		methods[methodName] = createChainableStyle([methodName]);
+	}
+
+	return methods;
 }
 
 /**
@@ -42,6 +107,7 @@ function makeStyleFn(pair: AnsiPair, enabled: boolean) {
  * // Force color output
  * const color = createStyle({ mode: "always" });
  * console.log(color.red("error"));
+ * console.log(color.bold.red("critical"));
  *
  * // Disable all styling
  * const plain = createStyle({ mode: "never" });
@@ -57,6 +123,8 @@ function makeStyleFn(pair: AnsiPair, enabled: boolean) {
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
 	const enabled = resolveCapability(mode, options?.overrides);
+	const createChainableStyle = buildChainableStyleFactory(enabled);
+	const methods = buildStyleMethods(createChainableStyle);
 
 	const instance: StyleInstance = {
 		enabled,
@@ -67,53 +135,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			? (text: string, pair: AnsiPair) => applyStyle(text, pair)
 			: (text: string, _pair: AnsiPair) => text,
 
-		// ── Modifiers ───────────────────────────────────────────────────────
-
-		bold: makeStyleFn(codes.bold, enabled),
-		dim: makeStyleFn(codes.dim, enabled),
-		italic: makeStyleFn(codes.italic, enabled),
-		underline: makeStyleFn(codes.underline, enabled),
-		inverse: makeStyleFn(codes.inverse, enabled),
-		hidden: makeStyleFn(codes.hidden, enabled),
-		strikethrough: makeStyleFn(codes.strikethrough, enabled),
-
-		// ── Foreground colors ───────────────────────────────────────────────
-
-		black: makeStyleFn(codes.black, enabled),
-		red: makeStyleFn(codes.red, enabled),
-		green: makeStyleFn(codes.green, enabled),
-		yellow: makeStyleFn(codes.yellow, enabled),
-		blue: makeStyleFn(codes.blue, enabled),
-		magenta: makeStyleFn(codes.magenta, enabled),
-		cyan: makeStyleFn(codes.cyan, enabled),
-		white: makeStyleFn(codes.white, enabled),
-		gray: makeStyleFn(codes.gray, enabled),
-		brightRed: makeStyleFn(codes.brightRed, enabled),
-		brightGreen: makeStyleFn(codes.brightGreen, enabled),
-		brightYellow: makeStyleFn(codes.brightYellow, enabled),
-		brightBlue: makeStyleFn(codes.brightBlue, enabled),
-		brightMagenta: makeStyleFn(codes.brightMagenta, enabled),
-		brightCyan: makeStyleFn(codes.brightCyan, enabled),
-		brightWhite: makeStyleFn(codes.brightWhite, enabled),
-
-		// ── Background colors ───────────────────────────────────────────────
-
-		bgBlack: makeStyleFn(codes.bgBlack, enabled),
-		bgRed: makeStyleFn(codes.bgRed, enabled),
-		bgGreen: makeStyleFn(codes.bgGreen, enabled),
-		bgYellow: makeStyleFn(codes.bgYellow, enabled),
-		bgBlue: makeStyleFn(codes.bgBlue, enabled),
-		bgMagenta: makeStyleFn(codes.bgMagenta, enabled),
-		bgCyan: makeStyleFn(codes.bgCyan, enabled),
-		bgWhite: makeStyleFn(codes.bgWhite, enabled),
-		bgBrightBlack: makeStyleFn(codes.bgBrightBlack, enabled),
-		bgBrightRed: makeStyleFn(codes.bgBrightRed, enabled),
-		bgBrightGreen: makeStyleFn(codes.bgBrightGreen, enabled),
-		bgBrightYellow: makeStyleFn(codes.bgBrightYellow, enabled),
-		bgBrightBlue: makeStyleFn(codes.bgBrightBlue, enabled),
-		bgBrightMagenta: makeStyleFn(codes.bgBrightMagenta, enabled),
-		bgBrightCyan: makeStyleFn(codes.bgBrightCyan, enabled),
-		bgBrightWhite: makeStyleFn(codes.bgBrightWhite, enabled),
+		...methods,
 	};
 
 	return Object.freeze(instance);
