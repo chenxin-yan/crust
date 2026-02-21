@@ -51,12 +51,10 @@ export interface PromptTheme {
 }
 
 /**
- * Recursive partial version of `PromptTheme` for user overrides.
+ * Partial version of `PromptTheme` for user overrides.
  * Users only need to specify the slots they want to customize.
  */
-export type PartialPromptTheme = {
-	readonly [K in keyof PromptTheme]?: PromptTheme[K];
-};
+export type PartialPromptTheme = Partial<PromptTheme>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Choices

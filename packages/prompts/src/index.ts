@@ -30,3 +30,10 @@ export type {
 	PromptConfig,
 } from "./renderer.ts";
 export { assertTTY, NonInteractiveError, runPrompt } from "./renderer.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Prompts
+// ────────────────────────────────────────────────────────────────────────────
+
+export type { InputOptions } from "./input.ts";
+export { input } from "./input.ts";
