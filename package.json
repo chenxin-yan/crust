@@ -10,7 +10,7 @@
 		"test": "turbo run test",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",
-		"packages:release": "bun run publish-packages && changeset tag",
+		"packages:release": "bun run packages:publish && changeset tag",
 		"packages:publish": "for dir in packages/*; do (cd \"$dir\" && bun publish --access public --no-git-checks || true); done"
 	},
 	"devDependencies": {
