@@ -19,13 +19,12 @@ export function baseOptions(): BaseLayoutProps {
             paddingLeft: 4,
           }}
         >
-          <span
+          <img
+            src="/favicon-96x96.png"
+            alt="Crust logo"
             style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "#ff6a10",
-              boxShadow: "0 0 8px rgba(255, 106, 16, 0.5)",
+              width: 24,
+              height: 24,
               flexShrink: 0,
             }}
           />

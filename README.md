@@ -1,4 +1,8 @@
-<h1 align="center">Crust</h1>
+<h1 align="center">
+  <img src="assets/crust-logo.png" alt="Crust logo" width="120">
+  <br>
+  Crust
+</h1>
 <p align="center">A TypeScript-first, Bun-native CLI framework with composable modules.</p>
 
 <p align="center">
