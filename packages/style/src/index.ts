@@ -116,6 +116,16 @@ export { stripAnsi } from "./text/stripAnsi.ts";
 export { visibleWidth } from "./text/width.ts";
 export type { WrapOptions } from "./text/wrap.ts";
 export { wrapText } from "./text/wrap.ts";
+// Markdown theme
+export {
+	createMarkdownTheme,
+	defaultTheme,
+} from "./theme/createMarkdownTheme.ts";
+export type {
+	MarkdownTheme,
+	PartialMarkdownTheme,
+	ThemeSlotFn,
+} from "./theme/markdownTheme.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
@@ -124,8 +134,3 @@ export type {
 	StyleInstance,
 	StyleOptions,
 } from "./types.ts";
-
-// Markdown theme
-// export type { MarkdownTheme } from "./theme/markdownTheme.ts";
-// export { defaultTheme } from "./theme/defaultTheme.ts";
-// export { createTheme } from "./theme/createTheme.ts";
