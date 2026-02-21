@@ -95,7 +95,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "Use Bun.spawn for all process spawning — it returns a Subprocess with an .exited promise. For the install step, pass stdout: 'inherit' and stderr: 'inherit' so users see install output. For the open-editor step, use spawn with detached-like behavior (don't wait for editor to close). The command step should use Bun.spawn with shell: true for the cmd string. Steps run sequentially in array order.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Finalize public API, write comprehensive JSDoc, and add end-to-end integration test",

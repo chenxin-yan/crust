@@ -162,3 +162,53 @@
 - The barrel file now has four sections: "Template Engine", "Scaffold", "Utilities", and "Types" — still need "Steps"
 - `detectPackageManager` is used by the `runSteps` "install" step (task 5) to determine which install command to run
 - All three utility functions are re-exported publicly from the barrel file
+
+---
+
+## Task: Implement the declarative post-scaffold step runner with built-in and custom command steps
+
+### Completed
+
+- Created `packages/create/src/steps.ts` with `async runSteps(steps: PostScaffoldStep[], cwd: string): Promise<void>`
+- Implemented `install` step: detects package manager via `detectPackageManager(cwd)`, spawns `<pm> install` with inherited stdout/stderr
+- Implemented `git-init` step: runs `git init`, optionally stages all files and creates initial commit with provided message
+- Implemented `open-editor` step: checks `$EDITOR` env var, falls back to `code` (VS Code), spawns detached (doesn't wait for GUI editor to close), warns on failure instead of throwing
+- Implemented `command` step: runs arbitrary shell command via `sh -c <cmd>` with inherited stdout/stderr, uses `step.cwd` if provided, falls back to main `cwd`
+- All step implementations propagate spawn errors with descriptive messages
+- Wrote 10 integration tests in `packages/create/tests/steps.test.ts` covering:
+  - git-init creates `.git` directory
+  - git-init with commit message creates a commit (verified via `git log`)
+  - git-init without commit message does not create any commits
+  - install step runs the detected package manager (bun) with a minimal package.json
+  - command step runs shell command and produces output file
+  - command step uses provided `cwd` for execution
+  - command step throws on non-zero exit code
+  - Steps run sequentially in array order (verified via file append ordering)
+  - First failure stops execution of remaining steps
+  - Empty steps array completes without error
+- Exported `runSteps` from `src/index.ts` under new "Steps" section
+- All 57 tests pass (47 existing + 10 new), type check passes, build succeeds, Biome lint/format passes
+
+### Files Changed
+
+- `packages/create/src/steps.ts` (new)
+- `packages/create/tests/steps.test.ts` (new)
+- `packages/create/src/index.ts` (modified — added Steps section with `runSteps` export)
+
+### Decisions
+
+- Used `Bun.spawn` (async) for all process spawning — returns a `Subprocess` with `.exited` promise, matching the async function signatures
+- `install` and `command` steps use `stdout: "inherit"` and `stderr: "inherit"` so users see output in real-time
+- `git-init` step uses `stdout: "ignore"` and `stderr: "pipe"` to capture errors without noisy output
+- `open-editor` step uses a 500ms race between `proc.exited` and a timeout to detect immediate spawn failures without blocking on GUI editors
+- `command` step uses `sh -c <cmd>` for shell execution (POSIX-compatible, works on Linux/macOS)
+- `spawnChecked()` helper centralizes the pattern of spawning + checking exit code + collecting stderr for git commands
+- Steps run sequentially in array order; first failure propagates immediately (remaining steps skipped)
+
+### Notes for Future Agent
+
+- The barrel file now has all five sections: "Template Engine", "Scaffold", "Steps", "Utilities", and "Types"
+- `runSteps` is the last value export needed before the finalization task (task 6)
+- The `open-editor` step is intentionally lenient — it warns rather than throws if the editor can't be opened
+- For the dogfooding task (task 7), `create-crust` will replace its manual `Bun.spawn(['bun', 'install'])` with `runSteps([{ type: 'install' }], destDir)`
+- The `command` step's `cwd` field overrides the main `cwd` parameter — useful for running commands in subdirectories
