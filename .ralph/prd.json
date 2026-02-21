@@ -53,7 +53,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "This is the foundation all prompts build on. Write output to process.stderr (not stdout) so prompt UI doesn't mix with piped output. Use ANSI escape codes directly (ESC[nA for cursor up, ESC[2K for erase line, ESC[?25l/h for cursor visibility). The renderer must be robust about cleanup — always restore terminal state even on errors. Keep the State generic so each prompt defines its own state shape. The handleKey reducer pattern keeps prompts pure and testable.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the input prompt (single-line text input with placeholder, validation, and initial value support)",
@@ -73,7 +73,7 @@
 				"Run 'bun run check:types' from packages/prompts to verify no type errors",
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
-			"notes": "The input prompt is the simplest interactive prompt and serves as the template for all others. Test the handleKey reducer in isolation (pass mock key events, assert state changes) without needing real stdin. The cursor position should support full editing (insert anywhere, not just append). Use the theme's placeholder slot for dim placeholder text, error slot for red error messages.",
+			"notes": "The input prompt is the simplest interactive prompt and serves as the template for all others. Test the handleKey reducer in isolation (pass mock key events, assert state changes) without needing real stdin. The cursor position should support full editing (insert anywhere, not just append). Use the theme's placeholder slot for dim placeholder text, error slot for red error messages. Use `runPrompt` from renderer.ts — create a PromptConfig with initialState, render, handleKey, and optionally renderSubmitted. Check for `initial` before calling runPrompt. For testing, mock isTTY=true, setRawMode, stderr.write, then emit keypress events on process.stdin. The handleKey can be async to support async validation.",
 			"passed": false
 		},
 		{
