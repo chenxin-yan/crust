@@ -49,6 +49,16 @@ export {
 	white as whiteCode,
 	yellow as yellowCode,
 } from "./ansiCodes.ts";
+// Block helpers
+export type {
+	OrderedListOptions,
+	TaskListItem,
+	TaskListOptions,
+	UnorderedListOptions,
+} from "./blocks/lists.ts";
+export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
+export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
+export { table } from "./blocks/tables.ts";
 export { resolveCapability } from "./capability.ts";
 // Style primitives — Colors
 export {
@@ -101,7 +111,6 @@ export {
 // Style engine
 export { applyStyle, composeStyles } from "./styleEngine.ts";
 export { center, padEnd, padStart } from "./text/pad.ts";
-
 // Text utilities
 export { stripAnsi } from "./text/stripAnsi.ts";
 export { visibleWidth } from "./text/width.ts";
@@ -115,10 +124,6 @@ export type {
 	StyleInstance,
 	StyleOptions,
 } from "./types.ts";
-
-// Block helpers
-// export { unorderedList, orderedList, taskList } from "./blocks/lists.ts";
-// export { table } from "./blocks/tables.ts";
 
 // Markdown theme
 // export type { MarkdownTheme } from "./theme/markdownTheme.ts";
