@@ -121,8 +121,8 @@
 				"Run `bun run check` from repo root to ensure lint and format compliance",
 				"Update task statuses in `prd.json` as work completes in subsequent agent iterations"
 			],
-			"notes": "This is the final hardening gate before release work. Keep this task last and use it to detect integration regressions across the Turborepo workspace.",
-			"passed": false
+			"notes": "DONE: All validation gates passed. Build: 5 output files (27.53 KB raw). Tests: 209/209 pass across 8 test files. Adjacent packages: @crustjs/core (195 pass), @crustjs/plugins (9 pass), @crustjs/crust (all pass), @crustjs/style (242 pass), create-crust (9 pass). Monorepo-wide type check: 9 tasks, 0 errors. Biome lint/format: 127 files checked, 0 issues. No cross-package regressions detected.",
+			"passed": true
 		}
 	]
 }
