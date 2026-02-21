@@ -66,14 +66,18 @@ export const Route = createFileRoute("/")({
   component: FurnaceHome,
   loader: async () => {
     let highlightedCode = FALLBACK_HIGHLIGHTED_CODE;
+    let npmVersions: Record<string, string | null> = {};
 
     try {
-      highlightedCode = await getHighlightedCode();
+      [highlightedCode, npmVersions] = await Promise.all([
+        getHighlightedCode(),
+        getNpmVersions(),
+      ]);
     } catch (error) {
-      console.error("[docs] Failed to load highlighted code", error);
+      console.error("[docs] Failed to load loader data", error);
     }
 
-    return { highlightedCode };
+    return { highlightedCode, npmVersions };
   },
 });
 
@@ -151,6 +155,32 @@ const MODULES: Array<{
   },
 ];
 
+const PUBLISHED_PACKAGES = MODULES.filter((m) => !m.upcoming).map((m) => m.pkg);
+
+async function fetchNpmVersion(pkg: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { version?: string };
+    return data.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
+  const entries = await Promise.all(
+    PUBLISHED_PACKAGES.map(async (pkg) => {
+      const version = await fetchNpmVersion(pkg);
+      return [pkg, version] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Record<string, string | null>;
+});
+
 const CODE_EXAMPLE = `import { defineCommand, runMain } from "@crustjs/crust";
 
 const cli = defineCommand({
@@ -169,7 +199,7 @@ runMain(cli);`;
 const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
-  const { highlightedCode } = Route.useLoaderData();
+  const { highlightedCode, npmVersions } = Route.useLoaderData();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -459,6 +489,17 @@ function FurnaceHome() {
           padding: 14px 0;
           border-bottom: 1px solid var(--fn-border);
           opacity: 0.5;
+        }
+
+        /* Version badge */
+        .fn-badge-version {
+          font-size: 10px;
+          color: var(--fn-molten);
+          border: 1px solid var(--fn-molten);
+          padding: 1px 8px;
+          white-space: nowrap;
+          opacity: 0.7;
+          letter-spacing: 0.5px;
         }
 
         /* Coming soon badge */
@@ -768,6 +809,11 @@ function FurnaceHome() {
                     >
                       {m.pkg}
                     </code>
+                    {npmVersions[m.pkg] && (
+                      <span className="fn-badge-version fn-mono">
+                        v{npmVersions[m.pkg]}
+                      </span>
+                    )}
                     <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
                       {m.desc}
                     </span>
