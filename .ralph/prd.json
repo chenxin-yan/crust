@@ -1,0 +1,128 @@
+{
+	"tasks": [
+		{
+			"description": "Scaffold `@crustjs/validate` package with dual entrypoints and monorepo wiring",
+			"subtasks": [
+				"Create `packages/validate` with baseline structure: `src/index.ts`, `src/zod/index.ts`, and package-level test directories consistent with existing packages",
+				"Add `packages/validate/package.json` with exports for `.` and `./zod`, Bun/Bunup scripts, ESM settings, and `@crustjs/core` peer dependency",
+				"Add type-only dependency configuration for `@standard-schema/spec` and peer dependency for Zod 4 support in the `./zod` mode contract",
+				"Add/align `tsconfig.json` in `packages/validate` to extend `@crustjs/config` and ensure strict mode behavior matches monorepo conventions",
+				"Set up barrel exports and section comments in `src/index.ts` and `src/zod/index.ts` following existing package style",
+				"Run `bun run build --filter=@crustjs/validate` to verify package builds",
+				"Run `bun run test --filter=@crustjs/validate` to verify package test command wiring",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify package type checking",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "References `.ralph/SPEC.md` decisions: dual mode architecture (`@crustjs/validate` + `@crustjs/validate/zod`), zero runtime dependencies, and experimental release posture. Keep package layout consistent with existing `packages/core` and `packages/plugins` patterns.",
+			"passed": false
+		},
+		{
+			"description": "Implement shared validation internals for issue normalization, path formatting, and Crust error mapping",
+			"subtasks": [
+				"Create internal types for Standard Schema result handling and normalized issue structures used across both entrypoints",
+				"Implement dot-path formatter for nested issue paths and stable bullet-list message renderer for CLI-friendly validation output",
+				"Implement shared helper that throws `CrustError(\"VALIDATION\")` with formatted bullet list message and preserves raw issue payload in `error.cause`",
+				"Implement sync-only guard behavior so async validator results are rejected with clear `VALIDATION` guidance in v1",
+				"Add unit tests for path formatting edge cases (root path, array indexes, nested keys) and message rendering consistency",
+				"Add unit tests confirming `CrustError` code/message/cause behavior for validation failures",
+				"Run `bun run test --filter=@crustjs/validate` to verify tests pass",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify type safety",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "This task establishes shared behavior required by SPEC: bullet-list errors, dot-path formatting, and structured issues in `error.cause`. Keep all helpers internal unless they are part of deliberate public API.",
+			"passed": false
+		},
+		{
+			"description": "Implement generic Standard Schema wrapper mode for validating existing Crust commands",
+			"subtasks": [
+				"Define root-entrypoint public APIs for generic validation wrappers (for example run-handler wrapper and/or command wrapper) and export stable TypeScript types",
+				"Accept Standard Schema-compatible schemas and validate `{ args, flags }` after Crust parsing and before command run execution",
+				"Ensure wrapper replaces handler-facing `context.args` and `context.flags` with transformed schema output while preserving original parsed input on `context.input`",
+				"Keep integration wrapper-only without changes to `@crustjs/core` lifecycle internals",
+				"Add runtime guards for unknown schema contract violations and map failures through shared `VALIDATION` error utilities",
+				"Write unit tests covering successful validation, transformed output replacement, failure path mapping, and preservation of original input",
+				"Run `bun run test --filter=@crustjs/validate` to verify tests pass",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify type inference and type safety",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "This is the library-agnostic mode from SPEC. It should not auto-generate parser/help metadata and should primarily support teams already defining commands with `defineCommand`.",
+			"passed": false
+		},
+		{
+			"description": "Implement `@crustjs/validate/zod` schema-first metadata DSL for positional args and flags",
+			"subtasks": [
+				"Design and implement Zod 4 metadata DSL primitives to colocate schema + CLI metadata (arg names/order, flag alias, descriptions, required/default hints)",
+				"Support tuple-based positional arg definitions with explicit arg names metadata for predictable ordering and help output",
+				"Support optional flag metadata API for aliases (including short aliases) and descriptions without requiring manual `flags` definitions",
+				"Implement conversion from Zod schema + metadata DSL into Crust-compatible `args` and `flags` definitions",
+				"Implement schema metadata precedence rules so schema-provided descriptions/default hints win when conflicts exist",
+				"Write unit tests for DSL authoring ergonomics, metadata parsing, tuple arg naming, alias handling, and definition generation",
+				"Run `bun run test --filter=@crustjs/validate` to verify tests pass",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify type safety",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "This is the DX-first mode requested by user: command authors should not have to define args/flags manually when using validator mode. Keep Zod support pinned to v4 behavior.",
+			"passed": false
+		},
+		{
+			"description": "Implement Zod schema-first command factory that creates executable Crust commands with validation",
+			"subtasks": [
+				"Add `@crustjs/validate/zod` command factory API (schema-first command definition helper) that compiles into a standard Crust command object",
+				"Wire generated `args`/`flags` definitions into `defineCommand` output so parser strictness and unknown-flag rejection remain framework-native",
+				"Run validation after parser coercion and before user handler execution, using sync-only Zod parsing in v1",
+				"Replace handler-facing `context.args`/`context.flags` with transformed schema outputs and preserve original parsed values on `context.input`",
+				"Support per-command explicit schemas in command/subcommand trees without automatic inheritance",
+				"Write tests for successful command execution, transformed outputs, validation errors, and subcommand behavior",
+				"Run `bun run test --filter=@crustjs/validate` to verify tests pass",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify inferred handler input types",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "Keep implementation wrapper-based and avoid modifying `@crustjs/core` lifecycle hooks. This task delivers the primary user-facing API for schema-only command authoring.",
+			"passed": false
+		},
+		{
+			"description": "Ensure help plugin compatibility for schema-first commands and validate integration behavior",
+			"subtasks": [
+				"Verify generated `args` and `flags` definitions from `/zod` mode are fully compatible with `@crustjs/plugins` `helpPlugin` rendering",
+				"Add integration tests that run schema-first commands with `helpPlugin` enabled and assert usage, args, and options sections are rendered correctly",
+				"Add coverage for alias rendering (`-x, --long`) and tuple arg token rendering in help output",
+				"Add tests that confirm schema metadata precedence in displayed help descriptions",
+				"Run `bun run test --filter=@crustjs/validate` for package integration coverage",
+				"Run `bun run test --filter=@crustjs/plugins` to confirm no regressions in plugin package behavior",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify type stability",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "SPEC requires help support in validate mode. Prefer integration via generated command defs over patching plugin internals.",
+			"passed": false
+		},
+		{
+			"description": "Document experimental API, usage examples, and version constraints for `@crustjs/validate`",
+			"subtasks": [
+				"Create package README with clear sections for generic Standard Schema mode and Zod schema-first mode",
+				"Document supported versions and constraints: Zod 4 minimum for `/zod`, args/flags-only scope, sync-only validation in v1, and experimental status",
+				"Add examples showing transformed output typing, validation failure formatting, and how original parsed input is accessed via `context.input`",
+				"Document two-mode tradeoff rationale so users know when to pick generic mode vs `/zod` mode",
+				"Add changelog/notes entry if repository release flow expects package-level release documentation",
+				"Run `bun run test --filter=@crustjs/validate` to verify docs examples remain aligned with tests",
+				"Run `bun run check:types --filter=@crustjs/validate` to verify documented APIs compile",
+				"Run `bun run check` to verify lint and format checks"
+			],
+			"notes": "Keep docs explicit about what is excluded from v1 (env/config validation, async validation, schema inheritance, JSON Schema utilities) and mark the package as experimental as specified in SPEC.",
+			"passed": false
+		},
+		{
+			"description": "Run final monorepo validation for new package integration and task completion readiness",
+			"subtasks": [
+				"Run `bun run build --filter=@crustjs/validate` and resolve any remaining packaging/export issues",
+				"Run `bun run test --filter=@crustjs/validate` and fix remaining test flakes or gaps",
+				"Run targeted compatibility tests for adjacent packages that consume command definitions (`@crustjs/core`, `@crustjs/plugins`, `@crustjs/crust`)",
+				"Run `bun run test` from repo root to ensure no cross-package regressions",
+				"Run `bun run check:types` from repo root to ensure monorepo-wide type safety",
+				"Run `bun run check` from repo root to ensure lint and format compliance",
+				"Update task statuses in `prd.json` as work completes in subsequent agent iterations"
+			],
+			"notes": "This is the final hardening gate before release work. Keep this task last and use it to detect integration regressions across the Turborepo workspace.",
+			"passed": false
+		}
+	]
+}
