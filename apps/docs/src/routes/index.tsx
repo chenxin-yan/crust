@@ -98,7 +98,7 @@ const MODULES: Array<{
 }> = [
   {
     pkg: "@crustjs/crust",
-    desc: "Full bundle + CLI",
+    desc: "Core packages + CLI",
     doc: "modules/crust",
   },
   {

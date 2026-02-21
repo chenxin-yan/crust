@@ -1,21 +1,193 @@
 ---
 title: "Style"
-description: Terminal styling — coming soon.
+description: Terminal styling, layout utilities, and markdown theme for CLI output.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+The style package provides ANSI-safe styling primitives, terminal capability awareness, text layout helpers, and a semantic markdown theme. It has **zero runtime dependencies**.
 
-<Callout>
-  This package is **coming soon** and not yet available.
-</Callout>
+## Install
 
-`@crustjs/style` will provide terminal styling utilities for CLI output.
+```sh
+bun add @crustjs/style
+```
 
-Planned features include:
-- ANSI color support (foreground, background, modifiers)
-- Automatic color detection and fallback
-- Composable style chains
-- Theme support
-- Text decoration (bold, italic, underline, strikethrough, dim)
+## Exports
 
-Check back for updates, or follow the [Crust repository](https://github.com/chenxin-yan/crust) for progress.
+### Style Instance
+
+| Export | Description |
+| --- | --- |
+| `style` | Default auto-mode style instance |
+| `createStyle(options?)` | Create a configured style instance |
+
+### Modifiers
+
+| Export | Description |
+| --- | --- |
+| `bold(text)` | Bold text |
+| `dim(text)` | Dimmed text |
+| `italic(text)` | Italic text |
+| `underline(text)` | Underlined text |
+| `inverse(text)` | Inverted foreground/background |
+| `hidden(text)` | Hidden text |
+| `strikethrough(text)` | Strikethrough text |
+
+### Colors
+
+**Foreground:** `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`, `brightRed`, `brightGreen`, `brightYellow`, `brightBlue`, `brightMagenta`, `brightCyan`, `brightWhite`
+
+**Background:** `bgBlack`, `bgRed`, `bgGreen`, `bgYellow`, `bgBlue`, `bgMagenta`, `bgCyan`, `bgWhite`, `bgBrightBlack`, `bgBrightRed`, `bgBrightGreen`, `bgBrightYellow`, `bgBrightBlue`, `bgBrightMagenta`, `bgBrightCyan`, `bgBrightWhite`
+
+### Style Engine
+
+| Export | Description |
+| --- | --- |
+| `applyStyle(text, pair)` | Apply an ANSI pair with nesting-safe composition |
+| `composeStyles(...pairs)` | Compose multiple ANSI pairs into one |
+
+### Capability Detection
+
+| Export | Description |
+| --- | --- |
+| `resolveCapability(mode, overrides?)` | Resolve whether colors should be emitted |
+
+### Text Utilities
+
+| Export | Description |
+| --- | --- |
+| `stripAnsi(text)` | Remove ANSI escape sequences from a string |
+| `visibleWidth(text)` | Compute visible width (ANSI-aware, CJK-aware) |
+| `wrapText(text, width, options?)` | Wrap text by visible width with style continuity |
+| `padStart(text, width, char?)` | Left-pad to visible width |
+| `padEnd(text, width, char?)` | Right-pad to visible width |
+| `center(text, width, char?)` | Center-align to visible width |
+
+### Block Helpers
+
+| Export | Description |
+| --- | --- |
+| `unorderedList(items, options?)` | Format an unordered list with bullet markers |
+| `orderedList(items, options?)` | Format an ordered list with number markers |
+| `taskList(items, options?)` | Format a task list with check markers |
+| `table(headers, rows, options?)` | Format a column-aligned table |
+
+### Markdown Theme
+
+| Export | Description |
+| --- | --- |
+| `defaultTheme` | Default auto-mode markdown theme |
+| `createMarkdownTheme(options?)` | Create a theme with optional overrides |
+| `buildDefaultMarkdownTheme(style)` | Build a default theme from a style instance |
+
+### Types
+
+| Type | Description |
+| --- | --- |
+| `AnsiPair` | Open/close ANSI escape sequence pair |
+| `ColorMode` | `"auto" \| "always" \| "never"` |
+| `StyleOptions` | Options for `createStyle` |
+| `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
+| `StyleFn` | `(text: string) => string` style function |
+| `StyleInstance` | Configured style object with all styling methods |
+| `WrapOptions` | Options for `wrapText` |
+| `ColumnAlignment` | `"left" \| "right" \| "center"` |
+| `TableOptions` | Options for `table` |
+| `UnorderedListOptions` | Options for `unorderedList` |
+| `OrderedListOptions` | Options for `orderedList` |
+| `TaskListItem` | `{ text: string; checked: boolean }` |
+| `TaskListOptions` | Options for `taskList` |
+| `MarkdownTheme` | Semantic theme contract with 30 GFM slots |
+| `PartialMarkdownTheme` | Partial override type for theme customization |
+| `ThemeSlotFn` | `(value: string) => string` theme slot function |
+| `CreateMarkdownThemeOptions` | Options for `createMarkdownTheme` |
+
+## Usage
+
+### Basic Styling
+
+```ts
+import { bold, red, italic } from "@crustjs/style";
+
+console.log(bold("Build succeeded"));
+console.log(red("Error: missing argument"));
+console.log(italic("note: check your config"));
+```
+
+### Mode-Aware Styling
+
+```ts
+import { createStyle } from "@crustjs/style";
+
+// Auto-detect terminal capabilities (default)
+const s = createStyle();
+console.log(s.bold("hello"));
+
+// Force colors on
+const color = createStyle({ mode: "always" });
+console.log(color.red("always red"));
+
+// Plain text output
+const plain = createStyle({ mode: "never" });
+console.log(plain.red("error")); // "error" (no ANSI)
+```
+
+### Composing Styles
+
+```ts
+import { applyStyle, composeStyles, boldCode, redCode } from "@crustjs/style";
+
+const boldRed = composeStyles(boldCode, redCode);
+console.log(applyStyle("critical", boldRed));
+```
+
+### Text Layout
+
+```ts
+import { visibleWidth, wrapText, padEnd, table } from "@crustjs/style";
+
+// Measure and wrap styled text
+const width = visibleWidth(styledText);
+const wrapped = wrapText(longText, 60);
+
+// Formatted table output
+const output = table(
+  ["Command", "Description"],
+  [
+    ["build", "Build all packages"],
+    ["test", "Run test suite"],
+  ],
+);
+console.log(output);
+```
+
+### Markdown Theme
+
+```ts
+import { defaultTheme, createMarkdownTheme } from "@crustjs/style";
+
+// Use the default theme
+console.log(defaultTheme.heading1("Getting Started"));
+console.log(defaultTheme.strong("important"));
+console.log(defaultTheme.inlineCode("bun install"));
+
+// Customize specific slots
+const custom = createMarkdownTheme({
+  style: { mode: "always" },
+  overrides: {
+    heading1: (text) => `# ${text.toUpperCase()}`,
+  },
+});
+```
+
+## Design
+
+`@crustjs/style` is the presentation layer for Crust terminal output. It is **parser-agnostic** — markdown parsing, AST transformation, and syntax highlighting belong to separate consumer packages. This package provides the styling and layout primitives that those packages build on.
+
+The architecture follows four layers:
+
+1. **Styling Core** — ANSI code mapping, nesting-safe application, and composition
+2. **Capability Layer** — Runtime color mode resolution (`auto`/`always`/`never`)
+3. **Layout Layer** — ANSI-aware width, wrapping, padding, and block formatting
+4. **Theme Layer** — Semantic style slots for GFM constructs
+
+The `NO_COLOR` environment variable and non-TTY detection are respected in `auto` mode. All APIs are pure and side-effect free.

@@ -1,0 +1,51 @@
+{
+	"name": "@crustjs/style",
+	"version": "0.0.0",
+	"description": "Terminal styling foundation for the Crust CLI framework",
+	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/style"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"style",
+		"ansi",
+		"color",
+		"terminal",
+		"bun",
+		"typescript"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"bunup": "catalog:"
+	},
+	"peerDependencies": {
+		"typescript": "catalog:"
+	}
+}
