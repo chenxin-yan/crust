@@ -126,3 +126,39 @@
 - Integration tests create temp directories with unique names and clean up in `afterEach` — follow this pattern for future test files
 - The `scaffold()` function uses `dirname()` trick with `mkdirSync({ recursive: true })` to create nested output directories
 - For the dogfooding task (task 7), `create-crust` will need to use `import.meta.url` and a relative path to its `templates/` directory
+
+---
+
+## Task: Implement standalone utility functions: detectPackageManager, isGitInstalled, getGitUser
+
+### Completed
+
+- Created `packages/create/src/utils.ts` with all three utility functions
+- `detectPackageManager(cwd?)` checks lockfiles in priority order (bun.lock/bun.lockb → pnpm-lock.yaml → yarn.lock → package-lock.json), falls back to `npm_config_user_agent` env var, defaults to `"npm"`
+- `isGitInstalled()` uses `Bun.spawnSync(["git", "--version"])` with try/catch, returns boolean
+- `getGitUser()` reads `git config user.name` and `git config user.email` via `Bun.spawnSync`, returns `{ name: string | null, email: string | null }`
+- Internal `readGitConfig(key)` helper extracts single git config values
+- Wrote 15 unit tests covering: lockfile detection for each package manager, priority ordering, npm_config_user_agent fallback for all 4 managers, default to npm, isGitInstalled returns true, getGitUser shape validation
+- Exported all three functions from `src/index.ts` under new "Utilities" section
+- All 47 tests pass (32 existing + 15 new), type check passes, build succeeds, Biome lint/format passes
+
+### Files Changed
+
+- `packages/create/src/utils.ts` (new)
+- `packages/create/src/utils.test.ts` (new)
+- `packages/create/src/index.ts` (modified — added Utilities section with 3 exports)
+
+### Decisions
+
+- Used `Bun.spawnSync` for git commands (Bun-native, simpler than `node:child_process`)
+- Lockfile check order matches task notes: bun first (bun.lock + bun.lockb), then pnpm, yarn, npm
+- `LOCKFILE_MAP` is a typed readonly array of tuples for clear, maintainable lockfile→manager mapping
+- `readGitConfig()` is a private helper to DRY up git config reads — returns `null` on any failure
+- Tests save and restore `npm_config_user_agent` env var to avoid test pollution
+- Tests use temp directories with unique names (timestamp + random) for lockfile detection
+
+### Notes for Future Agent
+
+- The barrel file now has four sections: "Template Engine", "Scaffold", "Utilities", and "Types" — still need "Steps"
+- `detectPackageManager` is used by the `runSteps` "install" step (task 5) to determine which install command to run
+- All three utility functions are re-exported publicly from the barrel file

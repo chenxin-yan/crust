@@ -74,7 +74,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "detectPackageManager should check lockfiles in order: bun.lock/bun.lockb first (Bun-native project), then pnpm-lock.yaml, yarn.lock, package-lock.json. For git commands, use Bun.spawnSync for simplicity. Wrap in try/catch — if git is not installed, spawnSync will throw. For detectPackageManager tests, create temp dirs with specific lockfiles.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the declarative post-scaffold step runner with built-in and custom command steps",
