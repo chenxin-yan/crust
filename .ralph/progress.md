@@ -212,3 +212,37 @@
 - The `open-editor` step is intentionally lenient — it warns rather than throws if the editor can't be opened
 - For the dogfooding task (task 7), `create-crust` will replace its manual `Bun.spawn(['bun', 'install'])` with `runSteps([{ type: 'install' }], destDir)`
 - The `command` step's `cwd` field overrides the main `cwd` parameter — useful for running commands in subdirectories
+
+---
+
+## Task: Finalize public API, write comprehensive JSDoc, and add end-to-end integration test
+
+### Completed
+
+- Reviewed and verified barrel exports in `src/index.ts` — all public APIs (`interpolate`, `scaffold`, `runSteps`, `detectPackageManager`, `isGitInstalled`, `getGitUser`) and types (`ScaffoldOptions`, `ScaffoldResult`, `PostScaffoldStep`) are correctly exported
+- Confirmed all type exports use `export type` per `verbatimModuleSyntax`
+- Verified all public functions and types already have comprehensive JSDoc with `@example`, `@param`, `@returns`, and `@throws` blocks from previous agents
+- Wrote end-to-end integration test in `packages/create/tests/e2e.test.ts` that validates the full consumer workflow:
+  - Creates a realistic template directory with `_gitignore`, `package.json` (with `{{name}}`/`{{description}}`), and `src/index.ts` (with `{{description}}`/`{{name}}`)
+  - Calls `scaffold()` with context and verifies all files created, content interpolated, dotfile renamed
+  - Calls `runSteps()` with `git-init` + commit message and verifies `.git` exists, commit message correct, and working tree clean
+- All 58 tests pass (57 existing + 1 new e2e), type check passes, Biome passes
+
+### Files Changed
+
+- `packages/create/tests/e2e.test.ts` (new)
+- `.ralph/prd.json` (modified — marked task 6 as passed)
+- `.ralph/progress.md` (modified — appended this entry)
+
+### Decisions
+
+- No changes needed to barrel exports or JSDoc — previous agents already implemented comprehensive JSDoc with `@example` blocks on all public APIs
+- The e2e test focuses on the full workflow a consumer would use: scaffold → verify files → run post-scaffold steps → verify git state
+- The e2e test verifies git working tree is clean after commit (no untracked/modified files), confirming all scaffolded files including the renamed `.gitignore` were properly committed
+
+### Notes for Future Agent
+
+- All 5 barrel sections are complete: Template Engine, Scaffold, Steps, Utilities, Types
+- The e2e test pattern can be reused for the dogfooding task (task 7) to verify `create-crust` produces the same output after refactoring
+- For the dogfooding task: `create-crust` templates should move from string constants to real files in `packages/create-crust/templates/base/`, using `import.meta.url` for resolution
+- Remember to add `templates/` to the `files` field in `packages/create-crust/package.json` so templates are included in the published package

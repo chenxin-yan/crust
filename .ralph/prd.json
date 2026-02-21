@@ -112,7 +112,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "JSDoc examples should show realistic usage — e.g., a create-react-app style tool calling scaffold with import.meta.url. Use section dividers in barrel file to group: Template Engine, Scaffold, Steps, Utilities, Types. The e2e test validates the full workflow a consumer would use. Clean up temp dirs in afterEach/afterAll.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Refactor create-crust to use @crustjs/create as dogfooding validation",
