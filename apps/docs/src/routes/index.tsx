@@ -162,6 +162,21 @@ const MODULES: Array<{
 
 const PUBLISHED_PACKAGES = MODULES.filter((m) => !m.upcoming).map((m) => m.pkg);
 
+type ReleaseChannel = "alpha" | "beta";
+
+function getReleaseChannel(version: string): ReleaseChannel | null {
+  const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) return null;
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+
+  if (major === 0 && minor === 0) return "alpha";
+  if (major === 0) return "beta";
+
+  return null;
+}
+
 async function fetchNpmVersion(pkg: string): Promise<string | null> {
   try {
     const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
@@ -507,6 +522,25 @@ function FurnaceHome() {
           letter-spacing: 0.5px;
         }
 
+        /* Release channel badge */
+        .fn-badge-channel {
+          font-size: 10px;
+          padding: 1px 8px;
+          white-space: nowrap;
+          opacity: 0.8;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          border: 1px solid;
+        }
+        .fn-badge-channel-alpha {
+          color: var(--fn-hot);
+          border-color: var(--fn-hot);
+        }
+        .fn-badge-channel-beta {
+          color: var(--fn-cool);
+          border-color: var(--fn-cool);
+        }
+
         /* Coming soon badge */
         .fn-badge-soon {
           font-family: 'Saira Condensed', sans-serif;
@@ -777,26 +811,33 @@ function FurnaceHome() {
               Modules
             </p>
 
-            {MODULES.map((m) =>
-              m.upcoming ? (
-                <div key={m.pkg} className="fn-module-upcoming">
-                  <div className="fn-module-info">
-                    <code
-                      className="fn-mono"
-                      style={{
-                        fontSize: 14,
-                        color: "var(--fn-dim)",
-                      }}
-                    >
-                      {m.pkg}
-                    </code>
-                    <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
-                      {m.desc}
-                    </span>
+            {MODULES.map((m) => {
+              if (m.upcoming) {
+                return (
+                  <div key={m.pkg} className="fn-module-upcoming">
+                    <div className="fn-module-info">
+                      <code
+                        className="fn-mono"
+                        style={{
+                          fontSize: 14,
+                          color: "var(--fn-dim)",
+                        }}
+                      >
+                        {m.pkg}
+                      </code>
+                      <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
+                        {m.desc}
+                      </span>
+                    </div>
+                    <span className="fn-badge-soon">Coming Soon</span>
                   </div>
-                  <span className="fn-badge-soon">Coming Soon</span>
-                </div>
-              ) : (
+                );
+              }
+
+              const version = npmVersions[m.pkg];
+              const channel = version ? getReleaseChannel(version) : null;
+
+              return (
                 <Link
                   key={m.pkg}
                   to="/docs/$"
@@ -814,9 +855,16 @@ function FurnaceHome() {
                     >
                       {m.pkg}
                     </code>
-                    {npmVersions[m.pkg] && (
+                    {version && (
                       <span className="fn-badge-version fn-mono">
-                        v{npmVersions[m.pkg]}
+                        v{version}
+                      </span>
+                    )}
+                    {channel && (
+                      <span
+                        className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}
+                      >
+                        {channel}
                       </span>
                     )}
                     <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
@@ -825,8 +873,8 @@ function FurnaceHome() {
                   </div>
                   <span className="fn-module-arrow">→</span>
                 </Link>
-              ),
-            )}
+              );
+            })}
           </section>
 
           {/* Footer */}
