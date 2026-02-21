@@ -217,7 +217,7 @@
 				"Run 'bun run test' from monorepo root to verify no regressions in other packages"
 			],
 			"notes": "This is the polish task — ensure everything is properly exported, tested, and builds cleanly. The barrel file should follow the same organization pattern as @crustjs/style/src/index.ts. Integration tests should focus on the public API surface (imports work, types are correct, basic flows), not re-test unit-level behavior. Verify the dist output includes proper .d.ts so consumers get full type inference.",
-			"passed": false
+			"passed": true
 		}
 	]
 }
