@@ -2,9 +2,10 @@
   "title": "Modules",
   "icon": "Blocks",
   "pages": [
-    "crust",
     "core",
     "plugins",
+    "crust",
+    "create",
     "validate",
     "prompt",
     "style",

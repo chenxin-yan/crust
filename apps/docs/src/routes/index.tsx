@@ -97,19 +97,25 @@ const MODULES: Array<{
   upcoming?: boolean;
 }> = [
   {
+    pkg: "@crustjs/core",
+    desc: "Parsing, routing, plugin system",
+    doc: "modules/core",
+  },
+  {
+    pkg: "@crustjs/plugins",
+    desc: "Official crust plugins",
+    doc: "modules/plugins",
+  },
+  {
     pkg: "@crustjs/crust",
     desc: "Core packages + CLI",
     doc: "modules/crust",
   },
   {
-    pkg: "@crustjs/core",
-    desc: "Parsing, routing, plugins",
-    doc: "modules/core",
-  },
-  {
-    pkg: "@crustjs/plugins",
-    desc: "Official plugins for crust",
-    doc: "modules/plugins",
+    pkg: "@crustjs/create",
+    desc: "Scaffolding library for create-xx tools",
+    doc: "modules/create",
+    upcoming: true,
   },
   {
     pkg: "@crustjs/validate",
