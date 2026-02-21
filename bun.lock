@@ -58,6 +58,18 @@
         "typescript": "catalog:",
       },
     },
+    "packages/create": {
+      "name": "@crustjs/create",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "packages/create-crust": {
       "name": "create-crust",
       "version": "0.0.5",
@@ -261,6 +273,8 @@
     "@crustjs/config": ["@crustjs/config@workspace:packages/config"],
 
     "@crustjs/core": ["@crustjs/core@workspace:packages/core"],
+
+    "@crustjs/create": ["@crustjs/create@workspace:packages/create"],
 
     "@crustjs/crust": ["@crustjs/crust@workspace:packages/crust"],
 

@@ -14,7 +14,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "Follow the exact same package.json structure as packages/core and packages/plugins. Use section dividers in barrel file. Types should use readonly where appropriate. The conflict option should default to 'abort'. importMeta field is how users pass import.meta.url for template resolution. Refer to SPEC.md in packages/create/ for all type shapes.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the template interpolation engine with {{var}} replacement and binary file detection",
