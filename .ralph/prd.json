@@ -31,7 +31,7 @@
 				"Run bun run check to verify Biome formatting and linting pass"
 			],
 			"notes": "Regex pattern should be /\\{\\{\\s*(\\w+)\\s*\\}\\}/g to allow optional whitespace inside braces. Binary detection uses the null-byte heuristic — check for 0x00 in the first 8KB chunk. Only interpolate and types should be re-exported publicly; isBinary is internal.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the core scaffold() function with template copying, interpolation, dotfile renaming, and conflict resolution",
