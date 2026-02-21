@@ -442,3 +442,41 @@
 - The barrel exports now include: `spinner`, `SpinnerOptions` (type), `SpinnerType` (type) in the Prompts section
 - All 11 test files pass together (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35, fuzzy: 20, filter: 27, spinner: 23 = 238 total). Note: 237 reported by runner due to test grouping.
 - The spinner is the only prompt that doesn't support `initial` short-circuit since it wraps an async task rather than collecting user input
+
+---
+
+## Task: Finalize barrel exports, add integration tests, and verify full build pipeline
+
+### Completed
+
+- Audited all 43 public exports across 12 source files — all properly re-exported in `src/index.ts` barrel
+- Verified all 17 type exports use `export type` syntax (enforced by `verbatimModuleSyntax`)
+- Verified barrel file organization follows `@crustjs/style` convention with section dividers: Types, Theme, Renderer, Prompts, Utilities
+- Created `packages/prompts/tests/integration.test.ts` with 22 integration tests covering:
+  - Barrel export availability (all 7 prompt functions, theme functions, renderer utilities, fuzzy utilities, normalizeChoices)
+  - Theme integration (createTheme returns valid theme with all 11 slots, slot functions produce strings, resolveTheme layers overrides)
+  - Initial value short-circuit for all 6 interactive prompts (input, password, confirm with true/false, select, multiselect, filter)
+  - Utility integration (normalizeChoices with strings and objects, fuzzyMatch character-in-order matching and rejection, fuzzyFilter sorted results)
+  - NonInteractiveError instanceof checks
+  - Compile-time type export verification (all 18 type exports used in type annotations to ensure they resolve)
+- All 259 tests pass across 12 test files (11 unit + 1 integration), type-check clean, Biome clean
+- Build produces `dist/index.js` (32.65KB) + `dist/index.d.ts` (25.59KB) with correct exports
+- Full monorepo test suite passes with zero regressions (9/9 tasks successful)
+
+### Files Changed
+
+- `packages/prompts/tests/integration.test.ts` (new)
+
+### Decisions
+
+- Type exports are verified using actual type annotations in a test (constructing typed values) rather than unused imports — this satisfies both Biome's `noUnusedImports` rule and provides compile-time verification
+- `HandleKeyResult` and `PromptConfig` are verified as `type` aliases (not runtime values) since they are generic interfaces that can only be tested at the type level
+- Integration tests focus on the public API surface (imports work, types resolve, basic flows like initial short-circuit) without duplicating unit-level behavior already covered in 11 unit test files
+
+### Notes for Future Agent
+
+- The `@crustjs/prompts` package is now complete. All 11 tasks in prd.json are finished.
+- Total test count: 259 tests across 12 files (theme: 14, renderer: 20, input: 23, password: 20, confirm: 23, utils: 6, select: 27, multiselect: 35, fuzzy: 20, filter: 27, spinner: 23, integration: 22)
+- The package exports 43 symbols: 17 type exports and 26 value exports
+- Build output: `dist/index.js` (32.65KB) and `dist/index.d.ts` (25.59KB) — consumers get full type inference
+- All verification passes: `bun test` (259 pass), `tsc --noEmit` (clean), `biome check` (clean), `bun run build` (clean), monorepo `bun run test` (9/9 successful)
