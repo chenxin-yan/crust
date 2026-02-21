@@ -13,7 +13,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "Follow the exact conventions from @crustjs/style package. @crustjs/style is a runtime dependency (not devDependency) since prompts need styling at runtime. The package must be ESM-only with no default exports. Use tabs for indentation, double quotes (Biome enforced).",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the theme system with default theme, createTheme(), and per-prompt style override types",
