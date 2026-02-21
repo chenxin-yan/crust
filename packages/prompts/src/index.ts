@@ -49,6 +49,8 @@ export type { PasswordOptions } from "./password.ts";
 export { password } from "./password.ts";
 export type { SelectOptions } from "./select.ts";
 export { select } from "./select.ts";
+export type { SpinnerOptions, SpinnerType } from "./spinner.ts";
+export { spinner } from "./spinner.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Utilities
