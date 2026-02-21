@@ -211,3 +211,46 @@
 - For confirm prompt: it needs a boolean state with toggle keys (left/right, y/n, tab) and two inline options rendered side-by-side. No text editing needed.
 - For select prompt: it needs a cursor index, list of normalized choices, viewport scrolling. The `normalizeChoices` utility should be extracted to a shared `utils.ts` file since multiselect and filter also need it.
 - All 4 test files (theme, renderer, input, password) pass together. The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is consistent across input and password tests.
+
+---
+
+## Task: Implement the confirm prompt (yes/no boolean confirmation)
+
+### Completed
+
+- Created `packages/prompts/src/confirm.ts` with `confirm()` function and `ConfirmOptions` interface
+- Implemented `initial` value short-circuit: returns immediately without rendering when `initial` is provided
+- Implemented `default` option (defaults to `true`): determines starting selection when user hasn't toggled
+- Implemented toggle keys: Left/Right arrows toggle, Tab toggles, h sets true (active/yes), l sets false (inactive/no)
+- Implemented y/Y and n/N keyboard shortcuts to set value directly
+- Implemented Enter to submit current value
+- Implemented render function with two side-by-side options separated by " / " — active option styled with `theme.selected`, inactive with `theme.unselected`
+- Implemented `renderSubmitted` showing the selected label (active or inactive) styled with `theme.success`
+- Implemented custom labels via `active` (default "Yes") and `inactive` (default "No") options for i18n support
+- Updated barrel exports in `src/index.ts` with `confirm` and `ConfirmOptions`
+- Wrote 23 unit tests covering: initial value (2), default value (3), toggle behavior (4), keyboard shortcuts (6), custom labels (3), rendering (3), non-TTY behavior (2)
+- All 100 tests pass across 5 test files, type-check clean, Biome clean
+- Build produces `index.js` (12.50KB) + `index.d.ts` (12.47KB)
+- Full monorepo test suite passes with zero regressions
+
+### Files Changed
+
+- `packages/prompts/src/confirm.ts` (new)
+- `packages/prompts/src/confirm.test.ts` (new)
+- `packages/prompts/src/index.ts` (updated — added confirm exports)
+
+### Decisions
+
+- `handleKey` is a plain synchronous function (not async, no factory) since confirm has no validation and no closure state needed — simpler than input's `createHandleKey` pattern
+- h/l vim-style keys map to "yes"/"no" positionally (h = left = active = yes, l = right = inactive = no) matching the visual layout
+- Left/Right and Tab all toggle (flip the boolean) rather than setting absolute positions — simpler and more intuitive for a binary choice
+- y/Y and n/N shortcuts set the value directly (not toggle) for predictable behavior
+- No validation option since confirm is inherently valid (always produces a boolean)
+- `ConfirmState` is minimal with just `{ value: boolean }` — no error state or cursor position needed
+
+### Notes for Future Agent
+
+- The confirm prompt is the simplest list-style prompt. The select prompt (Task 7) will need more complex state: cursor index, viewport scrolling, normalized choices.
+- For select prompt: extract `normalizeChoices` utility into a shared `utils.ts` file. Both multiselect and filter will also need it.
+- The test helper pattern (setupMocks/restoreMocks/pressKey/tick) is now consistent across input, password, and confirm tests.
+- All 5 test files pass together (theme: 14, renderer: 16+4, input: 23, password: 20, confirm: 23 = 100 total).

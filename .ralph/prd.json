@@ -112,7 +112,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "Keep the UI simple — two inline options with visual indicator of which is active (similar to gum confirm). The active/inactive labels are customizable for i18n or preference (e.g., 'Si / No' or 'Confirm / Cancel').",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the select prompt (single selection from a list of choices)",
