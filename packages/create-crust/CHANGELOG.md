@@ -1,5 +1,11 @@
 # create-crust
 
+## 0.0.5
+
+### Patch Changes
+
+- 8e0b48a: Fix published package metadata containing unresolved workspace and catalog protocols by switching to bun publish
+
 ## 0.0.4
 
 ### Patch Changes
