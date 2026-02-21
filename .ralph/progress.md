@@ -76,3 +76,47 @@
 - The `ValidationIssue` type may need to be publicly exported for consumers who want to inspect `error.cause` — this decision should be made in Task 3 or Task 5
 - `renderBulletList` with empty issues array produces `"prefix\n"` (trailing newline after prefix) — this is acceptable since validation failures should always have at least one issue
 - All utilities are sync-only and side-effect-free, suitable for use in both entrypoints
+
+---
+
+## Task: Implement generic Standard Schema wrapper mode for validating existing Crust commands
+
+### Completed
+
+- Created `src/wrapper.ts` with the `withValidation()` wrapper function as the primary public API for generic Standard Schema validation mode
+- Defined `ValidatedContext<ArgsOut, FlagsOut>` interface extending the handler context with transformed `args`/`flags` and `input` for original parsed values
+- Defined `ValidationSchemas`, `WithValidationOptions`, and `ValidatedRunHandler` types for the wrapper configuration
+- Implemented type inference via `InferSchemaOutput<S, Fallback>` so handler receives correctly typed transformed outputs
+- Wrapper validates `context.args` and `context.flags` against provided Standard Schema-compatible validators after Crust parsing
+- Aggregates issues from both args and flags schemas before throwing a single `CrustError("VALIDATION")` with all issues
+- Issue paths are prefixed with `"args"` or `"flags"` for clear CLI error messages
+- Original pre-validation parsed values preserved on `context.input.args` and `context.input.flags`
+- Returned command is frozen and preserves all original command properties (meta, args, flags, subCommands)
+- Updated `src/index.ts` barrel exports: `withValidation`, `ValidatedContext`, `ValidatedRunHandler`, `ValidationSchemas`, `WithValidationOptions`, and `ValidationIssue`
+- Added 35 unit tests in `src/wrapper.test.ts` covering: successful validation, transformed output, original input preservation, validation failures, async schema rejection, command structure preservation, partial schema usage, and Zod integration
+- Verified: build passes (3.28 KB index.js + 4.98 KB index.d.ts), all 70 tests pass, type check clean, biome lint/format clean
+
+### Files Changed
+
+- `packages/validate/src/wrapper.ts` — `withValidation()` wrapper, `ValidatedContext`, `ValidationSchemas`, `WithValidationOptions`, `ValidatedRunHandler` types
+- `packages/validate/src/wrapper.test.ts` — 35 unit tests for the generic wrapper mode
+- `packages/validate/src/index.ts` — Updated barrel exports for wrapper APIs and `ValidationIssue`
+
+### Decisions
+
+- Chose a single `withValidation({ command, schemas, run })` API over separate `wrapCommand`/`wrapRun` functions — simpler API surface and keeps validation wiring in one place
+- `ValidatedContext` is a new interface (not extending `CommandContext`) to cleanly express the transformed types and `input` field without polluting core types
+- Both args and flags schemas are optional in `ValidationSchemas` — when a schema is omitted, the corresponding parsed values pass through unchanged
+- Validation issues from both schemas are aggregated and thrown in a single error to give users a complete error picture
+- Schema output type inference uses `InferSchemaOutput<S, Fallback>` which falls back to the original parsed type when no schema is provided — preserves type safety for partial schema usage
+- `withValidation` returns a `Command<A, F>` (same generic parameters as input) so it remains compatible with `runCommand` and the plugin system
+- The `input` field on `ValidatedContext` uses `Record<string, unknown>` for both `args` and `flags` since the original Crust parser types are erased at the wrapper boundary
+- Test capture pattern uses a `capture()` helper instead of `| null` variables to satisfy both biome's `noNonNullAssertion` rule and TypeScript's strict narrowing
+
+### Notes for Future Agent
+
+- The `ValidationIssue` type is now publicly exported from `src/index.ts` — consumers can use it to inspect `error.cause` on validation failures
+- The wrapper does NOT auto-generate parser/help metadata from schemas — this is by design per SPEC for generic mode; the `/zod` schema-first mode (Task 4/5) will handle metadata generation
+- The wrapper preserves the original command's `preRun`/`postRun` hooks — they are NOT wrapped. Only `run` is replaced with the validating handler. If `preRun`/`postRun` wrapping is needed later, the API can be extended
+- The `withValidation` return type is `Command<A, F>` to maintain parser compatibility, but the `run` handler internally operates on `ValidatedContext` — this type mismatch is handled via internal casting
+- Zod v4 schemas work out of the box as Standard Schema providers — the integration tests confirm this works with `.min()`, `.max()`, `.default()`, and `.transform()`

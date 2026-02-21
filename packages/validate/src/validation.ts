@@ -149,7 +149,7 @@ export function throwValidationError(
 	prefix = "Validation failed",
 ): never {
 	const message = renderBulletList(prefix, issues);
-	throw new CrustError("VALIDATION", message, { issues });
+	throw new CrustError("VALIDATION", message, { issues }).withCause(issues);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
