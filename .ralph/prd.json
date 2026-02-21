@@ -33,7 +33,7 @@
 				"Run 'bun run check' from monorepo root to verify Biome formatting"
 			],
 			"notes": "Import style utilities from '@crustjs/style' (e.g. cyan, dim, red, green, bold, yellow). The theme should feel polished out of the box — use colors similar to clack/gum aesthetic. PartialPromptTheme uses recursive Partial so users only override what they need. Keep types in types.ts, implementation in theme.ts.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement the core renderer engine for managing raw mode, keypress handling, and screen repainting",
