@@ -29,8 +29,8 @@
 				"Run `bun run check:types --filter=@crustjs/validate` to verify type safety",
 				"Run `bun run check` to verify lint and format checks"
 			],
-			"notes": "This task establishes shared behavior required by SPEC: bullet-list errors, dot-path formatting, and structured issues in `error.cause`. Keep all helpers internal unless they are part of deliberate public API.",
-			"passed": false
+			"notes": "This task establishes shared behavior required by SPEC: bullet-list errors, dot-path formatting, and structured issues in `error.cause`. Keep all helpers internal unless they are part of deliberate public API. DONE: types.ts has AnySchema/SchemaResult/SchemaIssue/ValidationIssue types; validation.ts has formatPath, normalizeIssue(s), renderBulletList, throwValidationError, assertSyncResult.",
+			"passed": true
 		},
 		{
 			"description": "Implement generic Standard Schema wrapper mode for validating existing Crust commands",
@@ -45,7 +45,7 @@
 				"Run `bun run check:types --filter=@crustjs/validate` to verify type inference and type safety",
 				"Run `bun run check` to verify lint and format checks"
 			],
-			"notes": "This is the library-agnostic mode from SPEC. It should not auto-generate parser/help metadata and should primarily support teams already defining commands with `defineCommand`.",
+			"notes": "This is the library-agnostic mode from SPEC. It should not auto-generate parser/help metadata and should primarily support teams already defining commands with `defineCommand`. Import shared internals from `./types.ts` and `./validation.ts` — use normalizeIssues + throwValidationError for error mapping, assertSyncResult for async guard. The ValidationIssue type should likely be re-exported publicly from src/index.ts for consumers inspecting error.cause.",
 			"passed": false
 		},
 		{
