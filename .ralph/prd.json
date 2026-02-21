@@ -14,7 +14,7 @@
 				"Run `bun run check` to verify lint and format checks"
 			],
 			"notes": "References `.ralph/SPEC.md` decisions: dual mode architecture (`@crustjs/validate` + `@crustjs/validate/zod`), zero runtime dependencies, and experimental release posture. Keep package layout consistent with existing `packages/core` and `packages/plugins` patterns.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement shared validation internals for issue normalization, path formatting, and Crust error mapping",
