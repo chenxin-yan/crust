@@ -6,6 +6,7 @@
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
+export type { FuzzyFilterResult, FuzzyMatchResult } from "./fuzzy.ts";
 export type {
 	Choice,
 	PartialPromptTheme,
@@ -38,6 +39,8 @@ export { assertTTY, NonInteractiveError, runPrompt } from "./renderer.ts";
 
 export type { ConfirmOptions } from "./confirm.ts";
 export { confirm } from "./confirm.ts";
+export type { FilterOptions } from "./filter.ts";
+export { filter } from "./filter.ts";
 export type { InputOptions } from "./input.ts";
 export { input } from "./input.ts";
 export type { MultiselectOptions } from "./multiselect.ts";
@@ -51,4 +54,5 @@ export { select } from "./select.ts";
 // Utilities
 // ────────────────────────────────────────────────────────────────────────────
 
+export { fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
 export { normalizeChoices } from "./utils.ts";
