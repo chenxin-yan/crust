@@ -1,0 +1,223 @@
+{
+	"tasks": [
+		{
+			"description": "Initialize @crustjs/prompts package with build tooling and project scaffolding",
+			"subtasks": [
+				"Create packages/prompts/package.json following @crustjs/style pattern: name '@crustjs/prompts', version '0.0.1', type 'module', ESM exports from dist/, scripts for build/dev/check:types/test, devDependencies on '@crustjs/config': 'workspace:*' and 'bunup': 'catalog:', dependency on '@crustjs/style': 'workspace:*', peerDependency on 'typescript': 'catalog:', publishConfig access public, keywords: cli, prompts, interactive, terminal, bun, typescript",
+				"Create packages/prompts/tsconfig.json extending '@crustjs/config/tsconfig.base.json' with declaration: true, isolatedDeclarations: true, include: ['src', 'tests']",
+				"Create packages/prompts/bunup.config.ts with entry ['src/index.ts'], format ['esm'], target 'bun', dts: true",
+				"Create packages/prompts/src/index.ts as empty barrel file with section comment header '// @crustjs/prompts — Interactive terminal prompts for Crust'",
+				"Run 'bun install' from monorepo root to link the new workspace package",
+				"Run 'bun run build --filter=@crustjs/prompts' to verify the build pipeline works",
+				"Run 'bun run check:types' from packages/prompts to verify TypeScript config is correct",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "Follow the exact conventions from @crustjs/style package. @crustjs/style is a runtime dependency (not devDependency) since prompts need styling at runtime. The package must be ESM-only with no default exports. Use tabs for indentation, double quotes (Biome enforced).",
+			"passed": false
+		},
+		{
+			"description": "Implement the theme system with default theme, createTheme(), and per-prompt style override types",
+			"subtasks": [
+				"Create packages/prompts/src/types.ts with shared types: PromptTheme interface defining style slots for all prompt elements (prefix, message, placeholder, cursor, selected, unselected, error, success, hint, spinner, filter.match), each slot being a StyleFn from @crustjs/style or a string",
+				"Define PartialPromptTheme as DeepPartial<PromptTheme> for user overrides",
+				"Define Choice<T> type: string | { label: string; value: T; hint?: string } — the generic item type for select/multiselect/filter",
+				"Define ValidateResult type: true | string (true = valid, string = error message)",
+				"Define ValidateFn<T> type: (value: T) => ValidateResult | Promise<ValidateResult>",
+				"Create packages/prompts/src/theme.ts with: defaultTheme constant implementing PromptTheme using @crustjs/style colors (cyan for prefix/cursor, dim for placeholder/hint, red for error, green for success, bold for message, yellow for selected, etc.)",
+				"Implement createTheme(overrides?: PartialPromptTheme): PromptTheme that deep-merges overrides onto defaultTheme",
+				"Implement resolveTheme(globalTheme?: PartialPromptTheme, promptTheme?: PartialPromptTheme): PromptTheme that merges global then per-prompt overrides",
+				"Export defaultTheme, createTheme, resolveTheme, and all types from src/index.ts barrel",
+				"Write unit tests in src/theme.test.ts: default theme has all slots defined, createTheme merges partial overrides, resolveTheme applies per-prompt overrides on top of global",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "Import style utilities from '@crustjs/style' (e.g. cyan, dim, red, green, bold, yellow). The theme should feel polished out of the box — use colors similar to clack/gum aesthetic. PartialPromptTheme uses recursive Partial so users only override what they need. Keep types in types.ts, implementation in theme.ts.",
+			"passed": false
+		},
+		{
+			"description": "Implement the core renderer engine for managing raw mode, keypress handling, and screen repainting",
+			"subtasks": [
+				"Create packages/prompts/src/renderer.ts with a createRenderer function that encapsulates the terminal rendering lifecycle",
+				"Implement raw mode management: enable process.stdin.setRawMode(true) on start, restore on cleanup (including on process.exit and uncaught exceptions)",
+				"Implement keypress event handling using node:readline's emitKeypressEvents(process.stdin) to parse escape sequences into structured keypress objects (key name, ctrl, meta, shift)",
+				"Implement Ctrl+C handler that calls process.exit(0) for clean cancellation",
+				"Implement screen rendering: track previous frame content, use ANSI escape codes to clear previous output and write new frame (cursor up, erase line). Write to process.stderr so prompts don't pollute stdout piping",
+				"Implement cursor visibility management: hide cursor on start (ESC[?25l), show on cleanup (ESC[?25h)",
+				"Create the render loop interface: each prompt provides a State type, a render(state, theme) => string function, and a handleKey(key, state) => State | { submit: T } | 'cancel' reducer",
+				"Implement runPrompt<T>(config: { render, handleKey, initialState, theme }) => Promise<T> that ties together the renderer lifecycle: init state, listen keypresses, call handleKey, re-render, resolve on submit",
+				"Implement TTY detection: check process.stdin.isTTY before entering raw mode, throw descriptive error if not a TTY and no initial value",
+				"Write unit tests in src/renderer.test.ts: verify TTY check throws when not TTY, verify cleanup restores raw mode (mock process.stdin)",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "This is the foundation all prompts build on. Write output to process.stderr (not stdout) so prompt UI doesn't mix with piped output. Use ANSI escape codes directly (ESC[nA for cursor up, ESC[2K for erase line, ESC[?25l/h for cursor visibility). The renderer must be robust about cleanup — always restore terminal state even on errors. Keep the State generic so each prompt defines its own state shape. The handleKey reducer pattern keeps prompts pure and testable.",
+			"passed": false
+		},
+		{
+			"description": "Implement the input prompt (single-line text input with placeholder, validation, and initial value support)",
+			"subtasks": [
+				"Create packages/prompts/src/input.ts with the input function signature: input(options: InputOptions) => Promise<string>",
+				"Define InputOptions interface: { message: string; placeholder?: string; default?: string; initial?: string; validate?: ValidateFn<string>; theme?: PartialPromptTheme }",
+				"Implement initial value short-circuit: if options.initial is provided (not undefined), return it immediately without rendering",
+				"Implement input state: { value: string; cursorPos: number; error: string | null; submitted: boolean }",
+				"Implement keypress handler: printable characters insert at cursor position, Backspace/Delete remove characters, Left/Right arrow move cursor, Home/End jump to start/end, Enter submits (triggers validation if validate fn exists)",
+				"Implement render function: display message, show value with cursor indicator (or placeholder if empty), show error message inline below if validation failed, show default hint if default is set and value is empty",
+				"On submit with empty value and default is set, resolve with default value",
+				"On submit with validation, run validate(value) — if returns string, set error state and continue prompting; if returns true, resolve",
+				"After successful submit, render final state showing the confirmed value (styled with success color) and resolve the promise",
+				"Export input and InputOptions from src/index.ts barrel",
+				"Write unit tests in src/input.test.ts: initial value returns immediately, default value used on empty submit, validate rejects and re-prompts, basic key handling updates state correctly",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "The input prompt is the simplest interactive prompt and serves as the template for all others. Test the handleKey reducer in isolation (pass mock key events, assert state changes) without needing real stdin. The cursor position should support full editing (insert anywhere, not just append). Use the theme's placeholder slot for dim placeholder text, error slot for red error messages.",
+			"passed": false
+		},
+		{
+			"description": "Implement the password prompt (masked text input)",
+			"subtasks": [
+				"Create packages/prompts/src/password.ts with the password function signature: password(options: PasswordOptions) => Promise<string>",
+				"Define PasswordOptions interface: { message: string; mask?: string; validate?: ValidateFn<string>; initial?: string; theme?: PartialPromptTheme } — mask defaults to '*'",
+				"Implement by reusing the input renderer logic but replacing the render function to display mask characters instead of actual value (e.g. '****' for 4 chars)",
+				"Implement initial value short-circuit: if options.initial is provided, return immediately",
+				"Implement keypress handler: same as input (printable chars, backspace, delete, arrows, enter) but operating on the hidden value",
+				"Implement render function: show message, show masked value (mask character repeated for each character in value), cursor position shown within masked text",
+				"On submit, show a fixed number of mask characters (e.g., '****') as the confirmed value regardless of actual length, for security",
+				"Export password and PasswordOptions from src/index.ts barrel",
+				"Write unit tests in src/password.test.ts: mask character replaces value in render output, initial value returns immediately, validation works correctly, custom mask character supported",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "Password is essentially input with masked rendering. Reuse as much of the input implementation as possible — consider extracting shared text-editing logic into a helper if it reduces duplication. The mask character should be configurable but default to '*'. After submit, do NOT display the actual value length to prevent shoulder-surfing.",
+			"passed": false
+		},
+		{
+			"description": "Implement the confirm prompt (yes/no boolean confirmation)",
+			"subtasks": [
+				"Create packages/prompts/src/confirm.ts with the confirm function signature: confirm(options: ConfirmOptions) => Promise<boolean>",
+				"Define ConfirmOptions interface: { message: string; default?: boolean; initial?: boolean; active?: string; inactive?: string; theme?: PartialPromptTheme } — active defaults to 'Yes', inactive defaults to 'No', default defaults to true",
+				"Implement initial value short-circuit: if options.initial is provided (not undefined), return it immediately",
+				"Implement confirm state: { value: boolean; submitted: boolean }",
+				"Implement keypress handler: Left/Right or h/l toggle between yes/no, y sets to true, n sets to false, Enter submits with current value, Tab toggles",
+				"Implement render function: show message with two options side by side (e.g., 'Yes / No') — active option highlighted with cursor/selected theme color, inactive dimmed",
+				"After submit, render final state showing the selected answer styled with success color",
+				"Export confirm and ConfirmOptions from src/index.ts barrel",
+				"Write unit tests in src/confirm.test.ts: default value used on Enter without toggling, Left/Right toggles selection, y/n shortcuts work, initial returns immediately",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "Keep the UI simple — two inline options with visual indicator of which is active (similar to gum confirm). The active/inactive labels are customizable for i18n or preference (e.g., 'Si / No' or 'Confirm / Cancel').",
+			"passed": false
+		},
+		{
+			"description": "Implement the select prompt (single selection from a list of choices)",
+			"subtasks": [
+				"Create packages/prompts/src/select.ts with the select function signature: select<T>(options: SelectOptions<T>) => Promise<T>",
+				"Define SelectOptions<T> interface: { message: string; choices: Choice<T>[]; default?: T; initial?: T; maxVisible?: number; theme?: PartialPromptTheme }",
+				"Implement normalizeChoices<T> helper: convert string[] to { label: string; value: T }[] and pass-through object choices. Export this from a shared utils file for reuse in multiselect/filter",
+				"Implement initial value short-circuit: if options.initial is provided, return it immediately",
+				"Implement select state: { cursor: number; choices: NormalizedChoice<T>[]; scrollOffset: number; submitted: boolean }",
+				"Implement keypress handler: Up/Down (and k/j) move cursor through list with wrapping, Enter selects the highlighted item",
+				"Implement viewport scrolling: when choices exceed maxVisible (default ~10), show a scrollable window with scroll indicators (arrows or dimmed '...' at top/bottom)",
+				"Implement render function: show message, show visible choices with cursor indicator (e.g., '>' or colored bar) on active item, highlight active item with theme.selected, dim non-active with theme.unselected, show hint if choice has hint property",
+				"Set initial cursor position to match default value if provided",
+				"After submit, render final state showing the selected label styled with success color",
+				"Export select and SelectOptions from src/index.ts barrel",
+				"Write unit tests in src/select.test.ts: arrow keys move cursor, wrapping at boundaries, Enter selects correct value, initial returns immediately, default sets initial cursor, string choices normalized correctly, object choices with label/value work",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "The Choice<T> type supports both string[] and { label, value, hint? }[]. When T is string and choices are strings, label === value. The generic T flows through so select<number>({ choices: [{ label: 'One', value: 1 }] }) returns Promise<number>. Viewport scrolling is important for long lists — keep maxVisible configurable. Extract normalizeChoices into a utils file since multiselect and filter also need it.",
+			"passed": false
+		},
+		{
+			"description": "Implement the multiselect prompt (checkbox-style multi selection from a list)",
+			"subtasks": [
+				"Create packages/prompts/src/multiselect.ts with the multiselect function signature: multiselect<T>(options: MultiselectOptions<T>) => Promise<T[]>",
+				"Define MultiselectOptions<T> interface: { message: string; choices: Choice<T>[]; default?: T[]; initial?: T[]; required?: boolean; min?: number; max?: number; maxVisible?: number; theme?: PartialPromptTheme }",
+				"Implement initial value short-circuit: if options.initial is provided, return it immediately",
+				"Implement multiselect state: { cursor: number; choices: NormalizedChoice<T>[]; selected: Set<number>; scrollOffset: number; error: string | null; submitted: boolean }",
+				"Implement keypress handler: Up/Down move cursor, Space toggles selection on current item, Enter submits, 'a' toggles all, 'i' inverts selection",
+				"Implement validation on submit: if required is true and nothing selected, show error. If min/max set, validate count and show inline error if out of range",
+				"Implement render function: show message, show choices with checkbox indicators (e.g., '[ ]' unchecked, '[x]' checked), highlight cursor row, show selected count, scroll viewport if needed, show error inline if validation failed",
+				"Set initially selected items from default values if provided",
+				"After submit, render final state showing comma-separated selected labels styled with success color",
+				"Export multiselect and MultiselectOptions from src/index.ts barrel",
+				"Write unit tests in src/multiselect.test.ts: Space toggles selection, Enter submits selected values, required validation blocks empty submit, min/max validation, 'a' toggles all, initial returns immediately, default pre-selects items",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "Reuse normalizeChoices utility from select. The checkbox indicators should be clear: '[ ]' for unchecked, '[x]' or similar for checked, with color distinction. The 'a' (toggle all) and 'i' (invert) shortcuts are quality-of-life features inspired by gum. Display a hint line showing keybindings (Space to toggle, Enter to confirm).",
+			"passed": false
+		},
+		{
+			"description": "Implement the filter prompt (fuzzy-search interactive filter over a list)",
+			"subtasks": [
+				"Create packages/prompts/src/fuzzy.ts with the fuzzy matching algorithm: fuzzyMatch(query: string, candidate: string) => { match: boolean; score: number; indices: number[] }",
+				"Implement simple character-in-order matching: each query character must appear in candidate in order. Score by: consecutive matches get bonus, matches at word boundaries get bonus, earlier matches score higher",
+				"Implement fuzzyFilter<T>(query: string, items: { label: string; value: T }[]) => Array<{ item: { label: string; value: T }; score: number; indices: number[] }> — returns matched items sorted by score descending",
+				"Write unit tests in src/fuzzy.test.ts: exact match scores highest, substring match works, out-of-order characters don't match, empty query matches all, case-insensitive matching, scoring prefers contiguous matches",
+				"Create packages/prompts/src/filter.ts with the filter function signature: filter<T>(options: FilterOptions<T>) => Promise<T>",
+				"Define FilterOptions<T> interface: { message: string; choices: Choice<T>[]; initial?: T; placeholder?: string; maxVisible?: number; theme?: PartialPromptTheme }",
+				"Implement initial value short-circuit: if options.initial is provided, return it immediately",
+				"Implement filter state: { query: string; cursorPos: number; results: FuzzyResult<T>[]; listCursor: number; scrollOffset: number; submitted: boolean }",
+				"Implement keypress handler: printable characters update query and re-filter the list, Backspace/Delete edit query, Up/Down navigate filtered results, Enter selects highlighted result",
+				"Implement render function: show message, show text input line for query (with placeholder if empty), show filtered results below with matched characters highlighted (using theme colors on the matched indices), show cursor on active result",
+				"After submit, render final state showing the selected label styled with success color",
+				"Export filter, FilterOptions, fuzzyMatch, fuzzyFilter from src/index.ts barrel",
+				"Write unit tests in src/filter.test.ts: typing filters the list, arrow keys navigate results, Enter selects, empty query shows all items, initial returns immediately",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "The fuzzy matcher is extracted into its own file for independent testing and potential reuse. Keep the algorithm simple — no need for fzf-level sophistication. Case-insensitive matching is essential. The filter prompt combines the text input behavior (for query) with the select behavior (for navigating results). Highlight matched characters in results using theme colors for a polished UX. Also export fuzzyMatch and fuzzyFilter as public utilities — they may be useful to users outside of the prompt context.",
+			"passed": false
+		},
+		{
+			"description": "Implement the spinner prompt (display spinner while running an async task)",
+			"subtasks": [
+				"Create packages/prompts/src/spinner.ts with the spinner function signature: spinner<T>(options: SpinnerOptions<T>) => Promise<T>",
+				"Define SpinnerOptions<T> interface: { message: string; task: () => Promise<T>; spinner?: SpinnerType; theme?: PartialPromptTheme }",
+				"Define SpinnerType as a union of built-in spinner names: 'dots' | 'line' | 'arc' | 'bounce' — or a custom { frames: string[]; interval: number } object",
+				"Implement built-in spinner frame sets: dots ('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'), line ('-\\\\|/'), arc ('◐◓◑◒'), bounce ('⠁⠂⠄⡀⢀⠠⠐⠈')",
+				"Implement spinner rendering: use setInterval to cycle through frames at the spinner's interval (default ~80ms), write frame + message to stderr, erase previous frame before writing new one",
+				"Implement task execution: start spinner animation, await the task function, stop spinner on completion (success or error), clear spinner line",
+				"On success: render final state with success indicator (e.g., green checkmark) + message, return task result",
+				"On error: render final state with error indicator (e.g., red X) + message, re-throw the error",
+				"Ensure cleanup: clearInterval and restore cursor even if task throws",
+				"The spinner does NOT need raw mode or keypress handling — it's non-interactive (output only)",
+				"Export spinner, SpinnerOptions, SpinnerType from src/index.ts barrel",
+				"Write unit tests in src/spinner.test.ts: task result is returned, task error is re-thrown, spinner shows message (mock stderr)",
+				"Run 'bun test' from packages/prompts to verify tests pass",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting"
+			],
+			"notes": "The spinner is unique among prompts — it wraps an async function rather than collecting user input. It does NOT use raw mode or keypress handling. Write to stderr like other prompts. The built-in spinner sets are inspired by gum/cli-spinners. Use setInterval (not requestAnimationFrame). The generic T flows through so the task's return type becomes the spinner's return type. Always cleanup (clearInterval, show cursor) in a finally block.",
+			"passed": false
+		},
+		{
+			"description": "Finalize barrel exports, add integration tests, and verify full build pipeline",
+			"subtasks": [
+				"Review packages/prompts/src/index.ts barrel file — ensure all public functions, types, and utilities are exported with organized section comments following @crustjs/style convention (section dividers with '// ──── Section ────')",
+				"Verify export grouping: Prompt functions (input, password, confirm, select, multiselect, filter, spinner), Types (all Options interfaces, Choice, ValidateFn, ValidateResult, PromptTheme, PartialPromptTheme, SpinnerType), Theme (defaultTheme, createTheme), Utilities (fuzzyMatch, fuzzyFilter)",
+				"Ensure all type exports use 'export type' syntax (enforced by verbatimModuleSyntax)",
+				"Create packages/prompts/tests/integration.test.ts with integration-level tests: verify all exports are importable from '@crustjs/prompts', verify createTheme returns valid theme with all slots, verify initial short-circuit works for every prompt type",
+				"Run 'bun test' from packages/prompts to verify all tests pass",
+				"Run 'bun run build --filter=@crustjs/prompts' to verify clean build with no errors",
+				"Verify dist/ output contains index.js and index.d.ts with correct exports",
+				"Run 'bun run check:types' from packages/prompts to verify no type errors",
+				"Run 'bun run check' from monorepo root to verify Biome formatting across all files",
+				"Run 'bun run test' from monorepo root to verify no regressions in other packages"
+			],
+			"notes": "This is the polish task — ensure everything is properly exported, tested, and builds cleanly. The barrel file should follow the same organization pattern as @crustjs/style/src/index.ts. Integration tests should focus on the public API surface (imports work, types are correct, basic flows), not re-test unit-level behavior. Verify the dist output includes proper .d.ts so consumers get full type inference.",
+			"passed": false
+		}
+	]
+}
