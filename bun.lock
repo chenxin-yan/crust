@@ -60,7 +60,7 @@
     },
     "packages/create": {
       "name": "@crustjs/create",
-      "version": "0.0.1",
+      "version": "0.0.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
@@ -119,7 +119,7 @@
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
-      "version": "0.0.1",
+      "version": "0.0.0",
       "dependencies": {
         "@crustjs/style": "workspace:*",
       },

@@ -103,6 +103,10 @@ OPTIONS:
   />
 </Cards>
 
+## Roadmap
+
+Curious about what's coming next? Check out the [Roadmap](/roadmap) to see what we're working on, what's planned, and where you can contribute.
+
 ## Community
 
 Have questions or want to chat about Crust? Join our [Discord community](https://discord.gg/sQF8hdN6Ht) to connect with other developers, get help, and stay up to date.

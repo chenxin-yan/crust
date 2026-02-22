@@ -67,6 +67,12 @@ export function baseOptions(): BaseLayoutProps {
         on: "nav",
       },
       {
+        text: "Roadmap",
+        url: "/roadmap",
+        active: "url",
+        on: "nav",
+      },
+      {
         type: "icon",
         label: "Discord",
         icon: <DiscordIcon />,

@@ -122,10 +122,9 @@ const MODULES: Array<{
     doc: "modules/validate",
   },
   {
-    pkg: "@crustjs/prompt",
+    pkg: "@crustjs/prompts",
     desc: "Interactive prompts",
     doc: "modules/prompt",
-    upcoming: true,
   },
   {
     pkg: "@crustjs/style",
@@ -300,6 +299,67 @@ function FurnaceHome() {
           pointer-events: none;
           z-index: 0;
         }
+
+        /* Dev badge — roadmap link */
+        .fn-dev-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 10px;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          color: var(--fn-dim);
+          text-decoration: none;
+          padding: 7px 16px;
+          border: 1px solid var(--fn-border);
+          margin-bottom: 28px;
+          transition: border-color 0.25s;
+        }
+        .fn-dev-badge:hover {
+          border-color: var(--fn-molten);
+        }
+        .fn-dev-badge-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--fn-molten);
+          box-shadow: 0 0 8px rgba(255, 106, 16, 0.5);
+          flex-shrink: 0;
+          animation: fn-pulse 2.5s ease-in-out infinite;
+        }
+        @keyframes fn-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        .fn-dev-badge-status {
+          color: var(--fn-primary);
+          letter-spacing: 1px;
+        }
+        .fn-dev-badge-sep {
+          width: 1px;
+          height: 12px;
+          background: var(--fn-border);
+          flex-shrink: 0;
+        }
+        .fn-dev-badge-cta {
+          color: var(--fn-dim);
+          transition: color 0.2s;
+        }
+        .fn-dev-badge:hover .fn-dev-badge-cta {
+          color: var(--fn-molten);
+        }
+        .fn-dev-badge-arrow {
+          font-size: 9px;
+          line-height: 1;
+          margin-left: 5px;
+          color: var(--fn-dim);
+          transition: color 0.2s, transform 0.2s;
+        }
+        .fn-dev-badge:hover .fn-dev-badge-arrow {
+          color: var(--fn-molten);
+          transform: translateX(2px);
+        }
+
 
         .fn-condensed {
           font-family: 'Saira Condensed', sans-serif;
@@ -638,18 +698,17 @@ function FurnaceHome() {
         <div className="furnace-home">
           {/* Hero */}
           <section className="fn-hero-section">
-            <p
-              className="fn-mono"
-              style={{
-                fontSize: 11,
-                letterSpacing: 4,
-                color: "var(--fn-dim)",
-                textTransform: "uppercase",
-                marginBottom: 24,
-              }}
-            >
-              CLI Framework {"/"} TypeScript {"/"} Bun
-            </p>
+            <Link to="/roadmap" className="fn-mono fn-dev-badge">
+              <span className="fn-dev-badge-dot" />
+              <span className="fn-dev-badge-status">Now in Alpha</span>
+              <span className="fn-dev-badge-sep" />
+              <span className="fn-dev-badge-cta">
+                See Roadmap
+                <span className="fn-dev-badge-arrow" aria-hidden="true">
+                  →
+                </span>
+              </span>
+            </Link>
 
             <div className="fn-hero-grid">
               {/* Left — text content */}
