@@ -1,4 +1,4 @@
-import type { AnyCommand, CommandContext, CommandMeta } from "@crustjs/core";
+import type { CommandContext, CommandDef } from "@crustjs/core";
 import type * as z from "zod/v4/core";
 import type { ValidatedContext } from "../types.ts";
 
@@ -142,19 +142,36 @@ export type InferFlagsFromConfig<F> = F extends FlagShape
 	? InferFlagsFromShape<F>
 	: Record<string, never>;
 
-/** Config for `defineZodCommand()` using `arg()` + `flag()` schema-first DSL. */
+/**
+ * Keys from `CommandDef` that `ZodCommandDef` redefines with different types.
+ *
+ * - `args` / `flags`: Zod schema-based definitions replace core's `ArgsDef`/`FlagsDef`
+ * - `run`: receives `ValidatedContext` instead of raw `CommandContext`
+ * - `preRun` / `postRun`: use raw `CommandContext` (no `NoInfer` wrapper)
+ *
+ * All remaining `CommandDef` keys (e.g. `meta`, `subCommands`) are inherited
+ * automatically via `Omit`. If a new passthrough field is added to `CommandDef`,
+ * it propagates here without changes. The compile-time key exhaustiveness
+ * assertion in `command.test.ts` will fail, forcing a review.
+ */
+type ZodOverriddenKeys = "args" | "flags" | "run" | "preRun" | "postRun";
+
+/**
+ * Config for `defineZodCommand()` using `arg()` + `flag()` schema-first DSL.
+ *
+ * Extends `CommandDef` (minus overridden keys) so passthrough fields like
+ * `meta` and `subCommands` stay in sync automatically. If a new field is
+ * added to `CommandDef`, the key exhaustiveness assertion in
+ * `command.test.ts` fails at compile time, forcing a review.
+ */
 export interface ZodCommandDef<
 	A extends ArgSpecs | undefined = undefined,
 	F extends FlagShape | undefined = undefined,
-> {
-	/** Command metadata (name, description, usage). */
-	readonly meta: CommandMeta;
+> extends Omit<CommandDef, ZodOverriddenKeys> {
 	/** Ordered positional args as `arg()` specs. */
 	readonly args?: A;
 	/** Named flags as plain schemas or `flag()` wrappers. */
 	readonly flags?: F;
-	/** Named subcommands. */
-	readonly subCommands?: Record<string, AnyCommand>;
 	/**
 	 * Optional setup hook before schema validation runs.
 	 *

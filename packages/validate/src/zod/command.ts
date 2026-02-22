@@ -149,25 +149,29 @@ export function defineZodCommand<
 		flags?: F extends Record<string, unknown> ? ValidateFlagAliases<F> : F;
 	},
 ): AnyCommand {
-	const argSpecs = (config.args ?? []) as readonly ArgSpec[];
+	// Destructure Zod-specific fields; rest-spread forwards passthrough fields
+	// (meta, subCommands, preRun, postRun, + any future CommandDef additions)
+	// to defineCommand automatically.
+	const {
+		args: zodArgs,
+		flags: zodFlags,
+		run: userRun,
+		...passthrough
+	} = config;
+
+	const argSpecs = (zodArgs ?? []) as readonly ArgSpec[];
 	const generatedArgs = argsToDefinitions(argSpecs);
-	const generatedFlags = flagsToDefinitions(config.flags);
+	const generatedFlags = flagsToDefinitions(zodFlags);
 
 	const command = defineCommand({
-		meta: config.meta,
+		...passthrough,
 		...(generatedArgs.length > 0 && { args: generatedArgs }),
 		...(Object.keys(generatedFlags).length > 0 && { flags: generatedFlags }),
-		...(config.subCommands && { subCommands: config.subCommands }),
-		...(config.preRun && { preRun: config.preRun }),
-		...(config.run && {
+		...(userRun && {
 			async run(context: CommandContext) {
 				const issues: ValidationIssue[] = [];
 				const validatedArgs = await validateArgs(argSpecs, context, issues);
-				const validatedFlags = await validateFlags(
-					config.flags,
-					context,
-					issues,
-				);
+				const validatedFlags = await validateFlags(zodFlags, context, issues);
 
 				if (issues.length > 0) {
 					throwValidationError(issues);
@@ -184,12 +188,11 @@ export function defineZodCommand<
 					},
 				};
 
-				return (config.run as ZodCommandRunHandler<unknown, unknown>)(
+				return (userRun as ZodCommandRunHandler<unknown, unknown>)(
 					validatedContext,
 				);
 			},
 		}),
-		...(config.postRun && { postRun: config.postRun }),
 	});
 
 	return command;

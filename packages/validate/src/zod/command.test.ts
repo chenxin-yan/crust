@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type { CommandDef } from "@crustjs/core";
 import { CrustError, runCommand } from "@crustjs/core";
 import { z } from "zod";
 import { defineZodCommand } from "./command.ts";
 import { arg, flag } from "./schema.ts";
+import type { ZodCommandDef } from "./types.ts";
 
 function capture<T>(): { value: T | undefined; set(v: T): void } {
 	const box: { value: T | undefined; set(v: T): void } = {
@@ -357,6 +359,18 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
 		? true
 		: false;
+
+// ────────────────────────────────────────────────────────────────────────────
+// CommandDef ↔ ZodCommandDef key exhaustiveness
+// ────────────────────────────────────────────────────────────────────────────
+//
+// If a new key is added to `CommandDef`, this assertion fails at compile time.
+// When that happens, decide:
+// - **Passthrough** (e.g. `plugins`): no action needed — `Omit` auto-inherits it.
+//   Just add the key to this assertion.
+// - **Needs Zod wrapping** (e.g. new lifecycle hook): add it to `ZodOverriddenKeys`,
+//   redeclare it in `ZodCommandDef`, and handle it in `defineZodCommand`.
+type _assertKeysInSync = Expect<Equal<keyof CommandDef, keyof ZodCommandDef>>;
 
 describe("ValidateVariadicArgs (compile-time, via defineZodCommand)", () => {
 	it("accepts variadic as the last arg", () => {
