@@ -29,15 +29,23 @@ function isZodSchema(value: unknown): value is ZodSchemaLike {
 /**
  * Define a named positional argument schema for `defineZodCommand()`.
  *
+ * The `const Variadic` parameter preserves `{ variadic: true }` as a
+ * literal in the return type, enabling compile-time variadic position
+ * validation in `defineZodCommand()`.
+ *
  * @param name - Positional arg name used in parser output and help text
  * @param schema - Zod schema
  * @param options - Optional CLI metadata (description, variadic)
  */
-export function arg<Name extends string, Schema extends ZodSchemaLike>(
+export function arg<
+	Name extends string,
+	Schema extends ZodSchemaLike,
+	const Variadic extends true | undefined = undefined,
+>(
 	name: Name,
 	schema: Schema,
-	options?: ArgOptions,
-): ArgSpec<Name, Schema> {
+	options?: ArgOptions & { variadic?: Variadic },
+): ArgSpec<Name, Schema, Variadic> {
 	if (!name.trim()) {
 		throw new CrustError(
 			"DEFINITION",
@@ -56,20 +64,27 @@ export function arg<Name extends string, Schema extends ZodSchemaLike>(
 		name,
 		schema,
 		description: options?.description,
-		variadic: options?.variadic,
+		variadic: options?.variadic as Variadic,
 	};
 }
 
 /**
  * Define a flag schema for `defineZodCommand()` with optional alias/description.
  *
+ * The `const Alias` parameter preserves alias literals (e.g. `"v"` or
+ * `readonly ["v", "V"]`) in the return type, enabling compile-time alias
+ * collision detection in `defineZodCommand()`.
+ *
  * @param schema - Zod schema
  * @param options - Optional flag metadata
  */
-export function flag<Schema extends ZodSchemaLike>(
+export function flag<
+	Schema extends ZodSchemaLike,
+	const Alias extends string | readonly string[] | undefined = undefined,
+>(
 	schema: Schema,
-	options?: FlagOptions,
-): FlagSpec<Schema> {
+	options?: FlagOptions & { alias?: Alias },
+): FlagSpec<Schema, Alias> {
 	if (!isZodSchema(schema)) {
 		throw new CrustError("DEFINITION", "flag(): schema must be a Zod schema");
 	}
@@ -77,7 +92,7 @@ export function flag<Schema extends ZodSchemaLike>(
 	return {
 		kind: "flag",
 		schema,
-		alias: options?.alias,
+		alias: options?.alias as Alias,
 		description: options?.description,
 	};
 }

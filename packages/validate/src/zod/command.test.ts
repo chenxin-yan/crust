@@ -339,10 +339,166 @@ describe("defineZodCommand", () => {
 			defineZodCommand({
 				meta: { name: "bad-order" },
 				args: [
+					// @ts-expect-error — intentionally invalid: variadic is not last, compile-time branded error
 					arg("files", z.string(), { variadic: true }),
 					arg("mode", z.string()),
 				],
 			}),
 		).toThrow(CrustError);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level validation tests (compile-time only)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Expect<T extends true> = T;
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+		? true
+		: false;
+
+describe("ValidateVariadicArgs (compile-time, via defineZodCommand)", () => {
+	it("accepts variadic as the last arg", () => {
+		// Should compile without error
+		const cmd = defineZodCommand({
+			meta: { name: "ok" },
+			args: [
+				arg("mode", z.string()),
+				arg("files", z.string(), { variadic: true }),
+			],
+		});
+		expect(cmd.meta.name).toBe("ok");
+	});
+
+	it("accepts no variadic args", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok2" },
+			args: [arg("port", z.number()), arg("host", z.string())],
+		});
+		expect(cmd.meta.name).toBe("ok2");
+	});
+
+	it("accepts a single variadic arg", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok3" },
+			args: [arg("files", z.string(), { variadic: true })],
+		});
+		expect(cmd.meta.name).toBe("ok3");
+	});
+
+	it("accepts empty args array", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok4" },
+			args: [],
+		});
+		expect(cmd.meta.name).toBe("ok4");
+	});
+});
+
+describe("ValidateFlagAliases (compile-time, via defineZodCommand)", () => {
+	it("accepts non-colliding aliases", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok" },
+			flags: {
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				port: flag(z.number().default(3000), { alias: "p" }),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok");
+	});
+
+	it("accepts flags without aliases", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok2" },
+			flags: {
+				verbose: z.boolean().default(false),
+				port: z.number().default(3000),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok2");
+	});
+
+	it("accepts array aliases that don't collide", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok3" },
+			flags: {
+				verbose: flag(z.boolean().default(false), {
+					alias: ["v", "V"],
+				}),
+				port: flag(z.number().default(3000), { alias: "p" }),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok3");
+	});
+
+	it("accepts mix of plain schemas and flag() wrappers", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok4" },
+			flags: {
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				port: z.number().default(3000),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok4");
+	});
+
+	it("rejects alias that collides with a flag name (compile-time)", () => {
+		defineZodCommand({
+			meta: { name: "bad-alias" },
+			flags: {
+				out: z.string().optional(),
+				// @ts-expect-error — alias "out" collides with flag name "--out"
+				output: flag(z.string().optional(), { alias: "out" }),
+			},
+		});
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects duplicate aliases across flags (compile-time)", () => {
+		defineZodCommand({
+			meta: { name: "bad-alias-dup" },
+			flags: {
+				// @ts-expect-error — alias "v" collides with alias on other flag
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				// @ts-expect-error — alias "v" collides with alias on other flag
+				version: flag(z.boolean().default(false), { alias: "v" }),
+			},
+		});
+
+		expect(true).toBe(true);
+	});
+});
+
+describe("arg() / flag() generic type narrowing", () => {
+	it("narrows variadic to literal true on arg() return type", () => {
+		const variadicArg = arg("files", z.string(), { variadic: true });
+		type _check = Expect<Equal<typeof variadicArg.variadic, true>>;
+		expect(variadicArg.variadic).toBe(true);
+	});
+
+	it("narrows variadic to undefined when not specified", () => {
+		const plainArg = arg("port", z.number());
+		type _check = Expect<Equal<typeof plainArg.variadic, undefined>>;
+		expect(plainArg.variadic).toBeUndefined();
+	});
+
+	it("narrows alias to literal string on flag() return type", () => {
+		const f = flag(z.boolean(), { alias: "v" });
+		type _check = Expect<Equal<typeof f.alias, "v">>;
+		expect(f.alias).toBe("v");
+	});
+
+	it("narrows alias to literal tuple on flag() return type", () => {
+		const f = flag(z.boolean(), { alias: ["v", "V"] });
+		type _check = Expect<Equal<typeof f.alias, readonly ["v", "V"]>>;
+		expect(f.alias).toEqual(["v", "V"]);
+	});
+
+	it("narrows alias to undefined when not specified", () => {
+		const f = flag(z.boolean());
+		type _check = Expect<Equal<typeof f.alias, undefined>>;
+		expect(f.alias).toBeUndefined();
 	});
 });

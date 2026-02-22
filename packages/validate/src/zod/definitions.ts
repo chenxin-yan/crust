@@ -248,7 +248,7 @@ export function argsToDefinitions(args: ArgSpecs): ArgDef[] {
 
 function getFlagMetadata(value: ZodSchemaLike | FlagSpec): {
 	schema: ZodSchemaLike;
-	alias?: string | string[];
+	alias?: string | readonly string[];
 	description?: string;
 } {
 	if (isFlagSpec(value)) {
@@ -276,10 +276,18 @@ export function flagsToDefinitions(flags: FlagShape | undefined): FlagsDef {
 		const required = !isOptionalInputSchema(schema);
 		const description = resolveDescription(schema, metadata.description);
 
+		// Convert readonly alias to mutable for core FlagDef compatibility
+		const alias: string | string[] | undefined =
+			metadata.alias === undefined
+				? undefined
+				: typeof metadata.alias === "string"
+					? metadata.alias
+					: [...metadata.alias];
+
 		result[name] = {
 			type: shape.type,
 			...(shape.multiple && { multiple: true }),
-			...(metadata.alias !== undefined && { alias: metadata.alias }),
+			...(alias !== undefined && { alias }),
 			...(description !== undefined && { description }),
 			...(required && { required: true }),
 		};

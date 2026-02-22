@@ -1,4 +1,9 @@
-import type { AnyCommand, CommandContext } from "@crustjs/core";
+import type {
+	AnyCommand,
+	CommandContext,
+	ValidateFlagAliases,
+	ValidateVariadicArgs,
+} from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
 import { safeParseAsync } from "zod/v4/core";
 import type { ValidatedContext, ValidationIssue } from "../types.ts";
@@ -130,11 +135,20 @@ async function validateFlags(
  *
  * The factory generates Crust parser/help definitions and runs schema
  * validation after parsing but before user handler execution.
+ *
+ * Compile-time validation (via intersection branding) catches:
+ * - Variadic args that aren't in the last position
+ * - Flag alias collisions (alias→name or alias→alias)
  */
 export function defineZodCommand<
 	const A extends readonly ArgSpec[] | undefined,
 	const F extends FlagShape | undefined,
->(config: ZodCommandDef<A, F>): AnyCommand {
+>(
+	config: ZodCommandDef<A, F> & {
+		args?: A extends readonly object[] ? ValidateVariadicArgs<A> : A;
+		flags?: F extends Record<string, unknown> ? ValidateFlagAliases<F> : F;
+	},
+): AnyCommand {
 	const argSpecs = (config.args ?? []) as readonly ArgSpec[];
 	const generatedArgs = argsToDefinitions(argSpecs);
 	const generatedFlags = flagsToDefinitions(config.flags);

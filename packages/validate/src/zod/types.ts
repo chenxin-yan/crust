@@ -27,16 +27,27 @@ export interface ArgOptions {
 	readonly variadic?: true;
 }
 
-/** A single positional argument spec produced by `arg()`. */
+/**
+ * A single positional argument spec produced by `arg()`.
+ *
+ * The `Variadic` generic parameter preserves the literal `true` from
+ * `arg()` calls so `ValidateVariadicArgs` can distinguish variadic args
+ * from non-variadic ones at compile time.
+ *
+ * - `ArgSpec<N, S, true>` — variadic arg (only valid in last position)
+ * - `ArgSpec<N, S, undefined>` — normal positional arg
+ * - `ArgSpec<N, S>` (default) — type-erased form used in constraints
+ */
 export interface ArgSpec<
 	Name extends string = string,
 	Schema extends ZodSchemaLike = ZodSchemaLike,
+	Variadic extends true | undefined = true | undefined,
 > {
 	readonly kind: "arg";
 	readonly name: Name;
 	readonly schema: Schema;
 	readonly description?: string;
-	readonly variadic?: true;
+	readonly variadic: Variadic;
 }
 
 /** Ordered positional argument specs. */
@@ -71,16 +82,32 @@ export type InferArgsFromSpecs<A extends ArgSpecs> = Simplify<
 /** Optional metadata for a flag declared with `flag()`. */
 export interface FlagOptions {
 	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
-	readonly alias?: string | string[];
+	readonly alias?: string | readonly string[];
 	/** Human-readable description for help text. */
 	readonly description?: string;
 }
 
-/** A named flag schema wrapper produced by `flag()`. */
-export interface FlagSpec<Schema extends ZodSchemaLike = ZodSchemaLike> {
+/**
+ * A named flag schema wrapper produced by `flag()`.
+ *
+ * The `Alias` generic parameter preserves alias literals (e.g. `"v"` or
+ * `readonly ["v", "V"]`) from `flag()` calls so `ValidateFlagAliases` can
+ * detect collisions at compile time.
+ *
+ * - `FlagSpec<S, "v">` — flag with alias `"v"` (collision-detectable)
+ * - `FlagSpec<S, undefined>` — flag without an alias
+ * - `FlagSpec<S>` (default) — type-erased form used in constraints
+ */
+export interface FlagSpec<
+	Schema extends ZodSchemaLike = ZodSchemaLike,
+	Alias extends string | readonly string[] | undefined =
+		| string
+		| readonly string[]
+		| undefined,
+> {
 	readonly kind: "flag";
 	readonly schema: Schema;
-	readonly alias?: string | string[];
+	readonly alias: Alias;
 	readonly description?: string;
 }
 
