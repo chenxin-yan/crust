@@ -1,6 +1,5 @@
 import type {
 	AnyCommand,
-	CommandContext,
 	ValidateFlagAliases,
 	ValidateVariadicArgs,
 } from "@crustjs/core";
@@ -9,10 +8,10 @@ import { either, runSync } from "effect/Effect";
 import * as Either from "effect/Either";
 import * as ParseResult from "effect/ParseResult";
 import { decodeUnknown } from "effect/Schema";
-import type { ValidatedContext, ValidationIssue } from "../types.ts";
-import { normalizeIssues, throwValidationError } from "../validation.ts";
+import type { ValidationResult } from "../runner.ts";
+import { buildRunHandler } from "../runner.ts";
+import { normalizeIssues } from "../validation.ts";
 import { argsToDefinitions, flagsToDefinitions } from "./definitions.ts";
-import { getFlagSchema } from "./schema.ts";
 import type {
 	ArgSpec,
 	EffectCommandDef,
@@ -22,17 +21,24 @@ import type {
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Validation helpers
+// Provider-specific validation
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Validate a value against an Effect schema synchronously.
+ *
+ * Only synchronous schemas are supported. Schemas that perform async work
+ * (e.g. `Schema.filterEffect`, async `Schema.transformOrFail`) will cause
+ * `Effect.runSync` to throw an `AsyncFiberException` at runtime.
+ */
 function validateValue(
-	schema: EffectSchemaLike,
+	schema: unknown,
 	value: unknown,
 	prefix: readonly PropertyKey[],
-):
-	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly issues: ValidationIssue[] } {
-	const result = runSync(either(decodeUnknown(schema)(value)));
+): ValidationResult {
+	const result = runSync(
+		either(decodeUnknown(schema as EffectSchemaLike)(value)),
+	);
 
 	if (Either.isRight(result)) {
 		return { ok: true, value: result.right };
@@ -49,86 +55,16 @@ function validateValue(
 	return { ok: false, issues: normalizeIssues(prefixed) };
 }
 
-function validateArgs(
-	argSpecs: readonly ArgSpec[],
-	context: CommandContext,
-	issues: ValidationIssue[],
-): Record<string, unknown> {
-	const output: Record<string, unknown> = {};
-
-	for (const spec of argSpecs) {
-		const input = (context.args as Record<string, unknown>)[spec.name];
-
-		if (spec.variadic) {
-			const items = Array.isArray(input)
-				? input
-				: input === undefined
-					? []
-					: [input];
-
-			const transformed: unknown[] = [];
-			for (let i = 0; i < items.length; i++) {
-				const value = items[i];
-				const validated = validateValue(spec.schema, value, [
-					"args",
-					spec.name,
-					i,
-				]);
-				if (!validated.ok) {
-					issues.push(...validated.issues);
-					continue;
-				}
-				transformed.push(validated.value);
-			}
-
-			output[spec.name] = transformed;
-			continue;
-		}
-
-		const validated = validateValue(spec.schema, input, ["args", spec.name]);
-		if (!validated.ok) {
-			issues.push(...validated.issues);
-			continue;
-		}
-		output[spec.name] = validated.value;
-	}
-
-	return output;
-}
-
-function validateFlags(
-	flags: FlagShape | undefined,
-	context: CommandContext,
-	issues: ValidationIssue[],
-): Record<string, unknown> {
-	if (!flags) {
-		return {};
-	}
-
-	const output: Record<string, unknown> = {};
-
-	for (const [name, rawValue] of Object.entries(flags)) {
-		const schema = getFlagSchema(rawValue);
-		const input = (context.flags as Record<string, unknown>)[name];
-		const validated = validateValue(schema, input, ["flags", name]);
-
-		if (!validated.ok) {
-			issues.push(...validated.issues);
-			continue;
-		}
-
-		output[name] = validated.value;
-	}
-
-	return output;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // defineEffectCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Define a Crust command where Effect schemas are the source of truth.
+ *
+ * Only context-free (`R = never`), synchronous schemas are supported.
+ * Async combinators like `Schema.filterEffect` or async `Schema.transformOrFail`
+ * will throw at runtime.
  */
 export function defineEffectCommand<
 	const A extends readonly ArgSpec[] | undefined,
@@ -155,30 +91,12 @@ export function defineEffectCommand<
 		...(generatedArgs.length > 0 && { args: generatedArgs }),
 		...(Object.keys(generatedFlags).length > 0 && { flags: generatedFlags }),
 		...(userRun && {
-			async run(context: CommandContext) {
-				const issues: ValidationIssue[] = [];
-				const validatedArgs = validateArgs(argSpecs, context, issues);
-				const validatedFlags = validateFlags(effectFlags, context, issues);
-
-				if (issues.length > 0) {
-					throwValidationError(issues);
-				}
-
-				const validatedContext: ValidatedContext<unknown, unknown> = {
-					args: validatedArgs,
-					flags: validatedFlags,
-					rawArgs: context.rawArgs,
-					command: context.command,
-					input: {
-						args: context.args as Record<string, unknown>,
-						flags: context.flags as Record<string, unknown>,
-					},
-				};
-
-				return (userRun as EffectCommandRunHandler<unknown, unknown>)(
-					validatedContext,
-				);
-			},
+			run: buildRunHandler(
+				argSpecs,
+				effectFlags as Record<string, unknown> | undefined,
+				userRun as EffectCommandRunHandler<unknown, unknown>,
+				validateValue,
+			),
 		}),
 	});
 

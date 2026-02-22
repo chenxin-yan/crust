@@ -10,6 +10,9 @@ import type { ValidatedContext } from "../types.ts";
  * An Effect schema used by the Effect entrypoint.
  *
  * v1 intentionally supports context-free schemas only (`R = never`).
+ * Schemas must also be **synchronous** — async combinators such as
+ * `Schema.filterEffect` or async `Schema.transformOrFail` will cause
+ * `Effect.runSync` to throw at runtime.
  */
 export type EffectSchemaLike = schema.Schema.AnyNoContext;
 

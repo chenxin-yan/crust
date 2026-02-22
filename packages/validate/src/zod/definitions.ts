@@ -1,16 +1,16 @@
 import type { ArgDef, FlagsDef } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
-import { isFlagSpec, resolveDescription } from "./schema.ts";
-import type { ArgSpecs, FlagShape, FlagSpec, ZodSchemaLike } from "./types.ts";
+import type { DefinitionAdapter, InputShape } from "../definitionBuilders.ts";
+import {
+	buildArgDefinitions,
+	buildFlagDefinitions,
+} from "../definitionBuilders.ts";
+import { resolveDescription } from "./schema.ts";
+import type { ArgSpecs, FlagShape } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Schema analysis helpers
+// Schema analysis helpers — Zod-specific
 // ────────────────────────────────────────────────────────────────────────────
-
-type InputShape = {
-	type: "string" | "number" | "boolean";
-	multiple: boolean;
-};
 
 interface ZodRuntimeSchemaLike {
 	type?: unknown;
@@ -112,7 +112,7 @@ function resolvePrimitiveInputType(
 }
 
 /** Resolve Crust parser input shape from a Zod schema. */
-function resolveInputShape(schema: ZodSchemaLike, label: string): InputShape {
+function resolveInputShape(schema: unknown, label: string): InputShape {
 	const inputSchema = unwrapInputSchema(schema);
 
 	if (getSchemaType(inputSchema) === "array") {
@@ -146,7 +146,7 @@ function resolveInputShape(schema: ZodSchemaLike, label: string): InputShape {
 }
 
 /** Check if the schema accepts `undefined` as input. */
-function isOptionalInputSchema(schema: ZodSchemaLike): boolean {
+function isOptionalInputSchema(schema: unknown): boolean {
 	let current: unknown = schema;
 
 	for (;;) {
@@ -187,109 +187,28 @@ function isOptionalInputSchema(schema: ZodSchemaLike): boolean {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public definition generation
+// Adapter + public definition generation
 // ────────────────────────────────────────────────────────────────────────────
+
+const zodAdapter: DefinitionAdapter = {
+	resolveInputShape,
+	isOptionalInputSchema,
+	resolveDescription: resolveDescription as (
+		schema: unknown,
+	) => string | undefined,
+	commandLabel: "defineZodCommand",
+	arrayHint: "z.array(...)",
+};
 
 /** Build Crust positional arg definitions from ordered `arg()` specs. */
 export function argsToDefinitions(args: ArgSpecs): ArgDef[] {
-	const seen = new Set<string>();
-
-	for (let i = 0; i < args.length; i++) {
-		const spec = args[i];
-		if (!spec) continue;
-
-		if (seen.has(spec.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`defineZodCommand: duplicate arg name "${spec.name}"`,
-			);
-		}
-		seen.add(spec.name);
-
-		if (spec.variadic && i !== args.length - 1) {
-			throw new CrustError(
-				"DEFINITION",
-				`defineZodCommand: only the last arg can be variadic (arg "${spec.name}")`,
-			);
-		}
-	}
-
-	return args.map((spec) => {
-		const shape = resolveInputShape(spec.schema, `arg "${spec.name}"`);
-
-		if (spec.variadic && shape.multiple) {
-			throw new CrustError(
-				"DEFINITION",
-				`arg "${spec.name}": variadic args must use a scalar schema; do not wrap the schema in z.array(...)`,
-			);
-		}
-
-		if (!spec.variadic && shape.multiple) {
-			throw new CrustError(
-				"DEFINITION",
-				`arg "${spec.name}": array schema requires { variadic: true }`,
-			);
-		}
-
-		const description = resolveDescription(spec.schema);
-		const required = !isOptionalInputSchema(spec.schema);
-
-		const def: ArgDef = {
-			name: spec.name,
-			type: shape.type,
-			...(description !== undefined && { description }),
-			...(spec.variadic && { variadic: true }),
-			...(required && { required: true }),
-		};
-
-		return def;
-	});
-}
-
-function getFlagMetadata(value: ZodSchemaLike | FlagSpec): {
-	schema: ZodSchemaLike;
-	alias?: string | readonly string[];
-} {
-	if (isFlagSpec(value)) {
-		return {
-			schema: value.schema,
-			alias: value.alias,
-		};
-	}
-	return { schema: value };
+	return buildArgDefinitions(args, zodAdapter);
 }
 
 /** Build Crust flag definitions from schema-first `flags` shape. */
 export function flagsToDefinitions(flags: FlagShape | undefined): FlagsDef {
-	if (!flags) {
-		return {};
-	}
-
-	const result: FlagsDef = {};
-
-	for (const [name, value] of Object.entries(flags)) {
-		const metadata = getFlagMetadata(value);
-		const { schema } = metadata;
-		const shape = resolveInputShape(schema, `flag "--${name}"`);
-		const required = !isOptionalInputSchema(schema);
-		const description = resolveDescription(schema);
-
-		// Convert readonly alias to mutable for core FlagDef compatibility
-		const alias: string | string[] | undefined =
-			metadata.alias === undefined
-				? undefined
-				: typeof metadata.alias === "string"
-					? metadata.alias
-					: [...metadata.alias];
-
-		result[name] = {
-			type: shape.type,
-			...(shape.multiple && { multiple: true }),
-			...(alias !== undefined && { alias }),
-			...(description !== undefined && { description }),
-			...(required && { required: true }),
-		};
-	}
-
-	return result;
+	return buildFlagDefinitions(
+		flags as Record<string, unknown> | undefined,
+		zodAdapter,
+	);
 }

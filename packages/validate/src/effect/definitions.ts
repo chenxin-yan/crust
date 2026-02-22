@@ -2,22 +2,17 @@ import type { ArgDef, FlagsDef } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
 import { encodedSchema } from "effect/Schema";
 import type { AST } from "effect/SchemaAST";
-import { isFlagSpec, resolveDescription } from "./schema.ts";
-import type {
-	ArgSpecs,
-	EffectSchemaLike,
-	FlagShape,
-	FlagSpec,
-} from "./types.ts";
+import type { DefinitionAdapter, InputShape } from "../definitionBuilders.ts";
+import {
+	buildArgDefinitions,
+	buildFlagDefinitions,
+} from "../definitionBuilders.ts";
+import { resolveDescription } from "./schema.ts";
+import type { ArgSpecs, EffectSchemaLike, FlagShape } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Schema analysis helpers
+// Schema analysis helpers — Effect-specific
 // ────────────────────────────────────────────────────────────────────────────
-
-type InputShape = {
-	type: "string" | "number" | "boolean";
-	multiple: boolean;
-};
 
 /** Unwrap wrappers until the effective encoded input AST is reached. */
 function unwrapInputAst(ast: AST): AST {
@@ -176,11 +171,8 @@ function resolveTupleArrayShape(
 }
 
 /** Resolve Crust parser input shape from an Effect schema. */
-function resolveInputShape(
-	schema: EffectSchemaLike,
-	label: string,
-): InputShape {
-	const ast = unwrapInputAst(encodedSchema(schema).ast);
+function resolveInputShape(schema: unknown, label: string): InputShape {
+	const ast = unwrapInputAst(encodedSchema(schema as EffectSchemaLike).ast);
 
 	const tupleShape = resolveTupleArrayShape(ast, label);
 	if (tupleShape) {
@@ -213,114 +205,33 @@ function acceptsUndefined(ast: AST): boolean {
 	return false;
 }
 
-function isOptionalInputSchema(schema: EffectSchemaLike): boolean {
-	return acceptsUndefined(encodedSchema(schema).ast);
+function isOptionalInputSchema(schema: unknown): boolean {
+	return acceptsUndefined(encodedSchema(schema as EffectSchemaLike).ast);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public definition generation
+// Adapter + public definition generation
 // ────────────────────────────────────────────────────────────────────────────
+
+const effectAdapter: DefinitionAdapter = {
+	resolveInputShape,
+	isOptionalInputSchema,
+	resolveDescription: resolveDescription as (
+		schema: unknown,
+	) => string | undefined,
+	commandLabel: "defineEffectCommand",
+	arrayHint: "Schema.Array(...)",
+};
 
 /** Build Crust positional arg definitions from ordered `arg()` specs. */
 export function argsToDefinitions(args: ArgSpecs): ArgDef[] {
-	const seen = new Set<string>();
-
-	for (let i = 0; i < args.length; i++) {
-		const spec = args[i];
-		if (!spec) continue;
-
-		if (seen.has(spec.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`defineEffectCommand: duplicate arg name "${spec.name}"`,
-			);
-		}
-		seen.add(spec.name);
-
-		if (spec.variadic && i !== args.length - 1) {
-			throw new CrustError(
-				"DEFINITION",
-				`defineEffectCommand: only the last arg can be variadic (arg "${spec.name}")`,
-			);
-		}
-	}
-
-	return args.map((spec) => {
-		const shape = resolveInputShape(spec.schema, `arg "${spec.name}"`);
-
-		if (spec.variadic && shape.multiple) {
-			throw new CrustError(
-				"DEFINITION",
-				`arg "${spec.name}": variadic args must use a scalar schema; do not wrap the schema in Schema.Array(...)`,
-			);
-		}
-
-		if (!spec.variadic && shape.multiple) {
-			throw new CrustError(
-				"DEFINITION",
-				`arg "${spec.name}": array schema requires { variadic: true }`,
-			);
-		}
-
-		const description = resolveDescription(spec.schema);
-		const required = !isOptionalInputSchema(spec.schema);
-
-		const def: ArgDef = {
-			name: spec.name,
-			type: shape.type,
-			...(description !== undefined && { description }),
-			...(spec.variadic && { variadic: true }),
-			...(required && { required: true }),
-		};
-
-		return def;
-	});
-}
-
-function getFlagMetadata(value: EffectSchemaLike | FlagSpec): {
-	schema: EffectSchemaLike;
-	alias?: string | readonly string[];
-} {
-	if (isFlagSpec(value)) {
-		return {
-			schema: value.schema,
-			alias: value.alias,
-		};
-	}
-	return { schema: value };
+	return buildArgDefinitions(args, effectAdapter);
 }
 
 /** Build Crust flag definitions from schema-first `flags` shape. */
 export function flagsToDefinitions(flags: FlagShape | undefined): FlagsDef {
-	if (!flags) {
-		return {};
-	}
-
-	const result: FlagsDef = {};
-
-	for (const [name, value] of Object.entries(flags)) {
-		const metadata = getFlagMetadata(value);
-		const { schema } = metadata;
-		const shape = resolveInputShape(schema, `flag "--${name}"`);
-		const required = !isOptionalInputSchema(schema);
-		const description = resolveDescription(schema);
-
-		// Convert readonly alias to mutable for core FlagDef compatibility
-		const alias: string | string[] | undefined =
-			metadata.alias === undefined
-				? undefined
-				: typeof metadata.alias === "string"
-					? metadata.alias
-					: [...metadata.alias];
-
-		result[name] = {
-			type: shape.type,
-			...(shape.multiple && { multiple: true }),
-			...(alias !== undefined && { alias }),
-			...(description !== undefined && { description }),
-			...(required && { required: true }),
-		};
-	}
-
-	return result;
+	return buildFlagDefinitions(
+		flags as Record<string, unknown> | undefined,
+		effectAdapter,
+	);
 }

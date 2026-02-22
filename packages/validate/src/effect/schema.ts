@@ -76,23 +76,6 @@ export function flag<
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Extract flag metadata wrapper state. */
-export function isFlagSpec(value: unknown): value is FlagSpec {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"kind" in value &&
-		(value as { kind?: unknown }).kind === "flag"
-	);
-}
-
-/** Resolve the underlying schema from a plain schema or a `flag()` wrapper. */
-export function getFlagSchema(
-	value: EffectSchemaLike | FlagSpec,
-): EffectSchemaLike {
-	return isFlagSpec(value) ? value.schema : value;
-}
-
 /**
  * Resolve description by walking through Effect schema AST wrappers.
  *
