@@ -41,9 +41,11 @@ function walkDir(dir: string): string[] {
 }
 
 /**
- * Rename dotfile convention: leading `_` in the filename becomes `.`.
+ * Rename dotfile convention: a single leading `_` in the filename becomes `.`.
  *
  * For example, `_gitignore` becomes `.gitignore`.
+ * Files starting with `__` (double underscore) are left unchanged to avoid
+ * collisions with conventional directory names like `__tests__` or `__mocks__`.
  * Only the filename is renamed — parent directories are left unchanged.
  *
  * @param relativePath - The file path relative to the template root.
@@ -53,7 +55,7 @@ function renameDotfile(relativePath: string): string {
 	const dir = dirname(relativePath);
 	const base = relativePath.slice(dir === "." ? 0 : dir.length + 1);
 
-	if (base.startsWith("_")) {
+	if (base.startsWith("_") && !base.startsWith("__")) {
 		const renamed = `.${base.slice(1)}`;
 		return dir === "." ? renamed : join(dir, renamed);
 	}

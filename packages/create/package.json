@@ -46,7 +46,6 @@
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
 	}
 }

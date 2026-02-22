@@ -6,7 +6,8 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runSteps } from "../src/steps.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -16,8 +17,9 @@ import { runSteps } from "../src/steps.ts";
 let tempDir: string;
 
 beforeEach(() => {
-	tempDir = resolve(
-		`.tmp-test-steps-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	tempDir = join(
+		tmpdir(),
+		`crust-steps-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 	);
 	mkdirSync(tempDir, { recursive: true });
 });

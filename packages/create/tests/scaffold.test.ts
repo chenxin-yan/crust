@@ -6,6 +6,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { scaffold } from "../src/scaffold.ts";
 
@@ -18,8 +19,9 @@ let templateDir: string;
 let destDir: string;
 
 beforeEach(() => {
-	tempDir = resolve(
-		`.tmp-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	tempDir = join(
+		tmpdir(),
+		`crust-scaffold-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 	);
 	templateDir = join(tempDir, "template");
 	destDir = join(tempDir, "output");
@@ -118,6 +120,27 @@ describe("scaffold", () => {
 		const expected = join("config", ".eslintrc.json");
 		expect(result.files).toContain(expected);
 		expect(readOutputFile(expected)).toBe('{ "root": true }');
+	});
+
+	it("does not rename files starting with double underscore", async () => {
+		createTemplateFile("__tests__/foo.test.ts", "test('foo', () => {})");
+		createTemplateFile("__mocks__/bar.ts", "export default {}");
+
+		const result = await scaffold({
+			template: templateDir,
+			dest: destDir,
+			importMeta: `file://${resolve(".")}/test.ts`,
+			context: {},
+		});
+
+		expect(result.files).toContain(join("__tests__", "foo.test.ts"));
+		expect(result.files).toContain(join("__mocks__", "bar.ts"));
+		expect(readOutputFile(join("__tests__", "foo.test.ts"))).toBe(
+			"test('foo', () => {})",
+		);
+		expect(readOutputFile(join("__mocks__", "bar.ts"))).toBe(
+			"export default {}",
+		);
 	});
 
 	it("throws when conflict is 'abort' and dest is non-empty", async () => {
