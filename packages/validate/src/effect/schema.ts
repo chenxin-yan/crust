@@ -1,6 +1,7 @@
 import { CrustError } from "@crustjs/core";
 import { isSome } from "effect/Option";
 import { isSchema } from "effect/Schema";
+import type { AST } from "effect/SchemaAST";
 import { getDescriptionAnnotation } from "effect/SchemaAST";
 import type {
 	ArgOptions,
@@ -43,13 +44,12 @@ export function arg<
 		kind: "arg",
 		name,
 		schema,
-		description: options?.description,
 		variadic: options?.variadic as Variadic,
 	};
 }
 
 /**
- * Define a flag schema for `defineEffectCommand()` with optional alias/description.
+ * Define a flag schema for `defineEffectCommand()` with optional alias metadata.
  */
 export function flag<
 	SchemaType extends EffectSchemaLike,
@@ -69,7 +69,6 @@ export function flag<
 		kind: "flag",
 		schema,
 		alias: options?.alias as Alias,
-		description: options?.description,
 	};
 }
 
@@ -94,19 +93,71 @@ export function getFlagSchema(
 	return isFlagSpec(value) ? value.schema : value;
 }
 
-/** Resolve description from metadata first, then schema annotations. */
+/**
+ * Resolve description by walking through Effect schema AST wrappers.
+ *
+ * Effect's `.annotations({ description: "..." })` sets a description on the
+ * AST node it's called on. Wrappers like `Schema.UndefinedOr()`,
+ * `Schema.transform()`, and refinements create new AST nodes that lose the
+ * annotation. This function walks through those layers to find the first
+ * description annotation.
+ */
 export function resolveDescription(
 	schema: EffectSchemaLike,
-	metaDescription: string | undefined,
 ): string | undefined {
-	if (metaDescription !== undefined) {
-		return metaDescription;
-	}
+	return resolveDescriptionFromAst(schema.ast);
+}
 
-	const annotated = getDescriptionAnnotation(schema.ast);
-	if (isSome(annotated) && typeof annotated.value === "string") {
-		return annotated.value;
-	}
+function resolveDescriptionFromAst(ast: AST): string | undefined {
+	const seen = new Set<AST>();
 
-	return undefined;
+	let current: AST = ast;
+
+	for (;;) {
+		if (seen.has(current)) {
+			return undefined;
+		}
+		seen.add(current);
+
+		// Check if this node has a description annotation
+		const annotated = getDescriptionAnnotation(current);
+		if (isSome(annotated) && typeof annotated.value === "string") {
+			return annotated.value;
+		}
+
+		// Unwrap transformations — check the input (from) side
+		if (current._tag === "Transformation") {
+			current = current.from;
+			continue;
+		}
+
+		// Unwrap refinements — check the base schema
+		if (current._tag === "Refinement") {
+			current = current.from;
+			continue;
+		}
+
+		// Unwrap suspensions
+		if (current._tag === "Suspend") {
+			current = current.f();
+			continue;
+		}
+
+		// Unwrap unions — find description on non-undefined members
+		// (handles patterns like Schema.UndefinedOr(Schema.String.annotations({...})))
+		if (current._tag === "Union") {
+			for (const member of current.types) {
+				if (member._tag === "UndefinedKeyword") {
+					continue;
+				}
+				const desc = resolveDescriptionFromAst(member);
+				if (desc !== undefined) {
+					return desc;
+				}
+			}
+			return undefined;
+		}
+
+		return undefined;
+	}
 }

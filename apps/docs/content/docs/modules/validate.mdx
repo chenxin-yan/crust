@@ -39,6 +39,8 @@ bun add effect
 3. At runtime, after Crust parses argv, each value is validated and transformed through its schema before your `run` handler is called.
 4. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
 
+Descriptions for help text are provided directly on the schema using the validator's native API (`.describe()` for Zod, `.annotations()` for Effect). The framework automatically extracts descriptions even through wrappers like `.optional()`, `.default()`, and `.transform()`.
+
 ---
 
 ## Zod Provider
@@ -54,11 +56,10 @@ import { z } from "zod";
 
 const greet = defineZodCommand({
   meta: { name: "greet", description: "Say hello" },
-  args: [arg("name", z.string())],
+  args: [arg("name", z.string().describe("Person to greet"))],
   flags: {
-    loud: flag(z.boolean().default(false), {
+    loud: flag(z.boolean().default(false).describe("Shout the greeting"), {
       alias: "l",
-      description: "Shout the greeting",
     }),
   },
   run({ args, flags }) {
@@ -69,6 +70,21 @@ const greet = defineZodCommand({
 });
 
 runMain(greet);
+```
+
+### Descriptions (Zod)
+
+Use `.describe()` on the schema to provide help text. Descriptions are automatically resolved through wrappers:
+
+```ts
+// Description on the inner schema — resolved through .optional()
+arg("name", z.string().describe("Person to greet").optional());
+
+// Description on the inner schema — resolved through .default()
+flag(z.number().describe("Port number").default(3000));
+
+// Description on the inner schema — resolved through .transform()
+flag(z.string().describe("Output format").transform((v) => v.toUpperCase()));
 ```
 
 ### Schema Support (Zod)
@@ -108,7 +124,7 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 | ------------------ | -------------------------------------------------------- |
 | `defineZodCommand` | Define a command with Zod schemas as the source of truth |
 | `arg`              | Declare a named positional argument with a Zod schema    |
-| `flag`             | Wrap a Zod schema with alias and description metadata    |
+| `flag`             | Wrap a Zod schema with alias metadata                    |
 
 #### Types
 
@@ -118,10 +134,10 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 | `ZodCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
 | `ArgSpec<Name, Schema, Variadic>`         | A single positional arg spec from `arg()`    |
 | `ArgSpecs`                                | Ordered readonly array of `ArgSpec`          |
-| `ArgOptions`                              | Options for `arg()` (description, variadic)  |
+| `ArgOptions`                              | Options for `arg()` (variadic)               |
 | `FlagSpec<Schema, Alias>`                 | A flag wrapper from `flag()`                 |
 | `FlagShape`                               | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions`                             | Options for `flag()` (alias, description)    |
+| `FlagOptions`                             | Options for `flag()` (alias)                 |
 | `ZodSchemaLike`                           | Zod schema type constraint                   |
 | `InferSchemaOutput<S>`                    | Infer output type from a Zod schema          |
 | `InferArgsFromSpecs<A>`                   | Infer validated args object from arg specs   |
@@ -146,12 +162,15 @@ import { Schema } from "effect";
 
 const greet = defineEffectCommand({
   meta: { name: "greet", description: "Say hello" },
-  args: [arg("name", Schema.String)],
+  args: [arg("name", Schema.String.annotations({ description: "Person to greet" }))],
   flags: {
-    loud: flag(Schema.optionalWith(Schema.Boolean, { default: () => false }), {
-      alias: "l",
-      description: "Shout the greeting",
-    }),
+    loud: flag(
+      Schema.optionalWith(
+        Schema.Boolean.annotations({ description: "Shout the greeting" }),
+        { default: () => false },
+      ),
+      { alias: "l" },
+    ),
   },
   run({ args, flags }) {
     // args.name is string, flags.loud is boolean — fully typed
@@ -163,12 +182,30 @@ const greet = defineEffectCommand({
 runMain(greet);
 ```
 
+### Descriptions (Effect)
+
+Use `.annotations({ description: "..." })` on the schema to provide help text. Descriptions are automatically resolved through wrappers:
+
+```ts
+// Description on the inner schema — resolved through UndefinedOr
+arg("name", Schema.UndefinedOr(
+  Schema.String.annotations({ description: "Person to greet" }),
+));
+
+// Description on the inner schema — resolved through transform
+flag(Schema.transform(
+  Schema.String.annotations({ description: "Output format" }),
+  Schema.String,
+  { strict: false, decode: (v) => v.toUpperCase(), encode: (v) => v },
+));
+```
+
 ### Schema Support (Effect)
 
 - **Primitives**: `Schema.String`, `Schema.Number`, `Schema.Boolean`
 - **Enums and literals**: `Schema.Literal("a", "b")`, `Schema.Enums(MyEnum)`
 - **Arrays**: `Schema.Array(Schema.String)` (flags with `multiple: true`)
-- **Wrappers**: `Schema.optional(...)`, `Schema.optionalWith(...)`, `Schema.transform(...)`, `Schema.TemplateLiteral`
+- **Wrappers**: `Schema.UndefinedOr(...)`, `Schema.optionalWith(...)`, `Schema.transform(...)`, `Schema.TemplateLiteral`
 - **Descriptions**: `schema.annotations({ description: "Help text" })` (auto-extracted for help output)
 
 Schemas are introspected via AST at definition time to determine CLI parser types (`string`, `number`, `boolean`) and optionality. Transformations and refinements are unwrapped to find the encoded input type.
@@ -200,7 +237,7 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 | --------------------- | ----------------------------------------------------------- |
 | `defineEffectCommand` | Define a command with Effect schemas as the source of truth |
 | `arg`                 | Declare a named positional argument with an Effect schema   |
-| `flag`                | Wrap an Effect schema with alias and description metadata   |
+| `flag`                | Wrap an Effect schema with alias metadata                   |
 
 #### Types
 
@@ -210,10 +247,10 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 | `EffectCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
 | `ArgSpec<Name, Schema, Variadic>`            | A single positional arg spec from `arg()`    |
 | `ArgSpecs`                                   | Ordered readonly array of `ArgSpec`          |
-| `ArgOptions`                                 | Options for `arg()` (description, variadic)  |
+| `ArgOptions`                                 | Options for `arg()` (variadic)               |
 | `FlagSpec<Schema, Alias>`                    | A flag wrapper from `flag()`                 |
 | `FlagShape`                                  | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions`                                | Options for `flag()` (alias, description)    |
+| `FlagOptions`                                | Options for `flag()` (alias)                 |
 | `EffectSchemaLike`                           | Effect schema type constraint (`R = never`)  |
 | `InferSchemaOutput<S>`                       | Infer output type from an Effect schema      |
 | `InferArgsFromSpecs<A>`                      | Infer validated args object from arg specs   |

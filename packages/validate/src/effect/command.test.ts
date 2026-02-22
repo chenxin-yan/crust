@@ -40,10 +40,10 @@ describe("defineEffectCommand", () => {
 			meta: { name: "serve" },
 			args: [arg("port", Schema.Number), arg("host", Schema.String)],
 			flags: {
-				verbose: flag(Schema.Boolean, {
-					alias: "v",
-					description: "Verbose logging",
-				}),
+				verbose: flag(
+					Schema.Boolean.annotations({ description: "Verbose logging" }),
+					{ alias: "v" },
+				),
 			},
 			run({ args, flags }) {
 				received.set({ args, flags });
@@ -190,13 +190,18 @@ describe("defineEffectCommand", () => {
 			meta: { name: "serve", description: "Start server" },
 			args: [
 				arg("port", Schema.Number.annotations({ description: "Port number" })),
-				arg("host", Schema.UndefinedOr(Schema.String), { description: "Host" }),
+				arg(
+					"host",
+					Schema.UndefinedOr(
+						Schema.String.annotations({ description: "Host" }),
+					),
+				),
 			],
 			flags: {
-				verbose: flag(Schema.Boolean, {
-					alias: "v",
-					description: "Verbose mode",
-				}),
+				verbose: flag(
+					Schema.Boolean.annotations({ description: "Verbose mode" }),
+					{ alias: "v" },
+				),
 			},
 		});
 
@@ -217,6 +222,32 @@ describe("defineEffectCommand", () => {
 				required: true,
 			},
 		});
+	});
+
+	it("resolves description through Effect wrappers", () => {
+		const cmd = defineEffectCommand({
+			meta: { name: "unwrap" },
+			args: [
+				arg(
+					"name",
+					Schema.UndefinedOr(
+						Schema.String.annotations({ description: "Inner desc" }),
+					),
+				),
+			],
+			flags: {
+				mode: flag(
+					Schema.transform(
+						Schema.String.annotations({ description: "Mode desc" }),
+						Schema.String,
+						{ strict: false, decode: (v) => v, encode: (v) => v },
+					),
+				),
+			},
+		});
+
+		expect(cmd.args?.[0]?.description).toBe("Inner desc");
+		expect(cmd.flags?.mode?.description).toBe("Mode desc");
 	});
 
 	it("throws DEFINITION for array arg without variadic", () => {

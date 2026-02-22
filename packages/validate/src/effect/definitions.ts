@@ -262,7 +262,7 @@ export function argsToDefinitions(args: ArgSpecs): ArgDef[] {
 			);
 		}
 
-		const description = resolveDescription(spec.schema, spec.description);
+		const description = resolveDescription(spec.schema);
 		const required = !isOptionalInputSchema(spec.schema);
 
 		const def: ArgDef = {
@@ -280,13 +280,11 @@ export function argsToDefinitions(args: ArgSpecs): ArgDef[] {
 function getFlagMetadata(value: EffectSchemaLike | FlagSpec): {
 	schema: EffectSchemaLike;
 	alias?: string | readonly string[];
-	description?: string;
 } {
 	if (isFlagSpec(value)) {
 		return {
 			schema: value.schema,
 			alias: value.alias,
-			description: value.description,
 		};
 	}
 	return { schema: value };
@@ -305,7 +303,7 @@ export function flagsToDefinitions(flags: FlagShape | undefined): FlagsDef {
 		const { schema } = metadata;
 		const shape = resolveInputShape(schema, `flag "--${name}"`);
 		const required = !isOptionalInputSchema(schema);
-		const description = resolveDescription(schema, metadata.description);
+		const description = resolveDescription(schema);
 
 		// Convert readonly alias to mutable for core FlagDef compatibility
 		const alias: string | string[] | undefined =

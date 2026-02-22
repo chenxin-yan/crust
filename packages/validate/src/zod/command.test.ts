@@ -43,9 +43,8 @@ describe("defineZodCommand", () => {
 				arg("host", z.string().default("localhost")),
 			],
 			flags: {
-				verbose: flag(z.boolean().default(false), {
+				verbose: flag(z.boolean().default(false).describe("Verbose logging"), {
 					alias: "v",
-					description: "Verbose logging",
 				}),
 			},
 			run({ args, flags }) {
@@ -298,13 +297,12 @@ describe("defineZodCommand", () => {
 		const cmd = defineZodCommand({
 			meta: { name: "serve", description: "Start server" },
 			args: [
-				arg("port", z.number(), { description: "Port number" }),
-				arg("host", z.string().optional(), { description: "Host" }),
+				arg("port", z.number().describe("Port number")),
+				arg("host", z.string().optional().describe("Host")),
 			],
 			flags: {
-				verbose: flag(z.boolean().default(false), {
+				verbose: flag(z.boolean().default(false).describe("Verbose mode"), {
 					alias: "v",
-					description: "Verbose mode",
 				}),
 			},
 		});
@@ -325,6 +323,28 @@ describe("defineZodCommand", () => {
 				description: "Verbose mode",
 			},
 		});
+	});
+
+	it("resolves description through Zod wrappers", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "unwrap" },
+			args: [
+				arg("name", z.string().describe("Inner desc").optional()),
+				arg("count", z.number().describe("Count desc").default(1)),
+			],
+			flags: {
+				mode: flag(
+					z
+						.string()
+						.describe("Mode desc")
+						.transform((v) => v.toUpperCase()),
+				),
+			},
+		});
+
+		expect(cmd.args?.[0]?.description).toBe("Inner desc");
+		expect(cmd.args?.[1]?.description).toBe("Count desc");
+		expect(cmd.flags?.mode?.description).toBe("Mode desc");
 	});
 
 	it("throws DEFINITION for array arg without variadic", () => {

@@ -29,10 +29,14 @@ describe("help plugin integration with defineEffectCommand", () => {
 		const cmd = defineEffectCommand({
 			meta: { name: "serve", description: "Start dev server" },
 			flags: {
-				verbose: flag(Schema.UndefinedOr(Schema.Boolean), {
-					alias: "v",
-					description: "Enable verbose logging",
-				}),
+				verbose: flag(
+					Schema.UndefinedOr(
+						Schema.Boolean.annotations({
+							description: "Enable verbose logging",
+						}),
+					),
+					{ alias: "v" },
+				),
 			},
 			run() {},
 		});
@@ -56,16 +60,19 @@ describe("help plugin integration with defineEffectCommand", () => {
 		const cmd = defineEffectCommand({
 			meta: { name: "build" },
 			args: [
-				arg("entry", Schema.String, { description: "Entry file" }),
-				arg("target", Schema.UndefinedOr(Schema.String), {
-					description: "Build target",
-				}),
+				arg("entry", Schema.String.annotations({ description: "Entry file" })),
+				arg(
+					"target",
+					Schema.UndefinedOr(
+						Schema.String.annotations({ description: "Build target" }),
+					),
+				),
 			],
 			flags: {
-				outDir: flag(Schema.String, {
-					alias: "o",
-					description: "Output directory",
-				}),
+				outDir: flag(
+					Schema.String.annotations({ description: "Output directory" }),
+					{ alias: "o" },
+				),
 			},
 		});
 
@@ -86,16 +93,19 @@ describe("help plugin integration with defineEffectCommand", () => {
 		const cmd = defineEffectCommand({
 			meta: { name: "build" },
 			args: [
-				arg("entry", Schema.String, { description: "Entry file" }),
-				arg("target", Schema.UndefinedOr(Schema.String), {
-					description: "Build target",
-				}),
+				arg("entry", Schema.String.annotations({ description: "Entry file" })),
+				arg(
+					"target",
+					Schema.UndefinedOr(
+						Schema.String.annotations({ description: "Build target" }),
+					),
+				),
 			],
 			flags: {
-				outDir: flag(Schema.String, {
-					alias: "o",
-					description: "Output directory",
-				}),
+				outDir: flag(
+					Schema.String.annotations({ description: "Output directory" }),
+					{ alias: "o" },
+				),
 			},
 			run({ args, flags }) {
 				received.push({ args, flags });
@@ -115,21 +125,33 @@ describe("help plugin integration with defineEffectCommand", () => {
 		expect(received[0]?.flags).toEqual({ outDir: "dist" });
 	});
 
-	it("respects metadata description precedence over schema annotations", () => {
+	it("extracts description from schema annotations", () => {
 		const cmd = defineEffectCommand({
 			meta: { name: "app" },
 			flags: {
 				port: flag(
 					Schema.Number.annotations({ description: "Schema description" }),
-					{
-						description: "Metadata description",
-					},
 				),
 			},
 		});
 
 		const output = renderHelp(cmd, ["app"]);
-		expect(output).toContain("Metadata description");
-		expect(output).not.toContain("Schema description");
+		expect(output).toContain("Schema description");
+	});
+
+	it("resolves description through wrappers like UndefinedOr", () => {
+		const cmd = defineEffectCommand({
+			meta: { name: "app" },
+			flags: {
+				port: flag(
+					Schema.UndefinedOr(
+						Schema.Number.annotations({ description: "Port number" }),
+					),
+				),
+			},
+		});
+
+		const output = renderHelp(cmd, ["app"]);
+		expect(output).toContain("Port number");
 	});
 });

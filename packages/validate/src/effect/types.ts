@@ -23,8 +23,6 @@ export type InferSchemaOutput<S> =
 
 /** Optional metadata for a positional argument declared with `arg()`. */
 export interface ArgOptions {
-	/** Human-readable description for help text. */
-	readonly description?: string;
 	/** Collect remaining positionals into this arg as an array. */
 	readonly variadic?: true;
 }
@@ -38,7 +36,6 @@ export interface ArgSpec<
 	readonly kind: "arg";
 	readonly name: Name;
 	readonly schema: SchemaType;
-	readonly description?: string;
 	readonly variadic: Variadic;
 }
 
@@ -75,8 +72,6 @@ export type InferArgsFromSpecs<A extends ArgSpecs> = Simplify<
 export interface FlagOptions {
 	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
 	readonly alias?: string | readonly string[];
-	/** Human-readable description for help text. */
-	readonly description?: string;
 }
 
 /** A named flag schema wrapper produced by `flag()`. */
@@ -90,7 +85,6 @@ export interface FlagSpec<
 	readonly kind: "flag";
 	readonly schema: SchemaType;
 	readonly alias: Alias;
-	readonly description?: string;
 }
 
 /** Allowed value shape for `flags` in `defineEffectCommand()`. */
