@@ -156,20 +156,28 @@ function createHandleKey<T>(
 			return { ...state, selected: newSelected, error: null };
 		}
 
-		// 'a' — toggle all
+		// 'a' — toggle all (respects max constraint)
 		if (key.name === "a" && !key.ctrl && !key.meta) {
 			const allSelected = state.selected.size === totalItems;
-			const newSelected = allSelected
-				? new Set<number>()
-				: new Set(Array.from({ length: totalItems }, (_, i) => i));
+			let newSelected: Set<number>;
+			if (allSelected) {
+				newSelected = new Set<number>();
+			} else {
+				newSelected = new Set<number>();
+				for (let i = 0; i < totalItems; i++) {
+					if (max !== undefined && newSelected.size >= max) break;
+					newSelected.add(i);
+				}
+			}
 			return { ...state, selected: newSelected, error: null };
 		}
 
-		// 'i' — invert selection
+		// 'i' — invert selection (respects max constraint)
 		if (key.name === "i" && !key.ctrl && !key.meta) {
 			const newSelected = new Set<number>();
 			for (let i = 0; i < totalItems; i++) {
 				if (!state.selected.has(i)) {
+					if (max !== undefined && newSelected.size >= max) break;
 					newSelected.add(i);
 				}
 			}

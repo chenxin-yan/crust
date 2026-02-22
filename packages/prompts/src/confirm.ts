@@ -127,8 +127,8 @@ function renderConfirm(
 }
 
 function renderSubmitted(
-	state: ConfirmState,
-	_value: boolean,
+	_state: ConfirmState,
+	value: boolean,
 	theme: PromptTheme,
 	message: string,
 	activeLabel: string,
@@ -136,7 +136,7 @@ function renderSubmitted(
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message);
-	const answer = state.value ? activeLabel : inactiveLabel;
+	const answer = value ? activeLabel : inactiveLabel;
 	return `${prefix} ${msg} ${theme.success(answer)}`;
 }
 

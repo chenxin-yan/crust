@@ -37,7 +37,6 @@ export {
 	CancelledError,
 	NonInteractiveError,
 	runPrompt,
-	SUBMIT,
 	submit,
 } from "./renderer.ts";
 
@@ -65,4 +64,6 @@ export { spinner } from "./spinner.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 export { fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
+export type { TextEditResult, TextEditState } from "./textEdit.ts";
+export { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
 export { calculateScrollOffset, normalizeChoices } from "./utils.ts";

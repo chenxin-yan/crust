@@ -4,6 +4,7 @@
 
 import type { KeypressEvent, SubmitResult } from "./renderer.ts";
 import { runPrompt, submit } from "./renderer.ts";
+import { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
 import { resolveTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme, ValidateFn } from "./types.ts";
 
@@ -71,61 +72,10 @@ function createHandleKey(
 			return submit(state.value);
 		}
 
-		// Backspace — delete character before cursor
-		if (key.name === "backspace") {
-			if (state.cursorPos === 0) return state;
-			const before = state.value.slice(0, state.cursorPos - 1);
-			const after = state.value.slice(state.cursorPos);
-			return {
-				value: before + after,
-				cursorPos: state.cursorPos - 1,
-				error: null,
-			};
-		}
-
-		// Delete — delete character at cursor
-		if (key.name === "delete") {
-			if (state.cursorPos >= state.value.length) return state;
-			const before = state.value.slice(0, state.cursorPos);
-			const after = state.value.slice(state.cursorPos + 1);
-			return {
-				value: before + after,
-				cursorPos: state.cursorPos,
-				error: null,
-			};
-		}
-
-		// Left arrow — move cursor left
-		if (key.name === "left") {
-			if (state.cursorPos === 0) return state;
-			return { ...state, cursorPos: state.cursorPos - 1 };
-		}
-
-		// Right arrow — move cursor right
-		if (key.name === "right") {
-			if (state.cursorPos >= state.value.length) return state;
-			return { ...state, cursorPos: state.cursorPos + 1 };
-		}
-
-		// Home — jump to start
-		if (key.name === "home") {
-			return { ...state, cursorPos: 0 };
-		}
-
-		// End — jump to end
-		if (key.name === "end") {
-			return { ...state, cursorPos: state.value.length };
-		}
-
-		// Printable character — insert at cursor position
-		if (key.char.length === 1 && !key.ctrl && !key.meta) {
-			const before = state.value.slice(0, state.cursorPos);
-			const after = state.value.slice(state.cursorPos);
-			return {
-				value: before + key.char + after,
-				cursorPos: state.cursorPos + 1,
-				error: null,
-			};
+		// Delegate to shared text-editing handler
+		const edit = handleTextEdit(key, state.value, state.cursorPos);
+		if (edit) {
+			return { value: edit.text, cursorPos: edit.cursorPos, error: null };
 		}
 
 		return state;
@@ -137,7 +87,6 @@ function createHandleKey(
 // ────────────────────────────────────────────────────────────────────────────
 
 const PREFIX_SYMBOL = "?";
-const CURSOR_CHAR = "\u2502"; // │ — thin vertical bar as cursor indicator
 const SUBMITTED_MASK_LENGTH = 4;
 
 function renderPassword(

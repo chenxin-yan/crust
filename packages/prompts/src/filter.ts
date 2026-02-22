@@ -6,6 +6,7 @@ import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "./renderer.ts";
 import { runPrompt, submit } from "./renderer.ts";
+import { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
 import { resolveTheme } from "./theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
@@ -59,7 +60,6 @@ export interface FilterOptions<T> {
 
 const DEFAULT_MAX_VISIBLE = 10;
 const PREFIX_SYMBOL = "?";
-const CURSOR_CHAR = "\u2502"; // │ — thin vertical bar as cursor indicator
 const LIST_CURSOR_INDICATOR = ">";
 const SCROLL_UP_INDICATOR = "...";
 const SCROLL_DOWN_INDICATOR = "...";
@@ -165,63 +165,17 @@ function createHandleKey<T>(
 			};
 		}
 
-		// Backspace — delete character before cursor in query
-		if (key.name === "backspace") {
-			if (state.cursorPos === 0) return state;
-			const before = state.query.slice(0, state.cursorPos - 1);
-			const after = state.query.slice(state.cursorPos);
+		// Delegate text-editing keys to shared handler
+		const edit = handleTextEdit(key, state.query, state.cursorPos);
+		if (edit) {
+			const queryChanged = edit.text !== state.query;
 			const newState: FilterState<T> = {
 				...state,
-				query: before + after,
-				cursorPos: state.cursorPos - 1,
+				query: edit.text,
+				cursorPos: edit.cursorPos,
 			};
-			return refilter(newState, maxVisible);
-		}
-
-		// Delete — delete character at cursor in query
-		if (key.name === "delete") {
-			if (state.cursorPos >= state.query.length) return state;
-			const before = state.query.slice(0, state.cursorPos);
-			const after = state.query.slice(state.cursorPos + 1);
-			const newState: FilterState<T> = {
-				...state,
-				query: before + after,
-			};
-			return refilter(newState, maxVisible);
-		}
-
-		// Left arrow — move query cursor left
-		if (key.name === "left") {
-			if (state.cursorPos === 0) return state;
-			return { ...state, cursorPos: state.cursorPos - 1 };
-		}
-
-		// Right arrow — move query cursor right
-		if (key.name === "right") {
-			if (state.cursorPos >= state.query.length) return state;
-			return { ...state, cursorPos: state.cursorPos + 1 };
-		}
-
-		// Home — jump to start of query
-		if (key.name === "home") {
-			return { ...state, cursorPos: 0 };
-		}
-
-		// End — jump to end of query
-		if (key.name === "end") {
-			return { ...state, cursorPos: state.query.length };
-		}
-
-		// Printable character — insert at cursor position in query
-		if (key.char.length === 1 && !key.ctrl && !key.meta) {
-			const before = state.query.slice(0, state.cursorPos);
-			const after = state.query.slice(state.cursorPos);
-			const newState: FilterState<T> = {
-				...state,
-				query: before + key.char + after,
-				cursorPos: state.cursorPos + 1,
-			};
-			return refilter(newState, maxVisible);
+			// Re-filter only when the query text actually changed
+			return queryChanged ? refilter(newState, maxVisible) : newState;
 		}
 
 		return state;

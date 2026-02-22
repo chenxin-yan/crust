@@ -91,8 +91,8 @@ export interface PromptConfig<S, T> {
 // ANSI escape sequences
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Module-level flag to ensure emitKeypressEvents is only called once per stream */
-let keypressEventsAttached = false;
+/** Tracks whether a prompt is currently active to prevent concurrent prompts */
+let promptActive = false;
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -191,6 +191,16 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 	const { render, handleKey, initialState, theme, renderSubmitted } = config;
 
 	return new Promise<T>((resolve, reject) => {
+		// Guard against concurrent prompts — only one prompt can be active at a time
+		if (promptActive) {
+			reject(
+				new Error(
+					"Cannot run multiple prompts concurrently. Await each prompt before starting the next.",
+				),
+			);
+			return;
+		}
+
 		// TTY check inside the promise so it rejects rather than throwing synchronously
 		try {
 			assertTTY();
@@ -198,6 +208,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 			reject(err);
 			return;
 		}
+
+		promptActive = true;
 
 		let state = initialState;
 		let prevLineCount = 0;
@@ -210,6 +222,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 		function cleanup(): void {
 			if (isCleanedUp) return;
 			isCleanedUp = true;
+			promptActive = false;
 
 			stdin.removeListener("keypress", onKeypress);
 
@@ -297,10 +310,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 
 		// ── Initialize ──────────────────────────────────────────────────
 		try {
-			if (!keypressEventsAttached) {
-				readline.emitKeypressEvents(stdin);
-				keypressEventsAttached = true;
-			}
+			readline.emitKeypressEvents(stdin);
 			stdin.setRawMode(true);
 			stdin.resume();
 			output.write(HIDE_CURSOR);
