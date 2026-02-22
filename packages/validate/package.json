@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/validate",
-	"version": "0.0.1",
+	"version": "0.0.0",
 	"description": "Validation helpers for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
