@@ -105,12 +105,4 @@ OPTIONS:
 
 ## Community
 
-Have questions or want to chat about Crust? Join our Discord community to connect with other developers, get help, and stay up to date.
-
-<Cards>
-  <Card
-    title="Join Discord"
-    description="Chat with the community and get help"
-    href="https://discord.gg/sQF8hdN6Ht"
-  />
-</Cards>
+Have questions or want to chat about Crust? Join our [Discord community](https://discord.gg/sQF8hdN6Ht) to connect with other developers, get help, and stay up to date.
