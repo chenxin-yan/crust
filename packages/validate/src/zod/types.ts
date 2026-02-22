@@ -1,20 +1,19 @@
-import type { AnyCommand, CommandMeta } from "@crustjs/core";
-import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type { ValidatedContext } from "../wrapper.ts";
+import type { AnyCommand, CommandContext, CommandMeta } from "@crustjs/core";
+import type * as z from "zod/v4/core";
+import type { ValidatedContext } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Core schema aliases
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A Standard Schema-compatible validator used by the Zod entrypoint. */
-export type ZodSchemaLike<Input = unknown, Output = Input> = StandardSchemaV1<
-	Input,
-	Output
+/** A Zod schema used by the Zod entrypoint. */
+export type ZodSchemaLike<Input = unknown, Output = Input> = z.$ZodType<
+	Output,
+	Input
 >;
 
-/** Infer output type from a Standard Schema-compatible validator. */
-export type InferSchemaOutput<S> =
-	S extends StandardSchemaV1<infer _In, infer Out> ? Out : never;
+/** Infer output type from a Zod schema. */
+export type InferSchemaOutput<S> = S extends z.$ZodType ? z.output<S> : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // `arg()` DSL types
@@ -129,9 +128,21 @@ export interface ZodCommandDef<
 	readonly flags?: F;
 	/** Named subcommands. */
 	readonly subCommands?: Record<string, AnyCommand>;
+	/**
+	 * Optional setup hook before schema validation runs.
+	 *
+	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
+	 */
+	readonly preRun?: (context: CommandContext) => void | Promise<void>;
 	/** Main handler with validated/transformed args and flags. */
 	readonly run?: ZodCommandRunHandler<
 		InferArgsFromConfig<A>,
 		InferFlagsFromConfig<F>
 	>;
+	/**
+	 * Optional teardown hook after command execution.
+	 *
+	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
+	 */
+	readonly postRun?: (context: CommandContext) => void | Promise<void>;
 }

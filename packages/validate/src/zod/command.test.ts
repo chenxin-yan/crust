@@ -91,6 +91,36 @@ describe("defineZodCommand", () => {
 		expect(received.value?.flags).toEqual({ format: "TEXT" });
 	});
 
+	it("supports async transforms in args and flags", async () => {
+		const received = capture<{ args: unknown; flags: unknown }>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "async-transform" },
+			args: [
+				arg(
+					"name",
+					z.string().transform(async (value) => value.toUpperCase()),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.number()
+						.default(1)
+						.transform(async (value) => value + 1),
+				),
+			},
+			run({ args, flags }) {
+				received.set({ args, flags });
+			},
+		});
+
+		await runCommand(cmd, { argv: ["alice"] });
+
+		expect(received.value?.args).toEqual({ name: "ALICE" });
+		expect(received.value?.flags).toEqual({ count: 2 });
+	});
+
 	it("preserves original parser output on context.input", async () => {
 		const received = capture<unknown>();
 
@@ -125,6 +155,61 @@ describe("defineZodCommand", () => {
 			args: { name: "WORLD" },
 			flags: { count: 3 },
 		});
+	});
+
+	it("passes through preRun/postRun with raw parser context", async () => {
+		const phases: Array<{
+			phase: "pre" | "run" | "post";
+			port: unknown;
+			count: unknown;
+		}> = [];
+
+		const cmd = defineZodCommand({
+			meta: { name: "hooks" },
+			args: [
+				arg(
+					"port",
+					z.string().transform(async (value) => Number(value)),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.string()
+						.default("1")
+						.transform(async (value) => Number(value)),
+				),
+			},
+			preRun({ args, flags }) {
+				const rawArgs = args as Record<string, unknown>;
+				const rawFlags = flags as Record<string, unknown>;
+				phases.push({
+					phase: "pre",
+					port: rawArgs.port,
+					count: rawFlags.count,
+				});
+			},
+			run({ args, flags }) {
+				phases.push({ phase: "run", port: args.port, count: flags.count });
+			},
+			postRun({ args, flags }) {
+				const rawArgs = args as Record<string, unknown>;
+				const rawFlags = flags as Record<string, unknown>;
+				phases.push({
+					phase: "post",
+					port: rawArgs.port,
+					count: rawFlags.count,
+				});
+			},
+		});
+
+		await runCommand(cmd, { argv: ["8080"] });
+
+		expect(phases).toEqual([
+			{ phase: "pre", port: "8080", count: undefined },
+			{ phase: "run", port: 8080, count: 1 },
+			{ phase: "post", port: "8080", count: undefined },
+		]);
 	});
 
 	it("supports variadic args with named object output", async () => {
@@ -178,6 +263,32 @@ describe("defineZodCommand", () => {
 					{ path: "flags.count", message: expect.any(String) },
 				]),
 			);
+		}
+	});
+
+	it("maps async schema failures to CrustError(VALIDATION)", async () => {
+		const cmd = defineZodCommand({
+			meta: { name: "check-async" },
+			flags: {
+				token: flag(
+					z
+						.string()
+						.refine(async (value) => value === "secret", "Invalid token"),
+				),
+			},
+			run() {
+				expect.unreachable("handler should not run");
+			},
+		});
+
+		try {
+			await runCommand(cmd, { argv: ["--token", "nope"] });
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			const crustErr = error as CrustError;
+			expect(crustErr.is("VALIDATION")).toBe(true);
+			expect(crustErr.message).toContain("flags.token");
 		}
 	});
 

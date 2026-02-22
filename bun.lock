@@ -120,14 +120,18 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
-        "@standard-schema/spec": "^1.0.0",
+        "@crustjs/plugins": "workspace:*",
         "bunup": "catalog:",
         "zod": "^4.0.0",
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:*",
         "typescript": "catalog:",
+        "zod": "^4.0.0",
       },
+      "optionalPeers": [
+        "zod",
+      ],
     },
   },
   "catalog": {

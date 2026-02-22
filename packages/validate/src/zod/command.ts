@@ -1,12 +1,8 @@
 import type { AnyCommand, CommandContext } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
-import type { ValidationIssue } from "../types.ts";
-import {
-	assertSyncResult,
-	normalizeIssues,
-	throwValidationError,
-} from "../validation.ts";
-import type { ValidatedContext } from "../wrapper.ts";
+import { safeParseAsync } from "zod/v4/core";
+import type { ValidatedContext, ValidationIssue } from "../types.ts";
+import { normalizeIssues, throwValidationError } from "../validation.ts";
 import { argsToDefinitions, flagsToDefinitions } from "./definitions.ts";
 import { getFlagSchema, isFlagSpec } from "./schema.ts";
 import type {
@@ -21,33 +17,33 @@ import type {
 // Validation helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function validateValue(
+async function validateValue(
 	schema: ZodSchemaLike,
 	value: unknown,
 	prefix: readonly PropertyKey[],
-):
+): Promise<
 	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly issues: ValidationIssue[] } {
-	const rawResult = schema["~standard"].validate(value);
-	const result = assertSyncResult(rawResult);
+	| { readonly ok: false; readonly issues: ValidationIssue[] }
+> {
+	const parseResult = await safeParseAsync(schema, value);
 
-	if (!result.issues) {
-		return { ok: true, value: result.value };
+	if (parseResult.success) {
+		return { ok: true, value: parseResult.data };
 	}
 
-	const prefixed = result.issues.map((issue) => ({
-		...issue,
-		path: issue.path ? [...prefix, ...issue.path] : [...prefix],
+	const prefixed = parseResult.error.issues.map((issue) => ({
+		message: issue.message,
+		path: [...prefix, ...(issue.path ?? [])],
 	}));
 
 	return { ok: false, issues: normalizeIssues(prefixed) };
 }
 
-function validateArgs(
+async function validateArgs(
 	argSpecs: readonly ArgSpec[],
 	context: CommandContext,
 	issues: ValidationIssue[],
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
 	const output: Record<string, unknown> = {};
 
 	for (const spec of argSpecs) {
@@ -63,7 +59,7 @@ function validateArgs(
 			const transformed: unknown[] = [];
 			for (let i = 0; i < items.length; i++) {
 				const value = items[i];
-				const validated = validateValue(spec.schema, value, [
+				const validated = await validateValue(spec.schema, value, [
 					"args",
 					spec.name,
 					i,
@@ -79,7 +75,10 @@ function validateArgs(
 			continue;
 		}
 
-		const validated = validateValue(spec.schema, input, ["args", spec.name]);
+		const validated = await validateValue(spec.schema, input, [
+			"args",
+			spec.name,
+		]);
 		if (!validated.ok) {
 			issues.push(...validated.issues);
 			continue;
@@ -90,11 +89,11 @@ function validateArgs(
 	return output;
 }
 
-function validateFlags(
+async function validateFlags(
 	flags: FlagShape | undefined,
 	context: CommandContext,
 	issues: ValidationIssue[],
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
 	if (!flags) {
 		return {};
 	}
@@ -106,7 +105,7 @@ function validateFlags(
 			? rawValue.schema
 			: getFlagSchema(rawValue);
 		const input = (context.flags as Record<string, unknown>)[name];
-		const validated = validateValue(schema, input, ["flags", name]);
+		const validated = await validateValue(schema, input, ["flags", name]);
 
 		if (!validated.ok) {
 			issues.push(...validated.issues);
@@ -145,11 +144,16 @@ export function defineZodCommand<
 		...(generatedArgs.length > 0 && { args: generatedArgs }),
 		...(Object.keys(generatedFlags).length > 0 && { flags: generatedFlags }),
 		...(config.subCommands && { subCommands: config.subCommands }),
+		...(config.preRun && { preRun: config.preRun }),
 		...(config.run && {
-			run(context: CommandContext) {
+			async run(context: CommandContext) {
 				const issues: ValidationIssue[] = [];
-				const validatedArgs = validateArgs(argSpecs, context, issues);
-				const validatedFlags = validateFlags(config.flags, context, issues);
+				const validatedArgs = await validateArgs(argSpecs, context, issues);
+				const validatedFlags = await validateFlags(
+					config.flags,
+					context,
+					issues,
+				);
 
 				if (issues.length > 0) {
 					throwValidationError(issues);
@@ -171,6 +175,7 @@ export function defineZodCommand<
 				);
 			},
 		}),
+		...(config.postRun && { postRun: config.postRun }),
 	});
 
 	return command;

@@ -2,58 +2,24 @@
 
 > Experimental: API may change between minor versions.
 
-Validation helpers for the [Crust](https://crustjs.com) CLI framework.
+Validation support for the [Crust](https://crustjs.com) CLI framework.
 
-## Modes
+## Entry points
 
-| Mode | Import | Best for |
+| Entry | Import | Purpose |
 | --- | --- | --- |
-| Generic Standard Schema | `@crustjs/validate` | Add validation to existing `defineCommand` commands |
-| Zod schema-first | `@crustjs/validate/zod` | New commands where schemas are the source of truth |
+| Shared contracts | `@crustjs/validate` | Provider-agnostic types (`ValidatedContext`, `ValidationIssue`) |
+| Zod provider | `@crustjs/validate/zod` | Schema-first command API (`defineZodCommand`, `arg`, `flag`) |
 
 ## Install
 
 ```sh
-bun add @crustjs/validate
-```
-
-For Zod schema-first mode:
-
-```sh
-bun add zod
-```
-
-## Generic mode (`withValidation`)
-
-Use this when you already have command `args`/`flags` definitions and only want to add validation.
-
-```ts
-import { defineCommand } from "@crustjs/core";
-import { withValidation } from "@crustjs/validate";
-import { z } from "zod";
-
-const base = defineCommand({
-	meta: { name: "serve" },
-	args: [{ name: "port", type: "number" }],
-	flags: { host: { type: "string", default: "localhost" } },
-});
-
-export const serve = withValidation({
-	command: base,
-	schemas: {
-		args: z.object({ port: z.number().min(1).max(65535) }),
-		flags: z.object({ host: z.string().min(1) }),
-	},
-	run({ args, flags, input }) {
-		console.log(args.port, flags.host);
-		console.log(input.args, input.flags); // original parser output
-	},
-});
+bun add @crustjs/validate zod
 ```
 
 ## Zod schema-first mode (`defineZodCommand`)
 
-This is the DX-first API. You define schemas once and Crust `args`/`flags` are generated automatically.
+Define schemas once and let Crust `args`/`flags` definitions be generated automatically.
 
 ```ts
 import { runMain } from "@crustjs/core";
@@ -106,7 +72,7 @@ args: [
 
 ### Flags
 
-- Pass plain schemas or `flag(schema, options?)` wrappers.
+- Pass plain Zod schemas or `flag(schema, options?)` wrappers.
 - Use `flag(..., { alias, description })` for CLI metadata.
 
 ```ts
@@ -127,6 +93,14 @@ import { helpPlugin } from "@crustjs/plugins";
 runMain(serve, { plugins: [helpPlugin()] });
 ```
 
+### Lifecycle hooks
+
+`defineZodCommand` supports `preRun` and `postRun` passthrough hooks.
+
+- Both hooks receive the core `CommandContext` (raw parser output).
+- Schema validation/transforms run inside `run`, so validated values are only
+  available in the schema-first `run` handler.
+
 ## Validation errors
 
 Failures throw `CrustError("VALIDATION")`.
@@ -137,6 +111,5 @@ Failures throw `CrustError("VALIDATION")`.
 ## v1 constraints
 
 - Args and flags only (no env/config validation).
-- Sync validation only (async validators are rejected).
 - Zod mode requires Zod 4+.
 - No automatic schema inheritance across subcommands.

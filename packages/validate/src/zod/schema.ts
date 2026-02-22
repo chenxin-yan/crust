@@ -11,22 +11,15 @@ import type {
 // Runtime guards
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Narrow unknown input to Standard Schema-compatible validator shape. */
-function isStandardSchema(value: unknown): value is ZodSchemaLike {
+/** Narrow unknown input to a Zod schema instance. */
+function isZodSchema(value: unknown): value is ZodSchemaLike {
 	if (typeof value !== "object" || value === null) {
 		return false;
 	}
-	if (!("~standard" in value)) {
+	if (!("_zod" in value)) {
 		return false;
 	}
-	const standard = (value as { "~standard"?: unknown })["~standard"];
-	if (typeof standard !== "object" || standard === null) {
-		return false;
-	}
-	return (
-		"validate" in standard &&
-		typeof (standard as { validate?: unknown }).validate === "function"
-	);
+	return true;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -37,7 +30,7 @@ function isStandardSchema(value: unknown): value is ZodSchemaLike {
  * Define a named positional argument schema for `defineZodCommand()`.
  *
  * @param name - Positional arg name used in parser output and help text
- * @param schema - Standard Schema-compatible validator (Zod 4 schema)
+ * @param schema - Zod schema
  * @param options - Optional CLI metadata (description, variadic)
  */
 export function arg<Name extends string, Schema extends ZodSchemaLike>(
@@ -51,10 +44,10 @@ export function arg<Name extends string, Schema extends ZodSchemaLike>(
 			"arg(): name is required and must be a non-empty string",
 		);
 	}
-	if (!isStandardSchema(schema)) {
+	if (!isZodSchema(schema)) {
 		throw new CrustError(
 			"DEFINITION",
-			`arg("${name}"): schema must implement Standard Schema (~standard.validate)`,
+			`arg("${name}"): schema must be a Zod schema`,
 		);
 	}
 
@@ -70,18 +63,15 @@ export function arg<Name extends string, Schema extends ZodSchemaLike>(
 /**
  * Define a flag schema for `defineZodCommand()` with optional alias/description.
  *
- * @param schema - Standard Schema-compatible validator (Zod 4 schema)
+ * @param schema - Zod schema
  * @param options - Optional flag metadata
  */
 export function flag<Schema extends ZodSchemaLike>(
 	schema: Schema,
 	options?: FlagOptions,
 ): FlagSpec<Schema> {
-	if (!isStandardSchema(schema)) {
-		throw new CrustError(
-			"DEFINITION",
-			"flag(): schema must implement Standard Schema (~standard.validate)",
-		);
+	if (!isZodSchema(schema)) {
+		throw new CrustError("DEFINITION", "flag(): schema must be a Zod schema");
 	}
 
 	return {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { runCommand } from "@crustjs/core";
+import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import { z } from "zod";
-import { helpPlugin, renderHelp } from "../../plugins/src/help.ts";
 import { arg, defineZodCommand, flag } from "../src/zod/index.ts";
 
 let stdoutChunks: string[];

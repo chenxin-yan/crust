@@ -1,32 +1,17 @@
 import { CrustError } from "@crustjs/core";
-import type {
-	SchemaIssue,
-	SchemaPathSegment,
-	SchemaResult,
-	ValidationIssue,
-} from "./types.ts";
+import type { ValidationIssue } from "./types.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Path formatting — normalize Standard Schema paths to dot-path strings
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Extract the key from a Standard Schema path segment.
- *
- * Path entries are either plain `PropertyKey` values or `PathSegment` objects
- * with a `.key` property. This helper normalizes both forms to a string.
- */
-function resolveSegmentKey(
-	segment: PropertyKey | SchemaPathSegment,
-): PropertyKey {
-	if (typeof segment === "object" && segment !== null && "key" in segment) {
-		return segment.key;
-	}
-	return segment;
+interface IssueInput {
+	readonly message: string;
+	readonly path?: readonly PropertyKey[];
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Path formatting — normalize issue paths to dot-path strings
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Format an array of Standard Schema path segments into a dot-path string.
+ * Format an issue path into a dot-path string.
  *
  * - Numeric keys (array indexes) are rendered with bracket notation: `items[0]`
  * - String/symbol keys are joined with dots: `flags.verbose`
@@ -34,7 +19,7 @@ function resolveSegmentKey(
  *
  * @example
  * ```ts
- * formatPath([{ key: "flags" }, { key: "verbose" }]);
+ * formatPath(["flags", "verbose"]);
  * // => "flags.verbose"
  *
  * formatPath(["args", 0]);
@@ -44,12 +29,10 @@ function resolveSegmentKey(
  * // => ""
  * ```
  */
-export function formatPath(
-	path: ReadonlyArray<PropertyKey | SchemaPathSegment>,
-): string {
+export function formatPath(path: readonly PropertyKey[]): string {
 	let result = "";
 	for (const segment of path) {
-		const key = resolveSegmentKey(segment);
+		const key = segment;
 		if (typeof key === "number") {
 			result += `[${String(key)}]`;
 		} else {
@@ -65,15 +48,13 @@ export function formatPath(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Issue normalization — convert Standard Schema issues to canonical form
+// Issue normalization — convert provider issues to canonical form
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Normalize a Standard Schema issue into the internal canonical form.
- *
- * Converts heterogeneous path entries to a flat dot-path string.
+ * Normalize an issue into the internal canonical form.
  */
-export function normalizeIssue(issue: SchemaIssue): ValidationIssue {
+export function normalizeIssue(issue: IssueInput): ValidationIssue {
 	return {
 		message: issue.message,
 		path: issue.path ? formatPath(issue.path) : "",
@@ -81,10 +62,10 @@ export function normalizeIssue(issue: SchemaIssue): ValidationIssue {
 }
 
 /**
- * Normalize an array of Standard Schema issues into canonical form.
+ * Normalize an array of provider issues into canonical form.
  */
 export function normalizeIssues(
-	issues: ReadonlyArray<SchemaIssue>,
+	issues: readonly IssueInput[],
 ): ValidationIssue[] {
 	return issues.map(normalizeIssue);
 }
@@ -150,31 +131,4 @@ export function throwValidationError(
 ): never {
 	const message = renderBulletList(prefix, issues);
 	throw new CrustError("VALIDATION", message, { issues }).withCause(issues);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Sync-only guard — reject async validation results in v1
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Assert that a Standard Schema `validate` result is synchronous.
- *
- * In v1, `@crustjs/validate` only supports synchronous validation pipelines.
- * If a schema returns a `Promise`, this guard throws a `CrustError("VALIDATION")`
- * with guidance to use a synchronous schema.
- *
- * @param result — The value returned by `schema["~standard"].validate(input)`
- * @returns The synchronous result
- * @throws {CrustError} If `result` is a Promise (async schema detected)
- */
-export function assertSyncResult<Output>(
-	result: SchemaResult<Output> | Promise<SchemaResult<Output>>,
-): SchemaResult<Output> {
-	if (result instanceof Promise) {
-		throw new CrustError(
-			"VALIDATION",
-			"Async validation is not supported in @crustjs/validate v1. Use a synchronous schema.",
-		);
-	}
-	return result;
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { CrustError } from "@crustjs/core";
 import type { ValidationIssue } from "./types.ts";
 import {
-	assertSyncResult,
 	formatPath,
 	normalizeIssue,
 	normalizeIssues,
@@ -39,19 +38,9 @@ describe("formatPath", () => {
 		expect(formatPath([0])).toBe("[0]");
 	});
 
-	it("handles PathSegment objects with string keys", () => {
-		expect(formatPath([{ key: "flags" }, { key: "output" }])).toBe(
-			"flags.output",
-		);
-	});
-
-	it("handles PathSegment objects with numeric keys", () => {
-		expect(formatPath([{ key: "args" }, { key: 0 }])).toBe("args[0]");
-	});
-
-	it("handles mixed PropertyKey and PathSegment entries", () => {
-		expect(formatPath(["flags", { key: "verbose" }])).toBe("flags.verbose");
-		expect(formatPath([{ key: "items" }, 0, "name"])).toBe("items[0].name");
+	it("handles mixed string and numeric entries", () => {
+		expect(formatPath(["flags", "verbose"])).toBe("flags.verbose");
+		expect(formatPath(["items", 0, "name"])).toBe("items[0].name");
 	});
 
 	it("handles deeply nested paths", () => {
@@ -97,10 +86,10 @@ describe("normalizeIssue", () => {
 		expect(result).toEqual({ message: "Invalid input", path: "" });
 	});
 
-	it("normalizes issue with PathSegment objects", () => {
+	it("normalizes issue with numeric path entries", () => {
 		const result = normalizeIssue({
 			message: "Required",
-			path: [{ key: "args" }, { key: 0 }],
+			path: ["args", 0],
 		});
 		expect(result).toEqual({ message: "Required", path: "args[0]" });
 	});
@@ -256,49 +245,6 @@ describe("throwValidationError", () => {
 			expect(crustErr.is("VALIDATION")).toBe(true);
 			expect(crustErr.is("PARSE")).toBe(false);
 			expect(crustErr.is("EXECUTION")).toBe(false);
-		}
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// assertSyncResult
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("assertSyncResult", () => {
-	it("returns synchronous success result unchanged", () => {
-		const result = { value: { name: "test" } };
-		expect(assertSyncResult(result)).toBe(result);
-	});
-
-	it("returns synchronous failure result unchanged", () => {
-		const result = { issues: [{ message: "Required" }] };
-		expect(assertSyncResult(result)).toBe(result);
-	});
-
-	it("throws CrustError(VALIDATION) for async results", () => {
-		const asyncResult = Promise.resolve({ value: { name: "test" } });
-		expect(() => assertSyncResult(asyncResult)).toThrow(CrustError);
-		try {
-			assertSyncResult(asyncResult);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			const crustErr = err as CrustError;
-			expect(crustErr.code).toBe("VALIDATION");
-			expect(crustErr.message).toContain("Async validation is not supported");
-			expect(crustErr.message).toContain("v1");
-		}
-	});
-
-	it("throws with guidance message for async results", () => {
-		const asyncResult = Promise.resolve({
-			issues: [{ message: "fail" }],
-		});
-		try {
-			assertSyncResult(asyncResult);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			const crustErr = err as CrustError;
-			expect(crustErr.message).toContain("synchronous schema");
 		}
 	});
 });

@@ -17,7 +17,6 @@ interface ZodRuntimeSchemaLike {
 	unwrap?: () => unknown;
 	in?: unknown;
 	values?: Set<unknown>;
-	isOptional?: () => boolean;
 }
 
 function asRuntimeSchema(value: unknown): ZodRuntimeSchemaLike | undefined {
@@ -148,11 +147,43 @@ function resolveInputShape(schema: ZodSchemaLike, label: string): InputShape {
 
 /** Check if the schema accepts `undefined` as input. */
 function isOptionalInputSchema(schema: ZodSchemaLike): boolean {
-	const runtime = asRuntimeSchema(schema);
-	if (!runtime || typeof runtime.isOptional !== "function") {
+	let current: unknown = schema;
+
+	for (;;) {
+		const type = getSchemaType(current);
+		const runtime = asRuntimeSchema(current);
+
+		if (!type || !runtime) {
+			return false;
+		}
+
+		if (
+			type === "optional" ||
+			type === "default" ||
+			type === "prefault" ||
+			type === "catch"
+		) {
+			return true;
+		}
+
+		if (type === "pipe" || type === "transform") {
+			if (runtime.in === undefined) {
+				return false;
+			}
+			current = runtime.in;
+			continue;
+		}
+
+		if (type === "nullable" || type === "nonoptional" || type === "readonly") {
+			if (typeof runtime.unwrap !== "function") {
+				return false;
+			}
+			current = runtime.unwrap();
+			continue;
+		}
+
 		return false;
 	}
-	return runtime.isOptional();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

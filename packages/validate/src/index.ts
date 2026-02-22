@@ -1,14 +1,9 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/validate — Zero-dependency validation helpers for Crust CLI
+// @crustjs/validate — Provider-agnostic validation contracts for Crust CLI
 // ────────────────────────────────────────────────────────────────────────────
 
-// Shared validation types
-export type { ValidationIssue } from "./types.ts";
+// Shared public contracts
 export type {
 	ValidatedContext,
-	ValidatedRunHandler,
-	ValidationSchemas,
-	WithValidationOptions,
-} from "./wrapper.ts";
-// Generic Standard Schema validation (wrapper mode)
-export { withValidation } from "./wrapper.ts";
+	ValidationIssue,
+} from "./types.ts";
