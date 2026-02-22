@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/crust",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "A TypeScript-first, Bun-native CLI framework with composable modules.",
 	"type": "module",
 	"license": "MIT",
