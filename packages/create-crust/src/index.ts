@@ -1,108 +1,9 @@
 #!/usr/bin/env bun
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Template generators — embedded as functions to avoid disk I/O issues
-// ────────────────────────────────────────────────────────────────────────────
-
-function templatePackageJson(
-	name: string,
-	description: string,
-	author: string,
-): string {
-	const pkg: Record<string, unknown> = {
-		name,
-		version: "0.0.0",
-		type: "module",
-		bin: {
-			[name]: "dist/cli.js",
-		},
-		scripts: {
-			build: "crust build",
-			dev: "bun run src/cli.ts",
-		},
-		dependencies: {
-			"@crustjs/crust": "latest",
-		},
-		devDependencies: {
-			typescript: "^5",
-		},
-	};
-
-	if (description) {
-		pkg.description = description;
-	}
-	if (author) {
-		pkg.author = author;
-	}
-
-	return JSON.stringify(pkg, null, 2);
-}
-
-function templateTsconfig(): string {
-	return JSON.stringify(
-		{
-			compilerOptions: {
-				lib: ["ESNext"],
-				target: "ESNext",
-				module: "Preserve",
-				moduleDetection: "force",
-				moduleResolution: "bundler",
-				allowImportingTsExtensions: true,
-				verbatimModuleSyntax: true,
-				noEmit: true,
-				strict: true,
-				skipLibCheck: true,
-				noFallthroughCasesInSwitch: true,
-				noUncheckedIndexedAccess: true,
-			},
-			include: ["src"],
-		},
-		null,
-		2,
-	);
-}
-
-function templateCliTs(name: string): string {
-	return `#!/usr/bin/env bun
-
-import { defineCommand, helpPlugin, runMain, versionPlugin } from "@crustjs/crust";
-import pkg from "../package.json";
-
-const main = defineCommand({
-\tmeta: {
-\t\tname: "${name}",
-\t\tdescription: "A CLI built with Crust",
-\t},
-\targs: [
-\t\t{
-\t\t\tname: "name",
-\t\t\ttype: "string",
-\t\t\tdescription: "Your name",
-\t\t\tdefault: "world",
-\t\t},
-\t],
-\tflags: {
-\t\tgreet: {
-\t\t\ttype: "string",
-\t\t\tdescription: "Greeting to use",
-\t\t\tdefault: "Hello",
-\t\t\talias: "g",
-\t\t},
-\t},
-\trun({ args, flags }) {
-\t\tconsole.log(\`\${flags.greet}, \${args.name}!\`);
-\t},
-});
-
-runMain(main, {
-	plugins: [versionPlugin(pkg.version), helpPlugin()],
-});
-`;
-}
+import { runSteps, scaffold } from "@crustjs/create";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Interactive prompts (readline-based, zero dependencies)
@@ -132,32 +33,6 @@ function validateProjectName(name: string): string | null {
 		return `Project name contains invalid characters: ${name}`;
 	}
 	return null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Scaffold logic
-// ────────────────────────────────────────────────────────────────────────────
-
-export interface ScaffoldOptions {
-	dir: string;
-	name: string;
-	description: string;
-	author: string;
-}
-
-export function scaffold(options: ScaffoldOptions): void {
-	const { dir, name, description, author } = options;
-
-	// Create directories
-	mkdirSync(resolve(dir, "src"), { recursive: true });
-
-	// Write files
-	writeFileSync(
-		resolve(dir, "package.json"),
-		`${templatePackageJson(name, description, author)}\n`,
-	);
-	writeFileSync(resolve(dir, "tsconfig.json"), `${templateTsconfig()}\n`);
-	writeFileSync(resolve(dir, "src", "cli.ts"), templateCliTs(name));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -209,17 +84,18 @@ export async function main(
 		);
 		const author = await prompt(rl, "Author", "");
 
-		// Scaffold the project
-		scaffold({ dir: resolvedDir, name, description, author });
-
-		// Run bun install
-		console.log("\nInstalling dependencies...\n");
-		const install = Bun.spawn(["bun", "install"], {
-			cwd: resolvedDir,
-			stdout: "inherit",
-			stderr: "inherit",
+		// Scaffold the project using @crustjs/create
+		await scaffold({
+			template: "../templates/base",
+			dest: resolvedDir,
+			importMeta: import.meta.url,
+			context: { name, description, author },
+			conflict: "overwrite",
 		});
-		await install.exited;
+
+		// Run post-scaffold steps
+		console.log("\nInstalling dependencies...\n");
+		await runSteps([{ type: "install" }], resolvedDir);
 
 		// Print success message
 		const relativeDir = targetDir.startsWith("/")

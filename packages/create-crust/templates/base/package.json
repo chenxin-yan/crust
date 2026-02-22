@@ -1,0 +1,20 @@
+{
+	"name": "{{name}}",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "{{description}}",
+	"author": "{{author}}",
+	"bin": {
+		"{{name}}": "dist/cli.js"
+	},
+	"scripts": {
+		"build": "crust build",
+		"dev": "bun run src/cli.ts"
+	},
+	"dependencies": {
+		"@crustjs/crust": "latest"
+	},
+	"devDependencies": {
+		"typescript": "^5"
+	}
+}

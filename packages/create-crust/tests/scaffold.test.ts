@@ -1,9 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { scaffold } from "../src/index.ts";
+import { pathToFileURL } from "node:url";
+import { scaffold } from "@crustjs/create";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
+
+/**
+ * Simulated import.meta.url for the create-crust src/index.ts module.
+ * The template path "../templates/base" is resolved relative to this.
+ */
+const IMPORT_META_URL = pathToFileURL(
+	resolve(import.meta.dirname, "..", "src", "index.ts"),
+).href;
+
+/**
+ * Helper to scaffold the base template with the given context variables.
+ */
+async function scaffoldBase(
+	dest: string,
+	context: { name: string; description: string; author: string },
+	conflict: "abort" | "overwrite" = "overwrite",
+): Promise<void> {
+	await scaffold({
+		template: "../templates/base",
+		dest,
+		importMeta: IMPORT_META_URL,
+		context,
+		conflict,
+	});
+}
 
 beforeEach(() => {
 	// Clean up before each test
@@ -20,9 +46,8 @@ afterEach(() => {
 });
 
 describe("scaffold", () => {
-	it("creates the project directory structure", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("creates the project directory structure", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "my-cli",
 			description: "Test CLI",
 			author: "Test Author",
@@ -33,9 +58,8 @@ describe("scaffold", () => {
 		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
 	});
 
-	it("generates package.json with correct name and dependencies", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("generates package.json with correct name and dependencies", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "my-awesome-cli",
 			description: "An awesome CLI tool",
 			author: "Jane Doe",
@@ -61,9 +85,8 @@ describe("scaffold", () => {
 		});
 	});
 
-	it("generates package.json without empty description or author", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("generates package.json with empty description and author when not provided", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "minimal-cli",
 			description: "",
 			author: "",
@@ -74,13 +97,12 @@ describe("scaffold", () => {
 		);
 
 		expect(pkg.name).toBe("minimal-cli");
-		expect(pkg.description).toBeUndefined();
-		expect(pkg.author).toBeUndefined();
+		expect(pkg.description).toBe("");
+		expect(pkg.author).toBe("");
 	});
 
-	it("generates tsconfig.json with strict mode and bundler resolution", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("generates tsconfig.json with strict mode and bundler resolution", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "my-cli",
 			description: "",
 			author: "",
@@ -97,9 +119,8 @@ describe("scaffold", () => {
 		expect(tsconfig.include).toEqual(["src"]);
 	});
 
-	it("generates a valid CLI entry file with defineCommand and runMain", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("generates a valid CLI entry file with defineCommand and runMain", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "test-cli",
 			description: "",
 			author: "",
@@ -131,24 +152,19 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("run(");
 	});
 
-	it("generates CLI file that is valid TypeScript (compile check)", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("generates CLI file that is valid TypeScript (compile check)", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "compile-test-cli",
 			description: "",
 			author: "",
 		});
 
-		// Install @crustjs/core so the compile check can resolve the import
-		// Instead of a full install, we just check the syntax is valid TypeScript
-		// by running bun's TypeScript parser on it
+		// Verify it parses without syntax errors by checking structure
 		const cliContent = readFileSync(
 			resolve(TEST_DIR, "src", "cli.ts"),
 			"utf-8",
 		);
 
-		// Verify it parses without syntax errors by checking structure
-		// (We can't run tsc without dependencies installed, but we can verify syntax)
 		expect(cliContent).toContain("import {");
 		expect(cliContent).toContain("const main = defineCommand({");
 		expect(cliContent).toContain("runMain(main, {");
@@ -160,11 +176,10 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("run(");
 	});
 
-	it("creates project in nested directory (creates parent dirs)", () => {
+	it("creates project in nested directory (creates parent dirs)", async () => {
 		const nestedDir = resolve(TEST_DIR, "deep", "nested", "project");
 
-		scaffold({
-			dir: nestedDir,
+		await scaffoldBase(nestedDir, {
 			name: "nested-cli",
 			description: "",
 			author: "",
@@ -174,13 +189,12 @@ describe("scaffold", () => {
 		expect(existsSync(resolve(nestedDir, "src", "cli.ts"))).toBe(true);
 	});
 
-	it("overwrites existing directory when scaffold is called", () => {
+	it("overwrites existing directory when scaffold is called with overwrite", async () => {
 		// Create directory with some content
 		mkdirSync(resolve(TEST_DIR, "src"), { recursive: true });
 
 		// Scaffold over it
-		scaffold({
-			dir: TEST_DIR,
+		await scaffoldBase(TEST_DIR, {
 			name: "overwrite-cli",
 			description: "Overwritten",
 			author: "",
@@ -193,9 +207,8 @@ describe("scaffold", () => {
 		expect(pkg.description).toBe("Overwritten");
 	});
 
-	it("sets bin entry to match project name", () => {
-		scaffold({
-			dir: TEST_DIR,
+	it("sets bin entry to match project name", async () => {
+		await scaffoldBase(TEST_DIR, {
 			name: "my-custom-bin",
 			description: "",
 			author: "",
@@ -205,5 +218,18 @@ describe("scaffold", () => {
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
 		expect(pkg.bin["my-custom-bin"]).toBe("dist/cli.js");
+	});
+
+	it("creates .gitignore from _gitignore template via dotfile renaming", async () => {
+		await scaffoldBase(TEST_DIR, {
+			name: "gitignore-cli",
+			description: "",
+			author: "",
+		});
+
+		expect(existsSync(resolve(TEST_DIR, ".gitignore"))).toBe(true);
+		const gitignore = readFileSync(resolve(TEST_DIR, ".gitignore"), "utf-8");
+		expect(gitignore).toContain("node_modules");
+		expect(gitignore).toContain("dist");
 	});
 });

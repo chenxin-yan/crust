@@ -1,14 +1,14 @@
 {
-	"name": "create-crust",
-	"version": "0.0.5",
-	"description": "Scaffold a new Crust CLI project.",
+	"name": "@crustjs/create",
+	"version": "0.0.1",
+	"description": "Headless scaffolding engine for building create-xxx tools",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/create-crust"
+		"directory": "packages/create"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
@@ -18,29 +18,28 @@
 		"cli",
 		"scaffold",
 		"create",
+		"template",
 		"generator",
 		"bun",
-		"typescript",
-		"crust"
+		"typescript"
 	],
 	"files": [
-		"dist",
-		"templates"
+		"dist"
 	],
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
 	"publishConfig": {
 		"access": "public"
-	},
-	"bin": {
-		"create-crust": "dist/index.js"
 	},
 	"scripts": {
 		"build": "bunup",
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
-	},
-	"dependencies": {
-		"@crustjs/create": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

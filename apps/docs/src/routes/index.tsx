@@ -115,7 +115,6 @@ const MODULES: Array<{
     pkg: "@crustjs/create",
     desc: "Scaffolding library for create-xx tools",
     doc: "modules/create",
-    upcoming: true,
   },
   {
     pkg: "@crustjs/validate",

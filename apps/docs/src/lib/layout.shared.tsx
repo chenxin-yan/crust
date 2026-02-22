@@ -61,6 +61,12 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       {
+        text: "Docs",
+        url: "/docs",
+        active: "nested-url",
+        on: "nav",
+      },
+      {
         type: "icon",
         label: "Discord",
         icon: <DiscordIcon />,
