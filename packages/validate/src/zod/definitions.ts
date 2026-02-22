@@ -1,6 +1,6 @@
 import type { ArgDef, FlagsDef } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
-import { getFlagSchema, isFlagSpec, resolveDescription } from "./schema.ts";
+import { isFlagSpec, resolveDescription } from "./schema.ts";
 import type { ArgSpecs, FlagShape, FlagSpec, ZodSchemaLike } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ export function flagsToDefinitions(flags: FlagShape | undefined): FlagsDef {
 
 	for (const [name, value] of Object.entries(flags)) {
 		const metadata = getFlagMetadata(value);
-		const schema = getFlagSchema(value);
+		const { schema } = metadata;
 		const shape = resolveInputShape(schema, `flag "--${name}"`);
 		const required = !isOptionalInputSchema(schema);
 		const description = resolveDescription(schema, metadata.description);

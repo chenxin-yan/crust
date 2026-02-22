@@ -32,11 +32,10 @@ interface IssueInput {
 export function formatPath(path: readonly PropertyKey[]): string {
 	let result = "";
 	for (const segment of path) {
-		const key = segment;
-		if (typeof key === "number") {
-			result += `[${String(key)}]`;
+		if (typeof segment === "number") {
+			result += `[${String(segment)}]`;
 		} else {
-			const str = String(key);
+			const str = String(segment);
 			if (result.length > 0) {
 				result += `.${str}`;
 			} else {

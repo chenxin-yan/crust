@@ -1,1 +1,0 @@
-../../../.ralph/skills/create-prd/SKILL.md
