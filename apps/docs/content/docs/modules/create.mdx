@@ -1,22 +1,216 @@
 ---
 title: "Create"
-description: Scaffolding library for building create-xx tools — coming soon.
+description: Headless scaffolding engine for building create-xx tools.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-<Callout>
-  This package is **coming soon** and not yet available.
-</Callout>
+`@crustjs/create` is a headless, zero-dependency scaffolding engine for building `npm create-xxx` / `bun create-xxx` tools. It handles the mechanical parts of scaffolding — copying template directories, interpolating variables, renaming dotfiles, resolving conflicts, and running post-scaffold steps — so you focus purely on template design and interactive flow.
 
-`@crustjs/create` will provide a library for building `create-xx` scaffolding tools, similar to `create-vite` or `create-next-app`.
+The library is **headless**: it has no opinions about prompts, CLI frameworks, or terminal UI. Pair it with `@crustjs/core` for command routing and `@crustjs/prompt` for interactive input.
 
-Planned features include:
-- Template discovery and selection
-- File scaffolding with variable interpolation
-- Interactive project setup prompts
-- Git initialization
-- Dependency installation
-- Post-scaffold hooks
+## Install
 
-Check back for updates, or follow the [Crust repository](https://github.com/chenxin-yan/crust) for progress.
+```sh
+bun add @crustjs/create
+```
+
+## Quick Example
+
+```ts title="src/index.ts"
+import { scaffold, runSteps } from "@crustjs/create";
+
+// 1. Copy and interpolate the template
+const result = await scaffold({
+  template: "../templates/base",
+  dest: "./my-project",
+  importMeta: import.meta.url,
+  context: { name: "my-app", description: "A cool CLI" },
+});
+
+console.log("Created files:", result.files);
+
+// 2. Run post-scaffold automation
+await runSteps(
+  [
+    { type: "install" },
+    { type: "git-init", commit: "Initial commit" },
+    { type: "open-editor" },
+  ],
+  "./my-project",
+);
+```
+
+## How It Works
+
+1. You organize template files as real files on disk (not string constants).
+2. `scaffold()` copies the template directory to a destination, applying `{{var}}` interpolation to text files and renaming `_`-prefixed files to dotfiles.
+3. Binary files are detected automatically and copied as-is without interpolation.
+4. `runSteps()` executes post-scaffold automation declaratively — install dependencies, init git, open an editor.
+
+## Template Conventions
+
+### Variable Interpolation
+
+Template files can contain `{{var}}` placeholders that are replaced with values from the `context` object:
+
+```json title="templates/base/package.json"
+{
+  "name": "{{name}}",
+  "description": "{{description}}",
+  "author": "{{author}}"
+}
+```
+
+Only simple `{{identifier}}` patterns are supported — no conditionals, loops, or helpers. Whitespace inside braces is tolerated (`{{ name }}`). Missing variables are left untouched.
+
+### Dotfile Renaming
+
+Files prefixed with `_` are renamed to start with `.` during scaffold. This works around npm's behavior of stripping dotfiles during `npm publish`:
+
+| Template file  | Scaffolded as  |
+| -------------- | -------------- |
+| `_gitignore`   | `.gitignore`   |
+| `_env.example` | `.env.example` |
+
+Files starting with `__` (double underscore) are left unchanged, so directories like `__tests__` and `__mocks__` are preserved.
+
+### Binary Files
+
+Binary files (images, fonts, compiled assets) are detected via null-byte check and copied as-is without interpolation.
+
+### Template Composition
+
+Call `scaffold()` multiple times to layer templates — for example, a base template followed by a TypeScript-specific overlay:
+
+```ts
+// Base template
+await scaffold({
+  template: "../templates/base",
+  dest: projectDir,
+  importMeta: import.meta.url,
+  context,
+});
+
+// TypeScript overlay
+await scaffold({
+  template: "../templates/typescript",
+  dest: projectDir,
+  importMeta: import.meta.url,
+  context,
+  conflict: "overwrite",
+});
+```
+
+## API
+
+### `scaffold(options)`
+
+Copy a template directory to a destination, applying variable interpolation and dotfile renaming.
+
+#### Parameters
+
+| Field        | Type                     | Required | Description                                                             |
+| ------------ | ------------------------ | -------- | ----------------------------------------------------------------------- |
+| `template`   | `string`                 | Yes      | Relative path to the template directory (resolved against `importMeta`) |
+| `dest`       | `string`                 | Yes      | Absolute or relative path to the destination directory                  |
+| `importMeta` | `string`                 | Yes      | The `import.meta.url` of the calling module, used to resolve `template` |
+| `context`    | `Record<string, string>` | Yes      | Variables to interpolate into `{{key}}` placeholders                    |
+| `conflict`   | `"abort" \| "overwrite"` | No       | How to handle an existing non-empty destination. Default: `"abort"`     |
+
+#### Returns
+
+`Promise<ScaffoldResult>` — an object with:
+
+| Field   | Type                | Description                                                   |
+| ------- | ------------------- | ------------------------------------------------------------- |
+| `files` | `readonly string[]` | All written file paths, relative to the destination directory |
+
+#### Throws
+
+When `conflict` is `"abort"` (default) and the destination is a non-empty directory.
+
+### `runSteps(steps, cwd)`
+
+Execute an array of post-scaffold steps sequentially. If any step fails, the error propagates immediately and remaining steps are skipped.
+
+#### Parameters
+
+| Field   | Type                 | Description                                                      |
+| ------- | -------------------- | ---------------------------------------------------------------- |
+| `steps` | `PostScaffoldStep[]` | Array of step objects to execute in order                        |
+| `cwd`   | `string`             | Working directory for steps (typically the scaffold destination) |
+
+#### Step Types
+
+| Type          | Fields                        | Description                                                                         |
+| ------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
+| `install`     | —                             | Detect the package manager and run its install command                              |
+| `git-init`    | `commit?: string`             | Run `git init`, optionally stage all files and create an initial commit             |
+| `open-editor` | —                             | Open the project in `$EDITOR` or VS Code. Does not throw if the editor is not found |
+| `command`     | `cmd: string`, `cwd?: string` | Run an arbitrary shell command. Overrides the default `cwd` if provided             |
+
+### `interpolate(content, context)`
+
+Interpolate `{{var}}` placeholders in a string with values from a context object.
+
+```ts
+import { interpolate } from "@crustjs/create";
+
+interpolate("Hello, {{name}}!", { name: "world" });
+// => "Hello, world!"
+```
+
+### `detectPackageManager(cwd?)`
+
+Detect the package manager for a project directory.
+
+Detection strategy (first match wins):
+
+1. Check for lockfiles (`bun.lock` / `pnpm-lock.yaml` / `yarn.lock` / `package-lock.json`)
+2. Parse the `npm_config_user_agent` environment variable
+3. Default to `"npm"`
+
+Returns `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
+
+### `isGitInstalled()`
+
+Check whether `git` is available on the system PATH. Returns `boolean`.
+
+### `getGitUser()`
+
+Read the current git user's name and email from `git config`.
+
+Returns `{ name: string | null, email: string | null }`.
+
+## Exports
+
+### Functions
+
+| Function               | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `scaffold`             | Copy and interpolate a template directory             |
+| `runSteps`             | Execute post-scaffold automation steps                |
+| `interpolate`          | Replace `{{var}}` placeholders in a string            |
+| `detectPackageManager` | Detect bun/npm/pnpm/yarn from lockfiles or user agent |
+| `isGitInstalled`       | Check if git is available                             |
+| `getGitUser`           | Read git user.name and user.email                     |
+
+### Types
+
+| Type               | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| `ScaffoldOptions`  | Configuration for `scaffold()`                       |
+| `ScaffoldResult`   | Result returned by `scaffold()`                      |
+| `PostScaffoldStep` | Discriminated union of step objects for `runSteps()` |
+
+## Design
+
+`@crustjs/create` is the scaffolding primitive between the CLI layer (`@crustjs/core`) and the interactive layer (`@crustjs/prompt`). Templates live as real files on disk, composition is explicit via multiple `scaffold()` calls, and post-scaffold automation is declarative.
+
+**Not included** (by design):
+
+- Interactive prompts (belongs in `@crustjs/prompt`)
+- Terminal UI / styled output (headless — no `@crustjs/style` dependency)
+- Template-level conditionals or loops (`{{#if}}`, `{{#each}}`)
+- Dynamic filename interpolation (filenames are static)
