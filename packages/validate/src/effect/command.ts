@@ -5,7 +5,7 @@ import type {
 	ValidateVariadicArgs,
 } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
-import * as Effect from "effect/Effect";
+import { either, runSync } from "effect/Effect";
 import * as Either from "effect/Either";
 import * as ParseResult from "effect/ParseResult";
 import { decodeUnknown } from "effect/Schema";
@@ -25,17 +25,14 @@ import type {
 // Validation helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-async function validateValue(
+function validateValue(
 	schema: EffectSchemaLike,
 	value: unknown,
 	prefix: readonly PropertyKey[],
-): Promise<
+):
 	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly issues: ValidationIssue[] }
-> {
-	const result = await Effect.runPromise(
-		Effect.either(decodeUnknown(schema)(value)),
-	);
+	| { readonly ok: false; readonly issues: ValidationIssue[] } {
+	const result = runSync(either(decodeUnknown(schema)(value)));
 
 	if (Either.isRight(result)) {
 		return { ok: true, value: result.right };
@@ -52,11 +49,11 @@ async function validateValue(
 	return { ok: false, issues: normalizeIssues(prefixed) };
 }
 
-async function validateArgs(
+function validateArgs(
 	argSpecs: readonly ArgSpec[],
 	context: CommandContext,
 	issues: ValidationIssue[],
-): Promise<Record<string, unknown>> {
+): Record<string, unknown> {
 	const output: Record<string, unknown> = {};
 
 	for (const spec of argSpecs) {
@@ -72,7 +69,7 @@ async function validateArgs(
 			const transformed: unknown[] = [];
 			for (let i = 0; i < items.length; i++) {
 				const value = items[i];
-				const validated = await validateValue(spec.schema, value, [
+				const validated = validateValue(spec.schema, value, [
 					"args",
 					spec.name,
 					i,
@@ -88,10 +85,7 @@ async function validateArgs(
 			continue;
 		}
 
-		const validated = await validateValue(spec.schema, input, [
-			"args",
-			spec.name,
-		]);
+		const validated = validateValue(spec.schema, input, ["args", spec.name]);
 		if (!validated.ok) {
 			issues.push(...validated.issues);
 			continue;
@@ -102,11 +96,11 @@ async function validateArgs(
 	return output;
 }
 
-async function validateFlags(
+function validateFlags(
 	flags: FlagShape | undefined,
 	context: CommandContext,
 	issues: ValidationIssue[],
-): Promise<Record<string, unknown>> {
+): Record<string, unknown> {
 	if (!flags) {
 		return {};
 	}
@@ -116,7 +110,7 @@ async function validateFlags(
 	for (const [name, rawValue] of Object.entries(flags)) {
 		const schema = getFlagSchema(rawValue);
 		const input = (context.flags as Record<string, unknown>)[name];
-		const validated = await validateValue(schema, input, ["flags", name]);
+		const validated = validateValue(schema, input, ["flags", name]);
 
 		if (!validated.ok) {
 			issues.push(...validated.issues);
@@ -163,12 +157,8 @@ export function defineEffectCommand<
 		...(userRun && {
 			async run(context: CommandContext) {
 				const issues: ValidationIssue[] = [];
-				const validatedArgs = await validateArgs(argSpecs, context, issues);
-				const validatedFlags = await validateFlags(
-					effectFlags,
-					context,
-					issues,
-				);
+				const validatedArgs = validateArgs(argSpecs, context, issues);
+				const validatedFlags = validateFlags(effectFlags, context, issues);
 
 				if (issues.length > 0) {
 					throwValidationError(issues);

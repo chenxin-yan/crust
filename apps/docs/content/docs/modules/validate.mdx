@@ -165,10 +165,7 @@ const greet = defineEffectCommand({
   args: [arg("name", Schema.String.annotations({ description: "Person to greet" }))],
   flags: {
     loud: flag(
-      Schema.optionalWith(
-        Schema.Boolean.annotations({ description: "Shout the greeting" }),
-        { default: () => false },
-      ),
+      Schema.Boolean.annotations({ description: "Shout the greeting" }),
       { alias: "l" },
     ),
   },
@@ -205,7 +202,7 @@ flag(Schema.transform(
 - **Primitives**: `Schema.String`, `Schema.Number`, `Schema.Boolean`
 - **Enums and literals**: `Schema.Literal("a", "b")`, `Schema.Enums(MyEnum)`
 - **Arrays**: `Schema.Array(Schema.String)` (flags with `multiple: true`)
-- **Wrappers**: `Schema.UndefinedOr(...)`, `Schema.optionalWith(...)`, `Schema.transform(...)`, `Schema.TemplateLiteral`
+- **Wrappers**: `Schema.UndefinedOr(...)`, `Schema.transform(...)`, `Schema.TemplateLiteral`
 - **Descriptions**: `schema.annotations({ description: "Help text" })` (auto-extracted for help output)
 
 Schemas are introspected via AST at definition time to determine CLI parser types (`string`, `number`, `boolean`) and optionality. Transformations and refinements are unwrapped to find the encoded input type.
