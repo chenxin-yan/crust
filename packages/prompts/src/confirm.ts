@@ -2,8 +2,8 @@
 // Confirm — Yes/no boolean confirmation prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
@@ -61,10 +61,10 @@ interface ConfirmState {
 function handleKey(
 	key: KeypressEvent,
 	state: ConfirmState,
-): ConfirmState | { readonly submit: boolean } {
+): ConfirmState | SubmitResult<boolean> {
 	// Enter — submit current value
 	if (key.name === "return") {
-		return { submit: state.value };
+		return submit(state.value);
 	}
 
 	// Left/Right arrows toggle between yes/no

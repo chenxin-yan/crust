@@ -30,8 +30,16 @@ export type {
 	HandleKeyResult,
 	KeypressEvent,
 	PromptConfig,
+	SubmitResult,
 } from "./renderer.ts";
-export { assertTTY, NonInteractiveError, runPrompt } from "./renderer.ts";
+export {
+	assertTTY,
+	CancelledError,
+	NonInteractiveError,
+	runPrompt,
+	SUBMIT,
+	submit,
+} from "./renderer.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompts
@@ -57,4 +65,4 @@ export { spinner } from "./spinner.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 export { fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
-export { normalizeChoices } from "./utils.ts";
+export { calculateScrollOffset, normalizeChoices } from "./utils.ts";

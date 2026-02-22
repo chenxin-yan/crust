@@ -5,6 +5,43 @@
 import type { Choice } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Viewport scrolling
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate the scroll offset to keep the cursor within the visible viewport.
+ *
+ * Used by select, multiselect, and filter prompts to manage scrolling
+ * when the number of items exceeds the visible viewport.
+ *
+ * @param cursor - Current cursor position in the list
+ * @param scrollOffset - Current scroll offset
+ * @param totalItems - Total number of items in the list
+ * @param maxVisible - Maximum number of visible items in the viewport
+ * @returns The new scroll offset
+ */
+export function calculateScrollOffset(
+	cursor: number,
+	scrollOffset: number,
+	totalItems: number,
+	maxVisible: number,
+): number {
+	const visibleCount = Math.min(totalItems, maxVisible);
+
+	// Cursor moved above the viewport — scroll up
+	if (cursor < scrollOffset) {
+		return cursor;
+	}
+
+	// Cursor moved below the viewport — scroll down
+	if (cursor >= scrollOffset + visibleCount) {
+		return cursor - visibleCount + 1;
+	}
+
+	return scrollOffset;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Normalized Choice
 // ────────────────────────────────────────────────────────────────────────────
 

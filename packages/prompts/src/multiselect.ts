@@ -2,12 +2,12 @@
 // Multiselect — Checkbox-style multi selection from a list for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
-import { normalizeChoices } from "./utils.ts";
+import { calculateScrollOffset, normalizeChoices } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -86,34 +86,6 @@ interface MultiselectState<T> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Viewport scrolling
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Calculate the scroll offset to keep the cursor within the visible viewport.
- */
-function calculateScrollOffset(
-	cursor: number,
-	scrollOffset: number,
-	totalItems: number,
-	maxVisible: number,
-): number {
-	const visibleCount = Math.min(totalItems, maxVisible);
-
-	// Cursor moved above the viewport — scroll up
-	if (cursor < scrollOffset) {
-		return cursor;
-	}
-
-	// Cursor moved below the viewport — scroll down
-	if (cursor >= scrollOffset + visibleCount) {
-		return cursor - visibleCount + 1;
-	}
-
-	return scrollOffset;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Validation
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -154,7 +126,7 @@ function createHandleKey<T>(
 ): (
 	key: KeypressEvent,
 	state: MultiselectState<T>,
-) => MultiselectState<T> | { readonly submit: T[] } {
+) => MultiselectState<T> | SubmitResult<T[]> {
 	return (key, state) => {
 		const totalItems = state.choices.length;
 
@@ -168,7 +140,7 @@ function createHandleKey<T>(
 			const selectedValues = state.choices
 				.filter((_, i) => state.selected.has(i))
 				.map((c) => c.value);
-			return { submit: selectedValues };
+			return submit(selectedValues);
 		}
 
 		// Space — toggle selection on current item
@@ -177,7 +149,9 @@ function createHandleKey<T>(
 			if (newSelected.has(state.cursor)) {
 				newSelected.delete(state.cursor);
 			} else {
-				newSelected.add(state.cursor);
+				if (max === undefined || newSelected.size < max) {
+					newSelected.add(state.cursor);
+				}
 			}
 			return { ...state, selected: newSelected, error: null };
 		}

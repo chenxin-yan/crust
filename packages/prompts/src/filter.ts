@@ -4,12 +4,12 @@
 
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
-import { normalizeChoices } from "./utils.ts";
+import { calculateScrollOffset, normalizeChoices } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -84,34 +84,6 @@ interface FilterState<T> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Viewport scrolling
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Calculate the scroll offset to keep the cursor within the visible viewport.
- */
-function calculateScrollOffset(
-	cursor: number,
-	scrollOffset: number,
-	totalItems: number,
-	maxVisible: number,
-): number {
-	const visibleCount = Math.min(totalItems, maxVisible);
-
-	// Cursor moved above the viewport — scroll up
-	if (cursor < scrollOffset) {
-		return cursor;
-	}
-
-	// Cursor moved below the viewport — scroll down
-	if (cursor >= scrollOffset + visibleCount) {
-		return cursor - visibleCount + 1;
-	}
-
-	return scrollOffset;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -143,13 +115,13 @@ function createHandleKey<T>(
 ): (
 	key: KeypressEvent,
 	state: FilterState<T>,
-) => FilterState<T> | { readonly submit: T } {
+) => FilterState<T> | SubmitResult<T> {
 	return (key, state) => {
 		// Enter — submit the currently highlighted item
 		if (key.name === "return") {
 			const result = state.results[state.listCursor];
 			if (result) {
-				return { submit: result.item.value };
+				return submit(result.item.value);
 			}
 			// No results to select — ignore
 			return state;

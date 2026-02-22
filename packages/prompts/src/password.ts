@@ -2,8 +2,8 @@
 // Password — Masked text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme, ValidateFn } from "./types.ts";
 
@@ -56,8 +56,8 @@ function createHandleKey(
 	state: PasswordState,
 ) =>
 	| PasswordState
-	| { readonly submit: string }
-	| Promise<PasswordState | { readonly submit: string }> {
+	| SubmitResult<string>
+	| Promise<PasswordState | SubmitResult<string>> {
 	return async (key, state) => {
 		// Enter — submit
 		if (key.name === "return") {
@@ -68,7 +68,7 @@ function createHandleKey(
 				}
 			}
 
-			return { submit: state.value };
+			return submit(state.value);
 		}
 
 		// Backspace — delete character before cursor

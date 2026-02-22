@@ -4,6 +4,7 @@ import {
 	NonInteractiveError,
 	type PromptConfig,
 	runPrompt,
+	submit,
 } from "./renderer.ts";
 import { defaultTheme } from "./theme.ts";
 
@@ -157,7 +158,7 @@ describe("runPrompt", () => {
 	it("resolves with submitted value when handleKey returns submit", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
-			handleKey: () => ({ submit: "hello" }),
+			handleKey: () => submit("hello"),
 			initialState: { value: "test" },
 			theme: defaultTheme,
 		};
@@ -180,7 +181,7 @@ describe("runPrompt", () => {
 			handleKey: (_key, state) => {
 				keypressCount++;
 				if (keypressCount >= 3) {
-					return { submit: `${state.value}!` };
+					return submit(`${state.value}!`);
 				}
 				return { value: `${state.value}x` };
 			},
@@ -204,7 +205,7 @@ describe("runPrompt", () => {
 	it("writes output to stderr, not stdout", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: () => "prompt output",
-			handleKey: () => ({ submit: "done" }),
+			handleKey: () => submit("done"),
 			initialState: { value: "" },
 			theme: defaultTheme,
 		};
@@ -221,7 +222,7 @@ describe("runPrompt", () => {
 	it("hides cursor on start and shows cursor on cleanup", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: () => "test",
-			handleKey: () => ({ submit: "done" }),
+			handleKey: () => submit("done"),
 			initialState: { value: "" },
 			theme: defaultTheme,
 		};
@@ -242,7 +243,7 @@ describe("runPrompt", () => {
 	it("calls renderSubmitted when provided", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => `input: ${state.value}`,
-			handleKey: () => ({ submit: "final" }),
+			handleKey: () => submit("final"),
 			initialState: { value: "test" },
 			theme: defaultTheme,
 			renderSubmitted: (_state, value, theme) =>
@@ -265,7 +266,7 @@ describe("runPrompt", () => {
 			render: (state) => state.value,
 			handleKey: async () => {
 				await new Promise((r) => setTimeout(r, 5));
-				return { submit: "async-result" };
+				return submit("async-result");
 			},
 			initialState: { value: "" },
 			theme: defaultTheme,
@@ -301,7 +302,7 @@ describe("runPrompt", () => {
 	it("renders initial state immediately", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: () => "initial frame",
-			handleKey: () => ({ submit: "done" }),
+			handleKey: () => submit("done"),
 			initialState: { value: "" },
 			theme: defaultTheme,
 		};
@@ -318,7 +319,7 @@ describe("runPrompt", () => {
 	it("restores raw mode on cleanup", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: () => "test",
-			handleKey: () => ({ submit: "done" }),
+			handleKey: () => submit("done"),
 			initialState: { value: "" },
 			theme: defaultTheme,
 		};
@@ -345,7 +346,7 @@ describe("runPrompt", () => {
 				return `frame ${state.value}`;
 			},
 			handleKey: (_key, state) => {
-				if (state.value === "2") return { submit: state.value };
+				if (state.value === "2") return submit(state.value);
 				const next = state.value === "" ? "1" : "2";
 				return { value: next };
 			},
@@ -373,7 +374,7 @@ describe("runPrompt", () => {
 	it("handles multiline render content", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: () => "line1\nline2\nline3",
-			handleKey: () => ({ submit: "done" }),
+			handleKey: () => submit("done"),
 			initialState: { value: "" },
 			theme: defaultTheme,
 		};
@@ -438,7 +439,7 @@ describe("HandleKeyResult discrimination", () => {
 		const config: PromptConfig<{ count: number }, number> = {
 			render: (state) => `count: ${state.count}`,
 			handleKey: (_key, state) => {
-				if (state.count >= 2) return { submit: state.count };
+				if (state.count >= 2) return submit(state.count);
 				return { count: state.count + 1 };
 			},
 			initialState: { count: 0 },

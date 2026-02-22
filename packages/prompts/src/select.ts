@@ -2,12 +2,12 @@
 // Select — Single selection from a list of choices for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
-import { normalizeChoices } from "./utils.ts";
+import { calculateScrollOffset, normalizeChoices } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -72,34 +72,6 @@ interface SelectState<T> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Viewport scrolling
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Calculate the scroll offset to keep the cursor within the visible viewport.
- */
-function calculateScrollOffset(
-	cursor: number,
-	scrollOffset: number,
-	totalItems: number,
-	maxVisible: number,
-): number {
-	const visibleCount = Math.min(totalItems, maxVisible);
-
-	// Cursor moved above the viewport — scroll up
-	if (cursor < scrollOffset) {
-		return cursor;
-	}
-
-	// Cursor moved below the viewport — scroll down
-	if (cursor >= scrollOffset + visibleCount) {
-		return cursor - visibleCount + 1;
-	}
-
-	return scrollOffset;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Keypress handler
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -108,7 +80,7 @@ function createHandleKey<T>(
 ): (
 	key: KeypressEvent,
 	state: SelectState<T>,
-) => SelectState<T> | { readonly submit: T } {
+) => SelectState<T> | SubmitResult<T> {
 	return (key, state) => {
 		const totalItems = state.choices.length;
 
@@ -116,7 +88,7 @@ function createHandleKey<T>(
 		if (key.name === "return") {
 			const selected = state.choices[state.cursor];
 			if (selected) {
-				return { submit: selected.value };
+				return submit(selected.value);
 			}
 			return state;
 		}

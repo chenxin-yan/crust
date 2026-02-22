@@ -2,8 +2,8 @@
 // Input — Single-line text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import { runPrompt } from "./renderer.ts";
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { runPrompt, submit } from "./renderer.ts";
 import { resolveTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme, ValidateFn } from "./types.ts";
 
@@ -60,8 +60,8 @@ function createHandleKey(
 	state: InputState,
 ) =>
 	| InputState
-	| { readonly submit: string }
-	| Promise<InputState | { readonly submit: string }> {
+	| SubmitResult<string>
+	| Promise<InputState | SubmitResult<string>> {
 	return async (key, state) => {
 		// Enter — submit
 		if (key.name === "return") {
@@ -77,7 +77,7 @@ function createHandleKey(
 				}
 			}
 
-			return { submit: submitValue };
+			return submit(submitValue);
 		}
 
 		// Backspace — delete character before cursor

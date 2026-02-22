@@ -26,11 +26,42 @@ export interface KeypressEvent {
 }
 
 /**
+ * Symbol used internally to discriminate submit results from state updates.
+ * Using a symbol prevents collisions with user-defined state types.
+ */
+export const SUBMIT: unique symbol = Symbol("submit");
+
+/**
+ * A submit action wrapping the final value.
+ */
+export interface SubmitResult<T> {
+	readonly [SUBMIT]: T;
+}
+
+/**
+ * Create a submit result to resolve the prompt with the given value.
+ *
+ * @param value - The value to resolve the prompt with
+ * @returns A submit action object
+ *
+ * @example
+ * ```ts
+ * handleKey: (key, state) => {
+ *   if (key.name === "return") return submit(state.value);
+ *   return { ...state, value: state.value + key.char };
+ * }
+ * ```
+ */
+export function submit<T>(value: T): SubmitResult<T> {
+	return { [SUBMIT]: value };
+}
+
+/**
  * Result of a keypress handler.
  * - Return updated state to continue the prompt
- * - Return `{ submit: T }` to resolve the prompt with a value
+ * - Return `submit(value)` to resolve the prompt with a value
  */
-export type HandleKeyResult<S, T> = S | { readonly submit: T };
+export type HandleKeyResult<S, T> = S | SubmitResult<T>;
 
 /**
  * Configuration for `runPrompt` — each prompt provides these functions
@@ -39,7 +70,7 @@ export type HandleKeyResult<S, T> = S | { readonly submit: T };
 export interface PromptConfig<S, T> {
 	/** Render the current state to a string (may contain newlines) */
 	readonly render: (state: S, theme: PromptTheme) => string;
-	/** Handle a keypress event — return new state or `{ submit: value }` to resolve */
+	/** Handle a keypress event — return new state or `submit(value)` to resolve */
 	readonly handleKey: (
 		key: KeypressEvent,
 		state: S,
@@ -59,6 +90,9 @@ export interface PromptConfig<S, T> {
 // ────────────────────────────────────────────────────────────────────────────
 // ANSI escape sequences
 // ────────────────────────────────────────────────────────────────────────────
+
+/** Module-level flag to ensure emitKeypressEvents is only called once per stream */
+let keypressEventsAttached = false;
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -90,6 +124,16 @@ export class NonInteractiveError extends Error {
 }
 
 /**
+ * Error thrown when the user cancels a prompt with Ctrl+C.
+ */
+export class CancelledError extends Error {
+	constructor(message?: string) {
+		super(message ?? "Prompt was cancelled.");
+		this.name = "CancelledError";
+	}
+}
+
+/**
  * Check that stdin is an interactive TTY.
  * @throws {NonInteractiveError} when stdin is not a TTY
  */
@@ -108,8 +152,8 @@ export function assertTTY(): void {
  */
 function isSubmit<S, T>(
 	result: HandleKeyResult<S, T>,
-): result is { readonly submit: T } {
-	return typeof result === "object" && result !== null && "submit" in result;
+): result is SubmitResult<T> {
+	return typeof result === "object" && result !== null && SUBMIT in result;
 }
 
 /**
@@ -213,10 +257,11 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 				sequence?: string;
 			},
 		): Promise<void> {
-			// Ctrl+C → clean exit
+			// Ctrl+C → reject with CancelledError
 			if (key?.ctrl && key.name === "c") {
 				cleanup();
-				process.exit(0);
+				reject(new CancelledError());
+				return;
 			}
 
 			const event: KeypressEvent = {
@@ -231,14 +276,15 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 				const result = await handleKey(event, state);
 
 				if (isSubmit(result)) {
+					const value = result[SUBMIT];
 					// Render final submitted state
 					if (renderSubmitted) {
-						renderFrame(renderSubmitted(state, result.submit, theme));
+						renderFrame(renderSubmitted(state, value, theme));
 					}
 					// Write newline to move past the prompt
 					output.write("\n");
 					cleanup();
-					resolve(result.submit);
+					resolve(value);
 				} else {
 					state = result;
 					renderFrame(render(state, theme));
@@ -251,7 +297,10 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 
 		// ── Initialize ──────────────────────────────────────────────────
 		try {
-			readline.emitKeypressEvents(stdin);
+			if (!keypressEventsAttached) {
+				readline.emitKeypressEvents(stdin);
+				keypressEventsAttached = true;
+			}
 			stdin.setRawMode(true);
 			stdin.resume();
 			output.write(HIDE_CURSOR);
