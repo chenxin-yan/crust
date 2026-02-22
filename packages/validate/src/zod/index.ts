@@ -2,8 +2,23 @@
 // @crustjs/validate/zod — Zod 4 schema-first mode for Crust CLI
 // ────────────────────────────────────────────────────────────────────────────
 
-// Schema-first command factory
-// TODO: Export Zod schema-first APIs in subsequent tasks
+// Schema-first DSL helpers
+export { arg, flag } from "./schema.ts";
 
-// Metadata DSL
-// TODO: Export metadata DSL helpers in subsequent tasks
+// Public types
+export type {
+	ArgOptions,
+	ArgSpec,
+	ArgSpecs,
+	FlagOptions,
+	FlagShape,
+	FlagSpec,
+	InferArgsFromConfig,
+	InferArgsFromSpecs,
+	InferFlagsFromConfig,
+	InferFlagsFromShape,
+	InferSchemaOutput,
+	ZodCommandDef,
+	ZodCommandRunHandler,
+	ZodSchemaLike,
+} from "./types.ts";
