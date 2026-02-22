@@ -77,6 +77,10 @@ async function runGitInit(cwd: string, commit?: string): Promise<void> {
 	await spawnChecked(["git", "init"], cwd, "git init");
 
 	if (commit) {
+		// Ensure git identity is configured for the commit.
+		// CI environments often lack global user.name/user.email config,
+		// so we set local defaults if they are missing.
+		await ensureGitIdentity(cwd);
 		await spawnChecked(["git", "add", "."], cwd, "git add");
 		await spawnChecked(["git", "commit", "-m", commit], cwd, "git commit");
 	}
@@ -135,6 +139,35 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Ensure git `user.name` and `user.email` are configured locally.
+ *
+ * CI environments often lack global git config, which causes `git commit`
+ * to fail. This sets sensible local-repo defaults only when the values
+ * are not already set at any level (local, global, system).
+ */
+async function ensureGitIdentity(cwd: string): Promise<void> {
+	const hasName =
+		Bun.spawnSync(["git", "config", "user.name"], { cwd }).exitCode === 0;
+	const hasEmail =
+		Bun.spawnSync(["git", "config", "user.email"], { cwd }).exitCode === 0;
+
+	if (!hasName) {
+		await spawnChecked(
+			["git", "config", "user.name", "Crust"],
+			cwd,
+			"git config user.name",
+		);
+	}
+	if (!hasEmail) {
+		await spawnChecked(
+			["git", "config", "user.email", "crust@scaffolded.project"],
+			cwd,
+			"git config user.email",
+		);
+	}
+}
 
 /**
  * Spawn a process and throw a descriptive error if it exits non-zero.
