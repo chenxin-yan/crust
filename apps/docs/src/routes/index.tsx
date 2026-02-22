@@ -726,13 +726,14 @@ function FurnaceHome() {
                   >
                     Quick Start
                   </Link>
-                  <Link
-                    to="/docs/$"
-                    params={{ _splat: "" }}
+                  <a
+                    href="https://discord.gg/sQF8hdN6Ht"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="fn-btn-ghost"
                   >
-                    Documentation
-                  </Link>
+                    Join Discord
+                  </a>
                 </div>
               </div>
 
