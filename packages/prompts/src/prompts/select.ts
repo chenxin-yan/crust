@@ -2,12 +2,12 @@
 // Select — Single selection from a list of choices for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "./renderer.ts";
-import { runPrompt, submit } from "./renderer.ts";
-import { resolveTheme } from "./theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
-import type { NormalizedChoice } from "./utils.ts";
-import { calculateScrollOffset, normalizeChoices } from "./utils.ts";
+import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
+import { resolveTheme } from "../core/theme.ts";
+import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { NormalizedChoice } from "../core/utils.ts";
+import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

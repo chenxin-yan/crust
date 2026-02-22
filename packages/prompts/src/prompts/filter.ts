@@ -2,15 +2,15 @@
 // Filter — Fuzzy-search interactive filter prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { FuzzyFilterResult } from "./fuzzy.ts";
-import { fuzzyFilter } from "./fuzzy.ts";
-import type { KeypressEvent, SubmitResult } from "./renderer.ts";
-import { runPrompt, submit } from "./renderer.ts";
-import { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
-import { resolveTheme } from "./theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "./types.ts";
-import type { NormalizedChoice } from "./utils.ts";
-import { calculateScrollOffset, normalizeChoices } from "./utils.ts";
+import type { FuzzyFilterResult } from "../core/fuzzy.ts";
+import { fuzzyFilter } from "../core/fuzzy.ts";
+import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
+import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
+import { resolveTheme } from "../core/theme.ts";
+import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { NormalizedChoice } from "../core/utils.ts";
+import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

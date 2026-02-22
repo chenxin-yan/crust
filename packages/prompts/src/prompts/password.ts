@@ -2,11 +2,15 @@
 // Password — Masked text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "./renderer.ts";
-import { runPrompt, submit } from "./renderer.ts";
-import { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
-import { resolveTheme } from "./theme.ts";
-import type { PartialPromptTheme, PromptTheme, ValidateFn } from "./types.ts";
+import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
+import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
+import { resolveTheme } from "../core/theme.ts";
+import type {
+	PartialPromptTheme,
+	PromptTheme,
+	ValidateFn,
+} from "../core/types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

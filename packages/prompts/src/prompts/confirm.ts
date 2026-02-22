@@ -1,40 +1,47 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Input — Single-line text input prompt for @crustjs/prompts
+// Confirm — Yes/no boolean confirmation prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "./renderer.ts";
-import { runPrompt, submit } from "./renderer.ts";
-import { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
-import { resolveTheme } from "./theme.ts";
-import type { PartialPromptTheme, PromptTheme, ValidateFn } from "./types.ts";
+import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
+import { resolveTheme } from "../core/theme.ts";
+import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Options for the {@link input} prompt.
+ * Options for the {@link confirm} prompt.
  *
  * @example
  * ```ts
- * const name = await input({
- *   message: "What is your name?",
- *   placeholder: "Enter your name",
- *   validate: (v) => v.length > 0 || "Name is required",
+ * const shouldContinue = await confirm({
+ *   message: "Do you want to continue?",
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
+ * const agreed = await confirm({
+ *   message: "Accept terms?",
+ *   active: "Agree",
+ *   inactive: "Decline",
+ *   default: false,
  * });
  * ```
  */
-export interface InputOptions {
+export interface ConfirmOptions {
 	/** The prompt message displayed to the user */
 	readonly message: string;
-	/** Placeholder text shown when the input is empty */
-	readonly placeholder?: string;
-	/** Default value used when the user submits an empty input */
-	readonly default?: string;
+	/** Default value when the user presses Enter without toggling (defaults to `true`) */
+	readonly default?: boolean;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: string;
-	/** Validation function — return `true` for valid, or a string error message */
-	readonly validate?: ValidateFn<string>;
+	readonly initial?: boolean;
+	/** Label for the affirmative option (defaults to `"Yes"`) */
+	readonly active?: string;
+	/** Label for the negative option (defaults to `"No"`) */
+	readonly inactive?: string;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
@@ -43,52 +50,52 @@ export interface InputOptions {
 // State
 // ────────────────────────────────────────────────────────────────────────────
 
-interface InputState {
-	readonly value: string;
-	readonly cursorPos: number;
-	readonly error: string | null;
+interface ConfirmState {
+	readonly value: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Keypress handler
 // ────────────────────────────────────────────────────────────────────────────
 
-function createHandleKey(
-	validate: ValidateFn<string> | undefined,
-	defaultValue: string | undefined,
-): (
+function handleKey(
 	key: KeypressEvent,
-	state: InputState,
-) =>
-	| InputState
-	| SubmitResult<string>
-	| Promise<InputState | SubmitResult<string>> {
-	return async (key, state) => {
-		// Enter — submit
-		if (key.name === "return") {
-			const submitValue =
-				state.value === "" && defaultValue !== undefined
-					? defaultValue
-					: state.value;
+	state: ConfirmState,
+): ConfirmState | SubmitResult<boolean> {
+	// Enter — submit current value
+	if (key.name === "return") {
+		return submit(state.value);
+	}
 
-			if (validate) {
-				const result = await validate(submitValue);
-				if (result !== true) {
-					return { ...state, error: result };
-				}
-			}
+	// Left/Right arrows toggle between yes/no
+	if (key.name === "left" || key.name === "right") {
+		return { value: !state.value };
+	}
 
-			return submit(submitValue);
-		}
+	// h/l (vim-style) toggle
+	if (key.name === "h") {
+		return { value: true };
+	}
+	if (key.name === "l") {
+		return { value: false };
+	}
 
-		// Delegate to shared text-editing handler
-		const edit = handleTextEdit(key, state.value, state.cursorPos);
-		if (edit) {
-			return { value: edit.text, cursorPos: edit.cursorPos, error: null };
-		}
+	// Tab toggles
+	if (key.name === "tab") {
+		return { value: !state.value };
+	}
 
-		return state;
-	};
+	// y shortcut — set to true
+	if (key.char === "y" || key.char === "Y") {
+		return { value: true };
+	}
+
+	// n shortcut — set to false
+	if (key.char === "n" || key.char === "N") {
+		return { value: false };
+	}
+
+	return state;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -96,58 +103,41 @@ function createHandleKey(
 // ────────────────────────────────────────────────────────────────────────────
 
 const PREFIX_SYMBOL = "?";
+const SEPARATOR = " / ";
 
-function renderInput(
-	state: InputState,
+function renderConfirm(
+	state: ConfirmState,
 	theme: PromptTheme,
 	message: string,
-	placeholder: string | undefined,
-	defaultValue: string | undefined,
+	activeLabel: string,
+	inactiveLabel: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message);
 
-	// Default hint shown after message when value is empty and default exists
-	const defaultHint =
-		defaultValue !== undefined && state.value === ""
-			? ` ${theme.hint(`(${defaultValue})`)}`
-			: "";
+	const activeDisplay = state.value
+		? theme.selected(activeLabel)
+		: theme.unselected(activeLabel);
 
-	let valueLine: string;
+	const inactiveDisplay = state.value
+		? theme.unselected(inactiveLabel)
+		: theme.selected(inactiveLabel);
 
-	if (state.value === "") {
-		// Show placeholder when input is empty
-		if (placeholder) {
-			valueLine = theme.placeholder(placeholder);
-		} else {
-			valueLine = theme.cursor(CURSOR_CHAR);
-		}
-	} else {
-		// Show value with cursor
-		const before = state.value.slice(0, state.cursorPos);
-		const after = state.value.slice(state.cursorPos);
-		valueLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
-	}
-
-	let output = `${prefix} ${msg}${defaultHint}\n${valueLine}`;
-
-	// Show error inline below
-	if (state.error !== null) {
-		output += `\n${theme.error(state.error)}`;
-	}
-
-	return output;
+	return `${prefix} ${msg}\n${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
 }
 
 function renderSubmitted(
-	_state: InputState,
-	value: string,
+	_state: ConfirmState,
+	value: boolean,
 	theme: PromptTheme,
 	message: string,
+	activeLabel: string,
+	inactiveLabel: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message);
-	return `${prefix} ${msg} ${theme.success(value)}`;
+	const answer = value ? activeLabel : inactiveLabel;
+	return `${prefix} ${msg} ${theme.success(answer)}`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -155,63 +145,74 @@ function renderSubmitted(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Display an interactive single-line text input prompt.
+ * Display an interactive yes/no confirmation prompt.
  *
- * Supports placeholder text, default values, validation with inline error
- * display, and full cursor editing (insert, delete, arrow keys, home/end).
+ * Shows two side-by-side options (default: "Yes" / "No") that the user
+ * toggles with arrow keys, h/l, y/n, or Tab, then confirms with Enter.
  *
  * If `initial` is provided, the prompt is skipped and the value is returned
  * immediately — useful for prefilling from CLI flags.
  *
- * @param options - Input prompt configuration
- * @returns The user's entered text
+ * @param options - Confirm prompt configuration
+ * @returns The user's boolean selection
  * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
  *
  * @example
  * ```ts
- * const name = await input({
- *   message: "What is your name?",
- *   placeholder: "John Doe",
- *   validate: (v) => v.length > 0 || "Name cannot be empty",
+ * const proceed = await confirm({
+ *   message: "Do you want to continue?",
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Custom labels with default value
+ * const accepted = await confirm({
+ *   message: "Accept the license?",
+ *   active: "Accept",
+ *   inactive: "Decline",
+ *   default: false,
  * });
  * ```
  *
  * @example
  * ```ts
  * // Skip prompt when flag is provided
- * const name = await input({
- *   message: "Name?",
- *   initial: flags.name,
+ * const yes = await confirm({
+ *   message: "Continue?",
+ *   initial: flags.yes,
  * });
  * ```
  */
-export async function input(options: InputOptions): Promise<string> {
+export async function confirm(options: ConfirmOptions): Promise<boolean> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
 	}
 
 	const theme = resolveTheme(options.theme);
+	const activeLabel = options.active ?? "Yes";
+	const inactiveLabel = options.inactive ?? "No";
+	const defaultValue = options.default ?? true;
 
-	const initialState: InputState = {
-		value: "",
-		cursorPos: 0,
-		error: null,
+	const initialState: ConfirmState = {
+		value: defaultValue,
 	};
 
-	return runPrompt<InputState, string>({
+	return runPrompt<ConfirmState, boolean>({
 		initialState,
 		theme,
 		render: (state, t) =>
-			renderInput(
+			renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
+		handleKey,
+		renderSubmitted: (state, value, t) =>
+			renderSubmitted(
 				state,
+				value,
 				t,
 				options.message,
-				options.placeholder,
-				options.default,
+				activeLabel,
+				inactiveLabel,
 			),
-		handleKey: createHandleKey(options.validate, options.default),
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message),
 	});
 }

@@ -6,21 +6,21 @@
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-export type { FuzzyFilterResult, FuzzyMatchResult } from "./fuzzy.ts";
+export type { FuzzyFilterResult, FuzzyMatchResult } from "./core/fuzzy.ts";
 export type {
 	Choice,
 	PartialPromptTheme,
 	PromptTheme,
 	ValidateFn,
 	ValidateResult,
-} from "./types.ts";
-export type { NormalizedChoice } from "./utils.ts";
+} from "./core/types.ts";
+export type { NormalizedChoice } from "./core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme
 // ────────────────────────────────────────────────────────────────────────────
 
-export { createTheme, defaultTheme, getTheme, setTheme } from "./theme.ts";
+export { createTheme, defaultTheme, getTheme, setTheme } from "./core/theme.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Renderer
@@ -31,39 +31,39 @@ export type {
 	KeypressEvent,
 	PromptConfig,
 	SubmitResult,
-} from "./renderer.ts";
+} from "./core/renderer.ts";
 export {
 	assertTTY,
 	CancelledError,
 	NonInteractiveError,
 	runPrompt,
 	submit,
-} from "./renderer.ts";
+} from "./core/renderer.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-export type { ConfirmOptions } from "./confirm.ts";
-export { confirm } from "./confirm.ts";
-export type { FilterOptions } from "./filter.ts";
-export { filter } from "./filter.ts";
-export type { InputOptions } from "./input.ts";
-export { input } from "./input.ts";
-export type { MultiselectOptions } from "./multiselect.ts";
-export { multiselect } from "./multiselect.ts";
-export type { PasswordOptions } from "./password.ts";
-export { password } from "./password.ts";
-export type { SelectOptions } from "./select.ts";
-export { select } from "./select.ts";
-export type { SpinnerOptions, SpinnerType } from "./spinner.ts";
-export { spinner } from "./spinner.ts";
+export type { ConfirmOptions } from "./prompts/confirm.ts";
+export { confirm } from "./prompts/confirm.ts";
+export type { FilterOptions } from "./prompts/filter.ts";
+export { filter } from "./prompts/filter.ts";
+export type { InputOptions } from "./prompts/input.ts";
+export { input } from "./prompts/input.ts";
+export type { MultiselectOptions } from "./prompts/multiselect.ts";
+export { multiselect } from "./prompts/multiselect.ts";
+export type { PasswordOptions } from "./prompts/password.ts";
+export { password } from "./prompts/password.ts";
+export type { SelectOptions } from "./prompts/select.ts";
+export { select } from "./prompts/select.ts";
+export type { SpinnerOptions, SpinnerType } from "./prompts/spinner.ts";
+export { spinner } from "./prompts/spinner.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Utilities
 // ────────────────────────────────────────────────────────────────────────────
 
-export { fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
-export type { TextEditResult, TextEditState } from "./textEdit.ts";
-export { CURSOR_CHAR, handleTextEdit } from "./textEdit.ts";
-export { calculateScrollOffset, normalizeChoices } from "./utils.ts";
+export { fuzzyFilter, fuzzyMatch } from "./core/fuzzy.ts";
+export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
+export { CURSOR_CHAR, handleTextEdit } from "./core/textEdit.ts";
+export { calculateScrollOffset, normalizeChoices } from "./core/utils.ts";

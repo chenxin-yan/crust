@@ -2,8 +2,8 @@
 // Spinner — Display a spinner while running an async task for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import { resolveTheme } from "./theme.ts";
-import type { PartialPromptTheme, PromptTheme } from "./types.ts";
+import { resolveTheme } from "../core/theme.ts";
+import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // ANSI escape codes
