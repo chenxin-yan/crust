@@ -1,20 +1,160 @@
 ---
 title: "Validate"
-description: Input validation and coercion — coming soon.
+description: Schema-first validation for CLI arguments and flags using Zod.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+`@crustjs/validate` provides schema-first validation and coercion for Crust commands. Define your args and flags as Zod schemas, and the package generates parser definitions, runs validation, and delivers fully typed, transformed values to your handler.
 
-<Callout>
-  This package is **coming soon** and not yet available.
-</Callout>
+Currently ships a **Zod 4** provider via the `@crustjs/validate/zod` entrypoint. The root entrypoint (`@crustjs/validate`) exports shared types only.
 
-`@crustjs/validate` will provide input validation and coercion utilities for CLI arguments and flags.
+## Install
 
-Planned features include:
-- Schema-based validation for args and flags
-- Custom validators and coercion functions
-- Composable validation pipelines
-- Helpful error messages for invalid input
+```sh
+bun add @crustjs/validate zod
+```
 
-Check back for updates, or follow the [Crust repository](https://github.com/chenxin-yan/crust) for progress.
+`@crustjs/core` is a required peer dependency.
+
+## Quick Example
+
+```ts
+import { runMain } from "@crustjs/core";
+import { arg, defineZodCommand, flag } from "@crustjs/validate/zod";
+import { z } from "zod";
+
+const greet = defineZodCommand({
+  meta: { name: "greet", description: "Say hello" },
+  args: [arg("name", z.string())],
+  flags: {
+    loud: flag(z.boolean().default(false), {
+      alias: "l",
+      description: "Shout the greeting",
+    }),
+  },
+  run({ args, flags }) {
+    // args.name is string, flags.loud is boolean — fully typed
+    const msg = `Hello, ${args.name}!`;
+    console.log(flags.loud ? msg.toUpperCase() : msg);
+  },
+});
+
+runMain(greet);
+```
+
+## How It Works
+
+1. You declare args with `arg(name, schema)` and flags with plain Zod schemas or `flag(schema, options)` wrappers.
+2. `defineZodCommand()` introspects the schemas at definition time to generate the core `ArgDef[]` and `FlagsDef` that Crust's parser needs.
+3. At runtime, after Crust parses argv, each value is validated and transformed through its Zod schema before your `run` handler is called.
+4. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
+
+## Entrypoints
+
+| Entrypoint | What it provides |
+| --- | --- |
+| `@crustjs/validate` | Shared types (`ValidatedContext`, `ValidationIssue`) |
+| `@crustjs/validate/zod` | `defineZodCommand`, `arg`, `flag`, and all Zod-specific types |
+
+## Exports — `@crustjs/validate/zod`
+
+### Functions
+
+| Function | Description |
+| --- | --- |
+| `defineZodCommand` | Define a command with Zod schemas as the source of truth |
+| `arg` | Declare a named positional argument with a Zod schema |
+| `flag` | Wrap a Zod schema with alias and description metadata |
+
+### Types
+
+| Type | Description |
+| --- | --- |
+| `ZodCommandDef<A, F>` | Config shape for `defineZodCommand` |
+| `ZodCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext` |
+| `ArgSpec<Name, Schema, Variadic>` | A single positional arg spec from `arg()` |
+| `ArgSpecs` | Ordered readonly array of `ArgSpec` |
+| `ArgOptions` | Options for `arg()` (description, variadic) |
+| `FlagSpec<Schema, Alias>` | A flag wrapper from `flag()` |
+| `FlagShape` | Record of plain schemas or `FlagSpec` values |
+| `FlagOptions` | Options for `flag()` (alias, description) |
+| `ZodSchemaLike` | Zod schema type constraint |
+| `InferSchemaOutput<S>` | Infer output type from a Zod schema |
+| `InferArgsFromSpecs<A>` | Infer validated args object from arg specs |
+| `InferArgsFromConfig<A>` | Infer args output from command config |
+| `InferFlagsFromShape<F>` | Infer validated flags object from flag shape |
+| `InferFlagsFromConfig<F>` | Infer flags output from command config |
+
+## Exports — `@crustjs/validate`
+
+### Types
+
+| Type | Description |
+| --- | --- |
+| `ValidatedContext<ArgsOut, FlagsOut>` | Extended command context with validated args, flags, and `input` (pre-validation values) |
+| `ValidationIssue` | Normalized issue with `message` and dot-path `path` string |
+
+## Schema Support
+
+The Zod provider supports:
+
+- **Primitives**: `z.string()`, `z.number()`, `z.boolean()`
+- **Enums and literals**: `z.enum(["a", "b"])`, `z.literal("value")`
+- **Arrays**: `z.array(z.string())` (flags with `multiple: true`)
+- **Wrappers**: `.optional()`, `.default()`, `.nullable()`, `.transform()`, `.pipe()`
+- **Descriptions**: `z.string().describe("Help text")` (auto-extracted for help output)
+
+Schemas are introspected at definition time to determine CLI parser types (`string`, `number`, `boolean`) and optionality. Transforms and pipes are unwrapped to find the input type.
+
+## Variadic Args
+
+The last positional arg can be variadic, collecting all remaining positionals into an array:
+
+```ts
+const cmd = defineZodCommand({
+  meta: { name: "rm" },
+  args: [arg("files", z.string(), { variadic: true })],
+  run({ args }) {
+    // args.files is string[]
+    for (const file of args.files) {
+      console.log(`Removing ${file}`);
+    }
+  },
+});
+```
+
+Use a scalar schema (not `z.array()`). The framework handles array collection. Compile-time validation ensures variadic args are only in the last position.
+
+## Compile-Time Validation
+
+`defineZodCommand` inherits the same compile-time checks as `defineCommand`:
+
+- **Variadic position** — only the last arg can be `{ variadic: true }`
+- **Flag alias collisions** — aliases must not conflict with other flag names or aliases
+
+These produce TypeScript errors at the call site if violated.
+
+## Error Handling
+
+When validation fails, a `CrustError("VALIDATION")` is thrown with:
+
+- A human-readable bullet-list message suitable for CLI output
+- Structured `details.issues` array of `{ message, path }` objects
+
+```
+Validation failed
+  - args.name: Expected string, received number
+  - flags.port: Number must be greater than or equal to 1
+```
+
+## When to Use
+
+Use `@crustjs/validate/zod` when:
+
+- You want schemas as the single source of truth for parsing, validation, help text, and types
+- You need transforms or coercion (e.g., parsing a string into a `Date`)
+- You want fully inferred handler types without manual annotation
+
+Use `@crustjs/core` directly when:
+
+- You don't need runtime schema validation
+- You want zero additional dependencies
