@@ -1,0 +1,59 @@
+name: Auto-label roadmap issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  label:
+    if: contains(github.event.issue.labels.*.name, 'roadmap')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Parse form and apply module labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body ?? "";
+
+            // GitHub issue forms render as: ### Field Label\n\n<value>
+            function parseField(name) {
+              const regex = new RegExp(`### ${name}\\s*\\n\\s*\\n([\\s\\S]*?)(?=\\n### |$)`);
+              const match = body.match(regex);
+              return match ? match[1].trim() : "";
+            }
+
+            const labels = [];
+
+            // Modules → module:core, module:plugins, etc.
+            const modules = parseField("Related Module\\(s\\)");
+            if (modules && modules !== "_No response_") {
+              for (const mod of modules.split(",").map(s => s.trim()).filter(Boolean)) {
+                labels.push(`module:${mod}`);
+              }
+            }
+
+            if (labels.length === 0) return;
+
+            // Remove stale module: labels before applying new ones
+            const current = context.payload.issue.labels.map(l => l.name);
+            const stale = current.filter(l =>
+              l.startsWith("module:") && !labels.includes(l)
+            );
+            for (const name of stale) {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: context.issue.number,
+                name,
+              });
+            }
+
+            // Apply new labels (addLabels is idempotent)
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.issue.number,
+              labels,
+            });
+
+            core.info(`Applied labels: ${labels.join(", ")}`);

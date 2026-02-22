@@ -1,0 +1,48 @@
+name: Roadmap Item
+description: Propose or track a roadmap item for Crust
+labels: ["roadmap", "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for contributing to the Crust roadmap!
+        Please fill out the fields below. Labels will be applied automatically.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description of the work item.
+      placeholder: What does this roadmap item cover?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: modules
+    attributes:
+      label: Related Module(s)
+      description: Select related modules.
+      multiple: true
+      options:
+        - core
+        - plugins
+        - crust
+        - create
+        - validate
+        - prompt
+        - style
+        - test
+        - render
+        - store
+        - log
+    validations:
+      required: false
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Any additional context, links, or design notes.
+    validations:
+      required: false
+
