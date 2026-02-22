@@ -7,7 +7,7 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 `@crustjs/create` is a headless, zero-dependency scaffolding engine for building `npm create-xxx` / `bun create-xxx` tools. It handles the mechanical parts of scaffolding — copying template directories, interpolating variables, renaming dotfiles, resolving conflicts, and running post-scaffold steps — so you focus purely on template design and interactive flow.
 
-The library is **headless**: it has no opinions about prompts, CLI frameworks, or terminal UI. Pair it with `@crustjs/core` for command routing and `@crustjs/prompt` for interactive input.
+The library is **headless**: it has no opinions about prompts, CLI frameworks, or terminal UI. Pair it with `@crustjs/core` for command routing and `@crustjs/prompts` for interactive input.
 
 ## Install
 
@@ -206,11 +206,11 @@ Returns `{ name: string | null, email: string | null }`.
 
 ## Design
 
-`@crustjs/create` is the scaffolding primitive between the CLI layer (`@crustjs/core`) and the interactive layer (`@crustjs/prompt`). Templates live as real files on disk, composition is explicit via multiple `scaffold()` calls, and post-scaffold automation is declarative.
+`@crustjs/create` is the scaffolding primitive between the CLI layer (`@crustjs/core`) and the interactive layer (`@crustjs/prompts`). Templates live as real files on disk, composition is explicit via multiple `scaffold()` calls, and post-scaffold automation is declarative.
 
 **Not included** (by design):
 
-- Interactive prompts (belongs in `@crustjs/prompt`)
+- Interactive prompts (belongs in `@crustjs/prompts`)
 - Terminal UI / styled output (headless — no `@crustjs/style` dependency)
 - Template-level conditionals or loops (`{{#if}}`, `{{#each}}`)
 - Dynamic filename interpolation (filenames are static)

@@ -1,21 +1,397 @@
 ---
-title: "Prompt"
-description: Interactive prompts — coming soon.
+title: "Prompts"
+description: Interactive terminal prompts for CLI applications — input, password, confirm, select, multiselect, filter, and spinner.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+`@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
 
-<Callout>
-  This package is **coming soon** and not yet available.
-</Callout>
+All prompt UI renders to **stderr** so it never pollutes piped stdout. Every prompt accepts an `initial` option to skip interactivity — useful for prefilling from CLI flags or CI environments.
 
-`@crustjs/prompt` will provide interactive prompt utilities for CLI applications.
+## Install
 
-Planned features include:
-- Text input prompts
-- Confirmation prompts
-- Select and multi-select menus
-- Password input
-- Composable prompt flows
+```sh
+bun add @crustjs/prompts
+```
 
-Check back for updates, or follow the [Crust repository](https://github.com/chenxin-yan/crust) for progress.
+## Quick Example
+
+```ts
+import { input, confirm, select, multiselect } from "@crustjs/prompts";
+
+const name = await input({ message: "Project name?" });
+const useTS = await confirm({ message: "Use TypeScript?" });
+
+const framework = await select({
+  message: "Framework",
+  choices: ["react", "vue", "svelte"],
+});
+
+const features = await multiselect({
+  message: "Features",
+  choices: ["linting", "testing", "ci"],
+  required: true,
+});
+```
+
+## Prompts
+
+### `input(options)`
+
+Single-line text input with cursor editing, placeholder, default value, and validation.
+
+```ts
+const name = await input({
+  message: "What is your name?",
+  placeholder: "John Doe",
+  default: "anonymous",
+  validate: (v) => v.length > 0 || "Name is required",
+});
+```
+
+| Option        | Type                | Default     | Description                                          |
+| ------------- | ------------------- | ----------- | ---------------------------------------------------- |
+| `message`     | `string`            | —           | Prompt message displayed to the user                 |
+| `placeholder` | `string`            | —           | Placeholder text shown when input is empty           |
+| `default`     | `string`            | —           | Value used when the user submits empty input          |
+| `initial`     | `string`            | —           | Skip prompt and return this value immediately        |
+| `validate`    | `ValidateFn<string>`| —           | Return `true` or an error message string             |
+| `theme`       | `PartialPromptTheme`| —           | Per-prompt theme overrides                           |
+
+### `password(options)`
+
+Masked text input — characters are displayed as the mask character (default `*`). After submission, a fixed-length mask is shown to prevent revealing the password length.
+
+```ts
+const secret = await password({
+  message: "Enter your password:",
+  validate: (v) => v.length >= 8 || "Must be at least 8 characters",
+});
+```
+
+| Option     | Type                 | Default | Description                                    |
+| ---------- | -------------------- | ------- | ---------------------------------------------- |
+| `message`  | `string`             | —       | Prompt message                                 |
+| `mask`     | `string`             | `"*"`   | Character used to mask the input               |
+| `initial`  | `string`             | —       | Skip prompt and return this value immediately  |
+| `validate` | `ValidateFn<string>` | —       | Return `true` or an error message string       |
+| `theme`    | `PartialPromptTheme` | —       | Per-prompt theme overrides                     |
+
+### `confirm(options)`
+
+Yes/no boolean prompt. Toggle with arrow keys, h/l, y/n, or Tab. Confirm with Enter.
+
+```ts
+const proceed = await confirm({
+  message: "Accept the license?",
+  active: "Accept",
+  inactive: "Decline",
+  default: false,
+});
+```
+
+| Option     | Type                 | Default  | Description                                       |
+| ---------- | -------------------- | -------- | ------------------------------------------------- |
+| `message`  | `string`             | —        | Prompt message                                    |
+| `default`  | `boolean`            | `true`   | Default value when Enter is pressed without toggle |
+| `initial`  | `boolean`            | —        | Skip prompt and return this value immediately     |
+| `active`   | `string`             | `"Yes"`  | Label for the affirmative option                  |
+| `inactive` | `string`             | `"No"`   | Label for the negative option                     |
+| `theme`    | `PartialPromptTheme` | —        | Per-prompt theme overrides                        |
+
+### `select(options)`
+
+Single selection from a list. Navigate with Up/Down (or k/j), confirm with Enter. Scrolls when the list exceeds `maxVisible`.
+
+```ts
+const port = await select({
+  message: "Choose a port",
+  choices: [
+    { label: "HTTP", value: 80 },
+    { label: "HTTPS", value: 443, hint: "recommended" },
+  ],
+  default: 443,
+});
+```
+
+| Option       | Type                  | Default | Description                                       |
+| ------------ | --------------------- | ------- | ------------------------------------------------- |
+| `message`    | `string`              | —       | Prompt message                                    |
+| `choices`    | `Choice<T>[]`         | —       | Strings or `{ label, value, hint? }` objects      |
+| `default`    | `T`                   | —       | Sets initial cursor to the matching choice        |
+| `initial`    | `T`                   | —       | Skip prompt and return this value immediately     |
+| `maxVisible` | `number`              | `10`    | Maximum visible choices before scrolling          |
+| `theme`      | `PartialPromptTheme`  | —       | Per-prompt theme overrides                        |
+
+### `multiselect(options)`
+
+Checkbox-style multi-selection. Space to toggle, `a` to toggle all, `i` to invert, Enter to confirm.
+
+When `max` is set, toggle-all and invert respect the constraint — selections are capped at `max` items.
+
+```ts
+const features = await multiselect({
+  message: "Enable features",
+  choices: [
+    { label: "TypeScript", value: "ts", hint: "recommended" },
+    { label: "ESLint", value: "eslint" },
+    { label: "Prettier", value: "prettier" },
+  ],
+  default: ["ts"],
+  required: true,
+  max: 2,
+});
+```
+
+| Option       | Type                  | Default | Description                                    |
+| ------------ | --------------------- | ------- | ---------------------------------------------- |
+| `message`    | `string`              | —       | Prompt message                                 |
+| `choices`    | `Choice<T>[]`         | —       | Strings or `{ label, value, hint? }` objects   |
+| `default`    | `T[]`                 | —       | Pre-selects matching choices                   |
+| `initial`    | `T[]`                 | —       | Skip prompt and return this value immediately  |
+| `required`   | `boolean`             | `false` | Require at least one selection                 |
+| `min`        | `number`              | —       | Minimum selections required                    |
+| `max`        | `number`              | —       | Maximum selections allowed                     |
+| `maxVisible` | `number`              | `10`    | Maximum visible choices before scrolling       |
+| `theme`      | `PartialPromptTheme`  | —       | Per-prompt theme overrides                     |
+
+### `filter(options)`
+
+Fuzzy-search selection. Type to filter, navigate with Up/Down, confirm with Enter. Matched characters are highlighted in results.
+
+```ts
+const lang = await filter({
+  message: "Search for a language",
+  choices: ["TypeScript", "JavaScript", "Rust", "Python", "Go"],
+  placeholder: "Type to filter...",
+});
+```
+
+| Option       | Type                  | Default | Description                                    |
+| ------------ | --------------------- | ------- | ---------------------------------------------- |
+| `message`    | `string`              | —       | Prompt message                                 |
+| `choices`    | `Choice<T>[]`         | —       | Strings or `{ label, value, hint? }` objects   |
+| `initial`    | `T`                   | —       | Skip prompt and return this value immediately  |
+| `placeholder`| `string`              | —       | Placeholder text for the query input           |
+| `maxVisible` | `number`              | `10`    | Maximum visible results before scrolling       |
+| `theme`      | `PartialPromptTheme`  | —       | Per-prompt theme overrides                     |
+
+### `spinner(options)`
+
+Display a spinner animation while an async task runs. Non-interactive — output-only. Shows a success or error indicator when the task completes.
+
+```ts
+const data = await spinner({
+  message: "Fetching data...",
+  task: async () => {
+    const res = await fetch("https://api.example.com/data");
+    return res.json();
+  },
+  spinner: "arc",
+});
+```
+
+| Option    | Type                 | Default  | Description                                       |
+| --------- | -------------------- | -------- | ------------------------------------------------- |
+| `message` | `string`             | —        | Message displayed alongside the spinner           |
+| `task`    | `() => Promise<T>`   | —        | Async task to run                                 |
+| `spinner` | `SpinnerType`        | `"dots"` | Animation style: `"dots"`, `"line"`, `"arc"`, `"bounce"`, or custom `{ frames, interval }` |
+| `theme`   | `PartialPromptTheme` | —        | Per-prompt theme overrides                        |
+
+## Themes
+
+All prompts share a theming system with 11 style slots. Each slot is a `StyleFn` — a `(text: string) => string` function from `@crustjs/style`.
+
+### Default Theme
+
+| Slot          | Default   | Used for                                |
+| ------------- | --------- | --------------------------------------- |
+| `prefix`      | `cyan`    | Prefix glyph before the message         |
+| `message`     | `bold`    | Prompt message text                     |
+| `placeholder` | `dim`     | Placeholder text in empty inputs        |
+| `cursor`      | `cyan`    | Cursor indicator in inputs and lists    |
+| `selected`    | `yellow`  | Active / selected item                  |
+| `unselected`  | `dim`     | Inactive / unselected items             |
+| `error`       | `red`     | Validation error messages               |
+| `success`     | `green`   | Confirmed / submitted values            |
+| `hint`        | `dim`     | Hint text and scroll indicators         |
+| `spinner`     | `magenta` | Spinner frame characters                |
+| `filterMatch` | `cyan`    | Matched characters in filter results    |
+
+### Custom Themes
+
+```ts
+import { setTheme, createTheme } from "@crustjs/prompts";
+import { magenta, cyan, italic } from "@crustjs/style";
+
+// Set a global theme — applies to all prompts
+setTheme({ prefix: magenta, success: cyan });
+
+// Or create a reusable theme object
+const myTheme = createTheme({ prefix: magenta, success: cyan });
+setTheme(myTheme);
+
+// Per-prompt overrides (highest priority)
+const name = await input({
+  message: "Name?",
+  theme: { message: italic },
+});
+```
+
+Theme resolution order (later wins):
+
+1. `defaultTheme` (base)
+2. Global overrides (`setTheme()`)
+3. Per-prompt overrides (`theme` option)
+
+## Non-Interactive Environments
+
+All prompts (except `spinner`) require an interactive TTY. When stdin is not a TTY, prompts throw `NonInteractiveError` — unless `initial` is provided, in which case the value is returned immediately without rendering.
+
+```ts
+import { input, NonInteractiveError, CancelledError } from "@crustjs/prompts";
+
+try {
+  const name = await input({
+    message: "Name?",
+    initial: process.env.CI ? "ci-user" : undefined,
+  });
+} catch (err) {
+  if (err instanceof NonInteractiveError) {
+    // Not a TTY and no initial value
+  }
+  if (err instanceof CancelledError) {
+    // User pressed Ctrl+C
+  }
+}
+```
+
+## Custom Prompts
+
+The low-level `runPrompt` API lets you build custom interactive prompts with full control over state, rendering, and keypress handling.
+
+```ts
+import { runPrompt, submit } from "@crustjs/prompts";
+import type { KeypressEvent } from "@crustjs/prompts";
+import { resolveTheme } from "@crustjs/prompts";
+
+interface CounterState {
+  count: number;
+}
+
+const result = await runPrompt<CounterState, number>({
+  initialState: { count: 0 },
+  theme: resolveTheme(),
+  render: (state, theme) => `${theme.prefix("?")} Count: ${state.count}`,
+  handleKey: (key, state) => {
+    if (key.name === "return") return submit(state.count);
+    if (key.name === "up") return { count: state.count + 1 };
+    if (key.name === "down") return { count: state.count - 1 };
+    return state;
+  },
+  renderSubmitted: (state, value, theme) =>
+    `${theme.prefix("?")} Count: ${theme.success(String(value))}`,
+});
+```
+
+### Text Editing Helper
+
+For custom prompts that need text input, use the shared `handleTextEdit` helper instead of reimplementing cursor editing logic:
+
+```ts
+import { handleTextEdit, CURSOR_CHAR } from "@crustjs/prompts";
+
+// In your handleKey function:
+const edit = handleTextEdit(key, currentText, cursorPos);
+if (edit) {
+  // edit.text and edit.cursorPos are updated
+  return { ...state, text: edit.text, cursorPos: edit.cursorPos };
+}
+// null means not a text-editing key — handle other keys
+```
+
+`handleTextEdit` handles: backspace, delete, left, right, home, end, and printable character insertion. Returns `null` for non-text-editing keys so you can handle them separately (e.g., Enter for submit, Up/Down for list navigation).
+
+Only one prompt can be active at a time. Running a second prompt while one is already active will reject with an error.
+
+## Exports
+
+### Prompt Functions
+
+| Function      | Description                                    |
+| ------------- | ---------------------------------------------- |
+| `input`       | Single-line text input                         |
+| `password`    | Masked password input                          |
+| `confirm`     | Yes/no boolean prompt                          |
+| `select`      | Single selection from a list                   |
+| `multiselect` | Checkbox-style multi-selection                 |
+| `filter`      | Fuzzy-search selection                         |
+| `spinner`     | Spinner animation for async tasks              |
+
+### Theme
+
+| Export         | Description                                    |
+| -------------- | ---------------------------------------------- |
+| `defaultTheme` | Default prompt theme                           |
+| `createTheme`  | Create a theme with partial overrides          |
+| `setTheme`     | Set the global theme for all prompts           |
+| `getTheme`     | Get the current resolved global theme          |
+
+### Renderer
+
+| Export                | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `runPrompt`           | Low-level prompt runner for custom prompts        |
+| `submit`              | Create a submit result to resolve a prompt        |
+| `assertTTY`           | Throw `NonInteractiveError` if stdin is not a TTY |
+| `NonInteractiveError` | Error thrown when a TTY is required but absent    |
+| `CancelledError`      | Error thrown when the user presses Ctrl+C         |
+
+### Utilities
+
+| Export                 | Description                                            |
+| ---------------------- | ------------------------------------------------------ |
+| `handleTextEdit`       | Shared text-editing keypress handler for custom prompts |
+| `CURSOR_CHAR`          | Cursor indicator character (`│`)                       |
+| `fuzzyMatch`           | Score a query against a single candidate string        |
+| `fuzzyFilter`          | Filter and rank a list of choices by fuzzy query       |
+| `normalizeChoices`     | Normalize string/object choices to `{ label, value }`  |
+| `calculateScrollOffset`| Calculate viewport scroll offset for lists             |
+
+### Types
+
+| Type                | Description                                         |
+| ------------------- | --------------------------------------------------- |
+| `InputOptions`      | Options for `input()`                               |
+| `PasswordOptions`   | Options for `password()`                            |
+| `ConfirmOptions`    | Options for `confirm()`                             |
+| `SelectOptions<T>`  | Options for `select()`                              |
+| `MultiselectOptions<T>` | Options for `multiselect()`                     |
+| `FilterOptions<T>`  | Options for `filter()`                              |
+| `SpinnerOptions<T>` | Options for `spinner()`                             |
+| `SpinnerType`       | Spinner animation type                              |
+| `PromptTheme`       | Complete theme with all style slots                 |
+| `PartialPromptTheme`| Partial theme for overrides                         |
+| `Choice<T>`         | Choice item — string or `{ label, value, hint? }`   |
+| `ValidateFn<T>`     | Validation function type                            |
+| `ValidateResult`    | `true` or error message string                      |
+| `KeypressEvent`     | Structured keypress event                           |
+| `PromptConfig<S,T>` | Configuration for `runPrompt()`                     |
+| `SubmitResult<T>`   | Submit action type                                  |
+| `HandleKeyResult<S,T>` | Return type of keypress handlers                 |
+| `NormalizedChoice<T>`  | Normalized choice with explicit label/value      |
+| `FuzzyMatchResult`  | Single fuzzy match result with score and indices    |
+| `FuzzyFilterResult<T>` | Fuzzy filter result with item and match data     |
+| `TextEditState`     | Text + cursor position for `handleTextEdit`         |
+| `TextEditResult`    | `TextEditState \| null`                             |
+
+## Design
+
+`@crustjs/prompts` is the interactive layer of the Crust ecosystem. It depends only on `@crustjs/style` for ANSI styling and has no other runtime dependencies.
+
+Key design decisions:
+
+- **stderr rendering** — All prompt UI writes to stderr, keeping stdout clean for piped output
+- **`initial` escape hatch** — Every prompt accepts `initial` to skip interactivity, enabling CI and scripted usage
+- **Single active prompt** — Only one prompt can run at a time; concurrent calls are rejected with a clear error
+- **Composable themes** — Three-layer resolution (default, global, per-prompt) with `StyleFn` slots from `@crustjs/style`
+- **Shared text editing** — Common cursor-editing logic is extracted into `handleTextEdit` for consistency and reuse in custom prompts
