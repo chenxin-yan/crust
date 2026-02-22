@@ -114,6 +114,25 @@
         "typescript": "catalog:",
       },
     },
+    "packages/validate": {
+      "name": "@crustjs/validate",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "@crustjs/plugins": "workspace:*",
+        "bunup": "catalog:",
+        "zod": "^4.0.0",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:*",
+        "typescript": "catalog:",
+        "zod": "^4.0.0",
+      },
+      "optionalPeers": [
+        "zod",
+      ],
+    },
   },
   "catalog": {
     "bunup": "^0.16.29",
@@ -247,6 +266,8 @@
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 
     "@crustjs/style": ["@crustjs/style@workspace:packages/style"],
+
+    "@crustjs/validate": ["@crustjs/validate@workspace:packages/validate"],
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 

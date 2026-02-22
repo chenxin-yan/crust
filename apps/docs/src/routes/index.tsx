@@ -121,7 +121,6 @@ const MODULES: Array<{
     pkg: "@crustjs/validate",
     desc: "Input validation and coercion",
     doc: "modules/validate",
-    upcoming: true,
   },
   {
     pkg: "@crustjs/prompt",

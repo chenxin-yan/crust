@@ -179,12 +179,25 @@ export type FlagsDef = Record<string, FlagDef>;
 // Flag alias collision detection (compile-time, per-flag granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Extract alias string literals from a single FlagDef */
-type ExtractAliases<F extends FlagDef> = F extends { alias: infer A }
+/**
+ * Extract alias string literals from any value that has an `alias` field.
+ *
+ * Generalized to work with any shape (`FlagDef`, `FlagSpec`, etc.) —
+ * values without an `alias` field resolve to `never`.
+ *
+ * Includes a `string extends A` guard so non-narrowed aliases (e.g. the
+ * broad `string` type from a default generic) resolve to `never` instead
+ * of causing false-positive collisions.
+ */
+type ExtractAliases<F> = F extends { alias: infer A }
 	? A extends string
-		? A
+		? string extends A
+			? never
+			: A
 		: A extends readonly string[]
-			? A[number]
+			? string extends A[number]
+				? never
+				: A[number]
 			: never
 	: never;
 
@@ -192,7 +205,10 @@ type ExtractAliases<F extends FlagDef> = F extends { alias: infer A }
  * Collects aliases from every flag *except* flag K.
  * Used to detect alias→alias duplicates across different flags.
  */
-type AliasesExcluding<F extends FlagsDef, K extends keyof F & string> = {
+type AliasesExcluding<
+	F extends Record<string, unknown>,
+	K extends keyof F & string,
+> = {
 	[J in Exclude<keyof F & string, K>]: ExtractAliases<F[J]>;
 }[Exclude<keyof F & string, K>];
 
@@ -201,14 +217,20 @@ type AliasesExcluding<F extends FlagsDef, K extends keyof F & string> = {
  * that collide with another flag's name or another flag's alias,
  * or `never` when K's aliases are all unique.
  */
-type CollidingAliases<F extends FlagsDef, K extends keyof F & string> =
+type CollidingAliases<
+	F extends Record<string, unknown>,
+	K extends keyof F & string,
+> =
 	| (ExtractAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
 	| (ExtractAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
 /**
  * Per-flag validation mapped type. Resolves to `F` when no collisions exist.
  * For flags with colliding aliases, adds a branded error property to the
- * specific flag definition, causing a type error on that flag's value:
+ * specific flag definition, causing a type error on that flag's value.
+ *
+ * Generalized to work with any `Record<string, unknown>` shape — core uses
+ * it with `FlagsDef`, the validate package uses it with `FlagShape`, etc.
  *
  * ```
  * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; alias: "minify" }'
@@ -216,7 +238,7 @@ type CollidingAliases<F extends FlagsDef, K extends keyof F & string> =
  *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"minify\" collides with another flag name or alias" }'.
  * ```
  */
-export type ValidateFlagAliases<F extends FlagsDef> = {
+export type ValidateFlagAliases<F extends Record<string, unknown>> = {
 	[K in keyof F & string]: CollidingAliases<F, K> extends never
 		? F[K]
 		: F[K] & {
@@ -231,7 +253,12 @@ export type ValidateFlagAliases<F extends FlagsDef> = {
 /**
  * Per-arg validation tuple type. Resolves to `A` when the constraint is
  * satisfied (only the last arg is variadic). For non-last args that have
- * `variadic: true`, adds a branded error property to the specific arg:
+ * `variadic: true`, adds a branded error property to the specific arg.
+ *
+ * Generalized to work with any ordered tuple of object-typed definitions —
+ * core uses it with `ArgsDef`, the validate package uses it with
+ * `ArgSpec[]`, etc. Uses `readonly object[]` to avoid TypeScript's weak
+ * type detection (all-optional constraint rejection).
  *
  * ```
  * Property 'FIX_VARIADIC_POSITION' is missing in type '{ name: "files"; ... variadic: true }'
@@ -239,21 +266,19 @@ export type ValidateFlagAliases<F extends FlagsDef> = {
  *     '{ readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }'.
  * ```
  */
-export type ValidateVariadicArgs<A extends ArgsDef> = A extends readonly [
-	infer Head extends ArgDef,
-	...infer Tail extends readonly ArgDef[],
-]
-	? Tail extends readonly [ArgDef, ...ArgDef[]]
-		? Head extends { variadic: true }
-			? readonly [
-					Head & {
-						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-					},
-					...ValidateVariadicArgs<readonly [...Tail]>,
-				]
-			: readonly [Head, ...ValidateVariadicArgs<readonly [...Tail]>]
-		: readonly [Head]
-	: A;
+export type ValidateVariadicArgs<A extends readonly object[]> =
+	A extends readonly [infer Head, ...infer Tail extends readonly object[]]
+		? Tail extends readonly [unknown, ...unknown[]]
+			? Head extends { variadic: true }
+				? readonly [
+						Head & {
+							readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+						},
+						...ValidateVariadicArgs<Tail>,
+					]
+				: readonly [Head, ...ValidateVariadicArgs<Tail>]
+			: readonly [Head]
+		: A;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

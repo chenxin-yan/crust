@@ -11,9 +11,13 @@ export interface CommandNotFoundErrorDetails {
 	parentCommand: AnyCommand;
 }
 
+export interface ValidationErrorDetails {
+	issues: readonly { readonly message: string; readonly path: string }[];
+}
+
 export interface CrustErrorDetailsMap {
 	DEFINITION: undefined;
-	VALIDATION: undefined;
+	VALIDATION: ValidationErrorDetails | undefined;
 	PARSE: undefined;
 	EXECUTION: undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
@@ -86,8 +90,8 @@ export class CrustError<
 	constructor(
 		code: C,
 		message: string,
-		...details: CrustErrorDetails<C> extends undefined
-			? [] | [undefined]
+		...details: undefined extends CrustErrorDetails<C>
+			? [] | [CrustErrorDetails<C>]
 			: [CrustErrorDetails<C>]
 	) {
 		super(message);

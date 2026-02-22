@@ -1,0 +1,518 @@
+import { describe, expect, it } from "bun:test";
+import type { CommandDef } from "@crustjs/core";
+import { CrustError, runCommand } from "@crustjs/core";
+import { z } from "zod";
+import { defineZodCommand } from "./command.ts";
+import { arg, flag } from "./schema.ts";
+import type { ZodCommandDef } from "./types.ts";
+
+function capture<T>(): { value: T | undefined; set(v: T): void } {
+	const box: { value: T | undefined; set(v: T): void } = {
+		value: undefined,
+		set(v: T) {
+			box.value = v;
+		},
+	};
+	return box;
+}
+
+describe("defineZodCommand", () => {
+	it("infers named args and flags types in the run handler", () => {
+		defineZodCommand({
+			meta: { name: "types" },
+			args: [arg("port", z.number())],
+			flags: {
+				verbose: flag(z.boolean().default(false)),
+			},
+			run({ args, flags }) {
+				const port: number = args.port;
+				const verbose: boolean = flags.verbose;
+				expect(typeof port).toBe("number");
+				expect(typeof verbose).toBe("boolean");
+			},
+		});
+	});
+
+	it("uses schemas as source-of-truth for args and flags", async () => {
+		const received = capture<{ args: unknown; flags: unknown }>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "serve" },
+			args: [
+				arg("port", z.number().int().min(1)),
+				arg("host", z.string().default("localhost")),
+			],
+			flags: {
+				verbose: flag(z.boolean().default(false), {
+					alias: "v",
+					description: "Verbose logging",
+				}),
+			},
+			run({ args, flags }) {
+				received.set({ args, flags });
+			},
+		});
+
+		await runCommand(cmd, { argv: ["8080", "0.0.0.0", "-v"] });
+
+		expect(received.value).toBeDefined();
+		expect(received.value?.args).toEqual({
+			port: 8080,
+			host: "0.0.0.0",
+		});
+		expect(received.value?.flags).toEqual({ verbose: true });
+	});
+
+	it("applies schema defaults and transforms", async () => {
+		const received = capture<{ args: unknown; flags: unknown }>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "greet" },
+			args: [
+				arg(
+					"name",
+					z.string().transform((s) => s.toUpperCase()),
+				),
+			],
+			flags: {
+				format: flag(
+					z
+						.string()
+						.default("text")
+						.transform((value) => value.toUpperCase()),
+				),
+			},
+			run({ args, flags }) {
+				received.set({ args, flags });
+			},
+		});
+
+		await runCommand(cmd, { argv: ["alice"] });
+
+		expect(received.value?.args).toEqual({ name: "ALICE" });
+		expect(received.value?.flags).toEqual({ format: "TEXT" });
+	});
+
+	it("supports async transforms in args and flags", async () => {
+		const received = capture<{ args: unknown; flags: unknown }>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "async-transform" },
+			args: [
+				arg(
+					"name",
+					z.string().transform(async (value) => value.toUpperCase()),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.number()
+						.default(1)
+						.transform(async (value) => value + 1),
+				),
+			},
+			run({ args, flags }) {
+				received.set({ args, flags });
+			},
+		});
+
+		await runCommand(cmd, { argv: ["alice"] });
+
+		expect(received.value?.args).toEqual({ name: "ALICE" });
+		expect(received.value?.flags).toEqual({ count: 2 });
+	});
+
+	it("preserves original parser output on context.input", async () => {
+		const received = capture<unknown>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "demo" },
+			args: [
+				arg(
+					"name",
+					z.string().transform((s) => s.toUpperCase()),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.number()
+						.default(2)
+						.transform((n) => n + 1),
+				),
+			},
+			run({ input, args, flags }) {
+				received.set({ input, args, flags });
+			},
+		});
+
+		await runCommand(cmd, { argv: ["world"] });
+
+		expect(received.value).toEqual({
+			input: {
+				args: { name: "world" },
+				flags: { count: undefined },
+			},
+			args: { name: "WORLD" },
+			flags: { count: 3 },
+		});
+	});
+
+	it("passes through preRun/postRun with raw parser context", async () => {
+		const phases: Array<{
+			phase: "pre" | "run" | "post";
+			port: unknown;
+			count: unknown;
+		}> = [];
+
+		const cmd = defineZodCommand({
+			meta: { name: "hooks" },
+			args: [
+				arg(
+					"port",
+					z.string().transform(async (value) => Number(value)),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.string()
+						.default("1")
+						.transform(async (value) => Number(value)),
+				),
+			},
+			preRun({ args, flags }) {
+				const rawArgs = args as Record<string, unknown>;
+				const rawFlags = flags as Record<string, unknown>;
+				phases.push({
+					phase: "pre",
+					port: rawArgs.port,
+					count: rawFlags.count,
+				});
+			},
+			run({ args, flags }) {
+				phases.push({ phase: "run", port: args.port, count: flags.count });
+			},
+			postRun({ args, flags }) {
+				const rawArgs = args as Record<string, unknown>;
+				const rawFlags = flags as Record<string, unknown>;
+				phases.push({
+					phase: "post",
+					port: rawArgs.port,
+					count: rawFlags.count,
+				});
+			},
+		});
+
+		await runCommand(cmd, { argv: ["8080"] });
+
+		expect(phases).toEqual([
+			{ phase: "pre", port: "8080", count: undefined },
+			{ phase: "run", port: 8080, count: 1 },
+			{ phase: "post", port: "8080", count: undefined },
+		]);
+	});
+
+	it("supports variadic args with named object output", async () => {
+		const received = capture<unknown>();
+
+		const cmd = defineZodCommand({
+			meta: { name: "lint" },
+			args: [
+				arg("mode", z.string()),
+				arg("files", z.string().min(1), { variadic: true }),
+			],
+			run({ args }) {
+				received.set(args);
+			},
+		});
+
+		await runCommand(cmd, {
+			argv: ["strict", "src/a.ts", "src/b.ts"],
+		});
+
+		expect(received.value).toEqual({
+			mode: "strict",
+			files: ["src/a.ts", "src/b.ts"],
+		});
+	});
+
+	it("maps schema failures to CrustError(VALIDATION) with dot-paths", async () => {
+		const cmd = defineZodCommand({
+			meta: { name: "check" },
+			args: [arg("port", z.number().min(1))],
+			flags: {
+				count: flag(z.number().min(1)),
+			},
+			run() {
+				expect.unreachable("handler should not run");
+			},
+		});
+
+		try {
+			await runCommand(cmd, { argv: ["0", "--count", "0"] });
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			const crustErr = error as CrustError;
+			expect(crustErr.is("VALIDATION")).toBe(true);
+			expect(crustErr.message).toContain("args.port");
+			expect(crustErr.message).toContain("flags.count");
+			expect(crustErr.cause).toEqual(
+				expect.arrayContaining([
+					{ path: "args.port", message: expect.any(String) },
+					{ path: "flags.count", message: expect.any(String) },
+				]),
+			);
+		}
+	});
+
+	it("maps async schema failures to CrustError(VALIDATION)", async () => {
+		const cmd = defineZodCommand({
+			meta: { name: "check-async" },
+			flags: {
+				token: flag(
+					z
+						.string()
+						.refine(async (value) => value === "secret", "Invalid token"),
+				),
+			},
+			run() {
+				expect.unreachable("handler should not run");
+			},
+		});
+
+		try {
+			await runCommand(cmd, { argv: ["--token", "nope"] });
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			const crustErr = error as CrustError;
+			expect(crustErr.is("VALIDATION")).toBe(true);
+			expect(crustErr.message).toContain("flags.token");
+		}
+	});
+
+	it("generates help-compatible arg and flag definitions", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "serve", description: "Start server" },
+			args: [
+				arg("port", z.number(), { description: "Port number" }),
+				arg("host", z.string().optional(), { description: "Host" }),
+			],
+			flags: {
+				verbose: flag(z.boolean().default(false), {
+					alias: "v",
+					description: "Verbose mode",
+				}),
+			},
+		});
+
+		expect(cmd.args).toEqual([
+			{
+				name: "port",
+				type: "number",
+				description: "Port number",
+				required: true,
+			},
+			{ name: "host", type: "string", description: "Host" },
+		]);
+		expect(cmd.flags).toEqual({
+			verbose: {
+				type: "boolean",
+				alias: "v",
+				description: "Verbose mode",
+			},
+		});
+	});
+
+	it("throws DEFINITION for array arg without variadic", () => {
+		expect(() =>
+			defineZodCommand({
+				meta: { name: "bad" },
+				args: [arg("files", z.array(z.string()))],
+			}),
+		).toThrow(CrustError);
+	});
+
+	it("throws DEFINITION when a variadic arg is not last", () => {
+		expect(() =>
+			defineZodCommand({
+				meta: { name: "bad-order" },
+				args: [
+					// @ts-expect-error — intentionally invalid: variadic is not last, compile-time branded error
+					arg("files", z.string(), { variadic: true }),
+					arg("mode", z.string()),
+				],
+			}),
+		).toThrow(CrustError);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level validation tests (compile-time only)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Expect<T extends true> = T;
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+		? true
+		: false;
+
+// ────────────────────────────────────────────────────────────────────────────
+// CommandDef ↔ ZodCommandDef key exhaustiveness
+// ────────────────────────────────────────────────────────────────────────────
+//
+// If a new key is added to `CommandDef`, this assertion fails at compile time.
+// When that happens, decide:
+// - **Passthrough** (e.g. `plugins`): no action needed — `Omit` auto-inherits it.
+//   Just add the key to this assertion.
+// - **Needs Zod wrapping** (e.g. new lifecycle hook): add it to `ZodOverriddenKeys`,
+//   redeclare it in `ZodCommandDef`, and handle it in `defineZodCommand`.
+type _assertKeysInSync = Expect<Equal<keyof CommandDef, keyof ZodCommandDef>>;
+
+describe("ValidateVariadicArgs (compile-time, via defineZodCommand)", () => {
+	it("accepts variadic as the last arg", () => {
+		// Should compile without error
+		const cmd = defineZodCommand({
+			meta: { name: "ok" },
+			args: [
+				arg("mode", z.string()),
+				arg("files", z.string(), { variadic: true }),
+			],
+		});
+		expect(cmd.meta.name).toBe("ok");
+	});
+
+	it("accepts no variadic args", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok2" },
+			args: [arg("port", z.number()), arg("host", z.string())],
+		});
+		expect(cmd.meta.name).toBe("ok2");
+	});
+
+	it("accepts a single variadic arg", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok3" },
+			args: [arg("files", z.string(), { variadic: true })],
+		});
+		expect(cmd.meta.name).toBe("ok3");
+	});
+
+	it("accepts empty args array", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok4" },
+			args: [],
+		});
+		expect(cmd.meta.name).toBe("ok4");
+	});
+});
+
+describe("ValidateFlagAliases (compile-time, via defineZodCommand)", () => {
+	it("accepts non-colliding aliases", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok" },
+			flags: {
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				port: flag(z.number().default(3000), { alias: "p" }),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok");
+	});
+
+	it("accepts flags without aliases", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok2" },
+			flags: {
+				verbose: z.boolean().default(false),
+				port: z.number().default(3000),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok2");
+	});
+
+	it("accepts array aliases that don't collide", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok3" },
+			flags: {
+				verbose: flag(z.boolean().default(false), {
+					alias: ["v", "V"],
+				}),
+				port: flag(z.number().default(3000), { alias: "p" }),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok3");
+	});
+
+	it("accepts mix of plain schemas and flag() wrappers", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "ok4" },
+			flags: {
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				port: z.number().default(3000),
+			},
+		});
+		expect(cmd.meta.name).toBe("ok4");
+	});
+
+	it("rejects alias that collides with a flag name (compile-time)", () => {
+		defineZodCommand({
+			meta: { name: "bad-alias" },
+			flags: {
+				out: z.string().optional(),
+				// @ts-expect-error — alias "out" collides with flag name "--out"
+				output: flag(z.string().optional(), { alias: "out" }),
+			},
+		});
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects duplicate aliases across flags (compile-time)", () => {
+		defineZodCommand({
+			meta: { name: "bad-alias-dup" },
+			flags: {
+				// @ts-expect-error — alias "v" collides with alias on other flag
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				// @ts-expect-error — alias "v" collides with alias on other flag
+				version: flag(z.boolean().default(false), { alias: "v" }),
+			},
+		});
+
+		expect(true).toBe(true);
+	});
+});
+
+describe("arg() / flag() generic type narrowing", () => {
+	it("narrows variadic to literal true on arg() return type", () => {
+		const variadicArg = arg("files", z.string(), { variadic: true });
+		type _check = Expect<Equal<typeof variadicArg.variadic, true>>;
+		expect(variadicArg.variadic).toBe(true);
+	});
+
+	it("narrows variadic to undefined when not specified", () => {
+		const plainArg = arg("port", z.number());
+		type _check = Expect<Equal<typeof plainArg.variadic, undefined>>;
+		expect(plainArg.variadic).toBeUndefined();
+	});
+
+	it("narrows alias to literal string on flag() return type", () => {
+		const f = flag(z.boolean(), { alias: "v" });
+		type _check = Expect<Equal<typeof f.alias, "v">>;
+		expect(f.alias).toBe("v");
+	});
+
+	it("narrows alias to literal tuple on flag() return type", () => {
+		const f = flag(z.boolean(), { alias: ["v", "V"] });
+		type _check = Expect<Equal<typeof f.alias, readonly ["v", "V"]>>;
+		expect(f.alias).toEqual(["v", "V"]);
+	});
+
+	it("narrows alias to undefined when not specified", () => {
+		const f = flag(z.boolean());
+		type _check = Expect<Equal<typeof f.alias, undefined>>;
+		expect(f.alias).toBeUndefined();
+	});
+});
