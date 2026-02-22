@@ -1,6 +1,6 @@
 ---
-"@crustjs/create": minor
-"create-crust": minor
+"@crustjs/create": patch
+"create-crust": patch
 ---
 
 Add `@crustjs/create` — a headless, zero-dependency scaffolding engine for building `create-xxx` tools.
