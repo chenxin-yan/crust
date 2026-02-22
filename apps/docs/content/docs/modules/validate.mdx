@@ -1,15 +1,15 @@
 ---
 title: "Validate"
-description: Schema-first validation for CLI arguments and flags using Zod or Effect.
+description: Schema-first validation for CLI arguments and flags using validation libraries.
 ---
 
 `@crustjs/validate` provides schema-first validation and coercion for Crust commands. Define your args and flags as schemas, and the package generates parser definitions, runs validation, and delivers fully typed, transformed values to your handler.
 
 ## Supported Validators
 
-| Provider | Entrypoint | Define Function |
-| --- | --- | --- |
-| [Zod 4](#zod-provider) | `@crustjs/validate/zod` | `defineZodCommand` |
+| Provider                          | Entrypoint                 | Define Function       |
+| --------------------------------- | -------------------------- | --------------------- |
+| [Zod 4](#zod-provider)            | `@crustjs/validate/zod`    | `defineZodCommand`    |
 | [Effect Schema](#effect-provider) | `@crustjs/validate/effect` | `defineEffectCommand` |
 
 The root entrypoint (`@crustjs/validate`) exports [shared types](#shared-exports) only.
@@ -104,30 +104,30 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 
 #### Functions
 
-| Function | Description |
-| --- | --- |
+| Function           | Description                                              |
+| ------------------ | -------------------------------------------------------- |
 | `defineZodCommand` | Define a command with Zod schemas as the source of truth |
-| `arg` | Declare a named positional argument with a Zod schema |
-| `flag` | Wrap a Zod schema with alias and description metadata |
+| `arg`              | Declare a named positional argument with a Zod schema    |
+| `flag`             | Wrap a Zod schema with alias and description metadata    |
 
 #### Types
 
-| Type | Description |
-| --- | --- |
-| `ZodCommandDef<A, F>` | Config shape for `defineZodCommand` |
-| `ZodCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext` |
-| `ArgSpec<Name, Schema, Variadic>` | A single positional arg spec from `arg()` |
-| `ArgSpecs` | Ordered readonly array of `ArgSpec` |
-| `ArgOptions` | Options for `arg()` (description, variadic) |
-| `FlagSpec<Schema, Alias>` | A flag wrapper from `flag()` |
-| `FlagShape` | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions` | Options for `flag()` (alias, description) |
-| `ZodSchemaLike` | Zod schema type constraint |
-| `InferSchemaOutput<S>` | Infer output type from a Zod schema |
-| `InferArgsFromSpecs<A>` | Infer validated args object from arg specs |
-| `InferArgsFromConfig<A>` | Infer args output from command config |
-| `InferFlagsFromShape<F>` | Infer validated flags object from flag shape |
-| `InferFlagsFromConfig<F>` | Infer flags output from command config |
+| Type                                      | Description                                  |
+| ----------------------------------------- | -------------------------------------------- |
+| `ZodCommandDef<A, F>`                     | Config shape for `defineZodCommand`          |
+| `ZodCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
+| `ArgSpec<Name, Schema, Variadic>`         | A single positional arg spec from `arg()`    |
+| `ArgSpecs`                                | Ordered readonly array of `ArgSpec`          |
+| `ArgOptions`                              | Options for `arg()` (description, variadic)  |
+| `FlagSpec<Schema, Alias>`                 | A flag wrapper from `flag()`                 |
+| `FlagShape`                               | Record of plain schemas or `FlagSpec` values |
+| `FlagOptions`                             | Options for `flag()` (alias, description)    |
+| `ZodSchemaLike`                           | Zod schema type constraint                   |
+| `InferSchemaOutput<S>`                    | Infer output type from a Zod schema          |
+| `InferArgsFromSpecs<A>`                   | Infer validated args object from arg specs   |
+| `InferArgsFromConfig<A>`                  | Infer args output from command config        |
+| `InferFlagsFromShape<F>`                  | Infer validated flags object from flag shape |
+| `InferFlagsFromConfig<F>`                 | Infer flags output from command config       |
 
 ---
 
@@ -196,30 +196,30 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 
 #### Functions
 
-| Function | Description |
-| --- | --- |
+| Function              | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
 | `defineEffectCommand` | Define a command with Effect schemas as the source of truth |
-| `arg` | Declare a named positional argument with an Effect schema |
-| `flag` | Wrap an Effect schema with alias and description metadata |
+| `arg`                 | Declare a named positional argument with an Effect schema   |
+| `flag`                | Wrap an Effect schema with alias and description metadata   |
 
 #### Types
 
-| Type | Description |
-| --- | --- |
-| `EffectCommandDef<A, F>` | Config shape for `defineEffectCommand` |
-| `EffectCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext` |
-| `ArgSpec<Name, Schema, Variadic>` | A single positional arg spec from `arg()` |
-| `ArgSpecs` | Ordered readonly array of `ArgSpec` |
-| `ArgOptions` | Options for `arg()` (description, variadic) |
-| `FlagSpec<Schema, Alias>` | A flag wrapper from `flag()` |
-| `FlagShape` | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions` | Options for `flag()` (alias, description) |
-| `EffectSchemaLike` | Effect schema type constraint (`R = never`) |
-| `InferSchemaOutput<S>` | Infer output type from an Effect schema |
-| `InferArgsFromSpecs<A>` | Infer validated args object from arg specs |
-| `InferArgsFromConfig<A>` | Infer args output from command config |
-| `InferFlagsFromShape<F>` | Infer validated flags object from flag shape |
-| `InferFlagsFromConfig<F>` | Infer flags output from command config |
+| Type                                         | Description                                  |
+| -------------------------------------------- | -------------------------------------------- |
+| `EffectCommandDef<A, F>`                     | Config shape for `defineEffectCommand`       |
+| `EffectCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
+| `ArgSpec<Name, Schema, Variadic>`            | A single positional arg spec from `arg()`    |
+| `ArgSpecs`                                   | Ordered readonly array of `ArgSpec`          |
+| `ArgOptions`                                 | Options for `arg()` (description, variadic)  |
+| `FlagSpec<Schema, Alias>`                    | A flag wrapper from `flag()`                 |
+| `FlagShape`                                  | Record of plain schemas or `FlagSpec` values |
+| `FlagOptions`                                | Options for `flag()` (alias, description)    |
+| `EffectSchemaLike`                           | Effect schema type constraint (`R = never`)  |
+| `InferSchemaOutput<S>`                       | Infer output type from an Effect schema      |
+| `InferArgsFromSpecs<A>`                      | Infer validated args object from arg specs   |
+| `InferArgsFromConfig<A>`                     | Infer args output from command config        |
+| `InferFlagsFromShape<F>`                     | Infer validated flags object from flag shape |
+| `InferFlagsFromConfig<F>`                    | Infer flags output from command config       |
 
 ---
 
@@ -253,10 +253,10 @@ Validation failed
 
 The root entrypoint `@crustjs/validate` exports shared types used by both providers:
 
-| Type | Description |
-| --- | --- |
+| Type                                  | Description                                                                              |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `ValidatedContext<ArgsOut, FlagsOut>` | Extended command context with validated args, flags, and `input` (pre-validation values) |
-| `ValidationIssue` | Normalized issue with `message` and dot-path `path` string |
+| `ValidationIssue`                     | Normalized issue with `message` and dot-path `path` string                               |
 
 ## When to Use
 
