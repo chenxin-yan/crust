@@ -13,4 +13,9 @@ describe("@crustjs/validate scaffold", () => {
 		const mod = await import("./zod/index.ts");
 		expect(mod).toBeDefined();
 	});
+
+	it("effect entrypoint is importable", async () => {
+		const mod = await import("./effect/index.ts");
+		expect(mod).toBeDefined();
+	});
 });

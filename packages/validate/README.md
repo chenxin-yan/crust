@@ -9,13 +9,69 @@ Validation support for the [Crust](https://crustjs.com) CLI framework.
 | Entry | Import | Purpose |
 | --- | --- | --- |
 | Shared contracts | `@crustjs/validate` | Provider-agnostic types (`ValidatedContext`, `ValidationIssue`) |
+| Effect provider | `@crustjs/validate/effect` | Schema-first command API (`defineEffectCommand`, `arg`, `flag`) |
 | Zod provider | `@crustjs/validate/zod` | Schema-first command API (`defineZodCommand`, `arg`, `flag`) |
 
 ## Install
 
 ```sh
-bun add @crustjs/validate zod
+bun add @crustjs/validate
+
+# choose one or both providers
+bun add zod
+bun add effect
 ```
+
+## Effect schema-first mode (`defineEffectCommand`)
+
+Define schemas once and let Crust `args`/`flags` definitions be generated automatically.
+
+```ts
+import { runMain } from "@crustjs/core";
+import {
+	arg,
+	defineEffectCommand,
+	flag,
+} from "@crustjs/validate/effect";
+import * as Schema from "effect/Schema";
+
+const serve = defineEffectCommand({
+	meta: { name: "serve", description: "Start dev server" },
+	args: [
+		arg("port", Schema.Number, { description: "Port to listen on" }),
+		arg("host", Schema.UndefinedOr(Schema.String), {
+			description: "Host to bind",
+		}),
+	],
+	flags: {
+		verbose: flag(Schema.Boolean, {
+			alias: "v",
+			description: "Enable verbose logging",
+		}),
+		format: flag(Schema.Literal("json", "text"), {
+			alias: "f",
+			description: "Output format",
+		}),
+	},
+	run({ args, flags, input }) {
+		// args: { port: number; host: string | undefined }
+		// flags: { verbose: boolean; format: "json" | "text" }
+		console.log(args.port, args.host, flags.verbose, flags.format);
+		console.log(input.args, input.flags); // original parser output
+	},
+});
+
+runMain(serve);
+```
+
+### Effect schema support
+
+- Primitive schemas: `Schema.String`, `Schema.Number`, `Schema.Boolean`
+- Enums/literals: `Schema.Enums(...)`, `Schema.Literal(...)`
+- Arrays: `Schema.Array(...)` and array-like tuple rest schemas
+- Wrappers: refinement/transformation/suspend wrappers are unwrapped for parser-shape analysis
+
+For optional args/flags, use schemas whose encoded input allows `undefined` (for example `Schema.UndefinedOr(Schema.String)`).
 
 ## Zod schema-first mode (`defineZodCommand`)
 
@@ -111,5 +167,6 @@ Failures throw `CrustError("VALIDATION")`.
 ## v1 constraints
 
 - Args and flags only (no env/config validation).
+- Effect mode currently supports context-free schemas only (`R = never`).
 - Zod mode requires Zod 4+.
 - No automatic schema inheritance across subcommands.
