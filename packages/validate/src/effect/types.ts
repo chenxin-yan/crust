@@ -1,19 +1,24 @@
 import type { CommandContext, CommandDef } from "@crustjs/core";
-import type * as z from "zod/v4/core";
+import type * as schema from "effect/Schema";
 import type { ValidatedContext } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Core schema aliases
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A Zod schema used by the Zod entrypoint. */
-export type ZodSchemaLike<Input = unknown, Output = Input> = z.$ZodType<
-	Output,
-	Input
->;
+/**
+ * An Effect schema used by the Effect entrypoint.
+ *
+ * v1 intentionally supports context-free schemas only (`R = never`).
+ * Schemas must also be **synchronous** — async combinators such as
+ * `Schema.filterEffect` or async `Schema.transformOrFail` will cause
+ * `Effect.runSync` to throw at runtime.
+ */
+export type EffectSchemaLike = schema.Schema.AnyNoContext;
 
-/** Infer output type from a Zod schema. */
-export type InferSchemaOutput<S> = S extends z.$ZodType ? z.output<S> : never;
+/** Infer output type from an Effect schema. */
+export type InferSchemaOutput<S> =
+	S extends schema.Schema<infer A, infer _I, infer _R> ? A : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // `arg()` DSL types
@@ -25,25 +30,15 @@ export interface ArgOptions {
 	readonly variadic?: true;
 }
 
-/**
- * A single positional argument spec produced by `arg()`.
- *
- * The `Variadic` generic parameter preserves the literal `true` from
- * `arg()` calls so `ValidateVariadicArgs` can distinguish variadic args
- * from non-variadic ones at compile time.
- *
- * - `ArgSpec<N, S, true>` — variadic arg (only valid in last position)
- * - `ArgSpec<N, S, undefined>` — normal positional arg
- * - `ArgSpec<N, S>` (default) — type-erased form used in constraints
- */
+/** A single positional argument spec produced by `arg()`. */
 export interface ArgSpec<
 	Name extends string = string,
-	Schema extends ZodSchemaLike = ZodSchemaLike,
+	SchemaType extends EffectSchemaLike = EffectSchemaLike,
 	Variadic extends true | undefined = true | undefined,
 > {
 	readonly kind: "arg";
 	readonly name: Name;
-	readonly schema: Schema;
+	readonly schema: SchemaType;
 	readonly variadic: Variadic;
 }
 
@@ -82,35 +77,25 @@ export interface FlagOptions {
 	readonly alias?: string | readonly string[];
 }
 
-/**
- * A named flag schema wrapper produced by `flag()`.
- *
- * The `Alias` generic parameter preserves alias literals (e.g. `"v"` or
- * `readonly ["v", "V"]`) from `flag()` calls so `ValidateFlagAliases` can
- * detect collisions at compile time.
- *
- * - `FlagSpec<S, "v">` — flag with alias `"v"` (collision-detectable)
- * - `FlagSpec<S, undefined>` — flag without an alias
- * - `FlagSpec<S>` (default) — type-erased form used in constraints
- */
+/** A named flag schema wrapper produced by `flag()`. */
 export interface FlagSpec<
-	Schema extends ZodSchemaLike = ZodSchemaLike,
+	SchemaType extends EffectSchemaLike = EffectSchemaLike,
 	Alias extends string | readonly string[] | undefined =
 		| string
 		| readonly string[]
 		| undefined,
 > {
 	readonly kind: "flag";
-	readonly schema: Schema;
+	readonly schema: SchemaType;
 	readonly alias: Alias;
 }
 
-/** Allowed value shape for `flags` in `defineZodCommand()`. */
-export type FlagShape = Record<string, ZodSchemaLike | FlagSpec>;
+/** Allowed value shape for `flags` in `defineEffectCommand()`. */
+export type FlagShape = Record<string, EffectSchemaLike | FlagSpec>;
 
 /** Extract the schema from a flag shape value (plain schema or `flag()` wrapper). */
 type ExtractFlagSchema<V> =
-	V extends FlagSpec<infer S> ? S : V extends ZodSchemaLike ? V : never;
+	V extends FlagSpec<infer S> ? S : V extends EffectSchemaLike ? V : never;
 
 /** Infer validated flags object type from the flags shape. */
 export type InferFlagsFromShape<F extends FlagShape> = {
@@ -121,8 +106,8 @@ export type InferFlagsFromShape<F extends FlagShape> = {
 // Handler + command definition types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Handler type for `defineZodCommand()` with validated/transformed context. */
-export type ZodCommandRunHandler<ArgsOut, FlagsOut> = (
+/** Handler type for `defineEffectCommand()` with validated/transformed context. */
+export type EffectCommandRunHandler<ArgsOut, FlagsOut> = (
 	context: ValidatedContext<ArgsOut, FlagsOut>,
 ) => void | Promise<void>;
 
@@ -136,51 +121,24 @@ export type InferFlagsFromConfig<F> = F extends FlagShape
 	? InferFlagsFromShape<F>
 	: Record<string, never>;
 
-/**
- * Keys from `CommandDef` that `ZodCommandDef` redefines with different types.
- *
- * - `args` / `flags`: Zod schema-based definitions replace core's `ArgsDef`/`FlagsDef`
- * - `run`: receives `ValidatedContext` instead of raw `CommandContext`
- * - `preRun` / `postRun`: use raw `CommandContext` (no `NoInfer` wrapper)
- *
- * All remaining `CommandDef` keys (e.g. `meta`, `subCommands`) are inherited
- * automatically via `Omit`. If a new passthrough field is added to `CommandDef`,
- * it propagates here without changes. The compile-time key exhaustiveness
- * assertion in `command.test.ts` will fail, forcing a review.
- */
-type ZodOverriddenKeys = "args" | "flags" | "run" | "preRun" | "postRun";
+type EffectOverriddenKeys = "args" | "flags" | "run" | "preRun" | "postRun";
 
-/**
- * Config for `defineZodCommand()` using `arg()` + `flag()` schema-first DSL.
- *
- * Extends `CommandDef` (minus overridden keys) so passthrough fields like
- * `meta` and `subCommands` stay in sync automatically. If a new field is
- * added to `CommandDef`, the key exhaustiveness assertion in
- * `command.test.ts` fails at compile time, forcing a review.
- */
-export interface ZodCommandDef<
+/** Config for `defineEffectCommand()` using `arg()` + `flag()` schema-first DSL. */
+export interface EffectCommandDef<
 	A extends ArgSpecs | undefined = undefined,
 	F extends FlagShape | undefined = undefined,
-> extends Omit<CommandDef, ZodOverriddenKeys> {
+> extends Omit<CommandDef, EffectOverriddenKeys> {
 	/** Ordered positional args as `arg()` specs. */
 	readonly args?: A;
 	/** Named flags as plain schemas or `flag()` wrappers. */
 	readonly flags?: F;
-	/**
-	 * Optional setup hook before schema validation runs.
-	 *
-	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
-	 */
+	/** Optional setup hook before schema validation runs. */
 	readonly preRun?: (context: CommandContext) => void | Promise<void>;
 	/** Main handler with validated/transformed args and flags. */
-	readonly run?: ZodCommandRunHandler<
+	readonly run?: EffectCommandRunHandler<
 		InferArgsFromConfig<A>,
 		InferFlagsFromConfig<F>
 	>;
-	/**
-	 * Optional teardown hook after command execution.
-	 *
-	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
-	 */
+	/** Optional teardown hook after command execution. */
 	readonly postRun?: (context: CommandContext) => void | Promise<void>;
 }

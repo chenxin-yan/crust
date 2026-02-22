@@ -63,7 +63,6 @@ export function arg<
 		kind: "arg",
 		name,
 		schema,
-		description: options?.description,
 		variadic: options?.variadic as Variadic,
 	};
 }
@@ -93,7 +92,6 @@ export function flag<
 		kind: "flag",
 		schema,
 		alias: options?.alias as Alias,
-		description: options?.description,
 	};
 }
 
@@ -101,37 +99,72 @@ export function flag<
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Extract flag metadata wrapper state. */
-export function isFlagSpec(value: unknown): value is FlagSpec {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"kind" in value &&
-		(value as { kind?: unknown }).kind === "flag"
-	);
-}
+/**
+ * Resolve description by walking through Zod wrappers.
+ *
+ * Zod's `.describe()` sets `.description` on the schema node it's called on.
+ * Wrappers like `.optional()`, `.default()`, `.transform()`, `.pipe()` create
+ * new nodes that lose the description. This function unwraps those layers to
+ * find the first `.description` string.
+ */
+export function resolveDescription(schema: unknown): string | undefined {
+	let current: unknown = schema;
+	const seen = new Set<unknown>();
 
-/** Resolve the underlying schema from a plain schema or a `flag()` wrapper. */
-export function getFlagSchema(value: ZodSchemaLike | FlagSpec): ZodSchemaLike {
-	return isFlagSpec(value) ? value.schema : value;
-}
+	for (;;) {
+		if (current === undefined || current === null || seen.has(current)) {
+			return undefined;
+		}
+		seen.add(current);
 
-/** Resolve description from metadata first, then schema description. */
-export function resolveDescription(
-	schema: unknown,
-	metaDescription: string | undefined,
-): string | undefined {
-	if (metaDescription !== undefined) {
-		return metaDescription;
-	}
-	if (typeof schema !== "object" || schema === null) {
+		if (typeof current !== "object") {
+			return undefined;
+		}
+
+		// Check if this node has a description
+		if (
+			"description" in current &&
+			typeof (current as { description?: unknown }).description === "string"
+		) {
+			return (current as { description: string }).description;
+		}
+
+		// Try to unwrap wrappers to find inner description
+		const type =
+			"type" in current ? (current as { type?: unknown }).type : undefined;
+
+		if (typeof type !== "string") {
+			return undefined;
+		}
+
+		// Pipe/transform: check the input side
+		if (type === "pipe" || type === "transform") {
+			const input = (current as { in?: unknown }).in;
+			if (input !== undefined) {
+				current = input;
+				continue;
+			}
+			return undefined;
+		}
+
+		// Unwrappable wrappers: optional, nullable, default, etc.
+		if (
+			type === "optional" ||
+			type === "nullable" ||
+			type === "default" ||
+			type === "prefault" ||
+			type === "nonoptional" ||
+			type === "readonly" ||
+			type === "catch"
+		) {
+			const unwrap = (current as { unwrap?: unknown }).unwrap;
+			if (typeof unwrap === "function") {
+				current = unwrap();
+				continue;
+			}
+			return undefined;
+		}
+
 		return undefined;
 	}
-	if ("description" in schema) {
-		const value = (schema as { description?: unknown }).description;
-		if (typeof value === "string") {
-			return value;
-		}
-	}
-	return undefined;
 }

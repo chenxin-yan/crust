@@ -29,10 +29,10 @@ describe("help plugin integration with defineZodCommand", () => {
 		const cmd = defineZodCommand({
 			meta: { name: "serve", description: "Start dev server" },
 			flags: {
-				verbose: flag(z.boolean().default(false), {
-					alias: "v",
-					description: "Enable verbose logging",
-				}),
+				verbose: flag(
+					z.boolean().default(false).describe("Enable verbose logging"),
+					{ alias: "v" },
+				),
 			},
 			run() {},
 		});
@@ -56,13 +56,12 @@ describe("help plugin integration with defineZodCommand", () => {
 		const cmd = defineZodCommand({
 			meta: { name: "build" },
 			args: [
-				arg("entry", z.string(), { description: "Entry file" }),
-				arg("target", z.string().optional(), { description: "Build target" }),
+				arg("entry", z.string().describe("Entry file")),
+				arg("target", z.string().optional().describe("Build target")),
 			],
 			flags: {
-				outDir: flag(z.string().default("dist"), {
+				outDir: flag(z.string().default("dist").describe("Output directory"), {
 					alias: "o",
-					description: "Output directory",
 				}),
 			},
 		});
@@ -78,19 +77,30 @@ describe("help plugin integration with defineZodCommand", () => {
 		expect(output).toContain("-o, --outDir");
 	});
 
-	it("respects metadata description precedence over .describe()", () => {
+	it("extracts description from .describe() on the schema", () => {
 		const cmd = defineZodCommand({
 			meta: { name: "app" },
 			flags: {
-				port: flag(z.number().describe("Schema description"), {
-					description: "Metadata description",
-				}),
+				port: flag(z.number().describe("Schema description")),
 			},
 		});
 
 		const output = renderHelp(cmd, ["app"]);
-		expect(output).toContain("Metadata description");
-		expect(output).not.toContain("Schema description");
+		expect(output).toContain("Schema description");
+	});
+
+	it("resolves description through wrappers like .optional() and .default()", () => {
+		const cmd = defineZodCommand({
+			meta: { name: "app" },
+			flags: {
+				port: flag(z.number().describe("Port number").default(3000)),
+				host: flag(z.string().describe("Host name").optional()),
+			},
+		});
+
+		const output = renderHelp(cmd, ["app"]);
+		expect(output).toContain("Port number");
+		expect(output).toContain("Host name");
 	});
 
 	it("renders variadic positional args", () => {
@@ -98,9 +108,8 @@ describe("help plugin integration with defineZodCommand", () => {
 			meta: { name: "lint" },
 			args: [
 				arg("mode", z.string()),
-				arg("files", z.string(), {
+				arg("files", z.string().describe("Files to lint"), {
 					variadic: true,
-					description: "Files to lint",
 				}),
 			],
 		});
@@ -115,10 +124,10 @@ describe("help plugin integration with defineZodCommand", () => {
 		const deploy = defineZodCommand({
 			meta: { name: "deploy", description: "Deploy app" },
 			flags: {
-				env: flag(z.string().default("staging"), {
-					alias: "e",
-					description: "Target environment",
-				}),
+				env: flag(
+					z.string().default("staging").describe("Target environment"),
+					{ alias: "e" },
+				),
 			},
 			run() {},
 		});

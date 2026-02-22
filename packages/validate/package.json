@@ -17,6 +17,7 @@
 	"keywords": [
 		"cli",
 		"validation",
+		"effect",
 		"zod",
 		"bun",
 		"typescript"
@@ -28,6 +29,10 @@
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
+		},
+		"./effect": {
+			"import": "./dist/effect/index.js",
+			"types": "./dist/effect/index.d.ts"
 		},
 		"./zod": {
 			"import": "./dist/zod/index.js",
@@ -48,14 +53,19 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/plugins": "workspace:*",
 		"bunup": "catalog:",
+		"effect": "^3.19.0",
 		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:*",
+		"effect": "^3.19.0",
 		"zod": "^4.0.0",
 		"typescript": "catalog:"
 	},
 	"peerDependenciesMeta": {
+		"effect": {
+			"optional": true
+		},
 		"zod": {
 			"optional": true
 		}

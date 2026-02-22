@@ -4,81 +4,87 @@ import type {
 	ValidateVariadicArgs,
 } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
-import { safeParseAsync } from "zod/v4/core";
+import { either, runSync } from "effect/Effect";
+import * as Either from "effect/Either";
+import * as ParseResult from "effect/ParseResult";
+import { decodeUnknown } from "effect/Schema";
 import type { ValidationResult } from "../runner.ts";
 import { buildRunHandler } from "../runner.ts";
 import { normalizeIssues } from "../validation.ts";
 import { argsToDefinitions, flagsToDefinitions } from "./definitions.ts";
 import type {
 	ArgSpec,
+	EffectCommandDef,
+	EffectCommandRunHandler,
+	EffectSchemaLike,
 	FlagShape,
-	ZodCommandDef,
-	ZodCommandRunHandler,
-	ZodSchemaLike,
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Provider-specific validation
 // ────────────────────────────────────────────────────────────────────────────
 
-async function validateValue(
+/**
+ * Validate a value against an Effect schema synchronously.
+ *
+ * Only synchronous schemas are supported. Schemas that perform async work
+ * (e.g. `Schema.filterEffect`, async `Schema.transformOrFail`) will cause
+ * `Effect.runSync` to throw an `AsyncFiberException` at runtime.
+ */
+function validateValue(
 	schema: unknown,
 	value: unknown,
 	prefix: readonly PropertyKey[],
-): Promise<ValidationResult> {
-	const parseResult = await safeParseAsync(schema as ZodSchemaLike, value);
+): ValidationResult {
+	const result = runSync(
+		either(decodeUnknown(schema as EffectSchemaLike)(value)),
+	);
 
-	if (parseResult.success) {
-		return { ok: true, value: parseResult.data };
+	if (Either.isRight(result)) {
+		return { ok: true, value: result.right };
 	}
 
-	const prefixed = parseResult.error.issues.map((issue) => ({
-		message: issue.message,
-		path: [...prefix, ...(issue.path ?? [])],
-	}));
+	const flattened = ParseResult.ArrayFormatter.formatErrorSync(result.left);
+	const prefixed = flattened.map(
+		(issue: { message: string; path: readonly PropertyKey[] }) => ({
+			message: issue.message,
+			path: [...prefix, ...issue.path],
+		}),
+	);
 
 	return { ok: false, issues: normalizeIssues(prefixed) };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// defineZodCommand
+// defineEffectCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Define a Crust command where schemas are the source of truth.
+ * Define a Crust command where Effect schemas are the source of truth.
  *
- * Positional args are declared with `arg(name, schema)` in an ordered array,
- * flags are declared as plain schemas or `flag(schema, meta)` wrappers.
- *
- * The factory generates Crust parser/help definitions and runs schema
- * validation after parsing but before user handler execution.
- *
- * Compile-time validation (via intersection branding) catches:
- * - Variadic args that aren't in the last position
- * - Flag alias collisions (alias→name or alias→alias)
+ * Only context-free (`R = never`), synchronous schemas are supported.
+ * Async combinators like `Schema.filterEffect` or async `Schema.transformOrFail`
+ * will throw at runtime.
  */
-export function defineZodCommand<
+export function defineEffectCommand<
 	const A extends readonly ArgSpec[] | undefined,
 	const F extends FlagShape | undefined,
 >(
-	config: ZodCommandDef<A, F> & {
+	config: EffectCommandDef<A, F> & {
 		args?: A extends readonly object[] ? ValidateVariadicArgs<A> : A;
 		flags?: F extends Record<string, unknown> ? ValidateFlagAliases<F> : F;
 	},
 ): AnyCommand {
-	// Destructure Zod-specific fields; rest-spread forwards passthrough fields
-	// (meta, subCommands, preRun, postRun, + any future CommandDef additions)
-	// to defineCommand automatically.
 	const {
-		args: zodArgs,
-		flags: zodFlags,
+		args: effectArgs,
+		flags: effectFlags,
 		run: userRun,
 		...passthrough
 	} = config;
 
-	const argSpecs = (zodArgs ?? []) as readonly ArgSpec[];
+	const argSpecs = (effectArgs ?? []) as readonly ArgSpec[];
 	const generatedArgs = argsToDefinitions(argSpecs);
-	const generatedFlags = flagsToDefinitions(zodFlags);
+	const generatedFlags = flagsToDefinitions(effectFlags);
 
 	const command = defineCommand({
 		...passthrough,
@@ -87,8 +93,8 @@ export function defineZodCommand<
 		...(userRun && {
 			run: buildRunHandler(
 				argSpecs,
-				zodFlags as Record<string, unknown> | undefined,
-				userRun as ZodCommandRunHandler<unknown, unknown>,
+				effectFlags as Record<string, unknown> | undefined,
+				userRun as EffectCommandRunHandler<unknown, unknown>,
 				validateValue,
 			),
 		}),
