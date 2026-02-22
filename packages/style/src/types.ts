@@ -35,6 +35,19 @@ export interface CapabilityOverrides {
 }
 
 /**
+ * Truecolor capability overrides for deterministic testing.
+ *
+ * These override environment variable checks used by
+ * {@link resolveTrueColor} to detect 24-bit color support.
+ */
+export interface TrueColorOverrides {
+	/** Override `process.env.COLORTERM`. */
+	readonly colorTerm?: string | undefined;
+	/** Override `process.env.TERM`. */
+	readonly term?: string | undefined;
+}
+
+/**
  * Configuration options for creating a style instance.
  *
  * @example
@@ -46,7 +59,7 @@ export interface StyleOptions {
 	/** Color emission mode. Defaults to `"auto"`. */
 	readonly mode?: ColorMode;
 	/** Capability overrides for deterministic testing. */
-	readonly overrides?: CapabilityOverrides;
+	readonly overrides?: CapabilityOverrides & TrueColorOverrides;
 }
 
 /**
@@ -91,8 +104,25 @@ export interface StyleInstance extends StyleMethodMap {
 	/** Whether ANSI codes will be emitted by this instance. */
 	readonly enabled: boolean;
 
+	/** Whether truecolor (24-bit) sequences will be emitted by this instance. */
+	readonly trueColorEnabled: boolean;
+
 	// ── Style engine ──────────────────────────────────────────────────────
 
 	/** Apply an arbitrary ANSI pair to text, respecting the color mode. */
 	readonly apply: (text: string, pair: AnsiPair) => string;
+
+	// ── Dynamic colors (truecolor) ───────────────────────────────────────
+
+	/** Apply a truecolor foreground RGB color to text. */
+	readonly rgb: (text: string, r: number, g: number, b: number) => string;
+
+	/** Apply a truecolor background RGB color to text. */
+	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
+
+	/** Apply a truecolor foreground hex color to text. */
+	readonly hex: (text: string, hexColor: string) => string;
+
+	/** Apply a truecolor background hex color to text. */
+	readonly bgHex: (text: string, hexColor: string) => string;
 }

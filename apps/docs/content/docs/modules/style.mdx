@@ -3,6 +3,8 @@ title: "Style"
 description: Terminal styling, layout utilities, and markdown theme for CLI output.
 ---
 
+import { Callout } from "fumadocs-ui/components/callout";
+
 The style package provides ANSI-safe styling primitives, terminal capability awareness, text layout helpers, and a semantic markdown theme. It has **zero runtime dependencies**.
 
 ## Install
@@ -38,6 +40,27 @@ bun add @crustjs/style
 
 **Background:** `bgBlack`, `bgRed`, `bgGreen`, `bgYellow`, `bgBlue`, `bgMagenta`, `bgCyan`, `bgWhite`, `bgBrightBlack`, `bgBrightRed`, `bgBrightGreen`, `bgBrightYellow`, `bgBrightBlue`, `bgBrightMagenta`, `bgBrightCyan`, `bgBrightWhite`
 
+### Dynamic Colors (Truecolor)
+
+Direct styling functions using 24-bit truecolor ANSI sequences:
+
+| Export | Description |
+| --- | --- |
+| `rgb(text, r, g, b)` | Apply truecolor foreground RGB color |
+| `bgRgb(text, r, g, b)` | Apply truecolor background RGB color |
+| `hex(text, hexColor)` | Apply truecolor foreground hex color (`#RGB` or `#RRGGBB`) |
+| `bgHex(text, hexColor)` | Apply truecolor background hex color |
+
+ANSI pair factories for composition:
+
+| Export | Description |
+| --- | --- |
+| `rgbCode(r, g, b)` | Create foreground `AnsiPair` from RGB values |
+| `bgRgbCode(r, g, b)` | Create background `AnsiPair` from RGB values |
+| `hexCode(hex)` | Create foreground `AnsiPair` from hex string |
+| `bgHexCode(hex)` | Create background `AnsiPair` from hex string |
+| `parseHex(hex)` | Parse a hex color string into `[r, g, b]` tuple |
+
 ### Style Engine
 
 | Export | Description |
@@ -50,6 +73,7 @@ bun add @crustjs/style
 | Export | Description |
 | --- | --- |
 | `resolveCapability(mode, overrides?)` | Resolve whether colors should be emitted |
+| `resolveTrueColor(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
 
 ### Text Utilities
 
@@ -87,6 +111,7 @@ bun add @crustjs/style
 | `ColorMode` | `"auto" \| "always" \| "never"` |
 | `StyleOptions` | Options for `createStyle` |
 | `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
+| `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
 | `StyleFn` | `(text: string) => string` style function |
 | `StyleInstance` | Configured style object with all styling methods |
 | `WrapOptions` | Options for `wrapText` |
@@ -142,6 +167,52 @@ const boldRed = composeStyles(boldCode, redCode);
 console.log(applyStyle("critical", boldRed));
 ```
 
+### Dynamic Colors (Truecolor)
+
+Use any RGB or hex color via 24-bit truecolor ANSI sequences:
+
+```ts
+import { rgb, bgRgb, hex, bgHex } from "@crustjs/style";
+
+// RGB values (0–255 per channel)
+console.log(rgb("ocean", 0, 128, 255));
+console.log(bgRgb("warning", 255, 128, 0));
+
+// Hex colors (#RGB or #RRGGBB)
+console.log(hex("error", "#ff0000"));
+console.log(bgHex("highlight", "#ff8800"));
+```
+
+Pair factories work with `applyStyle` and `composeStyles`:
+
+```ts
+import { rgbCode, hexCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+
+const coral = rgbCode(255, 127, 80);
+console.log(applyStyle("coral text", coral));
+
+const boldCoral = composeStyles(boldCode, hexCode("#ff7f50"));
+console.log(applyStyle("bold coral", boldCoral));
+```
+
+On `createStyle` instances, dynamic colors respect mode and truecolor detection:
+
+```ts
+import { createStyle } from "@crustjs/style";
+
+const s = createStyle({ mode: "always" });
+console.log(s.rgb("text", 255, 0, 0));
+console.log(s.hex("text", "#ff0000"));
+```
+
+In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor — detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`. When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work normally.
+
+Invalid inputs throw immediately: `RangeError` for out-of-range RGB values, `TypeError` for malformed hex strings.
+
+<Callout type="info">
+Dynamic colors use truecolor (24-bit) ANSI sequences with no automatic fallback to 256 or 16 colors. On unsupported terminals, colors may be approximated or silently ignored — no runtime errors will occur.
+</Callout>
+
 ### Text Layout
 
 ```ts
@@ -188,7 +259,7 @@ const custom = createMarkdownTheme({
 The architecture follows four layers:
 
 1. **Styling Core** — ANSI code mapping, nesting-safe application, and composition
-2. **Capability Layer** — Runtime color mode resolution (`auto`/`always`/`never`)
+2. **Capability Layer** — Runtime color mode resolution (`auto`/`always`/`never`) with truecolor detection
 3. **Layout Layer** — ANSI-aware width, wrapping, padding, and block formatting
 4. **Theme Layer** — Semantic style slots for GFM constructs
 

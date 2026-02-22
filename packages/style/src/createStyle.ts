@@ -3,7 +3,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
-import { resolveCapability } from "./capability.ts";
+import { resolveCapability, resolveTrueColor } from "./capability.ts";
+import {
+	bgHex as bgHexDirect,
+	bgRgb as bgRgbDirect,
+	hex as hexDirect,
+	rgb as rgbDirect,
+} from "./dynamicColors.ts";
 import { applyStyle } from "./styleEngine.ts";
 import { styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
 import type {
@@ -123,17 +129,39 @@ function buildStyleMethods(
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
 	const enabled = resolveCapability(mode, options?.overrides);
+	const trueColorEnabled = resolveTrueColor(mode, options?.overrides);
 	const createChainableStyle = buildChainableStyleFactory(enabled);
 	const methods = buildStyleMethods(createChainableStyle);
 
 	const instance: StyleInstance = {
 		enabled,
+		trueColorEnabled,
 
 		// ── Style engine ────────────────────────────────────────────────────
 
 		apply: enabled
 			? (text: string, pair: AnsiPair) => applyStyle(text, pair)
 			: (text: string, _pair: AnsiPair) => text,
+
+		// ── Dynamic colors (truecolor) ──────────────────────────────────────
+
+		rgb: trueColorEnabled
+			? (text: string, r: number, g: number, b: number) =>
+					rgbDirect(text, r, g, b)
+			: (text: string, _r: number, _g: number, _b: number) => text,
+
+		bgRgb: trueColorEnabled
+			? (text: string, r: number, g: number, b: number) =>
+					bgRgbDirect(text, r, g, b)
+			: (text: string, _r: number, _g: number, _b: number) => text,
+
+		hex: trueColorEnabled
+			? (text: string, hexColor: string) => hexDirect(text, hexColor)
+			: (text: string, _hexColor: string) => text,
+
+		bgHex: trueColorEnabled
+			? (text: string, hexColor: string) => bgHexDirect(text, hexColor)
+			: (text: string, _hexColor: string) => text,
 
 		...methods,
 	};

@@ -58,6 +58,63 @@ console.log(applyStyle("critical error", boldRed));
 
 Nested styles are handled safely — no style bleed across boundaries.
 
+## Dynamic Colors (Truecolor)
+
+Use any RGB or hex color via 24-bit truecolor ANSI sequences:
+
+```ts
+import { rgb, bgRgb, hex, bgHex } from "@crustjs/style";
+
+// RGB values (0–255)
+console.log(rgb("ocean", 0, 128, 255));
+console.log(bgRgb("warning", 255, 128, 0));
+
+// Hex colors (#RGB or #RRGGBB)
+console.log(hex("error", "#ff0000"));
+console.log(hex("short", "#f00"));
+console.log(bgHex("highlight", "#ff8800"));
+```
+
+### Pair Factories
+
+Create reusable `AnsiPair` objects for composition:
+
+```ts
+import { rgbCode, bgRgbCode, hexCode, bgHexCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+
+const coral = rgbCode(255, 127, 80);
+console.log(applyStyle("coral text", coral));
+
+const boldCoral = composeStyles(boldCode, hexCode("#ff7f50"));
+console.log(applyStyle("bold coral", boldCoral));
+```
+
+### Style Instance
+
+Dynamic colors on `createStyle` instances respect mode and truecolor detection:
+
+```ts
+import { createStyle } from "@crustjs/style";
+
+const s = createStyle({ mode: "always" });
+console.log(s.rgb("text", 255, 0, 0));
+console.log(s.hex("text", "#ff0000"));
+console.log(s.bgRgb("text", 0, 128, 255));
+console.log(s.bgHex("text", "#0080ff"));
+```
+
+In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor (detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`). When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work.
+
+In `"never"` mode, all dynamic color methods return plain text. In `"always"` mode, truecolor sequences are always emitted.
+
+### Terminal Compatibility
+
+Dynamic colors use truecolor (24-bit) ANSI sequences. There is no automatic fallback to 256 or 16 colors. On terminals that do not support truecolor:
+
+- Colors may be approximated to the nearest supported color
+- Colors may be silently ignored (text renders in default color)
+- No runtime errors will occur
+
 ## Color Modes
 
 Control when ANSI codes are emitted using `createStyle`:
@@ -91,6 +148,12 @@ Inject capability overrides for predictable test output:
 const testStyle = createStyle({
   mode: "auto",
   overrides: { isTTY: true, noColor: undefined },
+});
+
+// Include truecolor overrides for dynamic color testing
+const truecolorStyle = createStyle({
+  mode: "auto",
+  overrides: { isTTY: true, noColor: undefined, colorTerm: "truecolor" },
 });
 ```
 

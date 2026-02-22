@@ -59,7 +59,7 @@ export type {
 export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
 export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
-export { resolveCapability } from "./capability.ts";
+export { resolveCapability, resolveTrueColor } from "./capability.ts";
 // Style primitives — Colors
 export {
 	// Background
@@ -98,6 +98,18 @@ export {
 	yellow,
 } from "./colors.ts";
 export { createStyle, style } from "./createStyle.ts";
+// Style primitives — Dynamic colors (truecolor)
+export {
+	bgHex,
+	bgHexCode,
+	bgRgb,
+	bgRgbCode,
+	hex,
+	hexCode,
+	parseHex,
+	rgb,
+	rgbCode,
+} from "./dynamicColors.ts";
 // Style primitives — Modifiers
 export {
 	bold,
@@ -135,4 +147,5 @@ export type {
 	StyleFn,
 	StyleInstance,
 	StyleOptions,
+	TrueColorOverrides,
 } from "./types.ts";

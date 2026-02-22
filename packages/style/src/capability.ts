@@ -2,7 +2,11 @@
 // Capability — Terminal color support detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CapabilityOverrides, ColorMode } from "./types.ts";
+import type {
+	CapabilityOverrides,
+	ColorMode,
+	TrueColorOverrides,
+} from "./types.ts";
 
 /**
  * Resolve whether ANSI color codes should be emitted.
@@ -54,4 +58,77 @@ export function resolveCapability(
 	}
 
 	return isTTY;
+}
+
+/**
+ * Resolve whether the terminal supports truecolor (24-bit) ANSI sequences.
+ *
+ * Detection heuristics (checked in order):
+ * 1. `COLORTERM` environment variable is `"truecolor"` or `"24bit"`.
+ * 2. `TERM` environment variable contains `"24bit"`, `"truecolor"`, or `"-direct"`.
+ *
+ * In `"always"` mode, returns `true` unconditionally.
+ * In `"never"` mode, returns `false` unconditionally.
+ * In `"auto"` mode, requires base color to be enabled **and** truecolor
+ * to be detected.
+ *
+ * @param mode - The color emission mode.
+ * @param overrides - Optional overrides for deterministic testing.
+ * @returns `true` if truecolor sequences should be emitted.
+ *
+ * @example
+ * ```ts
+ * resolveTrueColor("auto"); // true if TTY + truecolor env detected
+ * resolveTrueColor("always"); // true
+ * resolveTrueColor("never"); // false
+ * resolveTrueColor("auto", {
+ *   isTTY: true,
+ *   noColor: undefined,
+ *   colorTerm: "truecolor",
+ * }); // true
+ * ```
+ */
+export function resolveTrueColor(
+	mode: ColorMode,
+	overrides?: CapabilityOverrides & TrueColorOverrides,
+): boolean {
+	if (mode === "always") {
+		return true;
+	}
+
+	if (mode === "never") {
+		return false;
+	}
+
+	// Base color must be enabled first
+	if (!resolveCapability(mode, overrides)) {
+		return false;
+	}
+
+	const hasColorTermOverride =
+		overrides !== undefined && "colorTerm" in overrides;
+	const colorTerm = hasColorTermOverride
+		? overrides.colorTerm
+		: process.env.COLORTERM;
+
+	const lowerColorTerm = colorTerm?.toLowerCase();
+	if (lowerColorTerm === "truecolor" || lowerColorTerm === "24bit") {
+		return true;
+	}
+
+	const hasTermOverride = overrides !== undefined && "term" in overrides;
+	const term = hasTermOverride ? overrides.term : process.env.TERM;
+
+	if (term !== undefined) {
+		const lower = term.toLowerCase();
+		if (
+			lower.includes("24bit") ||
+			lower.includes("truecolor") ||
+			lower.endsWith("-direct")
+		) {
+			return true;
+		}
+	}
+
+	return false;
 }
