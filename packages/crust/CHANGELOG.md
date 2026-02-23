@@ -1,5 +1,11 @@
 # @crustjs/crust
 
+## 0.0.9
+
+### Patch Changes
+
+- 2d05fb1: Fix shell resolver failing to locate prebuilt binaries when invoked via symlink (e.g. from `node_modules/.bin/`). The resolver now follows symlinks to resolve the real script directory before looking up platform binaries.
+
 ## 0.0.8
 
 ### Patch Changes

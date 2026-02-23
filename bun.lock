@@ -90,7 +90,7 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "bin": {
         "crust": "dist/cli",
       },
