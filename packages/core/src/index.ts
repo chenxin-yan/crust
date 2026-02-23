@@ -40,4 +40,5 @@ export type {
 	ParseResult,
 	ValidateFlagAliases,
 	ValidateVariadicArgs,
+	ValueType,
 } from "./types.ts";

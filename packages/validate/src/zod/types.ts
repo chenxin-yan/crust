@@ -1,186 +1,266 @@
-import type { CommandContext, CommandDef } from "@crustjs/core";
+import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "@crustjs/core";
 import type * as z from "zod/v4/core";
 import type { ValidatedContext } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Core schema aliases
+// Schema metadata symbol — attaches Zod schema to core ArgDef / FlagDef
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A Zod schema used by the Zod entrypoint. */
+/**
+ * Unique symbol used to attach a Zod schema to a core `ArgDef` or `FlagDef`.
+ *
+ * Survives `{ ...def }` spread in `defineCommand` and `Object.freeze`,
+ * making the schema available at runtime via `def[ZOD_SCHEMA]`.
+ */
+export const ZOD_SCHEMA: unique symbol = Symbol.for("crustjs.validate.zod");
+export type ZOD_SCHEMA = typeof ZOD_SCHEMA;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Core schema alias
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A Zod schema used by the validate/zod entrypoint. */
 export type ZodSchemaLike<Input = unknown, Output = Input> = z.$ZodType<
 	Output,
 	Input
 >;
 
-/** Infer output type from a Zod schema. */
-export type InferSchemaOutput<S> = S extends z.$ZodType ? z.output<S> : never;
-
 // ────────────────────────────────────────────────────────────────────────────
-// `arg()` DSL types
+// Type-level: Zod schema → CLI ValueType resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Optional metadata for a positional argument declared with `arg()`. */
-export interface ArgOptions {
-	/** Collect remaining positionals into this arg as an array. */
-	readonly variadic?: true;
-}
+/** CLI value type literals. */
+type ValueType = "string" | "number" | "boolean";
 
 /**
- * A single positional argument spec produced by `arg()`.
+ * Resolve the CLI `ValueType` from a Zod schema at the type level.
  *
- * The `Variadic` generic parameter preserves the literal `true` from
- * `arg()` calls so `ValidateVariadicArgs` can distinguish variadic args
- * from non-variadic ones at compile time.
+ * Unwraps common wrappers (optional, default, nullable, pipe, catch,
+ * prefault, nonoptional, readonly) and maps leaf schemas to their
+ * primitive type string.
  *
- * - `ArgSpec<N, S, true>` — variadic arg (only valid in last position)
- * - `ArgSpec<N, S, undefined>` — normal positional arg
- * - `ArgSpec<N, S>` (default) — type-erased form used in constraints
+ * Falls back to `ValueType` (the union) for unrecognized schemas — the
+ * runtime introspection always produces the correct narrow value.
  */
-export interface ArgSpec<
+export type ResolveZodValueType<S> =
+	// Leaf types
+	S extends z.$ZodString
+		? "string"
+		: S extends z.$ZodNumber
+			? "number"
+			: S extends z.$ZodBoolean
+				? "boolean"
+				: // Enum / literal → string
+					S extends z.$ZodEnum
+					? "string"
+					: S extends z.$ZodLiteral<infer L>
+						? L extends string
+							? "string"
+							: L extends number
+								? "number"
+								: L extends boolean
+									? "boolean"
+									: ValueType
+						: // Wrappers — unwrap and recurse
+							S extends z.$ZodOptional<infer Inner>
+							? ResolveZodValueType<Inner>
+							: S extends z.$ZodDefault<infer Inner>
+								? ResolveZodValueType<Inner>
+								: S extends z.$ZodNullable<infer Inner>
+									? ResolveZodValueType<Inner>
+									: S extends z.$ZodCatch<infer Inner>
+										? ResolveZodValueType<Inner>
+										: S extends z.$ZodPrefault<infer Inner>
+											? ResolveZodValueType<Inner>
+											: S extends z.$ZodNonOptional<infer Inner>
+												? ResolveZodValueType<Inner>
+												: S extends z.$ZodReadonly<infer Inner>
+													? ResolveZodValueType<Inner>
+													: S extends z.$ZodPipe<infer In, infer _Out>
+														? ResolveZodValueType<In>
+														: // Fallback
+															ValueType;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Branded def types — ArgDef / FlagDef carrying hidden schema metadata
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * An `ArgDef` enriched with a hidden Zod schema.
+ *
+ * The `Type` parameter is resolved from the schema at the type level via
+ * `ResolveZodValueType`, producing a narrow literal (e.g. `"number"`) that
+ * matches exactly one variant of core's discriminated `ArgDef` union.
+ *
+ * The `ZOD_SCHEMA` symbol key carries the schema for runtime validation.
+ */
+export interface ZodArgDef<
 	Name extends string = string,
 	Schema extends ZodSchemaLike = ZodSchemaLike,
 	Variadic extends true | undefined = true | undefined,
+	Type extends ValueType = ResolveZodValueType<Schema>,
 > {
-	readonly kind: "arg";
 	readonly name: Name;
-	readonly schema: Schema;
+	readonly type: Type;
+	readonly description?: string;
+	readonly required?: true;
+	/**
+	 * Non-optional so `ValidateVariadicArgs` can match `{ variadic: true }`.
+	 * When `Variadic` is `undefined`, the runtime value is `undefined`.
+	 */
 	readonly variadic: Variadic;
-}
-
-/** Ordered positional argument specs. */
-export type ArgSpecs = readonly ArgSpec[];
-
-/** Output type for one ArgSpec in the validated handler context. */
-type InferArgValue<S extends ArgSpec> = S["variadic"] extends true
-	? InferSchemaOutput<S["schema"]>[]
-	: InferSchemaOutput<S["schema"]>;
-
-/** Flattens an intersection of objects for readable inferred types. */
-type Simplify<T> = { [K in keyof T]: T[K] };
-
-/** Recursively maps ordered ArgSpec entries to a named output object type. */
-type InferArgsFromTuple<A extends readonly ArgSpec[]> = A extends readonly [
-	infer Head extends ArgSpec,
-	...infer Tail extends readonly ArgSpec[],
-]
-	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsFromTuple<Tail>
-	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
-		{};
-
-/** Infer validated args object type from ordered ArgSpec entries. */
-export type InferArgsFromSpecs<A extends ArgSpecs> = Simplify<
-	InferArgsFromTuple<A>
->;
-
-// ────────────────────────────────────────────────────────────────────────────
-// `flag()` DSL types
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Optional metadata for a flag declared with `flag()`. */
-export interface FlagOptions {
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
-	readonly alias?: string | readonly string[];
+	readonly [ZOD_SCHEMA]: Schema;
 }
 
 /**
- * A named flag schema wrapper produced by `flag()`.
+ * A `FlagDef` enriched with a hidden Zod schema.
  *
- * The `Alias` generic parameter preserves alias literals (e.g. `"v"` or
- * `readonly ["v", "V"]`) from `flag()` calls so `ValidateFlagAliases` can
- * detect collisions at compile time.
+ * The `Type` parameter is resolved from the schema at the type level.
  *
- * - `FlagSpec<S, "v">` — flag with alias `"v"` (collision-detectable)
- * - `FlagSpec<S, undefined>` — flag without an alias
- * - `FlagSpec<S>` (default) — type-erased form used in constraints
+ * The `ZOD_SCHEMA` symbol key carries the schema for runtime validation.
  */
-export interface FlagSpec<
+export interface ZodFlagDef<
 	Schema extends ZodSchemaLike = ZodSchemaLike,
 	Alias extends string | readonly string[] | undefined =
 		| string
 		| readonly string[]
 		| undefined,
+	Type extends ValueType = ResolveZodValueType<Schema>,
 > {
-	readonly kind: "flag";
-	readonly schema: Schema;
-	readonly alias: Alias;
+	readonly type: Type;
+	readonly description?: string;
+	readonly required?: true;
+	/**
+	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
+	 * When `Alias` is `undefined`, the runtime value is `undefined` (no alias).
+	 */
+	readonly alias: Alias extends string | readonly string[] ? Alias : undefined;
+	readonly [ZOD_SCHEMA]: Schema;
 }
 
-/** Allowed value shape for `flags` in `defineZodCommand()`. */
-export type FlagShape = Record<string, ZodSchemaLike | FlagSpec>;
-
-/** Extract the schema from a flag shape value (plain schema or `flag()` wrapper). */
-type ExtractFlagSchema<V> =
-	V extends FlagSpec<infer S> ? S : V extends ZodSchemaLike ? V : never;
-
-/** Infer validated flags object type from the flags shape. */
-export type InferFlagsFromShape<F extends FlagShape> = {
-	[K in keyof F]: InferSchemaOutput<ExtractFlagSchema<F[K]>>;
-};
-
 // ────────────────────────────────────────────────────────────────────────────
-// Handler + command definition types
+// arg() / flag() option types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Handler type for `defineZodCommand()` with validated/transformed context. */
-export type ZodCommandRunHandler<ArgsOut, FlagsOut> = (
-	context: ValidatedContext<ArgsOut, FlagsOut>,
-) => void | Promise<void>;
+/** Options for `arg()`. */
+export interface ArgOptions {
+	/** Collect remaining positionals into this arg as an array. */
+	readonly variadic?: true;
+}
 
-/** Infer args output type from command config args. */
-export type InferArgsFromConfig<A> = A extends ArgSpecs
-	? InferArgsFromSpecs<A>
-	: Record<string, never>;
+/** Options for `flag()`. */
+export interface FlagOptions {
+	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
+	readonly alias?: string | readonly string[];
+}
 
-/** Infer flags output type from command config flags. */
-export type InferFlagsFromConfig<F> = F extends FlagShape
-	? InferFlagsFromShape<F>
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level: Infer validated output types from branded defs
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Infer Zod output type from a schema. */
+export type InferSchemaOutput<S> = S extends z.$ZodType ? z.output<S> : never;
+
+/** Output type for a single arg: variadic → `output[]`, scalar → `output`. */
+type InferValidatedArgValue<D> = D extends {
+	readonly [ZOD_SCHEMA]: infer S;
+	readonly variadic: true;
+}
+	? InferSchemaOutput<S>[]
+	: D extends { readonly [ZOD_SCHEMA]: infer S }
+		? InferSchemaOutput<S>
+		: never;
+
+/** Flattens an intersection of objects for readable inferred types. */
+type Simplify<T> = { [K in keyof T]: T[K] };
+
+/** Recursively maps args tuple to a named output object. */
+type InferValidatedArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
+	infer Head extends ArgDef,
+	...infer Tail extends readonly ArgDef[],
+]
+	? Head extends { readonly name: infer N extends string }
+		? { [K in N]: InferValidatedArgValue<Head> } & InferValidatedArgsTuple<Tail>
+		: InferValidatedArgsTuple<Tail>
+	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
+		{};
+
+/**
+ * Infer the validated args output type from an `ArgsDef` tuple
+ * where each element carries a `[ZOD_SCHEMA]` brand.
+ */
+export type InferValidatedArgs<A> = A extends readonly ArgDef[]
+	? Simplify<InferValidatedArgsTuple<A>>
 	: Record<string, never>;
 
 /**
- * Keys from `CommandDef` that `ZodCommandDef` redefines with different types.
- *
- * - `args` / `flags`: Zod schema-based definitions replace core's `ArgsDef`/`FlagsDef`
- * - `run`: receives `ValidatedContext` instead of raw `CommandContext`
- * - `preRun` / `postRun`: use raw `CommandContext` (no `NoInfer` wrapper)
- *
- * All remaining `CommandDef` keys (e.g. `meta`, `subCommands`) are inherited
- * automatically via `Omit`. If a new passthrough field is added to `CommandDef`,
- * it propagates here without changes. The compile-time key exhaustiveness
- * assertion in `command.test.ts` will fail, forcing a review.
+ * Infer the validated flags output type from a `FlagsDef` record
+ * where each value carries a `[ZOD_SCHEMA]` brand.
  */
-type ZodOverriddenKeys = "args" | "flags" | "run" | "preRun" | "postRun";
+export type InferValidatedFlags<F> =
+	F extends Record<string, FlagDef>
+		? Simplify<{
+				[K in keyof F]: F[K] extends { readonly [ZOD_SCHEMA]: infer S }
+					? InferSchemaOutput<S>
+					: never;
+			}>
+		: Record<string, never>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Strict check — reject plain defs without schema metadata
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Check that every arg in a tuple carries the `[ZOD_SCHEMA]` brand. */
+type AllArgsHaveSchema<A extends ArgsDef> = A extends readonly [
+	infer Head,
+	...infer Tail extends readonly ArgDef[],
+]
+	? Head extends { readonly [ZOD_SCHEMA]: unknown }
+		? AllArgsHaveSchema<Tail>
+		: false
+	: true;
+
+/** Check that every flag in a record carries the `[ZOD_SCHEMA]` brand. */
+type AllFlagsHaveSchema<F extends FlagsDef> =
+	// When F resolves to the base `FlagsDef` (no flags provided), pass
+	string extends keyof F
+		? true
+		: {
+					[K in keyof F]: F[K] extends { readonly [ZOD_SCHEMA]: unknown }
+						? true
+						: false;
+				}[keyof F] extends true
+			? true
+			: false;
 
 /**
- * Config for `defineZodCommand()` using `arg()` + `flag()` schema-first DSL.
- *
- * Extends `CommandDef` (minus overridden keys) so passthrough fields like
- * `meta` and `subCommands` stay in sync automatically. If a new field is
- * added to `CommandDef`, the key exhaustiveness assertion in
- * `command.test.ts` fails at compile time, forcing a review.
+ * Resolves to `true` only when all args and flags carry schema metadata.
+ * Used by `withZod` to enforce strict mode at compile time.
  */
-export interface ZodCommandDef<
-	A extends ArgSpecs | undefined = undefined,
-	F extends FlagShape | undefined = undefined,
-> extends Omit<CommandDef, ZodOverriddenKeys> {
-	/** Ordered positional args as `arg()` specs. */
-	readonly args?: A;
-	/** Named flags as plain schemas or `flag()` wrappers. */
-	readonly flags?: F;
-	/**
-	 * Optional setup hook before schema validation runs.
-	 *
-	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
-	 */
-	readonly preRun?: (context: CommandContext) => void | Promise<void>;
-	/** Main handler with validated/transformed args and flags. */
-	readonly run?: ZodCommandRunHandler<
-		InferArgsFromConfig<A>,
-		InferFlagsFromConfig<F>
-	>;
-	/**
-	 * Optional teardown hook after command execution.
-	 *
-	 * Receives raw parser output (`CommandContext`), not schema-transformed values.
-	 */
-	readonly postRun?: (context: CommandContext) => void | Promise<void>;
-}
+export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
+	AllArgsHaveSchema<A> extends true
+		? AllFlagsHaveSchema<F> extends true
+			? true
+			: false
+		: false;
+
+// ────────────────────────────────────────────────────────────────────────────
+// withZod handler type
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The validated handler type for `withZod()`.
+ *
+ * When all args/flags carry schema metadata, resolves to a typed handler
+ * receiving `ValidatedContext`. Otherwise resolves to `never`, causing
+ * a compile error at the call site.
+ */
+export type WithZodHandler<A extends ArgsDef, F extends FlagsDef> =
+	HasAllSchemas<A, F> extends true
+		? (
+				context: ValidatedContext<
+					InferValidatedArgs<A>,
+					InferValidatedFlags<F>
+				>,
+			) => void | Promise<void>
+		: never;

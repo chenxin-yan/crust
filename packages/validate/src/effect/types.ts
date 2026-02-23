@@ -1,144 +1,227 @@
-import type { CommandContext, CommandDef } from "@crustjs/core";
+import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "@crustjs/core";
 import type * as schema from "effect/Schema";
 import type { ValidatedContext } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Core schema aliases
+// Schema metadata symbol — attaches Effect schema to core ArgDef / FlagDef
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * An Effect schema used by the Effect entrypoint.
+ * Unique symbol used to attach an Effect schema to a core `ArgDef` or `FlagDef`.
+ *
+ * Survives `{ ...def }` spread in `defineCommand` and `Object.freeze`,
+ * making the schema available at runtime via `def[EFFECT_SCHEMA]`.
+ */
+export const EFFECT_SCHEMA: unique symbol = Symbol.for(
+	"crustjs.validate.effect",
+);
+export type EFFECT_SCHEMA = typeof EFFECT_SCHEMA;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Core schema alias
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * An Effect schema used by the validate/effect entrypoint.
  *
  * v1 intentionally supports context-free schemas only (`R = never`).
- * Schemas must also be **synchronous** — async combinators such as
- * `Schema.filterEffect` or async `Schema.transformOrFail` will cause
- * `Effect.runSync` to throw at runtime.
  */
 export type EffectSchemaLike = schema.Schema.AnyNoContext;
 
-/** Infer output type from an Effect schema. */
-export type InferSchemaOutput<S> =
-	S extends schema.Schema<infer A, infer _I, infer _R> ? A : never;
-
 // ────────────────────────────────────────────────────────────────────────────
-// `arg()` DSL types
+// Type-level: Effect schema → CLI ValueType resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Optional metadata for a positional argument declared with `arg()`. */
-export interface ArgOptions {
-	/** Collect remaining positionals into this arg as an array. */
-	readonly variadic?: true;
-}
+/** CLI value type literals. */
+type ValueType = "string" | "number" | "boolean";
 
-/** A single positional argument spec produced by `arg()`. */
-export interface ArgSpec<
+/**
+ * Resolve CLI ValueType from an Effect schema's encoded (input) type.
+ *
+ * Uses `Schema.Encoded<S>` to determine the CLI input type. If the encoded
+ * type is a primitive (possibly `| undefined`), resolves to the matching
+ * ValueType literal. Falls back to `ValueType` (the union) for complex types.
+ */
+type StripUndefined<T> = Exclude<T, undefined>;
+
+type PrimitiveToValueType<T> = [T] extends [string]
+	? "string"
+	: [T] extends [number]
+		? "number"
+		: [T] extends [boolean]
+			? "boolean"
+			: ValueType;
+
+export type ResolveEffectValueType<S> =
+	S extends schema.Schema<infer _A, infer I, infer _R>
+		? PrimitiveToValueType<StripUndefined<I>>
+		: ValueType;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Branded def types — ArgDef / FlagDef carrying hidden schema metadata
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * An `ArgDef` enriched with a hidden Effect schema.
+ *
+ * The `Type` parameter is resolved from the schema's encoded type.
+ *
+ * The `EFFECT_SCHEMA` symbol key carries the schema for runtime validation.
+ */
+export interface EffectArgDef<
 	Name extends string = string,
 	SchemaType extends EffectSchemaLike = EffectSchemaLike,
 	Variadic extends true | undefined = true | undefined,
+	Type extends ValueType = ResolveEffectValueType<SchemaType>,
 > {
-	readonly kind: "arg";
 	readonly name: Name;
-	readonly schema: SchemaType;
+	readonly type: Type;
+	readonly description?: string;
+	readonly required?: true;
+	/** Non-optional so `ValidateVariadicArgs` can match `{ variadic: true }`. */
 	readonly variadic: Variadic;
+	readonly [EFFECT_SCHEMA]: SchemaType;
 }
 
-/** Ordered positional argument specs. */
-export type ArgSpecs = readonly ArgSpec[];
-
-/** Output type for one ArgSpec in the validated handler context. */
-type InferArgValue<S extends ArgSpec> = S["variadic"] extends true
-	? InferSchemaOutput<S["schema"]>[]
-	: InferSchemaOutput<S["schema"]>;
-
-/** Flattens an intersection of objects for readable inferred types. */
-type Simplify<T> = { [K in keyof T]: T[K] };
-
-/** Recursively maps ordered ArgSpec entries to a named output object type. */
-type InferArgsFromTuple<A extends readonly ArgSpec[]> = A extends readonly [
-	infer Head extends ArgSpec,
-	...infer Tail extends readonly ArgSpec[],
-]
-	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsFromTuple<Tail>
-	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
-		{};
-
-/** Infer validated args object type from ordered ArgSpec entries. */
-export type InferArgsFromSpecs<A extends ArgSpecs> = Simplify<
-	InferArgsFromTuple<A>
->;
-
-// ────────────────────────────────────────────────────────────────────────────
-// `flag()` DSL types
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Optional metadata for a flag declared with `flag()`. */
-export interface FlagOptions {
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
-	readonly alias?: string | readonly string[];
-}
-
-/** A named flag schema wrapper produced by `flag()`. */
-export interface FlagSpec<
+/**
+ * A `FlagDef` enriched with a hidden Effect schema.
+ *
+ * The `EFFECT_SCHEMA` symbol key carries the schema for runtime validation.
+ */
+export interface EffectFlagDef<
 	SchemaType extends EffectSchemaLike = EffectSchemaLike,
 	Alias extends string | readonly string[] | undefined =
 		| string
 		| readonly string[]
 		| undefined,
+	Type extends ValueType = ResolveEffectValueType<SchemaType>,
 > {
-	readonly kind: "flag";
-	readonly schema: SchemaType;
-	readonly alias: Alias;
+	readonly type: Type;
+	readonly description?: string;
+	readonly required?: true;
+	/** Non-optional so `ValidateFlagAliases` can extract narrow alias literals. */
+	readonly alias: Alias extends string | readonly string[] ? Alias : undefined;
+	readonly [EFFECT_SCHEMA]: SchemaType;
 }
 
-/** Allowed value shape for `flags` in `defineEffectCommand()`. */
-export type FlagShape = Record<string, EffectSchemaLike | FlagSpec>;
-
-/** Extract the schema from a flag shape value (plain schema or `flag()` wrapper). */
-type ExtractFlagSchema<V> =
-	V extends FlagSpec<infer S> ? S : V extends EffectSchemaLike ? V : never;
-
-/** Infer validated flags object type from the flags shape. */
-export type InferFlagsFromShape<F extends FlagShape> = {
-	[K in keyof F]: InferSchemaOutput<ExtractFlagSchema<F[K]>>;
-};
-
 // ────────────────────────────────────────────────────────────────────────────
-// Handler + command definition types
+// arg() / flag() option types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Handler type for `defineEffectCommand()` with validated/transformed context. */
-export type EffectCommandRunHandler<ArgsOut, FlagsOut> = (
-	context: ValidatedContext<ArgsOut, FlagsOut>,
-) => void | Promise<void>;
-
-/** Infer args output type from command config args. */
-export type InferArgsFromConfig<A> = A extends ArgSpecs
-	? InferArgsFromSpecs<A>
-	: Record<string, never>;
-
-/** Infer flags output type from command config flags. */
-export type InferFlagsFromConfig<F> = F extends FlagShape
-	? InferFlagsFromShape<F>
-	: Record<string, never>;
-
-type EffectOverriddenKeys = "args" | "flags" | "run" | "preRun" | "postRun";
-
-/** Config for `defineEffectCommand()` using `arg()` + `flag()` schema-first DSL. */
-export interface EffectCommandDef<
-	A extends ArgSpecs | undefined = undefined,
-	F extends FlagShape | undefined = undefined,
-> extends Omit<CommandDef, EffectOverriddenKeys> {
-	/** Ordered positional args as `arg()` specs. */
-	readonly args?: A;
-	/** Named flags as plain schemas or `flag()` wrappers. */
-	readonly flags?: F;
-	/** Optional setup hook before schema validation runs. */
-	readonly preRun?: (context: CommandContext) => void | Promise<void>;
-	/** Main handler with validated/transformed args and flags. */
-	readonly run?: EffectCommandRunHandler<
-		InferArgsFromConfig<A>,
-		InferFlagsFromConfig<F>
-	>;
-	/** Optional teardown hook after command execution. */
-	readonly postRun?: (context: CommandContext) => void | Promise<void>;
+/** Options for `arg()`. */
+export interface ArgOptions {
+	/** Collect remaining positionals into this arg as an array. */
+	readonly variadic?: true;
 }
+
+/** Options for `flag()`. */
+export interface FlagOptions {
+	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
+	readonly alias?: string | readonly string[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level: Infer validated output types from branded defs
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Infer Effect output type from a schema. */
+export type InferSchemaOutput<S> =
+	S extends schema.Schema<infer A, infer _I, infer _R> ? A : never;
+
+/** Output type for a single arg: variadic → `output[]`, scalar → `output`. */
+type InferValidatedArgValue<D> = D extends {
+	readonly [EFFECT_SCHEMA]: infer S;
+	readonly variadic: true;
+}
+	? InferSchemaOutput<S>[]
+	: D extends { readonly [EFFECT_SCHEMA]: infer S }
+		? InferSchemaOutput<S>
+		: never;
+
+/** Flattens an intersection of objects for readable inferred types. */
+type Simplify<T> = { [K in keyof T]: T[K] };
+
+/** Recursively maps args tuple to a named output object. */
+type InferValidatedArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
+	infer Head extends ArgDef,
+	...infer Tail extends readonly ArgDef[],
+]
+	? Head extends { readonly name: infer N extends string }
+		? { [K in N]: InferValidatedArgValue<Head> } & InferValidatedArgsTuple<Tail>
+		: InferValidatedArgsTuple<Tail>
+	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
+		{};
+
+/**
+ * Infer the validated args output type from an `ArgsDef` tuple
+ * where each element carries an `[EFFECT_SCHEMA]` brand.
+ */
+export type InferValidatedArgs<A> = A extends readonly ArgDef[]
+	? Simplify<InferValidatedArgsTuple<A>>
+	: Record<string, never>;
+
+/**
+ * Infer the validated flags output type from a `FlagsDef` record
+ * where each value carries an `[EFFECT_SCHEMA]` brand.
+ */
+export type InferValidatedFlags<F> =
+	F extends Record<string, FlagDef>
+		? Simplify<{
+				[K in keyof F]: F[K] extends { readonly [EFFECT_SCHEMA]: infer S }
+					? InferSchemaOutput<S>
+					: never;
+			}>
+		: Record<string, never>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Strict check — reject plain defs without schema metadata
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Check that every arg in a tuple carries the `[EFFECT_SCHEMA]` brand. */
+type AllArgsHaveSchema<A extends ArgsDef> = A extends readonly [
+	infer Head,
+	...infer Tail extends readonly ArgDef[],
+]
+	? Head extends { readonly [EFFECT_SCHEMA]: unknown }
+		? AllArgsHaveSchema<Tail>
+		: false
+	: true;
+
+/** Check that every flag in a record carries the `[EFFECT_SCHEMA]` brand. */
+type AllFlagsHaveSchema<F extends FlagsDef> = string extends keyof F
+	? true
+	: {
+				[K in keyof F]: F[K] extends { readonly [EFFECT_SCHEMA]: unknown }
+					? true
+					: false;
+			}[keyof F] extends true
+		? true
+		: false;
+
+/**
+ * Resolves to `true` only when all args and flags carry schema metadata.
+ * Used by `withEffect` to enforce strict mode at compile time.
+ */
+export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
+	AllArgsHaveSchema<A> extends true
+		? AllFlagsHaveSchema<F> extends true
+			? true
+			: false
+		: false;
+
+// ────────────────────────────────────────────────────────────────────────────
+// withEffect handler type
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The validated handler type for `withEffect()`.
+ */
+export type WithEffectHandler<A extends ArgsDef, F extends FlagsDef> =
+	HasAllSchemas<A, F> extends true
+		? (
+				context: ValidatedContext<
+					InferValidatedArgs<A>,
+					InferValidatedFlags<F>
+				>,
+			) => void | Promise<void>
+		: never;

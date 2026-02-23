@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { runCommand } from "@crustjs/core";
+import { defineCommand, runCommand } from "@crustjs/core";
 import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import { z } from "zod";
-import { arg, defineZodCommand, flag } from "../src/zod/index.ts";
+import { arg, flag, withZod } from "../src/zod/index.ts";
 
 let stdoutChunks: string[];
 let originalLog: typeof console.log;
@@ -24,9 +24,9 @@ function getStdout(): string {
 	return stdoutChunks.join("\n");
 }
 
-describe("help plugin integration with defineZodCommand", () => {
+describe("help plugin integration with defineCommand + withZod", () => {
 	it("renders help for a flags-only schema-first command", async () => {
-		const cmd = defineZodCommand({
+		const cmd = defineCommand({
 			meta: { name: "serve", description: "Start dev server" },
 			flags: {
 				verbose: flag(
@@ -34,7 +34,7 @@ describe("help plugin integration with defineZodCommand", () => {
 					{ alias: "v" },
 				),
 			},
-			run() {},
+			run: withZod(() => {}),
 		});
 
 		await runCommand(cmd, {
@@ -53,7 +53,7 @@ describe("help plugin integration with defineZodCommand", () => {
 	});
 
 	it("renders args and options sections from generated definitions", () => {
-		const cmd = defineZodCommand({
+		const cmd = defineCommand({
 			meta: { name: "build" },
 			args: [
 				arg("entry", z.string().describe("Entry file")),
@@ -78,7 +78,7 @@ describe("help plugin integration with defineZodCommand", () => {
 	});
 
 	it("extracts description from .describe() on the schema", () => {
-		const cmd = defineZodCommand({
+		const cmd = defineCommand({
 			meta: { name: "app" },
 			flags: {
 				port: flag(z.number().describe("Schema description")),
@@ -90,7 +90,7 @@ describe("help plugin integration with defineZodCommand", () => {
 	});
 
 	it("resolves description through wrappers like .optional() and .default()", () => {
-		const cmd = defineZodCommand({
+		const cmd = defineCommand({
 			meta: { name: "app" },
 			flags: {
 				port: flag(z.number().describe("Port number").default(3000)),
@@ -104,7 +104,7 @@ describe("help plugin integration with defineZodCommand", () => {
 	});
 
 	it("renders variadic positional args", () => {
-		const cmd = defineZodCommand({
+		const cmd = defineCommand({
 			meta: { name: "lint" },
 			args: [
 				arg("mode", z.string()),
@@ -121,7 +121,7 @@ describe("help plugin integration with defineZodCommand", () => {
 	});
 
 	it("renders parent and subcommand help correctly", async () => {
-		const deploy = defineZodCommand({
+		const deploy = defineCommand({
 			meta: { name: "deploy", description: "Deploy app" },
 			flags: {
 				env: flag(
@@ -129,10 +129,10 @@ describe("help plugin integration with defineZodCommand", () => {
 					{ alias: "e" },
 				),
 			},
-			run() {},
+			run: withZod(() => {}),
 		});
 
-		const root = defineZodCommand({
+		const root = defineCommand({
 			meta: { name: "app", description: "App CLI" },
 			subCommands: { deploy },
 		});

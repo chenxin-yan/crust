@@ -4,13 +4,18 @@
 
 Validation support for the [Crust](https://crustjs.com) CLI framework.
 
+Define args and flags once using schema-first `arg()` / `flag()` helpers, then
+use `withZod()` or `withEffect()` as `run` middleware for `defineCommand`. CLI
+metadata (type, required, description, variadic) is derived from the schema
+automatically — single source of truth.
+
 ## Entry points
 
-| Entry | Import | Purpose |
-| --- | --- | --- |
-| Shared contracts | `@crustjs/validate` | Provider-agnostic types (`ValidatedContext`, `ValidationIssue`) |
-| Effect provider | `@crustjs/validate/effect` | Schema-first command API (`defineEffectCommand`, `arg`, `flag`) |
-| Zod provider | `@crustjs/validate/zod` | Schema-first command API (`defineZodCommand`, `arg`, `flag`) |
+| Entry            | Import                       | Purpose                                                        |
+| ---------------- | ---------------------------- | -------------------------------------------------------------- |
+| Shared contracts | `@crustjs/validate`          | Provider-agnostic types (`ValidatedContext`, `ValidationIssue`) |
+| Effect provider  | `@crustjs/validate/effect`   | `arg`, `flag`, `withEffect`                                    |
+| Zod provider     | `@crustjs/validate/zod`      | `arg`, `flag`, `withZod`                                       |
 
 ## Install
 
@@ -22,20 +27,56 @@ bun add zod
 bun add effect
 ```
 
-## Effect schema-first mode (`defineEffectCommand`)
-
-Define schemas once and let Crust `args`/`flags` definitions be generated automatically.
+## Zod provider
 
 ```ts
-import { runMain } from "@crustjs/core";
-import {
-	arg,
-	defineEffectCommand,
-	flag,
-} from "@crustjs/validate/effect";
+import { defineCommand, runMain } from "@crustjs/core";
+import { arg, flag, withZod } from "@crustjs/validate/zod";
+import { z } from "zod";
+
+const serve = defineCommand({
+	meta: { name: "serve", description: "Start dev server" },
+	args: [
+		arg("port", z.number().int().min(1).max(65535).describe("Port to listen on")),
+		arg("host", z.string().default("localhost").describe("Host to bind")),
+	],
+	flags: {
+		verbose: flag(
+			z.boolean().default(false).describe("Enable verbose logging"),
+			{ alias: "v" },
+		),
+		format: flag(
+			z.enum(["json", "text"]).default("text").describe("Output format"),
+			{ alias: "f" },
+		),
+	},
+	run: withZod(({ args, flags, input }) => {
+		// args: { port: number; host: string }
+		// flags: { verbose: boolean; format: "json" | "text" }
+		console.log(args.port, args.host, flags.verbose, flags.format);
+		console.log(input.args, input.flags); // original parser output
+	}),
+});
+
+runMain(serve);
+```
+
+### Zod schema support
+
+- Primitive schemas: `z.string()`, `z.number()`, `z.boolean()`
+- Enums/literals: `z.enum(...)`, `z.literal(...)`
+- Arrays: `z.array(...)` for variadic args or flags with `multiple: true`
+- Wrappers: `.optional()`, `.default()`, `.nullable()`, `.transform()`, `.pipe()`
+- Descriptions: `.describe("...")` — auto-extracted through wrappers
+
+## Effect provider
+
+```ts
+import { defineCommand, runMain } from "@crustjs/core";
+import { arg, flag, withEffect } from "@crustjs/validate/effect";
 import * as Schema from "effect/Schema";
 
-const serve = defineEffectCommand({
+const serve = defineCommand({
 	meta: { name: "serve", description: "Start dev server" },
 	args: [
 		arg("port", Schema.Number.annotations({ description: "Port to listen on" })),
@@ -53,12 +94,12 @@ const serve = defineEffectCommand({
 			{ alias: "f" },
 		),
 	},
-	run({ args, flags, input }) {
+	run: withEffect(({ args, flags, input }) => {
 		// args: { port: number; host: string | undefined }
 		// flags: { verbose: boolean; format: "json" | "text" }
 		console.log(args.port, args.host, flags.verbose, flags.format);
 		console.log(input.args, input.flags); // original parser output
-	},
+	}),
 });
 
 runMain(serve);
@@ -74,53 +115,10 @@ runMain(serve);
 
 For optional args/flags, use schemas whose encoded input allows `undefined` (for example `Schema.UndefinedOr(Schema.String)`).
 
-## Zod schema-first mode (`defineZodCommand`)
+## Positional args
 
-Define schemas once and let Crust `args`/`flags` definitions be generated automatically.
+Use ordered `arg(name, schema, options?)` entries.
 
-```ts
-import { runMain } from "@crustjs/core";
-import { arg, defineZodCommand, flag } from "@crustjs/validate/zod";
-import { z } from "zod";
-
-const serve = defineZodCommand({
-	meta: { name: "serve", description: "Start dev server" },
-	args: [
-		arg("port", z.number().int().min(1).max(65535).describe("Port to listen on")),
-		arg("host", z.string().default("localhost").describe("Host to bind")),
-	],
-	flags: {
-		verbose: flag(
-			z.boolean().default(false).describe("Enable verbose logging"),
-			{ alias: "v" },
-		),
-		format: flag(
-			z.enum(["json", "text"]).default("text").describe("Output format"),
-			{ alias: "f" },
-		),
-	},
-	run({ args, flags, input }) {
-		// args: { port: number; host: string }
-		// flags: { verbose: boolean; format: "json" | "text" }
-		console.log(args.port, args.host, flags.verbose, flags.format);
-		console.log(input.args, input.flags); // original parser output
-	},
-});
-
-runMain(serve);
-```
-
-### Zod schema support
-
-- Primitive schemas: `z.string()`, `z.number()`, `z.boolean()`
-- Enums/literals: `z.enum(...)`, `z.literal(...)`
-- Arrays: `z.array(...)` for flags with `multiple: true`
-- Wrappers: `.optional()`, `.default()`, `.nullable()`, `.transform()`, `.pipe()`
-- Descriptions: `.describe("...")` — auto-extracted through wrappers
-
-### Positional args
-
-- Use ordered `arg(name, schema, options?)` entries.
 - Optional/default schemas become optional CLI args (`[name]`).
 - Variadic args use `{ variadic: true }` and must be last.
 
@@ -131,20 +129,30 @@ args: [
 ];
 ```
 
-### Flags
+## Flags
 
-- Pass plain Zod schemas or `flag(schema, options?)` wrappers.
+Use `flag(schema, options?)` to define flags.
+
 - Use `flag(..., { alias })` for short aliases.
-- Use `.describe("...")` on the schema for help text.
+- Use `.describe("...")` (Zod) or `.annotations({ description: "..." })` (Effect) for help text.
 
 ```ts
 flags: {
-	debug: z.boolean().default(false).describe("Enable debug mode"),
+	debug: flag(z.boolean().default(false).describe("Enable debug mode")),
 	outDir: flag(z.string().default("dist").describe("Output directory"), { alias: "o" }),
 };
 ```
 
-### Help plugin compatibility
+## Strict mode
+
+When using `withZod()` or `withEffect()`, **all** args and flags must be created
+with the matching provider's `arg()` / `flag()` helpers. Mixing plain core
+definitions causes a compile-time error (handler parameter becomes `never`).
+
+Plugin-injected flags (e.g. `--help` from `helpPlugin`) are silently skipped at
+runtime — they don't need schema metadata.
+
+## Help plugin compatibility
 
 Generated definitions are compatible with `helpPlugin`.
 
@@ -154,14 +162,6 @@ import { helpPlugin } from "@crustjs/plugins";
 
 runMain(serve, { plugins: [helpPlugin()] });
 ```
-
-### Lifecycle hooks
-
-`defineZodCommand` supports `preRun` and `postRun` passthrough hooks.
-
-- Both hooks receive the core `CommandContext` (raw parser output).
-- Schema validation/transforms run inside `run`, so validated values are only
-  available in the schema-first `run` handler.
 
 ## Validation errors
 
@@ -173,6 +173,6 @@ Failures throw `CrustError("VALIDATION")`.
 ## v1 constraints
 
 - Args and flags only (no env/config validation).
-- Effect mode currently supports context-free schemas only (`R = never`).
+- Effect mode supports context-free, synchronous schemas only (`R = never`).
 - Zod mode requires Zod 4+.
 - No automatic schema inheritance across subcommands.

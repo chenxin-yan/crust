@@ -1,27 +1,20 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/validate/effect — Effect schema-first mode for Crust CLI
+// @crustjs/validate/effect — Effect schema-validated run middleware for Crust CLI
 // ────────────────────────────────────────────────────────────────────────────
-
-// Schema-first command factory
-export { defineEffectCommand } from "./command.ts";
 
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
-
 // Public types
 export type {
 	ArgOptions,
-	ArgSpec,
-	ArgSpecs,
-	EffectCommandDef,
-	EffectCommandRunHandler,
+	EffectArgDef,
+	EffectFlagDef,
 	EffectSchemaLike,
 	FlagOptions,
-	FlagShape,
-	FlagSpec,
-	InferArgsFromConfig,
-	InferArgsFromSpecs,
-	InferFlagsFromConfig,
-	InferFlagsFromShape,
 	InferSchemaOutput,
+	InferValidatedArgs,
+	InferValidatedFlags,
+	WithEffectHandler,
 } from "./types.ts";
+// Validated run middleware
+export { withEffect } from "./withEffect.ts";

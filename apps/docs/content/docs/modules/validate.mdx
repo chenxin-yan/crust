@@ -3,14 +3,14 @@ title: "Validate"
 description: Schema-first validation for CLI arguments and flags using validation libraries.
 ---
 
-`@crustjs/validate` provides schema-first validation and coercion for Crust commands. Define your args and flags as schemas, and the package generates parser definitions, runs validation, and delivers fully typed, transformed values to your handler.
+`@crustjs/validate` provides schema-first validation and coercion for Crust commands. Define your args and flags once using `arg()` / `flag()` helpers, then use `withZod()` or `withEffect()` as `run` middleware for `defineCommand`. CLI metadata (type, required, description, variadic) is derived from the schema automatically — single source of truth.
 
 ## Supported Validators
 
-| Provider                          | Entrypoint                 | Define Function       |
-| --------------------------------- | -------------------------- | --------------------- |
-| [Zod 4](#zod-provider)            | `@crustjs/validate/zod`    | `defineZodCommand`    |
-| [Effect Schema](#effect-provider) | `@crustjs/validate/effect` | `defineEffectCommand` |
+| Provider                          | Entrypoint                 | Middleware   |
+| --------------------------------- | -------------------------- | ------------ |
+| [Zod 4](#zod-provider)            | `@crustjs/validate/zod`    | `withZod`    |
+| [Effect Schema](#effect-provider) | `@crustjs/validate/effect` | `withEffect` |
 
 The root entrypoint (`@crustjs/validate`) exports [shared types](#shared-exports) only.
 
@@ -34,10 +34,11 @@ bun add effect
 
 ## How It Works
 
-1. You declare args with `arg(name, schema)` and flags with plain schemas or `flag(schema, options)` wrappers.
-2. The `define*Command()` function introspects schemas at definition time to generate the core `ArgDef[]` and `FlagsDef` that Crust's parser needs.
-3. At runtime, after Crust parses argv, each value is validated and transformed through its schema before your `run` handler is called.
-4. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
+1. You declare args with `arg(name, schema)` and flags with `flag(schema, options)` from a provider entrypoint.
+2. Each helper introspects the schema to generate core-compatible `ArgDef` / `FlagDef` with hidden schema metadata attached via a symbol key.
+3. You pass these definitions to `defineCommand` and use `withZod()` or `withEffect()` as the `run` handler.
+4. At runtime, after Crust parses argv, the middleware validates and transforms each value through its schema before calling your handler.
+5. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
 
 Descriptions for help text are provided directly on the schema using the validator's native API (`.describe()` for Zod, `.annotations()` for Effect). The framework automatically extracts descriptions even through wrappers like `.optional()`, `.default()`, and `.transform()`.
 
@@ -50,11 +51,11 @@ Import from `@crustjs/validate/zod`.
 ### Quick Example (Zod)
 
 ```ts
-import { runMain } from "@crustjs/core";
-import { arg, defineZodCommand, flag } from "@crustjs/validate/zod";
+import { defineCommand, runMain } from "@crustjs/core";
+import { arg, flag, withZod } from "@crustjs/validate/zod";
 import { z } from "zod";
 
-const greet = defineZodCommand({
+const greet = defineCommand({
   meta: { name: "greet", description: "Say hello" },
   args: [arg("name", z.string().describe("Person to greet"))],
   flags: {
@@ -62,11 +63,11 @@ const greet = defineZodCommand({
       alias: "l",
     }),
   },
-  run({ args, flags }) {
+  run: withZod(({ args, flags }) => {
     // args.name is string, flags.loud is boolean — fully typed
     const msg = `Hello, ${args.name}!`;
     console.log(flags.loud ? msg.toUpperCase() : msg);
-  },
+  }),
 });
 
 runMain(greet);
@@ -84,7 +85,12 @@ arg("name", z.string().describe("Person to greet").optional());
 flag(z.number().describe("Port number").default(3000));
 
 // Description on the inner schema — resolved through .transform()
-flag(z.string().describe("Output format").transform((v) => v.toUpperCase()));
+flag(
+  z
+    .string()
+    .describe("Output format")
+    .transform((v) => v.toUpperCase()),
+);
 ```
 
 ### Schema Support (Zod)
@@ -102,15 +108,15 @@ Schemas are introspected at definition time to determine CLI parser types (`stri
 The last positional arg can be variadic, collecting all remaining positionals into an array:
 
 ```ts
-const cmd = defineZodCommand({
+const cmd = defineCommand({
   meta: { name: "rm" },
   args: [arg("files", z.string(), { variadic: true })],
-  run({ args }) {
+  run: withZod(({ args }) => {
     // args.files is string[]
     for (const file of args.files) {
       console.log(`Removing ${file}`);
     }
-  },
+  }),
 });
 ```
 
@@ -120,30 +126,25 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 
 #### Functions
 
-| Function           | Description                                              |
-| ------------------ | -------------------------------------------------------- |
-| `defineZodCommand` | Define a command with Zod schemas as the source of truth |
-| `arg`              | Declare a named positional argument with a Zod schema    |
-| `flag`             | Wrap a Zod schema with alias metadata                    |
+| Function  | Description                                                     |
+| --------- | --------------------------------------------------------------- |
+| `arg`     | Declare a named positional argument with a Zod schema           |
+| `flag`    | Declare a flag with a Zod schema and optional alias             |
+| `withZod` | Create a validated `run` handler that validates via Zod schemas |
 
 #### Types
 
-| Type                                      | Description                                  |
-| ----------------------------------------- | -------------------------------------------- |
-| `ZodCommandDef<A, F>`                     | Config shape for `defineZodCommand`          |
-| `ZodCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
-| `ArgSpec<Name, Schema, Variadic>`         | A single positional arg spec from `arg()`    |
-| `ArgSpecs`                                | Ordered readonly array of `ArgSpec`          |
-| `ArgOptions`                              | Options for `arg()` (variadic)               |
-| `FlagSpec<Schema, Alias>`                 | A flag wrapper from `flag()`                 |
-| `FlagShape`                               | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions`                             | Options for `flag()` (alias)                 |
-| `ZodSchemaLike`                           | Zod schema type constraint                   |
-| `InferSchemaOutput<S>`                    | Infer output type from a Zod schema          |
-| `InferArgsFromSpecs<A>`                   | Infer validated args object from arg specs   |
-| `InferArgsFromConfig<A>`                  | Infer args output from command config        |
-| `InferFlagsFromShape<F>`                  | Infer validated flags object from flag shape |
-| `InferFlagsFromConfig<F>`                 | Infer flags output from command config       |
+| Type                     | Description                                        |
+| ------------------------ | -------------------------------------------------- |
+| `ZodArgDef<N, S, V, T>`  | `ArgDef` enriched with hidden Zod schema metadata  |
+| `ZodFlagDef<S, A, T>`    | `FlagDef` enriched with hidden Zod schema metadata |
+| `WithZodHandler<A, F>`   | Handler type receiving `ValidatedContext`          |
+| `ArgOptions`             | Options for `arg()` (`variadic`)                   |
+| `FlagOptions`            | Options for `flag()` (`alias`)                     |
+| `ZodSchemaLike`          | Zod schema type constraint                         |
+| `InferSchemaOutput<S>`   | Infer output type from a Zod schema                |
+| `InferValidatedArgs<A>`  | Infer validated args object from arg definitions   |
+| `InferValidatedFlags<F>` | Infer validated flags object from flag definitions |
 
 ---
 
@@ -151,29 +152,31 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 
 Import from `@crustjs/validate/effect`.
 
-> **Constraint:** Only context-free schemas (`R = never`) are supported in v1. Schemas that require an Effect context will produce a type error.
+> **Constraint:** Only context-free, synchronous schemas (`R = never`) are supported in v1. Schemas that require an Effect context or use async combinators will produce a type error or throw at runtime.
 
 ### Quick Example (Effect)
 
 ```ts
-import { runMain } from "@crustjs/core";
-import { arg, defineEffectCommand, flag } from "@crustjs/validate/effect";
+import { defineCommand, runMain } from "@crustjs/core";
+import { arg, flag, withEffect } from "@crustjs/validate/effect";
 import { Schema } from "effect";
 
-const greet = defineEffectCommand({
+const greet = defineCommand({
   meta: { name: "greet", description: "Say hello" },
-  args: [arg("name", Schema.String.annotations({ description: "Person to greet" }))],
+  args: [
+    arg("name", Schema.String.annotations({ description: "Person to greet" })),
+  ],
   flags: {
     loud: flag(
       Schema.Boolean.annotations({ description: "Shout the greeting" }),
       { alias: "l" },
     ),
   },
-  run({ args, flags }) {
+  run: withEffect(({ args, flags }) => {
     // args.name is string, flags.loud is boolean — fully typed
     const msg = `Hello, ${args.name}!`;
     console.log(flags.loud ? msg.toUpperCase() : msg);
-  },
+  }),
 });
 
 runMain(greet);
@@ -185,16 +188,21 @@ Use `.annotations({ description: "..." })` on the schema to provide help text. D
 
 ```ts
 // Description on the inner schema — resolved through UndefinedOr
-arg("name", Schema.UndefinedOr(
-  Schema.String.annotations({ description: "Person to greet" }),
-));
+arg(
+  "name",
+  Schema.UndefinedOr(
+    Schema.String.annotations({ description: "Person to greet" }),
+  ),
+);
 
 // Description on the inner schema — resolved through transform
-flag(Schema.transform(
-  Schema.String.annotations({ description: "Output format" }),
-  Schema.String,
-  { strict: false, decode: (v) => v.toUpperCase(), encode: (v) => v },
-));
+flag(
+  Schema.transform(
+    Schema.String.annotations({ description: "Output format" }),
+    Schema.String,
+    { strict: false, decode: (v) => v.toUpperCase(), encode: (v) => v },
+  ),
+);
 ```
 
 ### Schema Support (Effect)
@@ -212,15 +220,15 @@ Schemas are introspected via AST at definition time to determine CLI parser type
 The last positional arg can be variadic, collecting all remaining positionals into an array:
 
 ```ts
-const cmd = defineEffectCommand({
+const cmd = defineCommand({
   meta: { name: "rm" },
   args: [arg("files", Schema.String, { variadic: true })],
-  run({ args }) {
+  run: withEffect(({ args }) => {
     // args.files is string[]
     for (const file of args.files) {
       console.log(`Removing ${file}`);
     }
-  },
+  }),
 });
 ```
 
@@ -230,30 +238,25 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 
 #### Functions
 
-| Function              | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `defineEffectCommand` | Define a command with Effect schemas as the source of truth |
-| `arg`                 | Declare a named positional argument with an Effect schema   |
-| `flag`                | Wrap an Effect schema with alias metadata                   |
+| Function     | Description                                                        |
+| ------------ | ------------------------------------------------------------------ |
+| `arg`        | Declare a named positional argument with an Effect schema          |
+| `flag`       | Declare a flag with an Effect schema and optional alias            |
+| `withEffect` | Create a validated `run` handler that validates via Effect schemas |
 
 #### Types
 
-| Type                                         | Description                                  |
-| -------------------------------------------- | -------------------------------------------- |
-| `EffectCommandDef<A, F>`                     | Config shape for `defineEffectCommand`       |
-| `EffectCommandRunHandler<ArgsOut, FlagsOut>` | Handler receiving `ValidatedContext`         |
-| `ArgSpec<Name, Schema, Variadic>`            | A single positional arg spec from `arg()`    |
-| `ArgSpecs`                                   | Ordered readonly array of `ArgSpec`          |
-| `ArgOptions`                                 | Options for `arg()` (variadic)               |
-| `FlagSpec<Schema, Alias>`                    | A flag wrapper from `flag()`                 |
-| `FlagShape`                                  | Record of plain schemas or `FlagSpec` values |
-| `FlagOptions`                                | Options for `flag()` (alias)                 |
-| `EffectSchemaLike`                           | Effect schema type constraint (`R = never`)  |
-| `InferSchemaOutput<S>`                       | Infer output type from an Effect schema      |
-| `InferArgsFromSpecs<A>`                      | Infer validated args object from arg specs   |
-| `InferArgsFromConfig<A>`                     | Infer args output from command config        |
-| `InferFlagsFromShape<F>`                     | Infer validated flags object from flag shape |
-| `InferFlagsFromConfig<F>`                    | Infer flags output from command config       |
+| Type                       | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `EffectArgDef<N, S, V, T>` | `ArgDef` enriched with hidden Effect schema metadata  |
+| `EffectFlagDef<S, A, T>`   | `FlagDef` enriched with hidden Effect schema metadata |
+| `WithEffectHandler<A, F>`  | Handler type receiving `ValidatedContext`             |
+| `ArgOptions`               | Options for `arg()` (`variadic`)                      |
+| `FlagOptions`              | Options for `flag()` (`alias`)                        |
+| `EffectSchemaLike`         | Effect schema type constraint (`R = never`)           |
+| `InferSchemaOutput<S>`     | Infer output type from an Effect schema               |
+| `InferValidatedArgs<A>`    | Infer validated args object from arg definitions      |
+| `InferValidatedFlags<F>`   | Infer validated flags object from flag definitions    |
 
 ---
 
@@ -261,9 +264,15 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 
 These apply to both the Zod and Effect providers.
 
+### Strict Mode
+
+When using `withZod()` or `withEffect()`, **all** args and flags in the command must be created with the matching provider's `arg()` / `flag()` helpers. Mixing plain core definitions causes a compile-time error (the handler parameter becomes `never`).
+
+Plugin-injected flags (e.g. `--help` from `helpPlugin`) are silently skipped at runtime — they don't need schema metadata.
+
 ### Compile-Time Validation
 
-Both `defineZodCommand` and `defineEffectCommand` inherit the same compile-time checks as `defineCommand`:
+Both providers inherit the same compile-time checks as `defineCommand`:
 
 - **Variadic position** — only the last arg can be `{ variadic: true }`
 - **Flag alias collisions** — aliases must not conflict with other flag names or aliases
@@ -278,9 +287,20 @@ When validation fails, a `CrustError("VALIDATION")` is thrown with:
 - Structured `details.issues` array of `{ message, path }` objects
 
 ```
-Validation failed
+withZod: validation failed
   - args.name: Expected string, received number
   - flags.port: Number must be greater than or equal to 1
+```
+
+### Help Plugin Compatibility
+
+Generated definitions are fully compatible with `helpPlugin`:
+
+```ts
+import { runMain } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
+
+runMain(greet, { plugins: [helpPlugin()] });
 ```
 
 ### Shared Exports

@@ -1,27 +1,20 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/validate/zod — Zod 4 schema-first mode for Crust CLI
+// @crustjs/validate/zod — Zod schema-validated run middleware for Crust CLI
 // ────────────────────────────────────────────────────────────────────────────
-
-// Schema-first command factory
-export { defineZodCommand } from "./command.ts";
 
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
-
 // Public types
 export type {
 	ArgOptions,
-	ArgSpec,
-	ArgSpecs,
 	FlagOptions,
-	FlagShape,
-	FlagSpec,
-	InferArgsFromConfig,
-	InferArgsFromSpecs,
-	InferFlagsFromConfig,
-	InferFlagsFromShape,
 	InferSchemaOutput,
-	ZodCommandDef,
-	ZodCommandRunHandler,
+	InferValidatedArgs,
+	InferValidatedFlags,
+	WithZodHandler,
+	ZodArgDef,
+	ZodFlagDef,
 	ZodSchemaLike,
 } from "./types.ts";
+// Validated run middleware
+export { withZod } from "./withZod.ts";

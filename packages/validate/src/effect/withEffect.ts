@@ -1,24 +1,13 @@
-import type {
-	AnyCommand,
-	ValidateFlagAliases,
-	ValidateVariadicArgs,
-} from "@crustjs/core";
-import { defineCommand } from "@crustjs/core";
+import type { ArgsDef, CommandContext, FlagsDef } from "@crustjs/core";
 import { either, runSync } from "effect/Effect";
 import * as Either from "effect/Either";
 import * as ParseResult from "effect/ParseResult";
 import { decodeUnknown } from "effect/Schema";
-import type { ValidationResult } from "../runner.ts";
-import { buildRunHandler } from "../runner.ts";
+import type { ValidationResult } from "../middleware.ts";
+import { buildValidatedRunner } from "../middleware.ts";
 import { normalizeIssues } from "../validation.ts";
-import { argsToDefinitions, flagsToDefinitions } from "./definitions.ts";
-import type {
-	ArgSpec,
-	EffectCommandDef,
-	EffectCommandRunHandler,
-	EffectSchemaLike,
-	FlagShape,
-} from "./types.ts";
+import type { EffectSchemaLike, WithEffectHandler } from "./types.ts";
+import { EFFECT_SCHEMA } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Provider-specific validation
@@ -56,49 +45,55 @@ function validateValue(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// defineEffectCommand
+// withEffect — validated run middleware for defineCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Define a Crust command where Effect schemas are the source of truth.
+ * Create a validated `run` handler for `defineCommand`.
  *
- * Only context-free (`R = never`), synchronous schemas are supported.
- * Async combinators like `Schema.filterEffect` or async `Schema.transformOrFail`
- * will throw at runtime.
+ * Reads Effect schemas from the command's `arg()` / `flag()` definitions,
+ * validates parsed CLI input against them, and calls `handler` with
+ * the transformed, fully-typed result.
+ *
+ * **Strict mode**: all args and flags in the command must be created with
+ * `arg()` / `flag()` from `@crustjs/validate/effect`. Plain core defs cause
+ * a compile-time error (handler parameter becomes `never`).
+ *
+ * **Sync only**: only context-free (`R = never`), synchronous schemas are
+ * supported. Async combinators like `Schema.filterEffect` or async
+ * `Schema.transformOrFail` will throw at runtime.
+ *
+ * @param handler - Receives `ValidatedContext` with typed args/flags after validation
+ * @returns A `run` function compatible with `defineCommand`
+ *
+ * @example
+ * ```ts
+ * import { defineCommand } from "@crustjs/core";
+ * import * as Schema from "effect/Schema";
+ * import { arg, flag, withEffect } from "@crustjs/validate/effect";
+ *
+ * const serve = defineCommand({
+ *   meta: { name: "serve" },
+ *   args: [arg("port", Schema.Number)],
+ *   flags: { verbose: flag(Schema.Boolean, { alias: "v" }) },
+ *   run: withEffect(({ args, flags }) => {
+ *     // args.port: number, flags.verbose: boolean
+ *   }),
+ * });
+ * ```
  */
-export function defineEffectCommand<
-	const A extends readonly ArgSpec[] | undefined,
-	const F extends FlagShape | undefined,
+export function withEffect<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
 >(
-	config: EffectCommandDef<A, F> & {
-		args?: A extends readonly object[] ? ValidateVariadicArgs<A> : A;
-		flags?: F extends Record<string, unknown> ? ValidateFlagAliases<F> : F;
-	},
-): AnyCommand {
-	const {
-		args: effectArgs,
-		flags: effectFlags,
-		run: userRun,
-		...passthrough
-	} = config;
-
-	const argSpecs = (effectArgs ?? []) as readonly ArgSpec[];
-	const generatedArgs = argsToDefinitions(argSpecs);
-	const generatedFlags = flagsToDefinitions(effectFlags);
-
-	const command = defineCommand({
-		...passthrough,
-		...(generatedArgs.length > 0 && { args: generatedArgs }),
-		...(Object.keys(generatedFlags).length > 0 && { flags: generatedFlags }),
-		...(userRun && {
-			run: buildRunHandler(
-				argSpecs,
-				effectFlags as Record<string, unknown> | undefined,
-				userRun as EffectCommandRunHandler<unknown, unknown>,
-				validateValue,
-			),
-		}),
-	});
-
-	return command;
+	handler: WithEffectHandler<A, F>,
+): (context: CommandContext<A, F>) => Promise<void> {
+	return buildValidatedRunner(
+		handler as (
+			ctx: import("../types.ts").ValidatedContext<unknown, unknown>,
+		) => void | Promise<void>,
+		validateValue,
+		EFFECT_SCHEMA,
+		"withEffect",
+	) as (context: CommandContext<A, F>) => Promise<void>;
 }
