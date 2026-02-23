@@ -101,7 +101,7 @@ interface CommandNotFoundErrorDetails {
 ### Framework Errors
 
 ```ts
-import { CrustError } from "@crustjs/crust";
+import { CrustError } from "@crustjs/core";
 
 throw new CrustError("VALIDATION", `Invalid value for --port: "${value}"`);
 ```
@@ -130,7 +130,7 @@ try {
 ## Catching Errors
 
 ```ts
-import { CrustError } from "@crustjs/crust";
+import { CrustError } from "@crustjs/core";
 
 try {
   await runCommand(cmd, { argv });

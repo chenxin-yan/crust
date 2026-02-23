@@ -1,44 +1,18 @@
 # @crustjs/crust
 
-The all-in-one package for the [Crust](https://crustjs.com) CLI framework.
+CLI tooling for the [Crust](https://crustjs.com) framework — build and distribute standalone executables.
 
-Re-exports everything from `@crustjs/core` and `@crustjs/plugins`, plus provides CLI tooling for building Crust-powered CLIs.
+> For the framework API (`defineCommand`, `runMain`, plugins, etc.), install [`@crustjs/core`](https://www.npmjs.com/package/@crustjs/core) and [`@crustjs/plugins`](https://www.npmjs.com/package/@crustjs/plugins).
 
 ## Install
 
 ```sh
-bun add @crustjs/crust
+bun add -d @crustjs/crust
 ```
-
-## Framework API
-
-The `@crustjs/crust` package gives you the full framework API in a single import:
-
-```ts
-import {
-  defineCommand,
-  runMain,
-  helpPlugin,
-  versionPlugin,
-} from "@crustjs/crust";
-
-const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run() {
-    console.log("Hello!");
-  },
-});
-
-runMain(main, {
-  plugins: [versionPlugin("1.0.0"), helpPlugin()],
-});
-```
-
-> For granular control, you can install `@crustjs/core` and `@crustjs/plugins` separately.
 
 ## CLI Commands
 
-When installed, the `crust` binary provides tooling for your project:
+The `crust` binary provides build tooling for your Crust-powered CLI:
 
 | Command       | Description                                      |
 | ------------- | ------------------------------------------------ |
@@ -72,7 +46,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `linux-x64`    | `bun-linux-x64-baseline`   | Linux x86_64        |
 | `linux-arm64`  | `bun-linux-arm64`          | Linux ARM64         |
 | `darwin-x64`   | `bun-darwin-x64`           | macOS Intel         |
-| `darwin-arm64` | `bun-darwin-arm64`         | macOS Apple Silicon |
+| `darwin-arm64`  | `bun-darwin-arm64`         | macOS Apple Silicon |
 | `windows-x64`  | `bun-windows-x64-baseline` | Windows x86_64      |
 
 #### Flags

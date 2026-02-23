@@ -23,7 +23,7 @@
 
 | Package | Description | Version | Downloads |
 | --- | --- | --- | --- |
-| [`@crustjs/crust`](https://www.npmjs.com/package/@crustjs/crust) | CLI binary (self-hosted with `@crustjs/core`) | [![npm](https://img.shields.io/npm/v/@crustjs/crust)](https://www.npmjs.com/package/@crustjs/crust) | [![downloads](https://img.shields.io/npm/dm/@crustjs/crust)](https://www.npmjs.com/package/@crustjs/crust) |
+| [`@crustjs/crust`](https://www.npmjs.com/package/@crustjs/crust) | CLI tooling — build and distribute standalone executables | [![npm](https://img.shields.io/npm/v/@crustjs/crust)](https://www.npmjs.com/package/@crustjs/crust) | [![downloads](https://img.shields.io/npm/dm/@crustjs/crust)](https://www.npmjs.com/package/@crustjs/crust) |
 | [`@crustjs/core`](https://www.npmjs.com/package/@crustjs/core) | Core: command definition, arg parsing, routing, plugins, errors | [![npm](https://img.shields.io/npm/v/@crustjs/core)](https://www.npmjs.com/package/@crustjs/core) | [![downloads](https://img.shields.io/npm/dm/@crustjs/core)](https://www.npmjs.com/package/@crustjs/core) |
 | [`@crustjs/plugins`](https://www.npmjs.com/package/@crustjs/plugins) | Official plugins: help, version, autocomplete | [![npm](https://img.shields.io/npm/v/@crustjs/plugins)](https://www.npmjs.com/package/@crustjs/plugins) | [![downloads](https://img.shields.io/npm/dm/@crustjs/plugins)](https://www.npmjs.com/package/@crustjs/plugins) |
 | [`@crustjs/style`](https://www.npmjs.com/package/@crustjs/style) | Terminal styling foundation | [![npm](https://img.shields.io/npm/v/@crustjs/style)](https://www.npmjs.com/package/@crustjs/style) | [![downloads](https://img.shields.io/npm/dm/@crustjs/style)](https://www.npmjs.com/package/@crustjs/style) |

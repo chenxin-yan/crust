@@ -10,7 +10,8 @@ The autocomplete plugin catches `COMMAND_NOT_FOUND` errors and provides "Did you
 ## Usage
 
 ```ts
-import { autoCompletePlugin, runMain } from "@crustjs/crust";
+import { runMain } from "@crustjs/core";
+import { autoCompletePlugin } from "@crustjs/plugins";
 
 runMain(main, {
   plugins: [autoCompletePlugin()],

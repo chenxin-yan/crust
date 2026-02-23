@@ -12,7 +12,7 @@ Commands are the building blocks of every Crust CLI. You define them declarative
 Use `defineCommand` to create a command:
 
 ```ts
-import { defineCommand } from "@crustjs/crust";
+import { defineCommand } from "@crustjs/core";
 
 const serve = defineCommand({
   meta: {
@@ -85,7 +85,8 @@ defineCommand({
 `runMain` is the recommended way to run your CLI. It catches all errors and prints them to stderr:
 
 ```ts
-import { defineCommand, runMain, helpPlugin } from "@crustjs/crust";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli" },

@@ -108,7 +108,7 @@ const MODULES: Array<{
   },
   {
     pkg: "@crustjs/crust",
-    desc: "Core packages + CLI",
+    desc: "CLI build tooling",
     doc: "modules/crust",
   },
   {
@@ -198,7 +198,7 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
   return Object.fromEntries(entries) as Record<string, string | null>;
 });
 
-const CODE_EXAMPLE = `import { defineCommand, runMain } from "@crustjs/crust";
+const CODE_EXAMPLE = `import { defineCommand, runMain } from "@crustjs/core";
 
 const cli = defineCommand({
   meta: { name: "greet" },

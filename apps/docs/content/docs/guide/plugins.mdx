@@ -12,8 +12,8 @@ Crust's plugin system lets you extend CLI behavior through two phases: **setup**
 Pass plugins to `runMain` or `runCommand`:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/crust";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/crust";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI" },
@@ -115,7 +115,7 @@ const myPlugin: CrustPlugin = {
 A `CrustPlugin` is a plain object with optional `name`, `setup`, and `middleware`:
 
 ```ts
-import type { CrustPlugin } from "@crustjs/crust";
+import type { CrustPlugin } from "@crustjs/core";
 
 function timingPlugin(): CrustPlugin {
   return {

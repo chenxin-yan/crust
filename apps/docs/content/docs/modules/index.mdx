@@ -3,7 +3,7 @@ title: "Overview"
 description: Crust's composable module ecosystem — use the unified bundle or pick individual modules.
 ---
 
-Crust ships as independent modules so you only install what you need. For most projects, [`@crustjs/crust`](/docs/modules/crust) is the recommended starting point — it bundles `@crustjs/core` and `@crustjs/plugins` through a single import.
+Crust ships as independent modules so you only install what you need. For most projects, install [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins) as runtime dependencies, plus [`@crustjs/crust`](/docs/modules/crust) as a dev dependency for CLI build tooling.
 
 ## Available Modules
 
@@ -11,7 +11,7 @@ Crust ships as independent modules so you only install what you need. For most p
 | --------------------------------------------- | ----------------------------------------------------------- |
 | [`@crustjs/core`](/docs/modules/core)         | Command definition, parsing, routing, plugin system, errors |
 | [`@crustjs/plugins`](/docs/modules/plugins)   | Official plugins — help, version, autocomplete              |
-| [`@crustjs/crust`](/docs/modules/crust)       | Core + plugins bundle with CLI tooling                      |
+| [`@crustjs/crust`](/docs/modules/crust)       | CLI tooling — build and distribute standalone executables   |
 | [`@crustjs/validate`](/docs/modules/validate) | Schema-first validation and coercion                        |
 | [`@crustjs/style`](/docs/modules/style)       | Terminal styling, layout utilities, and markdown theme      |
 | [`@crustjs/create`](/docs/modules/create)     | Headless scaffolding engine for building create-xx tools    |

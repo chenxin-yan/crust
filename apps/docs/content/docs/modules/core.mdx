@@ -48,12 +48,6 @@ bun add @crustjs/core
 | `CrustErrorCode` | Error code union |
 | `CommandNotFoundErrorDetails` | Structured details for COMMAND_NOT_FOUND errors |
 
-## When to Use Directly
+## When to Use
 
-Use `@crustjs/core` directly when:
-
-- You don't need the official plugins (help, version, autocomplete)
-- You're building a library that wraps Crust's core functionality
-- You want the smallest possible dependency footprint
-
-For most CLI applications, [`@crustjs/crust`](/docs/modules/crust) (which bundles core + plugins) is recommended instead.
+`@crustjs/core` is the primary runtime dependency for all Crust CLI applications. Install it alongside [`@crustjs/plugins`](/docs/modules/plugins) for official plugin support, and [`@crustjs/crust`](/docs/modules/crust) as a dev dependency for build tooling.

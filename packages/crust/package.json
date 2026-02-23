@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/crust",
 	"version": "0.0.6",
-	"description": "A TypeScript-first, Bun-native CLI framework with composable modules.",
+	"description": "CLI tooling for the Crust framework — build and distribute standalone executables.",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
@@ -16,22 +16,15 @@
 	},
 	"keywords": [
 		"cli",
-		"command",
-		"framework",
-		"parser",
+		"build",
+		"compile",
+		"standalone",
 		"bun",
-		"typescript",
-		"plugin"
+		"typescript"
 	],
 	"files": [
 		"dist"
 	],
-	"exports": {
-		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
-		}
-	},
 	"publishConfig": {
 		"access": "public"
 	},

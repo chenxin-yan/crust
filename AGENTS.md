@@ -10,7 +10,7 @@ Crust is a Bun-native, TypeScript-first CLI framework. **Turborepo** monorepo, *
 | ------------------ | ----------------------- | ------------------------------------------------------------------ |
 | `@crustjs/core`    | `packages/core`         | Core: command definition, arg parsing, routing, plugins, errors    |
 | `@crustjs/plugins` | `packages/plugins`      | Official plugins: help, version, autocomplete                      |
-| `@crustjs/crust`   | `packages/crust`        | The `crust` CLI binary (self-hosted with `@crustjs/core`)          |
+| `@crustjs/crust`   | `packages/crust`        | CLI tooling — build and distribute standalone executables          |
 | `create-crust`     | `packages/create-crust` | Project scaffolding tool                                           |
 | `@crustjs/config`  | `packages/config`       | Shared TypeScript config (`tsconfig.base.json`)                    |
 | docs               | `apps/docs`             | Documentation site (Vite + TanStack Router, deployed to Cloudflare)|

@@ -1,42 +1,17 @@
 ---
 title: "Crust"
-description: Core + plugins bundle with CLI tooling.
+description: CLI tooling for building and distributing standalone executables.
 ---
 
-The `@crustjs/crust` package is the recommended way to use Crust. It re-exports everything from `@crustjs/core` and `@crustjs/plugins` through a single import, and provides the `crust` CLI binary.
+The `@crustjs/crust` package provides the `crust` CLI binary for building and distributing your CLI as standalone executables. It is a **dev dependency** — the framework API comes from [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins).
 
 ## Install
 
 ```sh
-bun add @crustjs/crust
+bun add -d @crustjs/crust
 ```
 
-## What's Included
-
-### Re-exports
-
-Everything from `@crustjs/core` and `@crustjs/plugins` is available under one import:
-
-```ts
-// All of these come from a single package
-import {
-  // From @crustjs/core
-  defineCommand,
-  parseArgs,
-  resolveCommand,
-  runCommand,
-  runMain,
-  CrustError,
-
-  // From @crustjs/plugins
-  helpPlugin,
-  versionPlugin,
-  autoCompletePlugin,
-  renderHelp,
-} from "@crustjs/crust";
-```
-
-### CLI Binary
+## CLI Binary
 
 The package includes the `crust` CLI, which provides:
 
@@ -46,34 +21,8 @@ The package includes the `crust` CLI, which provides:
 
 The `crust` CLI is itself built with Crust (self-hosted), demonstrating the framework in action.
 
-## Usage
-
-```ts title="src/cli.ts"
-#!/usr/bin/env bun
-
-import { defineCommand, helpPlugin, runMain, versionPlugin } from "@crustjs/crust";
-import pkg from "../package.json";
-
-const main = defineCommand({
-  meta: {
-    name: "my-cli",
-    description: "My CLI tool",
-  },
-  run() {
-    console.log("Hello!");
-  },
-});
-
-runMain(main, {
-  plugins: [versionPlugin(pkg.version), helpPlugin()],
-});
-```
-
 ## When to Use
 
-`@crustjs/crust` is recommended for:
-- All CLI application projects
-- The simplest possible setup with a single dependency
-- Projects that need the `crust build` command for distribution
+Install `@crustjs/crust` as a dev dependency when your project needs the `crust build` command for compiling to standalone executables. It is only needed at build time, not at runtime.
 
-Use the individual modules (`@crustjs/core`, `@crustjs/plugins`) if you're building a library on top of Crust or need minimal dependencies.
+For the framework API (`defineCommand`, `runMain`, plugins, etc.), use [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins).

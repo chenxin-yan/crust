@@ -75,8 +75,12 @@ describe("scaffold", () => {
 		expect(pkg.description).toBe("An awesome CLI tool");
 		expect(pkg.author).toBe("Jane Doe");
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli.js" });
-		expect(pkg.dependencies).toEqual({ "@crustjs/crust": "latest" });
+		expect(pkg.dependencies).toEqual({
+			"@crustjs/core": "latest",
+			"@crustjs/plugins": "latest",
+		});
 		expect(pkg.devDependencies).toEqual({
+			"@crustjs/crust": "latest",
 			typescript: "^5",
 		});
 		expect(pkg.scripts).toEqual({
@@ -142,8 +146,9 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("versionPlugin");
 		expect(cliContent).toContain('import pkg from "../package.json"');
 		expect(cliContent).toContain("versionPlugin(pkg.version)");
-		// Imports from @crustjs/crust
-		expect(cliContent).toContain('"@crustjs/crust"');
+		// Imports from @crustjs/core and @crustjs/plugins
+		expect(cliContent).toContain('"@crustjs/core"');
+		expect(cliContent).toContain('"@crustjs/plugins"');
 		// Contains command name
 		expect(cliContent).toContain('"test-cli"');
 		// Has a positional name argument with string literal type

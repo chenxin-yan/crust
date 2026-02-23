@@ -10,7 +10,8 @@ The help plugin adds `--help` / `-h` to all commands and auto-generates formatte
 ## Usage
 
 ```ts
-import { helpPlugin, runMain } from "@crustjs/crust";
+import { runMain } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
 
 runMain(main, {
   plugins: [helpPlugin()],
@@ -98,7 +99,7 @@ defineCommand({
 The `renderHelp` function is exported separately for generating help text programmatically:
 
 ```ts
-import { renderHelp } from "@crustjs/crust";
+import { renderHelp } from "@crustjs/plugins";
 
 const helpText = renderHelp(myCommand, ["my-cli", "deploy"]);
 console.log(helpText);

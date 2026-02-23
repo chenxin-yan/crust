@@ -69,7 +69,7 @@ Non-`CrustError` exceptions thrown by command handlers are wrapped:
 ### Basic Usage
 
 ```ts
-import { defineCommand, runCommand } from "@crustjs/crust";
+import { defineCommand, runCommand } from "@crustjs/core";
 
 const cmd = defineCommand({
   meta: { name: "greet" },
@@ -86,7 +86,7 @@ await runCommand(cmd, { argv: ["Alice"] });
 ### With Error Handling
 
 ```ts
-import { CrustError } from "@crustjs/crust";
+import { CrustError } from "@crustjs/core";
 
 try {
   await runCommand(cmd, { argv: ["--unknown"] });

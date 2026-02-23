@@ -1,11 +1,7 @@
 #!/usr/bin/env bun
 
-import {
-	defineCommand,
-	helpPlugin,
-	runMain,
-	versionPlugin,
-} from "@crustjs/crust";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const main = defineCommand({

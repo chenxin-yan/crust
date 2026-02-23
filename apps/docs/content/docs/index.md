@@ -14,7 +14,7 @@ Crust sits in the sweet spot: more structured than a bare parser, lighter than a
 
 - **Functional, declarative API** — plain objects and functions instead of class hierarchies
 - **TypeScript-first** — Args and flags are fully inferred from your definitions. No manual type annotations, just autocomplete that works.
-- **Composable, not monolithic** — Every capability ships as its own module. `@crustjs/crust` bundles the core framework and official plugins for convenience, or you can pick only the modules you need.
+- **Composable, not monolithic** — Every capability ships as its own module. Install only what you need — `@crustjs/core` for the framework, `@crustjs/plugins` for official plugins, `@crustjs/crust` for build tooling.
 - **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
 
 ## Features
@@ -27,12 +27,8 @@ Crust sits in the sweet spot: more structured than a bare parser, lighter than a
 ## Quick Example
 
 ```ts title="src/cli.ts"
-import {
-  defineCommand,
-  helpPlugin,
-  runMain,
-  versionPlugin,
-} from "@crustjs/crust";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: {

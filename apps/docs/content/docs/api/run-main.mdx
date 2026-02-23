@@ -53,7 +53,8 @@ async function runMain(command, options) {
 ## Example
 
 ```ts
-import { defineCommand, runMain, helpPlugin, versionPlugin } from "@crustjs/crust";
+import { defineCommand, runMain } from "@crustjs/core";
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },

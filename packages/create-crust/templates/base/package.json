@@ -12,9 +12,11 @@
 		"dev": "bun run src/cli.ts"
 	},
 	"dependencies": {
-		"@crustjs/crust": "latest"
+		"@crustjs/core": "latest",
+		"@crustjs/plugins": "latest"
 	},
 	"devDependencies": {
+		"@crustjs/crust": "latest",
 		"typescript": "^5"
 	}
 }

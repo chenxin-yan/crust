@@ -12,7 +12,7 @@ Crust uses a custom `CrustError` class with typed error codes for all framework-
 Every error thrown by Crust is an instance of `CrustError`:
 
 ```ts
-import { CrustError } from "@crustjs/crust";
+import { CrustError } from "@crustjs/core";
 
 try {
   await runCommand(cmd, { argv: ["--unknown"] });
@@ -88,7 +88,7 @@ When a non-`CrustError` is thrown inside a command handler, `runCommand` automat
 For framework-level errors, throw `CrustError`:
 
 ```ts
-import { CrustError } from "@crustjs/crust";
+import { CrustError } from "@crustjs/core";
 
 run({ flags }) {
   if (!isValidConfig(flags.config)) {
