@@ -90,9 +90,9 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.7",
+      "version": "0.0.8",
       "bin": {
-        "crust": "dist/cli.js",
+        "crust": "dist/cli",
       },
       "dependencies": {
         "@crustjs/core": "workspace:*",
@@ -146,7 +146,7 @@
     },
     "packages/validate": {
       "name": "@crustjs/validate",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
