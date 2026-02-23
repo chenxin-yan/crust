@@ -1,6 +1,6 @@
-# create-crust
+# @crustjs/create
 
-## 0.0.6
+## 0.0.1
 
 ### Patch Changes
 
@@ -9,24 +9,3 @@
   Provides `scaffold()` for template copying with `{{var}}` interpolation and dotfile renaming, `runSteps()` for declarative post-scaffold automation (install deps, git init, open editor, custom commands), and utilities for package manager detection and git user info.
 
   Refactor `create-crust` to use `@crustjs/create` as its scaffolding backend, replacing the inline implementation with the shared library (dogfooding).
-
-- Updated dependencies [5110c83]
-  - @crustjs/create@0.0.1
-
-## 0.0.5
-
-### Patch Changes
-
-- 8e0b48a: Fix published package metadata containing unresolved workspace and catalog protocols by switching to bun publish
-
-## 0.0.4
-
-### Patch Changes
-
-- dcc258c: switch to use literal string for flags and args types
-
-## 0.0.3
-
-### Patch Changes
-
-- Update domain to crustjs.com, update dependencies, add homepage, and remove flaky cross-compilation tests
