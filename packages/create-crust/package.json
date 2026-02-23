@@ -1,6 +1,6 @@
 {
 	"name": "create-crust",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Scaffold a new Crust CLI project.",
 	"type": "module",
 	"license": "MIT",
