@@ -29,6 +29,7 @@ crust build --target darwin-arm64
 | `--name` | `-n` | `"string"` | auto-detected | Binary name |
 | `--minify` | — | `"boolean"` | `true` | Minify the output |
 | `--target` | `-t` | `"string"` (repeatable) | all platforms | Target platform(s) |
+| `--resolver` | `-r` | `"string"` | `cli.js` | Resolver script filename (multi-target only) |
 
 ## Supported Targets
 
@@ -47,7 +48,7 @@ You can use either the short alias (e.g., `linux-x64`) or the full Bun target na
 When no `--target` is specified (or multiple targets are given), `crust build` produces:
 
 1. **A binary for each platform** — named `dist/<name>-<target>` (e.g., `dist/my-cli-bun-darwin-arm64`)
-2. **A JS resolver script** — `dist/<name>.js` that detects the host platform and spawns the correct binary
+2. **A JS resolver script** — `dist/cli.js` (customizable via `--resolver`) that detects the host platform and spawns the correct binary
 
 ```sh
 crust build
@@ -57,7 +58,7 @@ Output:
 
 ```
 dist/
-├── my-cli.js                            # JS resolver (entry point)
+├── cli.js                               # JS resolver (entry point)
 ├── my-cli-bun-linux-x64-baseline        # Linux x64 binary
 ├── my-cli-bun-linux-arm64               # Linux ARM64 binary
 ├── my-cli-bun-darwin-x64                # macOS Intel binary
@@ -67,7 +68,7 @@ dist/
 
 ### The Resolver Script
 
-The JS resolver (`dist/<name>.js`) is a `#!/usr/bin/env node` script that:
+The JS resolver (`dist/cli.js` by default) is a `#!/usr/bin/env node` script that:
 
 1. Detects `process.platform` and `process.arch` at runtime
 2. Maps to the correct prebuilt binary
@@ -138,7 +139,7 @@ For a distributable CLI package:
 {
   "name": "my-cli",
   "bin": {
-    "my-cli": "dist/my-cli.js"
+    "my-cli": "dist/cli.js"
   },
   "scripts": {
     "build": "crust build"

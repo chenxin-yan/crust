@@ -58,6 +58,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--name`    | `-n`  | `"string"`  | package.json `name` | Base binary name                             |
 | `--minify`  | —     | `"boolean"` | `true`              | Minify the output                            |
 | `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
+| `--resolver` | `-r` | `"string"`  | `cli.js`            | Resolver script filename (multi-target only) |
 
 #### Output
 
@@ -65,7 +66,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 
 ```
 dist/
-  my-cli.js                         # JS resolver (entry point for npm bin)
+  cli.js                            # JS resolver (entry point for npm bin)
   my-cli-bun-linux-x64-baseline     # Linux x64 binary
   my-cli-bun-linux-arm64            # Linux ARM64 binary
   my-cli-bun-darwin-x64             # macOS Intel binary
@@ -88,7 +89,7 @@ After building for all platforms, configure your `package.json` to use the JS re
 {
   "name": "my-cli",
   "bin": {
-    "my-cli": "dist/my-cli.js"
+    "my-cli": "dist/cli.js"
   },
   "files": ["dist"]
 }

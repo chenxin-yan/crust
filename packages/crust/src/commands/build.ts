@@ -412,6 +412,12 @@ export const buildCommand = defineCommand({
 				"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
 			alias: "t",
 		},
+		resolver: {
+			type: "string",
+			description: "Filename for the JS resolver script (multi-target builds)",
+			default: "cli.js",
+			alias: "r",
+		},
 	},
 	async run({ flags }) {
 		const cwd = process.cwd();
@@ -476,7 +482,7 @@ export const buildCommand = defineCommand({
 			}
 
 			// Generate JS resolver
-			const resolverPath = resolve(cwd, "dist", `${baseName}.js`);
+			const resolverPath = resolve(cwd, "dist", flags.resolver);
 			writeResolver(resolverPath, baseName, targets);
 
 			console.log(`\nBuilt ${results.length} target(s) successfully:`);
