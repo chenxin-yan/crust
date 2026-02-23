@@ -1,5 +1,11 @@
 # @crustjs/validate
 
+## 0.0.2
+
+### Patch Changes
+
+- 965a77c: Refactor validation API from wrapper-based `defineZodCommand`/`defineEffectCommand` to composable middleware design. Define args/flags with `arg()`/`flag()` helpers and use `withZod()`/`withEffect()` as `run` middleware for `defineCommand`. All old APIs are removed.
+
 ## 0.0.1
 
 ### Patch Changes
