@@ -5,7 +5,7 @@ description: Compile your CLI to standalone executables with crust build.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The `crust build` command compiles your CLI entry file into standalone Bun executables using `bun build --compile`. It supports cross-platform compilation and generates a platform-detecting resolver script for multi-target distribution.
+The `crust build` command compiles your CLI entry file into standalone Bun executables using `bun build --compile`. It supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
 
 ## Basic Usage
 
@@ -29,7 +29,7 @@ crust build --target darwin-arm64
 | `--name` | `-n` | `"string"` | auto-detected | Binary name |
 | `--minify` | — | `"boolean"` | `true` | Minify the output |
 | `--target` | `-t` | `"string"` (repeatable) | all platforms | Target platform(s) |
-| `--resolver` | `-r` | `"string"` | `cli.js` | Resolver script filename (multi-target only) |
+| `--resolver` | `-r` | `"string"` | `cli` | Resolver script filename (multi-target only, no extension) |
 
 ## Supported Targets
 
@@ -48,7 +48,7 @@ You can use either the short alias (e.g., `linux-x64`) or the full Bun target na
 When no `--target` is specified (or multiple targets are given), `crust build` produces:
 
 1. **A binary for each platform** — named `dist/<name>-<target>` (e.g., `dist/my-cli-bun-darwin-arm64`)
-2. **A JS resolver script** — `dist/cli.js` (customizable via `--resolver`) that detects the host platform and spawns the correct binary
+2. **A shell resolver** — `dist/cli` (customizable via `--resolver`) that detects the host platform and executes the correct binary, plus a `dist/cli.cmd` companion for Windows
 
 ```sh
 crust build
@@ -58,7 +58,8 @@ Output:
 
 ```
 dist/
-├── cli.js                               # JS resolver (entry point)
+├── cli                                  # Shell resolver (entry point)
+├── cli.cmd                              # Windows batch resolver
 ├── my-cli-bun-linux-x64-baseline        # Linux x64 binary
 ├── my-cli-bun-linux-arm64               # Linux ARM64 binary
 ├── my-cli-bun-darwin-x64                # macOS Intel binary
@@ -68,14 +69,16 @@ dist/
 
 ### The Resolver Script
 
-The JS resolver (`dist/cli.js` by default) is a `#!/usr/bin/env node` script that:
+The resolver (`dist/cli` by default) is a `#!/bin/sh` POSIX shell script that:
 
-1. Detects `process.platform` and `process.arch` at runtime
+1. Detects the platform via `uname -s` and `uname -m`
 2. Maps to the correct prebuilt binary
-3. Ensures execute permissions on Unix
-4. Spawns the binary with inherited stdio and exit code propagation
+3. Ensures execute permissions
+4. Replaces itself with the binary via `exec` (no child process overhead)
 
-This script is what you point to in your `package.json`'s `bin` field. It uses Node's `#!/usr/bin/env node` shebang so end users don't need Bun installed.
+A companion `dist/cli.cmd` Windows batch file is also generated for Windows support.
+
+This is what you point to in your `package.json`'s `bin` field. No runtime (Node.js or Bun) is required — the resolver directly executes the standalone binary.
 
 ## Single-Target Build
 
@@ -139,7 +142,7 @@ For a distributable CLI package:
 {
   "name": "my-cli",
   "bin": {
-    "my-cli": "dist/cli.js"
+    "my-cli": "dist/cli"
   },
   "scripts": {
     "build": "crust build"
@@ -147,4 +150,4 @@ For a distributable CLI package:
 }
 ```
 
-The `bin` field points to the JS resolver, which handles platform detection and binary execution.
+The `bin` field points to the shell resolver, which handles platform detection and binary execution.

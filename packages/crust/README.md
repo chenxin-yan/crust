@@ -22,10 +22,10 @@ The `crust` binary provides build tooling for your Crust-powered CLI:
 
 Compiles your CLI entry file to standalone Bun executables using `bun build --compile`.
 
-**By default, builds for all 5 supported platforms** and generates a JS resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere.
+**By default, builds for all 5 supported platforms** and generates a shell resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere — no runtime (Node.js or Bun) required.
 
 ```sh
-crust build                          # All platforms + JS resolver (default)
+crust build                          # All platforms + shell resolver (default)
 crust build --entry src/main.ts      # Custom entry point
 crust build --name my-tool           # Set base binary name
 crust build --no-minify              # Disable minification
@@ -58,7 +58,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--name`    | `-n`  | `"string"`  | package.json `name` | Base binary name                             |
 | `--minify`  | —     | `"boolean"` | `true`              | Minify the output                            |
 | `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
-| `--resolver` | `-r` | `"string"`  | `cli.js`            | Resolver script filename (multi-target only) |
+| `--resolver` | `-r` | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
 
 #### Output
 
@@ -66,7 +66,8 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 
 ```
 dist/
-  cli.js                            # JS resolver (entry point for npm bin)
+  cli                               # Shell resolver (entry point for npm bin)
+  cli.cmd                           # Windows batch resolver
   my-cli-bun-linux-x64-baseline     # Linux x64 binary
   my-cli-bun-linux-arm64            # Linux ARM64 binary
   my-cli-bun-darwin-x64             # macOS Intel binary
@@ -83,19 +84,19 @@ dist/
 
 #### Distributing via npm
 
-After building for all platforms, configure your `package.json` to use the JS resolver as the bin entry:
+After building for all platforms, configure your `package.json` to use the shell resolver as the bin entry:
 
 ```json
 {
   "name": "my-cli",
   "bin": {
-    "my-cli": "dist/cli.js"
+    "my-cli": "dist/cli"
   },
   "files": ["dist"]
 }
 ```
 
-The resolver uses `#!/usr/bin/env node` for maximum compatibility when installed globally via npm (works even when Bun is not installed on the end user's machine).
+The resolver is a `#!/bin/sh` script (with a companion `.cmd` for Windows) that requires no runtime — it detects the platform and directly executes the correct prebuilt binary.
 
 ## Documentation
 

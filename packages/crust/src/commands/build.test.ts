@@ -6,6 +6,7 @@ import type { BunTarget } from "../../src/commands/build.ts";
 import {
 	buildBunArgs,
 	buildCommand,
+	generateCmdResolver,
 	generateResolver,
 	getBinaryFilename,
 	resolveBaseName,
@@ -15,6 +16,7 @@ import {
 	SUPPORTED_TARGETS,
 	TARGET_ALIASES,
 	TARGET_PLATFORM_MAP,
+	TARGET_UNAME_MAP,
 } from "../../src/commands/build.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,6 +35,7 @@ describe("buildCommand definition", () => {
 		const result = parseArgs(buildCommand, []);
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
+		expect(result.flags.resolver).toBe("cli");
 		expect(result.flags.outfile).toBeUndefined();
 		expect(result.flags.name).toBeUndefined();
 		expect(result.flags.target).toBeUndefined();
@@ -378,29 +381,33 @@ describe("buildBunArgs", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Unit tests for generateResolver
+// Unit tests for generateResolver (shell script)
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("generateResolver", () => {
-	it("includes node shebang", () => {
+	it("includes POSIX shell shebang", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
+		expect(content.startsWith("#!/bin/sh\n")).toBe(true);
 	});
 
-	it("contains platform detection using process.platform and process.arch", () => {
+	it("detects platform using uname", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("process.platform");
-		expect(content).toContain("process.arch");
+		expect(content).toContain("uname -s");
+		expect(content).toContain("uname -m");
 	});
 
-	it("maps all targets to correct platform keys", () => {
+	it("maps all Unix targets to correct uname keys", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		// Should contain all platform-arch keys
-		expect(content).toContain('"linux-x64"');
-		expect(content).toContain('"linux-arm64"');
-		expect(content).toContain('"darwin-x64"');
-		expect(content).toContain('"darwin-arm64"');
-		expect(content).toContain('"win32-x64"');
+		expect(content).toContain("Linux-x86_64)");
+		expect(content).toContain("Linux-aarch64)");
+		expect(content).toContain("Darwin-x86_64)");
+		expect(content).toContain("Darwin-arm64)");
+	});
+
+	it("excludes Windows targets from shell resolver", () => {
+		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).not.toContain("Windows");
+		expect(content).not.toContain("bun-windows");
 	});
 
 	it("maps to correct binary filenames", () => {
@@ -409,18 +416,16 @@ describe("generateResolver", () => {
 		expect(content).toContain('"my-cli-bun-linux-arm64"');
 		expect(content).toContain('"my-cli-bun-darwin-x64"');
 		expect(content).toContain('"my-cli-bun-darwin-arm64"');
-		expect(content).toContain('"my-cli-bun-windows-x64-baseline.exe"');
 	});
 
 	it("only includes targets that were built", () => {
 		const subset: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
 		const content = generateResolver("my-cli", subset);
-		expect(content).toContain('"linux-x64"');
-		expect(content).toContain('"darwin-arm64"');
+		expect(content).toContain("Linux-x86_64)");
+		expect(content).toContain("Darwin-arm64)");
 		// Should NOT contain platforms not in subset
-		expect(content).not.toContain('"linux-arm64"');
-		expect(content).not.toContain('"darwin-x64"');
-		expect(content).not.toContain('"win32-x64"');
+		expect(content).not.toContain("Linux-aarch64)");
+		expect(content).not.toContain("Darwin-x86_64)");
 	});
 
 	it("includes the base name in error messages", () => {
@@ -428,27 +433,91 @@ describe("generateResolver", () => {
 		expect(content).toContain("[my-tool]");
 	});
 
-	it("includes execFileSync for spawning the binary", () => {
+	it("uses exec to replace shell process with binary", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("execFileSync");
-		expect(content).toContain('stdio: "inherit"');
+		expect(content).toContain('exec "$bin_path" "$@"');
 	});
 
-	it("includes chmod logic for Unix permissions", () => {
+	it("includes chmod logic for execute permissions", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("chmodSync");
-		expect(content).toContain('process.platform !== "win32"');
+		expect(content).toContain("chmod +x");
 	});
 
-	it("propagates exit code from spawned binary", () => {
+	it("has a wildcard case for unsupported platforms", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("process.exit");
-		expect(content).toContain("error.status");
+		expect(content).toContain("*)");
+		expect(content).toContain("Unsupported platform");
 	});
 
-	it("uses __dirname for binary path resolution", () => {
+	it("checks binary file exists before exec", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("__dirname");
+		expect(content).toContain('[ ! -f "$bin_path" ]');
+		expect(content).toContain("Try reinstalling the package");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Unit tests for generateCmdResolver (Windows batch)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("generateCmdResolver", () => {
+	it("generates a batch script with @echo off", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toStartWith("@echo off");
+	});
+
+	it("references the correct Windows binary filename", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
+	});
+
+	it("passes all arguments to the binary", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain("%*");
+	});
+
+	it("checks binary exists before running", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain('if not exist "%bin_path%"');
+	});
+
+	it("includes the base name in error messages", () => {
+		const content = generateCmdResolver("my-tool", SUPPORTED_TARGETS);
+		expect(content).toContain("[my-tool]");
+	});
+
+	it("generates error stub when no Windows targets built", () => {
+		const unixOnly: BunTarget[] = [
+			"bun-linux-x64-baseline",
+			"bun-darwin-arm64",
+		];
+		const content = generateCmdResolver("my-cli", unixOnly);
+		expect(content).toContain("No Windows binary was built");
+	});
+
+	it("uses CRLF line endings", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain("\r\n");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Unit tests for TARGET_UNAME_MAP
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("TARGET_UNAME_MAP", () => {
+	it("maps every supported target", () => {
+		for (const target of SUPPORTED_TARGETS) {
+			expect(TARGET_UNAME_MAP[target]).toBeDefined();
+		}
+	});
+
+	it("uses uname -s / uname -m format", () => {
+		expect(TARGET_UNAME_MAP["bun-linux-x64-baseline"]).toBe("Linux-x86_64");
+		expect(TARGET_UNAME_MAP["bun-linux-arm64"]).toBe("Linux-aarch64");
+		expect(TARGET_UNAME_MAP["bun-darwin-x64"]).toBe("Darwin-x86_64");
+		expect(TARGET_UNAME_MAP["bun-darwin-arm64"]).toBe("Darwin-arm64");
+		expect(TARGET_UNAME_MAP["bun-windows-x64-baseline"]).toBe("Windows-x64");
 	});
 });
 
