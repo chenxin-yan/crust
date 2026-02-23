@@ -312,7 +312,7 @@ function FurnaceHome() {
           text-decoration: none;
           padding: 7px 16px;
           border: 1px solid var(--fn-border);
-          margin-bottom: 28px;
+          margin-bottom: 20px;
           transition: border-color 0.25s;
         }
         .fn-dev-badge:hover {
