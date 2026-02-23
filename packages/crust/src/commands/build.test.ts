@@ -4,7 +4,6 @@ import { join, resolve } from "node:path";
 import { parseArgs, runCommand } from "@crustjs/core";
 import type { BunTarget } from "../../src/commands/build.ts";
 import {
-	buildBunArgs,
 	buildCommand,
 	generateCmdResolver,
 	generateResolver,
@@ -36,6 +35,7 @@ describe("buildCommand definition", () => {
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.resolver).toBe("cli");
+		expect(result.flags.outdir).toBe("dist");
 		expect(result.flags.outfile).toBeUndefined();
 		expect(result.flags.name).toBeUndefined();
 		expect(result.flags.target).toBeUndefined();
@@ -49,6 +49,11 @@ describe("buildCommand definition", () => {
 	it("defines --outfile/-o flag as string", () => {
 		const result = parseArgs(buildCommand, ["-o", "./my-cli"]);
 		expect(result.flags.outfile).toBe("./my-cli");
+	});
+
+	it("defines --outdir/-d flag as string with default 'dist'", () => {
+		const result = parseArgs(buildCommand, ["-d", "out"]);
+		expect(result.flags.outdir).toBe("out");
 	});
 
 	it("defines --name/-n flag as string", () => {
@@ -190,22 +195,22 @@ describe("resolveOutfile", () => {
 	const entry = "/test/project/src/cli.ts";
 
 	it("uses --outfile when provided", () => {
-		const result = resolveOutfile("./my-cli", undefined, entry, cwd);
+		const result = resolveOutfile("./my-cli", undefined, entry, cwd, "dist");
 		expect(result).toBe(resolve(cwd, "./my-cli"));
 	});
 
 	it("resolves --outfile relative to cwd", () => {
-		const result = resolveOutfile("dist/output", undefined, entry, cwd);
+		const result = resolveOutfile("dist/output", undefined, entry, cwd, "dist");
 		expect(result).toBe(resolve(cwd, "dist/output"));
 	});
 
 	it("uses --name as dist/<name> when --outfile not provided", () => {
-		const result = resolveOutfile(undefined, "my-tool", entry, cwd);
+		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "dist");
 		expect(result).toBe(resolve(cwd, "dist", "my-tool"));
 	});
 
 	it("prefers --outfile over --name", () => {
-		const result = resolveOutfile("./custom", "my-tool", entry, cwd);
+		const result = resolveOutfile("./custom", "my-tool", entry, cwd, "dist");
 		expect(result).toBe(resolve(cwd, "./custom"));
 	});
 
@@ -230,6 +235,7 @@ describe("resolveOutfile", () => {
 				undefined,
 				join(tmpDir, "src/cli.ts"),
 				tmpDir,
+				"dist",
 			);
 			expect(result).toBe(resolve(tmpDir, "dist", "my-cli-app"));
 		});
@@ -244,6 +250,7 @@ describe("resolveOutfile", () => {
 				undefined,
 				join(tmpDir, "src/cli.ts"),
 				tmpDir,
+				"dist",
 			);
 			expect(result).toBe(resolve(tmpDir, "dist", "my-cli"));
 		});
@@ -257,6 +264,7 @@ describe("resolveOutfile", () => {
 			undefined,
 			testEntry,
 			noPackageCwd,
+			"dist",
 		);
 		expect(result).toBe(resolve(noPackageCwd, "dist", "main"));
 	});
@@ -269,8 +277,19 @@ describe("resolveOutfile", () => {
 			undefined,
 			testEntry,
 			noPackageCwd,
+			"dist",
 		);
 		expect(result).toBe(resolve(noPackageCwd, "dist", "app.cli"));
+	});
+
+	it("uses custom outdir when provided", () => {
+		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "out");
+		expect(result).toBe(resolve(cwd, "out", "my-tool"));
+	});
+
+	it("ignores outdir when --outfile is provided", () => {
+		const result = resolveOutfile("./custom", undefined, entry, cwd, "out");
+		expect(result).toBe(resolve(cwd, "./custom"));
 	});
 });
 
@@ -282,27 +301,33 @@ describe("resolveTargetOutfile", () => {
 	const cwd = "/test/project";
 
 	it("produces dist/<name>-<target> for non-Windows targets", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd)).toBe(
-			resolve(cwd, "dist", "my-cli-bun-linux-x64-baseline"),
-		);
+		expect(
+			resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "dist"),
+		).toBe(resolve(cwd, "dist", "my-cli-bun-linux-x64-baseline"));
 	});
 
 	it("produces dist/<name>-<target> for darwin targets", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-darwin-arm64", cwd)).toBe(
-			resolve(cwd, "dist", "my-cli-bun-darwin-arm64"),
-		);
+		expect(
+			resolveTargetOutfile("my-cli", "bun-darwin-arm64", cwd, "dist"),
+		).toBe(resolve(cwd, "dist", "my-cli-bun-darwin-arm64"));
 	});
 
 	it("appends .exe for Windows targets", () => {
 		expect(
-			resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd),
+			resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd, "dist"),
 		).toBe(resolve(cwd, "dist", "my-cli-bun-windows-x64-baseline.exe"));
 	});
 
 	it("works with scoped-stripped names", () => {
-		expect(resolveTargetOutfile("my-tool", "bun-linux-arm64", cwd)).toBe(
-			resolve(cwd, "dist", "my-tool-bun-linux-arm64"),
-		);
+		expect(
+			resolveTargetOutfile("my-tool", "bun-linux-arm64", cwd, "dist"),
+		).toBe(resolve(cwd, "dist", "my-tool-bun-linux-arm64"));
+	});
+
+	it("uses custom outdir when provided", () => {
+		expect(
+			resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "out"),
+		).toBe(resolve(cwd, "out", "my-cli-bun-linux-x64-baseline"));
 	});
 });
 
@@ -328,66 +353,13 @@ describe("getBinaryFilename", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Unit tests for buildBunArgs
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("buildBunArgs", () => {
-	const entry = "/project/src/cli.ts";
-	const out = "/project/dist/my-cli";
-
-	it("builds args for host-platform build with minify", () => {
-		const args = buildBunArgs(entry, out, true);
-		expect(args).toEqual([
-			"build",
-			"--compile",
-			entry,
-			"--outfile",
-			out,
-			"--minify",
-		]);
-	});
-
-	it("builds args without --minify when disabled", () => {
-		const args = buildBunArgs(entry, out, false);
-		expect(args).toEqual(["build", "--compile", entry, "--outfile", out]);
-	});
-
-	it("includes --target for cross-compilation", () => {
-		const args = buildBunArgs(entry, out, true, "bun-linux-x64-baseline");
-		expect(args).toEqual([
-			"build",
-			"--compile",
-			entry,
-			"--outfile",
-			out,
-			"--target",
-			"bun-linux-x64-baseline",
-			"--minify",
-		]);
-	});
-
-	it("includes --target without --minify", () => {
-		const args = buildBunArgs(entry, out, false, "bun-darwin-arm64");
-		expect(args).toEqual([
-			"build",
-			"--compile",
-			entry,
-			"--outfile",
-			out,
-			"--target",
-			"bun-darwin-arm64",
-		]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Unit tests for generateResolver (shell script)
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("generateResolver", () => {
-	it("includes POSIX shell shebang", () => {
+	it("includes bash shebang", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content.startsWith("#!/bin/sh\n")).toBe(true);
+		expect(content.startsWith("#!/usr/bin/env bash\n")).toBe(true);
 	});
 
 	it("detects platform using uname", () => {

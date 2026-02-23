@@ -29,10 +29,10 @@
 		"access": "public"
 	},
 	"bin": {
-		"crust": "dist/cli.js"
+		"crust": "dist/cli"
 	},
 	"scripts": {
-		"build": "bunup",
+		"build": "bunup && bun dist/cli.js build --entry src/cli.ts --name crust",
 		"dev": "bun ./src/cli.ts",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"

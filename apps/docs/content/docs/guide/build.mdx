@@ -5,7 +5,7 @@ description: Compile your CLI to standalone executables with crust build.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The `crust build` command compiles your CLI entry file into standalone Bun executables using `bun build --compile`. It supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
+The `crust build` command compiles your CLI entry file into standalone Bun executables using the `Bun.build()` API. It supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
 
 ## Basic Usage
 
@@ -29,6 +29,7 @@ crust build --target darwin-arm64
 | `--name` | `-n` | `"string"` | auto-detected | Binary name |
 | `--minify` | — | `"boolean"` | `true` | Minify the output |
 | `--target` | `-t` | `"string"` (repeatable) | all platforms | Target platform(s) |
+| `--outdir` | `-d` | `"string"` | `dist` | Output directory for compiled binaries |
 | `--resolver` | `-r` | `"string"` | `cli` | Resolver script filename (multi-target only, no extension) |
 
 ## Supported Targets
@@ -69,7 +70,7 @@ dist/
 
 ### The Resolver Script
 
-The resolver (`dist/cli` by default) is a `#!/bin/sh` POSIX shell script that:
+The resolver (`dist/cli` by default) is a `#!/usr/bin/env bash` shell script that:
 
 1. Detects the platform via `uname -s` and `uname -m`
 2. Maps to the correct prebuilt binary

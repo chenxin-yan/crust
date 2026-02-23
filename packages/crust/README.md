@@ -20,7 +20,7 @@ The `crust` binary provides build tooling for your Crust-powered CLI:
 
 ### `crust build`
 
-Compiles your CLI entry file to standalone Bun executables using `bun build --compile`.
+Compiles your CLI entry file to standalone Bun executables using the `Bun.build()` API.
 
 **By default, builds for all 5 supported platforms** and generates a shell resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere — no runtime (Node.js or Bun) required.
 
@@ -58,6 +58,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--name`    | `-n`  | `"string"`  | package.json `name` | Base binary name                             |
 | `--minify`  | —     | `"boolean"` | `true`              | Minify the output                            |
 | `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
+| `--outdir`  | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries       |
 | `--resolver` | `-r` | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
 
 #### Output
@@ -96,7 +97,7 @@ After building for all platforms, configure your `package.json` to use the shell
 }
 ```
 
-The resolver is a `#!/bin/sh` script (with a companion `.cmd` for Windows) that requires no runtime — it detects the platform and directly executes the correct prebuilt binary.
+The resolver is a `#!/usr/bin/env bash` script (with a companion `.cmd` for Windows) that requires no runtime — it detects the platform and directly executes the correct prebuilt binary.
 
 ## Documentation
 
