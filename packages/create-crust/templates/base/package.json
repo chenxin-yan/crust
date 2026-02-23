@@ -2,14 +2,15 @@
 	"name": "{{name}}",
 	"version": "0.0.0",
 	"type": "module",
-	"description": "{{description}}",
-	"author": "{{author}}",
+	"description": "A CLI built with Crust",
 	"bin": {
-		"{{name}}": "dist/cli.js"
+		"{{name}}": "dist/cli"
 	},
 	"scripts": {
+		"dev": "bun run src/cli.ts",
 		"build": "crust build",
-		"dev": "bun run src/cli.ts"
+		"start": "./dist/cli",
+		"check:types": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@crustjs/core": "latest",
@@ -17,6 +18,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/crust": "latest",
+		"@types/bun": "latest",
 		"typescript": "^5"
 	}
 }

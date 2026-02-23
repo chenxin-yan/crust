@@ -76,7 +76,9 @@
         "create-crust": "dist/index.js",
       },
       "dependencies": {
+        "@crustjs/core": "workspace:*",
         "@crustjs/create": "workspace:*",
+        "@crustjs/prompts": "workspace:*",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",

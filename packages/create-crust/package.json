@@ -40,7 +40,9 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@crustjs/create": "workspace:*"
+		"@crustjs/core": "workspace:*",
+		"@crustjs/create": "workspace:*",
+		"@crustjs/prompts": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

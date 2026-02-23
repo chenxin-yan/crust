@@ -19,7 +19,7 @@ const IMPORT_META_URL = pathToFileURL(
  */
 async function scaffoldBase(
 	dest: string,
-	context: { name: string; description: string; author: string },
+	context: { name: string },
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
 	await scaffold({
@@ -47,23 +47,16 @@ afterEach(() => {
 
 describe("scaffold", () => {
 	it("creates the project directory structure", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "my-cli",
-			description: "Test CLI",
-			author: "Test Author",
-		});
+		await scaffoldBase(TEST_DIR, { name: "my-cli" });
 
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "tsconfig.json"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
+		expect(existsSync(resolve(TEST_DIR, "README.md"))).toBe(true);
 	});
 
 	it("generates package.json with correct name and dependencies", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "my-awesome-cli",
-			description: "An awesome CLI tool",
-			author: "Jane Doe",
-		});
+		await scaffoldBase(TEST_DIR, { name: "my-awesome-cli" });
 
 		const pkg = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
@@ -72,45 +65,38 @@ describe("scaffold", () => {
 		expect(pkg.name).toBe("my-awesome-cli");
 		expect(pkg.version).toBe("0.0.0");
 		expect(pkg.type).toBe("module");
-		expect(pkg.description).toBe("An awesome CLI tool");
-		expect(pkg.author).toBe("Jane Doe");
-		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli.js" });
+		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli" });
 		expect(pkg.dependencies).toEqual({
 			"@crustjs/core": "latest",
 			"@crustjs/plugins": "latest",
 		});
 		expect(pkg.devDependencies).toEqual({
 			"@crustjs/crust": "latest",
+			"@types/bun": "latest",
 			typescript: "^5",
 		});
 		expect(pkg.scripts).toEqual({
-			build: "crust build",
 			dev: "bun run src/cli.ts",
+			build: "crust build",
+			start: "./dist/cli",
+			"check:types": "tsc --noEmit",
 		});
 	});
 
-	it("generates package.json with empty description and author when not provided", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "minimal-cli",
-			description: "",
-			author: "",
-		});
+	it("generates package.json with generic description and no author", async () => {
+		await scaffoldBase(TEST_DIR, { name: "minimal-cli" });
 
 		const pkg = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
 
 		expect(pkg.name).toBe("minimal-cli");
-		expect(pkg.description).toBe("");
-		expect(pkg.author).toBe("");
+		expect(pkg.description).toBe("A CLI built with Crust");
+		expect(pkg.author).toBeUndefined();
 	});
 
 	it("generates tsconfig.json with strict mode and bundler resolution", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "my-cli",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "my-cli" });
 
 		const tsconfig = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "tsconfig.json"), "utf-8"),
@@ -124,19 +110,15 @@ describe("scaffold", () => {
 	});
 
 	it("generates a valid CLI entry file with defineCommand and runMain", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "test-cli",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "test-cli" });
 
 		const cliContent = readFileSync(
 			resolve(TEST_DIR, "src", "cli.ts"),
 			"utf-8",
 		);
 
-		// Shebang
-		expect(cliContent.startsWith("#!/usr/bin/env bun")).toBe(true);
+		// No shebang — compiled binary is standalone
+		expect(cliContent.startsWith("import")).toBe(true);
 		// Uses defineCommand
 		expect(cliContent).toContain("defineCommand");
 		// Uses runMain
@@ -158,11 +140,7 @@ describe("scaffold", () => {
 	});
 
 	it("generates CLI file that is valid TypeScript (compile check)", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "compile-test-cli",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "compile-test-cli" });
 
 		// Verify it parses without syntax errors by checking structure
 		const cliContent = readFileSync(
@@ -184,11 +162,7 @@ describe("scaffold", () => {
 	it("creates project in nested directory (creates parent dirs)", async () => {
 		const nestedDir = resolve(TEST_DIR, "deep", "nested", "project");
 
-		await scaffoldBase(nestedDir, {
-			name: "nested-cli",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(nestedDir, { name: "nested-cli" });
 
 		expect(existsSync(resolve(nestedDir, "package.json"))).toBe(true);
 		expect(existsSync(resolve(nestedDir, "src", "cli.ts"))).toBe(true);
@@ -199,42 +173,40 @@ describe("scaffold", () => {
 		mkdirSync(resolve(TEST_DIR, "src"), { recursive: true });
 
 		// Scaffold over it
-		await scaffoldBase(TEST_DIR, {
-			name: "overwrite-cli",
-			description: "Overwritten",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "overwrite-cli" });
 
 		const pkg = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
 		expect(pkg.name).toBe("overwrite-cli");
-		expect(pkg.description).toBe("Overwritten");
 	});
 
 	it("sets bin entry to match project name", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "my-custom-bin",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "my-custom-bin" });
 
 		const pkg = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
-		expect(pkg.bin["my-custom-bin"]).toBe("dist/cli.js");
+		expect(pkg.bin["my-custom-bin"]).toBe("dist/cli");
 	});
 
 	it("creates .gitignore from _gitignore template via dotfile renaming", async () => {
-		await scaffoldBase(TEST_DIR, {
-			name: "gitignore-cli",
-			description: "",
-			author: "",
-		});
+		await scaffoldBase(TEST_DIR, { name: "gitignore-cli" });
 
 		expect(existsSync(resolve(TEST_DIR, ".gitignore"))).toBe(true);
 		const gitignore = readFileSync(resolve(TEST_DIR, ".gitignore"), "utf-8");
 		expect(gitignore).toContain("node_modules");
 		expect(gitignore).toContain("dist");
+	});
+
+	it("generates README.md with project name", async () => {
+		await scaffoldBase(TEST_DIR, { name: "readme-cli" });
+
+		expect(existsSync(resolve(TEST_DIR, "README.md"))).toBe(true);
+		const readme = readFileSync(resolve(TEST_DIR, "README.md"), "utf-8");
+		expect(readme).toContain("# readme-cli");
+		expect(readme).toContain("Crust");
+		expect(readme).toContain("bun run dev");
+		expect(readme).toContain("bun run build");
 	});
 });

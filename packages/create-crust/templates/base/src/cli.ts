@@ -1,5 +1,3 @@
-#!/usr/bin/env bun
-
 import { defineCommand, runMain } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
