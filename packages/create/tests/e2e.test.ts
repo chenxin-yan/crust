@@ -75,7 +75,6 @@ describe("end-to-end scaffold + runSteps", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
 			context,
 		});
 

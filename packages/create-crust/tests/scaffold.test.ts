@@ -1,18 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { scaffold } from "@crustjs/create";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
-
-/**
- * Simulated import.meta.url for the create-crust src/index.ts module.
- * The template path "../templates/base" is resolved relative to this.
- */
-const IMPORT_META_URL = pathToFileURL(
-	resolve(import.meta.dirname, "..", "src", "index.ts"),
-).href;
 
 /**
  * Helper to scaffold the base template with the given context variables.
@@ -23,9 +14,8 @@ async function scaffoldBase(
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
 	await scaffold({
-		template: "../templates/base",
+		template: "./templates/base",
 		dest,
-		importMeta: IMPORT_META_URL,
 		context,
 		conflict,
 	});

@@ -8,26 +8,24 @@
  * @example
  * ```ts
  * const options: ScaffoldOptions = {
- *   template: "../templates/base",
+ *   template: new URL("../templates/base", import.meta.url),
  *   dest: "./my-project",
- *   importMeta: import.meta.url,
  *   context: { name: "my-app", description: "A cool CLI" },
  *   conflict: "abort",
  * };
  * ```
  */
 export interface ScaffoldOptions {
-	/** Relative path to the template directory (resolved against `importMeta`). */
-	readonly template: string;
+	/**
+	 * Template directory source.
+	 *
+	 * - `string`: resolved relative to `process.cwd()`
+	 * - `URL`: must be a `file:` URL (for module-relative templates)
+	 */
+	readonly template: string | URL;
 
 	/** Absolute or relative path to the destination directory. */
 	readonly dest: string;
-
-	/**
-	 * The `import.meta.url` of the calling module.
-	 * Used to resolve the template path relative to the caller.
-	 */
-	readonly importMeta: string;
 
 	/**
 	 * Variables to interpolate into template file contents.

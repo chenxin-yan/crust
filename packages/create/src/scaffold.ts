@@ -78,6 +78,30 @@ function isNonEmptyDir(dirPath: string): boolean {
 	return entries.length > 0;
 }
 
+/**
+ * Resolve the template directory from a string path or file URL.
+ */
+function resolveTemplateDir(template: string | URL): string {
+	if (template instanceof URL) {
+		if (template.protocol !== "file:") {
+			throw new Error(
+				`Template URL must use file: protocol, got "${template.protocol}".`,
+			);
+		}
+
+		return fileURLToPath(template);
+	}
+
+	return resolve(process.cwd(), template);
+}
+
+/**
+ * Convert template input to a readable string for diagnostics.
+ */
+function formatTemplateInput(template: string | URL): string {
+	return typeof template === "string" ? template : template.href;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Core Scaffold Function
 // ────────────────────────────────────────────────────────────────────────────
@@ -86,9 +110,9 @@ function isNonEmptyDir(dirPath: string): boolean {
  * Copy a template directory to a destination, applying variable interpolation
  * and dotfile renaming.
  *
- * Templates are resolved relative to the calling module's `import.meta.url`,
- * so templates bundled inside published npm packages resolve correctly
- * regardless of install location.
+ * Template resolution:
+ * - `string` templates resolve relative to `process.cwd()`
+ * - `URL` templates must be `file:` URLs (for module-relative templates)
  *
  * Call `scaffold()` multiple times to layer/compose templates — for example,
  * a base template followed by a TypeScript-specific overlay.
@@ -102,9 +126,8 @@ function isNonEmptyDir(dirPath: string): boolean {
  * import { scaffold } from "@crustjs/create";
  *
  * const result = await scaffold({
- *   template: "../templates/base",
+ *   template: new URL("../templates/base", import.meta.url),
  *   dest: "./my-project",
- *   importMeta: import.meta.url,
  *   context: { name: "my-app", description: "A cool CLI" },
  * });
  *
@@ -114,11 +137,22 @@ function isNonEmptyDir(dirPath: string): boolean {
 export async function scaffold(
 	options: ScaffoldOptions,
 ): Promise<ScaffoldResult> {
-	const { template, dest, importMeta, context, conflict = "abort" } = options;
+	const { template, dest, context, conflict = "abort" } = options;
 
-	// Resolve the template directory relative to the caller's import.meta.url
-	const templateDir = fileURLToPath(new URL(template, importMeta));
+	const templateDir = resolveTemplateDir(template);
 	const destDir = resolve(dest);
+
+	if (!existsSync(templateDir)) {
+		throw new Error(
+			`Template directory "${templateDir}" does not exist (from template: "${formatTemplateInput(template)}").`,
+		);
+	}
+
+	if (!statSync(templateDir).isDirectory()) {
+		throw new Error(
+			`Template path "${templateDir}" is not a directory (from template: "${formatTemplateInput(template)}").`,
+		);
+	}
 
 	// Conflict resolution
 	if (conflict === "abort" && isNonEmptyDir(destDir)) {

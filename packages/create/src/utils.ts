@@ -5,12 +5,14 @@ import { join } from "node:path";
 // Package Manager Detection
 // ────────────────────────────────────────────────────────────────────────────
 
+export type PackageManager = "npm" | "pnpm" | "bun" | "yarn";
+
 /**
  * Lockfile names mapped to their package manager.
  *
  * Checked in order: bun → pnpm → yarn → npm.
  */
-const LOCKFILE_MAP: ReadonlyArray<readonly [string, string]> = [
+const LOCKFILE_MAP: ReadonlyArray<readonly [string, PackageManager]> = [
 	["bun.lock", "bun"],
 	["bun.lockb", "bun"],
 	["pnpm-lock.yaml", "pnpm"],
@@ -35,7 +37,7 @@ const LOCKFILE_MAP: ReadonlyArray<readonly [string, string]> = [
  * // => "bun" (if bun.lock exists)
  * ```
  */
-export function detectPackageManager(cwd?: string): string {
+export function detectPackageManager(cwd?: string): PackageManager {
 	const dir = cwd ?? process.cwd();
 
 	// Check lockfiles in priority order

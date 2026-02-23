@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { scaffold } from "../src/scaffold.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "my-app", description: "A cool CLI" },
 		});
 
@@ -96,7 +96,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: {},
 		});
 
@@ -113,7 +113,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: {},
 		});
 
@@ -129,7 +129,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: {},
 		});
 
@@ -154,7 +154,7 @@ describe("scaffold", () => {
 			scaffold({
 				template: templateDir,
 				dest: destDir,
-				importMeta: `file://${resolve(".")}/test.ts`,
+
 				context: {},
 				conflict: "abort",
 			}),
@@ -172,7 +172,7 @@ describe("scaffold", () => {
 			scaffold({
 				template: templateDir,
 				dest: destDir,
-				importMeta: `file://${resolve(".")}/test.ts`,
+
 				context: {},
 			}),
 		).rejects.toThrow("already exists and is non-empty");
@@ -188,7 +188,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { author: "crust" },
 			conflict: "overwrite",
 		});
@@ -210,7 +210,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "world" },
 		});
 
@@ -231,7 +231,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "unused" },
 		});
 
@@ -245,7 +245,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { who: "there" },
 		});
 
@@ -263,7 +263,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: {},
 			conflict: "abort",
 		});
@@ -285,7 +285,7 @@ describe("scaffold", () => {
 		await scaffold({
 			template: baseTemplateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "my-project" },
 		});
 
@@ -304,7 +304,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: overlayTemplateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "my-project" },
 			conflict: "overwrite",
 		});
@@ -347,7 +347,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: { name: "my-app", label: "Click me" },
 		});
 
@@ -363,6 +363,53 @@ describe("scaffold", () => {
 		);
 	});
 
+	it("resolves template from a file: URL", async () => {
+		createTemplateFile("hello.txt", "hi {{who}}");
+
+		const templateUrl = new URL(`file://${templateDir}`);
+		const result = await scaffold({
+			template: templateUrl,
+			dest: destDir,
+			context: { who: "URL" },
+		});
+
+		expect(result.files).toContain("hello.txt");
+		expect(readOutputFile("hello.txt")).toBe("hi URL");
+	});
+
+	it("throws when template URL uses non-file protocol", async () => {
+		expect(
+			scaffold({
+				template: new URL("https://example.com/templates/base"),
+				dest: destDir,
+				context: {},
+			}),
+		).rejects.toThrow("file: protocol");
+	});
+
+	it("throws when template directory does not exist", async () => {
+		expect(
+			scaffold({
+				template: "/nonexistent/path/to/template",
+				dest: destDir,
+				context: {},
+			}),
+		).rejects.toThrow("does not exist");
+	});
+
+	it("throws when template path is a file, not a directory", async () => {
+		const filePath = join(tempDir, "not-a-dir.txt");
+		writeFileSync(filePath, "I am a file");
+
+		expect(
+			scaffold({
+				template: filePath,
+				dest: destDir,
+				context: {},
+			}),
+		).rejects.toThrow("is not a directory");
+	});
+
 	it("returns files sorted relative to dest", async () => {
 		createTemplateFile("b.txt", "b");
 		createTemplateFile("a.txt", "a");
@@ -370,7 +417,7 @@ describe("scaffold", () => {
 		const result = await scaffold({
 			template: templateDir,
 			dest: destDir,
-			importMeta: `file://${resolve(".")}/test.ts`,
+
 			context: {},
 		});
 

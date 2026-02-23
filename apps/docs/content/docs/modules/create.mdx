@@ -22,9 +22,8 @@ import { scaffold, runSteps } from "@crustjs/create";
 
 // 1. Copy and interpolate the template
 const result = await scaffold({
-  template: "../templates/base",
+  template: "./templates/base",
   dest: "./my-project",
-  importMeta: import.meta.url,
   context: { name: "my-app", description: "A cool CLI" },
 });
 
@@ -86,17 +85,15 @@ Call `scaffold()` multiple times to layer templates — for example, a base temp
 ```ts
 // Base template
 await scaffold({
-  template: "../templates/base",
+  template: "./templates/base",
   dest: projectDir,
-  importMeta: import.meta.url,
   context,
 });
 
 // TypeScript overlay
 await scaffold({
-  template: "../templates/typescript",
+  template: "./templates/typescript",
   dest: projectDir,
-  importMeta: import.meta.url,
   context,
   conflict: "overwrite",
 });
@@ -110,13 +107,12 @@ Copy a template directory to a destination, applying variable interpolation and 
 
 #### Parameters
 
-| Field        | Type                     | Required | Description                                                             |
-| ------------ | ------------------------ | -------- | ----------------------------------------------------------------------- |
-| `template`   | `string`                 | Yes      | Relative path to the template directory (resolved against `importMeta`) |
-| `dest`       | `string`                 | Yes      | Absolute or relative path to the destination directory                  |
-| `importMeta` | `string`                 | Yes      | The `import.meta.url` of the calling module, used to resolve `template` |
-| `context`    | `Record<string, string>` | Yes      | Variables to interpolate into `{{key}}` placeholders                    |
-| `conflict`   | `"abort" \| "overwrite"` | No       | How to handle an existing non-empty destination. Default: `"abort"`     |
+| Field      | Type                     | Required | Description                                                                                                           |
+| ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `template` | `string \| URL`          | Yes      | Template directory. `string` resolves relative to `process.cwd()`. `URL` must be a `file:` URL (for module-relative). |
+| `dest`     | `string`                 | Yes      | Absolute or relative path to the destination directory                                                                |
+| `context`  | `Record<string, string>` | Yes      | Variables to interpolate into `{{key}}` placeholders                                                                  |
+| `conflict` | `"abort" \| "overwrite"` | No       | How to handle an existing non-empty destination. Default: `"abort"`                                                   |
 
 #### Returns
 
@@ -171,7 +167,7 @@ Detection strategy (first match wins):
 2. Parse the `npm_config_user_agent` environment variable
 3. Default to `"npm"`
 
-Returns `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
+Returns a `PackageManager` — `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
 
 ### `isGitInstalled()`
 
@@ -203,6 +199,7 @@ Returns `{ name: string | null, email: string | null }`.
 | `ScaffoldOptions`  | Configuration for `scaffold()`                       |
 | `ScaffoldResult`   | Result returned by `scaffold()`                      |
 | `PostScaffoldStep` | Discriminated union of step objects for `runSteps()` |
+| `PackageManager`   | `"npm" \| "pnpm" \| "bun" \| "yarn"`                |
 
 ## Design
 
