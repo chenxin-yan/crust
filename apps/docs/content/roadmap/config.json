@@ -14,7 +14,7 @@
     "crust": "/docs/modules/crust",
     "create": "/docs/modules/create",
     "validate": "/docs/modules/validate",
-    "prompt": "/docs/modules/prompt",
+    "prompts": "/docs/modules/prompts",
     "style": "/docs/modules/style",
     "test": "/docs/modules/test",
     "render": "/docs/modules/render",
