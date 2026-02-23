@@ -426,6 +426,12 @@ describe("generateResolver", () => {
 		expect(content).toContain('[ ! -f "$bin_path" ]');
 		expect(content).toContain("Try reinstalling the package");
 	});
+
+	it("resolves symlinks to find the real script directory", () => {
+		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain("readlink");
+		expect(content).toContain('[ -L "$source" ]');
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
