@@ -124,7 +124,7 @@ const MODULES: Array<{
   {
     pkg: "@crustjs/prompts",
     desc: "Interactive prompts",
-    doc: "modules/prompt",
+    doc: "modules/prompts",
   },
   {
     pkg: "@crustjs/style",
