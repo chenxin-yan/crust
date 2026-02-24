@@ -1,5 +1,12 @@
 # @crustjs/prompts
 
+## 0.0.2
+
+### Patch Changes
+
+- f76fd1c: Extract duplicated UI symbol constants into shared `core/symbols.ts` module and unify `CURSOR_INDICATOR` naming across prompts
+- 89f3828: Fix race condition in keypress handling that caused pasted text to lose all but the last character
+
 ## 0.0.1
 
 ### Patch Changes

@@ -71,7 +71,7 @@
     },
     "packages/create-crust": {
       "name": "create-crust",
-      "version": "0.0.7",
+      "version": "0.0.8",
       "bin": {
         "create-crust": "dist/index.js",
       },
@@ -121,7 +121,7 @@
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@crustjs/style": "workspace:*",
       },
