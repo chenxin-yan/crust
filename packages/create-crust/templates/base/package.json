@@ -3,6 +3,9 @@
 	"version": "0.0.0",
 	"type": "module",
 	"description": "A CLI built with Crust",
+	"files": [
+		"dist"
+	],
 	"bin": {
 		"{{name}}": "dist/cli"
 	},
