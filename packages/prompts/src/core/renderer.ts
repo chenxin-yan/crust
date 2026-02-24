@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import * as readline from "node:readline";
+import { visibleWidth } from "@crustjs/style";
 import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -104,6 +105,28 @@ const ERASE_LINE = `${ESC}2K`;
  */
 function cursorUp(n: number): string {
 	return n > 0 ? `${ESC}${n}A` : "";
+}
+
+/**
+ * Count the number of physical terminal lines a string occupies,
+ * accounting for line wrapping based on terminal column width.
+ *
+ * Each logical line (split by `\n`) may wrap across multiple physical
+ * lines when its visible width exceeds the terminal columns.
+ *
+ * @param content - The rendered string (may contain ANSI escapes and newlines)
+ * @param columns - Terminal width in columns
+ * @returns Number of physical lines the content occupies
+ */
+function physicalLineCount(content: string, columns: number): number {
+	const lines = content.split("\n");
+	let count = 0;
+	for (const line of lines) {
+		const width = visibleWidth(line);
+		// An empty line still occupies one physical row
+		count += width === 0 ? 1 : Math.ceil(width / columns);
+	}
+	return count;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -236,6 +259,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 
 		// ── Render helper ───────────────────────────────────────────────
 		function renderFrame(content: string): void {
+			const columns = output.columns || 80;
+
 			// Erase previous frame
 			if (prevLineCount > 0) {
 				output.write(`${cursorUp(prevLineCount - 1)}\r`);
@@ -254,15 +279,38 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 
 			output.write(content);
 
-			// Track line count for next erase
-			const lines = content.split("\n");
-			prevLineCount = lines.length;
+			// Track physical line count (accounting for wrapping) for next erase
+			prevLineCount = physicalLineCount(content, columns);
 		}
 
 		// ── Keypress handler ────────────────────────────────────────────
 		// Serialize keypress processing to prevent race conditions when
 		// multiple events arrive rapidly (e.g., pasting text).
 		let processing: Promise<void> = Promise.resolve();
+
+		// Debounce rendering: when multiple keypresses arrive in the same
+		// event-loop tick (e.g., pasting text), we defer rendering with
+		// setTimeout(0) so only a single render fires after all state
+		// updates are applied.  Normal single keystrokes are unaffected —
+		// they still produce one render with no perceptible delay.
+		let renderPending: ReturnType<typeof setTimeout> | null = null;
+
+		function scheduleRender(): void {
+			if (renderPending !== null) return;
+			renderPending = setTimeout(() => {
+				renderPending = null;
+				if (!isCleanedUp) {
+					renderFrame(render(state, theme));
+				}
+			}, 0);
+		}
+
+		function flushRender(): void {
+			if (renderPending !== null) {
+				clearTimeout(renderPending);
+				renderPending = null;
+			}
+		}
 
 		function onKeypress(
 			ch: string | undefined,
@@ -276,6 +324,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 		): void {
 			// Ctrl+C → reject with CancelledError (handle immediately)
 			if (key?.ctrl && key.name === "c") {
+				flushRender();
 				cleanup();
 				reject(new CancelledError());
 				return;
@@ -298,6 +347,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 					const result = await handleKey(event, state);
 
 					if (isSubmit(result)) {
+						// Submit must render immediately — cancel any pending render
+						flushRender();
 						const value = result[SUBMIT];
 						// Render final submitted state
 						if (renderSubmitted) {
@@ -309,9 +360,10 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 						resolve(value);
 					} else {
 						state = result;
-						renderFrame(render(state, theme));
+						scheduleRender();
 					}
 				} catch (err) {
+					flushRender();
 					cleanup();
 					reject(err);
 				}
@@ -328,8 +380,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 			// Initial render
 			const initialContent = render(state, theme);
 			output.write(initialContent);
-			const lines = initialContent.split("\n");
-			prevLineCount = lines.length;
+			const columns = output.columns || 80;
+			prevLineCount = physicalLineCount(initialContent, columns);
 
 			stdin.on("keypress", onKeypress);
 		} catch (err) {
