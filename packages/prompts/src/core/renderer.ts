@@ -260,7 +260,11 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 		}
 
 		// ── Keypress handler ────────────────────────────────────────────
-		async function onKeypress(
+		// Serialize keypress processing to prevent race conditions when
+		// multiple events arrive rapidly (e.g., pasting text).
+		let processing: Promise<void> = Promise.resolve();
+
+		function onKeypress(
 			ch: string | undefined,
 			key?: {
 				name?: string;
@@ -269,8 +273,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 				shift?: boolean;
 				sequence?: string;
 			},
-		): Promise<void> {
-			// Ctrl+C → reject with CancelledError
+		): void {
+			// Ctrl+C → reject with CancelledError (handle immediately)
 			if (key?.ctrl && key.name === "c") {
 				cleanup();
 				reject(new CancelledError());
@@ -285,27 +289,33 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 				shift: key?.shift ?? false,
 			};
 
-			try {
-				const result = await handleKey(event, state);
+			// Chain onto the processing queue so each keypress waits for
+			// the previous one to finish before reading state
+			processing = processing.then(async () => {
+				if (isCleanedUp) return;
 
-				if (isSubmit(result)) {
-					const value = result[SUBMIT];
-					// Render final submitted state
-					if (renderSubmitted) {
-						renderFrame(renderSubmitted(state, value, theme));
+				try {
+					const result = await handleKey(event, state);
+
+					if (isSubmit(result)) {
+						const value = result[SUBMIT];
+						// Render final submitted state
+						if (renderSubmitted) {
+							renderFrame(renderSubmitted(state, value, theme));
+						}
+						// Write newline to move past the prompt
+						output.write("\n");
+						cleanup();
+						resolve(value);
+					} else {
+						state = result;
+						renderFrame(render(state, theme));
 					}
-					// Write newline to move past the prompt
-					output.write("\n");
+				} catch (err) {
 					cleanup();
-					resolve(value);
-				} else {
-					state = result;
-					renderFrame(render(state, theme));
+					reject(err);
 				}
-			} catch (err) {
-				cleanup();
-				reject(err);
-			}
+			});
 		}
 
 		// ── Initialize ──────────────────────────────────────────────────
