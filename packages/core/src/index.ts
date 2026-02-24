@@ -2,7 +2,7 @@
 export { defineCommand } from "./command.ts";
 
 // Errors
-export type { CommandNotFoundErrorDetails, CrustErrorCode } from "./errors.ts";
+export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 
 // Argument & flag parsing

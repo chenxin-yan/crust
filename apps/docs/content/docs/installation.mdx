@@ -8,7 +8,8 @@ import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 <Callout>
-  If you're starting a new project, the easiest way is `bun create crust my-cli`. See the [Quick Start](/docs/quick-start) guide.
+  If you're starting a new project, the easiest way is `bun create crust
+  my-cli`. See the [Quick Start](/docs/quick-start) guide.
 </Callout>
 
 ## Install
@@ -32,7 +33,8 @@ import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 ```
 
 <Callout>
-  `@crustjs/crust` is a **dev dependency** — it provides the `crust` CLI binary (e.g., `crust build`) and is only needed at build time, not at runtime.
+  `@crustjs/crust` is a **dev dependency** — it provides the `crust` CLI binary
+  (e.g., `crust build`) and is only needed at build time, not at runtime.
 </Callout>
 
 ## Minimal Setup
@@ -69,12 +71,14 @@ For a distributable CLI, configure your `package.json`:
   "name": "my-cli",
   "version": "1.0.0",
   "type": "module",
+  "files": ["dist"],
   "bin": {
     "my-cli": "dist/cli"
   },
   "scripts": {
+    "dev": "bun run src/cli.ts",
     "build": "crust build",
-    "dev": "bun run src/cli.ts"
+    "start": "./dist/cli"
   },
   "dependencies": {
     "@crustjs/core": "latest",

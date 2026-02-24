@@ -129,6 +129,13 @@ my-cli build --help        # Help for build subcommand
 my-cli create plugin --help # Help for nested subcommand
 ```
 
+## Type
+
+```ts
+function helpPlugin(): CrustPlugin;
+function renderHelp(command: AnyCommand, path?: string[]): string;
+```
+
 The help output includes the full command path:
 
 ```
