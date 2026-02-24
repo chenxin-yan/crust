@@ -22,11 +22,9 @@ permissions:
 
 jobs:
   ci:
-    name: Check packages
     uses: ./.github/workflows/ci-packages.yml
 
   release:
-    name: Release Packages
     needs: ci
     runs-on: ubuntu-latest
     steps:
