@@ -4,6 +4,7 @@
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type {
@@ -90,7 +91,6 @@ function createHandleKey(
 // Render
 // ────────────────────────────────────────────────────────────────────────────
 
-const PREFIX_SYMBOL = "?";
 const SUBMITTED_MASK_LENGTH = 4;
 
 function renderPassword(
@@ -114,11 +114,11 @@ function renderPassword(
 		valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
 	}
 
-	let output = `${prefix} ${msg}\n${valueLine}`;
+	let output = `${prefix} ${msg}\n  ${valueLine}`;
 
 	// Show error inline below
 	if (state.error !== null) {
-		output += `\n${theme.error(state.error)}`;
+		output += `\n  ${theme.error(state.error)}`;
 	}
 
 	return output;
@@ -131,7 +131,7 @@ function renderSubmitted(
 	message: string,
 	mask: string,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	// Show a fixed number of mask characters regardless of actual length
 	const maskedDisplay = theme.success(mask.repeat(SUBMITTED_MASK_LENGTH));

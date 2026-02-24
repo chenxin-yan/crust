@@ -281,7 +281,7 @@ interface CounterState {
 const result = await runPrompt<CounterState, number>({
   initialState: { count: 0 },
   theme: resolveTheme(),
-  render: (state, theme) => `${theme.prefix("?")} Count: ${state.count}`,
+  render: (state, theme) => `${theme.prefix("○")} Count: ${state.count}`,
   handleKey: (key, state) => {
     if (key.name === "return") return submit(state.count);
     if (key.name === "up") return { count: state.count + 1 };
@@ -289,7 +289,7 @@ const result = await runPrompt<CounterState, number>({
     return state;
   },
   renderSubmitted: (state, value, theme) =>
-    `${theme.prefix("?")} Count: ${theme.success(String(value))}`,
+    `${theme.prefix("○")} Count: ${theme.success(String(value))}`,
 });
 ```
 

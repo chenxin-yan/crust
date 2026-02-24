@@ -39,7 +39,7 @@ describe("defaultTheme", () => {
 		expect(defaultTheme.message).toBe(bold);
 		expect(defaultTheme.placeholder).toBe(dim);
 		expect(defaultTheme.cursor).toBe(cyan);
-		expect(defaultTheme.selected).toBe(yellow);
+		expect(defaultTheme.selected).toBe(cyan);
 		expect(defaultTheme.unselected).toBe(dim);
 		expect(defaultTheme.error).toBe(red);
 		expect(defaultTheme.success).toBe(green);

@@ -6,6 +6,13 @@ import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import {
+	CURSOR_INDICATOR,
+	PREFIX_SUBMITTED,
+	PREFIX_SYMBOL,
+	SCROLL_DOWN_INDICATOR,
+	SCROLL_UP_INDICATOR,
+} from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
@@ -59,10 +66,6 @@ export interface FilterOptions<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_VISIBLE = 10;
-const PREFIX_SYMBOL = "?";
-const LIST_CURSOR_INDICATOR = ">";
-const SCROLL_UP_INDICATOR = "...";
-const SCROLL_DOWN_INDICATOR = "...";
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -242,7 +245,7 @@ function renderFilter<T>(
 		queryLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	const lines: string[] = [`${prefix} ${msg}`, queryLine];
+	const lines: string[] = [`${prefix} ${msg}`, `  ${queryLine}`];
 
 	// Filtered results list
 	const totalResults = state.results.length;
@@ -270,9 +273,7 @@ function renderFilter<T>(
 		const label = highlightMatches(result.item.label, result.indices, theme);
 
 		if (isActive) {
-			lines.push(
-				`${theme.cursor(LIST_CURSOR_INDICATOR)} ${theme.selected(label)}`,
-			);
+			lines.push(`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`);
 		} else {
 			lines.push(`  ${theme.unselected(label)}`);
 		}
@@ -295,7 +296,7 @@ function renderSubmitted<T>(
 	results: readonly FuzzyFilterResult<T>[],
 	listCursor: number,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	const selected = results[listCursor];
 	const label = selected ? selected.item.label : "";

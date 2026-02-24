@@ -4,6 +4,7 @@
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 
@@ -102,8 +103,7 @@ function handleKey(
 // Render
 // ────────────────────────────────────────────────────────────────────────────
 
-const PREFIX_SYMBOL = "?";
-const SEPARATOR = " / ";
+const SEPARATOR = " · ";
 
 function renderConfirm(
 	state: ConfirmState,
@@ -116,14 +116,14 @@ function renderConfirm(
 	const msg = theme.message(message);
 
 	const activeDisplay = state.value
-		? theme.selected(activeLabel)
-		: theme.unselected(activeLabel);
+		? `${theme.selected("●")} ${theme.selected(activeLabel)}`
+		: `${theme.unselected("○")} ${theme.unselected(activeLabel)}`;
 
 	const inactiveDisplay = state.value
-		? theme.unselected(inactiveLabel)
-		: theme.selected(inactiveLabel);
+		? `${theme.unselected("○")} ${theme.unselected(inactiveLabel)}`
+		: `${theme.selected("●")} ${theme.selected(inactiveLabel)}`;
 
-	return `${prefix} ${msg}\n${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
+	return `${prefix} ${msg}\n  ${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
 }
 
 function renderSubmitted(
@@ -134,7 +134,7 @@ function renderSubmitted(
 	activeLabel: string,
 	inactiveLabel: string,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	const answer = value ? activeLabel : inactiveLabel;
 	return `${prefix} ${msg} ${theme.success(answer)}`;

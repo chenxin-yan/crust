@@ -381,7 +381,7 @@ describe("confirm — rendering", () => {
 		const promise = confirm({ message: "Continue?" });
 
 		await tick();
-		expect(stderrOutput).toContain(" / ");
+		expect(stderrOutput).toContain(" · ");
 
 		pressKey("", { name: "return" });
 		await promise;

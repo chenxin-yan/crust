@@ -4,6 +4,7 @@
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type {
@@ -99,8 +100,6 @@ function createHandleKey(
 // Render
 // ────────────────────────────────────────────────────────────────────────────
 
-const PREFIX_SYMBOL = "?";
-
 function renderInput(
 	state: InputState,
 	theme: PromptTheme,
@@ -133,11 +132,11 @@ function renderInput(
 		valueLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	let output = `${prefix} ${msg}${defaultHint}\n${valueLine}`;
+	let output = `${prefix} ${msg}${defaultHint}\n  ${valueLine}`;
 
 	// Show error inline below
 	if (state.error !== null) {
-		output += `\n${theme.error(state.error)}`;
+		output += `\n  ${theme.error(state.error)}`;
 	}
 
 	return output;
@@ -149,7 +148,7 @@ function renderSubmitted(
 	theme: PromptTheme,
 	message: string,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	return `${prefix} ${msg} ${theme.success(value)}`;
 }

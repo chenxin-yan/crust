@@ -4,6 +4,15 @@
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import {
+	CHECKBOX_CHECKED,
+	CHECKBOX_UNCHECKED,
+	CURSOR_INDICATOR,
+	PREFIX_SUBMITTED,
+	PREFIX_SYMBOL,
+	SCROLL_DOWN_INDICATOR,
+	SCROLL_UP_INDICATOR,
+} from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
@@ -64,12 +73,6 @@ export interface MultiselectOptions<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_VISIBLE = 10;
-const PREFIX_SYMBOL = "?";
-const CURSOR_INDICATOR = ">";
-const CHECKBOX_CHECKED = "[x]";
-const CHECKBOX_UNCHECKED = "[ ]";
-const SCROLL_UP_INDICATOR = "...";
-const SCROLL_DOWN_INDICATOR = "...";
 const HINT_LINE =
 	"(Space to toggle, a to toggle all, i to invert, Enter to confirm)";
 
@@ -292,7 +295,7 @@ function renderSubmitted<T>(
 	choices: readonly NormalizedChoice<T>[],
 	selected: ReadonlySet<number>,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	const selectedLabels = choices
 		.filter((_, i) => selected.has(i))

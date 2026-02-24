@@ -583,7 +583,7 @@ describe("multiselect — rendering", () => {
 		expect(stderrOutput).toContain("alpha");
 		expect(stderrOutput).toContain("beta");
 		expect(stderrOutput).toContain("gamma");
-		expect(stderrOutput).toContain("[ ]");
+		expect(stderrOutput).toContain("○");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -597,7 +597,7 @@ describe("multiselect — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("[x]");
+		expect(stderrOutput).toContain("●");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -610,7 +610,7 @@ describe("multiselect — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain(">");
+		expect(stderrOutput).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;

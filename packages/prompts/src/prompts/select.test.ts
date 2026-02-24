@@ -385,7 +385,7 @@ describe("select — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain(">");
+		expect(stderrOutput).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;

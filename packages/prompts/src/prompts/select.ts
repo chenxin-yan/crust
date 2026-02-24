@@ -4,6 +4,13 @@
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
+import {
+	CURSOR_INDICATOR,
+	PREFIX_SUBMITTED,
+	PREFIX_SYMBOL,
+	SCROLL_DOWN_INDICATOR,
+	SCROLL_UP_INDICATOR,
+} from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
@@ -56,10 +63,6 @@ export interface SelectOptions<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_VISIBLE = 10;
-const PREFIX_SYMBOL = "?";
-const CURSOR_INDICATOR = ">";
-const SCROLL_UP_INDICATOR = "...";
-const SCROLL_DOWN_INDICATOR = "...";
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -179,7 +182,7 @@ function renderSubmitted<T>(
 	choices: readonly NormalizedChoice<T>[],
 	cursor: number,
 ): string {
-	const prefix = theme.prefix(PREFIX_SYMBOL);
+	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message);
 	const selected = choices[cursor];
 	const label = selected ? selected.label : "";
