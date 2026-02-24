@@ -1,5 +1,11 @@
 # @crustjs/plugins
 
+## 0.0.7
+
+### Patch Changes
+
+- fe4d64d: Make `path` parameter optional in `renderHelp`, defaulting to `[command.meta.name]` for simpler usage
+
 ## 0.0.6
 
 ### Patch Changes
