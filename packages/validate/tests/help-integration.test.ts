@@ -66,7 +66,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["build"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("build <entry> [target] [options]");
 		expect(output).toContain("ARGS:");
 		expect(output).toContain("<entry>");
@@ -85,7 +85,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["app"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("Schema description");
 	});
 
@@ -98,7 +98,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["app"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("Port number");
 		expect(output).toContain("Host name");
 	});
@@ -114,7 +114,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 			],
 		});
 
-		const output = renderHelp(cmd, ["lint"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("<mode>");
 		expect(output).toContain("<files...>");
 		expect(output).toContain("Files to lint");

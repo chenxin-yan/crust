@@ -93,16 +93,17 @@ function formatCommandsSection(command: AnyCommand): string[] {
 	return lines;
 }
 
-export function renderHelp(command: AnyCommand, path: string[]): string {
+export function renderHelp(command: AnyCommand, path?: string[]): string {
+	const resolvedPath = path ?? [command.meta.name];
 	const lines: string[] = [];
 	lines.push(
 		command.meta.description
-			? `${path.join(" ")} - ${command.meta.description}`
-			: path.join(" "),
+			? `${resolvedPath.join(" ")} - ${command.meta.description}`
+			: resolvedPath.join(" "),
 	);
 	lines.push("");
 	lines.push("USAGE:");
-	lines.push(`  ${formatUsage(command.meta, command, path)}`);
+	lines.push(`  ${formatUsage(command.meta, command, resolvedPath)}`);
 
 	const commandsSection = formatCommandsSection(command);
 	if (commandsSection.length > 0) {

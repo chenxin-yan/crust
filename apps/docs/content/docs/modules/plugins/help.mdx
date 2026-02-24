@@ -103,12 +103,15 @@ import { renderHelp } from "@crustjs/plugins";
 
 const helpText = renderHelp(myCommand, ["my-cli", "deploy"]);
 console.log(helpText);
+
+// path is optional — defaults to [command.meta.name]
+const helpText2 = renderHelp(myCommand);
 ```
 
 **Parameters:**
 
 - `command` — The command to render help for
-- `path` — The command path array (e.g., `["my-cli", "deploy"]`)
+- `path` _(optional)_ — The command path array (e.g., `["my-cli", "deploy"]`). Defaults to `[command.meta.name]`
 
 **Returns:** A formatted help string.
 

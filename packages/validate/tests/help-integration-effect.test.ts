@@ -76,7 +76,7 @@ describe("help plugin integration with defineCommand + withEffect", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["build"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("build <entry> [target] [options]");
 		expect(output).toContain("ARGS:");
 		expect(output).toContain("<entry>");
@@ -135,7 +135,7 @@ describe("help plugin integration with defineCommand + withEffect", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["app"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("Schema description");
 	});
 
@@ -151,7 +151,7 @@ describe("help plugin integration with defineCommand + withEffect", () => {
 			},
 		});
 
-		const output = renderHelp(cmd, ["app"]);
+		const output = renderHelp(cmd);
 		expect(output).toContain("Port number");
 	});
 });
