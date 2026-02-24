@@ -5,6 +5,8 @@
 // Errors
 export type { StoreErrorCode } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
+// Store
+export { createStore } from "./store.ts";
 // Types
 export type {
 	CreateStore,
