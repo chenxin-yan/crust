@@ -133,6 +133,17 @@
         "typescript": "catalog:",
       },
     },
+    "packages/store": {
+      "name": "@crustjs/store",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
     "packages/style": {
       "name": "@crustjs/style",
       "version": "0.0.3",
@@ -301,6 +312,8 @@
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 
     "@crustjs/prompts": ["@crustjs/prompts@workspace:packages/prompts"],
+
+    "@crustjs/store": ["@crustjs/store@workspace:packages/store"],
 
     "@crustjs/style": ["@crustjs/style@workspace:packages/style"],
 
