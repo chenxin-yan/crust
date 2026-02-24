@@ -71,7 +71,7 @@
     },
     "packages/create-crust": {
       "name": "create-crust",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "bin": {
         "create-crust": "dist/index.js",
       },
@@ -90,7 +90,7 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.9",
+      "version": "0.0.10",
       "bin": {
         "crust": "dist/cli",
       },
@@ -108,7 +108,7 @@
     },
     "packages/plugins": {
       "name": "@crustjs/plugins",
-      "version": "0.0.6",
+      "version": "0.0.7",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
@@ -121,7 +121,7 @@
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@crustjs/style": "workspace:*",
       },

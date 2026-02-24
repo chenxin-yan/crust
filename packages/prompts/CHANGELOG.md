@@ -1,5 +1,11 @@
 # @crustjs/prompts
 
+## 0.0.3
+
+### Patch Changes
+
+- 1b77051: Fix rendering corruption when pasting long text into prompts by accounting for physical terminal line wrapping and debouncing renders during rapid input
+
 ## 0.0.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # create-crust
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [1b77051]
+  - @crustjs/prompts@0.0.3
+
 ## 0.0.8
 
 ### Patch Changes
