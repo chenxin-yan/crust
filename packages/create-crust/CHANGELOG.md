@@ -1,5 +1,11 @@
 # create-crust
 
+## 0.0.10
+
+### Patch Changes
+
+- 3d8b529: fix missing files field in package.json
+
 ## 0.0.9
 
 ### Patch Changes
