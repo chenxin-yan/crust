@@ -697,7 +697,12 @@ function FurnaceHome() {
         <div className="furnace-home">
           {/* Hero */}
           <section className="fn-hero-section">
-            <Link to="/roadmap" className="fn-mono fn-dev-badge">
+            <a
+              href="https://github.com/users/chenxin-yan/projects/10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="fn-mono fn-dev-badge"
+            >
               <span className="fn-dev-badge-dot" />
               <span className="fn-dev-badge-status">Now in Alpha</span>
               <span className="fn-dev-badge-sep" />
@@ -707,7 +712,7 @@ function FurnaceHome() {
                   →
                 </span>
               </span>
-            </Link>
+            </a>
 
             <div className="fn-hero-grid">
               {/* Left — text content */}

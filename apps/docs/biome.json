@@ -9,8 +9,7 @@
       "!node_modules",
       "!.source",
       "!.vercel",
-      "!src/routeTree.gen.ts",
-      "!content/roadmap/issues.generated.json"
+      "!src/routeTree.gen.ts"
     ]
   },
   "formatter": {

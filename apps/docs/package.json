@@ -5,13 +5,12 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev",
-    "build": "bun run roadmap:sync && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "check:types": "fumadocs-mdx && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
     "deploy": "bun run build && wrangler deploy",
-    "cf-typegen": "wrangler types",
-    "roadmap:sync": "bun run scripts/syncRoadmapIssues.ts"
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@tanstack/react-router": "1.162.8",

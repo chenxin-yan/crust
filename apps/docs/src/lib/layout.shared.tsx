@@ -68,9 +68,10 @@ export function baseOptions(): BaseLayoutProps {
       },
       {
         text: "Roadmap",
-        url: "/roadmap",
+        url: "https://github.com/users/chenxin-yan/projects/10",
         active: "url",
         on: "nav",
+        external: true,
       },
       {
         type: "icon",
