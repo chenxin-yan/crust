@@ -2,7 +2,7 @@
 // Top-level generation — orchestrates manifest → render → write pipeline
 // ────────────────────────────────────────────────────────────────────────────
 
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -222,17 +222,7 @@ function renderReadme(meta: SkillMeta): string {
  * @param dir - Absolute path to the directory to remove
  */
 async function cleanDirectory(dir: string): Promise<void> {
-	try {
-		// Check if directory exists before removing
-		await readdir(dir);
-		await rm(dir, { recursive: true });
-	} catch (error) {
-		// Directory doesn't exist — nothing to clean
-		if (isNodeError(error) && error.code === "ENOENT") {
-			return;
-		}
-		throw error;
-	}
+	await rm(dir, { recursive: true, force: true });
 }
 
 /**
@@ -267,15 +257,4 @@ async function writeFiles(
 		const filePath = join(baseDir, file.path);
 		await writeFile(filePath, file.content, "utf-8");
 	}
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Utility helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Type guard for Node.js system errors with a `code` property.
- */
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-	return error instanceof Error && "code" in error;
 }

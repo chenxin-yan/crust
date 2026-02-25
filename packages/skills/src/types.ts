@@ -184,24 +184,11 @@ export interface WriteOptions {
  * });
  * ```
  */
-export interface GenerateOptions {
+export interface GenerateOptions extends WriteOptions {
 	/** Root command to generate the skill from */
 	command: AnyCommand;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
-	/**
-	 * Output directory path. Files are written under `<outDir>/skills/<name>/`.
-	 *
-	 * @default "."
-	 */
-	outDir?: string;
-	/**
-	 * When `true`, removes the existing skill directory before writing.
-	 * Prevents stale files from previous generations.
-	 *
-	 * @default true
-	 */
-	clean?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

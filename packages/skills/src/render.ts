@@ -44,8 +44,7 @@ export function renderSkill(
 ): RenderedFile[] {
 	const files: RenderedFile[] = [];
 
-	// Collect all command nodes from the tree (excluding the root itself
-	// since the root represents the CLI app, not a subcommand)
+	// Collect all command nodes from the tree (including the root)
 	const allNodes = collectNodes(manifest);
 
 	// 1. SKILL.md — entrypoint

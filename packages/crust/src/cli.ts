@@ -8,7 +8,6 @@ import {
 } from "@crustjs/plugins";
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";
-import { skillsCommand } from "./commands/skills/index.ts";
 
 /**
  * The root `crust` CLI command.
@@ -18,7 +17,6 @@ import { skillsCommand } from "./commands/skills/index.ts";
  *
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
- * - `crust skills` - Agent skill generation commands
  */
 export const crustCommand: Command = defineCommand({
 	meta: {
@@ -27,7 +25,6 @@ export const crustCommand: Command = defineCommand({
 	},
 	subCommands: {
 		build: buildCommand,
-		skills: skillsCommand,
 	},
 });
 

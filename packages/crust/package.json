@@ -39,8 +39,7 @@
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:*",
-		"@crustjs/plugins": "workspace:*",
-		"@crustjs/skills": "workspace:*"
+		"@crustjs/plugins": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
