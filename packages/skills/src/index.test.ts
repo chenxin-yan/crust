@@ -5,31 +5,47 @@ import { describe, expect, it } from "bun:test";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("@crustjs/skills exports", () => {
-	it("exports buildManifest function", async () => {
-		const mod = await import("./index.ts");
-		expect(mod.buildManifest).toBeDefined();
-		expect(typeof mod.buildManifest).toBe("function");
-	});
-
-	it("exports renderSkill function", async () => {
-		const mod = await import("./index.ts");
-		expect(mod.renderSkill).toBeDefined();
-		expect(typeof mod.renderSkill).toBe("function");
-	});
-
 	it("exports generateSkill function", async () => {
 		const mod = await import("./index.ts");
 		expect(mod.generateSkill).toBeDefined();
 		expect(typeof mod.generateSkill).toBe("function");
 	});
 
-	it("exports all expected type-related symbols", async () => {
-		// Type exports don't appear at runtime, but we can verify the module
-		// loads without errors and all function exports are present
+	it("exports uninstallSkill function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.uninstallSkill).toBeDefined();
+		expect(typeof mod.uninstallSkill).toBe("function");
+	});
+
+	it("exports skillStatus function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.skillStatus).toBeDefined();
+		expect(typeof mod.skillStatus).toBe("function");
+	});
+
+	it("exports skillPlugin function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.skillPlugin).toBeDefined();
+		expect(typeof mod.skillPlugin).toBe("function");
+	});
+
+	it("exports createSkillCommand function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.createSkillCommand).toBeDefined();
+		expect(typeof mod.createSkillCommand).toBe("function");
+	});
+
+	it("exports all expected function symbols", async () => {
 		const mod = await import("./index.ts");
 		const exportedKeys = Object.keys(mod).sort();
 		expect(exportedKeys).toEqual(
-			["buildManifest", "generateSkill", "renderSkill"].sort(),
+			[
+				"createSkillCommand",
+				"generateSkill",
+				"skillPlugin",
+				"skillStatus",
+				"uninstallSkill",
+			].sort(),
 		);
 	});
 });

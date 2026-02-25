@@ -12,7 +12,7 @@ import type { AnyCommand } from "@crustjs/core";
  * Metadata for the generated skill bundle.
  *
  * This information populates the `SKILL.md` frontmatter and distribution
- * metadata files (`manifest.json`, `README.md`).
+ * metadata files (`manifest.json`).
  *
  * @example
  * ```ts
@@ -28,9 +28,19 @@ export interface SkillMeta {
 	name: string;
 	/** Human-readable description of what the CLI does */
 	description: string;
-	/** Optional version string for the generated skill bundle */
-	version?: string;
+	/** Version string for the generated skill bundle */
+	version: string;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Agent and scope types
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Supported agent targets for skill installation. */
+export type AgentTarget = "claude-code" | "opencode";
+
+/** Installation scope — global (home directory) or project (cwd). */
+export type Scope = "global" | "project";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
@@ -136,37 +146,11 @@ export interface RenderedFile {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Write options — controls output behavior
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Options controlling how generated files are written to disk.
- */
-export interface WriteOptions {
-	/**
-	 * Output directory path. Files are written under `<outDir>/skills/<name>/`.
-	 *
-	 * @default "."
-	 */
-	outDir?: string;
-	/**
-	 * When `true`, removes the existing skill directory before writing.
-	 * Prevents stale files from previous generations.
-	 *
-	 * @default true
-	 */
-	clean?: boolean;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Generation options — top-level input for skill generation
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Top-level options for generating a skill bundle from a command tree.
- *
- * Combines the root command input, skill metadata, and write configuration
- * into a single options object for the `generateSkill` API.
  *
  * @example
  * ```ts
@@ -180,27 +164,177 @@ export interface WriteOptions {
  *     description: "CLI tool for managing widgets",
  *     version: "1.0.0",
  *   },
- *   outDir: "./dist",
+ *   agents: ["claude-code", "opencode"],
  * });
  * ```
  */
-export interface GenerateOptions extends WriteOptions {
+export interface GenerateOptions {
 	/** Root command to generate the skill from */
 	command: AnyCommand;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
+	/** Agent targets to install skills for */
+	agents: AgentTarget[];
+	/**
+	 * Installation scope — global (home directory) or project (cwd).
+	 * @default "global"
+	 */
+	scope?: Scope;
+	/**
+	 * When `true`, removes the existing skill directory before writing.
+	 * Prevents stale files from previous generations.
+	 * @default true
+	 */
+	clean?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Generation result — returned from generateSkill
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Status of an individual agent installation. */
+export type InstallStatus = "installed" | "updated" | "up-to-date";
+
+/** Status of an individual agent uninstallation. */
+export type UninstallStatus = "removed" | "not-found";
+
+/** Per-agent result from a generateSkill call. */
+export interface AgentResult {
+	/** Which agent this result is for */
+	agent: AgentTarget;
+	/** Absolute path to the skill output directory for this agent */
+	outputDir: string;
+	/** List of files that were written (relative paths) */
+	files: string[];
+	/** What happened during this installation */
+	status: InstallStatus;
+	/** Previous version string when status is "updated" */
+	previousVersion?: string;
+}
+
 /**
  * Result returned by `generateSkill` after writing files to disk.
  */
 export interface GenerateResult {
-	/** Absolute path to the generated skill directory */
-	outputDir: string;
-	/** List of files that were written (relative paths) */
-	files: string[];
+	/** Per-agent installation results */
+	agents: AgentResult[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Uninstall types
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Options for removing installed skills. */
+export interface UninstallOptions {
+	/** Skill name to uninstall */
+	name: string;
+	/** Agent targets to uninstall from */
+	agents: AgentTarget[];
+	/**
+	 * Installation scope to uninstall from.
+	 * @default "global"
+	 */
+	scope?: Scope;
+}
+
+/** Result returned by `uninstallSkill`. */
+export interface UninstallResult {
+	/** Per-agent uninstall results */
+	agents: Array<{
+		agent: AgentTarget;
+		outputDir: string;
+		status: UninstallStatus;
+	}>;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Status types
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Options for checking installed skill status. */
+export interface StatusOptions {
+	/** Skill name to check */
+	name: string;
+	/** Agent targets to check */
+	agents: AgentTarget[];
+	/**
+	 * Installation scope to check.
+	 * @default "global"
+	 */
+	scope?: Scope;
+}
+
+/** Result returned by `skillStatus`. */
+export interface StatusResult {
+	/** Per-agent status results */
+	agents: Array<{
+		agent: AgentTarget;
+		outputDir: string;
+		installed: boolean;
+		version?: string;
+	}>;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Plugin option types
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Options for the auto-mode skill plugin.
+ *
+ * The plugin reads `name` and `description` from the root command's `meta`
+ * at setup time, so only `version` is required here.
+ *
+ * The plugin silently updates already-installed skills when a new version is
+ * detected (`autoUpdate: true`). First-time installation is off by default
+ * (`autoInstall: false`), leaving it to the interactive skill command.
+ */
+export interface SkillPluginOptions {
+	/** Skill version string — compared against the installed manifest */
+	version: string;
+	/** Agent targets to manage */
+	agents: AgentTarget[];
+	/**
+	 * Installation scope.
+	 * @default "global"
+	 */
+	scope?: Scope;
+	/**
+	 * Automatically install skills when not yet present.
+	 * Set to `true` to install on first CLI invocation without requiring the
+	 * interactive skill command.
+	 * @default false
+	 */
+	autoInstall?: boolean;
+	/**
+	 * Automatically update skills when the installed version is outdated.
+	 * @default true
+	 */
+	autoUpdate?: boolean;
+}
+
+/**
+ * Options for the interactive skill command.
+ *
+ * The command reads `name` and `description` from the root command's `meta`
+ * (via the lazy `command` reference), so only `version` is required here.
+ *
+ * Creates a single command with interactive prompts for
+ * install, uninstall, and status operations.
+ */
+export interface SkillCommandOptions {
+	/** Lazy reference to the root command (avoids circular dependency) */
+	command: () => AnyCommand;
+	/** Skill version string — compared against the installed manifest */
+	version: string;
+	/**
+	 * Agent targets to offer in prompts.
+	 * @default All supported agents
+	 */
+	agents?: AgentTarget[];
+	/**
+	 * Default installation scope.
+	 * @default "global"
+	 */
+	scope?: Scope;
 }

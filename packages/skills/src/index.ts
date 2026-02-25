@@ -2,19 +2,26 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-export { generateSkill } from "./generate.ts";
+// Primitives
+export { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 
-// Generation API
-export { buildManifest } from "./manifest.ts";
-export { renderSkill } from "./render.ts";
-// Generation types
+// Plugin
+export { createSkillCommand, skillPlugin } from "./plugin.ts";
+
+// Types
 export type {
+	AgentResult,
+	AgentTarget,
 	GenerateOptions,
 	GenerateResult,
-	ManifestArg,
-	ManifestFlag,
-	ManifestNode,
-	RenderedFile,
+	InstallStatus,
+	Scope,
+	SkillCommandOptions,
 	SkillMeta,
-	WriteOptions,
+	SkillPluginOptions,
+	StatusOptions,
+	StatusResult,
+	UninstallOptions,
+	UninstallResult,
+	UninstallStatus,
 } from "./types.ts";

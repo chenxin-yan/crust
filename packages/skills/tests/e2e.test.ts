@@ -12,10 +12,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
 import { generateSkill } from "../src/generate.ts";
+import type { AgentResult } from "../src/types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -26,7 +27,7 @@ async function makeTmpDir(): Promise<string> {
 	const base = join(import.meta.dirname ?? ".", ".tmp-e2e");
 	const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const dir = join(base, id);
-	await Bun.write(join(dir, ".keep"), "");
+	await mkdir(dir, { recursive: true });
 	return dir;
 }
 
@@ -83,6 +84,40 @@ function resolveLink(fromFile: string, href: string): string {
 		}
 	}
 	return resolved.join("/");
+}
+
+/**
+ * Overrides process.cwd() for the duration of a callback.
+ * Used to control project-scope output paths in tests.
+ */
+async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+	const original = process.cwd;
+	process.cwd = () => dir;
+	try {
+		return await fn();
+	} finally {
+		process.cwd = original;
+	}
+}
+
+/**
+ * Helper to generate a skill and return the first agent's result.
+ * Uses project scope with cwd override for test isolation.
+ */
+async function generateForTest(
+	tmpDir: string,
+	command: ReturnType<typeof defineCommand>,
+	meta: { name: string; description: string; version: string },
+) {
+	const result = await withCwd(tmpDir, () =>
+		generateSkill({
+			command,
+			meta,
+			agents: ["claude-code"],
+			scope: "project",
+		}),
+	);
+	return result.agents[0] as AgentResult;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -307,15 +342,14 @@ afterEach(async () => {
 describe("E2E: skill generation", () => {
 	describe("output tree structure", () => {
 		it("creates the correct directory and file layout", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const files = await listFiles(result.outputDir);
+			const files = await listFiles(agent.outputDir);
 			const expected = [
-				"README.md",
 				"SKILL.md",
 				"command-index.md",
 				"commands/app.md",
@@ -334,26 +368,26 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("returns files matching on-disk files", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const diskFiles = await listFiles(result.outputDir);
-			const sorted = [...result.files].sort();
+			const diskFiles = await listFiles(agent.outputDir);
+			const sorted = [...agent.files].sort();
 			expect(diskFiles).toEqual(sorted);
 		});
 
 		it("produces a non-empty file for every entry", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			for (const file of result.files) {
-				const content = await readText(join(result.outputDir, file));
+			for (const file of agent.files) {
+				const content = await readText(join(agent.outputDir, file));
 				expect(content.length).toBeGreaterThan(0);
 			}
 		});
@@ -365,13 +399,13 @@ describe("E2E: skill generation", () => {
 
 	describe("SKILL.md", () => {
 		it("has valid YAML frontmatter with required fields", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 
 			// Frontmatter block
 			expect(content).toMatch(/^---\n/);
@@ -384,13 +418,13 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("contains the skill title and description", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("# deploy-cli");
 			expect(content).toContain(
 				"A cloud deployment CLI for managing applications",
@@ -398,51 +432,51 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("lists all top-level subcommands", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("`app`");
 			expect(content).toContain("`config`");
 			expect(content).toContain("`status`");
 		});
 
 		it("includes lazy-load instructions", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("command-index.md");
 			expect(content).toContain("commands/");
 		});
 
 		it("references root command usage (since root is runnable)", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("## Usage");
 			expect(content).toContain("commands/deploy.md");
 		});
 
 		it("all links in SKILL.md resolve to real files", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
-			const diskFiles = new Set(await listFiles(result.outputDir));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
 			const links = extractLinks(content);
 
 			expect(links.length).toBeGreaterThan(0);
@@ -459,15 +493,13 @@ describe("E2E: skill generation", () => {
 
 	describe("command-index.md", () => {
 		it("lists every command in the tree", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "command-index.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
+
+			const content = await readText(join(agent.outputDir, "command-index.md"));
 			const expectedCommands = [
 				"deploy",
 				"deploy app",
@@ -486,37 +518,29 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("has correct type labels", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "command-index.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
 
-			// deploy root is runnable + has children
+			const content = await readText(join(agent.outputDir, "command-index.md"));
+
 			expect(content).toMatch(/`deploy`\s*\|\s*runnable, group/);
-			// deploy app is group only (no run handler)
 			expect(content).toMatch(/`deploy app`\s*\|\s*group/);
-			// deploy config is runnable + group
 			expect(content).toMatch(/`deploy config`\s*\|\s*runnable, group/);
-			// deploy status is leaf/runnable
 			expect(content).toMatch(/`deploy status`\s*\|\s*runnable/);
 		});
 
 		it("all documentation links resolve to real files", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "command-index.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
-			const diskFiles = new Set(await listFiles(result.outputDir));
+
+			const content = await readText(join(agent.outputDir, "command-index.md"));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
 			const links = extractLinks(content);
 
 			expect(links.length).toBeGreaterThan(0);
@@ -527,15 +551,13 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("uses markdown table format", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "command-index.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
+
+			const content = await readText(join(agent.outputDir, "command-index.md"));
 			expect(content).toContain("| Command | Type | Documentation |");
 			expect(content).toContain("| ------- | ---- | ------------- |");
 		});
@@ -547,26 +569,21 @@ describe("E2E: skill generation", () => {
 
 	describe("leaf command files", () => {
 		it("deploy app create has full invocation details", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "commands", "app", "create.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
 
-			// Title
+			const content = await readText(
+				join(agent.outputDir, "commands", "app", "create.md"),
+			);
+
 			expect(content).toContain("# `deploy app create`");
-			// Description
 			expect(content).toContain("Create a new application");
-			// Usage line
 			expect(content).toContain("deploy app create <name>");
-			// Arguments section
 			expect(content).toContain("## Arguments");
 			expect(content).toContain("`name`");
-			// Flags section
 			expect(content).toContain("## Flags");
 			expect(content).toContain("`--template`");
 			expect(content).toContain("`-t`");
@@ -574,14 +591,14 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("deploy status has a watch flag", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const content = await readText(
-				join(result.outputDir, "commands", "status.md"),
+				join(agent.outputDir, "commands", "status.md"),
 			);
 
 			expect(content).toContain("# `deploy status`");
@@ -591,32 +608,30 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("leaf command file includes navigation links", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(
-				join(result.outputDir, "commands", "app", "create.md"),
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
 			);
 
-			// Parent link
+			const content = await readText(
+				join(agent.outputDir, "commands", "app", "create.md"),
+			);
+
 			expect(content).toContain("Parent:");
 			expect(content).toContain("`deploy app`");
-			// Command index link
 			expect(content).toContain("Command Index");
 		});
 
 		it("deploy config get has arguments documented", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const content = await readText(
-				join(result.outputDir, "commands", "config", "get.md"),
+				join(agent.outputDir, "commands", "config", "get.md"),
 			);
 
 			expect(content).toContain("# `deploy config get`");
@@ -632,14 +647,14 @@ describe("E2E: skill generation", () => {
 
 	describe("group command files", () => {
 		it("deploy app lists subcommands with links", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const content = await readText(
-				join(result.outputDir, "commands", "app.md"),
+				join(agent.outputDir, "commands", "app.md"),
 			);
 
 			expect(content).toContain("# `deploy app`");
@@ -651,49 +666,44 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("deploy config is a runnable group with usage and subcommands", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const content = await readText(
-				join(result.outputDir, "commands", "config.md"),
+				join(agent.outputDir, "commands", "config.md"),
 			);
 
 			expect(content).toContain("# `deploy config`");
 			expect(content).toContain("View and manage configuration");
-			// Should have usage section (runnable)
 			expect(content).toContain("## Usage");
-			// Should have flags (global flag)
 			expect(content).toContain("`--global`");
 			expect(content).toContain("`-g`");
-			// Should have subcommands
 			expect(content).toContain("## Subcommands");
 			expect(content).toContain("`get`");
 			expect(content).toContain("`set`");
 		});
 
 		it("root command (deploy.md) is rendered as a group with usage", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const content = await readText(
-				join(result.outputDir, "commands", "deploy.md"),
+				join(agent.outputDir, "commands", "deploy.md"),
 			);
 
 			expect(content).toContain("# `deploy`");
 			expect(content).toContain(
 				"A cloud deployment CLI for managing applications",
 			);
-			// Root has args and flags
 			expect(content).toContain("`environment`");
 			expect(content).toContain("`--verbose`");
 			expect(content).toContain("`--region`");
-			// Root has subcommands
 			expect(content).toContain("## Subcommands");
 		});
 	});
@@ -704,20 +714,20 @@ describe("E2E: skill generation", () => {
 
 	describe("cross-file link integrity", () => {
 		it("every markdown link across all files resolves to a real file", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const diskFiles = new Set(await listFiles(result.outputDir));
-			const mdFiles = result.files.filter((f) => f.endsWith(".md"));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
+			const mdFiles = agent.files.filter((f: string) => f.endsWith(".md"));
 
 			let totalLinks = 0;
 			const brokenLinks: string[] = [];
 
 			for (const mdFile of mdFiles) {
-				const content = await readText(join(result.outputDir, mdFile));
+				const content = await readText(join(agent.outputDir, mdFile));
 				const links = extractLinks(content);
 
 				for (const link of links) {
@@ -731,21 +741,19 @@ describe("E2E: skill generation", () => {
 				}
 			}
 
-			// Ensure we actually checked a meaningful number of links
 			expect(totalLinks).toBeGreaterThan(10);
 			expect(brokenLinks).toEqual([]);
 		});
 
 		it("group commands link correctly to child files", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			// Check that commands/app.md links resolve to commands/app/create.md etc.
 			const appContent = await readText(
-				join(result.outputDir, "commands", "app.md"),
+				join(agent.outputDir, "commands", "app.md"),
 			);
 			const appLinks = extractLinks(appContent);
 			const subcommandLinks = appLinks.filter(
@@ -757,7 +765,7 @@ describe("E2E: skill generation", () => {
 
 			expect(subcommandLinks.length).toBe(3);
 
-			const diskFiles = new Set(await listFiles(result.outputDir));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
 			for (const link of subcommandLinks) {
 				const resolved = resolveLink("commands/app.md", link.href);
 				expect(diskFiles.has(resolved)).toBe(true);
@@ -765,22 +773,21 @@ describe("E2E: skill generation", () => {
 		});
 
 		it("leaf commands link back to parent group", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const createContent = await readText(
-				join(result.outputDir, "commands", "app", "create.md"),
+				join(agent.outputDir, "commands", "app", "create.md"),
 			);
 			const links = extractLinks(createContent);
 
-			// Should have a link pointing back to app.md
 			const parentLink = links.find((l) => l.text.includes("deploy app"));
 			expect(parentLink).toBeDefined();
 
-			const diskFiles = new Set(await listFiles(result.outputDir));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
 			const resolved = resolveLink(
 				"commands/app/create.md",
 				parentLink?.href ?? "",
@@ -795,13 +802,13 @@ describe("E2E: skill generation", () => {
 
 	describe("distribution metadata", () => {
 		it("manifest.json contains all commands", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(join(agent.outputDir, "manifest.json"));
 			const manifest = JSON.parse(content);
 
 			expect(manifest.name).toBe("deploy-cli");
@@ -825,24 +832,6 @@ describe("E2E: skill generation", () => {
 			}
 			expect(manifest.commands.length).toBe(expectedCommands.length);
 		});
-
-		it("README.md has install instructions for both agents", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-
-			expect(content).toContain("# deploy-cli");
-			expect(content).toContain("Agent skill for the deploy CLI tool");
-			expect(content).toContain("1.2.0");
-			expect(content).toContain("OpenCode");
-			expect(content).toContain(".opencode/skills/deploy-cli/");
-			expect(content).toContain("Claude Code");
-			expect(content).toContain(".claude/skills/deploy-cli/");
-		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
@@ -851,19 +840,17 @@ describe("E2E: skill generation", () => {
 
 	describe("bundle usability", () => {
 		it("SKILL.md has valid Agent Skills frontmatter", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 
-			// Must start with YAML frontmatter delimiters
 			const lines = content.split("\n");
 			expect(lines[0]).toBe("---");
 
-			// Find the closing delimiter
 			let closingIdx = -1;
 			for (let i = 1; i < lines.length; i++) {
 				if (lines[i] === "---") {
@@ -873,110 +860,97 @@ describe("E2E: skill generation", () => {
 			}
 			expect(closingIdx).toBeGreaterThan(0);
 
-			// Frontmatter must contain required fields
 			const frontmatter = lines.slice(1, closingIdx).join("\n");
 			expect(frontmatter).toContain("name:");
 			expect(frontmatter).toContain("description:");
+			expect(frontmatter).toContain("version:");
 		});
 
 		it("SKILL.md body has markdown heading and instruction text", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 
-			// Should have an H1 heading
 			expect(content).toMatch(/^# .+$/m);
-			// Should have command reference section
 			expect(content).toContain("## Command Reference");
 		});
 
-		it("output is deterministic across multiple generations", async () => {
-			const cmd = buildFixtureCommand();
-			const tmpDir2 = await makeTmpDir();
-
-			try {
-				const result1 = await generateSkill({
-					command: cmd,
+		it("output is deterministic across multiple agents", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: buildFixtureCommand(),
 					meta: SKILL_META,
-					outDir: tmpDir,
-				});
-				const result2 = await generateSkill({
-					command: cmd,
-					meta: SKILL_META,
-					outDir: tmpDir2,
-				});
+					agents: ["claude-code", "opencode"],
+					scope: "project",
+				}),
+			);
 
-				// Same file list
-				expect(result1.files).toEqual(result2.files);
+			const claude = result.agents[0] as AgentResult;
+			const opencode = result.agents[1] as AgentResult;
 
-				// Same file contents
-				for (const file of result1.files) {
-					const content1 = await readText(join(result1.outputDir, file));
-					const content2 = await readText(join(result2.outputDir, file));
-					expect(content1).toBe(content2);
-				}
-			} finally {
-				await rm(tmpDir2, { recursive: true }).catch(() => {});
+			// Same file list
+			expect(claude.files).toEqual(opencode.files);
+
+			// Same file contents
+			for (const file of claude.files) {
+				const content1 = await readText(join(claude.outputDir, file));
+				const content2 = await readText(join(opencode.outputDir, file));
+				expect(content1).toBe(content2);
 			}
 		});
 
 		it("all markdown files are valid UTF-8 text", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const mdFiles = result.files.filter((f) => f.endsWith(".md"));
+			const mdFiles = agent.files.filter((f: string) => f.endsWith(".md"));
 			for (const mdFile of mdFiles) {
-				const content = await readText(join(result.outputDir, mdFile));
-				// Should be non-empty strings
+				const content = await readText(join(agent.outputDir, mdFile));
 				expect(typeof content).toBe("string");
 				expect(content.length).toBeGreaterThan(0);
-				// Should not contain null bytes or other binary artifacts
 				expect(content).not.toContain("\0");
 			}
 		});
 
 		it("manifest.json is valid JSON", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(join(agent.outputDir, "manifest.json"));
 			expect(() => JSON.parse(content)).not.toThrow();
 		});
 
 		it("command file paths in manifest match actual files", async () => {
-			const result = await generateSkill({
-				command: buildFixtureCommand(),
-				meta: SKILL_META,
-				outDir: tmpDir,
-			});
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
 
 			const manifestContent = await readText(
-				join(result.outputDir, "manifest.json"),
+				join(agent.outputDir, "manifest.json"),
 			);
 			const manifest = JSON.parse(manifestContent);
-			const diskFiles = new Set(await listFiles(result.outputDir));
+			const diskFiles = new Set(await listFiles(agent.outputDir));
 
-			// command-index should reference files for all commands
 			const indexContent = await readText(
-				join(result.outputDir, "command-index.md"),
+				join(agent.outputDir, "command-index.md"),
 			);
 
-			// For each command in manifest, verify its documentation file exists
 			for (const cmd of manifest.commands) {
 				expect(indexContent).toContain(`\`${cmd}\``);
 			}
 
-			// Every commands/ file on disk should be referenced in the index
 			const commandFiles = [...diskFiles].filter((f) =>
 				f.startsWith("commands/"),
 			);

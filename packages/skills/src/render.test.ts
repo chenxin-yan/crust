@@ -11,6 +11,7 @@ import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 const baseMeta: SkillMeta = {
 	name: "test-cli",
 	description: "A test CLI tool",
+	version: "1.0.0",
 };
 
 /**
@@ -89,7 +90,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "git", description: "Version control" };
+			const meta: SkillMeta = {
+				name: "git",
+				description: "Version control",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 
 			const paths = files.map((f) => f.path).sort();
@@ -126,12 +131,13 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain('  version: "1.2.3"');
 		});
 
-		it("omits metadata block when no version", () => {
+		it("always includes metadata block with required version", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).not.toContain("metadata:");
+			expect(skill?.content).toContain("metadata:");
+			expect(skill?.content).toContain('  version: "1.0.0"');
 		});
 
 		it("includes the manifest description in the body", () => {
@@ -165,7 +171,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App CLI" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App CLI",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
 
@@ -195,7 +205,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
 
@@ -243,7 +257,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App CLI" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App CLI",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const index = findFile(files, "command-index.md");
 
@@ -269,7 +287,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(hybrid);
-			const meta: SkillMeta = { name: "hybrid", description: "Test" };
+			const meta: SkillMeta = {
+				name: "hybrid",
+				description: "Test",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const index = findFile(files, "command-index.md");
 
@@ -298,7 +320,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const deploy = findFile(files, "commands/deploy.md");
 
@@ -313,7 +339,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "serve", description: "Server" };
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Server",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
@@ -338,7 +368,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const deploy = findFile(files, "commands/deploy.md");
 
@@ -355,7 +389,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "build", description: "Build" };
+			const meta: SkillMeta = {
+				name: "build",
+				description: "Build",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const build = findFile(files, "commands/build.md");
 
@@ -388,7 +426,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "copy", description: "Copy" };
+			const meta: SkillMeta = {
+				name: "copy",
+				description: "Copy",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const copy = findFile(files, "commands/copy.md");
 
@@ -419,7 +461,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "serve", description: "Serve" };
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Serve",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
@@ -451,7 +497,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "build", description: "Build" };
+			const meta: SkillMeta = {
+				name: "build",
+				description: "Build",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const build = findFile(files, "commands/build.md");
 
@@ -477,7 +527,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "lint", description: "Lint" };
+			const meta: SkillMeta = {
+				name: "lint",
+				description: "Lint",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const lint = findFile(files, "commands/lint.md");
 
@@ -499,7 +553,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "install", description: "Install" };
+			const meta: SkillMeta = {
+				name: "install",
+				description: "Install",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const install = findFile(files, "commands/install.md");
 
@@ -513,7 +571,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "serve", description: "Serve" };
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Serve",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
@@ -536,7 +598,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "git", description: "Git" };
+			const meta: SkillMeta = {
+				name: "git",
+				description: "Git",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const addFile = findFile(files, "commands/remote/add.md");
 
@@ -551,7 +617,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "serve", description: "Serve" };
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Serve",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
@@ -565,7 +635,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "serve", description: "Serve" };
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Serve",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
@@ -580,7 +654,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "test", description: "Test" };
+			const meta: SkillMeta = {
+				name: "test",
+				description: "Test",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const test = findFile(files, "commands/test.md");
 
@@ -597,7 +675,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "test", description: "Test" };
+			const meta: SkillMeta = {
+				name: "test",
+				description: "Test",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const test = findFile(files, "commands/test.md");
 
@@ -629,7 +711,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "git", description: "Git" };
+			const meta: SkillMeta = {
+				name: "git",
+				description: "Git",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const remoteFile = findFile(files, "commands/remote.md");
 
@@ -658,7 +744,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(parent);
-			const meta: SkillMeta = { name: "parent", description: "Parent" };
+			const meta: SkillMeta = {
+				name: "parent",
+				description: "Parent",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const parentFile = findFile(files, "commands/parent.md");
 
@@ -678,7 +768,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(parent);
-			const meta: SkillMeta = { name: "parent", description: "Parent" };
+			const meta: SkillMeta = {
+				name: "parent",
+				description: "Parent",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const parentFile = findFile(files, "commands/parent.md");
 
@@ -703,7 +797,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "git", description: "Git" };
+			const meta: SkillMeta = {
+				name: "git",
+				description: "Git",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const remoteFile = findFile(files, "commands/remote.md");
 
@@ -732,7 +830,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "app", description: "App CLI" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App CLI",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const allPaths = new Set(files.map((f) => f.path));
 
@@ -771,7 +873,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "git", description: "Git" };
+			const meta: SkillMeta = {
+				name: "git",
+				description: "Git",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const index = findFile(files, "command-index.md");
 			const commandFiles = files
@@ -963,7 +1069,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "app", description: "An app" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "An app",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 
 			expect(files.length).toBeGreaterThan(0);
@@ -990,7 +1100,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(root);
-			const meta: SkillMeta = { name: "root", description: "Root" };
+			const meta: SkillMeta = {
+				name: "root",
+				description: "Root",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 
 			const deepFile = findFile(files, "commands/level2/level3/deep.md");
@@ -1010,7 +1124,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "test", description: "Test tool" };
+			const meta: SkillMeta = {
+				name: "test",
+				description: "Test tool",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const test = findFile(files, "commands/test.md");
 
@@ -1026,7 +1144,11 @@ describe("renderSkill", () => {
 			});
 
 			const manifest = buildManifest(cmd);
-			const meta: SkillMeta = { name: "app", description: "App" };
+			const meta: SkillMeta = {
+				name: "app",
+				description: "App",
+				version: "1.0.0",
+			};
 			const files = renderSkill(manifest, meta);
 			const app = findFile(files, "commands/app.md");
 

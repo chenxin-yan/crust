@@ -159,10 +159,8 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 	lines.push("---");
 	lines.push(`name: ${meta.name}`);
 	lines.push(`description: ${meta.description}`);
-	if (meta.version) {
-		lines.push("metadata:");
-		lines.push(`  version: "${meta.version}"`);
-	}
+	lines.push("metadata:");
+	lines.push(`  version: "${meta.version}"`);
 	lines.push("---");
 	lines.push("");
 

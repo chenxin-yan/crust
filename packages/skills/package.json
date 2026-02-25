@@ -44,10 +44,12 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
+		"@crustjs/prompts": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:*",
+		"@crustjs/prompts": "workspace:*",
 		"typescript": "catalog:"
 	}
 }

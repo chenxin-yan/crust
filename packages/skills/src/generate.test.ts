@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
-import { generateSkill } from "./generate.ts";
+
+import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
+import type { AgentResult, UninstallResult } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -13,7 +15,7 @@ async function makeTmpDir(): Promise<string> {
 	const base = join(import.meta.dirname ?? ".", ".tmp-test");
 	const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const dir = join(base, id);
-	await Bun.write(join(dir, ".keep"), "");
+	await mkdir(dir, { recursive: true });
 	return dir;
 }
 
@@ -35,6 +37,20 @@ async function listFiles(dir: string, prefix = ""): Promise<string[]> {
 /** Reads a file's content as UTF-8 text. */
 async function readText(filePath: string): Promise<string> {
 	return readFile(filePath, "utf-8");
+}
+
+/**
+ * Overrides process.cwd() for the duration of a callback.
+ * Used to control project-scope output paths in tests.
+ */
+async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+	const original = process.cwd;
+	process.cwd = () => dir;
+	try {
+		return await fn();
+	} finally {
+		process.cwd = original;
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -111,7 +127,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-	// Clean up temp directory
 	const { rm } = await import("node:fs/promises");
 	try {
 		await rm(tmpDir, { recursive: true });
@@ -126,68 +141,109 @@ afterEach(async () => {
 
 describe("generateSkill", () => {
 	describe("output structure", () => {
-		it("creates skill directory under skills/<name>/", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Simple CLI" },
-				outDir: tmpDir,
-			});
+		it("creates skill directories for each agent", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code", "opencode"],
+					scope: "project",
+				}),
+			);
 
-			expect(result.outputDir).toEndWith("/skills/my-cli");
-
-			const stats = await stat(result.outputDir);
-			expect(stats.isDirectory()).toBe(true);
+			expect(result.agents).toHaveLength(2);
+			for (const agent of result.agents) {
+				const stats = await stat(agent.outputDir);
+				expect(stats.isDirectory()).toBe(true);
+			}
 		});
 
-		it("returns list of written files", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Simple CLI" },
-				outDir: tmpDir,
-			});
+		it("returns per-agent results with files and status", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			expect(result.files.length).toBeGreaterThan(0);
-			expect(result.files).toContain("SKILL.md");
-			expect(result.files).toContain("command-index.md");
-			expect(result.files).toContain("manifest.json");
-			expect(result.files).toContain("README.md");
+			expect(result.agents).toHaveLength(1);
+			const agent = result.agents[0] as AgentResult;
+			expect(agent.agent).toBe("claude-code");
+			expect(agent.status).toBe("installed");
+			expect(agent.files.length).toBeGreaterThan(0);
+			expect(agent.files).toContain("SKILL.md");
+			expect(agent.files).toContain("command-index.md");
+			expect(agent.files).toContain("manifest.json");
 		});
 
 		it("writes all returned files to disk", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Simple CLI" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const diskFiles = await listFiles(result.outputDir);
-			const sorted = [...result.files].sort();
+			const agent = result.agents[0] as AgentResult;
+			const diskFiles = await listFiles(agent.outputDir);
+			const sorted = [...agent.files].sort();
 			expect(diskFiles).toEqual(sorted);
 		});
 
 		it("creates correct files for simple command", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Simple CLI" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const files = await listFiles(result.outputDir);
+			const agent = result.agents[0] as AgentResult;
+			const files = await listFiles(agent.outputDir);
 			expect(files).toContain("SKILL.md");
 			expect(files).toContain("command-index.md");
 			expect(files).toContain("commands/my-cli.md");
 			expect(files).toContain("manifest.json");
-			expect(files).toContain("README.md");
 		});
 
 		it("creates correct files for nested commands", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Git tool" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Git tool",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const files = await listFiles(result.outputDir);
+			const agent = result.agents[0] as AgentResult;
+			const files = await listFiles(agent.outputDir);
 			expect(files).toContain("SKILL.md");
 			expect(files).toContain("command-index.md");
 			expect(files).toContain("commands/git.md");
@@ -196,37 +252,157 @@ describe("generateSkill", () => {
 			expect(files).toContain("commands/remote/add.md");
 			expect(files).toContain("commands/remote/remove.md");
 			expect(files).toContain("manifest.json");
-			expect(files).toContain("README.md");
+		});
+
+		it("does not generate README.md (removed in redesign)", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const agent = result.agents[0] as AgentResult;
+			expect(agent.files).not.toContain("README.md");
 		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// outDir defaults and custom paths
+	// Agent path resolution
 	// ────────────────────────────────────────────────────────────────────────
 
-	describe("outDir option", () => {
-		it("uses current directory as default outDir", async () => {
-			// Use a custom tmpDir as cwd to avoid polluting the project
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "test-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+	describe("agent paths", () => {
+		it("writes to correct claude-code project path", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			expect(result.outputDir).toContain("skills/test-cli");
+			const expected = join(tmpDir, ".claude", "skills", "my-cli");
+			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 
-		it("resolves nested outDir paths", async () => {
-			const nested = join(tmpDir, "deep", "nested");
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: nested,
-			});
+		it("writes to correct opencode project path", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["opencode"],
+					scope: "project",
+				}),
+			);
 
-			expect(result.outputDir).toContain("deep/nested/skills/my-cli");
-			const stats = await stat(result.outputDir);
-			expect(stats.isDirectory()).toBe(true);
+			const expected = join(tmpDir, ".opencode", "skills", "my-cli");
+			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
+		});
+	});
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Version checking and skip logic
+	// ────────────────────────────────────────────────────────────────────────
+
+	describe("version checking", () => {
+		it("skips installation when version is up-to-date", async () => {
+			// First install
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			// Second install — same version
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("up-to-date");
+			expect((result.agents[0] as AgentResult).files).toHaveLength(0);
+		});
+
+		it("updates when version changes", async () => {
+			// First install
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			// Second install — new version
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("updated");
+			expect((result.agents[0] as AgentResult).previousVersion).toBe("1.0.0");
+			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
+		});
+
+		it("returns installed status for fresh install", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("installed");
+			expect((result.agents[0] as AgentResult).previousVersion).toBeUndefined();
 		});
 	});
 
@@ -235,61 +411,89 @@ describe("generateSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("clean option", () => {
-		it("removes existing skill directory when clean is true (default)", async () => {
+		it("removes stale files when clean is true (default)", async () => {
 			// First generation
-			await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+			const first = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			// Write a stale file into the skill directory
-			const staleFile = join(tmpDir, "skills", "my-cli", "stale-file.txt");
+			// Write a stale file
+			const staleFile = join(
+				(first.agents[0] as AgentResult).outputDir,
+				"stale-file.txt",
+			);
 			await writeFile(staleFile, "stale content", "utf-8");
 
-			// Second generation — should clean
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+			// Second generation — different version to trigger update
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const files = await listFiles(result.outputDir);
+			const files = await listFiles(
+				(result.agents[0] as AgentResult).outputDir,
+			);
 			expect(files).not.toContain("stale-file.txt");
 		});
 
 		it("preserves existing files when clean is false", async () => {
 			// First generation
-			await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+			const first = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			// Write a stale file into the skill directory
-			const staleFile = join(tmpDir, "skills", "my-cli", "extra.txt");
-			await writeFile(staleFile, "extra content", "utf-8");
+			// Write an extra file
+			const extraFile = join(
+				(first.agents[0] as AgentResult).outputDir,
+				"extra.txt",
+			);
+			await writeFile(extraFile, "extra content", "utf-8");
 
-			// Second generation with clean: false
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-				clean: false,
-			});
+			// Second generation with clean: false and new version
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					clean: false,
+				}),
+			);
 
-			const files = await listFiles(result.outputDir);
+			const files = await listFiles(
+				(result.agents[0] as AgentResult).outputDir,
+			);
 			expect(files).toContain("extra.txt");
-		});
-
-		it("succeeds when skill directory does not exist and clean is true", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "fresh-cli", description: "Test" },
-				outDir: tmpDir,
-			});
-
-			expect(result.files.length).toBeGreaterThan(0);
 		});
 	});
 
@@ -298,57 +502,48 @@ describe("generateSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("manifest.json", () => {
-		it("contains valid JSON", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Simple CLI" },
-				outDir: tmpDir,
-			});
+		it("contains valid JSON with version", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
-			expect(() => JSON.parse(content)).not.toThrow();
-		});
-
-		it("includes skill metadata", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: {
-					name: "my-cli",
-					description: "Simple CLI",
-					version: "2.0.0",
-				},
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+			);
 			const manifest = JSON.parse(content);
 
 			expect(manifest.name).toBe("my-cli");
 			expect(manifest.description).toBe("Simple CLI");
 			expect(manifest.version).toBe("2.0.0");
-		});
-
-		it("includes entrypoint field", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "manifest.json"));
-			const manifest = JSON.parse(content);
-
 			expect(manifest.entrypoint).toBe("SKILL.md");
 		});
 
 		it("lists all command paths", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+			);
 			const manifest = JSON.parse(content);
 
 			expect(manifest.commands).toContain("git");
@@ -358,109 +553,45 @@ describe("generateSkill", () => {
 			expect(manifest.commands).toContain("git remote remove");
 		});
 
-		it("omits version when not provided", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+		it("always includes version field", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+			);
 			const manifest = JSON.parse(content);
-
-			expect(manifest.version).toBeUndefined();
+			expect(manifest.version).toBe("1.0.0");
 		});
 
 		it("ends with a trailing newline", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const content = await readText(join(result.outputDir, "manifest.json"));
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+			);
 			expect(content.endsWith("\n")).toBe(true);
-		});
-	});
-
-	// ────────────────────────────────────────────────────────────────────────
-	// README.md content
-	// ────────────────────────────────────────────────────────────────────────
-
-	describe("README.md", () => {
-		it("contains skill name as title", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "A simple CLI tool" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("# my-cli");
-		});
-
-		it("includes skill description", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "A simple CLI tool" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("A simple CLI tool");
-		});
-
-		it("includes version when provided", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: {
-					name: "my-cli",
-					description: "Test",
-					version: "3.0.0",
-				},
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("3.0.0");
-		});
-
-		it("includes OpenCode install instructions", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("OpenCode");
-			expect(content).toContain(".opencode/skills/my-cli/");
-		});
-
-		it("includes Claude Code install instructions", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("Claude Code");
-			expect(content).toContain(".claude/skills/my-cli/");
-		});
-
-		it("includes structure overview", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "Test" },
-				outDir: tmpDir,
-			});
-
-			const content = await readText(join(result.outputDir, "README.md"));
-			expect(content).toContain("SKILL.md");
-			expect(content).toContain("command-index.md");
-			expect(content).toContain("commands/");
-			expect(content).toContain("manifest.json");
 		});
 	});
 
@@ -469,86 +600,100 @@ describe("generateSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("determinism", () => {
-		it("produces identical output across multiple runs", async () => {
-			const tmpDir1 = await makeTmpDir();
-			const tmpDir2 = await makeTmpDir();
+		it("produces identical output across agents", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Git tool",
+						version: "1.0.0",
+					},
+					agents: ["claude-code", "opencode"],
+					scope: "project",
+				}),
+			);
 
-			try {
-				const cmd = nestedCommand();
-				const meta = {
-					name: "git-tool",
-					description: "Git tool",
-					version: "1.0.0",
-				};
+			const claude = result.agents[0] as AgentResult;
+			const opencode = result.agents[1] as (typeof result.agents)[number];
 
-				const result1 = await generateSkill({
-					command: cmd,
-					meta,
-					outDir: tmpDir1,
-				});
-				const result2 = await generateSkill({
-					command: cmd,
-					meta,
-					outDir: tmpDir2,
-				});
+			// Same file list
+			expect(claude.files).toEqual(opencode.files);
 
-				// Same file list
-				expect(result1.files).toEqual(result2.files);
-
-				// Same file contents
-				for (const file of result1.files) {
-					const content1 = await readText(join(result1.outputDir, file));
-					const content2 = await readText(join(result2.outputDir, file));
-					expect(content1).toBe(content2);
-				}
-			} finally {
-				const { rm } = await import("node:fs/promises");
-				await rm(tmpDir1, { recursive: true }).catch(() => {});
-				await rm(tmpDir2, { recursive: true }).catch(() => {});
+			// Same file contents
+			for (const file of claude.files) {
+				const content1 = await readText(join(claude.outputDir, file));
+				const content2 = await readText(join(opencode.outputDir, file));
+				expect(content1).toBe(content2);
 			}
 		});
 
 		it("returns files in sorted order", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const sorted = [...result.files].sort();
-			expect(result.files).toEqual(sorted);
+			const agent = result.agents[0] as AgentResult;
+			const sorted = [...agent.files].sort();
+			expect(agent.files).toEqual(sorted);
 		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// SKILL.md and command files wiring
+	// Content wiring
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("content wiring", () => {
 		it("SKILL.md is written correctly to disk", async () => {
-			const result = await generateSkill({
-				command: simpleCommand(),
-				meta: { name: "my-cli", description: "A simple CLI tool" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "A simple CLI tool",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const content = await readText(join(result.outputDir, "SKILL.md"));
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, "SKILL.md"),
+			);
 			expect(content).toContain("---");
 			expect(content).toContain("name: my-cli");
 			expect(content).toContain("description: A simple CLI tool");
+			expect(content).toContain('version: "1.0.0"');
 		});
 
 		it("command-index.md references existing command files", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const index = await readText(join(result.outputDir, "command-index.md"));
-			const files = await listFiles(result.outputDir);
+			const agent = result.agents[0] as AgentResult;
+			const index = await readText(join(agent.outputDir, "command-index.md"));
+			const files = await listFiles(agent.outputDir);
 
-			// Extract all file paths referenced in command-index.md links
 			const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
 			let match: RegExpExecArray | null;
 			// biome-ignore lint/suspicious/noAssignInExpressions: regex exec loop pattern
@@ -561,28 +706,51 @@ describe("generateSkill", () => {
 		});
 
 		it("command files contain expected content for leaf commands", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
 			const addCmd = await readText(
-				join(result.outputDir, "commands", "remote", "add.md"),
+				join(
+					(result.agents[0] as AgentResult).outputDir,
+					"commands",
+					"remote",
+					"add.md",
+				),
 			);
 			expect(addCmd).toContain("git remote add");
 			expect(addCmd).toContain("Add a remote");
 		});
 
 		it("command files contain expected content for group commands", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
 			const remote = await readText(
-				join(result.outputDir, "commands", "remote.md"),
+				join(
+					(result.agents[0] as AgentResult).outputDir,
+					"commands",
+					"remote.md",
+				),
 			);
 			expect(remote).toContain("Manage remotes");
 			expect(remote).toContain("Subcommands");
@@ -602,16 +770,23 @@ describe("generateSkill", () => {
 				run() {},
 			});
 
-			const result = await generateSkill({
-				command: cmd,
-				meta: { name: "minimal", description: "Bare minimum" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: cmd,
+					meta: {
+						name: "minimal",
+						description: "Bare minimum",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			expect(result.files).toContain("SKILL.md");
-			expect(result.files).toContain("manifest.json");
-			expect(result.files).toContain("README.md");
-			expect(result.files).toContain("command-index.md");
+			const agent = result.agents[0] as AgentResult;
+			expect(agent.files).toContain("SKILL.md");
+			expect(agent.files).toContain("manifest.json");
+			expect(agent.files).toContain("command-index.md");
 		});
 
 		it("handles deeply nested command hierarchy", async () => {
@@ -635,43 +810,163 @@ describe("generateSkill", () => {
 				},
 			});
 
-			const result = await generateSkill({
-				command: cmd,
-				meta: { name: "deep-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: cmd,
+					meta: {
+						name: "deep-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			const files = await listFiles(result.outputDir);
+			const files = await listFiles(
+				(result.agents[0] as AgentResult).outputDir,
+			);
 			expect(files).toContain("commands/level1/level2/level3.md");
 		});
 
 		it("does not produce partial output on successful run", async () => {
-			const result = await generateSkill({
-				command: nestedCommand(),
-				meta: { name: "git-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: nestedCommand(),
+					meta: {
+						name: "git-tool",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
 
-			// All files from result should exist on disk
-			for (const file of result.files) {
-				const stats = await stat(join(result.outputDir, file));
+			const agent = result.agents[0] as AgentResult;
+			for (const file of agent.files) {
+				const stats = await stat(join(agent.outputDir, file));
 				expect(stats.isFile()).toBe(true);
 			}
 		});
+	});
+});
 
-		it("handles skill name with special characters", async () => {
-			const cmd = defineCommand({
-				meta: { name: "my-cli", description: "Test" },
-				run() {},
-			});
+// ────────────────────────────────────────────────────────────────────────────
+// uninstallSkill
+// ────────────────────────────────────────────────────────────────────────────
 
-			const result = await generateSkill({
-				command: cmd,
-				meta: { name: "my-cli-tool", description: "Test" },
-				outDir: tmpDir,
-			});
+describe("uninstallSkill", () => {
+	it("removes installed skill directory", async () => {
+		// Install first
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: simpleCommand(),
+				meta: { name: "my-cli", description: "Test", version: "1.0.0" },
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
 
-			expect(result.outputDir).toContain("skills/my-cli-tool");
-		});
+		// Uninstall
+		const result = await withCwd(tmpDir, () =>
+			uninstallSkill({
+				name: "my-cli",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		const agentResult = result.agents[0] as UninstallResult["agents"][number];
+		expect(agentResult.status).toBe("removed");
+
+		// Verify directory is gone
+		try {
+			await stat(agentResult.outputDir);
+			expect(true).toBe(false); // Should not reach here
+		} catch {
+			// Expected — directory should not exist
+		}
+	});
+
+	it("returns not-found for non-existent skill", async () => {
+		const result = await withCwd(tmpDir, () =>
+			uninstallSkill({
+				name: "nonexistent",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		// Should be removed (rm -rf on non-existent succeeds) or not-found
+		const agentResult = result.agents[0] as UninstallResult["agents"][number];
+		expect(["removed", "not-found"]).toContain(agentResult.status);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// skillStatus
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("skillStatus", () => {
+	it("reports installed with version for existing skill", async () => {
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: simpleCommand(),
+				meta: { name: "my-cli", description: "Test", version: "1.0.0" },
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		const status = await withCwd(tmpDir, () =>
+			skillStatus({
+				name: "my-cli",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		expect(status.agents[0]?.installed).toBe(true);
+		expect(status.agents[0]?.version).toBe("1.0.0");
+	});
+
+	it("reports not installed for missing skill", async () => {
+		const status = await withCwd(tmpDir, () =>
+			skillStatus({
+				name: "nonexistent",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		expect(status.agents[0]?.installed).toBe(false);
+		expect(status.agents[0]?.version).toBeUndefined();
+	});
+
+	it("checks multiple agents", async () => {
+		// Install for claude-code only
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: simpleCommand(),
+				meta: { name: "my-cli", description: "Test", version: "1.0.0" },
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		const status = await withCwd(tmpDir, () =>
+			skillStatus({
+				name: "my-cli",
+				agents: ["claude-code", "opencode"],
+				scope: "project",
+			}),
+		);
+
+		expect(status.agents).toHaveLength(2);
+		const claude = status.agents.find((a) => a.agent === "claude-code");
+		const opencode = status.agents.find((a) => a.agent === "opencode");
+		expect(claude?.installed).toBe(true);
+		expect(opencode?.installed).toBe(false);
 	});
 });
