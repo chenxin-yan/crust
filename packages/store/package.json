@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/store",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "Minimal, type-safe config persistence for CLI apps",
 	"type": "module",
 	"license": "MIT",
