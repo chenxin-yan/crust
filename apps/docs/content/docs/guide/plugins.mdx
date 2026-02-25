@@ -81,6 +81,28 @@ Available setup actions:
 | Action | Description |
 | --- | --- |
 | `addFlag(command, name, def)` | Inject a flag into a command's flags object |
+| `addSubCommand(parent, name, command)` | Inject a subcommand (silently skipped if user already defined one with the same name) |
+
+#### Injecting Subcommands
+
+Plugins can register subcommands during setup. If the user already defined a subcommand with the same name, the plugin's injection is silently skipped — user definitions always take priority:
+
+```ts
+const myPlugin: CrustPlugin = {
+  name: "my-plugin",
+  setup(context, actions) {
+    const statusCmd = defineCommand({
+      meta: { name: "status", description: "Show status" },
+      run() {
+        console.log("Status: OK");
+      },
+    });
+
+    // Inject "status" as a subcommand of the root command
+    actions.addSubCommand(context.rootCommand, "status", statusCmd);
+  },
+};
+```
 
 ### Middleware Phase
 
