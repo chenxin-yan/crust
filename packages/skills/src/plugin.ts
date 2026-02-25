@@ -5,6 +5,7 @@
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
 import { confirm, multiselect, select, spinner } from "@crustjs/prompts";
+import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
 import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
@@ -12,17 +13,6 @@ import type {
 	SkillMeta,
 	SkillPluginOptions,
 } from "./types.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────────────────
-
-const ALL_AGENTS: AgentTarget[] = ["claude-code", "opencode"];
-
-const AGENT_LABELS: Record<AgentTarget, string> = {
-	"claude-code": "Claude Code",
-	opencode: "OpenCode",
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -47,6 +37,10 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  * `name` and `description` are read from the root command's `meta` at setup
  * time — only `version` needs to be supplied in the options.
  *
+ * Installed agents are detected automatically by checking for global
+ * configuration directories. Only detected agents are managed by the
+ * middleware and the interactive command.
+ *
  * **Auto-update** (default): silently updates already-installed skills when a
  * new version is detected. Set `autoInstall: true` to also install skills that
  * are not yet present.
@@ -56,7 +50,7 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  * subcommand is injected via `addSubCommand` during `setup()` — if the user
  * already defines a subcommand with the same name, theirs takes priority.
  *
- * @param options - Plugin configuration with version, agents, and scope
+ * @param options - Plugin configuration with version and scope
  * @returns A `CrustPlugin` to register in a command's `plugins` array
  *
  * @example
@@ -69,7 +63,6 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  *   plugins: [
  *     skillPlugin({
  *       version: "1.0.0",
- *       agents: ["claude-code", "opencode"],
  *       command: true, // registers "my-cli skill" subcommand
  *     }),
  *   ],
@@ -80,6 +73,7 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  */
 export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 	let rootCmd: AnyCommand;
+	let skillCmd: AnyCommand | null = null;
 
 	return {
 		name: "skills",
@@ -90,18 +84,30 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 			if (options.command) {
 				const name =
 					typeof options.command === "string" ? options.command : "skill";
-				const skillCmd = buildSkillCommand(rootCmd, options);
+				skillCmd = buildSkillCommand(rootCmd, options);
 				actions.addSubCommand(rootCmd, name, skillCmd);
 			}
 		},
 		async middleware(_context, next) {
+			// Skip auto-update when the skill command itself is being executed
+			if (skillCmd && _context.route?.command === skillCmd) {
+				await next();
+				return;
+			}
+
+			const agents = await detectInstalledAgents();
+			if (agents.length === 0) {
+				await next();
+				return;
+			}
+
 			const autoInstall = options.autoInstall ?? false;
 			const autoUpdate = options.autoUpdate ?? true;
 			const meta = deriveSkillMeta(rootCmd, options.version);
 
 			const status = await skillStatus({
 				name: meta.name,
-				agents: options.agents,
+				agents,
 				scope: options.scope ?? "global",
 			});
 
@@ -144,14 +150,12 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
  * Builds the interactive skill management command.
  *
  * Supports three actions via prompts: install/update, uninstall, and status.
- * All prompts can be skipped via flags for CI/scripting.
+ * Agents are detected automatically — only installed agents are shown.
  */
 function buildSkillCommand(
 	rootCmd: AnyCommand,
 	options: SkillPluginOptions,
 ): AnyCommand {
-	const availableAgents = options.agents ?? ALL_AGENTS;
-
 	return defineCommand({
 		meta: {
 			name: "skill",
@@ -162,12 +166,6 @@ function buildSkillCommand(
 				type: "string",
 				description:
 					'Action to perform: "install", "uninstall", or "status" (skips prompt)',
-			},
-			agent: {
-				type: "string",
-				multiple: true,
-				description:
-					"Agent target (can be specified multiple times, skips prompt)",
 			},
 			scope: {
 				type: "string",
@@ -181,9 +179,17 @@ function buildSkillCommand(
 		async run({ flags }) {
 			const meta = deriveSkillMeta(rootCmd, options.version);
 			const actionFlag = flags.action as string | undefined;
-			const agentFlag = flags.agent as string[] | undefined;
 			const scopeFlag = flags.scope as string | undefined;
 			const forceFlag = flags.force ?? false;
+
+			// Detect installed agents
+			const installedAgents = await detectInstalledAgents();
+			if (installedAgents.length === 0) {
+				console.log(
+					"No supported agents detected. Install Claude Code or OpenCode first.",
+				);
+				return;
+			}
 
 			// Step 1 — Select action
 			const action = await select<string>({
@@ -197,24 +203,11 @@ function buildSkillCommand(
 			});
 
 			if (action === "install") {
-				await handleInstall(
-					rootCmd,
-					meta,
-					options,
-					availableAgents,
-					agentFlag,
-					scopeFlag,
-				);
+				await handleInstall(rootCmd, meta, options, installedAgents, scopeFlag);
 			} else if (action === "uninstall") {
-				await handleUninstall(
-					meta,
-					availableAgents,
-					agentFlag,
-					scopeFlag,
-					forceFlag,
-				);
+				await handleUninstall(meta, installedAgents, scopeFlag, forceFlag);
 			} else if (action === "status") {
-				await handleStatus(meta, availableAgents, agentFlag, scopeFlag);
+				await handleStatus(meta, installedAgents, scopeFlag);
 			}
 		},
 	});
@@ -228,20 +221,18 @@ async function handleInstall(
 	rootCmd: AnyCommand,
 	meta: SkillMeta,
 	options: SkillPluginOptions,
-	availableAgents: AgentTarget[],
-	agentFlag: string[] | undefined,
+	installedAgents: AgentTarget[],
 	scopeFlag: string | undefined,
 ): Promise<void> {
 	// Select agents
 	const agents = await multiselect<AgentTarget>({
 		message: "Which agents?",
-		choices: availableAgents.map((a) => ({
+		choices: installedAgents.map((a) => ({
 			label: AGENT_LABELS[a],
 			value: a,
 		})),
-		default: availableAgents,
+		default: installedAgents,
 		required: true,
-		initial: agentFlag as AgentTarget[] | undefined,
 	});
 
 	// Select scope
@@ -284,21 +275,19 @@ async function handleInstall(
 
 async function handleUninstall(
 	meta: SkillMeta,
-	availableAgents: AgentTarget[],
-	agentFlag: string[] | undefined,
+	installedAgents: AgentTarget[],
 	scopeFlag: string | undefined,
 	forceFlag: boolean,
 ): Promise<void> {
 	// Select agents
 	const agents = await multiselect<AgentTarget>({
 		message: "Which agents to uninstall from?",
-		choices: availableAgents.map((a) => ({
+		choices: installedAgents.map((a) => ({
 			label: AGENT_LABELS[a],
 			value: a,
 		})),
-		default: availableAgents,
+		default: installedAgents,
 		required: true,
-		initial: agentFlag as AgentTarget[] | undefined,
 	});
 
 	// Confirm
@@ -344,16 +333,14 @@ async function handleUninstall(
 
 async function handleStatus(
 	meta: SkillMeta,
-	availableAgents: AgentTarget[],
-	agentFlag: string[] | undefined,
+	installedAgents: AgentTarget[],
 	scopeFlag: string | undefined,
 ): Promise<void> {
-	const agents = (agentFlag as AgentTarget[] | undefined) ?? availableAgents;
 	const scope = (scopeFlag as Scope | undefined) ?? "global";
 
 	const result = await skillStatus({
 		name: meta.name,
-		agents,
+		agents: installedAgents,
 		scope,
 	});
 

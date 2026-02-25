@@ -1,7 +1,13 @@
-import { describe, expect, it } from "bun:test";
-import { homedir } from "node:os";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveAgentPath } from "./agents.ts";
+import {
+	AGENT_LABELS,
+	ALL_AGENTS,
+	detectInstalledAgents,
+	resolveAgentPath,
+} from "./agents.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveAgentPath
@@ -46,5 +52,102 @@ describe("resolveAgentPath", () => {
 				join(homedir(), ".config", "opencode", "skills", "x"),
 			);
 		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Constants
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ALL_AGENTS", () => {
+	it("contains claude-code and opencode", () => {
+		expect(ALL_AGENTS).toContain("claude-code");
+		expect(ALL_AGENTS).toContain("opencode");
+	});
+});
+
+describe("AGENT_LABELS", () => {
+	it("has a label for every agent in ALL_AGENTS", () => {
+		for (const agent of ALL_AGENTS) {
+			expect(AGENT_LABELS[agent]).toBeString();
+			expect(AGENT_LABELS[agent].length).toBeGreaterThan(0);
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// detectInstalledAgents
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("detectInstalledAgents", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = join(
+			tmpdir(),
+			`crust-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
+		await mkdir(tmpDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("returns empty array when no agent config dirs exist", async () => {
+		const result = await detectInstalledAgents(tmpDir);
+		expect(result).toEqual([]);
+	});
+
+	it("detects claude-code when ~/.claude/ exists", async () => {
+		await mkdir(join(tmpDir, ".claude"), { recursive: true });
+
+		const result = await detectInstalledAgents(tmpDir);
+		expect(result).toContain("claude-code");
+		expect(result).not.toContain("opencode");
+	});
+
+	it("detects opencode when ~/.config/opencode/ exists", async () => {
+		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
+
+		const result = await detectInstalledAgents(tmpDir);
+		expect(result).toContain("opencode");
+		expect(result).not.toContain("claude-code");
+	});
+
+	it("detects both agents when both config dirs exist", async () => {
+		await mkdir(join(tmpDir, ".claude"), { recursive: true });
+		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
+
+		const result = await detectInstalledAgents(tmpDir);
+		expect(result).toContain("claude-code");
+		expect(result).toContain("opencode");
+		expect(result).toHaveLength(2);
+	});
+
+	it("only returns known agent targets", async () => {
+		// Create both to get a full result
+		await mkdir(join(tmpDir, ".claude"), { recursive: true });
+		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
+
+		const result = await detectInstalledAgents(tmpDir);
+		for (const agent of result) {
+			expect(ALL_AGENTS).toContain(agent);
+		}
+	});
+
+	it("does not return duplicates", async () => {
+		await mkdir(join(tmpDir, ".claude"), { recursive: true });
+		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
+
+		const result = await detectInstalledAgents(tmpDir);
+		const unique = new Set(result);
+		expect(unique.size).toBe(result.length);
+	});
+
+	it("defaults to os.homedir() when no home parameter provided", async () => {
+		// Just verify it runs without error and returns an array
+		const result = await detectInstalledAgents();
+		expect(Array.isArray(result)).toBe(true);
 	});
 });

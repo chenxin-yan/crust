@@ -285,18 +285,20 @@ export interface StatusResult {
  * The plugin reads `name` and `description` from the root command's `meta`
  * at setup time, so only `version` is required here.
  *
- * The plugin silently updates already-installed skills when a new version is
- * detected (`autoUpdate: true`). First-time installation is off by default
- * (`autoInstall: false`), leaving it to the interactive skill command.
+ * Installed agents are detected automatically by checking for global
+ * configuration directories (`~/.claude/` for Claude Code,
+ * `~/.config/opencode/` for OpenCode). Only detected agents are managed.
  *
- * Set `command` to register an interactive `skill` subcommand on the root
- * command for manual install/uninstall/status management.
+ * **Auto-update** (default): silently updates already-installed skills when a
+ * new version is detected. Set `autoInstall: true` to also install skills that
+ * are not yet present.
+ *
+ * **Interactive command**: set `command: true` to register a `skill` subcommand
+ * on the root command for manual install/uninstall/status management.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed manifest */
 	version: string;
-	/** Agent targets to manage */
-	agents: AgentTarget[];
 	/**
 	 * Installation scope.
 	 * @default "global"

@@ -898,9 +898,8 @@ describe("uninstallSkill", () => {
 			}),
 		);
 
-		// Should be removed (rm -rf on non-existent succeeds) or not-found
 		const agentResult = result.agents[0] as UninstallResult["agents"][number];
-		expect(["removed", "not-found"]).toContain(agentResult.status);
+		expect(agentResult.status).toBe("not-found");
 	});
 });
 

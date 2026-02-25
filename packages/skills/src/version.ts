@@ -38,27 +38,34 @@ export async function readInstalledVersion(
 	}
 }
 
+/** Result from {@link checkVersion} containing the status and installed version. */
+export interface VersionCheckResult {
+	/** Installation status */
+	status: InstallStatus;
+	/** Previously installed version, or `null` if not found */
+	installedVersion: string | null;
+}
+
 /**
  * Checks whether a skill directory needs installation or update.
  *
  * @param dir - Absolute path to the skill directory
  * @param newVersion - The version being installed
- * @returns `"installed"` if no manifest found, `"updated"` if versions differ,
- *          or `"up-to-date"` if versions match exactly
+ * @returns The installation status and the currently installed version (if any)
  */
 export async function checkVersion(
 	dir: string,
 	newVersion: string,
-): Promise<InstallStatus> {
+): Promise<VersionCheckResult> {
 	const installed = await readInstalledVersion(dir);
 
 	if (installed === null) {
-		return "installed";
+		return { status: "installed", installedVersion: null };
 	}
 
 	if (installed !== newVersion) {
-		return "updated";
+		return { status: "updated", installedVersion: installed };
 	}
 
-	return "up-to-date";
+	return { status: "up-to-date", installedVersion: installed };
 }

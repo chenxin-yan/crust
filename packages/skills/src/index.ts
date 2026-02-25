@@ -2,6 +2,9 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
+// Agent detection
+export { detectInstalledAgents } from "./agents.ts";
+
 // Primitives
 export { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 

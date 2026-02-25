@@ -174,11 +174,9 @@ function normalizeAliases(alias: string | string[] | undefined): string[] {
  * @param parentPath - Full path of the parent node
  */
 function normalizeChildren(
-	subCommands: Record<string, AnyCommand> | undefined,
+	subCommands: Record<string, AnyCommand>,
 	parentPath: string[],
 ): ManifestNode[] {
-	if (!subCommands) return [];
-
 	const keys = Object.keys(subCommands).sort();
 	return keys.map((key) => {
 		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so value is guaranteed

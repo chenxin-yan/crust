@@ -29,11 +29,23 @@ describe("@crustjs/skills exports", () => {
 		expect(typeof mod.skillPlugin).toBe("function");
 	});
 
+	it("exports detectInstalledAgents function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.detectInstalledAgents).toBeDefined();
+		expect(typeof mod.detectInstalledAgents).toBe("function");
+	});
+
 	it("exports all expected function symbols", async () => {
 		const mod = await import("./index.ts");
 		const exportedKeys = Object.keys(mod).sort();
 		expect(exportedKeys).toEqual(
-			["generateSkill", "skillPlugin", "skillStatus", "uninstallSkill"].sort(),
+			[
+				"detectInstalledAgents",
+				"generateSkill",
+				"skillPlugin",
+				"skillStatus",
+				"uninstallSkill",
+			].sort(),
 		);
 	});
 });

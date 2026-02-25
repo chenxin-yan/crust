@@ -2,7 +2,7 @@
 // Orchestration — install, uninstall, and status operations for agent skills
 // ────────────────────────────────────────────────────────────────────────────
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { resolveAgentPath } from "./agents.ts";
 import { buildManifest } from "./manifest.ts";
@@ -77,7 +77,10 @@ export async function generateSkill(
 
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, meta.name);
-		const status = await checkVersion(outputDir, meta.version);
+		const { status, installedVersion } = await checkVersion(
+			outputDir,
+			meta.version,
+		);
 
 		if (status === "up-to-date") {
 			results.push({
@@ -89,11 +92,8 @@ export async function generateSkill(
 			continue;
 		}
 
-		// Read previous version before overwriting (for "updated" status)
 		const previousVersion =
-			status === "updated"
-				? ((await readInstalledVersion(outputDir)) ?? undefined)
-				: undefined;
+			status === "updated" ? (installedVersion ?? undefined) : undefined;
 
 		if (clean) {
 			await cleanDirectory(outputDir);
@@ -132,19 +132,14 @@ export async function uninstallSkill(
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, name);
 
-		try {
-			// Check if directory exists by attempting to read it
-			const version = await readInstalledVersion(outputDir);
-			if (version !== null) {
-				await rm(outputDir, { recursive: true, force: true });
-				results.push({ agent, outputDir, status: "removed" });
-			} else {
-				// manifest.json missing or malformed — try removing directory anyway
-				// in case partial files exist
-				await rm(outputDir, { recursive: true, force: true });
-				results.push({ agent, outputDir, status: "removed" });
-			}
-		} catch {
+		const exists = await access(outputDir)
+			.then(() => true)
+			.catch(() => false);
+
+		if (exists) {
+			await rm(outputDir, { recursive: true, force: true });
+			results.push({ agent, outputDir, status: "removed" });
+		} else {
 			results.push({ agent, outputDir, status: "not-found" });
 		}
 	}

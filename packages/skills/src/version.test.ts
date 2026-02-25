@@ -82,36 +82,40 @@ describe("readInstalledVersion", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("checkVersion", () => {
-	it("returns 'installed' when no manifest exists", async () => {
-		const status = await checkVersion(tmpDir, "1.0.0");
-		expect(status).toBe("installed");
+	it("returns 'installed' with null version when no manifest exists", async () => {
+		const result = await checkVersion(tmpDir, "1.0.0");
+		expect(result.status).toBe("installed");
+		expect(result.installedVersion).toBeNull();
 	});
 
-	it("returns 'up-to-date' when versions match exactly", async () => {
+	it("returns 'up-to-date' with version when versions match exactly", async () => {
 		await writeFile(
 			join(tmpDir, "manifest.json"),
 			JSON.stringify({ name: "test", version: "1.0.0" }),
 		);
 
-		const status = await checkVersion(tmpDir, "1.0.0");
-		expect(status).toBe("up-to-date");
+		const result = await checkVersion(tmpDir, "1.0.0");
+		expect(result.status).toBe("up-to-date");
+		expect(result.installedVersion).toBe("1.0.0");
 	});
 
-	it("returns 'updated' when versions differ", async () => {
+	it("returns 'updated' with previous version when versions differ", async () => {
 		await writeFile(
 			join(tmpDir, "manifest.json"),
 			JSON.stringify({ name: "test", version: "1.0.0" }),
 		);
 
-		const status = await checkVersion(tmpDir, "2.0.0");
-		expect(status).toBe("updated");
+		const result = await checkVersion(tmpDir, "2.0.0");
+		expect(result.status).toBe("updated");
+		expect(result.installedVersion).toBe("1.0.0");
 	});
 
-	it("returns 'installed' when manifest is malformed", async () => {
+	it("returns 'installed' with null version when manifest is malformed", async () => {
 		await writeFile(join(tmpDir, "manifest.json"), "invalid json");
 
-		const status = await checkVersion(tmpDir, "1.0.0");
-		expect(status).toBe("installed");
+		const result = await checkVersion(tmpDir, "1.0.0");
+		expect(result.status).toBe("installed");
+		expect(result.installedVersion).toBeNull();
 	});
 
 	it("uses exact string comparison", async () => {
@@ -121,7 +125,8 @@ describe("checkVersion", () => {
 		);
 
 		// "1.0.0" !== "v1.0.0"
-		const status = await checkVersion(tmpDir, "v1.0.0");
-		expect(status).toBe("updated");
+		const result = await checkVersion(tmpDir, "v1.0.0");
+		expect(result.status).toBe("updated");
+		expect(result.installedVersion).toBe("1.0.0");
 	});
 });
