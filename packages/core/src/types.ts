@@ -247,6 +247,59 @@ export type ValidateFlagAliases<F extends Record<string, unknown>> = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// "no-" prefix validation (compile-time, per-flag granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detects whether a single alias literal starts with `"no-"`.
+ * Resolves to the offending alias, or `never` when it is clean.
+ */
+type NoPrefixedAlias<A> = A extends `no-${string}` ? A : never;
+
+/**
+ * Collects all `"no-"`-prefixed alias literals from a flag definition.
+ * Works with both `alias: "no-foo"` (string) and `alias: ["no-foo", "f"]` (array).
+ * Non-narrowed `string` types resolve to `never` to avoid false positives.
+ */
+type NoPrefixedAliases<F> = F extends { alias: infer A }
+	? A extends string
+		? string extends A
+			? never
+			: NoPrefixedAlias<A>
+		: A extends readonly string[]
+			? string extends A[number]
+				? never
+				: NoPrefixedAlias<A[number]>
+			: never
+	: never;
+
+/**
+ * Per-flag validation mapped type. Resolves to `F` when no `"no-"` prefixes
+ * exist on flag names or aliases. For flags with offending names or aliases,
+ * adds a branded error property causing a compile-time type error.
+ *
+ * The `"no-"` prefix is reserved for boolean flag negation (`--no-flag`).
+ * Define only the positive form (e.g. `cache`) and use `--no-cache` at runtime.
+ *
+ * ```
+ * Property 'FIX_NO_PREFIX' is missing in type '{ type: "boolean" }'
+ *   but required in type
+ *     '{ readonly FIX_NO_PREFIX: "Flag name \"no-cache\" must not start with \"no-\"; define \"cache\" instead and use \"--no-cache\" at runtime" }'.
+ * ```
+ */
+export type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
+	[K in keyof F & string]: K extends `no-${infer Base}`
+		? F[K] & {
+				readonly FIX_NO_PREFIX: `Flag name "${K}" must not start with "no-"; define "${Base}" instead and use "--no-${Base}" at runtime`;
+			}
+		: NoPrefixedAliases<F[K]> extends never
+			? F[K]
+			: F[K] & {
+					readonly FIX_NO_PREFIX: `Alias "${NoPrefixedAliases<F[K]>}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`;
+				};
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // Variadic arg validation (compile-time, per-arg granularity)
 // ────────────────────────────────────────────────────────────────────────────
 

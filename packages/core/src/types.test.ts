@@ -10,6 +10,7 @@ import type {
 	InferArgs,
 	InferFlags,
 	ValidateFlagAliases,
+	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
 
@@ -721,6 +722,100 @@ describe("ValidateVariadicArgs type inference", () => {
 		type Args = readonly [];
 		type Result = ValidateVariadicArgs<Args>;
 		type _check = Expect<Equal<Result, Args>>;
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// ValidateNoPrefixedFlags type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ValidateNoPrefixedFlags type inference", () => {
+	it("resolves to identity when no flag names or aliases start with no-", () => {
+		type Flags = {
+			cache: { type: "boolean" };
+			verbose: { type: "boolean"; alias: "v" };
+			output: { type: "string"; alias: ["o", "out"] };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("resolves to identity when no aliases are defined", () => {
+		type Flags = {
+			verbose: { type: "boolean" };
+			port: { type: "number" };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands flag whose name starts with no-", () => {
+		type Flags = {
+			"no-cache": { type: "boolean" };
+			verbose: { type: "boolean" };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		// "verbose" is clean
+		type _checkVerbose = Expect<Equal<Result["verbose"], Flags["verbose"]>>;
+		// "no-cache" gets branded
+		type _checkNoCache = Expect<
+			Equal<
+				Result["no-cache"],
+				Flags["no-cache"] & {
+					readonly FIX_NO_PREFIX: 'Flag name "no-cache" must not start with "no-"; define "cache" instead and use "--no-cache" at runtime';
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands flag whose string alias starts with no-", () => {
+		type Flags = {
+			cache: { type: "boolean"; alias: "no-store" };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result["cache"],
+				Flags["cache"] & {
+					readonly FIX_NO_PREFIX: 'Alias "no-store" must not start with "no-"; the "no-" prefix is reserved for boolean negation';
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands flag whose alias array contains a no- prefixed entry", () => {
+		type Flags = {
+			cache: { type: "boolean"; alias: ["c", "no-store"] };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result["cache"],
+				Flags["cache"] & {
+					readonly FIX_NO_PREFIX: 'Alias "no-store" must not start with "no-"; the "no-" prefix is reserved for boolean negation';
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("allows short aliases (single char) without branding", () => {
+		type Flags = {
+			verbose: { type: "boolean"; alias: "v" };
+		};
+		type Result = ValidateNoPrefixedFlags<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
 
 		expect(true).toBe(true);
 	});

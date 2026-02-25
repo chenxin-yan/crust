@@ -48,6 +48,15 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	}
 
 	for (const [name, def] of Object.entries(flagsDef)) {
+		// Defense-in-depth: reject "no-" prefixed names even when bypassing defineCommand
+		if (name.startsWith("no-")) {
+			const base = name.slice(3);
+			throw new CrustError(
+				"DEFINITION",
+				`Flag name "--${name}" must not start with "no-"; define "${base}" instead and use "--no-${base}" at runtime`,
+			);
+		}
+
 		// Map Crust types to util.parseArgs types
 		// util.parseArgs only supports "string" and "boolean"
 		// "number" types are parsed as "string" then coerced
@@ -64,6 +73,14 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 		if (def.alias) {
 			const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
 			for (const alias of aliases) {
+				// Defense-in-depth: reject "no-" prefixed aliases
+				if (alias.startsWith("no-")) {
+					throw new CrustError(
+						"DEFINITION",
+						`Alias "--${alias}" on flag "--${name}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`,
+					);
+				}
+
 				// Check for collision
 				const existing = aliasRegistry.get(alias);
 				if (existing) {
@@ -143,14 +160,20 @@ function coerceFlagValue(
 
 	if (def.multiple && Array.isArray(parsedValue)) {
 		return def.type === "boolean"
-			? parsedValue.map((v) => (typeof v === "boolean" ? v : Boolean(v)))
+			? parsedValue.filter((v): v is boolean => typeof v === "boolean")
 			: (parsedValue as string[]).map((v) => coerceValue(v, def.type, label));
 	}
 
 	if (def.type === "boolean") {
-		return typeof parsedValue === "boolean"
-			? parsedValue
-			: Boolean(parsedValue);
+		// Strict: only accept actual boolean values from the parser.
+		// --flag produces true, --no-flag produces false.
+		if (typeof parsedValue === "boolean") {
+			return parsedValue;
+		}
+		throw new CrustError(
+			"PARSE",
+			`Expected boolean value for flag "${label}", got ${typeof parsedValue}`,
+		);
 	}
 
 	if (typeof parsedValue === "string") {
@@ -285,6 +308,46 @@ function resolveArgs(
 	return resolved;
 }
 
+/**
+ * Enforce canonical-only boolean negation.
+ *
+ * `--no-<name>` is accepted only for the canonical boolean flag name.
+ * Negating long aliases (for example `--no-loud` where `loud` aliases
+ * `verbose`) is rejected with a targeted CrustError.
+ */
+function validateCanonicalNegationUsage(
+	argv: string[],
+	flagsDef: FlagsDef | undefined,
+	aliasToName: Record<string, string>,
+): void {
+	if (!flagsDef) return;
+
+	for (const arg of argv) {
+		if (arg === "--") return;
+		if (!arg.startsWith("--no-")) continue;
+
+		const assignmentIndex = arg.indexOf("=");
+		const rawName =
+			assignmentIndex === -1
+				? arg.slice("--no-".length)
+				: arg.slice("--no-".length, assignmentIndex);
+
+		if (!rawName) continue;
+
+		const canonical = aliasToName[rawName];
+		if (!canonical) continue;
+		if (canonical === rawName) continue;
+
+		const def = flagsDef[canonical];
+		if (def?.type !== "boolean") continue;
+
+		throw new CrustError(
+			"PARSE",
+			`Cannot negate alias "--no-${rawName}"; use "--no-${canonical}" instead`,
+		);
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // parseArgs — Main parsing function
 // ────────────────────────────────────────────────────────────────────────────
@@ -311,6 +374,8 @@ export function parseArgs<
 	const { options: parseOptions, aliasToName } =
 		buildParseArgsOptionDescriptor(flagsDef);
 
+	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
+
 	let parsed: ReturnType<typeof nodeParseArgs>;
 
 	try {
@@ -326,10 +391,16 @@ export function parseArgs<
 		if (error instanceof Error) {
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
 			if (unknownMatch) {
-				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`);
+				throw new CrustError(
+					"PARSE",
+					`Unknown flag "${unknownMatch[1]}"`,
+				).withCause(error);
 			}
 		}
-		throw error;
+		throw new CrustError(
+			"PARSE",
+			"Failed to parse command arguments",
+		).withCause(error);
 	}
 
 	const rawArgs: string[] = [];

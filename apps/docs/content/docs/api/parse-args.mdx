@@ -38,7 +38,7 @@ interface ParseResult<A, F> {
 
 - **`CrustError("PARSE")`** — Unknown flag, number coercion failure
 - **`CrustError("VALIDATION")`** — Missing required argument or flag
-- **`CrustError("DEFINITION")`** — Flag alias collision (runtime defense-in-depth)
+- **`CrustError("DEFINITION")`** — Invalid flag definition at runtime (alias collision, or flag name/alias starting with `"no-"`)
 
 ## Behavior
 
@@ -48,7 +48,7 @@ interface ParseResult<A, F> {
 
 - **Strict mode** — Unknown flags immediately produce a `PARSE` error
 - **Positionals allowed** — Positional arguments are captured and mapped
-- **Negative flags** — `--no-<flag>` syntax is supported for boolean flags
+- **Negative flags** — `--no-<canonical-flag>` syntax is supported for boolean flags; `--no-<alias>` is not supported
 - **Token-based** — Uses `util.parseArgs` tokens for accurate `--` separator handling
 
 ### Type Coercion
@@ -57,7 +57,7 @@ interface ParseResult<A, F> {
 | --- | --- |
 | `"string"` | Kept as-is |
 | `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
-| `"boolean"` | Toggle flags. `--flag` → `true`, `--no-flag` → `false` |
+| `"boolean"` | Toggle flags. `--flag` → `true`, `--no-flag` → `false`. Value assignment forms like `--flag=true` are rejected |
 
 ### Alias Resolution
 

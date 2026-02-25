@@ -19,7 +19,7 @@ description: Typed error class with error codes and structured details.
 
 | Code                | When Thrown                                                 | Details Type                          |
 | ------------------- | ----------------------------------------------------------- | ------------------------------------- |
-| `DEFINITION`        | Invalid command configuration (empty name, alias collision) | `undefined`                           |
+| `DEFINITION`        | Invalid command configuration (empty name, alias collision, invalid `no-` prefixed flag name/alias) | `undefined`                           |
 | `VALIDATION`        | Missing required argument or flag                           | `ValidationErrorDetails \| undefined` |
 | `PARSE`             | Argv parsing failure (unknown flag, type coercion)          | `undefined`                           |
 | `EXECUTION`         | Runtime command/middleware failure                          | `undefined`                           |

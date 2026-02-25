@@ -14,7 +14,7 @@ function defineCommand<
 >(
   config: CommandDef<A, F> & {
     args?: ValidateVariadicArgs<A>;
-    flags?: ValidateFlagAliases<F>;
+    flags?: ValidateNoPrefixedFlags<ValidateFlagAliases<F>>;
   },
 ): Command<A, F>;
 ```
@@ -44,16 +44,17 @@ A frozen `Command<A, F>` object. The returned object is immutable via `Object.fr
 
 ## Throws
 
-- **`CrustError("DEFINITION")`** — If `meta.name` is empty or whitespace-only
+- **`CrustError("DEFINITION")`** — If `meta.name` is empty/whitespace-only, or if a flag name/alias starts with `"no-"`
 
 ## Compile-Time Checks
 
-`defineCommand` performs two compile-time validations with per-item error targeting:
+`defineCommand` performs three compile-time validations with per-item error targeting:
 
 1. **`ValidateVariadicArgs<A>`** — Ensures only the last positional argument has `variadic: true`
 2. **`ValidateFlagAliases<F>`** — Ensures no flag alias collides with another flag name or alias
+3. **`ValidateNoPrefixedFlags<F>`** — Ensures flag names and aliases do not start with `"no-"` (reserved for boolean negation)
 
-On error, these types add branded properties (`FIX_VARIADIC_POSITION` or `FIX_ALIAS_COLLISION`) to the specific offending arg/flag so the TypeScript squiggle appears on the exact problematic item.
+On error, these types add branded properties (`FIX_VARIADIC_POSITION`, `FIX_ALIAS_COLLISION`, or `FIX_NO_PREFIX`) to the specific offending arg/flag so the TypeScript squiggle appears on the exact problematic item.
 
 ## Examples
 

@@ -819,3 +819,171 @@ describe("parseArgs — complex scenarios", () => {
 		expect(result.args.destination).toBe("./dest");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Boolean flag value assignment errors (--flag=false)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — boolean flag value assignment", () => {
+	const cmd = defineCommand({
+		meta: { name: "test" },
+		flags: {
+			verbose: { type: "boolean" },
+		},
+	});
+
+	it("throws CrustError with PARSE code on --flag=false", () => {
+		try {
+			parseArgs(cmd, ["--verbose=false"]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("PARSE");
+			expect((err as CrustError).message).toBe(
+				"Failed to parse command arguments",
+			);
+			expect((err as CrustError).cause).toBeInstanceOf(Error);
+			expect(((err as CrustError).cause as Error).message).toContain(
+				"Option '--verbose' does not take an argument",
+			);
+		}
+	});
+
+	it("throws CrustError with PARSE code on --flag=true", () => {
+		try {
+			parseArgs(cmd, ["--verbose=true"]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("PARSE");
+			expect((err as CrustError).message).toBe(
+				"Failed to parse command arguments",
+			);
+			expect((err as CrustError).cause).toBeInstanceOf(Error);
+			expect(((err as CrustError).cause as Error).message).toContain(
+				"Option '--verbose' does not take an argument",
+			);
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Negated boolean flag with value assignment (--no-flag=value)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — negated boolean flag with value assignment", () => {
+	const cmd = defineCommand({
+		meta: { name: "test" },
+		flags: {
+			verbose: { type: "boolean" },
+		},
+	});
+
+	// Node's parseArgs does not recognize --no-<flag>=<value> as a combined
+	// form, so it surfaces as an "Unknown option" error rather than the
+	// "does not take an argument" path used for --flag=value.
+	it("throws CrustError with PARSE code on --no-flag=true", () => {
+		try {
+			parseArgs(cmd, ["--no-verbose=true"]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("PARSE");
+			expect((err as CrustError).message).toBe('Unknown flag "--no-verbose"');
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Canonical-only negation (reject --no-<alias>)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — canonical-only negation", () => {
+	const cmd = defineCommand({
+		meta: { name: "test" },
+		flags: {
+			verbose: { type: "boolean", alias: ["v", "loud"] },
+		},
+	});
+
+	it("allows --no-<canonical> (--no-verbose)", () => {
+		const result = parseArgs(cmd, ["--no-verbose"]);
+		expect(result.flags.verbose).toBe(false);
+	});
+
+	it("allows --<canonical> (--verbose)", () => {
+		const result = parseArgs(cmd, ["--verbose"]);
+		expect(result.flags.verbose).toBe(true);
+	});
+
+	it("allows positive long alias (--loud)", () => {
+		const result = parseArgs(cmd, ["--loud"]);
+		expect(result.flags.verbose).toBe(true);
+	});
+
+	it("allows positive short alias (-v)", () => {
+		const result = parseArgs(cmd, ["-v"]);
+		expect(result.flags.verbose).toBe(true);
+	});
+
+	it("throws CrustError with PARSE code on --no-<long-alias>", () => {
+		try {
+			parseArgs(cmd, ["--no-loud"]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("PARSE");
+			expect((err as CrustError).message).toBe(
+				'Cannot negate alias "--no-loud"; use "--no-verbose" instead',
+			);
+		}
+	});
+
+	it("last-token-wins for canonical positive/negative", () => {
+		const result1 = parseArgs(cmd, ["--verbose", "--no-verbose"]);
+		expect(result1.flags.verbose).toBe(false);
+
+		const result2 = parseArgs(cmd, ["--no-verbose", "--verbose"]);
+		expect(result2.flags.verbose).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Defense-in-depth: "no-" prefixed flag names in parser
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — no- prefix defense-in-depth", () => {
+	it("throws CrustError with DEFINITION code on no- prefixed flag name", () => {
+		const cmd: AnyCommand = {
+			meta: { name: "test" },
+			flags: { "no-cache": { type: "boolean" } },
+		};
+		try {
+			parseArgs(cmd, []);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain(
+				'Flag name "--no-cache" must not start with "no-"',
+			);
+		}
+	});
+
+	it("throws CrustError with DEFINITION code on no- prefixed alias", () => {
+		const cmd: AnyCommand = {
+			meta: { name: "test" },
+			flags: { cache: { type: "boolean", alias: "no-store" } },
+		};
+		try {
+			parseArgs(cmd, []);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain(
+				'Alias "--no-store" on flag "--cache" must not start with "no-"',
+			);
+		}
+	});
+});

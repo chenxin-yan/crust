@@ -5,6 +5,7 @@ import type {
 	CommandDef,
 	FlagsDef,
 	ValidateFlagAliases,
+	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
 
@@ -42,7 +43,7 @@ export function defineCommand<
 >(
 	config: CommandDef<A, F> & {
 		args?: ValidateVariadicArgs<A>;
-		flags?: ValidateFlagAliases<F>;
+		flags?: ValidateNoPrefixedFlags<ValidateFlagAliases<F>>;
 	},
 ): Command<A, F> {
 	// Validate required meta.name
@@ -51,6 +52,30 @@ export function defineCommand<
 			"DEFINITION",
 			"defineCommand: meta.name is required and must be a non-empty string",
 		);
+	}
+
+	// Runtime guard: reject flag names and aliases starting with "no-"
+	if (config.flags) {
+		for (const [name, def] of Object.entries(config.flags)) {
+			if (name.startsWith("no-")) {
+				const base = name.slice(3);
+				throw new CrustError(
+					"DEFINITION",
+					`Flag name "--${name}" must not start with "no-"; define "${base}" instead and use "--no-${base}" at runtime`,
+				);
+			}
+			if (def.alias) {
+				const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
+				for (const alias of aliases) {
+					if (alias.startsWith("no-")) {
+						throw new CrustError(
+							"DEFINITION",
+							`Alias "--${alias}" on flag "--${name}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`,
+						);
+					}
+				}
+			}
+		}
 	}
 
 	// Deep copy data objects to decouple from the original config.

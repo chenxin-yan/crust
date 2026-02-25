@@ -75,6 +75,10 @@ my-cli --verbose --no-verbose   # flags.verbose === false
 my-cli --no-verbose --verbose   # flags.verbose === true
 ```
 
+Use the canonical flag name for negation (`--no-verbose`), not aliases like `--no-v` or `--no-loud`.
+
+Boolean flags are toggles and do not accept explicit value assignment. Forms like `--verbose=true` or `--verbose=false` are parse errors.
+
 ## Aliases
 
 Provide short aliases with the `alias` property:
@@ -91,6 +95,10 @@ Single-character aliases use the `-x` short form. You can provide multiple alias
 
 <Callout type="warn">
   Alias collisions are caught at **compile time** and **runtime**. If an alias conflicts with another flag name or another alias, you'll get an error.
+</Callout>
+
+<Callout type="warn">
+  The `no-` prefix is reserved for boolean negation. Do not define flag names or aliases that start with `no-`.
 </Callout>
 
 ## Required Flags

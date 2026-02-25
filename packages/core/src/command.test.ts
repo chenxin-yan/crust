@@ -366,3 +366,74 @@ describe("defineCommand type inference", () => {
 		expect(_broadCmd).toBeDefined();
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// defineCommand — "no-" prefix validation
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('defineCommand "no-" prefix validation', () => {
+	it("throws CrustError with DEFINITION code on flag name starting with no-", () => {
+		const config = {
+			meta: { name: "test" },
+			flags: { "no-cache": { type: "boolean" as const } },
+		};
+		try {
+			defineCommand(config as Parameters<typeof defineCommand>[0]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Flag name "--no-cache" must not start with "no-"; define "cache" instead and use "--no-cache" at runtime',
+			);
+		}
+	});
+
+	it("throws CrustError with DEFINITION code on alias starting with no-", () => {
+		const config = {
+			meta: { name: "test" },
+			flags: { cache: { type: "boolean" as const, alias: "no-store" } },
+		};
+		try {
+			defineCommand(config as Parameters<typeof defineCommand>[0]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Alias "--no-store" on flag "--cache" must not start with "no-"; the "no-" prefix is reserved for boolean negation',
+			);
+		}
+	});
+
+	it("throws CrustError with DEFINITION code on alias array containing no- entry", () => {
+		const config = {
+			meta: { name: "test" },
+			flags: {
+				cache: { type: "boolean" as const, alias: ["c", "no-store"] },
+			},
+		};
+		try {
+			defineCommand(config as Parameters<typeof defineCommand>[0]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Alias "--no-store" on flag "--cache" must not start with "no-"; the "no-" prefix is reserved for boolean negation',
+			);
+		}
+	});
+
+	it("accepts valid flag names without no- prefix", () => {
+		expect(() => {
+			defineCommand({
+				meta: { name: "test" },
+				flags: {
+					cache: { type: "boolean" },
+					verbose: { type: "boolean", alias: ["v", "loud"] },
+				},
+			});
+		}).not.toThrow();
+	});
+});

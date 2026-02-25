@@ -314,3 +314,15 @@ type ValidateFlagAliases<F extends FlagsDef> = /* ... */;
 // On error, the offending flag gets a branded property:
 // { readonly FIX_ALIAS_COLLISION: `Alias "${...}" collides with another flag name or alias` }
 ```
+
+### `ValidateNoPrefixedFlags<F>`
+
+Per-flag validation used by `defineCommand`. Reserves the `no-` prefix for boolean negation by rejecting flag names and aliases that start with `no-`.
+
+```ts
+type ValidateNoPrefixedFlags<F extends FlagsDef> = /* ... */;
+// On error, the offending flag gets a branded property:
+// { readonly FIX_NO_PREFIX: `Flag name "${...}" must not start with "no-"; ...` }
+// or
+// { readonly FIX_NO_PREFIX: `Alias "${...}" must not start with "no-"; ...` }
+```

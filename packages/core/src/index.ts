@@ -39,6 +39,7 @@ export type {
 	InferFlags,
 	ParseResult,
 	ValidateFlagAliases,
+	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 	ValueType,
 } from "./types.ts";
