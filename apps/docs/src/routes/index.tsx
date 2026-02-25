@@ -132,6 +132,11 @@ const MODULES: Array<{
     doc: "modules/style",
   },
   {
+    pkg: "@crustjs/store",
+    desc: "Type-safe config persistence",
+    doc: "modules/store",
+  },
+  {
     pkg: "@crustjs/test",
     desc: "CLI testing helpers",
     doc: "modules/test",
@@ -141,12 +146,6 @@ const MODULES: Array<{
     pkg: "@crustjs/render",
     desc: "Terminal content rendering",
     doc: "modules/render",
-    upcoming: true,
-  },
-  {
-    pkg: "@crustjs/store",
-    desc: "Persistent data storage",
-    doc: "modules/store",
     upcoming: true,
   },
   {
