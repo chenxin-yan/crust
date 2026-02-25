@@ -1,5 +1,12 @@
 # @crustjs/validate
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [384e2a9]
+  - @crustjs/core@0.0.8
+
 ## 0.0.3
 
 ### Patch Changes
