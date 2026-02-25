@@ -100,9 +100,8 @@ describe("defineCommand", () => {
 			},
 		});
 
-		expect(parentCmd.subCommands).toBeDefined();
-		expect(parentCmd.subCommands?.status).toBe(subCmd);
-		expect(parentCmd.subCommands?.status?.meta.name).toBe("status");
+		expect(parentCmd.subCommands.status).toBe(subCmd);
+		expect(parentCmd.subCommands.status?.meta.name).toBe("status");
 	});
 
 	it("handles optional fields gracefully — all omitted", () => {
@@ -113,7 +112,7 @@ describe("defineCommand", () => {
 		expect(cmd.meta.name).toBe("minimal");
 		expect(cmd.args).toBeUndefined();
 		expect(cmd.flags).toEqual({});
-		expect(cmd.subCommands).toBeUndefined();
+		expect(cmd.subCommands).toEqual({});
 		expect(cmd.preRun).toBeUndefined();
 		expect(cmd.run).toBeUndefined();
 		expect(cmd.postRun).toBeUndefined();

@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Plugin layer — skillPlugin (auto mode) and createSkillCommand (command mode)
+// Plugin layer — skillPlugin with optional interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
@@ -9,7 +9,6 @@ import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
 	Scope,
-	SkillCommandOptions,
 	SkillMeta,
 	SkillPluginOptions,
 } from "./types.ts";
@@ -39,30 +38,30 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Auto mode plugin — skillPlugin
+// Skill plugin
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Auto-mode plugin that silently manages agent skills on every CLI invocation.
+ * Plugin that manages agent skills for a Crust CLI application.
  *
  * `name` and `description` are read from the root command's `meta` at setup
  * time — only `version` needs to be supplied in the options.
  *
- * By default the plugin only **updates** already-installed skills when a new
- * version is detected (`autoUpdate: true`). First-time installation is left to
- * the interactive {@link createSkillCommand} (`autoInstall: false`).
+ * **Auto-update** (default): silently updates already-installed skills when a
+ * new version is detected. Set `autoInstall: true` to also install skills that
+ * are not yet present.
  *
- * Set `autoInstall: true` to also install skills that are not yet present.
- *
- * - `setup` phase: captures `rootCommand` from the setup context
- * - `middleware` phase: checks skill versions and installs/updates if needed
+ * **Interactive command**: set `command: true` to register a `skill` subcommand
+ * on the root command for manual install/uninstall/status management. The
+ * subcommand is injected via `addSubCommand` during `setup()` — if the user
+ * already defines a subcommand with the same name, theirs takes priority.
  *
  * @param options - Plugin configuration with version, agents, and scope
  * @returns A `CrustPlugin` to register in a command's `plugins` array
  *
  * @example
  * ```ts
- * import { defineCommand } from "@crustjs/core";
+ * import { defineCommand, runMain } from "@crustjs/core";
  * import { skillPlugin } from "@crustjs/skills";
  *
  * const app = defineCommand({
@@ -71,9 +70,12 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  *     skillPlugin({
  *       version: "1.0.0",
  *       agents: ["claude-code", "opencode"],
+ *       command: true, // registers "my-cli skill" subcommand
  *     }),
  *   ],
  * });
+ *
+ * runMain(app);
  * ```
  */
 export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
@@ -81,8 +83,16 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 
 	return {
 		name: "skills",
-		setup(context) {
+		setup(context, actions) {
 			rootCmd = context.rootCommand;
+
+			// Inject interactive skill command if requested
+			if (options.command) {
+				const name =
+					typeof options.command === "string" ? options.command : "skill";
+				const skillCmd = buildSkillCommand(rootCmd, options);
+				actions.addSubCommand(rootCmd, name, skillCmd);
+			}
 		},
 		async middleware(_context, next) {
 			const autoInstall = options.autoInstall ?? false;
@@ -127,46 +137,19 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Command mode — createSkillCommand
+// Interactive skill command builder
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates an interactive command for managing agent skills.
+ * Builds the interactive skill management command.
  *
- * `name` and `description` are read from the root command's `meta` (via the
- * lazy `command` reference) — only `version` needs to be supplied.
- *
- * The command supports three actions via interactive prompts:
- * - **Install / update** — select agents and scope, then install skills
- * - **Uninstall** — select agents and confirm removal
- * - **Check status** — display installation status for all agents
- *
- * All prompts can be skipped via flags for CI/scripting:
- * - `--action`: `"install" | "uninstall" | "status"`
- * - `--agent`: agent target (can be specified multiple times)
- * - `--scope`: `"global" | "project"`
- * - `--force`: skip confirmation on uninstall
- *
- * @param options - Command configuration with lazy root command ref and version
- * @returns An `AnyCommand` to mount as a subcommand
- *
- * @example
- * ```ts
- * import { defineCommand } from "@crustjs/core";
- * import { createSkillCommand } from "@crustjs/skills";
- *
- * let app: AnyCommand;
- * const skillCmd = createSkillCommand({
- *   command: () => app,
- *   version: "1.0.0",
- * });
- * app = defineCommand({
- *   meta: { name: "my-cli", description: "My CLI" },
- *   subCommands: { skill: skillCmd },
- * });
- * ```
+ * Supports three actions via prompts: install/update, uninstall, and status.
+ * All prompts can be skipped via flags for CI/scripting.
  */
-export function createSkillCommand(options: SkillCommandOptions): AnyCommand {
+function buildSkillCommand(
+	rootCmd: AnyCommand,
+	options: SkillPluginOptions,
+): AnyCommand {
 	const availableAgents = options.agents ?? ALL_AGENTS;
 
 	return defineCommand({
@@ -196,7 +179,7 @@ export function createSkillCommand(options: SkillCommandOptions): AnyCommand {
 			},
 		} as const,
 		async run({ flags }) {
-			const meta = deriveSkillMeta(options.command(), options.version);
+			const meta = deriveSkillMeta(rootCmd, options.version);
 			const actionFlag = flags.action as string | undefined;
 			const agentFlag = flags.agent as string[] | undefined;
 			const scopeFlag = flags.scope as string | undefined;
@@ -215,8 +198,9 @@ export function createSkillCommand(options: SkillCommandOptions): AnyCommand {
 
 			if (action === "install") {
 				await handleInstall(
-					options,
+					rootCmd,
 					meta,
+					options,
 					availableAgents,
 					agentFlag,
 					scopeFlag,
@@ -241,8 +225,9 @@ export function createSkillCommand(options: SkillCommandOptions): AnyCommand {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function handleInstall(
-	options: SkillCommandOptions,
+	rootCmd: AnyCommand,
 	meta: SkillMeta,
+	options: SkillPluginOptions,
 	availableAgents: AgentTarget[],
 	agentFlag: string[] | undefined,
 	scopeFlag: string | undefined,
@@ -275,7 +260,7 @@ async function handleInstall(
 		message: "Installing skills...",
 		task: async () =>
 			generateSkill({
-				command: options.command(),
+				command: rootCmd,
 				meta,
 				agents,
 				scope,

@@ -280,7 +280,7 @@ export interface StatusResult {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Options for the auto-mode skill plugin.
+ * Options for the skill plugin.
  *
  * The plugin reads `name` and `description` from the root command's `meta`
  * at setup time, so only `version` is required here.
@@ -288,6 +288,9 @@ export interface StatusResult {
  * The plugin silently updates already-installed skills when a new version is
  * detected (`autoUpdate: true`). First-time installation is off by default
  * (`autoInstall: false`), leaving it to the interactive skill command.
+ *
+ * Set `command` to register an interactive `skill` subcommand on the root
+ * command for manual install/uninstall/status management.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed manifest */
@@ -311,30 +314,11 @@ export interface SkillPluginOptions {
 	 * @default true
 	 */
 	autoUpdate?: boolean;
-}
-
-/**
- * Options for the interactive skill command.
- *
- * The command reads `name` and `description` from the root command's `meta`
- * (via the lazy `command` reference), so only `version` is required here.
- *
- * Creates a single command with interactive prompts for
- * install, uninstall, and status operations.
- */
-export interface SkillCommandOptions {
-	/** Lazy reference to the root command (avoids circular dependency) */
-	command: () => AnyCommand;
-	/** Skill version string — compared against the installed manifest */
-	version: string;
 	/**
-	 * Agent targets to offer in prompts.
-	 * @default All supported agents
+	 * Register an interactive skill management subcommand on the root command.
+	 * - `true`: register with default name `"skill"`
+	 * - `string`: register with a custom command name
+	 * @default false
 	 */
-	agents?: AgentTarget[];
-	/**
-	 * Default installation scope.
-	 * @default "global"
-	 */
-	scope?: Scope;
+	command?: boolean | string;
 }

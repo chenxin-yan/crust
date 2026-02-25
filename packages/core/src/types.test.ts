@@ -492,6 +492,7 @@ describe("Command interface", () => {
 	it("accepts a minimal definition (meta only)", () => {
 		const cmd: Command = {
 			meta: { name: "test" },
+			subCommands: {},
 		};
 		expect(cmd.meta.name).toBe("test");
 	});
@@ -504,6 +505,7 @@ describe("Command interface", () => {
 				port: { type: "number", default: 3000 },
 				verbose: { type: "boolean", alias: "v" },
 			},
+			subCommands: {},
 			preRun: (_ctx) => {
 				/* init */
 			},
@@ -526,6 +528,7 @@ describe("Command runtime shape", () => {
 	it("accepts a command value used at runtime", () => {
 		const cmd: Command = {
 			meta: { name: "test" },
+			subCommands: {},
 			run: (_ctx) => {
 				/* execute */
 			},
@@ -546,7 +549,7 @@ describe("CommandContext interface", () => {
 			args: {},
 			flags: {},
 			rawArgs: ["--verbose"],
-			command: { meta: { name: "test" } },
+			command: { meta: { name: "test" }, subCommands: {} },
 		};
 
 		expect(ctx.rawArgs).toEqual(["--verbose"]);
@@ -561,7 +564,7 @@ describe("CommandContext interface", () => {
 			args: { name: "hello" },
 			flags: { verbose: true },
 			rawArgs: [],
-			command: { meta: { name: "test" } },
+			command: { meta: { name: "test" }, subCommands: {} },
 		};
 
 		// These are compile-time verified type checks

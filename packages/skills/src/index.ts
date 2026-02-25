@@ -6,7 +6,7 @@
 export { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 
 // Plugin
-export { createSkillCommand, skillPlugin } from "./plugin.ts";
+export { skillPlugin } from "./plugin.ts";
 
 // Types
 export type {
@@ -16,7 +16,6 @@ export type {
 	GenerateResult,
 	InstallStatus,
 	Scope,
-	SkillCommandOptions,
 	SkillMeta,
 	SkillPluginOptions,
 	StatusOptions,

@@ -92,9 +92,7 @@ export function defineCommand<
 					Object.entries(config.flags).map(([k, v]) => [k, { ...v }]),
 				) as unknown as F)
 			: ({} as F),
-		...(config.subCommands && {
-			subCommands: { ...config.subCommands },
-		}),
+		subCommands: config.subCommands ? { ...config.subCommands } : {},
 	};
 
 	// Freeze and return as immutable Command

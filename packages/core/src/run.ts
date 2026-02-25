@@ -124,6 +124,17 @@ export async function runCommand(
 			}
 			target.flags[name] = def;
 		},
+		addSubCommand(parent, name, subCommand) {
+			if (!name.trim()) {
+				throw new CrustError(
+					"DEFINITION",
+					"addSubCommand: name is required and must be a non-empty string",
+				);
+			}
+			// User-defined subcommands take priority — silently skip
+			if (parent.subCommands[name]) return;
+			parent.subCommands[name] = subCommand;
+		},
 	};
 
 	const middlewareContext: MiddlewareContext = {

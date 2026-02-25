@@ -13,6 +13,7 @@ export type {
 	CrustPlugin,
 	MiddlewareContext,
 	PluginMiddleware,
+	SetupActions,
 	SetupContext,
 } from "./plugins.ts";
 

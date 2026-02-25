@@ -29,23 +29,11 @@ describe("@crustjs/skills exports", () => {
 		expect(typeof mod.skillPlugin).toBe("function");
 	});
 
-	it("exports createSkillCommand function", async () => {
-		const mod = await import("./index.ts");
-		expect(mod.createSkillCommand).toBeDefined();
-		expect(typeof mod.createSkillCommand).toBe("function");
-	});
-
 	it("exports all expected function symbols", async () => {
 		const mod = await import("./index.ts");
 		const exportedKeys = Object.keys(mod).sort();
 		expect(exportedKeys).toEqual(
-			[
-				"createSkillCommand",
-				"generateSkill",
-				"skillPlugin",
-				"skillStatus",
-				"uninstallSkill",
-			].sort(),
+			["generateSkill", "skillPlugin", "skillStatus", "uninstallSkill"].sort(),
 		);
 	});
 });
