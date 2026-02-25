@@ -101,7 +101,7 @@ function renderPassword(
 	mask: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Enter a password");
 
 	let valueLine: string;
 
@@ -133,7 +133,7 @@ function renderSubmitted(
 	mask: string,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Enter a password");
 	// Show a fixed number of mask characters regardless of actual length
 	const maskedDisplay = theme.success(mask.repeat(SUBMITTED_MASK_LENGTH));
 	return formatSubmitted(prefix, msg, maskedDisplay);

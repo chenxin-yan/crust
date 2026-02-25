@@ -241,11 +241,11 @@ function renderMultiselect<T>(
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Pick one or more");
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = msg ? [formatHeader(prefix, msg)] : [];
+	const lines: string[] = [formatHeader(prefix, msg)];
 
 	// Show hint line with keybinding instructions
 	lines.push(theme.hint(HINT_LINE));
@@ -301,7 +301,7 @@ function renderSubmitted<T>(
 	selected: ReadonlySet<number>,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Pick one or more");
 	const selectedLabels = choices
 		.filter((_, i) => selected.has(i))
 		.map((c) => c.label)

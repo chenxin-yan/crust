@@ -735,12 +735,13 @@ describe("multiselect — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = multiselect({
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
+		expect(stderrOutput).toContain("Pick one or more");
 		expect(stderrOutput).not.toContain("undefined");
 		expect(stderrOutput).toContain("a");
 
@@ -753,7 +754,7 @@ describe("multiselect — no message", () => {
 		expect(result).toEqual(["a"]);
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = multiselect({
 			choices: ["a", "b", "c"],
 		});
@@ -764,6 +765,7 @@ describe("multiselect — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Pick one or more");
 		expect(stderrOutput).not.toContain("undefined");
 	});
 });

@@ -594,12 +594,13 @@ describe("filter — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = filter({
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
+		expect(stderrOutput).toContain("Search and select");
 		expect(stderrOutput).not.toContain("undefined");
 		expect(stderrOutput).toContain("apple");
 
@@ -608,7 +609,7 @@ describe("filter — no message", () => {
 		expect(result).toBe("apple");
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = filter({
 			choices: ["apple", "banana", "cherry"],
 		});
@@ -617,6 +618,7 @@ describe("filter — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Search and select");
 		expect(stderrOutput).not.toContain("undefined");
 	});
 });

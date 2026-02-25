@@ -437,10 +437,11 @@ describe("password — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = password({});
 
 		await tick();
+		expect(stderrOutput).toContain("Enter a password");
 		expect(stderrOutput).not.toContain("undefined");
 
 		pressKey("s");
@@ -455,7 +456,7 @@ describe("password — no message", () => {
 		expect(result).toBe("sec");
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = password({});
 
 		await tick();
@@ -464,6 +465,7 @@ describe("password — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Enter a password");
 		expect(stderrOutput).not.toContain("undefined");
 	});
 });

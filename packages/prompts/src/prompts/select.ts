@@ -140,11 +140,11 @@ function renderSelect<T>(
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Pick an option");
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = msg ? [formatHeader(prefix, msg)] : [];
+	const lines: string[] = [formatHeader(prefix, msg)];
 
 	// Show scroll-up indicator if items are hidden above
 	const hasScrollUp = state.scrollOffset > 0;
@@ -188,7 +188,7 @@ function renderSubmitted<T>(
 	cursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Pick an option");
 	const selected = choices[cursor];
 	const label = selected ? selected.label : "";
 	return formatSubmitted(prefix, msg, theme.success(label));

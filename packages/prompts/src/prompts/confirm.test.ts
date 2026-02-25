@@ -409,10 +409,11 @@ describe("confirm — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = confirm({});
 
 		await tick();
+		expect(stderrOutput).toContain("Are you sure?");
 		expect(stderrOutput).not.toContain("undefined");
 		expect(stderrOutput).toContain("Yes");
 		expect(stderrOutput).toContain("No");
@@ -422,13 +423,14 @@ describe("confirm — no message", () => {
 		expect(result).toBe(true);
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = confirm({});
 
 		await tick();
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Are you sure?");
 		expect(stderrOutput).not.toContain("undefined");
 	});
 });

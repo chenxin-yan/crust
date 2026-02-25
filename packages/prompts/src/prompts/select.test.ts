@@ -540,12 +540,13 @@ describe("select — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = select({
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
+		expect(stderrOutput).toContain("Pick an option");
 		expect(stderrOutput).not.toContain("undefined");
 		expect(stderrOutput).toContain("a");
 
@@ -554,7 +555,7 @@ describe("select — no message", () => {
 		expect(result).toBe("a");
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = select({
 			choices: ["a", "b", "c"],
 		});
@@ -563,6 +564,7 @@ describe("select — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Pick an option");
 		expect(stderrOutput).not.toContain("undefined");
 	});
 });

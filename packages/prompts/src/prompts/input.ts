@@ -115,7 +115,7 @@ function renderInput(
 	defaultValue: string | undefined,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Enter a value");
 
 	// Default hint shown after header when value is empty and default exists
 	const defaultHint =
@@ -156,7 +156,7 @@ function renderSubmitted(
 	message: string | undefined,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Enter a value");
 	return formatSubmitted(prefix, msg, theme.success(value));
 }
 

@@ -234,7 +234,7 @@ function renderFilter<T>(
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Search and select");
 
 	// Query input line
 	let queryLine: string;
@@ -302,7 +302,7 @@ function renderSubmitted<T>(
 	listCursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Search and select");
 	const selected = results[listCursor];
 	const label = selected ? selected.item.label : "";
 	return formatSubmitted(prefix, msg, theme.success(label));

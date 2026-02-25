@@ -487,10 +487,11 @@ describe("input — no message", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("renders without message and does not contain undefined", async () => {
+	it("renders default message when message is omitted", async () => {
 		const promise = input({});
 
 		await tick();
+		expect(stderrOutput).toContain("Enter a value");
 		expect(stderrOutput).not.toContain("undefined");
 
 		pressKey("A");
@@ -501,10 +502,11 @@ describe("input — no message", () => {
 		expect(result).toBe("A");
 	});
 
-	it("renders placeholder without message", async () => {
+	it("renders placeholder with default message", async () => {
 		const promise = input({ placeholder: "Enter name" });
 
 		await tick();
+		expect(stderrOutput).toContain("Enter a value");
 		expect(stderrOutput).toContain("Enter name");
 		expect(stderrOutput).not.toContain("undefined");
 
@@ -512,10 +514,11 @@ describe("input — no message", () => {
 		await promise;
 	});
 
-	it("renders default hint without message", async () => {
+	it("renders default hint with default message", async () => {
 		const promise = input({ default: "World" });
 
 		await tick();
+		expect(stderrOutput).toContain("Enter a value");
 		expect(stderrOutput).toContain("(World)");
 		expect(stderrOutput).not.toContain("undefined");
 
@@ -524,7 +527,7 @@ describe("input — no message", () => {
 		expect(result).toBe("World");
 	});
 
-	it("submitted output does not contain undefined", async () => {
+	it("submitted output shows default message", async () => {
 		const promise = input({});
 
 		await tick();
@@ -533,6 +536,7 @@ describe("input — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
+		expect(stderrOutput).toContain("Enter a value");
 		expect(stderrOutput).not.toContain("undefined");
 		expect(stderrOutput).toContain("X");
 	});

@@ -114,7 +114,7 @@ function renderConfirm(
 	inactiveLabel: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Are you sure?");
 
 	const activeDisplay = state.value
 		? `${theme.selected("●")} ${theme.selected(activeLabel)}`
@@ -137,7 +137,7 @@ function renderSubmitted(
 	inactiveLabel: string,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = message ? theme.message(message) : undefined;
+	const msg = theme.message(message ?? "Are you sure?");
 	const answer = value ? activeLabel : inactiveLabel;
 	return formatSubmitted(prefix, msg, theme.success(answer));
 }
