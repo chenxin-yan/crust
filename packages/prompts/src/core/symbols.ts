@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Prefix glyph shown while the prompt is active. */
-export const PREFIX_SYMBOL = "○";
+export const PREFIX_SYMBOL = "▸";
 
 /** Prefix glyph shown after the prompt is submitted. */
 export const PREFIX_SUBMITTED = "✔";

@@ -5,6 +5,89 @@
 import type { Choice } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Prompt header formatting
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Format the header line for an active prompt.
+ *
+ * Produces `"prefix message"` when a message is provided, or just `"prefix"`
+ * when the message is omitted — ensuring no trailing spaces or `"undefined"`.
+ *
+ * @internal — Used by `formatPromptLine` and list-style prompts (select, multiselect).
+ *
+ * @param prefix - Themed prefix string (e.g., styled "▸")
+ * @param message - Optional themed message string
+ * @returns Formatted header line
+ */
+export function formatHeader(prefix: string, message?: string): string {
+	if (message) {
+		return `${prefix} ${message}`;
+	}
+	return prefix;
+}
+
+/**
+ * Format the submitted line for a prompt.
+ *
+ * Produces `"prefix message value"`, `"prefix value"`, `"prefix message"`,
+ * or just `"prefix"` depending on which parts are present — ensuring clean
+ * spacing with no trailing spaces or `"undefined"`.
+ *
+ * @param prefix - Themed prefix string (e.g., styled "✔")
+ * @param message - Optional themed message string
+ * @param value - Optional themed submitted value string
+ * @returns Formatted submitted line
+ */
+export function formatSubmitted(
+	prefix: string,
+	message?: string,
+	value?: string,
+): string {
+	const parts = [prefix];
+	if (message) parts.push(message);
+	if (value) parts.push(value);
+	return parts.join(" ");
+}
+
+/**
+ * Format the prompt header together with inline content.
+ *
+ * When a message is present, the content goes on an indented line below:
+ * ```
+ * prefix message
+ *   content
+ * ```
+ *
+ * When the message is absent, the content sits on the same line as the prefix:
+ * ```
+ * prefix content
+ * ```
+ *
+ * An optional `suffix` (e.g., a default-value hint) is appended to the
+ * header portion before the content line.
+ *
+ * @param prefix - Themed prefix string (e.g., styled "▸")
+ * @param message - Optional themed message string
+ * @param content - The inline content (input value, placeholder, toggles, etc.)
+ * @param suffix - Optional text appended after the header (e.g., default hint)
+ * @returns Formatted prompt line(s)
+ */
+export function formatPromptLine(
+	prefix: string,
+	message: string | undefined,
+	content: string,
+	suffix?: string,
+): string {
+	const header = formatHeader(prefix, message);
+	const extra = suffix ?? "";
+	if (message) {
+		return `${header}${extra}\n  ${content}`;
+	}
+	return `${header}${extra} ${content}`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Viewport scrolling
 // ────────────────────────────────────────────────────────────────────────────
 
