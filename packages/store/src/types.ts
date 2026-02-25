@@ -2,30 +2,209 @@
 // @crustjs/store — Public type contracts
 // ────────────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────────────────
+// Literal-to-primitive mapping
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Supported type literals for store fields. */
+export type ValueType = "string" | "number" | "boolean";
+
 /**
- * Validates an unknown input and returns a typed config value.
+ * Resolves a type literal to its corresponding TypeScript primitive type.
  *
- * Thrown errors are caught and normalized into `CrustStoreError` with `VALIDATION` code.
- * Compatible with schema-library wrappers (e.g. Zod `.parse`, Valibot `.parse`).
+ * - `"string"` → `string`
+ * - `"number"` → `number`
+ * - `"boolean"` → `boolean`
+ */
+type ResolvePrimitive<T extends ValueType> = T extends "string"
+	? string
+	: T extends "number"
+		? number
+		: T extends "boolean"
+			? boolean
+			: never;
+
+// ────────────────────────────────────────────────────────────────────────────
+// FieldDef — Store field definition (discriminated by `type` × `array`)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Shared fields present on every store field definition. */
+interface FieldDefBase {
+	/** Human-readable description for documentation and tooling. */
+	description?: string;
+}
+
+// ── Scalar fields ─────────────────────────────────────────────────────────
+
+/** Base for scalar (non-array) fields — `array` must be omitted. */
+interface ScalarFieldBase extends FieldDefBase {
+	/** Must be omitted for scalar fields — set to `true` for array fields. */
+	array?: never;
+}
+
+/** A scalar string field. */
+interface StringFieldDef extends ScalarFieldBase {
+	type: "string";
+	/** Default string value when the field is not persisted. */
+	default?: string;
+}
+
+/** A scalar number field. */
+interface NumberFieldDef extends ScalarFieldBase {
+	type: "number";
+	/** Default number value when the field is not persisted. */
+	default?: number;
+}
+
+/** A scalar boolean field. */
+interface BooleanFieldDef extends ScalarFieldBase {
+	type: "boolean";
+	/** Default boolean value when the field is not persisted. */
+	default?: boolean;
+}
+
+// ── Array fields ──────────────────────────────────────────────────────────
+
+/** Base for array fields — `array` is required as `true`. */
+interface ArrayFieldBase extends FieldDefBase {
+	/** Collect values into an array. */
+	array: true;
+}
+
+/** An array of strings field. */
+interface StringArrayFieldDef extends ArrayFieldBase {
+	type: "string";
+	/** Default string array value when the field is not persisted. */
+	default?: readonly string[];
+}
+
+/** An array of numbers field. */
+interface NumberArrayFieldDef extends ArrayFieldBase {
+	type: "number";
+	/** Default number array value when the field is not persisted. */
+	default?: readonly number[];
+}
+
+/** An array of booleans field. */
+interface BooleanArrayFieldDef extends ArrayFieldBase {
+	type: "boolean";
+	/** Default boolean array value when the field is not persisted. */
+	default?: readonly boolean[];
+}
+
+/**
+ * Defines a single field in a store's config schema.
+ *
+ * Discriminated by `type` and `array` for type-safe `default` values.
  *
  * @example
  * ```ts
- * const validate: StoreValidator<MyConfig> = (input) => {
- *   if (typeof input !== "object" || input === null) {
- *     throw new Error("Expected object");
- *   }
- *   return input as MyConfig;
- * };
+ * const fields = {
+ *   theme: { type: "string", default: "light" },
+ *   verbose: { type: "boolean", default: false },
+ *   tags: { type: "string", array: true, default: [] },
+ *   token: { type: "string" },  // optional — no default
+ * } satisfies FieldsDef;
  * ```
  */
-export type StoreConfigShape = object;
+export type FieldDef =
+	| StringFieldDef
+	| NumberFieldDef
+	| BooleanFieldDef
+	| StringArrayFieldDef
+	| NumberArrayFieldDef
+	| BooleanArrayFieldDef;
+
+/** Record mapping field names to their definitions. */
+export type FieldsDef = Record<string, FieldDef>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// InferStoreConfig — Type inference from field definitions
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Validates an unknown input and returns a strongly typed config object.
+ * Infer the resolved type for a single field definition.
+ *
+ * - **array** → `primitive[]` (or `primitive[] | undefined` if no default)
+ * - **has default** → `primitive` (guaranteed present)
+ * - **no default** → `primitive | undefined` (optional)
  */
-export type StoreValidator<TConfig extends StoreConfigShape> = (
-	input: unknown,
-) => TConfig;
+type InferFieldValue<F extends FieldDef> = F extends { array: true }
+	? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
+		? ResolvePrimitive<F["type"]>[]
+		: ResolvePrimitive<F["type"]>[] | undefined
+	: F extends { default: ResolvePrimitive<F["type"]> }
+		? ResolvePrimitive<F["type"]>
+		: ResolvePrimitive<F["type"]> | undefined;
+
+/**
+ * Maps a full {@link FieldsDef} record to the inferred config object type.
+ *
+ * @example
+ * ```ts
+ * type Config = InferStoreConfig<{
+ *   theme: { type: "string"; default: "light" };
+ *   verbose: { type: "boolean" };
+ * }>;
+ * // → { theme: string; verbose: boolean | undefined }
+ * ```
+ */
+export type InferStoreConfig<F extends FieldsDef> = {
+	[K in keyof F]: InferFieldValue<F[K]>;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// CreateStoreOptions — Factory configuration
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Options for {@link createStore}.
+ *
+ * @typeParam F - The field definitions record (inferred via `const` generic).
+ *
+ * @example
+ * ```ts
+ * const store = createStore({
+ *   dirPath: configDir("my-cli"),
+ *   fields: {
+ *     theme: { type: "string", default: "light" },
+ *     verbose: { type: "boolean", default: false },
+ *   },
+ * });
+ * ```
+ */
+export interface CreateStoreOptions<F extends FieldsDef> {
+	/**
+	 * Absolute directory path where the store JSON file is persisted.
+	 *
+	 * Use the {@link configDir} helper to resolve the platform-standard
+	 * config directory from an app name.
+	 */
+	dirPath: string;
+
+	/**
+	 * Store name used as the JSON filename in the directory.
+	 *
+	 * Defaults to `"config"`, producing `config.json`. Set to a different value
+	 * to create multiple stores under the same directory
+	 * (e.g. `name: "auth"` → `auth.json`).
+	 *
+	 * Must not contain path separators or the `.json` extension.
+	 */
+	name?: string;
+
+	/**
+	 * Field definitions that declare the store's config schema.
+	 *
+	 * Each key maps to a {@link FieldDef} with a `type` discriminant and optional
+	 * `default`. Fields without a `default` are optional (`T | undefined`).
+	 */
+	fields: F;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// StoreUpdater — Mutation callback
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Receives the current effective config and returns an updated config.
@@ -40,112 +219,7 @@ export type StoreValidator<TConfig extends StoreConfigShape> = (
  * }));
  * ```
  */
-export type StoreUpdater<TConfig extends StoreConfigShape> = (
-	current: TConfig,
-) => NoInfer<TConfig>;
-
-// ────────────────────────────────────────────────────────────────────────────
-// CreateStoreOptions — Factory configuration
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Common options accepted by all createStore modes. */
-export interface CreateStoreBaseOptions {
-	/**
-	 * Application name used to derive the platform-standard config directory.
-	 *
-	 * Must be a non-empty string. Used as the directory name under the
-	 * platform config root (e.g. `~/.config/<appName>/config.json` on Linux).
-	 */
-	appName: string;
-
-	/**
-	 * Explicit file path override for the config file.
-	 *
-	 * When provided, bypasses default platform path derivation entirely.
-	 * Must be an absolute path ending in `.json`.
-	 */
-	filePath?: string;
-}
-
-/**
- * Strict options branch where config shape is inferred from `defaults`.
- */
-export interface CreateStoreOptionsWithDefaults<
-	TConfig extends StoreConfigShape,
-> extends CreateStoreBaseOptions {
-	/**
-	 * Default config values returned by `read()` when no persisted file exists.
-	 *
-	 * Defaults are deep-merged with persisted config at read time — missing
-	 * persisted fields are filled from defaults without auto-persisting the
-	 * merged result.
-	 */
-	defaults: TConfig;
-
-	/**
-	 * Optional validator function run on every `read()`, `write()`, and `update()`.
-	 *
-	 * Must accept `unknown` and return a valid `TConfig`, or throw an error
-	 * that will be normalized into `CrustStoreError` with `VALIDATION` code.
-	 */
-	validate?: StoreValidator<TConfig>;
-}
-
-/**
- * Strict options branch where config shape is inferred from `validate`.
- */
-export interface CreateStoreOptionsWithValidator<
-	TConfig extends StoreConfigShape,
-> extends CreateStoreBaseOptions {
-	/**
-	 * Optional default config returned by `read()` when no persisted file exists.
-	 */
-	defaults?: TConfig;
-
-	/**
-	 * Validator function run on every `read()`, `write()`, and `update()`.
-	 *
-	 * Required in this branch and used as the source of config-shape inference.
-	 */
-	validate: StoreValidator<TConfig>;
-}
-
-/**
- * Options for {@link createStore}.
- *
- * Strict by design: callers must provide at least one type source (`defaults`
- * or `validate`) so `TConfig` is explicit/inferable and editor autocomplete
- * remains precise for all store operations.
- *
- * @typeParam TConfig - The shape of the config object managed by the store.
- *
- * @example
- * ```ts
- * const store = createStore<AppConfig>({
- *   appName: "my-cli",
- *   defaults: { theme: "light", verbose: false },
- * });
- * ```
- */
-export type CreateStoreOptions<TConfig extends StoreConfigShape> =
-	| CreateStoreOptionsWithDefaults<TConfig>
-	| CreateStoreOptionsWithValidator<TConfig>;
-
-/**
- * Type contract for the `createStore` factory.
- *
- * Strict by design: there is intentionally no overload that accepts only
- * `appName`/`filePath`, because that would erase config-shape inference and
- * degrade autocomplete to loose object types.
- */
-export interface CreateStore {
-	<TConfig extends StoreConfigShape>(
-		options: CreateStoreOptionsWithDefaults<TConfig>,
-	): Store<TConfig>;
-	<TConfig extends StoreConfigShape>(
-		options: CreateStoreOptionsWithValidator<TConfig>,
-	): Store<TConfig>;
-}
+export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Store — Async object-store instance
@@ -157,13 +231,15 @@ export interface CreateStore {
  * Provides `read`, `write`, `update`, and `reset` operations for a single
  * typed config object persisted as JSON on the local filesystem.
  *
- * @typeParam TConfig - The shape of the config object managed by the store.
+ * @typeParam TConfig - The inferred config shape from field definitions.
  *
  * @example
  * ```ts
- * const store = createStore<AppConfig>({
- *   appName: "my-cli",
- *   defaults: { theme: "light" },
+ * const store = createStore({
+ *   dirPath: configDir("my-cli"),
+ *   fields: {
+ *     theme: { type: "string", default: "light" },
+ *   },
  * });
  *
  * const config = await store.read();
@@ -172,35 +248,32 @@ export interface CreateStore {
  * await store.reset();
  * ```
  */
-export interface Store<TConfig extends StoreConfigShape> {
+export interface Store<TConfig> {
 	/**
-	 * Reads the persisted config, deep-merging with defaults if provided.
+	 * Reads the persisted config, applying field defaults for missing keys.
 	 *
-	 * Returns defaults (if configured) when no persisted file exists.
-	 * Runs optional validation on the final merged result.
+	 * Always returns a value — fields with defaults are guaranteed present,
+	 * fields without defaults may be `undefined`.
 	 *
 	 * @returns The effective config value.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
-	 * @throws {CrustStoreError} `VALIDATION` if validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem read failures.
 	 */
-	read(): Promise<TConfig | undefined>;
+	read(): Promise<TConfig>;
 
 	/**
-	 * Validates and atomically persists the full config object.
+	 * Atomically persists the full config object.
 	 *
 	 * @param config - The complete config to persist.
-	 * @throws {CrustStoreError} `VALIDATION` if validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
 	write(config: NoInfer<TConfig>): Promise<void>;
 
 	/**
-	 * Reads current effective config, applies the updater, validates, and persists.
+	 * Reads current effective config, applies the updater, and persists.
 	 *
 	 * @param updater - Function receiving current config and returning updated config.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
-	 * @throws {CrustStoreError} `VALIDATION` if validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
 	update(updater: StoreUpdater<TConfig>): Promise<void>;

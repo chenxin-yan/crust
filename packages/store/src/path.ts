@@ -7,9 +7,10 @@ import { join } from "node:path";
 import { CrustStoreError } from "./errors.ts";
 
 /**
- * Default config filename used when deriving platform-standard paths.
+ * Default store name used when no explicit `name` is provided.
+ * Produces `config.json` as the filename.
  */
-const CONFIG_FILENAME = "config.json";
+const DEFAULT_STORE_NAME = "config";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Platform environment — injectable for testing
@@ -72,32 +73,66 @@ function validateAppName(appName: string): void {
 }
 
 /**
- * Validates that an explicit file path override is an absolute path ending in `.json`.
+ * Validates that `name` is a non-empty string without path separators or `.json` extension.
  *
- * @param filePath - The explicit path override to validate.
- * @throws {CrustStoreError} `PATH` if the path is not absolute or does not end in `.json`.
+ * @param name - Store name to validate.
+ * @throws {CrustStoreError} `PATH` if `name` is empty, contains path separators, or ends with `.json`.
  */
-function validateFilePath(filePath: string): void {
-	if (!filePath || filePath.trim().length === 0) {
-		throw new CrustStoreError("PATH", "filePath must be a non-empty string", {
-			path: filePath ?? "",
+function validateName(name: string): void {
+	if (!name || name.trim().length === 0) {
+		throw new CrustStoreError("PATH", "name must be a non-empty string", {
+			path: name ?? "",
+		});
+	}
+
+	if (name.includes("/") || name.includes("\\")) {
+		throw new CrustStoreError("PATH", "name must not contain path separators", {
+			path: name,
+		});
+	}
+
+	if (name.endsWith(".json")) {
+		throw new CrustStoreError(
+			"PATH",
+			"name must not include the .json extension",
+			{
+				path: name,
+			},
+		);
+	}
+}
+
+/**
+ * Validates that a directory path is an absolute, non-empty string that
+ * does not end with `.json`.
+ *
+ * @param dirPath - The directory path to validate.
+ * @throws {CrustStoreError} `PATH` if the path is empty, not absolute, or ends in `.json`.
+ */
+function validateDirPath(dirPath: string): void {
+	if (!dirPath || dirPath.trim().length === 0) {
+		throw new CrustStoreError("PATH", "dirPath must be a non-empty string", {
+			path: dirPath ?? "",
 		});
 	}
 
 	// Check for absolute path — Unix starts with `/`, Windows with drive letter or UNC
-	const isAbsolute =
-		filePath.startsWith("/") || /^[A-Za-z]:[/\\]/.test(filePath);
+	const isAbsolute = dirPath.startsWith("/") || /^[A-Za-z]:[/\\]/.test(dirPath);
 
 	if (!isAbsolute) {
-		throw new CrustStoreError("PATH", "filePath must be an absolute path", {
-			path: filePath,
+		throw new CrustStoreError("PATH", "dirPath must be an absolute path", {
+			path: dirPath,
 		});
 	}
 
-	if (!filePath.endsWith(".json")) {
-		throw new CrustStoreError("PATH", "filePath must end with .json", {
-			path: filePath,
-		});
+	if (dirPath.endsWith(".json")) {
+		throw new CrustStoreError(
+			"PATH",
+			"dirPath must be a directory path, not a file path (should not end with .json)",
+			{
+				path: dirPath,
+			},
+		);
 	}
 }
 
@@ -113,98 +148,90 @@ function validateFilePath(filePath: string): void {
  * - **macOS**: `~/Library/Application Support/<appName>`
  * - **Windows**: `%APPDATA%/<appName>` or `~/AppData/Roaming/<appName>`
  *
- * @param appName - Application name used as directory name.
- * @param env - Platform environment (defaults to runtime environment).
+ * @param appName - Application name used as directory name. Must be a non-empty
+ *   string without path separators.
+ * @param env - Optional platform environment override for testing.
  * @returns Absolute path to the app's config directory.
- * @throws {CrustStoreError} `PATH` on unsupported platforms or missing home directory.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ *
+ * @example
+ * ```ts
+ * import { configDir } from "@crustjs/store";
+ *
+ * const dir = configDir("my-cli");
+ * // → "/home/user/.config/my-cli" (Linux)
+ * // → "/Users/user/Library/Application Support/my-cli" (macOS)
+ * // → "C:\\Users\\user\\AppData\\Roaming\\my-cli" (Windows)
+ * ```
  */
-function resolveConfigDir(appName: string, env: PlatformEnv): string {
-	switch (env.platform) {
+export function configDir(appName: string, env?: PlatformEnv): string {
+	validateAppName(appName);
+
+	const resolvedEnv = env ?? getRuntimeEnv();
+
+	switch (resolvedEnv.platform) {
 		case "linux": {
-			const xdgConfig = env.env.XDG_CONFIG_HOME;
+			const xdgConfig = resolvedEnv.env.XDG_CONFIG_HOME;
 			const base =
 				xdgConfig && xdgConfig.trim().length > 0
 					? xdgConfig
-					: join(env.homedir, ".config");
+					: join(resolvedEnv.homedir, ".config");
 			return join(base, appName);
 		}
 
 		case "darwin": {
-			return join(env.homedir, "Library", "Application Support", appName);
+			return join(
+				resolvedEnv.homedir,
+				"Library",
+				"Application Support",
+				appName,
+			);
 		}
 
 		case "win32": {
-			const appData = env.env.APPDATA;
+			const appData = resolvedEnv.env.APPDATA;
 			const base =
 				appData && appData.trim().length > 0
 					? appData
-					: join(env.homedir, "AppData", "Roaming");
+					: join(resolvedEnv.homedir, "AppData", "Roaming");
 			return join(base, appName);
 		}
 
 		default:
 			throw new CrustStoreError(
 				"PATH",
-				`Unsupported platform: ${env.platform}`,
+				`Unsupported platform: ${resolvedEnv.platform}`,
 				{
-					path: env.platform,
+					path: resolvedEnv.platform,
 				},
 			);
 	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public API — resolveStorePath
+// resolveStorePath — Internal file path construction
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resolves the absolute config file path for a store.
+ * Constructs the absolute config file path from a directory and store name.
  *
- * When `filePath` is provided, it is validated and used directly (bypassing
- * platform path derivation). Otherwise, the path is derived from `appName`
- * using platform-standard conventions.
+ * Validates `dirPath` (must be absolute, not end in `.json`) and `name`
+ * (no path separators, no `.json` suffix), then joins them as
+ * `<dirPath>/<name>.json`.
  *
- * Resolution rules:
- * - Explicit `filePath` → validated as absolute `.json` path and returned as-is.
- * - No `filePath` → derive from `appName` and platform:
- *   - Linux: `$XDG_CONFIG_HOME/<appName>/config.json` (fallback `~/.config/<appName>/config.json`)
- *   - macOS: `~/Library/Application Support/<appName>/config.json`
- *   - Windows: `%APPDATA%/<appName>/config.json` (fallback `~/AppData/Roaming/<appName>/config.json`)
- *
- * @param appName - Application name used to derive the config directory.
- * @param filePath - Optional explicit file path override.
- * @param env - Optional platform environment override for testing.
+ * @param dirPath - Absolute directory path.
+ * @param name - Optional store name (defaults to `"config"`).
  * @returns Absolute path to the config file.
- * @throws {CrustStoreError} `PATH` if inputs are invalid or platform is unsupported.
- *
- * @example
- * ```ts
- * // Platform-derived path
- * const path = resolveStorePath("my-cli");
- * // → "/home/user/.config/my-cli/config.json" (Linux)
- *
- * // Explicit override
- * const path = resolveStorePath("my-cli", "/custom/path/settings.json");
- * // → "/custom/path/settings.json"
- * ```
+ * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  */
-export function resolveStorePath(
-	appName: string,
-	filePath?: string,
-	env?: PlatformEnv,
-): string {
-	// Always validate appName — it's required even when filePath is provided
-	validateAppName(appName);
+export function resolveStorePath(dirPath: string, name?: string): string {
+	validateDirPath(dirPath);
 
-	// Explicit path override bypasses platform derivation
-	if (filePath !== undefined) {
-		validateFilePath(filePath);
-		return filePath;
+	// Resolve store name (validate only when explicitly provided)
+	const storeName = name ?? DEFAULT_STORE_NAME;
+	if (name !== undefined) {
+		validateName(name);
 	}
 
-	// Resolve runtime environment if not injected
-	const resolvedEnv = env ?? getRuntimeEnv();
-
-	const configDir = resolveConfigDir(appName, resolvedEnv);
-	return join(configDir, CONFIG_FILENAME);
+	return join(dirPath, `${storeName}.json`);
 }

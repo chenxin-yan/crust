@@ -1,220 +1,197 @@
 import { describe, expect, it } from "bun:test";
-import { deepMerge } from "./merge.ts";
+import { applyFieldDefaults } from "./merge.ts";
+import type { FieldsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// deepMerge — Unit tests
+// Test field definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("deepMerge", () => {
-	// ── Basic merge behavior ──────────────────────────────────────────────
+const BASIC_FIELDS = {
+	theme: { type: "string", default: "light" },
+	verbose: { type: "boolean", default: false },
+	retries: { type: "number", default: 3 },
+} as const satisfies FieldsDef;
 
-	it("fills missing keys from defaults", () => {
-		const defaults = { a: 1, b: 2, c: 3 };
-		const persisted = { a: 10 };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ a: 10, b: 2, c: 3 });
-	});
+const MIXED_FIELDS = {
+	theme: { type: "string", default: "light" },
+	verbose: { type: "boolean", default: false },
+	token: { type: "string" },
+} as const satisfies FieldsDef;
 
-	it("returns persisted as-is when all keys are present", () => {
-		const defaults = { a: 1, b: 2 };
-		const persisted = { a: 10, b: 20 };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ a: 10, b: 20 });
-	});
+const ARRAY_FIELDS = {
+	tags: { type: "string", array: true, default: ["default"] },
+	ids: { type: "number", array: true },
+} as const satisfies FieldsDef;
 
-	it("returns defaults when persisted is an empty object", () => {
-		const defaults = { a: 1, b: 2 };
-		const result = deepMerge(defaults, {});
-		expect(result).toEqual({ a: 1, b: 2 });
-	});
+// ────────────────────────────────────────────────────────────────────────────
+// applyFieldDefaults
+// ────────────────────────────────────────────────────────────────────────────
 
-	it("includes persisted keys not present in defaults", () => {
-		const defaults = { a: 1 } as Record<string, unknown>;
-		const persisted = { a: 10, extra: "new" };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ a: 10, extra: "new" });
-	});
+describe("applyFieldDefaults", () => {
+	// ──────────────────────────────────────────────────────────────────────
+	// No persisted data
+	// ──────────────────────────────────────────────────────────────────────
 
-	// ── Nested object merging ─────────────────────────────────────────────
+	it("should return all defaults when persisted is undefined", () => {
+		const result = applyFieldDefaults(undefined, BASIC_FIELDS);
 
-	it("recursively merges nested plain objects", () => {
-		const defaults = { ui: { theme: "light", fontSize: 14 }, verbose: false };
-		const persisted = { ui: { theme: "dark" } };
-		const result = deepMerge(defaults, persisted);
 		expect(result).toEqual({
-			ui: { theme: "dark", fontSize: 14 },
+			theme: "light",
 			verbose: false,
+			retries: 3,
 		});
 	});
 
-	it("handles deeply nested structures", () => {
-		const defaults = {
-			level1: {
-				level2: {
-					level3: { a: 1, b: 2 },
-				},
-			},
-		};
-		const persisted = {
-			level1: {
-				level2: {
-					level3: { a: 100 },
-				},
-			},
-		};
-		const result = deepMerge(defaults, persisted);
+	it("should omit fields without defaults when persisted is undefined", () => {
+		const result = applyFieldDefaults(undefined, MIXED_FIELDS);
+
+		expect(result.theme).toBe("light");
+		expect(result.verbose).toBe(false);
+		expect(result.token).toBeUndefined();
+		expect("token" in result).toBe(false);
+	});
+
+	// ──────────────────────────────────────────────────────────────────────
+	// Persisted data — full match
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("should use persisted values when all keys are present", () => {
+		const persisted = { theme: "dark", verbose: true, retries: 5 };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+
 		expect(result).toEqual({
-			level1: {
-				level2: {
-					level3: { a: 100, b: 2 },
-				},
-			},
+			theme: "dark",
+			verbose: true,
+			retries: 5,
 		});
 	});
 
-	it("merges nested object while adding new nested keys from persisted", () => {
-		const defaults = { db: { host: "localhost" } } as Record<string, unknown>;
-		const persisted = { db: { host: "remote", port: 5432 } };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ db: { host: "remote", port: 5432 } });
+	// ──────────────────────────────────────────────────────────────────────
+	// Persisted data — partial match
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("should fill missing persisted keys from defaults", () => {
+		const persisted = { theme: "dark" };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+
+		expect(result).toEqual({
+			theme: "dark",
+			verbose: false,
+			retries: 3,
+		});
 	});
 
-	// ── Array behavior (replace, not merge) ──────────────────────────────
+	it("should include optional fields when persisted", () => {
+		const persisted = { theme: "dark", verbose: true, token: "abc123" };
+		const result = applyFieldDefaults(persisted, MIXED_FIELDS);
 
-	it("replaces arrays entirely from persisted", () => {
-		const defaults = { tags: ["a", "b", "c"] };
-		const persisted = { tags: ["x"] };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ tags: ["x"] });
+		expect(result).toEqual({
+			theme: "dark",
+			verbose: true,
+			token: "abc123",
+		});
 	});
 
-	it("replaces default array with empty persisted array", () => {
-		const defaults = { items: [1, 2, 3] };
-		const persisted = { items: [] as number[] };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ items: [] });
+	// ──────────────────────────────────────────────────────────────────────
+	// Extra keys in persisted are dropped
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("should drop persisted keys not defined in fields", () => {
+		const persisted = {
+			theme: "dark",
+			verbose: true,
+			retries: 5,
+			unknown: "extra",
+		};
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+
+		expect(result).toEqual({
+			theme: "dark",
+			verbose: true,
+			retries: 5,
+		});
+		expect("unknown" in result).toBe(false);
 	});
 
-	it("uses default array when key is missing from persisted", () => {
-		const defaults = { tags: ["a", "b"] };
-		const persisted = {};
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ tags: ["a", "b"] });
+	// ──────────────────────────────────────────────────────────────────────
+	// Array fields
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("should apply array defaults", () => {
+		const result = applyFieldDefaults(undefined, ARRAY_FIELDS);
+
+		expect(result.tags).toEqual(["default"]);
+		expect(result.ids).toBeUndefined();
+		expect("ids" in result).toBe(false);
 	});
 
-	// ── Null handling ────────────────────────────────────────────────────
+	it("should use persisted array values", () => {
+		const persisted = { tags: ["a", "b"], ids: [1, 2, 3] };
+		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
 
-	it("treats null in persisted as an explicit value replacing the default", () => {
-		const defaults = { name: "default" } as Record<string, unknown>;
-		const persisted = { name: null };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ name: null });
+		expect(result).toEqual({
+			tags: ["a", "b"],
+			ids: [1, 2, 3],
+		});
 	});
 
-	it("treats null in persisted replacing a nested object default", () => {
-		const defaults = { db: { host: "localhost", port: 3000 } } as Record<
-			string,
-			unknown
-		>;
-		const persisted = { db: null };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ db: null });
+	it("should shallow-copy array defaults to prevent shared mutation", () => {
+		const fields = {
+			tags: { type: "string", array: true, default: ["a", "b"] },
+		} as const satisfies FieldsDef;
+
+		const result1 = applyFieldDefaults(undefined, fields);
+		const result2 = applyFieldDefaults(undefined, fields);
+
+		// Mutating one result should not affect the other
+		(result1.tags as string[]).push("c");
+		expect(result2.tags).toEqual(["a", "b"]);
 	});
 
-	// ── Primitive persisted values ────────────────────────────────────────
+	// ──────────────────────────────────────────────────────────────────────
+	// Edge cases
+	// ──────────────────────────────────────────────────────────────────────
 
-	it("returns persisted when it is a non-object primitive (string)", () => {
-		const result = deepMerge({ a: 1 } as unknown, "hello");
-		expect(result).toBe("hello");
+	it("should handle empty fields definition", () => {
+		const result = applyFieldDefaults({ extra: "value" }, {});
+		expect(result).toEqual({});
 	});
 
-	it("returns persisted when it is a non-object primitive (number)", () => {
-		const result = deepMerge({ a: 1 } as unknown, 42);
-		expect(result).toBe(42);
+	it("should handle empty persisted object", () => {
+		const result = applyFieldDefaults({}, BASIC_FIELDS);
+
+		expect(result).toEqual({
+			theme: "light",
+			verbose: false,
+			retries: 3,
+		});
 	});
 
-	it("returns persisted when it is a non-object primitive (boolean)", () => {
-		const result = deepMerge({ a: 1 } as unknown, true);
-		expect(result).toBe(true);
+	it("should preserve null as a persisted value", () => {
+		const persisted = { theme: null, verbose: false, retries: 3 };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+
+		expect(result.theme).toBeNull();
 	});
 
-	it("returns persisted when it is null", () => {
-		const result = deepMerge({ a: 1 } as unknown, null);
-		expect(result).toBeNull();
+	it("should preserve zero as a persisted value", () => {
+		const persisted = { retries: 0 };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+
+		expect(result.retries).toBe(0);
 	});
 
-	// ── Non-plain-object defaults ─────────────────────────────────────────
+	it("should preserve empty string as a persisted value", () => {
+		const persisted = { theme: "" };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
 
-	it("returns persisted when defaults is a primitive", () => {
-		const result = deepMerge(42 as unknown, { a: 1 });
-		expect(result).toEqual({ a: 1 });
+		expect(result.theme).toBe("");
 	});
 
-	it("returns persisted when defaults is an array", () => {
-		const result = deepMerge([1, 2, 3] as unknown, { a: 1 });
-		expect(result).toEqual({ a: 1 });
-	});
+	it("should preserve false as a persisted value", () => {
+		const persisted = { verbose: false };
+		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
 
-	// ── Type replacement at boundaries ────────────────────────────────────
-
-	it("replaces object default with primitive persisted value at same key", () => {
-		const defaults = { setting: { nested: true } } as Record<string, unknown>;
-		const persisted = { setting: "flat" };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ setting: "flat" });
-	});
-
-	it("replaces primitive default with object persisted value at same key", () => {
-		const defaults = { setting: "flat" } as Record<string, unknown>;
-		const persisted = { setting: { nested: true } };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ setting: { nested: true } });
-	});
-
-	// ── Immutability ─────────────────────────────────────────────────────
-
-	it("does not mutate the defaults object", () => {
-		const defaults = { a: 1, b: { c: 2 } };
-		const defaultsCopy = JSON.parse(JSON.stringify(defaults));
-		const persisted = { a: 10, b: { c: 20 } };
-		deepMerge(defaults, persisted);
-		expect(defaults).toEqual(defaultsCopy);
-	});
-
-	it("does not mutate the persisted object", () => {
-		const defaults = { a: 1, b: { c: 2 } };
-		const persisted = { a: 10 };
-		const persistedCopy = JSON.parse(JSON.stringify(persisted));
-		deepMerge(defaults, persisted);
-		expect(persisted).toEqual(persistedCopy);
-	});
-
-	// ── Edge cases ───────────────────────────────────────────────────────
-
-	it("handles Object.create(null) as a plain object", () => {
-		const defaults = { a: 1 };
-		const persisted = Object.create(null) as Record<string, unknown>;
-		persisted.a = 10;
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ a: 10 });
-	});
-
-	it("does not merge class instances — treats them as non-plain objects", () => {
-		class Config {
-			value = 42;
-		}
-		const defaults = { config: { value: 1 } } as Record<string, unknown>;
-		const persisted = { config: new Config() };
-		const result = deepMerge(defaults, persisted);
-		// Class instance replaces default, not deep-merged
-		expect((result as { config: Config }).config).toBeInstanceOf(Config);
-		expect((result as { config: Config }).config.value).toBe(42);
-	});
-
-	it("handles undefined persisted value — replaces default with undefined", () => {
-		const defaults = { a: 1, b: 2 } as Record<string, unknown>;
-		const persisted = { a: undefined };
-		const result = deepMerge(defaults, persisted);
-		expect(result).toEqual({ a: undefined, b: 2 });
+		expect(result.verbose).toBe(false);
 	});
 });

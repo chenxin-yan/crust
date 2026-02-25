@@ -5,17 +5,18 @@
 // Errors
 export type { StoreErrorCode } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
+export type { PlatformEnv } from "./path.ts";
+// Path
+export { configDir } from "./path.ts";
 // Store
 export { createStore } from "./store.ts";
 // Types
 export type {
-	CreateStore,
-	CreateStoreBaseOptions,
 	CreateStoreOptions,
-	CreateStoreOptionsWithDefaults,
-	CreateStoreOptionsWithValidator,
+	FieldDef,
+	FieldsDef,
+	InferStoreConfig,
 	Store,
-	StoreConfigShape,
 	StoreUpdater,
-	StoreValidator,
+	ValueType,
 } from "./types.ts";

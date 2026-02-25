@@ -2,17 +2,16 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import { CrustStoreError } from "./errors.ts";
-import { deepMerge } from "./merge.ts";
+import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
+	FieldsDef,
+	InferStoreConfig,
 	Store,
-	StoreConfigShape,
 	StoreUpdater,
 } from "./types.ts";
-import { runValidation } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — Public factory
@@ -21,99 +20,76 @@ import { runValidation } from "./validation.ts";
 /**
  * Creates a typed async config store backed by a local JSON file.
  *
- * The store resolves its file path once at creation time using platform-standard
- * conventions (XDG on Linux, Application Support on macOS, AppData on Windows),
- * unless an explicit `filePath` override is provided.
+ * The store resolves its file path once at creation time from `dirPath` and
+ * optional `name`. Field definitions declare the config schema — each field's
+ * `type` determines its TypeScript type, and the presence of `default`
+ * determines whether the field is guaranteed or optional (`T | undefined`).
  *
- * @typeParam TConfig - The shape of the config object managed by the store.
+ * @typeParam F - Field definitions record (inferred via `const` generic).
  * @param options - Store configuration options.
  * @returns A {@link Store} instance with `read`, `write`, `update`, and `reset` methods.
- * @throws {CrustStoreError} `PATH` if `appName` or `filePath` is invalid.
+ * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  *
  * @example
  * ```ts
- * import { createStore } from "@crustjs/store";
+ * import { createStore, configDir } from "@crustjs/store";
  *
- * interface AppConfig {
- *   theme: "light" | "dark";
- *   verbose: boolean;
- * }
- *
- * const store = createStore<AppConfig>({
- *   appName: "my-cli",
- *   defaults: { theme: "light", verbose: false },
+ * const store = createStore({
+ *   dirPath: configDir("my-cli"),
+ *   fields: {
+ *     theme: { type: "string", default: "light" },
+ *     verbose: { type: "boolean", default: false },
+ *     token: { type: "string" },
+ *   },
  * });
  *
  * const config = await store.read();
  * // → { theme: "light", verbose: false } (defaults when no persisted file)
  *
- * await store.write({ theme: "dark", verbose: true });
- * await store.update((c) => ({ ...c, verbose: false }));
+ * await store.write({ theme: "dark", verbose: true, token: "abc" });
+ * await store.update((c) => ({ ...c, theme: "light" }));
  * await store.reset();
  * ```
  */
-export function createStore<TConfig extends StoreConfigShape>(
-	options: CreateStoreOptions<TConfig>,
-): Store<TConfig> {
-	const { appName, filePath: filePathOverride, defaults, validate } = options;
+export function createStore<const F extends FieldsDef>(
+	options: CreateStoreOptions<F>,
+): Store<InferStoreConfig<F>> {
+	const { dirPath, name, fields } = options;
 
 	// Resolve the config file path once at creation time (synchronous)
-	const filePath = resolveStorePath(appName, filePathOverride);
+	const filePath = resolveStorePath(dirPath, name);
 
 	// ──────────────────────────────────────────────────────────────────────
-	// read — Load persisted config, merge with defaults, validate
+	// read — Load persisted config, apply field defaults
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function read(): Promise<TConfig | undefined> {
+	async function read(): Promise<InferStoreConfig<F>> {
 		const persisted = await readJson(filePath);
 
-		// No persisted file and no defaults → undefined
-		if (persisted === undefined && defaults === undefined) {
-			return undefined;
-		}
-
-		// No persisted file but defaults exist → validate and return defaults
-		if (persisted === undefined) {
-			return runValidation(defaults, validate, filePath);
-		}
-
-		// Persisted file exists but no defaults → validate persisted directly
-		if (defaults === undefined) {
-			return runValidation(persisted, validate, filePath);
-		}
-
-		// Both persisted and defaults exist → deep-merge then validate
-		const merged = deepMerge(defaults, persisted);
-		return runValidation(merged, validate, filePath);
+		return applyFieldDefaults(
+			persisted as Record<string, unknown> | undefined,
+			fields,
+		);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// write — Validate and atomically persist full config
+	// write — Atomically persist full config
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function write(config: TConfig): Promise<void> {
-		const validated = runValidation(config, validate, filePath);
-		await writeJson(filePath, validated);
+	async function write(config: InferStoreConfig<F>): Promise<void> {
+		await writeJson(filePath, config);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current, apply updater, validate, persist
+	// update — Read current, apply updater, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(updater: StoreUpdater<TConfig>): Promise<void> {
+	async function update(
+		updater: StoreUpdater<InferStoreConfig<F>>,
+	): Promise<void> {
 		const current = await read();
-
-		if (current === undefined) {
-			throw new CrustStoreError(
-				"IO",
-				"Cannot update store: no persisted config and no defaults configured",
-				{ path: filePath, operation: "read" },
-			);
-		}
-
 		const updated = updater(current);
-		const validated = runValidation(updated, validate, filePath);
-		await writeJson(filePath, validated);
+		await writeJson(filePath, updated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

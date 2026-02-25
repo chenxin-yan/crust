@@ -1,122 +1,173 @@
 import { describe, expect, it } from "bun:test";
 import type {
-	CreateStore,
 	CreateStoreOptions,
+	FieldDef,
+	FieldsDef,
+	InferStoreConfig,
 	Store,
-	StoreConfigShape,
-	StoreValidator,
+	StoreUpdater,
 } from "./types.ts";
 
-interface AppConfig {
-	theme: "light" | "dark";
-	retries: number;
-	telemetry: boolean;
-}
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference tests (compile-time, validated via assignments)
+// ────────────────────────────────────────────────────────────────────────────
 
-const APP_DEFAULTS: AppConfig = {
-	theme: "light",
-	retries: 1,
-	telemetry: false,
-};
+describe("InferStoreConfig", () => {
+	it("should infer types from field definitions with defaults", () => {
+		type Fields = {
+			readonly theme: { readonly type: "string"; readonly default: "light" };
+			readonly verbose: {
+				readonly type: "boolean";
+				readonly default: false;
+			};
+			readonly retries: { readonly type: "number"; readonly default: 3 };
+		};
+		type Config = InferStoreConfig<Fields>;
 
-const validateAppConfig: StoreValidator<AppConfig> = (input) => {
-	if (typeof input !== "object" || input === null) {
-		throw new Error("Expected object");
-	}
-
-	return input as AppConfig;
-};
-
-function createStoreStub<TConfig extends StoreConfigShape>(): Store<TConfig> {
-	return {
-		async read() {
-			return undefined;
-		},
-		async write(_config) {},
-		async update(_updater) {},
-		async reset() {},
-	};
-}
-
-const createStore = ((options: unknown) => {
-	void options;
-	return createStoreStub<StoreConfigShape>();
-}) as CreateStore;
-
-describe("CreateStoreOptions", () => {
-	it("accepts defaults branch", () => {
-		const options: CreateStoreOptions<AppConfig> = {
-			appName: "my-cli",
-			defaults: APP_DEFAULTS,
+		// Fields with defaults resolve to their primitive type (guaranteed)
+		const config: Config = {
+			theme: "dark",
+			verbose: true,
+			retries: 5,
 		};
 
-		expect(options.defaults.theme).toBe("light");
+		expect(config.theme).toBe("dark");
+		expect(config.verbose).toBe(true);
+		expect(config.retries).toBe(5);
 	});
 
-	it("accepts validator branch", () => {
-		const options: CreateStoreOptions<AppConfig> = {
-			appName: "my-cli",
-			validate: validateAppConfig,
+	it("should infer optional fields as T | undefined", () => {
+		type Fields = {
+			readonly theme: { readonly type: "string"; readonly default: "light" };
+			readonly token: { readonly type: "string" };
+		};
+		type Config = InferStoreConfig<Fields>;
+
+		// token has no default → string | undefined
+		const config: Config = {
+			theme: "light",
+			token: undefined,
 		};
 
-		expect(typeof options.validate).toBe("function");
+		expect(config.theme).toBe("light");
+		expect(config.token).toBeUndefined();
 	});
 
-	it("rejects missing defaults and validate", () => {
-		// @ts-expect-error — strict options require defaults or validate
-		const _invalid: CreateStoreOptions<AppConfig> = { appName: "my-cli" };
-		expect(true).toBe(true);
+	it("should infer array fields", () => {
+		type Fields = {
+			readonly tags: {
+				readonly type: "string";
+				readonly array: true;
+				readonly default: readonly string[];
+			};
+			readonly ids: { readonly type: "number"; readonly array: true };
+		};
+		type Config = InferStoreConfig<Fields>;
+
+		// tags has array default → string[] (guaranteed)
+		// ids has no default → number[] | undefined
+		const config: Config = {
+			tags: ["a", "b"],
+			ids: undefined,
+		};
+
+		expect(config.tags).toEqual(["a", "b"]);
+		expect(config.ids).toBeUndefined();
 	});
 });
 
-describe("CreateStore strict inference", () => {
-	it("infers config shape from defaults", () => {
-		const store = createStore({
-			appName: "my-cli",
-			defaults: APP_DEFAULTS,
-		});
+describe("FieldDef", () => {
+	it("should accept scalar field definitions", () => {
+		const stringField: FieldDef = { type: "string", default: "hello" };
+		const numberField: FieldDef = { type: "number", default: 42 };
+		const booleanField: FieldDef = { type: "boolean", default: true };
 
-		const _typedStore: Store<AppConfig> = store;
-
-		const _validWrite: Parameters<typeof store.write>[0] = {
-			theme: "dark",
-			retries: 2,
-			telemetry: true,
-		};
-
-		const _invalidWrite: Parameters<typeof store.write>[0] = {
-			theme: "dark",
-			retries: 2,
-			telemetry: true,
-			// @ts-expect-error — unknown fields are rejected in write()
-			extra: "nope",
-		};
-
-		const _updater: Parameters<typeof store.update>[0] = (current) => {
-			// @ts-expect-error — unknown fields are rejected in update()
-			const _missing = current.missing;
-			return {
-				...current,
-				retries: current.retries + 1,
-			};
-		};
-
-		expect(typeof _typedStore.update).toBe("function");
+		expect(stringField.type).toBe("string");
+		expect(numberField.type).toBe("number");
+		expect(booleanField.type).toBe("boolean");
 	});
 
-	it("infers config shape from validator", () => {
-		const store = createStore({
-			appName: "my-cli",
-			validate: validateAppConfig,
-		});
+	it("should accept array field definitions", () => {
+		const stringArray: FieldDef = {
+			type: "string",
+			array: true,
+			default: ["a"],
+		};
+		const numberArray: FieldDef = {
+			type: "number",
+			array: true,
+			default: [1, 2],
+		};
 
-		const _typedStore: Store<AppConfig> = store;
-		expect(typeof _typedStore.write).toBe("function");
+		expect(stringArray.type).toBe("string");
+		expect(numberArray.type).toBe("number");
 	});
 
-	it("rejects createStore without type source", () => {
-		// @ts-expect-error — strict API requires defaults or validate
-		createStore<AppConfig>({ appName: "my-cli" });
-		expect(true).toBe(true);
+	it("should accept fields without defaults", () => {
+		const optional: FieldDef = { type: "string" };
+		expect(optional.type).toBe("string");
+	});
+
+	it("should accept fields with description", () => {
+		const field: FieldDef = {
+			type: "string",
+			default: "light",
+			description: "The UI theme",
+		};
+		expect(field.description).toBe("The UI theme");
+	});
+});
+
+describe("CreateStoreOptions", () => {
+	it("should accept valid options with fields", () => {
+		const fields = {
+			theme: { type: "string", default: "light" },
+			verbose: { type: "boolean", default: false },
+		} as const satisfies FieldsDef;
+
+		const options: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp/test",
+			fields,
+		};
+
+		expect(options.dirPath).toBe("/tmp/test");
+		expect(options.fields.theme.default).toBe("light");
+	});
+
+	it("should accept optional name", () => {
+		const fields = {
+			theme: { type: "string", default: "light" },
+		} as const satisfies FieldsDef;
+
+		const options: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp/test",
+			name: "settings",
+			fields,
+		};
+
+		expect(options.name).toBe("settings");
+	});
+});
+
+describe("Store", () => {
+	it("should define read, write, update, reset", () => {
+		type Config = { theme: string; verbose: boolean };
+
+		// Type-level check — Store interface has all four methods
+		const _check: keyof Store<Config> = "read" as keyof Store<Config>;
+		expect(["read", "write", "update", "reset"].includes(_check)).toBe(true);
+	});
+});
+
+describe("StoreUpdater", () => {
+	it("should accept a function that transforms config", () => {
+		type Config = { theme: string; count: number };
+		const updater: StoreUpdater<Config> = (current) => ({
+			...current,
+			count: current.count + 1,
+		});
+
+		const result = updater({ theme: "light", count: 0 });
+		expect(result.count).toBe(1);
 	});
 });

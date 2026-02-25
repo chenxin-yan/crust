@@ -1,21 +1,339 @@
 ---
 title: "Store"
-description: Persistent data storage for CLI apps — coming soon.
+description: Minimal, type-safe config persistence for CLI apps.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
+`@crustjs/store` gives your CLI a production-ready config store with near-zero setup. Declare your fields, get full type inference, and let the store handle path resolution, file IO, defaults, and error mapping.
+
+## Install
+
+```sh
+bun add @crustjs/store
+```
+
+## Quick Example
+
+```ts title="src/config.ts"
+import { createStore, configDir } from "@crustjs/store";
+
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  fields: {
+    theme: { type: "string", default: "light" },
+    verbose: { type: "boolean", default: false },
+    token: { type: "string" }, // optional — no default
+  },
+});
+
+// Read config (returns defaults when no persisted file exists)
+const config = await store.read();
+// → { theme: "light", verbose: false, token: undefined }
+
+// Write a full config object
+await store.write({ theme: "dark", verbose: true, token: "abc123" });
+
+// Update a single field
+await store.update((current) => ({ ...current, verbose: false }));
+
+// Reset to defaults (removes persisted file)
+await store.reset();
+```
+
+No explicit generics needed — types are inferred from your field definitions.
+
+## How It Works
+
+1. `configDir()` resolves the platform-standard config directory for your app name.
+2. `createStore()` resolves the file path once (`<dirPath>/<name>.json`) and returns a typed store instance.
+3. `read()` loads persisted JSON, applies field defaults for missing keys, and returns the merged config.
+4. `write()` atomically persists the full config (temp file + rename — no partial writes on crash).
+5. `reset()` deletes the persisted file, reverting to defaults-on-read behavior.
+
+## Field Definitions
+
+Each field in the `fields` record is a `FieldDef` with a `type` discriminant. The presence of `default` determines whether the field is guaranteed or optional in the inferred config type.
+
+```ts
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  fields: {
+    theme: { type: "string", default: "light" }, // → string
+    verbose: { type: "boolean", default: false }, // → boolean
+    retries: { type: "number", default: 3 }, // → number
+    token: { type: "string" }, // → string | undefined
+    tags: { type: "string", array: true, default: [] }, // → string[]
+    ids: { type: "number", array: true }, // → number[] | undefined
+  },
+});
+```
+
+| Property      | Type                                | Required | Description                                    |
+| ------------- | ----------------------------------- | -------- | ---------------------------------------------- |
+| `type`        | `"string" \| "number" \| "boolean"` | Yes      | The value type.                                |
+| `default`     | Matches `type`                      | No       | Default value when the field is not persisted. |
+| `array`       | `true`                              | No       | Collect values into an array.                  |
+| `description` | `string`                            | No       | Human-readable description for tooling.        |
+
+### Type Inference Rules
+
+- **Has `default`** → field is guaranteed present (e.g., `string`)
+- **No `default`** → field is optional (e.g., `string | undefined`)
+- **`array: true`** → wraps the type in an array (e.g., `string[]`)
+- **`array: true` + no `default`** → `T[] | undefined`
+
+Type inference mirrors the pattern used by `@crustjs/core`'s `defineCommand` — no explicit generics are exposed to users.
+
+## Config File Path
+
+### `configDir(appName, env?)`
+
+Resolves the platform-standard config directory for the given app name.
+
+```ts
+import { configDir } from "@crustjs/store";
+
+const dir = configDir("my-cli");
+// → "/home/user/.config/my-cli"                        (Linux)
+// → "/Users/user/Library/Application Support/my-cli"   (macOS)
+// → "C:\\Users\\user\\AppData\\Roaming\\my-cli"        (Windows)
+```
+
+| Platform | Default Path                              | Env Override       |
+| -------- | ----------------------------------------- | ------------------ |
+| Linux    | `~/.config/<appName>/<name>.json`         | `$XDG_CONFIG_HOME` |
+| macOS    | `~/Library/Application Support/<appName>` | —                  |
+| Windows  | `%APPDATA%\<appName>`                     | `%APPDATA%`        |
+
+The optional `env` parameter accepts a `PlatformEnv` object for deterministic testing without mutating `process.env`.
+
+### Multiple Stores
+
+Use the `name` option to maintain separate JSON files under the same directory:
+
+```ts
+import { createStore, configDir } from "@crustjs/store";
+
+const dir = configDir("my-cli");
+
+// ~/.config/my-cli/config.json (default)
+const configStore = createStore({
+  dirPath: dir,
+  fields: {
+    theme: { type: "string", default: "light" },
+    verbose: { type: "boolean", default: false },
+  },
+});
+
+// ~/.config/my-cli/auth.json
+const authStore = createStore({
+  dirPath: dir,
+  name: "auth",
+  fields: {
+    token: { type: "string" },
+  },
+});
+```
+
+Each store is fully independent — reading, writing, updating, and resetting one does not affect the others.
+
+`name` defaults to `"config"` (producing `config.json`). It must not contain path separators or the `.json` extension.
+
+## API
+
+### `createStore(options)`
+
+Creates a typed async config store backed by a local JSON file. The file path is resolved once at creation time from `dirPath` and optional `name`.
+
+```ts
+const store = createStore(options);
+```
+
+#### Parameters
+
+| Option    | Type        | Required | Description                                                       |
+| --------- | ----------- | -------- | ----------------------------------------------------------------- |
+| `dirPath` | `string`    | Yes      | Absolute directory path where the JSON file is stored.            |
+| `name`    | `string`    | No       | Store name used as filename (default `"config"` → `config.json`). |
+| `fields`  | `FieldsDef` | Yes      | Field definitions that declare the config schema.                 |
+
+**Returns:** A `Store<TConfig>` with `read()`, `write()`, `update()`, and `reset()` methods.
+
+**Throws:** `CrustStoreError` with `PATH` code if `dirPath` or `name` is invalid.
+
+### `store.read()`
+
+Reads the persisted config file. Missing fields are filled from their `default` values. Fields without defaults are `undefined` when not persisted.
+
+```ts
+const config = await store.read();
+```
+
+Always returns a value — never `undefined`. Does not write merged defaults back to disk.
+
+**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `IO` code on filesystem failure.
+
+### `store.write(config)`
+
+Atomically persists a full config object. The entire previous config is replaced. Parent directories are created if missing.
+
+```ts
+await store.write({ theme: "dark", verbose: true, token: "abc123" });
+```
+
+**Throws:** `CrustStoreError` with `IO` code on filesystem failure.
+
+### `store.update(updater)`
+
+Reads the current effective config, applies the updater function, and atomically persists the result.
+
+```ts
+await store.update((current) => ({
+  ...current,
+  theme: "dark",
+}));
+```
+
+When no persisted file exists, the updater receives field defaults as the current value.
+
+**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `IO` code on filesystem failure.
+
+### `store.reset()`
+
+Removes the persisted config file. After reset, `read()` returns field defaults.
+
+```ts
+await store.reset();
+```
+
+Reset is idempotent — calling it when no file exists is a no-op.
+
+**Throws:** `CrustStoreError` with `IO` code on filesystem failure.
+
+## Defaults & Merge
+
+When a persisted file exists, `read()` applies field defaults for any missing keys:
+
+```ts
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  fields: {
+    theme: { type: "string", default: "light" },
+    verbose: { type: "boolean", default: false },
+    retries: { type: "number", default: 3 },
+  },
+});
+
+// Persisted file contains: { "theme": "dark" }
+const config = await store.read();
+// → { theme: "dark", verbose: false, retries: 3 }
+```
+
+### Merge Rules
+
+- Fields present in the persisted file use the persisted value.
+- Missing fields with a `default` use the default value.
+- Missing fields without a `default` are omitted (typed as `T | undefined`).
+- Extra keys in the persisted file not defined in `fields` are dropped.
+- Array defaults are shallow-copied to prevent shared mutation.
+- Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
+
 <Callout>
-  This package is **coming soon** and not yet available.
+  Merged defaults exist only in memory. The persisted file remains unchanged
+  until you explicitly call `write()` or `update()`.
 </Callout>
 
-`@crustjs/store` will provide persistent data storage for CLI applications.
+## Error Handling
 
-Planned features include:
-- Configuration file management (JSON, TOML, YAML)
-- XDG-compliant config/data directory resolution
-- Schema validation for stored data
-- Migration support for config changes
-- Encrypted storage for sensitive values
+All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-Check back for updates, or follow the [Crust repository](https://github.com/chenxin-yan/crust) for progress.
+| Code    | When                                                    | Details               |
+| ------- | ------------------------------------------------------- | --------------------- |
+| `PATH`  | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`    |
+| `PARSE` | Malformed JSON in persisted config file                 | `{ path: string }`    |
+| `IO`    | Filesystem read, write, or delete failure               | `{ path, operation }` |
+
+### Catching Errors
+
+```ts
+import { CrustStoreError } from "@crustjs/store";
+
+try {
+  const config = await store.read();
+} catch (err) {
+  if (err instanceof CrustStoreError) {
+    switch (err.code) {
+      case "PARSE":
+        console.error(`Corrupt config at ${err.details.path}`);
+        break;
+      case "IO":
+        console.error(`File ${err.details.operation} failed: ${err.message}`);
+        break;
+    }
+  }
+}
+```
+
+### Type Narrowing
+
+The `.is()` method narrows the error type so `details` is fully typed:
+
+```ts
+if (err instanceof CrustStoreError && err.is("IO")) {
+  // err.details is { path: string; operation: "read" | "write" | "delete" }
+  console.error(err.details.operation, err.details.path);
+}
+```
+
+### Cause Chaining
+
+`CrustStoreError` preserves the original error as `cause`:
+
+```ts
+if (err instanceof CrustStoreError && err.is("PARSE")) {
+  console.error("Original parse error:", err.cause);
+}
+```
+
+<Callout type="warn">
+  `@crustjs/store` does **not** silently recover from malformed JSON. If the
+  persisted file contains invalid JSON, `read()` throws immediately — no
+  fallback to defaults.
+</Callout>
+
+## Exports
+
+### Functions
+
+| Function      | Description                                           |
+| ------------- | ----------------------------------------------------- |
+| `createStore` | Create a typed async config store backed by JSON      |
+| `configDir`   | Resolve platform-standard config directory for an app |
+
+### Types
+
+| Type                 | Description                                                    |
+| -------------------- | -------------------------------------------------------------- |
+| `CreateStoreOptions` | Options object for `createStore()`.                            |
+| `FieldDef`           | Single field definition (discriminated by `type` and `array`). |
+| `FieldsDef`          | Record mapping field names to `FieldDef`.                      |
+| `InferStoreConfig`   | Utility type: infers config shape from a `FieldsDef`.          |
+| `Store`              | Store instance with `read`, `write`, `update`, `reset`.        |
+| `StoreUpdater`       | Updater function type `(current: TConfig) => TConfig`.         |
+| `ValueType`          | Supported type literals: `"string" \| "number" \| "boolean"`.  |
+| `StoreErrorCode`     | Union of error codes: `"PATH" \| "PARSE" \| "IO"`.             |
+| `PlatformEnv`        | Injectable platform environment for testing `configDir`.       |
+| `CrustStoreError`    | Typed error class with `code`, `details`, and `cause`.         |
+
+## Design
+
+`@crustjs/store` is a standalone package — it has no dependency on `@crustjs/core` and is not injected into the command context. It handles one thing: persisting typed config objects as JSON files with platform-aware path resolution.
+
+**Not included** (by design):
+
+- Built-in validation (planned via `@crustjs/validate` integration)
+- Alternative formats (YAML, TOML, JSON5) — JSON only
+- Cross-process locking — assumes single-process usage
+- Sync API variants
+- Encryption or keychain integration

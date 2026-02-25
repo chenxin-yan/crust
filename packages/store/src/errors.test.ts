@@ -41,23 +41,6 @@ describe("CrustStoreError", () => {
 		expect(err.details.path).toBe("/home/user/.config/app/config.json");
 	});
 
-	it("should construct VALIDATION error without details", () => {
-		const err = new CrustStoreError("VALIDATION", "invalid config value");
-
-		expect(err.code).toBe("VALIDATION");
-		expect(err.message).toBe("invalid config value");
-		expect(err.details).toBeUndefined();
-	});
-
-	it("should construct VALIDATION error with optional details", () => {
-		const err = new CrustStoreError("VALIDATION", "schema mismatch", {
-			path: "/tmp/config.json",
-		});
-
-		expect(err.code).toBe("VALIDATION");
-		expect(err.details).toEqual({ path: "/tmp/config.json" });
-	});
-
 	it("should construct IO error with operation context", () => {
 		const err = new CrustStoreError("IO", "permission denied", {
 			path: "/etc/config.json",
@@ -89,7 +72,6 @@ describe("CrustStoreError", () => {
 
 		expect(err.is("PATH")).toBe(true);
 		expect(err.is("PARSE")).toBe(false);
-		expect(err.is("VALIDATION")).toBe(false);
 		expect(err.is("IO")).toBe(false);
 
 		if (err.is("PATH")) {
@@ -109,16 +91,6 @@ describe("CrustStoreError", () => {
 		if (err.is("PARSE")) {
 			expect(err.details.path).toBe("/tmp/config.json");
 		}
-	});
-
-	it("should narrow to VALIDATION with .is()", () => {
-		const err: CrustStoreError = new CrustStoreError(
-			"VALIDATION",
-			"validation failed",
-		);
-
-		expect(err.is("VALIDATION")).toBe(true);
-		expect(err.is("IO")).toBe(false);
 	});
 
 	it("should narrow to IO with .is()", () => {
@@ -142,9 +114,9 @@ describe("CrustStoreError", () => {
 
 	it("should attach cause with .withCause()", () => {
 		const original = new TypeError("unexpected type");
-		const err = new CrustStoreError("VALIDATION", "invalid config").withCause(
-			original,
-		);
+		const err = new CrustStoreError("PARSE", "invalid config", {
+			path: "/tmp/config.json",
+		}).withCause(original);
 
 		expect(err.cause).toBe(original);
 		expect(err.cause).toBeInstanceOf(TypeError);
@@ -195,7 +167,6 @@ describe("CrustStoreError", () => {
 			operation: "read",
 		});
 
-		// Error.prototype.toString() uses name and message
 		expect(err.toString()).toBe("CrustStoreError: permission denied");
 	});
 

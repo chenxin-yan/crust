@@ -23,16 +23,6 @@ export interface ParseErrorDetails {
 }
 
 /**
- * Contextual details attached to a `VALIDATION` error.
- *
- * Returned when the user-provided validator rejects a config value.
- */
-export interface ValidationErrorDetails {
-	/** Absolute path to the config file involved, if available. */
-	path?: string;
-}
-
-/**
  * Contextual details attached to an `IO` error.
  *
  * Returned on filesystem read, write, or delete failures.
@@ -52,7 +42,6 @@ export interface IOErrorDetails {
 export interface StoreErrorDetailsMap {
 	PATH: PathErrorDetails;
 	PARSE: ParseErrorDetails;
-	VALIDATION: ValidationErrorDetails | undefined;
 	IO: IOErrorDetails;
 }
 
@@ -61,7 +50,6 @@ export interface StoreErrorDetailsMap {
  *
  * - `PATH` — Invalid or unsupported config file path
  * - `PARSE` — Malformed JSON in persisted config file
- * - `VALIDATION` — User-provided validator rejected a config value
  * - `IO` — Filesystem read, write, or delete failure
  *
  * @example
@@ -95,7 +83,7 @@ export type StoreErrorDetails<C extends StoreErrorCode> =
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A typed error thrown by `@crustjs/store` for path, parse, validation, and IO failures.
+ * A typed error thrown by `@crustjs/store` for path, parse, and IO failures.
  *
  * Every `CrustStoreError` carries a {@link StoreErrorCode} that identifies the failure
  * category, along with structured {@link StoreErrorDetails} for programmatic handling
@@ -126,17 +114,11 @@ export class CrustStoreError<
 	/** Optional wrapped original error or value. */
 	override cause?: unknown;
 
-	constructor(
-		code: C,
-		message: string,
-		...details: undefined extends StoreErrorDetails<C>
-			? [] | [StoreErrorDetails<C>]
-			: [StoreErrorDetails<C>]
-	) {
+	constructor(code: C, message: string, details: StoreErrorDetails<C>) {
 		super(message);
 		this.name = "CrustStoreError";
 		this.code = code;
-		this.details = details[0] as StoreErrorDetails<C>;
+		this.details = details;
 	}
 
 	/**

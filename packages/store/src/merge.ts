@@ -1,79 +1,40 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/store — Deep-merge defaults helper
+// @crustjs/store — Field-based defaults application
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { FieldsDef, InferStoreConfig } from "./types.ts";
+
 /**
- * Deep-merges a persisted config with default values.
+ * Applies field defaults to a persisted config object.
  *
- * Behavior:
- * - Missing keys in `persisted` are filled from `defaults`.
- * - Nested plain objects are merged recursively.
- * - Arrays and non-plain-object values in `persisted` **replace** the default
- *   (no element-level array merging).
- * - `null` in `persisted` is treated as an explicit value and replaces the default.
+ * For each field defined in `fields`:
+ * - If the key exists in `persisted`, the persisted value is used.
+ * - If the key is missing and the field has a `default`, the default is used.
+ *   Array defaults are shallow-copied to prevent shared mutation.
+ * - If the key is missing and no default exists, the field is omitted
+ *   (typed as `T | undefined` in the output).
  *
- * This function is used at read time to produce the effective config without
- * auto-persisting the merged result back to disk.
+ * Keys in `persisted` that are not defined in `fields` are dropped.
  *
- * @param defaults - Base default config values.
- * @param persisted - Persisted config values (may be partial).
- * @returns A new object with defaults filled in for missing persisted fields.
+ * @param persisted - Parsed JSON from disk, or `undefined` if no file exists.
+ * @param fields - Store field definitions.
+ * @returns A new object with field defaults applied.
  */
-export function deepMerge<T>(defaults: T, persisted: unknown): T {
-	// If persisted is not a plain object, it replaces defaults entirely
-	if (!isPlainObject(persisted)) {
-		return persisted as T;
-	}
-
-	// If defaults is not a plain object, persisted replaces it entirely
-	if (!isPlainObject(defaults)) {
-		return persisted as T;
-	}
-
+export function applyFieldDefaults<F extends FieldsDef>(
+	persisted: Record<string, unknown> | undefined,
+	fields: F,
+): InferStoreConfig<F> {
 	const result: Record<string, unknown> = {};
 
-	// Start with all default keys
-	for (const key of Object.keys(defaults as Record<string, unknown>)) {
-		const defaultValue = (defaults as Record<string, unknown>)[key];
-		const persistedValue = (persisted as Record<string, unknown>)[key];
-
-		if (!(key in (persisted as Record<string, unknown>))) {
-			// Key missing from persisted — use default
-			result[key] = defaultValue;
-		} else if (isPlainObject(defaultValue) && isPlainObject(persistedValue)) {
-			// Both sides are plain objects — recurse
-			result[key] = deepMerge(defaultValue, persistedValue);
-		} else {
-			// Persisted value replaces default (arrays, primitives, null)
-			result[key] = persistedValue;
+	for (const [key, def] of Object.entries(fields)) {
+		if (persisted && key in persisted) {
+			result[key] = persisted[key];
+		} else if ("default" in def && def.default !== undefined) {
+			// Shallow-copy array defaults to prevent shared mutation
+			result[key] = Array.isArray(def.default) ? [...def.default] : def.default;
 		}
+		// else: no persisted value and no default → key not set (field is T | undefined)
 	}
 
-	// Include persisted keys not present in defaults
-	for (const key of Object.keys(persisted as Record<string, unknown>)) {
-		if (!(key in (defaults as Record<string, unknown>))) {
-			result[key] = (persisted as Record<string, unknown>)[key];
-		}
-	}
-
-	return result as T;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Checks whether a value is a plain object (not an array, null, Date, etc.).
- *
- * Only objects created by `{}`, `Object.create(null)`, or `new Object()` are
- * considered plain. Arrays, class instances, and `null` are excluded.
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) {
-		return false;
-	}
-
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	return result as InferStoreConfig<F>;
 }
