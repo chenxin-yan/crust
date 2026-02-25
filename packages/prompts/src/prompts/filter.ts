@@ -17,7 +17,12 @@ import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
+import {
+	calculateScrollOffset,
+	formatPromptLine,
+	formatSubmitted,
+	normalizeChoices,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -48,7 +53,7 @@ import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
  */
 export interface FilterOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
@@ -224,12 +229,12 @@ function highlightMatches(
 function renderFilter<T>(
 	state: FilterState<T>,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	placeholder: string | undefined,
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 
 	// Query input line
 	let queryLine: string;
@@ -245,7 +250,7 @@ function renderFilter<T>(
 		queryLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	const lines: string[] = [`${prefix} ${msg}`, `  ${queryLine}`];
+	const lines: string[] = [formatPromptLine(prefix, msg, queryLine)];
 
 	// Filtered results list
 	const totalResults = state.results.length;
@@ -292,15 +297,15 @@ function renderSubmitted<T>(
 	_state: FilterState<T>,
 	_value: T,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	results: readonly FuzzyFilterResult<T>[],
 	listCursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const selected = results[listCursor];
 	const label = selected ? selected.item.label : "";
-	return `${prefix} ${msg} ${theme.success(label)}`;
+	return formatSubmitted(prefix, msg, theme.success(label));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

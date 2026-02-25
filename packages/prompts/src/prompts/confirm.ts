@@ -7,6 +7,7 @@ import { runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -34,7 +35,7 @@ import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
  */
 export interface ConfirmOptions {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** Default value when the user presses Enter without toggling (defaults to `true`) */
 	readonly default?: boolean;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
@@ -108,12 +109,12 @@ const SEPARATOR = " · ";
 function renderConfirm(
 	state: ConfirmState,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	activeLabel: string,
 	inactiveLabel: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 
 	const activeDisplay = state.value
 		? `${theme.selected("●")} ${theme.selected(activeLabel)}`
@@ -123,21 +124,22 @@ function renderConfirm(
 		? `${theme.unselected("○")} ${theme.unselected(inactiveLabel)}`
 		: `${theme.selected("●")} ${theme.selected(inactiveLabel)}`;
 
-	return `${prefix} ${msg}\n  ${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
+	const toggleLine = `${activeDisplay}${SEPARATOR}${inactiveDisplay}`;
+	return formatPromptLine(prefix, msg, toggleLine);
 }
 
 function renderSubmitted(
 	_state: ConfirmState,
 	value: boolean,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	activeLabel: string,
 	inactiveLabel: string,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const answer = value ? activeLabel : inactiveLabel;
-	return `${prefix} ${msg} ${theme.success(answer)}`;
+	return formatSubmitted(prefix, msg, theme.success(answer));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

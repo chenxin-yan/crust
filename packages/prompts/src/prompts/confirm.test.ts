@@ -402,6 +402,38 @@ describe("confirm — rendering", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("confirm — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = confirm({});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+		expect(stderrOutput).toContain("Yes");
+		expect(stderrOutput).toContain("No");
+
+		pressKey("", { name: "return" });
+		const result = await promise;
+		expect(result).toBe(true);
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = confirm({});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 

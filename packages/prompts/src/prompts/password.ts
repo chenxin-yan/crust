@@ -12,6 +12,7 @@ import type {
 	PromptTheme,
 	ValidateFn,
 } from "../core/types.ts";
+import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -30,7 +31,7 @@ import type {
  */
 export interface PasswordOptions {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** Character used to mask the input (default: `"*"`) */
 	readonly mask?: string;
 	/** Validation function — return `true` for valid, or a string error message */
@@ -96,11 +97,11 @@ const SUBMITTED_MASK_LENGTH = 4;
 function renderPassword(
 	state: PasswordState,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	mask: string,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 
 	let valueLine: string;
 
@@ -114,7 +115,7 @@ function renderPassword(
 		valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
 	}
 
-	let output = `${prefix} ${msg}\n  ${valueLine}`;
+	let output = formatPromptLine(prefix, msg, valueLine);
 
 	// Show error inline below
 	if (state.error !== null) {
@@ -128,14 +129,14 @@ function renderSubmitted(
 	_state: PasswordState,
 	_value: string,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	mask: string,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	// Show a fixed number of mask characters regardless of actual length
 	const maskedDisplay = theme.success(mask.repeat(SUBMITTED_MASK_LENGTH));
-	return `${prefix} ${msg} ${maskedDisplay}`;
+	return formatSubmitted(prefix, msg, maskedDisplay);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

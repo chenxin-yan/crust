@@ -12,6 +12,7 @@ import type {
 	PromptTheme,
 	ValidateFn,
 } from "../core/types.ts";
+import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -28,10 +29,16 @@ import type {
  *   validate: (v) => v.length > 0 || "Name is required",
  * });
  * ```
+ *
+ * @example
+ * ```ts
+ * // Without a message — renders prefix + input only
+ * const name = await input({ placeholder: "Enter your name" });
+ * ```
  */
 export interface InputOptions {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** Placeholder text shown when the input is empty */
 	readonly placeholder?: string;
 	/** Default value used when the user submits an empty input */
@@ -103,14 +110,14 @@ function createHandleKey(
 function renderInput(
 	state: InputState,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	placeholder: string | undefined,
 	defaultValue: string | undefined,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 
-	// Default hint shown after message when value is empty and default exists
+	// Default hint shown after header when value is empty and default exists
 	const defaultHint =
 		defaultValue !== undefined && state.value === ""
 			? ` ${theme.hint(`(${defaultValue})`)}`
@@ -132,7 +139,7 @@ function renderInput(
 		valueLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	let output = `${prefix} ${msg}${defaultHint}\n  ${valueLine}`;
+	let output = formatPromptLine(prefix, msg, valueLine, defaultHint);
 
 	// Show error inline below
 	if (state.error !== null) {
@@ -146,11 +153,11 @@ function renderSubmitted(
 	_state: InputState,
 	value: string,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
-	return `${prefix} ${msg} ${theme.success(value)}`;
+	const msg = message ? theme.message(message) : undefined;
+	return formatSubmitted(prefix, msg, theme.success(value));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

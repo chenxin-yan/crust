@@ -14,7 +14,12 @@ import {
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
+import {
+	calculateScrollOffset,
+	formatHeader,
+	formatSubmitted,
+	normalizeChoices,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -45,7 +50,7 @@ import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
  */
 export interface SelectOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Default value — sets the initial cursor position to the matching choice */
@@ -131,15 +136,15 @@ function createHandleKey<T>(
 function renderSelect<T>(
 	state: SelectState<T>,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = [`${prefix} ${msg}`];
+	const lines: string[] = msg ? [formatHeader(prefix, msg)] : [];
 
 	// Show scroll-up indicator if items are hidden above
 	const hasScrollUp = state.scrollOffset > 0;
@@ -178,15 +183,15 @@ function renderSubmitted<T>(
 	_state: SelectState<T>,
 	_value: T,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	choices: readonly NormalizedChoice<T>[],
 	cursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const selected = choices[cursor];
 	const label = selected ? selected.label : "";
-	return `${prefix} ${msg} ${theme.success(label)}`;
+	return formatSubmitted(prefix, msg, theme.success(label));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

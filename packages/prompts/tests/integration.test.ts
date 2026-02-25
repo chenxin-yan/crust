@@ -284,18 +284,30 @@ describe("type exports", () => {
 		// to type-check, not produce real values.
 		const _choice: Choice<string> = "test";
 		const _inputOpts: InputOptions = { message: "m" };
+		const _inputOptsNoMsg: InputOptions = {};
 		const _passwordOpts: PasswordOptions = { message: "m" };
+		const _passwordOptsNoMsg: PasswordOptions = {};
 		const _confirmOpts: ConfirmOptions = { message: "m" };
+		const _confirmOptsNoMsg: ConfirmOptions = {};
 		const _selectOpts: SelectOptions<string> = {
 			message: "m",
+			choices: ["a"],
+		};
+		const _selectOptsNoMsg: SelectOptions<string> = {
 			choices: ["a"],
 		};
 		const _multiselectOpts: MultiselectOptions<string> = {
 			message: "m",
 			choices: ["a"],
 		};
+		const _multiselectOptsNoMsg: MultiselectOptions<string> = {
+			choices: ["a"],
+		};
 		const _filterOpts: FilterOptions<string> = {
 			message: "m",
+			choices: ["a"],
+		};
+		const _filterOptsNoMsg: FilterOptions<string> = {
 			choices: ["a"],
 		};
 		const _spinnerOpts: SpinnerOptions<string> = {

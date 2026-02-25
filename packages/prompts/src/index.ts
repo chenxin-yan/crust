@@ -66,4 +66,9 @@ export { spinner } from "./prompts/spinner.ts";
 export { fuzzyFilter, fuzzyMatch } from "./core/fuzzy.ts";
 export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
 export { CURSOR_CHAR, handleTextEdit } from "./core/textEdit.ts";
-export { calculateScrollOffset, normalizeChoices } from "./core/utils.ts";
+export {
+	calculateScrollOffset,
+	formatPromptLine,
+	formatSubmitted,
+	normalizeChoices,
+} from "./core/utils.ts";

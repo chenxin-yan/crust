@@ -533,6 +533,41 @@ describe("select — viewport scrolling", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("select — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = select({
+			choices: ["a", "b", "c"],
+		});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+		expect(stderrOutput).toContain("a");
+
+		pressKey("", { name: "return" });
+		const result = await promise;
+		expect(result).toBe("a");
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = select({
+			choices: ["a", "b", "c"],
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 

@@ -728,6 +728,47 @@ describe("multiselect — viewport scrolling", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("multiselect — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = multiselect({
+			choices: ["a", "b", "c"],
+		});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+		expect(stderrOutput).toContain("a");
+
+		// Select first item and submit
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toEqual(["a"]);
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = multiselect({
+			choices: ["a", "b", "c"],
+		});
+
+		await tick();
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 

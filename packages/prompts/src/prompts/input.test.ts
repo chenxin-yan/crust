@@ -480,6 +480,65 @@ describe("input — validation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("input — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = input({});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+
+		pressKey("A");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("A");
+	});
+
+	it("renders placeholder without message", async () => {
+		const promise = input({ placeholder: "Enter name" });
+
+		await tick();
+		expect(stderrOutput).toContain("Enter name");
+		expect(stderrOutput).not.toContain("undefined");
+
+		pressKey("", { name: "return" });
+		await promise;
+	});
+
+	it("renders default hint without message", async () => {
+		const promise = input({ default: "World" });
+
+		await tick();
+		expect(stderrOutput).toContain("(World)");
+		expect(stderrOutput).not.toContain("undefined");
+
+		pressKey("", { name: "return" });
+		const result = await promise;
+		expect(result).toBe("World");
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = input({});
+
+		await tick();
+		pressKey("X");
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+		expect(stderrOutput).toContain("X");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 

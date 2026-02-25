@@ -430,6 +430,45 @@ describe("password — validation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("password — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = password({});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+
+		pressKey("s");
+		await tick();
+		pressKey("e");
+		await tick();
+		pressKey("c");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("sec");
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = password({});
+
+		await tick();
+		pressKey("x");
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 

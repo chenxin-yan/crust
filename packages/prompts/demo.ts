@@ -24,7 +24,7 @@ async function main() {
 	});
 	console.log(`  -> Name: ${name}\n`);
 
-	// ── 2. Input with default ──────────────────────────────────────────────
+	// ── 2. Input (with default) ───────────────────────────────────────────
 	const project = await input({
 		message: "Project name?",
 		default: "my-app",
@@ -32,14 +32,20 @@ async function main() {
 	});
 	console.log(`  -> Project: ${project}\n`);
 
-	// ── 3. Password ────────────────────────────────────────────────────────
+	// ── 3. Input (no message) ─────────────────────────────────────────────
+	const nickname = await input({
+		placeholder: "Enter a nickname",
+	});
+	console.log(`  -> Nickname: ${nickname}\n`);
+
+	// ── 4. Password ────────────────────────────────────────────────────────
 	const secret = await password({
 		message: "Enter a secret password:",
 		validate: (v) => v.length >= 4 || "Password must be at least 4 characters",
 	});
 	console.log(`  -> Password length: ${secret.length}\n`);
 
-	// ── 4. Confirm ─────────────────────────────────────────────────────────
+	// ── 5. Confirm ─────────────────────────────────────────────────────────
 	const shouldContinue = await confirm({
 		message: "Do you want to continue?",
 	});
@@ -50,7 +56,11 @@ async function main() {
 		return;
 	}
 
-	// ── 5. Confirm (custom labels) ─────────────────────────────────────────
+	// ── 6. Confirm (no message) ───────────────────────────────────────────
+	const ready = await confirm({});
+	console.log(`  -> Ready: ${ready}\n`);
+
+	// ── 7. Confirm (custom labels) ────────────────────────────────────────
 	const accepted = await confirm({
 		message: "Accept the license agreement?",
 		active: "Accept",
@@ -59,14 +69,14 @@ async function main() {
 	});
 	console.log(`  -> Accepted: ${accepted}\n`);
 
-	// ── 6. Select ──────────────────────────────────────────────────────────
+	// ── 8. Select ─────────────────────────────────────────────────────────
 	const color = await select({
 		message: "Pick your favorite color",
 		choices: ["Red", "Green", "Blue", "Yellow", "Purple"],
 	});
 	console.log(`  -> Color: ${color}\n`);
 
-	// ── 7. Select (with objects + hints) ───────────────────────────────────
+	// ── 9. Select (with objects + hints) ──────────────────────────────────
 	const framework = await select({
 		message: "Choose a framework",
 		choices: [
@@ -80,7 +90,13 @@ async function main() {
 	});
 	console.log(`  -> Framework: ${framework}\n`);
 
-	// ── 8. Multiselect ─────────────────────────────────────────────────────
+	// ── 10. Select (no message) ───────────────────────────────────────────
+	const size = await select({
+		choices: ["Small", "Medium", "Large"],
+	});
+	console.log(`  -> Size: ${size}\n`);
+
+	// ── 11. Multiselect ───────────────────────────────────────────────────
 	const toppings = await multiselect({
 		message: "Select pizza toppings",
 		choices: [
@@ -96,7 +112,7 @@ async function main() {
 	});
 	console.log(`  -> Toppings: ${toppings.join(", ")}\n`);
 
-	// ── 9. Multiselect (with constraints) ──────────────────────────────────
+	// ── 12. Multiselect (with constraints) ────────────────────────────────
 	const features = await multiselect({
 		message: "Enable features (pick 1-3)",
 		choices: [
@@ -112,7 +128,13 @@ async function main() {
 	});
 	console.log(`  -> Features: ${features.join(", ")}\n`);
 
-	// ── 10. Filter ─────────────────────────────────────────────────────────
+	// ── 13. Multiselect (no message) ──────────────────────────────────────
+	const extras = await multiselect({
+		choices: ["Ketchup", "Mustard", "Mayo"],
+	});
+	console.log(`  -> Extras: ${extras.join(", ")}\n`);
+
+	// ── 14. Filter ────────────────────────────────────────────────────────
 	const language = await filter({
 		message: "Search for a programming language",
 		choices: [
@@ -136,7 +158,7 @@ async function main() {
 	});
 	console.log(`  -> Language: ${language}\n`);
 
-	// ── 11. Spinner ────────────────────────────────────────────────────────
+	// ── 15. Spinner ───────────────────────────────────────────────────────
 	const data = await spinner({
 		message: "Simulating some work...",
 		task: async () => {
@@ -146,7 +168,7 @@ async function main() {
 	});
 	console.log(`  -> Spinner result: ${JSON.stringify(data)}\n`);
 
-	// ── 12. Spinner (different style) ──────────────────────────────────────
+	// ── 16. Spinner (different style) ─────────────────────────────────────
 	await spinner({
 		message: "Almost there...",
 		task: async () => {
@@ -158,11 +180,14 @@ async function main() {
 	// ── Summary ────────────────────────────────────────────────────────────
 	console.log("\n=== Demo Complete ===");
 	console.log(`  Name:      ${name}`);
+	console.log(`  Nickname:  ${nickname}`);
 	console.log(`  Project:   ${project}`);
 	console.log(`  Color:     ${color}`);
+	console.log(`  Size:      ${size}`);
 	console.log(`  Framework: ${framework}`);
 	console.log(`  Toppings:  ${toppings.join(", ")}`);
 	console.log(`  Features:  ${features.join(", ")}`);
+	console.log(`  Extras:    ${extras.join(", ")}`);
 	console.log(`  Language:  ${language}`);
 	console.log("");
 }

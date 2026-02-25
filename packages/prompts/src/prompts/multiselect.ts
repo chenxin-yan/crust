@@ -16,7 +16,12 @@ import {
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
+import {
+	calculateScrollOffset,
+	formatHeader,
+	formatSubmitted,
+	normalizeChoices,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,7 +54,7 @@ import { calculateScrollOffset, normalizeChoices } from "../core/utils.ts";
  */
 export interface MultiselectOptions<T> {
 	/** The prompt message displayed to the user */
-	readonly message: string;
+	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
 	/** Default selected values — pre-selects matching choices */
@@ -232,15 +237,15 @@ function createHandleKey<T>(
 function renderMultiselect<T>(
 	state: MultiselectState<T>,
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	maxVisible: number,
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = [`${prefix} ${msg}`];
+	const lines: string[] = msg ? [formatHeader(prefix, msg)] : [];
 
 	// Show hint line with keybinding instructions
 	lines.push(theme.hint(HINT_LINE));
@@ -291,17 +296,17 @@ function renderSubmitted<T>(
 	_state: MultiselectState<T>,
 	_value: T[],
 	theme: PromptTheme,
-	message: string,
+	message: string | undefined,
 	choices: readonly NormalizedChoice<T>[],
 	selected: ReadonlySet<number>,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
-	const msg = theme.message(message);
+	const msg = message ? theme.message(message) : undefined;
 	const selectedLabels = choices
 		.filter((_, i) => selected.has(i))
 		.map((c) => c.label)
 		.join(", ");
-	return `${prefix} ${msg} ${theme.success(selectedLabels)}`;
+	return formatSubmitted(prefix, msg, theme.success(selectedLabels));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

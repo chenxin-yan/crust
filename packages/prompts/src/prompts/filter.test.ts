@@ -587,6 +587,41 @@ describe("filter — viewport scrolling", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// No message
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("filter — no message", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("renders without message and does not contain undefined", async () => {
+		const promise = filter({
+			choices: ["apple", "banana", "cherry"],
+		});
+
+		await tick();
+		expect(stderrOutput).not.toContain("undefined");
+		expect(stderrOutput).toContain("apple");
+
+		pressKey("", { name: "return" });
+		const result = await promise;
+		expect(result).toBe("apple");
+	});
+
+	it("submitted output does not contain undefined", async () => {
+		const promise = filter({
+			choices: ["apple", "banana", "cherry"],
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		await promise;
+		expect(stderrOutput).not.toContain("undefined");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Non-TTY behavior
 // ────────────────────────────────────────────────────────────────────────────
 
