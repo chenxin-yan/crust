@@ -25,6 +25,20 @@ export interface SetupActions {
 	 * @param def - The flag definition
 	 */
 	addFlag(command: AnyCommand, name: string, def: FlagDef): void;
+
+	/**
+	 * Inject a subcommand into a command's `subCommands` record.
+	 *
+	 * Use this in plugin `setup()` hooks to register plugin-provided commands
+	 * (e.g. a "skill" management command). If the parent already has a
+	 * subcommand with the same name (user-defined), the call is silently
+	 * skipped — user definitions always take priority over plugin injections.
+	 *
+	 * @param parent - The parent command to add the subcommand to
+	 * @param name - The subcommand name (used for routing)
+	 * @param command - The subcommand to register
+	 */
+	addSubCommand(parent: AnyCommand, name: string, command: AnyCommand): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

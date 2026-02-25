@@ -1,0 +1,71 @@
+// ────────────────────────────────────────────────────────────────────────────
+// Version checking — reads and compares installed skill versions
+// ────────────────────────────────────────────────────────────────────────────
+
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { InstallStatus } from "./types.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Public API
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the installed version from a skill directory's `manifest.json`.
+ *
+ * @param dir - Absolute path to the skill directory
+ * @returns The version string if found, or `null` if the file is missing or malformed
+ */
+export async function readInstalledVersion(
+	dir: string,
+): Promise<string | null> {
+	try {
+		const raw = await readFile(join(dir, "manifest.json"), "utf-8");
+		const parsed: unknown = JSON.parse(raw);
+
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			"version" in parsed &&
+			typeof (parsed as Record<string, unknown>).version === "string"
+		) {
+			return (parsed as Record<string, unknown>).version as string;
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/** Result from {@link checkVersion} containing the status and installed version. */
+export interface VersionCheckResult {
+	/** Installation status */
+	status: InstallStatus;
+	/** Previously installed version, or `null` if not found */
+	installedVersion: string | null;
+}
+
+/**
+ * Checks whether a skill directory needs installation or update.
+ *
+ * @param dir - Absolute path to the skill directory
+ * @param newVersion - The version being installed
+ * @returns The installation status and the currently installed version (if any)
+ */
+export async function checkVersion(
+	dir: string,
+	newVersion: string,
+): Promise<VersionCheckResult> {
+	const installed = await readInstalledVersion(dir);
+
+	if (installed === null) {
+		return { status: "installed", installedVersion: null };
+	}
+
+	if (installed !== newVersion) {
+		return { status: "updated", installedVersion: installed };
+	}
+
+	return { status: "up-to-date", installedVersion: installed };
+}

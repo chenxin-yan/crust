@@ -531,8 +531,8 @@ export interface Command<
 	readonly args?: A;
 	/** Flag definitions */
 	readonly flags?: F;
-	/** Named subcommands */
-	readonly subCommands?: Record<string, AnyCommand>;
+	/** Named subcommands (always initialized, may be empty) */
+	readonly subCommands: Record<string, AnyCommand>;
 	/** Called before `run()` — useful for initialization */
 	preRun?(context: CommandContext<A, F>): void | Promise<void>;
 	/** The main command handler */

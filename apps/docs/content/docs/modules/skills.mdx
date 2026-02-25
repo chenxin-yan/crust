@@ -1,0 +1,136 @@
+---
+title: "Skills"
+description: Agent skill generation for AI coding assistants.
+---
+
+The `@crustjs/skills` package generates and installs agent skills from your CLI's command definitions. Skills provide structured documentation that AI coding assistants (Claude Code, OpenCode) use to understand your CLI.
+
+## Install
+
+```sh
+bun add @crustjs/skills
+```
+
+## Quick Start
+
+Add `skillPlugin()` to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
+
+```ts
+import { defineCommand, runMain } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+
+const app = defineCommand({
+  meta: { name: "my-cli", description: "My CLI tool" },
+  plugins: [
+    skillPlugin({
+      version: "1.0.0",
+      command: true, // registers "my-cli skill" subcommand
+    }),
+  ],
+});
+
+runMain(app);
+```
+
+This gives you:
+
+- **Auto-detection**: the plugin detects which supported agents are installed by checking for their global configuration directories.
+- **Auto-update**: when a user runs any command, the plugin silently updates installed skills if the version has changed.
+- **Interactive command**: `my-cli skill` lets users install, uninstall, or check skill status via prompts (or flags for CI).
+
+## Plugin Options
+
+```ts
+interface SkillPluginOptions {
+  /** Skill version — compared against the installed manifest */
+  version: string;
+  /** Installation scope. @default "global" */
+  scope?: "global" | "project";
+  /** Auto-install skills when not yet present. @default false */
+  autoInstall?: boolean;
+  /** Auto-update skills when version is outdated. @default true */
+  autoUpdate?: boolean;
+  /** Register interactive skill subcommand. true = "skill", string = custom name. @default false */
+  command?: boolean | string;
+}
+```
+
+### Agent Auto-Detection
+
+The plugin automatically detects which agents are installed by checking for their global configuration directories — no manual configuration needed. Only detected agents are managed by the middleware and shown in the interactive command.
+
+| Agent | Detection Path |
+| --- | --- |
+| `claude-code` | `~/.claude/` |
+| `opencode` | `~/.config/opencode/` |
+
+Detection always checks global paths regardless of the installation scope.
+
+### Auto-Install vs Auto-Update
+
+| `autoInstall` | `autoUpdate` | Behavior |
+| --- | --- | --- |
+| `false` (default) | `true` (default) | Only update already-installed skills; user uses `my-cli skill` for first install |
+| `true` | `true` | Fully automatic — install and update on every invocation |
+| `true` | `false` | Auto-install once, never auto-update |
+| `false` | `false` | Plugin does nothing automatically (command-only mode) |
+
+### Supported Agents
+
+| Agent | Global Path | Project Path |
+| --- | --- | --- |
+| `claude-code` | `~/.claude/skills/<name>/` | `.claude/skills/<name>/` |
+| `opencode` | `~/.config/opencode/skills/<name>/` | `.opencode/skills/<name>/` |
+
+## Interactive Command
+
+When `command: true` is set, the plugin registers a `skill` subcommand with three actions:
+
+- **Install / update** — select from detected agents and scope, then install skills
+- **Uninstall** — select agents and confirm removal
+- **Check status** — display installation status for detected agents
+
+All prompts can be skipped via flags for CI:
+
+```sh
+my-cli skill --action install --scope global
+my-cli skill --action uninstall --force
+my-cli skill --action status
+```
+
+## Low-Level Primitives
+
+For custom workflows, the package also exports lower-level functions:
+
+```ts
+import {
+  detectInstalledAgents,
+  generateSkill,
+  uninstallSkill,
+  skillStatus,
+} from "@crustjs/skills";
+
+// Detect which agents are installed
+const agents = await detectInstalledAgents();
+// ["claude-code", "opencode"] — only agents with config dirs present
+
+// Install skills
+const result = await generateSkill({
+  command: rootCommand,
+  meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
+  agents,
+  scope: "global",
+});
+
+// Check status
+const status = await skillStatus({
+  name: "my-cli",
+  agents,
+});
+
+// Uninstall
+const removed = await uninstallSkill({
+  name: "my-cli",
+  agents,
+});
+```

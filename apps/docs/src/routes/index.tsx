@@ -137,6 +137,11 @@ const MODULES: Array<{
     doc: "modules/store",
   },
   {
+    pkg: "@crustjs/skills",
+    desc: "Agent skills for AI coding assistants",
+    doc: "modules/skills",
+  },
+  {
     pkg: "@crustjs/test",
     desc: "CLI testing helpers",
     doc: "modules/test",

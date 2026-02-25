@@ -94,7 +94,12 @@ describe("integration: exported types", () => {
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 
-		const cmdDef: Command = { meta, args: argsDef, flags: flagsDef };
+		const cmdDef: Command = {
+			meta,
+			args: argsDef,
+			flags: flagsDef,
+			subCommands: {},
+		};
 		const cmd: Command = defineCommand({ meta: { name: "typed-cmd" } });
 
 		const parsed: ParseResult = {

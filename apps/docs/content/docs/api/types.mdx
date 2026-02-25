@@ -34,12 +34,14 @@ interface Command<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
   readonly meta: CommandMeta;
   readonly args?: A;
   readonly flags?: F;
-  readonly subCommands?: Record<string, AnyCommand>;
+  readonly subCommands: Record<string, AnyCommand>;
   preRun?(context: CommandContext<A, F>): void | Promise<void>;
   run?(context: CommandContext<A, F>): void | Promise<void>;
   postRun?(context: CommandContext<A, F>): void | Promise<void>;
 }
 ```
+
+`subCommands` is always initialized (defaults to `{}`), even when omitted in `CommandDef`. This allows plugins to inject subcommands via `addSubCommand` during setup.
 
 ### `AnyCommand`
 
@@ -252,8 +254,12 @@ Actions available during plugin setup:
 ```ts
 interface SetupActions {
   addFlag(command: AnyCommand, name: string, def: FlagDef): void;
+  addSubCommand(parent: AnyCommand, name: string, command: AnyCommand): void;
 }
 ```
+
+- `addFlag` — inject a flag into a command's flags object.
+- `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is silently skipped — user definitions always take priority.
 
 ### `MiddlewareContext`
 

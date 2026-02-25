@@ -178,6 +178,7 @@ describe("parseArgs — aliases", () => {
 				verbose: { type: "boolean", alias: "v" },
 				version: { type: "boolean", alias: "v" },
 			},
+			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);
@@ -198,6 +199,7 @@ describe("parseArgs — aliases", () => {
 				out: { type: "string", description: "Output format" },
 				output: { type: "string", alias: ["o", "out"] },
 			},
+			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);
@@ -957,6 +959,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 		const cmd: AnyCommand = {
 			meta: { name: "test" },
 			flags: { "no-cache": { type: "boolean" } },
+			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);
@@ -974,6 +977,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 		const cmd: AnyCommand = {
 			meta: { name: "test" },
 			flags: { cache: { type: "boolean", alias: "no-store" } },
+			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);

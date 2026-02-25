@@ -350,6 +350,90 @@ describe("runCommand", () => {
 		expect(didRun).toBe(false);
 	});
 
+	// ── addSubCommand ──────────────────────────────────────────────────
+
+	it("plugin injects subcommand via addSubCommand and route executes it", async () => {
+		let subRan = false;
+
+		const rootCmd = defineCommand({
+			meta: { name: "cli" },
+		});
+
+		const plugin: CrustPlugin = {
+			name: "inject-plugin",
+			setup(_context, actions) {
+				const injected = defineCommand({
+					meta: { name: "injected" },
+					run() {
+						subRan = true;
+					},
+				});
+				actions.addSubCommand(rootCmd, "injected", injected);
+			},
+		};
+
+		await runCommand(rootCmd, {
+			argv: ["injected"],
+			plugins: [plugin],
+		});
+
+		expect(subRan).toBe(true);
+	});
+
+	it("user-defined subcommand wins over plugin-injected one", async () => {
+		const observed: string[] = [];
+
+		const userCmd = defineCommand({
+			meta: { name: "skill" },
+			run() {
+				observed.push("user");
+			},
+		});
+
+		const rootCmd = defineCommand({
+			meta: { name: "cli" },
+			subCommands: { skill: userCmd },
+		});
+
+		const plugin: CrustPlugin = {
+			name: "inject-plugin",
+			setup(_context, actions) {
+				const pluginCmd = defineCommand({
+					meta: { name: "skill" },
+					run() {
+						observed.push("plugin");
+					},
+				});
+				actions.addSubCommand(rootCmd, "skill", pluginCmd);
+			},
+		};
+
+		await runCommand(rootCmd, {
+			argv: ["skill"],
+			plugins: [plugin],
+		});
+
+		expect(observed).toEqual(["user"]);
+	});
+
+	it("addSubCommand throws on empty name", async () => {
+		const rootCmd = defineCommand({
+			meta: { name: "cli" },
+		});
+
+		const plugin: CrustPlugin = {
+			name: "bad-plugin",
+			setup(_context, actions) {
+				const cmd = defineCommand({ meta: { name: "test" } });
+				actions.addSubCommand(rootCmd, "", cmd);
+			},
+		};
+
+		expect(
+			runCommand(rootCmd, { argv: [], plugins: [plugin] }),
+		).rejects.toThrow("addSubCommand: name is required");
+	});
+
 	// ── Subcommand routing ──────────────────────────────────────────────
 
 	it("routes to subcommand and executes it", async () => {
