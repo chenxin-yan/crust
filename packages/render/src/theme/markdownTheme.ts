@@ -2,7 +2,7 @@
 // Markdown Theme — Semantic theme slot definitions for GFM presentation
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { StyleInstance } from "../types.ts";
+import type { StyleInstance } from "@crustjs/style";
 /**
  * A style function that transforms a string for themed terminal output.
  *
@@ -26,7 +26,7 @@ export type ThemeSlotFn = (value: string) => string;
  *
  * @example
  * ```ts
- * import { defaultTheme } from "@crustjs/style";
+ * import { defaultTheme } from "@crustjs/render";
  *
  * // Use theme slots to style extracted markdown content
  * const styled = defaultTheme.heading1("Introduction");
@@ -148,7 +148,7 @@ export interface MarkdownTheme {
 }
 
 /**
- * Partial theme override type for {@link createTheme}.
+ * Partial theme override type for {@link createMarkdownTheme}.
  *
  * Allows overriding any subset of theme slots while inheriting
  * defaults for the rest.
@@ -169,9 +169,9 @@ export type PartialMarkdownTheme = Partial<MarkdownTheme>;
  * @example
  * ```ts
  * import { createStyle } from "@crustjs/style";
- * import { buildDefaultTheme } from "./defaultTheme.ts";
+ * import { buildDefaultMarkdownTheme } from "@crustjs/render";
  *
- * const theme = buildDefaultTheme(createStyle({ mode: "always" }));
+ * const theme = buildDefaultMarkdownTheme(createStyle({ mode: "always" }));
  * console.log(theme.heading1("Title")); // bold + underlined
  * ```
  */

@@ -2,8 +2,8 @@
 // Create Theme — Typed partial override merging with default theme
 // ────────────────────────────────────────────────────────────────────────────
 
-import { createStyle } from "../createStyle.ts";
-import type { StyleOptions } from "../types.ts";
+import type { StyleOptions } from "@crustjs/style";
+import { createStyle } from "@crustjs/style";
 import {
 	buildDefaultMarkdownTheme,
 	type MarkdownTheme,
@@ -62,7 +62,7 @@ export interface CreateMarkdownThemeOptions {
  *
  * @example
  * ```ts
- * import { createMarkdownTheme } from "@crustjs/style";
+ * import { createMarkdownTheme } from "@crustjs/render";
  *
  * // Default theme with auto mode
  * const theme = createMarkdownTheme();
@@ -132,7 +132,7 @@ export function createMarkdownTheme(
  *
  * @example
  * ```ts
- * import { defaultTheme } from "@crustjs/style";
+ * import { defaultTheme } from "@crustjs/render";
  *
  * console.log(defaultTheme.heading1("Title"));
  * console.log(defaultTheme.strong("important"));
