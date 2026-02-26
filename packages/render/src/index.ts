@@ -2,6 +2,8 @@
 // @crustjs/render — Streaming-first markdown rendering engine for the terminal
 // ────────────────────────────────────────────────────────────────────────────
 
+// One-shot rendering
+export { renderMarkdown } from "./renderMarkdown.ts";
 // Markdown theme
 export type { CreateMarkdownThemeOptions } from "./theme/createMarkdownTheme.ts";
 export {
@@ -14,3 +16,5 @@ export type {
 	ThemeSlotFn,
 } from "./theme/markdownTheme.ts";
 export { buildDefaultMarkdownTheme } from "./theme/markdownTheme.ts";
+// Render options
+export type { RenderOptions } from "./types.ts";
