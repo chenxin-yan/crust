@@ -4,7 +4,7 @@
 
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
-import { multiselect, spinner } from "@crustjs/prompts";
+import { confirm, multiselect, spinner } from "@crustjs/prompts";
 import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
@@ -260,14 +260,36 @@ function buildSkillCommand(
 					}
 				} catch (err) {
 					if (err instanceof SkillConflictError) {
-						console.error(
-							`\nSkill conflict: "${err.details.outputDir}" already exists ` +
-								`but was not created by Crust. Delete or rename the ` +
-								`conflicting skill to resolve.`,
-						);
-						return;
+						const overwrite = await confirm({
+							message:
+								`"${err.details.outputDir}" already exists but was not ` +
+								`created by Crust. Overwrite?`,
+							default: false,
+						});
+
+						if (overwrite) {
+							const result = await spinner({
+								message: "Overwriting skill...",
+								task: async () =>
+									generateSkill({
+										command: rootCmd,
+										meta,
+										agents: [err.details.agent],
+										scope,
+										force: true,
+									}),
+							});
+
+							console.log(`\nInstalled "${meta.name}" v${meta.version}`);
+							for (const r of result.agents) {
+								console.log(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`);
+							}
+						} else {
+							console.log(`\nSkipped ${AGENT_LABELS[err.details.agent]}`);
+						}
+					} else {
+						throw err;
 					}
-					throw err;
 				}
 			}
 

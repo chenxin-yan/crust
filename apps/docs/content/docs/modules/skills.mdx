@@ -42,7 +42,7 @@ This gives you:
 
 ```ts
 interface SkillPluginOptions {
-  /** Skill version — compared against the installed manifest */
+  /** Skill version — compared against the installed crust.json */
   version: string;
   /** Installation scope. @default "global" */
   scope?: "global" | "project";
@@ -94,6 +94,34 @@ Detected agents are listed with their current installation status. Already-insta
 
 ```sh
 my-cli skill
+```
+
+## Conflict Detection
+
+Each generated skill directory contains a `crust.json` file that serves as an ownership marker. When `generateSkill()` encounters a target directory that already exists but has no `crust.json`, it assumes the skill was not created by Crust (e.g. manually created or installed by another tool) and throws a `SkillConflictError` to prevent silent overwrites.
+
+### Behavior by context
+
+| Context | Conflict behavior |
+| --- | --- |
+| **Auto-update middleware** | Logs a warning and skips — the CLI continues running normally |
+| **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
+| **`generateSkill()` API** | Throws `SkillConflictError`. Pass `force: true` to overwrite |
+
+### Handling conflicts programmatically
+
+```ts
+import { generateSkill, SkillConflictError } from "@crustjs/skills";
+
+try {
+  await generateSkill({ command, meta, agents });
+} catch (err) {
+  if (err instanceof SkillConflictError) {
+    console.error(`Conflict at: ${err.details.outputDir}`);
+    // Retry with force to overwrite
+    await generateSkill({ command, meta, agents, force: true });
+  }
+}
 ```
 
 ## Low-Level Primitives

@@ -89,7 +89,14 @@ export function resolveSkillName(name: string): string {
 export async function generateSkill(
 	options: GenerateOptions,
 ): Promise<GenerateResult> {
-	const { command, meta, agents, scope = "global", clean = true } = options;
+	const {
+		command,
+		meta,
+		agents,
+		scope = "global",
+		clean = true,
+		force = false,
+	} = options;
 
 	// Apply `use-` prefix — do not mutate the caller's meta object
 	const resolvedMeta: SkillMeta = {
@@ -114,15 +121,14 @@ export async function generateSkill(
 
 		// ── Conflict check ────────────────────────────────────────────
 		// If the directory exists but has no crust.json, it was not
-		// created by Crust — refuse to overwrite (fail-fast: earlier
-		// agents may already be written).
+		// created by Crust — refuse to overwrite unless force is set.
 		const installedVersion = await readInstalledVersion(outputDir);
 		if (installedVersion === null) {
 			const dirExists = await access(outputDir)
 				.then(() => true)
 				.catch(() => false);
 
-			if (dirExists) {
+			if (dirExists && !force) {
 				throw new SkillConflictError({ agent, outputDir });
 			}
 		}

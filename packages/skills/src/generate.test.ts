@@ -1028,6 +1028,29 @@ describe("generateSkill", () => {
 				),
 			).rejects.toThrow(SkillConflictError);
 		});
+
+		it("succeeds with force when directory exists without crust.json", async () => {
+			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					force: true,
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("installed");
+			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
+		});
 	});
 });
 

@@ -198,6 +198,13 @@ export interface GenerateOptions {
 	 * @default true
 	 */
 	clean?: boolean;
+	/**
+	 * When `true`, overwrite an existing skill directory even if it was not
+	 * created by Crust (i.e. has no `crust.json`). Without this flag, a
+	 * conflict throws a {@link SkillConflictError}.
+	 * @default false
+	 */
+	force?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -309,7 +316,7 @@ export interface StatusResult {
  * that presents a single multiselect prompt for toggling agent installations.
  */
 export interface SkillPluginOptions {
-	/** Skill version string — compared against the installed manifest */
+	/** Skill version string — compared against the installed crust.json */
 	version: string;
 	/**
 	 * Installation scope.
