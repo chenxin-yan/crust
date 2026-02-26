@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
 
+import { SkillConflictError } from "./errors.ts";
 import {
 	generateSkill,
 	resolveSkillName,
@@ -10,6 +11,7 @@ import {
 	uninstallSkill,
 } from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
+import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -214,7 +216,7 @@ describe("generateSkill", () => {
 			expect(agent.files.length).toBeGreaterThan(0);
 			expect(agent.files).toContain("SKILL.md");
 			expect(agent.files).toContain("command-index.md");
-			expect(agent.files).toContain("manifest.json");
+			expect(agent.files).toContain(CRUST_MANIFEST);
 		});
 
 		it("writes all returned files to disk", async () => {
@@ -256,7 +258,7 @@ describe("generateSkill", () => {
 			expect(files).toContain("SKILL.md");
 			expect(files).toContain("command-index.md");
 			expect(files).toContain("commands/my-cli.md");
-			expect(files).toContain("manifest.json");
+			expect(files).toContain(CRUST_MANIFEST);
 		});
 
 		it("creates correct files for nested commands", async () => {
@@ -282,7 +284,25 @@ describe("generateSkill", () => {
 			expect(files).toContain("commands/remote.md");
 			expect(files).toContain("commands/remote/add.md");
 			expect(files).toContain("commands/remote/remove.md");
-			expect(files).toContain("manifest.json");
+			expect(files).toContain(CRUST_MANIFEST);
+		});
+
+		it("does not generate manifest.json (renamed to crust.json)", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Simple CLI",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const agent = result.agents[0] as AgentResult;
+			expect(agent.files).not.toContain("manifest.json");
 		});
 
 		it("does not generate README.md (removed in redesign)", async () => {
@@ -529,10 +549,10 @@ describe("generateSkill", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// manifest.json content
+	// crust.json content
 	// ────────────────────────────────────────────────────────────────────────
 
-	describe("manifest.json", () => {
+	describe("crust.json", () => {
 		it("contains valid JSON with version", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
@@ -548,7 +568,7 @@ describe("generateSkill", () => {
 			);
 
 			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
 			);
 			const manifest = JSON.parse(content);
 
@@ -573,7 +593,7 @@ describe("generateSkill", () => {
 			);
 
 			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
 			);
 			const manifest = JSON.parse(content);
 
@@ -599,7 +619,7 @@ describe("generateSkill", () => {
 			);
 
 			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
 			);
 			const manifest = JSON.parse(content);
 			expect(manifest.version).toBe("1.0.0");
@@ -620,7 +640,7 @@ describe("generateSkill", () => {
 			);
 
 			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, "manifest.json"),
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
 			);
 			expect(content.endsWith("\n")).toBe(true);
 		});
@@ -816,7 +836,7 @@ describe("generateSkill", () => {
 
 			const agent = result.agents[0] as AgentResult;
 			expect(agent.files).toContain("SKILL.md");
-			expect(agent.files).toContain("manifest.json");
+			expect(agent.files).toContain(CRUST_MANIFEST);
 			expect(agent.files).toContain("command-index.md");
 		});
 
@@ -879,6 +899,134 @@ describe("generateSkill", () => {
 				const stats = await stat(join(agent.outputDir, file));
 				expect(stats.isFile()).toBe(true);
 			}
+		});
+	});
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Conflict detection
+	// ────────────────────────────────────────────────────────────────────────
+
+	describe("conflict detection", () => {
+		it("throws SkillConflictError when directory exists without crust.json", async () => {
+			// Pre-create the skill directory without crust.json (simulating a non-Crust skill)
+			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
+
+			await expect(
+				withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				),
+			).rejects.toThrow(SkillConflictError);
+		});
+
+		it("includes agent and outputDir in conflict error details", async () => {
+			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false); // Should not reach here
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.agent).toBe("claude-code");
+				expect(conflict.details.outputDir).toBe(skillDir);
+			}
+		});
+
+		it("does not throw when directory exists with valid crust.json", async () => {
+			// First install — creates crust.json
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			// Second install — same source, different version — should not throw
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("updated");
+		});
+
+		it("does not throw for fresh install (no directory)", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("installed");
+		});
+
+		it("throws when directory has only non-Crust files", async () => {
+			const skillDir = join(tmpDir, ".opencode", "skills", "use-my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(
+				join(skillDir, "manifest.json"),
+				JSON.stringify({ name: "use-my-cli", version: "1.0.0" }),
+			);
+
+			await expect(
+				withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["opencode"],
+						scope: "project",
+					}),
+				),
+			).rejects.toThrow(SkillConflictError);
 		});
 	});
 });

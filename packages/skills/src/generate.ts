@@ -5,12 +5,14 @@
 import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { resolveAgentPath } from "./agents.ts";
+import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type {
 	AgentResult,
 	GenerateOptions,
 	GenerateResult,
+	InstallStatus,
 	ManifestNode,
 	RenderedFile,
 	SkillMeta,
@@ -19,7 +21,7 @@ import type {
 	UninstallOptions,
 	UninstallResult,
 } from "./types.ts";
-import { checkVersion, readInstalledVersion } from "./version.ts";
+import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Naming — resolveSkillName
@@ -28,7 +30,7 @@ import { checkVersion, readInstalledVersion } from "./version.ts";
 /**
  * Resolves the canonical skill name by applying the `use-` prefix.
  *
- * All generated output (directory names, manifest metadata, SKILL.md content)
+ * All generated output (directory names, crust.json metadata, SKILL.md content)
  * uses the resolved name. Consumers pass the raw CLI name (e.g. `"my-cli"`),
  * and this function returns the prefixed form (e.g. `"use-my-cli"`).
  *
@@ -53,13 +55,16 @@ export function resolveSkillName(name: string): string {
  *
  * For each target agent:
  * 1. Resolves the output directory via {@link resolveAgentPath}
- * 2. Checks the installed version — skips if up-to-date
- * 3. Builds a canonical manifest from the command tree
- * 4. Renders markdown files + `manifest.json`
- * 5. Writes files to the agent's skill directory
+ * 2. Checks for conflicts — if the directory exists but has no `crust.json`,
+ *    it was not created by Crust and a {@link SkillConflictError} is thrown
+ * 3. Checks the installed version — skips if up-to-date
+ * 4. Builds a canonical manifest from the command tree
+ * 5. Renders markdown files + `crust.json`
+ * 6. Writes files to the agent's skill directory
  *
  * @param options - Generation options including command, metadata, agents, and scope
  * @returns Per-agent installation results
+ * @throws {SkillConflictError} If the output directory exists but was not created by Crust
  *
  * @example
  * ```ts
@@ -106,10 +111,29 @@ export async function generateSkill(
 
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, resolvedMeta.name);
-		const { status, installedVersion } = await checkVersion(
-			outputDir,
-			resolvedMeta.version,
-		);
+
+		// ── Conflict check ────────────────────────────────────────────
+		// If the directory exists but has no crust.json, it was not
+		// created by Crust — refuse to overwrite (fail-fast: earlier
+		// agents may already be written).
+		const installedVersion = await readInstalledVersion(outputDir);
+		if (installedVersion === null) {
+			const dirExists = await access(outputDir)
+				.then(() => true)
+				.catch(() => false);
+
+			if (dirExists) {
+				throw new SkillConflictError({ agent, outputDir });
+			}
+		}
+
+		// ── Version check ─────────────────────────────────────────────
+		const status: InstallStatus =
+			installedVersion === null
+				? "installed"
+				: installedVersion === resolvedMeta.version
+					? "up-to-date"
+					: "updated";
 
 		if (status === "up-to-date") {
 			results.push({
@@ -214,12 +238,13 @@ export async function skillStatus(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Renders distribution metadata file (`manifest.json`) that stores
- * version information for subsequent version checks.
+ * Renders the Crust-specific metadata file (`crust.json`) that stores
+ * version information for subsequent version checks and serves as an
+ * ownership marker for conflict detection.
  *
  * @param manifest - The canonical manifest tree
  * @param meta - Skill metadata
- * @returns Array containing the manifest.json rendered file
+ * @returns Array containing the crust.json rendered file
  */
 function renderDistributionMetadata(
 	manifest: ManifestNode,
@@ -227,20 +252,20 @@ function renderDistributionMetadata(
 ): RenderedFile[] {
 	return [
 		{
-			path: "manifest.json",
-			content: renderManifestJson(manifest, meta),
+			path: CRUST_MANIFEST,
+			content: renderCrustJson(manifest, meta),
 		},
 	];
 }
 
 /**
- * Renders `manifest.json` — a machine-readable distribution manifest
+ * Renders `crust.json` — a machine-readable Crust metadata file
  * describing the skill bundle contents.
  *
- * The manifest is sorted deterministically: top-level keys in a stable
+ * The file is sorted deterministically: top-level keys in a stable
  * order, and the `commands` array sorted alphabetically.
  */
-function renderManifestJson(manifest: ManifestNode, meta: SkillMeta): string {
+function renderCrustJson(manifest: ManifestNode, meta: SkillMeta): string {
 	const commands = collectCommandPaths(manifest);
 
 	const obj: Record<string, unknown> = {
@@ -256,7 +281,7 @@ function renderManifestJson(manifest: ManifestNode, meta: SkillMeta): string {
 
 /**
  * Collects all command invocation paths from the manifest tree.
- * Used in `manifest.json` to list available commands.
+ * Used in `crust.json` to list available commands.
  */
 function collectCommandPaths(node: ManifestNode): string[] {
 	const paths: string[] = [node.path.join(" ")];

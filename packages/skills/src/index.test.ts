@@ -35,11 +35,18 @@ describe("@crustjs/skills exports", () => {
 		expect(typeof mod.detectInstalledAgents).toBe("function");
 	});
 
+	it("exports SkillConflictError class", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.SkillConflictError).toBeDefined();
+		expect(typeof mod.SkillConflictError).toBe("function");
+	});
+
 	it("exports all expected function symbols", async () => {
 		const mod = await import("./index.ts");
 		const exportedKeys = Object.keys(mod).sort();
 		expect(exportedKeys).toEqual(
 			[
+				"SkillConflictError",
 				"detectInstalledAgents",
 				"generateSkill",
 				"resolveSkillName",

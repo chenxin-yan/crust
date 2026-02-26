@@ -4,6 +4,9 @@
 
 // Agent detection
 export { detectInstalledAgents } from "./agents.ts";
+export type { SkillConflictDetails } from "./errors.ts";
+// Errors
+export { SkillConflictError } from "./errors.ts";
 
 // Primitives
 export {

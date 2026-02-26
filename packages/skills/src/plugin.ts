@@ -6,6 +6,7 @@ import type { AnyCommand, CrustPlugin } from "@crustjs/core";
 import { defineCommand } from "@crustjs/core";
 import { multiselect, spinner } from "@crustjs/prompts";
 import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
+import { SkillConflictError } from "./errors.ts";
 import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 import type { AgentTarget, SkillMeta, SkillPluginOptions } from "./types.ts";
 
@@ -119,22 +120,34 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 			});
 
 			if (needsUpdate.length > 0) {
-				const result = await generateSkill({
-					command: rootCmd,
-					meta,
-					agents: needsUpdate.map((a) => a.agent),
-					scope: options.scope,
-				});
+				try {
+					const result = await generateSkill({
+						command: rootCmd,
+						meta,
+						agents: needsUpdate.map((a) => a.agent),
+						scope: options.scope,
+					});
 
-				// Print one-line summary
-				const agentNames = result.agents
-					.filter((a) => a.status !== "up-to-date")
-					.map((a) => AGENT_LABELS[a.agent]);
+					// Print one-line summary
+					const agentNames = result.agents
+						.filter((a) => a.status !== "up-to-date")
+						.map((a) => AGENT_LABELS[a.agent]);
 
-				if (agentNames.length > 0) {
-					console.log(
-						`Skill "${meta.name}" v${meta.version} installed for ${agentNames.join(", ")}`,
-					);
+					if (agentNames.length > 0) {
+						console.log(
+							`Skill "${meta.name}" v${meta.version} installed for ${agentNames.join(", ")}`,
+						);
+					}
+				} catch (err) {
+					if (err instanceof SkillConflictError) {
+						console.warn(
+							`Skill conflict: "${err.details.outputDir}" already exists ` +
+								`but was not created by Crust. Skipping auto-update. ` +
+								`Delete or rename the conflicting skill to resolve.`,
+						);
+					} else {
+						throw err;
+					}
 				}
 			}
 
@@ -229,20 +242,32 @@ function buildSkillCommand(
 
 			// Install/update selected agents
 			if (agentsToGenerate.length > 0) {
-				const result = await spinner({
-					message: "Installing skills...",
-					task: async () =>
-						generateSkill({
-							command: rootCmd,
-							meta,
-							agents: agentsToGenerate,
-							scope,
-						}),
-				});
+				try {
+					const result = await spinner({
+						message: "Installing skills...",
+						task: async () =>
+							generateSkill({
+								command: rootCmd,
+								meta,
+								agents: agentsToGenerate,
+								scope,
+							}),
+					});
 
-				console.log(`\nInstalled "${meta.name}" v${meta.version}`);
-				for (const r of result.agents) {
-					console.log(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`);
+					console.log(`\nInstalled "${meta.name}" v${meta.version}`);
+					for (const r of result.agents) {
+						console.log(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`);
+					}
+				} catch (err) {
+					if (err instanceof SkillConflictError) {
+						console.error(
+							`\nSkill conflict: "${err.details.outputDir}" already exists ` +
+								`but was not created by Crust. Delete or rename the ` +
+								`conflicting skill to resolve.`,
+						);
+						return;
+					}
+					throw err;
 				}
 			}
 

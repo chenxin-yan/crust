@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
 import { generateSkill } from "../src/generate.ts";
 import type { AgentResult } from "../src/types.ts";
+import { CRUST_MANIFEST } from "../src/version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -361,7 +362,7 @@ describe("E2E: skill generation", () => {
 				"commands/config/set.md",
 				"commands/deploy.md",
 				"commands/status.md",
-				"manifest.json",
+				CRUST_MANIFEST,
 			];
 
 			expect(files).toEqual(expected);
@@ -801,14 +802,14 @@ describe("E2E: skill generation", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("distribution metadata", () => {
-		it("manifest.json contains all commands", async () => {
+		it("crust.json contains all commands", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "manifest.json"));
+			const content = await readText(join(agent.outputDir, CRUST_MANIFEST));
 			const manifest = JSON.parse(content);
 
 			expect(manifest.name).toBe("use-deploy-cli");
@@ -919,18 +920,18 @@ describe("E2E: skill generation", () => {
 			}
 		});
 
-		it("manifest.json is valid JSON", async () => {
+		it("crust.json is valid JSON", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "manifest.json"));
+			const content = await readText(join(agent.outputDir, CRUST_MANIFEST));
 			expect(() => JSON.parse(content)).not.toThrow();
 		});
 
-		it("command file paths in manifest match actual files", async () => {
+		it("command file paths in crust.json match actual files", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -938,7 +939,7 @@ describe("E2E: skill generation", () => {
 			);
 
 			const manifestContent = await readText(
-				join(agent.outputDir, "manifest.json"),
+				join(agent.outputDir, CRUST_MANIFEST),
 			);
 			const manifest = JSON.parse(manifestContent);
 			const diskFiles = new Set(await listFiles(agent.outputDir));

@@ -12,7 +12,7 @@ import type { AnyCommand } from "@crustjs/core";
  * Metadata for the generated skill bundle.
  *
  * This information populates the `SKILL.md` frontmatter and distribution
- * metadata files (`manifest.json`).
+ * metadata files (`crust.json`).
  *
  * @example
  * ```ts
@@ -30,7 +30,7 @@ export interface SkillMeta {
 	 *
 	 * `generateSkill()`, `uninstallSkill()`, and `skillStatus()` automatically
 	 * prefix `use-` to this name for output directory paths, SKILL.md frontmatter,
-	 * and manifest.json metadata. For example, `name: "my-cli"` produces output
+	 * and crust.json metadata. For example, `name: "my-cli"` produces output
 	 * under `use-my-cli/`.
 	 */
 	name: string;

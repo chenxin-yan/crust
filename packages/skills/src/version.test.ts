@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { checkVersion, readInstalledVersion } from "./version.ts";
+import {
+	CRUST_MANIFEST,
+	checkVersion,
+	readInstalledVersion,
+} from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -29,9 +33,9 @@ afterEach(async () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("readInstalledVersion", () => {
-	it("reads version from manifest.json", async () => {
+	it("reads version from crust.json", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.2.3" }),
 		);
 
@@ -39,21 +43,21 @@ describe("readInstalledVersion", () => {
 		expect(version).toBe("1.2.3");
 	});
 
-	it("returns null when manifest.json does not exist", async () => {
+	it("returns null when crust.json does not exist", async () => {
 		const version = await readInstalledVersion(tmpDir);
 		expect(version).toBeNull();
 	});
 
-	it("returns null when manifest.json is malformed JSON", async () => {
-		await writeFile(join(tmpDir, "manifest.json"), "not json {{{");
+	it("returns null when crust.json is malformed JSON", async () => {
+		await writeFile(join(tmpDir, CRUST_MANIFEST), "not json {{{");
 
 		const version = await readInstalledVersion(tmpDir);
 		expect(version).toBeNull();
 	});
 
-	it("returns null when manifest.json has no version field", async () => {
+	it("returns null when crust.json has no version field", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test" }),
 		);
 
@@ -63,7 +67,7 @@ describe("readInstalledVersion", () => {
 
 	it("returns null when version is not a string", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: 123 }),
 		);
 
@@ -82,7 +86,7 @@ describe("readInstalledVersion", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("checkVersion", () => {
-	it("returns 'installed' with null version when no manifest exists", async () => {
+	it("returns 'installed' with null version when no crust.json exists", async () => {
 		const result = await checkVersion(tmpDir, "1.0.0");
 		expect(result.status).toBe("installed");
 		expect(result.installedVersion).toBeNull();
@@ -90,7 +94,7 @@ describe("checkVersion", () => {
 
 	it("returns 'up-to-date' with version when versions match exactly", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.0.0" }),
 		);
 
@@ -101,7 +105,7 @@ describe("checkVersion", () => {
 
 	it("returns 'updated' with previous version when versions differ", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.0.0" }),
 		);
 
@@ -110,8 +114,8 @@ describe("checkVersion", () => {
 		expect(result.installedVersion).toBe("1.0.0");
 	});
 
-	it("returns 'installed' with null version when manifest is malformed", async () => {
-		await writeFile(join(tmpDir, "manifest.json"), "invalid json");
+	it("returns 'installed' with null version when crust.json is malformed", async () => {
+		await writeFile(join(tmpDir, CRUST_MANIFEST), "invalid json");
 
 		const result = await checkVersion(tmpDir, "1.0.0");
 		expect(result.status).toBe("installed");
@@ -120,7 +124,7 @@ describe("checkVersion", () => {
 
 	it("uses exact string comparison", async () => {
 		await writeFile(
-			join(tmpDir, "manifest.json"),
+			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.0.0" }),
 		);
 
