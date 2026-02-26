@@ -13,6 +13,7 @@ function createTestContext(width = 80): RenderContext {
 	return {
 		theme: createMarkdownTheme({ style: { mode: "never" } }),
 		width,
+		indent: "",
 	};
 }
 
@@ -216,6 +217,7 @@ describe("renderInline", () => {
 			const colorCtx: RenderContext = {
 				theme: createMarkdownTheme({ style: { mode: "always" } }),
 				width: 80,
+				indent: "",
 			};
 			const nodes = getInlineNodes("**bold**");
 			const result = renderInline(nodes, colorCtx);
@@ -240,6 +242,7 @@ describe("renderInline", () => {
 					},
 				}),
 				width: 80,
+				indent: "",
 			};
 
 			const nodes = getInlineNodes("**bold** *em* `code`");

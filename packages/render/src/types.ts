@@ -53,4 +53,13 @@ export interface RenderContext {
 
 	/** Maximum visible width for the current rendering scope. */
 	readonly width: number;
+
+	/**
+	 * Current indentation prefix applied to the start of each line.
+	 *
+	 * Used for nested structures like blockquotes and list items.
+	 * Empty string at the top level.
+	 * @default ""
+	 */
+	readonly indent: string;
 }
