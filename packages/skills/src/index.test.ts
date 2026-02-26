@@ -42,6 +42,7 @@ describe("@crustjs/skills exports", () => {
 			[
 				"detectInstalledAgents",
 				"generateSkill",
+				"resolveSkillName",
 				"skillPlugin",
 				"skillStatus",
 				"uninstallSkill",
