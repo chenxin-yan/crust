@@ -1,5 +1,11 @@
 # @crustjs/skills
 
+## 0.0.3
+
+### Patch Changes
+
+- 1d75efd: Rewrite interactive skill command to single multiselect prompt and add `use-` prefix idempotency guard to `resolveSkillName`
+
 ## 0.0.2
 
 ### Patch Changes
