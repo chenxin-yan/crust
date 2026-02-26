@@ -8,7 +8,7 @@
         "@biomejs/biome": "2.4.4",
         "@changesets/cli": "^2.29.8",
         "@types/bun": "^1.3.9",
-        "turbo": "^2.8.10",
+        "turbo": "^2.8.11",
         "typescript": "5.9.3",
       },
     },
@@ -135,7 +135,7 @@
     },
     "packages/skills": {
       "name": "@crustjs/skills",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
