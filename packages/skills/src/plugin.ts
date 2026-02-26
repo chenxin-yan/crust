@@ -129,14 +129,30 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 						scope: options.scope,
 					});
 
-					// Print one-line summary
-					const agentNames = result.agents
-						.filter((a) => a.status !== "up-to-date")
+					// Print concise status summaries for auto-install and auto-update
+					const installedAgents = result.agents
+						.filter((a) => a.status === "installed")
+						.map((a) => AGENT_LABELS[a.agent]);
+					const updatedAgents = result.agents
+						.filter((a) => a.status === "updated")
 						.map((a) => AGENT_LABELS[a.agent]);
 
-					if (agentNames.length > 0) {
+					if (installedAgents.length > 0) {
+						if (options.command !== false) {
+							const manageCommand = `${rootCmd.meta.name} skill`;
+							console.log(
+								`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}. Manage with \`${manageCommand}\`.`,
+							);
+						} else {
+							console.log(
+								`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}.`,
+							);
+						}
+					}
+
+					if (updatedAgents.length > 0) {
 						console.log(
-							`Skill "${meta.name}" v${meta.version} installed for ${agentNames.join(", ")}`,
+							`Updated skill "${meta.name}" to v${meta.version} for ${updatedAgents.join(", ")}.`,
 						);
 					}
 				} catch (err) {
