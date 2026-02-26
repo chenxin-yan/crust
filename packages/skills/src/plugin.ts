@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Plugin layer — skillPlugin with optional interactive command injection
+// Plugin layer — skillPlugin with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
@@ -46,11 +46,12 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  * new version is detected. Set `autoInstall: true` to also install skills that
  * are not yet present.
  *
- * **Interactive command**: set `command: true` to register a `skill` subcommand
- * that presents a single multiselect prompt for toggling agent installations.
+ * **Interactive command** (default): registers a `skill` subcommand that
+ * presents a single multiselect prompt for toggling agent installations.
  * Detected agents are shown with their current installation status pre-filled.
  * The system reconciles the desired state: newly selected agents are installed,
  * deselected agents are uninstalled, and already-correct agents are skipped.
+ * Set `command: false` to disable command injection.
  *
  * @param options - Plugin configuration with version and scope
  * @returns A `CrustPlugin` to register in a command's `plugins` array
@@ -82,8 +83,8 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 		setup(context, actions) {
 			rootCmd = context.rootCommand;
 
-			// Inject interactive skill command if requested
-			if (options.command) {
+			// Inject interactive skill command unless explicitly disabled
+			if (options.command !== false) {
 				const name =
 					typeof options.command === "string" ? options.command : "skill";
 				skillCmd = buildSkillCommand(rootCmd, options);
@@ -142,7 +143,7 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 					if (err instanceof SkillConflictError) {
 						console.warn(
 							`Skill conflict: "${err.details.outputDir}" already exists ` +
-								`but was not created by Crust. Skipping auto-update. ` +
+								`but was not created by ${meta.name}. Skipping auto-update. ` +
 								`Delete or rename the conflicting skill to resolve.`,
 						);
 					} else {

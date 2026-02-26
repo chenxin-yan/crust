@@ -350,8 +350,9 @@ export interface StatusResult {
  * new version is detected. Set `autoInstall: true` to also install skills that
  * are not yet present.
  *
- * **Interactive command**: set `command: true` to register a `skill` subcommand
- * that presents a single multiselect prompt for toggling agent installations.
+ * **Interactive command** (default): registers a `skill` subcommand that
+ * presents a single multiselect prompt for toggling agent installations.
+ * Set `command: false` to disable the command.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed crust.json */
@@ -384,7 +385,7 @@ export interface SkillPluginOptions {
 	 *
 	 * - `true`: register with default name `"skill"`
 	 * - `string`: register with a custom command name
-	 * @default false
+	 * @default true
 	 */
 	command?: boolean | string;
 }

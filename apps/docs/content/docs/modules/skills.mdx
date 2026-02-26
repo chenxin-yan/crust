@@ -24,7 +24,7 @@ const app = defineCommand({
   plugins: [
     skillPlugin({
       version: "1.0.0",
-      command: true, // registers "my-cli skill" subcommand
+      // command defaults to true and registers "my-cli skill"
     }),
   ],
 });
@@ -50,7 +50,7 @@ interface SkillPluginOptions {
   autoInstall?: boolean;
   /** Auto-update skills when version is outdated. @default true */
   autoUpdate?: boolean;
-  /** Register interactive skill subcommand. true = "skill", string = custom name. @default false */
+  /** Register interactive skill subcommand. true = "skill", string = custom name. @default true */
   command?: boolean | string;
 }
 ```
@@ -84,7 +84,7 @@ Detection always checks global paths regardless of the installation scope.
 
 ## Interactive Command
 
-When `command: true` is set, the plugin registers a `skill` subcommand that presents a single multiselect prompt.
+By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt. Set `command: false` to disable it.
 
 Detected agents are listed with their current installation status. Already-installed agents are pre-selected. The user toggles agents on or off and the system reconciles the desired state:
 
