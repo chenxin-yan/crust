@@ -4,6 +4,7 @@
 
 // One-shot rendering
 export { renderMarkdown } from "./renderMarkdown.ts";
+export { renderMarkdownStream } from "./renderMarkdownStream.ts";
 // Streaming rendering
 export type { MarkdownRenderer } from "./streaming.ts";
 export { createMarkdownRenderer } from "./streaming.ts";
