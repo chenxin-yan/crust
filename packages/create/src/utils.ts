@@ -64,6 +64,35 @@ export function detectPackageManager(cwd?: string): PackageManager {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Check whether a directory is inside an existing git repository.
+ *
+ * Uses `git rev-parse --is-inside-work-tree` to detect any enclosing repo,
+ * including parent directories. Useful for skipping `git init` prompts when
+ * scaffolding inside a monorepo or existing project.
+ *
+ * @param cwd - The directory to check. Defaults to `process.cwd()`.
+ * @returns `true` if the directory is inside a git work tree, `false` otherwise.
+ *
+ * @example
+ * ```ts
+ * if (isInGitRepo("./my-project")) {
+ *   // Skip git init — already inside a repo
+ * }
+ * ```
+ */
+export function isInGitRepo(cwd?: string): boolean {
+	try {
+		const result = Bun.spawnSync(
+			["git", "rev-parse", "--is-inside-work-tree"],
+			{ cwd: cwd ?? process.cwd(), stdout: "ignore", stderr: "ignore" },
+		);
+		return result.exitCode === 0;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Check whether `git` is installed and available on the system PATH.
  *
  * Runs `git --version` and returns `true` if it exits successfully.

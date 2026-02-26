@@ -3,7 +3,12 @@
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { defineCommand, runMain } from "@crustjs/core";
-import { detectPackageManager, runSteps, scaffold } from "@crustjs/create";
+import {
+	detectPackageManager,
+	isInGitRepo,
+	runSteps,
+	scaffold,
+} from "@crustjs/create";
 import { confirm, input, spinner } from "@crustjs/prompts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -71,10 +76,19 @@ const command = defineCommand({
 			default: true,
 		});
 
-		const initGit = await confirm({
-			message: "Initialize a git repository?",
-			default: true,
-		});
+		// Skip git init prompt if already inside a git repository.
+		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
+		// otherwise check the parent (directory will be created by scaffold).
+		const gitCheckDir = existsSync(resolvedDir)
+			? resolvedDir
+			: resolve(resolvedDir, "..");
+		const alreadyInRepo = isInGitRepo(gitCheckDir);
+		const initGit = alreadyInRepo
+			? false
+			: await confirm({
+					message: "Initialize a git repository?",
+					default: true,
+				});
 
 		// ── Execute all file operations after prompts are done ──────────
 

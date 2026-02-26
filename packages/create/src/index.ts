@@ -24,6 +24,7 @@ export {
 	detectPackageManager,
 	getGitUser,
 	isGitInstalled,
+	isInGitRepo,
 	type PackageManager,
 } from "./utils.ts";
 

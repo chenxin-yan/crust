@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectPackageManager, getGitUser, isGitInstalled } from "./utils.ts";
+import {
+	detectPackageManager,
+	getGitUser,
+	isGitInstalled,
+	isInGitRepo,
+} from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // detectPackageManager()
@@ -93,6 +98,47 @@ describe("detectPackageManager", () => {
 
 	it("defaults to npm when no signals are present", () => {
 		expect(detectPackageManager(tempDir)).toBe("npm");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// isInGitRepo()
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("isInGitRepo", () => {
+	it("returns true for a directory inside a git repo", () => {
+		// This test file is inside the crust monorepo
+		expect(isInGitRepo(process.cwd())).toBe(true);
+	});
+
+	it("returns false for a directory outside any git repo", () => {
+		// /tmp is not inside a git repo
+		expect(isInGitRepo(tmpdir())).toBe(false);
+	});
+
+	it("returns true for a subdirectory of a git repo", () => {
+		const subDir = join(
+			tmpdir(),
+			`crust-git-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
+		mkdirSync(subDir, { recursive: true });
+		// Init a repo, then check a subdirectory
+		Bun.spawnSync(["git", "init"], {
+			cwd: subDir,
+			stdout: "ignore",
+			stderr: "ignore",
+		});
+		const nested = join(subDir, "nested");
+		mkdirSync(nested, { recursive: true });
+
+		expect(isInGitRepo(nested)).toBe(true);
+
+		rmSync(subDir, { recursive: true, force: true });
+	});
+
+	it("defaults to process.cwd() when no argument is provided", () => {
+		// cwd is inside the monorepo
+		expect(isInGitRepo()).toBe(true);
 	});
 });
 
