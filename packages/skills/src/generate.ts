@@ -22,6 +22,29 @@ import type {
 import { checkVersion, readInstalledVersion } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Naming — resolveSkillName
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the canonical skill name by applying the `use-` prefix.
+ *
+ * All generated output (directory names, manifest metadata, SKILL.md content)
+ * uses the resolved name. Consumers pass the raw CLI name (e.g. `"my-cli"`),
+ * and this function returns the prefixed form (e.g. `"use-my-cli"`).
+ *
+ * @param name - The raw CLI tool name
+ * @returns The prefixed skill name
+ *
+ * @example
+ * ```ts
+ * resolveSkillName("my-cli"); // "use-my-cli"
+ * ```
+ */
+export function resolveSkillName(name: string): string {
+	return name.startsWith("use-") ? name : `use-${name}`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Public API — generateSkill
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -63,10 +86,16 @@ export async function generateSkill(
 ): Promise<GenerateResult> {
 	const { command, meta, agents, scope = "global", clean = true } = options;
 
+	// Apply `use-` prefix — do not mutate the caller's meta object
+	const resolvedMeta: SkillMeta = {
+		...meta,
+		name: resolveSkillName(meta.name),
+	};
+
 	// Build manifest and render files once (shared across all agents)
 	const manifest = buildManifest(command);
-	const renderedFiles = renderSkill(manifest, meta);
-	const metadataFiles = renderDistributionMetadata(manifest, meta);
+	const renderedFiles = renderSkill(manifest, resolvedMeta);
+	const metadataFiles = renderDistributionMetadata(manifest, resolvedMeta);
 
 	// Combine and sort for deterministic output
 	const allFiles = [...renderedFiles, ...metadataFiles].sort((a, b) =>
@@ -76,10 +105,10 @@ export async function generateSkill(
 	const results: AgentResult[] = [];
 
 	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, meta.name);
+		const outputDir = resolveAgentPath(agent, scope, resolvedMeta.name);
 		const { status, installedVersion } = await checkVersion(
 			outputDir,
-			meta.version,
+			resolvedMeta.version,
 		);
 
 		if (status === "up-to-date") {
@@ -127,10 +156,11 @@ export async function uninstallSkill(
 	options: UninstallOptions,
 ): Promise<UninstallResult> {
 	const { name, agents, scope = "global" } = options;
+	const resolvedName = resolveSkillName(name);
 	const results: UninstallResult["agents"] = [];
 
 	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, name);
+		const outputDir = resolveAgentPath(agent, scope, resolvedName);
 
 		const exists = await access(outputDir)
 			.then(() => true)
@@ -161,10 +191,11 @@ export async function skillStatus(
 	options: StatusOptions,
 ): Promise<StatusResult> {
 	const { name, agents, scope = "global" } = options;
+	const resolvedName = resolveSkillName(name);
 	const results: StatusResult["agents"] = [];
 
 	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, name);
+		const outputDir = resolveAgentPath(agent, scope, resolvedName);
 		const version = await readInstalledVersion(outputDir);
 
 		results.push({

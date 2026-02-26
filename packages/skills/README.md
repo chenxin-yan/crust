@@ -149,10 +149,10 @@ for (const file of files) {
 
 ## Output Structure
 
-Generated output goes to `<outDir>/skills/<name>/`:
+Generated output goes to `<outDir>/skills/use-<name>/` (the `use-` prefix is applied automatically):
 
 ```
-skills/my-cli/
+skills/use-my-cli/
   SKILL.md            # Entrypoint — loaded by the agent
   command-index.md    # Maps all commands to documentation file paths
   commands/           # Per-command documentation mirroring the CLI hierarchy
@@ -162,7 +162,6 @@ skills/my-cli/
       migrate.md      # Nested subcommand
       seed.md
   manifest.json       # Machine-readable bundle metadata
-  README.md           # Install instructions for consumers
 ```
 
 ### File Details
@@ -173,7 +172,6 @@ skills/my-cli/
 | `command-index.md` | Markdown table listing every command, its type (runnable/group), and documentation path. |
 | `commands/*.md` | Per-command reference files. Leaf commands include usage, arguments, flags, defaults, and aliases. Group commands list subcommands with links. |
 | `manifest.json` | JSON metadata: name, description, version, entrypoint, and list of all command paths. |
-| `README.md` | Human-readable install instructions for OpenCode and Claude Code. |
 
 ## Installing Generated Skills
 
@@ -182,13 +180,13 @@ After generating a skill bundle, consumers can install it by copying the skill d
 ### OpenCode
 
 ```sh
-cp -r skills/my-cli/ .opencode/skills/my-cli/
+cp -r skills/use-my-cli/ .opencode/skills/use-my-cli/
 ```
 
 ### Claude Code
 
 ```sh
-cp -r skills/my-cli/ .claude/skills/my-cli/
+cp -r skills/use-my-cli/ .claude/skills/use-my-cli/
 ```
 
 The agent will discover the skill from `SKILL.md` and load command documentation on demand from the `commands/` directory.

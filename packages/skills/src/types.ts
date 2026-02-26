@@ -21,10 +21,18 @@ import type { AnyCommand } from "@crustjs/core";
  *   description: "CLI tool for managing widgets",
  *   version: "1.0.0",
  * };
+ * // generateSkill() will output to `use-my-cli/` with name "use-my-cli"
  * ```
  */
 export interface SkillMeta {
-	/** Skill name — used as the directory name and in frontmatter */
+	/**
+	 * Skill name — the user-facing CLI name (e.g. `"my-cli"`).
+	 *
+	 * `generateSkill()`, `uninstallSkill()`, and `skillStatus()` automatically
+	 * prefix `use-` to this name for output directory paths, SKILL.md frontmatter,
+	 * and manifest.json metadata. For example, `name: "my-cli"` produces output
+	 * under `use-my-cli/`.
+	 */
 	name: string;
 	/** Human-readable description of what the CLI does */
 	description: string;
@@ -152,6 +160,10 @@ export interface RenderedFile {
 /**
  * Top-level options for generating a skill bundle from a command tree.
  *
+ * The `meta.name` value is automatically prefixed with `use-` for all output
+ * paths and metadata. For example, `name: "my-cli"` produces skill directories
+ * named `use-my-cli/` and sets the manifest/frontmatter name to `"use-my-cli"`.
+ *
  * @example
  * ```ts
  * import { generateSkill } from "@crustjs/skills";
@@ -160,7 +172,7 @@ export interface RenderedFile {
  * await generateSkill({
  *   command: rootCommand,
  *   meta: {
- *     name: "my-cli",
+ *     name: "my-cli", // output: use-my-cli/
  *     description: "CLI tool for managing widgets",
  *     version: "1.0.0",
  *   },
@@ -294,7 +306,7 @@ export interface StatusResult {
  * are not yet present.
  *
  * **Interactive command**: set `command: true` to register a `skill` subcommand
- * on the root command for manual install/uninstall/status management.
+ * that presents a single multiselect prompt for toggling agent installations.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed manifest */
@@ -318,6 +330,13 @@ export interface SkillPluginOptions {
 	autoUpdate?: boolean;
 	/**
 	 * Register an interactive skill management subcommand on the root command.
+	 *
+	 * The command presents a single multiselect prompt listing all detected
+	 * agents with their current installation status pre-filled. The user
+	 * toggles agents on/off and the system reconciles the desired state:
+	 * newly selected agents are installed, deselected agents are uninstalled,
+	 * and already-correct agents are skipped.
+	 *
 	 * - `true`: register with default name `"skill"`
 	 * - `string`: register with a custom command name
 	 * @default false

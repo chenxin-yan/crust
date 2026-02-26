@@ -6,7 +6,12 @@
 export { detectInstalledAgents } from "./agents.ts";
 
 // Primitives
-export { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
+export {
+	generateSkill,
+	resolveSkillName,
+	skillStatus,
+	uninstallSkill,
+} from "./generate.ts";
 
 // Plugin
 export { skillPlugin } from "./plugin.ts";

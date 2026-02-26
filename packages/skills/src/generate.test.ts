@@ -3,7 +3,12 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
 
-import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
+import {
+	generateSkill,
+	resolveSkillName,
+	skillStatus,
+	uninstallSkill,
+} from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -115,6 +120,32 @@ function nestedCommand() {
 		},
 	});
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// resolveSkillName
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolveSkillName", () => {
+	it("adds use- prefix to a plain name", () => {
+		expect(resolveSkillName("my-cli")).toBe("use-my-cli");
+	});
+
+	it("does not double-prefix a name already starting with use-", () => {
+		expect(resolveSkillName("use-my-cli")).toBe("use-my-cli");
+	});
+
+	it("handles empty string", () => {
+		expect(resolveSkillName("")).toBe("use-");
+	});
+
+	it("handles names with special characters", () => {
+		expect(resolveSkillName("@scope/my-cli")).toBe("use-@scope/my-cli");
+	});
+
+	it("handles name that is exactly 'use-'", () => {
+		expect(resolveSkillName("use-")).toBe("use-");
+	});
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test suites
@@ -292,7 +323,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".claude", "skills", "my-cli");
+			const expected = join(tmpDir, ".claude", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 
@@ -310,7 +341,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".opencode", "skills", "my-cli");
+			const expected = join(tmpDir, ".opencode", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 	});
@@ -521,7 +552,7 @@ describe("generateSkill", () => {
 			);
 			const manifest = JSON.parse(content);
 
-			expect(manifest.name).toBe("my-cli");
+			expect(manifest.name).toBe("use-my-cli");
 			expect(manifest.description).toBe("Simple CLI");
 			expect(manifest.version).toBe("2.0.0");
 			expect(manifest.entrypoint).toBe("SKILL.md");
@@ -671,7 +702,7 @@ describe("generateSkill", () => {
 				join((result.agents[0] as AgentResult).outputDir, "SKILL.md"),
 			);
 			expect(content).toContain("---");
-			expect(content).toContain("name: my-cli");
+			expect(content).toContain("name: use-my-cli");
 			expect(content).toContain("description: A simple CLI tool");
 			expect(content).toContain('version: "1.0.0"');
 		});
