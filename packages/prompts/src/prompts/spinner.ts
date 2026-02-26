@@ -2,6 +2,7 @@
 // Spinner — Display a spinner while running an async task for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { PREFIX_ERROR, PREFIX_SUBMITTED } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 
@@ -111,8 +112,8 @@ function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 // Render helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const SUCCESS_SYMBOL = "✔";
-const ERROR_SYMBOL = "✖";
+const SUCCESS_SYMBOL = PREFIX_SUBMITTED;
+const ERROR_SYMBOL = PREFIX_ERROR;
 
 function renderFrame(
 	frame: string,
@@ -138,7 +139,7 @@ function renderError(message: string, theme: PromptTheme): string {
  * Display a spinner animation while running an async task.
  *
  * The spinner renders to stderr so it doesn't interfere with piped stdout.
- * On task completion, the spinner is replaced with a success (✔) or error (✖)
+ * On task completion, the spinner is replaced with a success (✓) or error (✗)
  * indicator. If the task throws, the error is re-thrown after cleanup.
  *
  * Unlike other prompts, the spinner does **not** use raw mode or keypress

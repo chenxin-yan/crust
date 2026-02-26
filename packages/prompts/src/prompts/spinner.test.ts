@@ -139,7 +139,7 @@ describe("spinner — stderr output", () => {
 			task: async () => "ok",
 		});
 
-		expect(stderrOutput).toContain("✔");
+		expect(stderrOutput).toContain("✓");
 		expect(stderrOutput).toContain("Building...");
 	});
 
@@ -155,7 +155,7 @@ describe("spinner — stderr output", () => {
 			// Expected
 		}
 
-		expect(stderrOutput).toContain("✖");
+		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Deploying...");
 	});
 
