@@ -19,7 +19,8 @@ export interface ScaffoldOptions {
 	/**
 	 * Template directory source.
 	 *
-	 * - `string`: resolved relative to `process.cwd()`
+	 * - `string` absolute path: used as-is
+	 * - `string` relative path: resolved from the nearest package root of `process.argv[1]`
 	 * - `URL`: must be a `file:` URL (for module-relative templates)
 	 */
 	readonly template: string | URL;

@@ -377,6 +377,39 @@ describe("scaffold", () => {
 		expect(readOutputFile("hello.txt")).toBe("hi URL");
 	});
 
+	it("resolves relative template string from package root", async () => {
+		const originalArgv1 = process.argv[1];
+		const hadArgv1 = process.argv.length > 1;
+		const packageRoot = join(tempDir, "my-generator");
+		const entryFile = join(packageRoot, "dist", "index.js");
+		const relativeTemplate = "templates/base";
+		const templateRoot = join(packageRoot, relativeTemplate);
+
+		mkdirSync(join(packageRoot, "dist"), { recursive: true });
+		writeFileSync(join(packageRoot, "package.json"), '{"name":"my-generator"}');
+		mkdirSync(templateRoot, { recursive: true });
+		writeFileSync(join(templateRoot, "hello.txt"), "hi {{who}}", "utf-8");
+
+		process.argv[1] = entryFile;
+
+		try {
+			const result = await scaffold({
+				template: relativeTemplate,
+				dest: destDir,
+				context: { who: "pkg-root" },
+			});
+
+			expect(result.files).toContain("hello.txt");
+			expect(readOutputFile("hello.txt")).toBe("hi pkg-root");
+		} finally {
+			if (hadArgv1 && originalArgv1) {
+				process.argv[1] = originalArgv1;
+			} else {
+				process.argv.splice(1, 1);
+			}
+		}
+	});
+
 	it("throws when template URL uses non-file protocol", async () => {
 		expect(
 			scaffold({
@@ -385,6 +418,30 @@ describe("scaffold", () => {
 				context: {},
 			}),
 		).rejects.toThrow("file: protocol");
+	});
+
+	it("throws for relative template when package root cannot be found", async () => {
+		const originalArgv1 = process.argv[1];
+		const hadArgv1 = process.argv.length > 1;
+		const fakeEntrypoint = join(tempDir, "no-package-root", "dist", "index.js");
+
+		process.argv[1] = fakeEntrypoint;
+
+		try {
+			expect(
+				scaffold({
+					template: "templates/base",
+					dest: destDir,
+					context: {},
+				}),
+			).rejects.toThrow("no package.json was found");
+		} finally {
+			if (hadArgv1 && originalArgv1) {
+				process.argv[1] = originalArgv1;
+			} else {
+				process.argv.splice(1, 1);
+			}
+		}
 	});
 
 	it("throws when template directory does not exist", async () => {

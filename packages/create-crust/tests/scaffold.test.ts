@@ -14,7 +14,7 @@ async function scaffoldBase(
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
 	await scaffold({
-		template: "./templates/base",
+		template: "templates/base",
 		dest,
 		context,
 		conflict,

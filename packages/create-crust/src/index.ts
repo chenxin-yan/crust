@@ -68,7 +68,7 @@ const command = defineCommand({
 
 		// Scaffold the project using @crustjs/create
 		await scaffold({
-			template: "./templates/base",
+			template: "templates/base",
 			dest: resolvedDir,
 			context: { name },
 			conflict: "overwrite",
