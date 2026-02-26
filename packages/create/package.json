@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/create",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "Headless scaffolding engine for building create-xxx tools",
 	"type": "module",
 	"license": "MIT",

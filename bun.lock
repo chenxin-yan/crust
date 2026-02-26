@@ -60,7 +60,7 @@
     },
     "packages/create": {
       "name": "@crustjs/create",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
@@ -71,7 +71,7 @@
     },
     "packages/create-crust": {
       "name": "create-crust",
-      "version": "0.0.13",
+      "version": "0.0.14",
       "bin": {
         "create-crust": "dist/index.js",
       },
