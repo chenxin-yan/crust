@@ -135,13 +135,30 @@ describe("input — interactive", () => {
 		await promise;
 	});
 
-	it("renders default hint when default is set and value is empty", async () => {
+	it("renders default value as placeholder when no placeholder is set", async () => {
 		const promise = input({
 			message: "Name?",
 			default: "World",
 		});
 
 		await tick();
+		// Default is shown as placeholder text, not as a (hint)
+		expect(stderrOutput).toContain("World");
+		expect(stderrOutput).not.toContain("(World)");
+
+		pressKey("", { name: "return" });
+		await promise;
+	});
+
+	it("renders default hint when both placeholder and default are set", async () => {
+		const promise = input({
+			message: "Name?",
+			placeholder: "Enter your name",
+			default: "World",
+		});
+
+		await tick();
+		expect(stderrOutput).toContain("Enter your name");
 		expect(stderrOutput).toContain("(World)");
 
 		pressKey("", { name: "return" });
@@ -514,12 +531,14 @@ describe("input — no message", () => {
 		await promise;
 	});
 
-	it("renders default hint with default message", async () => {
+	it("renders default as placeholder with default message", async () => {
 		const promise = input({ default: "World" });
 
 		await tick();
 		expect(stderrOutput).toContain("Enter a value");
-		expect(stderrOutput).toContain("(World)");
+		// Default shown as placeholder, not hint
+		expect(stderrOutput).toContain("World");
+		expect(stderrOutput).not.toContain("(World)");
 		expect(stderrOutput).not.toContain("undefined");
 
 		pressKey("", { name: "return" });

@@ -39,12 +39,15 @@ const command = defineCommand({
 		},
 	],
 	async run({ args }) {
+		// ── Collect all prompts before any file operations ──────────────
+		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
+
 		// Determine project directory from positional arg or prompt
 		const targetDir =
 			args.directory ??
 			(await input({
 				message: "Project directory",
-				placeholder: "my-cli",
+				default: "my-cli",
 				validate: validateProjectName,
 			}));
 
@@ -63,6 +66,18 @@ const command = defineCommand({
 			}
 		}
 
+		const installDeps = await confirm({
+			message: "Install dependencies?",
+			default: true,
+		});
+
+		const initGit = await confirm({
+			message: "Initialize a git repository?",
+			default: true,
+		});
+
+		// ── Execute all file operations after prompts are done ──────────
+
 		// Infer package name from directory
 		const name = dirName;
 
@@ -75,22 +90,12 @@ const command = defineCommand({
 		});
 
 		// Install dependencies using the detected package manager
-		const installDeps = await confirm({
-			message: "Install dependencies?",
-			default: true,
-		});
-
 		if (installDeps) {
 			const pm = detectPackageManager(resolvedDir);
 			const installCmd = pm === "npm" ? "npm install" : `${pm} install`;
 
 			await runSteps([{ type: "command", cmd: installCmd }], resolvedDir);
 		}
-
-		const initGit = await confirm({
-			message: "Initialize a git repository?",
-			default: true,
-		});
 
 		if (initGit) {
 			await spinner({

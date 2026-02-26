@@ -39,9 +39,9 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 export interface InputOptions {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
-	/** Placeholder text shown when the input is empty */
+	/** Placeholder text shown when the input is empty. Overrides the default value as visual placeholder when both are set. */
 	readonly placeholder?: string;
-	/** Default value used when the user submits an empty input */
+	/** Default value used when the user submits an empty input. Also shown as placeholder text when `placeholder` is not set. */
 	readonly default?: string;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
@@ -117,9 +117,15 @@ function renderInput(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Enter a value");
 
+	// Use default as placeholder when placeholder isn't explicitly set
+	const effectivePlaceholder = placeholder ?? defaultValue;
+
 	// Default hint shown after header when value is empty and default exists
+	// (only when placeholder is explicitly set, to avoid redundancy)
 	const defaultHint =
-		defaultValue !== undefined && state.value === ""
+		defaultValue !== undefined &&
+		placeholder !== undefined &&
+		state.value === ""
 			? ` ${theme.hint(`(${defaultValue})`)}`
 			: "";
 
@@ -127,8 +133,8 @@ function renderInput(
 
 	if (state.value === "") {
 		// Show placeholder when input is empty
-		if (placeholder) {
-			valueLine = theme.placeholder(placeholder);
+		if (effectivePlaceholder) {
+			valueLine = theme.placeholder(effectivePlaceholder);
 		} else {
 			valueLine = theme.cursor(CURSOR_CHAR);
 		}
