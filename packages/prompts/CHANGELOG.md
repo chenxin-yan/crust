@@ -1,5 +1,11 @@
 # @crustjs/prompts
 
+## 0.0.5
+
+### Patch Changes
+
+- 695854e: Update prompt prefix symbols for a cleaner aesthetic: active prefix `▸` → `┃`, submitted prefix `✔` → `✓`, and add shared `PREFIX_ERROR` (`✗`). Spinner now uses shared symbol constants instead of hardcoded values.
+
 ## 0.0.4
 
 ### Patch Changes
