@@ -36,7 +36,7 @@ This gives you:
 
 - **Auto-detection**: the plugin detects which supported agents are installed by checking for their global configuration directories.
 - **Auto-update**: when a user runs any command, the plugin silently updates installed skills if the version has changed.
-- **Interactive command**: `my-cli skill` lets users install, uninstall, or check skill status via prompts (or flags for CI).
+- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling agent installations on or off.
 
 ## Plugin Options
 
@@ -84,18 +84,16 @@ Detection always checks global paths regardless of the installation scope.
 
 ## Interactive Command
 
-When `command: true` is set, the plugin registers a `skill` subcommand with three actions:
+When `command: true` is set, the plugin registers a `skill` subcommand that presents a single multiselect prompt.
 
-- **Install / update** — select from detected agents and scope, then install skills
-- **Uninstall** — select agents and confirm removal
-- **Check status** — display installation status for detected agents
+Detected agents are listed with their current installation status. Already-installed agents are pre-selected. The user toggles agents on or off and the system reconciles the desired state:
 
-All prompts can be skipped via flags for CI:
+- **Newly selected** agents are installed
+- **Deselected** agents are uninstalled
+- **Already-correct** agents are skipped
 
 ```sh
-my-cli skill --action install --scope global
-my-cli skill --action uninstall --force
-my-cli skill --action status
+my-cli skill
 ```
 
 ## Low-Level Primitives

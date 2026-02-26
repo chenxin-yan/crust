@@ -41,7 +41,7 @@ import { checkVersion, readInstalledVersion } from "./version.ts";
  * ```
  */
 export function resolveSkillName(name: string): string {
-	return `use-${name}`;
+	return name.startsWith("use-") ? name : `use-${name}`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

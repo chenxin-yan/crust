@@ -206,7 +206,7 @@ function buildSkillCommand(
 			});
 
 			// Single multiselect — pre-check currently installed agents
-			const selected = await multiselect<AgentTarget>({
+			const selected = await multiselect({
 				message: "Select agents to install skills for",
 				choices,
 				default: installedAgents,

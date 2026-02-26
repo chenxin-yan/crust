@@ -3,7 +3,12 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "@crustjs/core";
 
-import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
+import {
+	generateSkill,
+	resolveSkillName,
+	skillStatus,
+	uninstallSkill,
+} from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -115,6 +120,32 @@ function nestedCommand() {
 		},
 	});
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// resolveSkillName
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolveSkillName", () => {
+	it("adds use- prefix to a plain name", () => {
+		expect(resolveSkillName("my-cli")).toBe("use-my-cli");
+	});
+
+	it("does not double-prefix a name already starting with use-", () => {
+		expect(resolveSkillName("use-my-cli")).toBe("use-my-cli");
+	});
+
+	it("handles empty string", () => {
+		expect(resolveSkillName("")).toBe("use-");
+	});
+
+	it("handles names with special characters", () => {
+		expect(resolveSkillName("@scope/my-cli")).toBe("use-@scope/my-cli");
+	});
+
+	it("handles name that is exactly 'use-'", () => {
+		expect(resolveSkillName("use-")).toBe("use-");
+	});
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test suites
