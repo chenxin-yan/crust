@@ -292,7 +292,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".claude", "skills", "my-cli");
+			const expected = join(tmpDir, ".claude", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 
@@ -310,7 +310,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".opencode", "skills", "my-cli");
+			const expected = join(tmpDir, ".opencode", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 	});
@@ -521,7 +521,7 @@ describe("generateSkill", () => {
 			);
 			const manifest = JSON.parse(content);
 
-			expect(manifest.name).toBe("my-cli");
+			expect(manifest.name).toBe("use-my-cli");
 			expect(manifest.description).toBe("Simple CLI");
 			expect(manifest.version).toBe("2.0.0");
 			expect(manifest.entrypoint).toBe("SKILL.md");
@@ -671,7 +671,7 @@ describe("generateSkill", () => {
 				join((result.agents[0] as AgentResult).outputDir, "SKILL.md"),
 			);
 			expect(content).toContain("---");
-			expect(content).toContain("name: my-cli");
+			expect(content).toContain("name: use-my-cli");
 			expect(content).toContain("description: A simple CLI tool");
 			expect(content).toContain('version: "1.0.0"');
 		});
