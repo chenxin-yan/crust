@@ -32,12 +32,50 @@ export interface SkillMeta {
 	 * prefix `use-` to this name for output directory paths, SKILL.md frontmatter,
 	 * and crust.json metadata. For example, `name: "my-cli"` produces output
 	 * under `use-my-cli/`.
+	 *
+	 * The resolved name (with `use-` prefix) must conform to the Agent Skills
+	 * spec: 1–64 lowercase alphanumeric characters and hyphens, no leading/
+	 * trailing/consecutive hyphens.
 	 */
 	name: string;
 	/** Human-readable description of what the CLI does */
 	description: string;
 	/** Version string for the generated skill bundle */
 	version: string;
+	/**
+	 * License name or reference to a bundled license file.
+	 *
+	 * Emitted in SKILL.md YAML frontmatter as `license:`.
+	 */
+	license?: string;
+	/**
+	 * Environment requirements or compatibility notes (max 500 chars per spec).
+	 *
+	 * Indicates intended product, required system packages, network access, etc.
+	 * Emitted in SKILL.md YAML frontmatter as `compatibility:`.
+	 *
+	 * @example "Requires deploy-cli installed on PATH"
+	 */
+	compatibility?: string;
+	/**
+	 * When `true`, prevents agents from automatically loading this skill.
+	 * Users must invoke it manually with `/skill-name`.
+	 *
+	 * Emitted in SKILL.md YAML frontmatter as `disable-model-invocation: true`.
+	 * @default false
+	 */
+	disableModelInvocation?: boolean;
+	/**
+	 * Space-delimited list of pre-approved tools the skill may use.
+	 *
+	 * For CLI skills, setting this to `Bash(<cli-name> *)` allows agents to
+	 * execute the CLI without per-use permission prompts.
+	 *
+	 * Emitted in SKILL.md YAML frontmatter as `allowed-tools:`.
+	 *
+	 * @example "Bash(my-cli *) Read Grep"
+	 */
+	allowedTools?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -124,6 +124,42 @@ try {
 }
 ```
 
+## Skill Metadata
+
+The `SkillMeta` object controls the generated `SKILL.md` frontmatter. Beyond the required `name`, `description`, and `version` fields, several optional fields are supported:
+
+```ts
+const meta: SkillMeta = {
+  name: "my-cli",
+  description: "CLI tool for managing widgets",
+  version: "1.0.0",
+  allowedTools: "Bash(my-cli *) Read Grep",
+  license: "MIT",
+  compatibility: "Requires my-cli on PATH",
+  disableModelInvocation: false,
+};
+```
+
+| Field | Frontmatter Key | Description |
+| ----- | --------------- | ----------- |
+| `allowedTools` | `allowed-tools` | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
+| `license` | `license` | License name or file reference |
+| `compatibility` | `compatibility` | Environment requirements or compatibility notes |
+| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill |
+
+## Name Validation
+
+Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. `generateSkill()` validates the resolved name (with `use-` prefix) and throws a descriptive error if invalid.
+
+Use `isValidSkillName()` to check names before calling `generateSkill()`:
+
+```ts
+import { isValidSkillName } from "@crustjs/skills";
+
+isValidSkillName("my-cli");   // true
+isValidSkillName("My_CLI");   // false
+```
+
 ## Low-Level Primitives
 
 For custom workflows, the package also exports lower-level functions:
@@ -134,7 +170,11 @@ import {
   generateSkill,
   uninstallSkill,
   skillStatus,
+  isValidSkillName,
 } from "@crustjs/skills";
+
+// Validate a skill name
+isValidSkillName("my-cli"); // true
 
 // Detect which agents are installed
 const agents = await detectInstalledAgents();

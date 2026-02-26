@@ -24,8 +24,24 @@ import type {
 import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Naming — resolveSkillName
+// Naming — resolveSkillName and validation
 // ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Agent Skills spec name pattern: 1–64 lowercase alphanumeric characters and
+ * hyphens. Must not start or end with `-`, and must not contain consecutive `--`.
+ */
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * Validates a resolved skill name against the Agent Skills specification.
+ *
+ * @param name - The resolved skill name to validate (already has `use-` prefix)
+ * @returns `true` if valid, `false` otherwise
+ */
+export function isValidSkillName(name: string): boolean {
+	return name.length >= 1 && name.length <= 64 && SKILL_NAME_PATTERN.test(name);
+}
 
 /**
  * Resolves the canonical skill name by applying the `use-` prefix.
@@ -99,9 +115,20 @@ export async function generateSkill(
 	} = options;
 
 	// Apply `use-` prefix — do not mutate the caller's meta object
+	const resolvedName = resolveSkillName(meta.name);
+
+	// Validate resolved name against Agent Skills spec
+	if (!isValidSkillName(resolvedName)) {
+		throw new Error(
+			`Invalid skill name "${resolvedName}": must be 1–64 lowercase ` +
+				`alphanumeric characters and hyphens, no leading/trailing/consecutive ` +
+				`hyphens. Pattern: ${SKILL_NAME_PATTERN.source}`,
+		);
+	}
+
 	const resolvedMeta: SkillMeta = {
 		...meta,
-		name: resolveSkillName(meta.name),
+		name: resolvedName,
 	};
 
 	// Build manifest and render files once (shared across all agents)

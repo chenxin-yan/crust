@@ -11,6 +11,36 @@ import type {
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Text escaping helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Escapes a string for safe use as a YAML scalar value.
+ *
+ * Wraps the value in double quotes if it contains characters that would
+ * break plain YAML scalars (colons, hash signs, brackets, quotes, etc.).
+ * Internal double quotes are escaped with a backslash.
+ */
+function escapeYaml(value: string): string {
+	// Characters that make a plain YAML scalar ambiguous
+	if (/[:#[\]{}&*!|>'"`,@?\\]|^\s|\s$|^---|[\n\r]/.test(value)) {
+		return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r")}"`;
+	}
+	return value;
+}
+
+/**
+ * Escapes pipe characters in text intended for markdown table cells.
+ *
+ * Unescaped `|` characters break markdown table structure. This replaces
+ * them with `\|` while leaving already-escaped `\|` sequences untouched.
+ */
+function escapeTableCell(value: string): string {
+	// Replace | that is NOT preceded by \
+	return value.replace(/(?<!\\)\|/g, "\\|");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -157,8 +187,20 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 
 	// YAML frontmatter
 	lines.push("---");
-	lines.push(`name: ${meta.name}`);
-	lines.push(`description: ${meta.description}`);
+	lines.push(`name: ${escapeYaml(meta.name)}`);
+	lines.push(`description: ${escapeYaml(meta.description)}`);
+	if (meta.license) {
+		lines.push(`license: ${escapeYaml(meta.license)}`);
+	}
+	if (meta.compatibility) {
+		lines.push(`compatibility: ${escapeYaml(meta.compatibility)}`);
+	}
+	if (meta.disableModelInvocation) {
+		lines.push("disable-model-invocation: true");
+	}
+	if (meta.allowedTools) {
+		lines.push(`allowed-tools: ${escapeYaml(meta.allowedTools)}`);
+	}
 	lines.push("metadata:");
 	lines.push(`  version: "${meta.version}"`);
 	lines.push("---");
@@ -172,19 +214,28 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 		lines.push("");
 	}
 
+	// Extract the raw CLI name (strip `use-` prefix for natural language)
+	const cliName = meta.name.startsWith("use-") ? meta.name.slice(4) : meta.name;
+
+	// When-to-use guidance for agents
+	lines.push(
+		`Use this skill when working with \`${cliName}\` commands, or when you need help with \`${cliName}\` syntax, flags, or subcommands.`,
+	);
+	lines.push("");
+
 	// Lazy-load instructions for agents
 	lines.push("## Command Reference");
 	lines.push("");
 	lines.push(
-		"This skill provides documentation for all available CLI commands.",
+		`For the full list of commands and their documentation paths, see [command-index.md](command-index.md). ` +
+			"**Do not read all command files at once.** Instead:",
 	);
 	lines.push("");
 	lines.push(
-		`For a complete list of commands and their documentation paths, see [command-index.md](command-index.md).`,
+		"1. Check [command-index.md](command-index.md) to find the relevant command",
 	);
-	lines.push("");
 	lines.push(
-		"When you need details about a specific command, load the corresponding file from the `commands/` directory rather than reading all files at once.",
+		"2. Read only the specific file from the `commands/` directory that you need",
 	);
 	lines.push("");
 
@@ -421,7 +472,7 @@ function renderArgsTable(args: ManifestArg[]): string[] {
 	for (const arg of args) {
 		const name = arg.variadic ? `${arg.name}...` : arg.name;
 		const required = arg.required ? "Yes" : "No";
-		const desc = formatArgDescription(arg);
+		const desc = escapeTableCell(formatArgDescription(arg));
 		lines.push(`| \`${name}\` | ${arg.type} | ${required} | ${desc} |`);
 	}
 
@@ -454,7 +505,7 @@ function renderFlagsTable(flags: ManifestFlag[]): string[] {
 	for (const flag of flags) {
 		const name = formatFlagName(flag);
 		const required = flag.required ? "Yes" : "No";
-		const desc = formatFlagDescription(flag);
+		const desc = escapeTableCell(formatFlagDescription(flag));
 		lines.push(`| ${name} | ${flag.type} | ${required} | ${desc} |`);
 	}
 

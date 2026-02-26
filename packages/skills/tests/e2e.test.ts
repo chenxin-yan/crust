@@ -445,7 +445,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("`status`");
 		});
 
-		it("includes lazy-load instructions", async () => {
+		it("includes lazy-load instructions with directive phrasing", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -454,7 +454,20 @@ describe("E2E: skill generation", () => {
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("command-index.md");
-			expect(content).toContain("commands/");
+			expect(content).toContain("**Do not read all command files at once.**");
+		});
+
+		it("includes when-to-use guidance referencing the CLI name", async () => {
+			const agent = await generateForTest(
+				tmpDir,
+				buildFixtureCommand(),
+				SKILL_META,
+			);
+
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
+			expect(content).toContain(
+				"Use this skill when working with `deploy-cli` commands",
+			);
 		});
 
 		it("references root command usage (since root is runnable)", async () => {

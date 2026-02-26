@@ -226,8 +226,131 @@ describe("renderSkill", () => {
 
 			expect(skill?.content).toContain("Command Reference");
 			expect(skill?.content).toContain(
-				"load the corresponding file from the `commands/` directory",
+				"**Do not read all command files at once.**",
 			);
+			expect(skill?.content).toContain(
+				"Check [command-index.md](command-index.md) to find the relevant command",
+			);
+		});
+
+		it("includes when-to-use guidance", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, baseMeta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain(
+				"Use this skill when working with `test-cli` commands",
+			);
+		});
+
+		it("strips use- prefix from CLI name in when-to-use text", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				name: "use-my-tool",
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain(
+				"Use this skill when working with `my-tool` commands",
+			);
+		});
+
+		it("escapes YAML-special characters in description", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				description: 'Deploy: the "app" to {production}',
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			// Should be wrapped in double quotes with internal quotes escaped
+			expect(skill?.content).toContain(
+				'description: "Deploy: the \\"app\\" to {production}"',
+			);
+		});
+
+		it("does not quote YAML values that are safe plain scalars", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, baseMeta);
+			const skill = findFile(files, "SKILL.md");
+
+			// "A test CLI tool" has no special chars — should not be quoted
+			expect(skill?.content).toContain("description: A test CLI tool");
+		});
+
+		it("renders license field when provided", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				license: "MIT",
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain("license: MIT");
+		});
+
+		it("renders compatibility field when provided", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				compatibility: "Requires test-cli on PATH",
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain(
+				"compatibility: Requires test-cli on PATH",
+			);
+		});
+
+		it("renders disable-model-invocation when true", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				disableModelInvocation: true,
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain("disable-model-invocation: true");
+		});
+
+		it("omits disable-model-invocation when false or unset", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, baseMeta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).not.toContain("disable-model-invocation");
+		});
+
+		it("renders allowed-tools when provided", () => {
+			const manifest = buildSimpleManifest();
+			const meta: SkillMeta = {
+				...baseMeta,
+				allowedTools: "Bash(test-cli *) Read Grep",
+			};
+			const files = renderSkill(manifest, meta);
+			const skill = findFile(files, "SKILL.md");
+
+			// The value contains special YAML chars (* and parentheses),
+			// so it gets escaped with double quotes
+			expect(skill?.content).toContain(
+				'allowed-tools: "Bash(test-cli *) Read Grep"',
+			);
+		});
+
+		it("omits optional fields when not provided", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, baseMeta);
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).not.toContain("license:");
+			expect(skill?.content).not.toContain("compatibility:");
+			expect(skill?.content).not.toContain("allowed-tools:");
 		});
 	});
 
@@ -1114,7 +1237,41 @@ describe("renderSkill", () => {
 			expect(deepFile?.content).toContain("`root level2 level3`");
 		});
 
-		it("handles command with description containing special markdown characters", () => {
+		it("escapes pipe characters in description within table cells", () => {
+			const cmd = defineCommand({
+				meta: { name: "test" },
+				flags: {
+					mode: {
+						type: "string",
+						description: "Use enable | disable to toggle",
+					},
+				},
+				run() {},
+			});
+
+			const manifest = buildManifest(cmd);
+			const meta: SkillMeta = {
+				name: "test",
+				description: "Test tool",
+				version: "1.0.0",
+			};
+			const files = renderSkill(manifest, meta);
+			const test = findFile(files, "commands/test.md");
+
+			// Pipe should be escaped inside table cells
+			expect(test?.content).toContain("Use enable \\| disable to toggle");
+			// But the raw | should not appear unescaped in a table row
+			const tableRows = test?.content
+				.split("\n")
+				.filter((l) => l.startsWith("| ") && l.includes("enable"));
+			for (const row of tableRows ?? []) {
+				// Count unescaped pipes — they should only be column separators
+				const cells = row.split(/(?<!\\)\|/).filter((c) => c.trim());
+				expect(cells.length).toBe(4); // Flag, Type, Required, Description
+			}
+		});
+
+		it("preserves pipe in command description outside tables", () => {
 			const cmd = defineCommand({
 				meta: {
 					name: "test",
@@ -1132,9 +1289,35 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const test = findFile(files, "commands/test.md");
 
+			// Outside tables, the raw description is preserved as-is
 			expect(test?.content).toContain(
 				"Use `--flag` to enable | disable features",
 			);
+		});
+
+		it("escapes pipe characters in arg description within table cells", () => {
+			const cmd = defineCommand({
+				meta: { name: "test" },
+				args: [
+					{
+						name: "input",
+						type: "string",
+						description: "File path | URL to process",
+					},
+				] as const,
+				run() {},
+			});
+
+			const manifest = buildManifest(cmd);
+			const meta: SkillMeta = {
+				name: "test",
+				description: "Test tool",
+				version: "1.0.0",
+			};
+			const files = renderSkill(manifest, meta);
+			const test = findFile(files, "commands/test.md");
+
+			expect(test?.content).toContain("File path \\| URL to process");
 		});
 
 		it("root command file does not have parent navigation", () => {

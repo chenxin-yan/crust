@@ -106,6 +106,8 @@ crust skills generate ./src/cli.ts -n my-cli -d "My CLI" --no-clean
 
 High-level API that runs the full pipeline: introspection, rendering, and writing to disk.
 
+The `meta.name` must be a valid skill name — lowercase alphanumeric with hyphens, 1–64 characters (validated against the [Agent Skills spec](https://agentskills.io/specification) pattern). Use `isValidSkillName()` to check before calling.
+
 ```ts
 import { generateSkill } from "@crustjs/skills";
 
@@ -147,6 +149,55 @@ for (const file of files) {
   console.log(file.content); // markdown content
 }
 ```
+
+### `isValidSkillName(name)`
+
+Validates a skill name against the [Agent Skills spec](https://agentskills.io/specification) pattern: 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.
+
+```ts
+import { isValidSkillName } from "@crustjs/skills";
+
+isValidSkillName("my-cli");     // true
+isValidSkillName("My_CLI");     // false — uppercase and underscores not allowed
+isValidSkillName("-leading");   // false — leading hyphen
+isValidSkillName("a".repeat(65)); // false — exceeds 64 characters
+```
+
+> **Note:** `generateSkill()` automatically validates `meta.name` (after prepending `use-`) and throws a descriptive error if the name is invalid.
+
+## Skill Metadata
+
+The `SkillMeta` object controls the generated `SKILL.md` frontmatter. Beyond the required `name`, `description`, and `version` fields, several optional fields are supported:
+
+```ts
+const meta: SkillMeta = {
+  name: "my-cli",
+  description: "CLI tool for managing widgets",
+  version: "1.0.0",
+
+  // Optional fields — emitted in SKILL.md YAML frontmatter when set
+  allowedTools: "Bash(my-cli *) Read Grep",   // Pre-approved tools (avoids per-use prompts)
+  license: "MIT",                              // License name or reference
+  compatibility: "Requires my-cli on PATH",    // Environment requirements (max 500 chars)
+  disableModelInvocation: false,               // true = agent won't auto-load; user must invoke manually
+};
+```
+
+| Field | Frontmatter Key | Description |
+| ----- | --------------- | ----------- |
+| `allowedTools` | `allowed-tools` | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
+| `license` | `license` | License name or file reference |
+| `compatibility` | `compatibility` | Environment requirements or compatibility notes |
+| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill |
+
+## Escaping
+
+The renderer automatically handles special characters in generated output:
+
+- **YAML frontmatter**: Values containing YAML-special characters (`:`, `#`, `*`, `!`, `[`, `{`, `'`, `"`, etc.) are wrapped in double quotes with internal quotes escaped.
+- **Markdown tables**: Literal `|` characters in argument/flag descriptions are escaped as `\|` to prevent broken table rendering.
+
+No manual escaping is needed — pass raw values and the renderer handles the rest.
 
 ## Output Structure
 

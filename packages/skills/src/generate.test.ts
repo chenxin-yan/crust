@@ -6,6 +6,7 @@ import { defineCommand } from "@crustjs/core";
 import { SkillConflictError } from "./errors.ts";
 import {
 	generateSkill,
+	isValidSkillName,
 	resolveSkillName,
 	skillStatus,
 	uninstallSkill,
@@ -146,6 +147,65 @@ describe("resolveSkillName", () => {
 
 	it("handles name that is exactly 'use-'", () => {
 		expect(resolveSkillName("use-")).toBe("use-");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// isValidSkillName
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("isValidSkillName", () => {
+	it("accepts valid names", () => {
+		expect(isValidSkillName("use-my-cli")).toBe(true);
+		expect(isValidSkillName("use-deploy")).toBe(true);
+		expect(isValidSkillName("use-git")).toBe(true);
+		expect(isValidSkillName("a")).toBe(true);
+		expect(isValidSkillName("abc123")).toBe(true);
+	});
+
+	it("rejects names with uppercase characters", () => {
+		expect(isValidSkillName("use-My-CLI")).toBe(false);
+	});
+
+	it("rejects names with underscores", () => {
+		expect(isValidSkillName("use-my_cli")).toBe(false);
+	});
+
+	it("rejects names with dots", () => {
+		expect(isValidSkillName("use-my.cli")).toBe(false);
+	});
+
+	it("rejects names with @ or /", () => {
+		expect(isValidSkillName("use-@scope/cli")).toBe(false);
+	});
+
+	it("rejects names starting with hyphen", () => {
+		expect(isValidSkillName("-use-cli")).toBe(false);
+	});
+
+	it("rejects names ending with hyphen", () => {
+		expect(isValidSkillName("use-cli-")).toBe(false);
+	});
+
+	it("rejects names with consecutive hyphens", () => {
+		expect(isValidSkillName("use--cli")).toBe(false);
+	});
+
+	it("rejects empty string", () => {
+		expect(isValidSkillName("")).toBe(false);
+	});
+
+	it("rejects names longer than 64 characters", () => {
+		const longName = `use-${"a".repeat(62)}`;
+		expect(longName.length).toBeGreaterThan(64);
+		expect(isValidSkillName(longName)).toBe(false);
+	});
+
+	it("accepts names exactly 64 characters", () => {
+		// "use-" is 4 chars, need 60 more chars that form valid segments
+		const name = `use-${"a".repeat(60)}`;
+		expect(name.length).toBe(64);
+		expect(isValidSkillName(name)).toBe(true);
 	});
 });
 
@@ -878,6 +938,40 @@ describe("generateSkill", () => {
 				(result.agents[0] as AgentResult).outputDir,
 			);
 			expect(files).toContain("commands/level1/level2/level3.md");
+		});
+
+		it("throws on invalid skill name with special characters", async () => {
+			await expect(
+				withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "@scope/my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				),
+			).rejects.toThrow("Invalid skill name");
+		});
+
+		it("throws on invalid skill name with uppercase", async () => {
+			await expect(
+				withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "My-CLI",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				),
+			).rejects.toThrow("Invalid skill name");
 		});
 
 		it("does not produce partial output on successful run", async () => {

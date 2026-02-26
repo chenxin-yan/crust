@@ -11,6 +11,7 @@ export { SkillConflictError } from "./errors.ts";
 // Primitives
 export {
 	generateSkill,
+	isValidSkillName,
 	resolveSkillName,
 	skillStatus,
 	uninstallSkill,

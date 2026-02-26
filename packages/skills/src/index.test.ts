@@ -49,6 +49,7 @@ describe("@crustjs/skills exports", () => {
 				"SkillConflictError",
 				"detectInstalledAgents",
 				"generateSkill",
+				"isValidSkillName",
 				"resolveSkillName",
 				"skillPlugin",
 				"skillStatus",
