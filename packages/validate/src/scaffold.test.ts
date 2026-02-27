@@ -19,6 +19,7 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.normalizeStandardPath).toBe("function");
 		expect(typeof mod.success).toBe("function");
 		expect(typeof mod.failure).toBe("function");
+		expect(typeof mod.promptValidator).toBe("function");
 	});
 
 	it("zod entrypoint is importable", async () => {

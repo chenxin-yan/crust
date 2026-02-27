@@ -2,6 +2,12 @@
 // @crustjs/validate/standard — Standard Schema-first validation core
 // ────────────────────────────────────────────────────────────────────────────
 
+// Prompt adapter
+export type {
+	PromptErrorStrategy,
+	PromptValidatorOptions,
+} from "./prompt.ts";
+export { promptValidator } from "./prompt.ts";
 // Types
 export type {
 	InferInput,

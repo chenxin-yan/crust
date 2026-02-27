@@ -80,3 +80,42 @@
 - Effect's `standardSchemaV1()` returns a function object (not a plain object) with `~standard` interface. The `as StandardSchema` cast is safe because it matches the structural contract
 - For prompt adapters (Task 3) and store adapters (Task 6), the same `validateStandard()` function can be reused directly — no need to go through provider-specific validation paths
 - The `formatPath`/`normalizeIssues`/`renderBulletList`/`throwValidationError` utilities in `validation.ts` are still used by `middleware.ts` for error rendering — they remain unchanged
+
+---
+
+## Task: Add first-class prompt validation adapters in @crustjs/validate/standard with consistent error rendering and async support
+
+### Completed
+
+- Implemented `promptValidator()` function that converts a Standard Schema into a `ValidateFn<T>`-compatible function for `@crustjs/prompts`
+- The adapter returns `true` on valid input and a `string` error message on invalid input, matching the `ValidateFn<T>` contract exactly
+- Supports both sync and async schemas transparently via `validateStandard()` — always returns `Promise<true | string>`
+- Implemented configurable `PromptErrorStrategy` with two modes:
+  - `"first"` (default) — returns only the first issue's message, with path prefix when available
+  - `"all"` — renders all issues as a multi-line bullet list using `renderBulletList()` from the shared validation core
+- Exported `promptValidator`, `PromptErrorStrategy`, and `PromptValidatorOptions` from `@crustjs/validate/standard`
+- Added 26 focused unit tests covering: success/failure for sync and async schemas, both error strategies, edge cases (empty issues, successive calls, PathSegment paths, null/undefined values), and ValidateFn contract compatibility
+- Updated scaffold test to verify `promptValidator` is exported from the standard entrypoint
+- All 194 package tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/src/standard/prompt.ts` — new: prompt adapter implementation with `promptValidator()`, `PromptErrorStrategy`, `PromptValidatorOptions`
+- `packages/validate/src/standard/prompt.test.ts` — new: comprehensive unit tests for prompt adapter
+- `packages/validate/src/standard/index.ts` — added exports for prompt adapter types and function
+- `packages/validate/src/scaffold.test.ts` — extended to verify `promptValidator` export
+
+### Decisions
+
+- **No dependency on `@crustjs/prompts`**: The adapter produces functions matching the `ValidateFn<T>` contract (`(value: T) => true | string | Promise<true | string>`) without importing from `@crustjs/prompts`. This keeps package boundaries clean.
+- **Always async**: `promptValidator()` always returns `Promise<true | string>` since `validateStandard()` always awaits. The `@crustjs/prompts` `ValidateFn<T>` contract already supports async return values.
+- **"first" as default strategy**: Most prompt inputs are single fields where showing one error at a time is the best UX. The `"all"` strategy is available for complex schemas.
+- **Path-prefixed messages in "first" strategy**: When the first issue has a path (e.g. from object schemas), the error message includes the path context (e.g. `"name: Required"`) for clarity.
+- **`renderBulletList` reuse**: The "all" strategy delegates to the shared `renderBulletList()` from `validation.ts` for consistent multi-issue formatting across command and prompt targets.
+
+### Notes for Future Agent
+
+- Task 4 (typed prompt parsing helpers) is complementary — it focuses on parsing prompt answers into schema output types, while this task focuses on validation functions. They use different parts of the `validateStandard()` result.
+- The `promptValidator` function only validates — it does NOT return the transformed schema output. Task 4's parsing helpers will address that gap for typed output workflows.
+- For provider wrapper exports in zod/effect entrypoints (mentioned in Task 4 subtasks), `promptValidator` can be re-exported directly since it already works with any Standard Schema. Zod schemas are natively compatible; Effect schemas need `standardSchemaV1()` wrapping at the caller level.
+- The `renderBulletList` function from `validation.ts` is now shared between command validation error rendering (via `middleware.ts`) and prompt "all" strategy. Any changes to its format will affect both surfaces.

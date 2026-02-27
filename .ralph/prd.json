@@ -42,8 +42,8 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Prompt integration must not require changes to @crustjs/prompts internals. The adapter should fit the existing ValidateFn<T> contract from packages/prompts/src/core/types.ts. Use validateStandard() from standard/validate.ts for schema execution — it handles both sync and async schemas and returns normalized ValidationResult.",
-			"passed": false
+			"notes": "Completed. promptValidator() converts Standard Schema to ValidateFn<T>-compatible function. Supports \"first\" (default) and \"all\" error strategies. Always async via validateStandard(). No dependency on @crustjs/prompts. 194 tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Add typed prompt parsing helpers for schema-transformed prompt outputs to improve end-to-end DX",
@@ -57,7 +57,7 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "This task is separate from ValidateFn adapter behavior. Focus on strongly typed output-oriented DX for prompt workflows.",
+			"notes": "This task is separate from ValidateFn adapter behavior (completed in Task 3). Focus on strongly typed output-oriented DX for prompt workflows. promptValidator() from standard/prompt.ts only validates — it does NOT return transformed schema output. Parsing helpers should use validateStandard() and return the typed output value. For provider wrappers, promptValidator can be re-exported directly since it works with any Standard Schema. Effect schemas need standardSchemaV1() wrapping at the caller level.",
 			"passed": false
 		},
 		{
