@@ -2,13 +2,12 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import { applyFieldDefaults } from "./merge.ts";
+import { applyDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
-	FieldsDef,
-	InferStoreConfig,
+	DeepPartial,
 	Store,
 	StoreUpdater,
 } from "./types.ts";
@@ -18,16 +17,15 @@ import type {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates a typed async config store backed by a local JSON file.
+ * Creates a typed async store backed by a local JSON file.
  *
  * The store resolves its file path once at creation time from `dirPath` and
- * optional `name`. Field definitions declare the config schema — each field's
- * `type` determines its TypeScript type, and the presence of `default`
- * determines whether the field is guaranteed or optional (`T | undefined`).
+ * optional `name`. The `defaults` object declares the data shape — its
+ * TypeScript type determines the store's type parameter `T`.
  *
- * @typeParam F - Field definitions record (inferred via `const` generic).
+ * @typeParam T - The store data shape (inferred from `defaults`).
  * @param options - Store configuration options.
- * @returns A {@link Store} instance with `read`, `write`, `update`, and `reset` methods.
+ * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  *
  * @example
@@ -36,69 +34,79 @@ import type {
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   fields: {
- *     theme: { type: "string", default: "light" },
- *     verbose: { type: "boolean", default: false },
- *     token: { type: "string" },
+ *   defaults: {
+ *     ui: { theme: "light", fontSize: 14 },
+ *     verbose: false,
  *   },
  * });
  *
- * const config = await store.read();
- * // → { theme: "light", verbose: false } (defaults when no persisted file)
+ * const state = await store.read();
+ * // → { ui: { theme: "light", fontSize: 14 }, verbose: false }
  *
- * await store.write({ theme: "dark", verbose: true, token: "abc" });
- * await store.update((c) => ({ ...c, theme: "light" }));
+ * await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
+ * await store.update((s) => ({ ...s, verbose: false }));
+ * await store.patch({ ui: { theme: "dark" } });
  * await store.reset();
  * ```
  */
-export function createStore<const F extends FieldsDef>(
-	options: CreateStoreOptions<F>,
-): Store<InferStoreConfig<F>> {
-	const { dirPath, name, fields } = options;
+export function createStore<const T extends Record<string, unknown>>(
+	options: CreateStoreOptions<T>,
+): Store<T> {
+	const { dirPath, name, defaults } = options;
 
-	// Resolve the config file path once at creation time (synchronous)
+	// Resolve the store file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
 
 	// ──────────────────────────────────────────────────────────────────────
-	// read — Load persisted config, apply field defaults
+	// read — Load persisted state, apply defaults for missing keys
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function read(): Promise<InferStoreConfig<F>> {
+	async function read(): Promise<T> {
 		const persisted = await readJson(filePath);
-
-		return applyFieldDefaults(
+		return applyDefaults(
 			persisted as Record<string, unknown> | undefined,
-			fields,
-		);
+			defaults,
+		) as T;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// write — Atomically persist full config
+	// write — Atomically persist full state
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function write(config: InferStoreConfig<F>): Promise<void> {
-		await writeJson(filePath, config);
+	async function write(state: T): Promise<void> {
+		await writeJson(filePath, state);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// update — Read current, apply updater, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(
-		updater: StoreUpdater<InferStoreConfig<F>>,
-	): Promise<void> {
+	async function update(updater: StoreUpdater<T>): Promise<void> {
 		const current = await read();
 		const updated = updater(current);
 		await writeJson(filePath, updated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// reset — Remove persisted config file
+	// patch — Deep partial update (placeholder — full impl in task 3/4)
+	// ──────────────────────────────────────────────────────────────────────
+
+	async function patch(partial: DeepPartial<T>): Promise<void> {
+		const current = await read();
+		const merged = applyDefaults(
+			partial as Record<string, unknown>,
+			current as Record<string, unknown>,
+		) as T;
+		await writeJson(filePath, merged);
+	}
+
+	// ──────────────────────────────────────────────────────────────────────
+	// reset — Remove persisted state file
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function reset(): Promise<void> {
 		await deleteJson(filePath);
 	}
 
-	return { read, write, update, reset };
+	return { read, write, update, patch, reset };
 }

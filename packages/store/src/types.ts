@@ -3,155 +3,30 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 // ────────────────────────────────────────────────────────────────────────────
-// Literal-to-primitive mapping
+// DeepPartial — Recursive partial for nested object updates
 // ────────────────────────────────────────────────────────────────────────────
-
-/** Supported type literals for store fields. */
-export type ValueType = "string" | "number" | "boolean";
 
 /**
- * Resolves a type literal to its corresponding TypeScript primitive type.
+ * Recursively makes all properties of `T` optional.
  *
- * - `"string"` → `string`
- * - `"number"` → `number`
- * - `"boolean"` → `boolean`
- */
-type ResolvePrimitive<T extends ValueType> = T extends "string"
-	? string
-	: T extends "number"
-		? number
-		: T extends "boolean"
-			? boolean
-			: never;
-
-// ────────────────────────────────────────────────────────────────────────────
-// FieldDef — Store field definition (discriminated by `type` × `array`)
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Shared fields present on every store field definition. */
-interface FieldDefBase {
-	/** Human-readable description for documentation and tooling. */
-	description?: string;
-}
-
-// ── Scalar fields ─────────────────────────────────────────────────────────
-
-/** Base for scalar (non-array) fields — `array` must be omitted. */
-interface ScalarFieldBase extends FieldDefBase {
-	/** Must be omitted for scalar fields — set to `true` for array fields. */
-	array?: never;
-}
-
-/** A scalar string field. */
-interface StringFieldDef extends ScalarFieldBase {
-	type: "string";
-	/** Default string value when the field is not persisted. */
-	default?: string;
-}
-
-/** A scalar number field. */
-interface NumberFieldDef extends ScalarFieldBase {
-	type: "number";
-	/** Default number value when the field is not persisted. */
-	default?: number;
-}
-
-/** A scalar boolean field. */
-interface BooleanFieldDef extends ScalarFieldBase {
-	type: "boolean";
-	/** Default boolean value when the field is not persisted. */
-	default?: boolean;
-}
-
-// ── Array fields ──────────────────────────────────────────────────────────
-
-/** Base for array fields — `array` is required as `true`. */
-interface ArrayFieldBase extends FieldDefBase {
-	/** Collect values into an array. */
-	array: true;
-}
-
-/** An array of strings field. */
-interface StringArrayFieldDef extends ArrayFieldBase {
-	type: "string";
-	/** Default string array value when the field is not persisted. */
-	default?: readonly string[];
-}
-
-/** An array of numbers field. */
-interface NumberArrayFieldDef extends ArrayFieldBase {
-	type: "number";
-	/** Default number array value when the field is not persisted. */
-	default?: readonly number[];
-}
-
-/** An array of booleans field. */
-interface BooleanArrayFieldDef extends ArrayFieldBase {
-	type: "boolean";
-	/** Default boolean array value when the field is not persisted. */
-	default?: readonly boolean[];
-}
-
-/**
- * Defines a single field in a store's config schema.
+ * - Plain objects are recursed into — each nested key becomes optional.
+ * - Arrays are left as-is (replaced wholesale, not partially updated).
+ * - Primitives pass through unchanged.
  *
- * Discriminated by `type` and `array` for type-safe `default` values.
+ * Used by {@link Store.patch} for deep partial updates.
  *
  * @example
  * ```ts
- * const fields = {
- *   theme: { type: "string", default: "light" },
- *   verbose: { type: "boolean", default: false },
- *   tags: { type: "string", array: true, default: [] },
- *   token: { type: "string" },  // optional — no default
- * } satisfies FieldsDef;
+ * type Config = { ui: { theme: string; fontSize: number }; verbose: boolean };
+ * type Partial = DeepPartial<Config>;
+ * // → { ui?: { theme?: string; fontSize?: number }; verbose?: boolean }
  * ```
  */
-export type FieldDef =
-	| StringFieldDef
-	| NumberFieldDef
-	| BooleanFieldDef
-	| StringArrayFieldDef
-	| NumberArrayFieldDef
-	| BooleanArrayFieldDef;
-
-/** Record mapping field names to their definitions. */
-export type FieldsDef = Record<string, FieldDef>;
-
-// ────────────────────────────────────────────────────────────────────────────
-// InferStoreConfig — Type inference from field definitions
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Infer the resolved type for a single field definition.
- *
- * - **array** → `primitive[]` (or `primitive[] | undefined` if no default)
- * - **has default** → `primitive` (guaranteed present)
- * - **no default** → `primitive | undefined` (optional)
- */
-type InferFieldValue<F extends FieldDef> = F extends { array: true }
-	? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
-		? ResolvePrimitive<F["type"]>[]
-		: ResolvePrimitive<F["type"]>[] | undefined
-	: F extends { default: ResolvePrimitive<F["type"]> }
-		? ResolvePrimitive<F["type"]>
-		: ResolvePrimitive<F["type"]> | undefined;
-
-/**
- * Maps a full {@link FieldsDef} record to the inferred config object type.
- *
- * @example
- * ```ts
- * type Config = InferStoreConfig<{
- *   theme: { type: "string"; default: "light" };
- *   verbose: { type: "boolean" };
- * }>;
- * // → { theme: string; verbose: boolean | undefined }
- * ```
- */
-export type InferStoreConfig<F extends FieldsDef> = {
-	[K in keyof F]: InferFieldValue<F[K]>;
-};
+export type DeepPartial<T> = T extends readonly unknown[]
+	? T
+	: T extends Record<string, unknown>
+		? { [K in keyof T]?: DeepPartial<T[K]> }
+		: T;
 
 // ────────────────────────────────────────────────────────────────────────────
 // CreateStoreOptions — Factory configuration
@@ -160,25 +35,26 @@ export type InferStoreConfig<F extends FieldsDef> = {
 /**
  * Options for {@link createStore}.
  *
- * @typeParam F - The field definitions record (inferred via `const` generic).
+ * @typeParam T - The store data shape, inferred from `defaults`.
  *
  * @example
  * ```ts
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   fields: {
- *     theme: { type: "string", default: "light" },
- *     verbose: { type: "boolean", default: false },
+ *   defaults: {
+ *     ui: { theme: "light", fontSize: 14 },
+ *     verbose: false,
+ *     tags: ["default"],
  *   },
  * });
  * ```
  */
-export interface CreateStoreOptions<F extends FieldsDef> {
+export interface CreateStoreOptions<T extends Record<string, unknown>> {
 	/**
 	 * Absolute directory path where the store JSON file is persisted.
 	 *
-	 * Use the {@link configDir} helper to resolve the platform-standard
-	 * config directory from an app name.
+	 * Use a path helper ({@link configDir}, {@link dataDir}, etc.) to resolve
+	 * the platform-standard directory from an app name.
 	 */
 	dirPath: string;
 
@@ -194,12 +70,32 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	name?: string;
 
 	/**
-	 * Field definitions that declare the store's config schema.
+	 * Default values for the store. Defines the data shape and provides
+	 * fallback values when no persisted file exists or keys are missing.
 	 *
-	 * Each key maps to a {@link FieldDef} with a `type` discriminant and optional
-	 * `default`. Fields without a `default` are optional (`T | undefined`).
+	 * The TypeScript type of `defaults` determines the store's `T` parameter.
 	 */
-	fields: F;
+	defaults: T;
+
+	/**
+	 * Optional validation function called before every write and patch.
+	 *
+	 * Receives the full state that is about to be persisted. Throw an error
+	 * (or return a rejected promise) to prevent the write.
+	 *
+	 * @param state - The candidate state to validate.
+	 * @throws When the state is invalid — the error is wrapped in a
+	 *   `CrustStoreError` with `VALIDATION` code.
+	 */
+	validate?: (state: T) => void | Promise<void>;
+
+	/**
+	 * When `true` (the default), persisted keys not present in `defaults`
+	 * are dropped on read. Set to `false` to preserve unknown keys.
+	 *
+	 * @default true
+	 */
+	pruneUnknown?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -207,79 +103,97 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Receives the current effective config and returns an updated config.
+ * Receives the current effective state and returns an updated state.
  *
- * Used by {@link Store.update} to apply partial mutations atomically.
+ * Used by {@link Store.update} to apply mutations atomically.
  *
  * @example
  * ```ts
  * await store.update((current) => ({
  *   ...current,
- *   theme: "dark",
+ *   ui: { ...current.ui, theme: "dark" },
  * }));
  * ```
  */
-export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
+export type StoreUpdater<T> = (current: T) => NoInfer<T>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Store — Async object-store instance
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A typed async config store returned by {@link createStore}.
+ * A typed async store returned by {@link createStore}.
  *
- * Provides `read`, `write`, `update`, and `reset` operations for a single
- * typed config object persisted as JSON on the local filesystem.
+ * Provides `read`, `write`, `update`, `patch`, and `reset` operations for a
+ * typed state object persisted as JSON on the local filesystem.
  *
- * @typeParam TConfig - The inferred config shape from field definitions.
+ * @typeParam T - The store data shape, inferred from `defaults`.
  *
  * @example
  * ```ts
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   fields: {
- *     theme: { type: "string", default: "light" },
+ *   defaults: {
+ *     ui: { theme: "light", fontSize: 14 },
+ *     verbose: false,
  *   },
  * });
  *
- * const config = await store.read();
- * await store.write({ theme: "dark" });
- * await store.update((c) => ({ ...c, theme: "dark" }));
+ * const state = await store.read();
+ * await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
+ * await store.update((s) => ({ ...s, verbose: false }));
+ * await store.patch({ ui: { theme: "dark" } });
  * await store.reset();
  * ```
  */
-export interface Store<TConfig> {
+export interface Store<T> {
 	/**
-	 * Reads the persisted config, applying field defaults for missing keys.
+	 * Reads the persisted state, merging defaults for missing keys.
 	 *
-	 * Always returns a value — fields with defaults are guaranteed present,
-	 * fields without defaults may be `undefined`.
+	 * Always returns a complete `T` — missing persisted keys are filled
+	 * from `defaults`.
 	 *
-	 * @returns The effective config value.
+	 * @returns The effective state.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `IO` on filesystem read failures.
 	 */
-	read(): Promise<TConfig>;
+	read(): Promise<T>;
 
 	/**
-	 * Atomically persists the full config object.
+	 * Atomically persists the full state object.
 	 *
-	 * @param config - The complete config to persist.
+	 * @param state - The complete state to persist.
+	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the state.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
-	write(config: NoInfer<TConfig>): Promise<void>;
+	write(state: NoInfer<T>): Promise<void>;
 
 	/**
-	 * Reads current effective config, applies the updater, and persists.
+	 * Reads current effective state, applies the updater, and persists.
 	 *
-	 * @param updater - Function receiving current config and returning updated config.
+	 * @param updater - Function receiving current state and returning updated state.
+	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the result.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	update(updater: StoreUpdater<TConfig>): Promise<void>;
+	update(updater: StoreUpdater<T>): Promise<void>;
 
 	/**
-	 * Removes the persisted config file, returning the store to defaults-on-read behavior.
+	 * Applies a deep partial update to the current state and persists.
+	 *
+	 * Only the provided keys are updated; everything else is preserved.
+	 * Arrays are replaced wholesale (not merged element-by-element).
+	 *
+	 * @param partial - A deep-partial subset of the state to merge in.
+	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the result.
+	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `IO` on filesystem failures.
+	 */
+	patch(partial: DeepPartial<NoInfer<T>>): Promise<void>;
+
+	/**
+	 * Removes the persisted state file, returning the store to
+	 * defaults-on-read behavior.
 	 *
 	 * @throws {CrustStoreError} `IO` on filesystem deletion failures.
 	 */

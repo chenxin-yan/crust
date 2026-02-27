@@ -1,39 +1,37 @@
 import { describe, expect, it } from "bun:test";
-import { applyFieldDefaults } from "./merge.ts";
-import type { FieldsDef } from "./types.ts";
+import { applyDefaults } from "./merge.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Test field definitions
+// Test default objects
 // ────────────────────────────────────────────────────────────────────────────
 
-const BASIC_FIELDS = {
-	theme: { type: "string", default: "light" },
-	verbose: { type: "boolean", default: false },
-	retries: { type: "number", default: 3 },
-} as const satisfies FieldsDef;
+const BASIC_DEFAULTS = {
+	theme: "light",
+	verbose: false,
+	retries: 3,
+};
 
-const MIXED_FIELDS = {
-	theme: { type: "string", default: "light" },
-	verbose: { type: "boolean", default: false },
-	token: { type: "string" },
-} as const satisfies FieldsDef;
+const NESTED_DEFAULTS = {
+	ui: { theme: "light", fontSize: 14 },
+	verbose: false,
+};
 
-const ARRAY_FIELDS = {
-	tags: { type: "string", array: true, default: ["default"] },
-	ids: { type: "number", array: true },
-} as const satisfies FieldsDef;
+const ARRAY_DEFAULTS = {
+	tags: ["default"] as string[],
+	count: 0,
+};
 
 // ────────────────────────────────────────────────────────────────────────────
-// applyFieldDefaults
+// applyDefaults
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("applyFieldDefaults", () => {
+describe("applyDefaults", () => {
 	// ──────────────────────────────────────────────────────────────────────
 	// No persisted data
 	// ──────────────────────────────────────────────────────────────────────
 
 	it("should return all defaults when persisted is undefined", () => {
-		const result = applyFieldDefaults(undefined, BASIC_FIELDS);
+		const result = applyDefaults(undefined, BASIC_DEFAULTS);
 
 		expect(result).toEqual({
 			theme: "light",
@@ -42,13 +40,11 @@ describe("applyFieldDefaults", () => {
 		});
 	});
 
-	it("should omit fields without defaults when persisted is undefined", () => {
-		const result = applyFieldDefaults(undefined, MIXED_FIELDS);
+	it("should return nested defaults when persisted is undefined", () => {
+		const result = applyDefaults(undefined, NESTED_DEFAULTS);
 
-		expect(result.theme).toBe("light");
+		expect(result.ui).toEqual({ theme: "light", fontSize: 14 });
 		expect(result.verbose).toBe(false);
-		expect(result.token).toBeUndefined();
-		expect("token" in result).toBe(false);
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -57,7 +53,7 @@ describe("applyFieldDefaults", () => {
 
 	it("should use persisted values when all keys are present", () => {
 		const persisted = { theme: "dark", verbose: true, retries: 5 };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result).toEqual({
 			theme: "dark",
@@ -72,7 +68,7 @@ describe("applyFieldDefaults", () => {
 
 	it("should fill missing persisted keys from defaults", () => {
 		const persisted = { theme: "dark" };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result).toEqual({
 			theme: "dark",
@@ -81,29 +77,18 @@ describe("applyFieldDefaults", () => {
 		});
 	});
 
-	it("should include optional fields when persisted", () => {
-		const persisted = { theme: "dark", verbose: true, token: "abc123" };
-		const result = applyFieldDefaults(persisted, MIXED_FIELDS);
-
-		expect(result).toEqual({
-			theme: "dark",
-			verbose: true,
-			token: "abc123",
-		});
-	});
-
 	// ──────────────────────────────────────────────────────────────────────
 	// Extra keys in persisted are dropped
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("should drop persisted keys not defined in fields", () => {
+	it("should drop persisted keys not defined in defaults", () => {
 		const persisted = {
 			theme: "dark",
 			verbose: true,
 			retries: 5,
 			unknown: "extra",
 		};
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result).toEqual({
 			theme: "dark",
@@ -118,47 +103,55 @@ describe("applyFieldDefaults", () => {
 	// ──────────────────────────────────────────────────────────────────────
 
 	it("should apply array defaults", () => {
-		const result = applyFieldDefaults(undefined, ARRAY_FIELDS);
+		const result = applyDefaults(undefined, ARRAY_DEFAULTS);
 
 		expect(result.tags).toEqual(["default"]);
-		expect(result.ids).toBeUndefined();
-		expect("ids" in result).toBe(false);
+		expect(result.count).toBe(0);
 	});
 
 	it("should use persisted array values", () => {
-		const persisted = { tags: ["a", "b"], ids: [1, 2, 3] };
-		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
+		const persisted = { tags: ["a", "b"], count: 42 };
+		const result = applyDefaults(persisted, ARRAY_DEFAULTS);
 
 		expect(result).toEqual({
 			tags: ["a", "b"],
-			ids: [1, 2, 3],
+			count: 42,
 		});
 	});
 
 	it("should shallow-copy array defaults to prevent shared mutation", () => {
-		const fields = {
-			tags: { type: "string", array: true, default: ["a", "b"] },
-		} as const satisfies FieldsDef;
+		const defaults = { tags: ["a", "b"] };
 
-		const result1 = applyFieldDefaults(undefined, fields);
-		const result2 = applyFieldDefaults(undefined, fields);
+		const result1 = applyDefaults(undefined, defaults);
+		const result2 = applyDefaults(undefined, defaults);
 
 		// Mutating one result should not affect the other
 		(result1.tags as string[]).push("c");
 		expect(result2.tags).toEqual(["a", "b"]);
 	});
 
+	it("should shallow-copy object defaults to prevent shared mutation", () => {
+		const defaults = { ui: { theme: "light" } };
+
+		const result1 = applyDefaults(undefined, defaults);
+		const result2 = applyDefaults(undefined, defaults);
+
+		// Mutating one result should not affect the other
+		(result1.ui as Record<string, unknown>).theme = "dark";
+		expect((result2.ui as Record<string, unknown>).theme).toBe("light");
+	});
+
 	// ──────────────────────────────────────────────────────────────────────
 	// Edge cases
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("should handle empty fields definition", () => {
-		const result = applyFieldDefaults({ extra: "value" }, {});
+	it("should handle empty defaults", () => {
+		const result = applyDefaults({ extra: "value" }, {});
 		expect(result).toEqual({});
 	});
 
 	it("should handle empty persisted object", () => {
-		const result = applyFieldDefaults({}, BASIC_FIELDS);
+		const result = applyDefaults({}, BASIC_DEFAULTS);
 
 		expect(result).toEqual({
 			theme: "light",
@@ -169,28 +162,28 @@ describe("applyFieldDefaults", () => {
 
 	it("should preserve null as a persisted value", () => {
 		const persisted = { theme: null, verbose: false, retries: 3 };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result.theme).toBeNull();
 	});
 
 	it("should preserve zero as a persisted value", () => {
 		const persisted = { retries: 0 };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result.retries).toBe(0);
 	});
 
 	it("should preserve empty string as a persisted value", () => {
 		const persisted = { theme: "" };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result.theme).toBe("");
 	});
 
 	it("should preserve false as a persisted value", () => {
 		const persisted = { verbose: false };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
+		const result = applyDefaults(persisted, BASIC_DEFAULTS);
 
 		expect(result.verbose).toBe(false);
 	});

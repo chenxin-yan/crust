@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CrustStoreError } from "./errors.ts";
 import { createStore } from "./store.ts";
-import type { FieldsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -17,21 +16,15 @@ function createTempDir(): string {
 	return join(tmpdir(), `crust-store-test-${randomUUID()}`);
 }
 
-const BASIC_FIELDS = {
-	theme: { type: "string", default: "light" },
-	verbose: { type: "boolean", default: false },
-} as const satisfies FieldsDef;
+const BASIC_DEFAULTS = {
+	theme: "light" as string,
+	verbose: false as boolean,
+};
 
-const MIXED_FIELDS = {
-	theme: { type: "string", default: "light" },
-	verbose: { type: "boolean", default: false },
-	token: { type: "string" },
-} as const satisfies FieldsDef;
-
-const ARRAY_FIELDS = {
-	tags: { type: "string", array: true, default: [] },
-	count: { type: "number", default: 0 },
-} as const satisfies FieldsDef;
+const ARRAY_DEFAULTS = {
+	tags: [] as string[],
+	count: 0,
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — factory
@@ -49,15 +42,16 @@ describe("createStore", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should return a store with read, write, update, and reset methods", () => {
+	it("should return a store with read, write, update, patch, and reset methods", () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		expect(typeof store.read).toBe("function");
 		expect(typeof store.write).toBe("function");
 		expect(typeof store.update).toBe("function");
+		expect(typeof store.patch).toBe("function");
 		expect(typeof store.reset).toBe("function");
 	});
 
@@ -65,7 +59,7 @@ describe("createStore", () => {
 		expect(() =>
 			createStore({
 				dirPath: "relative/path",
-				fields: BASIC_FIELDS,
+				defaults: BASIC_DEFAULTS,
 			}),
 		).toThrow(CrustStoreError);
 	});
@@ -74,7 +68,7 @@ describe("createStore", () => {
 		expect(() =>
 			createStore({
 				dirPath: "/tmp/config.json",
-				fields: BASIC_FIELDS,
+				defaults: BASIC_DEFAULTS,
 			}),
 		).toThrow(CrustStoreError);
 	});
@@ -84,7 +78,7 @@ describe("createStore", () => {
 			createStore({
 				dirPath: tempDir,
 				name: "my/store",
-				fields: BASIC_FIELDS,
+				defaults: BASIC_DEFAULTS,
 			}),
 		).toThrow(CrustStoreError);
 	});
@@ -94,7 +88,7 @@ describe("createStore", () => {
 			createStore({
 				dirPath: tempDir,
 				name: "config.json",
-				fields: BASIC_FIELDS,
+				defaults: BASIC_DEFAULTS,
 			}),
 		).toThrow(CrustStoreError);
 	});
@@ -103,7 +97,7 @@ describe("createStore", () => {
 		const store = createStore({
 			dirPath: tempDir,
 			name: "auth",
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -117,7 +111,7 @@ describe("createStore", () => {
 	it("should default to config.json when name is not provided", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -146,32 +140,19 @@ describe("store.read", () => {
 	it("should return defaults when no persisted file exists", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		const result = await store.read();
 
 		expect(result.theme).toBe("light");
 		expect(result.verbose).toBe(false);
-	});
-
-	it("should omit optional fields (no default) when no persisted file exists", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			fields: MIXED_FIELDS,
-		});
-
-		const result = await store.read();
-
-		expect(result.theme).toBe("light");
-		expect(result.verbose).toBe(false);
-		expect(result.token).toBeUndefined();
 	});
 
 	it("should return persisted values overriding defaults", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -181,13 +162,13 @@ describe("store.read", () => {
 		expect(result.verbose).toBe(true);
 	});
 
-	it("should fill missing persisted keys from field defaults", async () => {
+	it("should fill missing persisted keys from defaults", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ theme: "dark" }));
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		const result = await store.read();
@@ -196,29 +177,10 @@ describe("store.read", () => {
 		expect(result.verbose).toBe(false);
 	});
 
-	it("should include optional fields when persisted", async () => {
-		const filePath = join(tempDir, "config.json");
-		await writeFile(
-			filePath,
-			JSON.stringify({ theme: "dark", verbose: true, token: "abc123" }),
-		);
-
-		const store = createStore({
-			dirPath: tempDir,
-			fields: MIXED_FIELDS,
-		});
-
-		const result = await store.read();
-
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(true);
-		expect(result.token).toBe("abc123");
-	});
-
 	it("should not auto-persist merged defaults back to disk", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		// Read triggers merge but should not write
@@ -228,7 +190,7 @@ describe("store.read", () => {
 		expect(existsSync(filePath)).toBe(false);
 	});
 
-	it("should drop extra persisted keys not defined in fields", async () => {
+	it("should drop extra persisted keys not defined in defaults", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(
 			filePath,
@@ -241,7 +203,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		const result = await store.read();
@@ -257,7 +219,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		try {
@@ -286,10 +248,10 @@ describe("store.write", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should persist config to disk", async () => {
+	it("should persist state to disk", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -303,7 +265,7 @@ describe("store.write", () => {
 		const nestedDir = join(tempDir, "deep", "nested");
 		const store = createStore({
 			dirPath: nestedDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "light", verbose: false });
@@ -314,10 +276,10 @@ describe("store.write", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "light", verbose: false });
 	});
 
-	it("should overwrite existing config", async () => {
+	it("should overwrite existing state", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "light", verbose: false });
@@ -326,27 +288,6 @@ describe("store.write", () => {
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
 		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
-	});
-
-	it("should persist optional fields when provided", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			fields: MIXED_FIELDS,
-		});
-
-		await store.write({
-			theme: "dark",
-			verbose: true,
-			token: "abc123",
-		});
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({
-			theme: "dark",
-			verbose: true,
-			token: "abc123",
-		});
 	});
 });
 
@@ -369,7 +310,7 @@ describe("store.update", () => {
 	it("should read, apply updater, and persist", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "light", verbose: false });
@@ -380,10 +321,10 @@ describe("store.update", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: false });
 	});
 
-	it("should use field defaults as current when no persisted file", async () => {
+	it("should use defaults as current when no persisted file", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.update((current) => ({ ...current, verbose: true }));
@@ -393,16 +334,16 @@ describe("store.update", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "light", verbose: true });
 	});
 
-	it("should merge field defaults with partial persisted before applying updater", async () => {
+	it("should merge defaults with partial persisted before applying updater", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ theme: "dark" }));
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
-		// Update should see merged config (defaults + persisted)
+		// Update should see merged state (defaults + persisted)
 		await store.update((current) => ({
 			...current,
 			verbose: true,
@@ -411,25 +352,6 @@ describe("store.update", () => {
 		const raw = await readFile(filePath, "utf-8");
 		const result = JSON.parse(raw);
 		expect(result).toEqual({ theme: "dark", verbose: true });
-	});
-
-	it("should work with optional fields", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			fields: MIXED_FIELDS,
-		});
-
-		await store.update((current) => ({
-			...current,
-			token: "my-token",
-		}));
-
-		const filePath = join(tempDir, "config.json");
-		const raw = await readFile(filePath, "utf-8");
-		const result = JSON.parse(raw);
-		expect(result.token).toBe("my-token");
-		expect(result.theme).toBe("light");
-		expect(result.verbose).toBe(false);
 	});
 });
 
@@ -449,10 +371,10 @@ describe("store.reset", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should delete persisted config file", async () => {
+	it("should delete persisted state file", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -466,7 +388,7 @@ describe("store.reset", () => {
 	it("should not throw when no persisted file exists", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		// Should not throw
@@ -476,10 +398,10 @@ describe("store.reset", () => {
 	it("should return to defaults-on-read behavior after reset", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
-		// Write custom config
+		// Write custom state
 		await store.write({ theme: "dark", verbose: true });
 		const before = await store.read();
 		expect(before.theme).toBe("dark");
@@ -492,25 +414,6 @@ describe("store.reset", () => {
 		const after = await store.read();
 		expect(after.theme).toBe("light");
 		expect(after.verbose).toBe(false);
-	});
-
-	it("should return field defaults after reset (optional fields undefined)", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			fields: MIXED_FIELDS,
-		});
-
-		await store.write({
-			theme: "dark",
-			verbose: true,
-			token: "abc123",
-		});
-		await store.reset();
-
-		const result = await store.read();
-		expect(result.theme).toBe("light");
-		expect(result.verbose).toBe(false);
-		expect(result.token).toBeUndefined();
 	});
 });
 
@@ -533,7 +436,7 @@ describe("store lifecycle", () => {
 	it("should support full read → write → update → reset cycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		// 1. Read returns defaults
@@ -541,13 +444,13 @@ describe("store lifecycle", () => {
 		expect(step1.theme).toBe("light");
 		expect(step1.verbose).toBe(false);
 
-		// 2. Write persists new config
+		// 2. Write persists new state
 		await store.write({ theme: "dark", verbose: true });
 		const step2 = await store.read();
 		expect(step2.theme).toBe("dark");
 		expect(step2.verbose).toBe(true);
 
-		// 3. Update modifies persisted config
+		// 3. Update modifies persisted state
 		await store.update((c) => ({ ...c, verbose: false }));
 		const step3 = await store.read();
 		expect(step3.theme).toBe("dark");
@@ -565,7 +468,7 @@ describe("store lifecycle", () => {
 	it("should support multiple write → read cycles", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		for (const theme of ["light", "dark", "light", "dark"] as const) {
@@ -579,7 +482,7 @@ describe("store lifecycle", () => {
 	it("should support write → reset → write cycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -593,10 +496,10 @@ describe("store lifecycle", () => {
 		expect(result.verbose).toBe(false);
 	});
 
-	it("should handle array fields across lifecycle", async () => {
+	it("should handle array defaults across lifecycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			fields: ARRAY_FIELDS,
+			defaults: ARRAY_DEFAULTS,
 		});
 
 		// Defaults
@@ -636,17 +539,13 @@ describe("multiple stores with name option", () => {
 	it("should support multiple independent stores under the same directory", async () => {
 		const configStore = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
-
-		const authFields = {
-			token: { type: "string", default: "" },
-		} as const satisfies FieldsDef;
 
 		const authStore = createStore({
 			dirPath: tempDir,
 			name: "auth",
-			fields: authFields,
+			defaults: { token: "" as string },
 		});
 
 		// Write to both stores independently
@@ -672,33 +571,16 @@ describe("multiple stores with name option", () => {
 	});
 
 	it("should write to different JSON files based on name", async () => {
-		createStore({
-			dirPath: tempDir,
-			fields: BASIC_FIELDS,
-		});
-
-		createStore({
-			dirPath: tempDir,
-			name: "auth",
-			fields: {
-				token: { type: "string", default: "" },
-			} as const satisfies FieldsDef,
-		});
-
-		// Write to default store
 		const defaultStore = createStore({
 			dirPath: tempDir,
-			fields: BASIC_FIELDS,
+			defaults: BASIC_DEFAULTS,
 		});
 		await defaultStore.write({ theme: "dark", verbose: true });
 
-		// Write to auth store
 		const authStore = createStore({
 			dirPath: tempDir,
 			name: "auth",
-			fields: {
-				token: { type: "string", default: "" },
-			} as const satisfies FieldsDef,
+			defaults: { token: "" as string },
 		});
 		await authStore.write({ token: "secret" });
 

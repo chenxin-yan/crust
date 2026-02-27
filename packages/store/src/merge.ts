@@ -1,40 +1,45 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/store — Field-based defaults application
+// @crustjs/store — Object-based defaults application
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { FieldsDef, InferStoreConfig } from "./types.ts";
-
 /**
- * Applies field defaults to a persisted config object.
+ * Applies defaults to a persisted object.
  *
- * For each field defined in `fields`:
+ * For each key defined in `defaults`:
  * - If the key exists in `persisted`, the persisted value is used.
- * - If the key is missing and the field has a `default`, the default is used.
- *   Array defaults are shallow-copied to prevent shared mutation.
- * - If the key is missing and no default exists, the field is omitted
- *   (typed as `T | undefined` in the output).
+ * - If the key is missing, the default value is used.
+ *   Array and object defaults are shallow-copied to prevent shared mutation.
  *
- * Keys in `persisted` that are not defined in `fields` are dropped.
+ * Keys in `persisted` that are not defined in `defaults` are dropped
+ * (pruned by default).
+ *
+ * This is a shallow merge — deep merge behavior will be added in a
+ * subsequent task.
  *
  * @param persisted - Parsed JSON from disk, or `undefined` if no file exists.
- * @param fields - Store field definitions.
- * @returns A new object with field defaults applied.
+ * @param defaults - Default values object defining the expected shape.
+ * @returns A new object with defaults applied for missing keys.
  */
-export function applyFieldDefaults<F extends FieldsDef>(
+export function applyDefaults<T extends Record<string, unknown>>(
 	persisted: Record<string, unknown> | undefined,
-	fields: F,
-): InferStoreConfig<F> {
+	defaults: T,
+): T {
 	const result: Record<string, unknown> = {};
 
-	for (const [key, def] of Object.entries(fields)) {
+	for (const [key, defaultValue] of Object.entries(defaults)) {
 		if (persisted && key in persisted) {
 			result[key] = persisted[key];
-		} else if ("default" in def && def.default !== undefined) {
-			// Shallow-copy array defaults to prevent shared mutation
-			result[key] = Array.isArray(def.default) ? [...def.default] : def.default;
+		} else if (defaultValue !== undefined) {
+			// Shallow-copy arrays and objects to prevent shared mutation
+			if (Array.isArray(defaultValue)) {
+				result[key] = [...defaultValue];
+			} else if (defaultValue !== null && typeof defaultValue === "object") {
+				result[key] = { ...defaultValue };
+			} else {
+				result[key] = defaultValue;
+			}
 		}
-		// else: no persisted value and no default → key not set (field is T | undefined)
 	}
 
-	return result as InferStoreConfig<F>;
+	return result as T;
 }

@@ -26,7 +26,7 @@
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
 			"notes": "This is the core DX change: users provide one typed defaults object and get a typed store without primitive-only limitations.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Implement deep merge and pruning primitives for defaults + persisted JSON",
@@ -39,7 +39,7 @@
 				"Run `bun run check:types` to ensure no type errors",
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
-			"notes": "Keep semantics deterministic and simple; this task must not introduce store IO behavior changes yet.",
+			"notes": "Keep semantics deterministic and simple; this task must not introduce store IO behavior changes yet. The current `applyDefaults` in merge.ts is a shallow-only merge — it needs to be replaced with proper recursive deep merge. The function signature is `applyDefaults<T>(persisted, defaults): T`. Add a `pruneUnknown` parameter. Existing merge.test.ts covers shallow cases; add nested object merge, array replacement, and pruneUnknown tests.",
 			"passed": false
 		},
 		{
@@ -54,7 +54,7 @@
 				"Run `bun run check:types` to ensure no type errors",
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
-			"notes": "No backward compatibility requirement: remove field-based behavior cleanly and keep the runtime API minimal and intuitive.",
+			"notes": "No backward compatibility requirement. The type contracts are already in place: `CreateStoreOptions<T>` has `defaults`, `validate`, and `pruneUnknown`. `Store<T>` already has `patch` method stub. Wire `validate` (call before writeJson in write/update/patch, throw CrustStoreError with VALIDATION code on failure) and `pruneUnknown` (pass to merge). Add VALIDATION to StoreErrorCode in errors.ts. The `patch` stub in store.ts needs to use deep merge from task 3. Use `as string`/`as boolean` type widening in test defaults to avoid const narrowing.",
 			"passed": false
 		},
 		{

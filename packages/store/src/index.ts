@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/store — Minimal, type-safe config persistence for CLI apps
+// @crustjs/store — Typed persistence for CLI apps
 // ────────────────────────────────────────────────────────────────────────────
 
 // Errors
@@ -13,10 +13,7 @@ export { createStore } from "./store.ts";
 // Types
 export type {
 	CreateStoreOptions,
-	FieldDef,
-	FieldsDef,
-	InferStoreConfig,
+	DeepPartial,
 	Store,
 	StoreUpdater,
-	ValueType,
 } from "./types.ts";
