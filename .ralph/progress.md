@@ -77,3 +77,36 @@
 - `applyDefaults` in `merge.ts` only does shallow merge — task 3 must implement deep merge with array-replace and unknown-key pruning semantics
 - When writing tests with `createStore`, use `as string` / `as boolean` type widening on defaults to avoid `const` narrowing issues (e.g., `{ theme: "light" as string }` not `{ theme: "light" } as const`)
 - 189 tests pass, type checks and lint are clean
+
+---
+
+## Task: Implement deep merge and pruning primitives for defaults + persisted JSON
+
+### Completed
+
+- Rewrote `applyDefaults` in `merge.ts` from shallow-only merge to recursive deep merge
+- Deep merge recurses into nested plain objects; persisted values override defaults at every level
+- Arrays replace wholesale (not element-merged), matching SPEC and `DeepPartial<T>` semantics
+- Added `isPlainObject` helper to distinguish recursible objects from arrays, null, etc.
+- Added `deepClone` helper that recursively clones plain objects and shallow-copies arrays, ensuring no shared-reference mutation from defaults or parsed input
+- Added `pruneUnknown` parameter (3rd arg, defaults to `true`): when `true`, keys not in `defaults` are dropped at every nesting level; when `false`, extra keys are preserved (deep-cloned for safety)
+- Type-mismatch handling: if defaults has an object but persisted has a primitive (or vice versa), the persisted value wins without recursion
+- Rewrote `merge.test.ts` with 5 test sections (40 tests total): shallow behavior, deep merge, array replacement, immutability guarantees, and `pruneUnknown` parameter
+
+### Files Changed
+
+- `packages/store/src/merge.ts` — complete rewrite with deep merge, `deepClone`, `isPlainObject`, and `pruneUnknown` support
+- `packages/store/src/merge.test.ts` — complete rewrite with comprehensive test coverage across 5 categories
+
+### Decisions
+
+- `deepClone` shallow-copies arrays (elements not deep-cloned) since arrays are replaced wholesale — element identity doesn't matter
+- `pruneUnknown` is propagated recursively to nested `applyDefaults` calls so unknown keys are pruned/preserved consistently at all depths
+- No changes to `store.ts` — wiring `pruneUnknown` from `CreateStoreOptions` into the `applyDefaults` call is task 4's responsibility
+- The `applyDefaults` function signature is now `applyDefaults<T>(persisted, defaults, pruneUnknown?)` — backward compatible since `pruneUnknown` defaults to `true`
+
+### Notes for Future Agent
+
+- `store.ts` currently calls `applyDefaults(persisted, defaults)` without passing `pruneUnknown` — task 4 should wire `options.pruneUnknown` through to get the `pruneUnknown=false` behavior working end-to-end
+- The `patch` method in `store.ts` uses `applyDefaults` with `current` as defaults and `partial` as persisted — this should work correctly now for deep partial updates since `applyDefaults` does proper deep merge. Verify in task 4 tests.
+- 212 tests pass, type checks and lint are clean
