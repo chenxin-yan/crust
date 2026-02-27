@@ -332,3 +332,43 @@
 - The scaffold tests now provide a safety net for the public API surface — if any export is added or removed, the exact-match test will fail.
 - The store README examples use `@crustjs/validate/zod` and `@crustjs/validate/effect` import paths, matching the documented entrypoints.
 - The validate README includes a "Standard Schema directly" section showing the standard entrypoint for provider-agnostic usage — this is relevant for libraries building on top of `@crustjs/validate`.
+
+---
+
+## Task: Add cross-package integration coverage to verify consistent validation semantics across command, prompt, and store
+
+### Completed
+
+- Created `packages/validate/tests/cross-target-integration.test.ts` with 54 integration tests across 8 test groups
+- Added `@crustjs/store` as a devDependency to `@crustjs/validate` for cross-package integration tests
+- Verified all 362 validate tests pass (including 54 new integration tests), all 157 store tests pass, monorepo type checks clean, biome lint clean
+
+### Test Groups
+
+1. **Zod: shared schema across command, prompt, and store** — exercises one Zod config schema across all three targets (valid/invalid for command, prompt validator, prompt parse, store write/read, sync variants)
+2. **Effect: shared schema across command, prompt, and store** — same as above using Effect schemas with `standardSchemaV1()` wrapping for prompt/store adapters
+3. **Consistent issue path formatting across targets** — nested object dot-paths (`database.host`), array bracket-notation (`items[1]`), command variadic arg paths (`args.files[1]`), root-level empty paths
+4. **Transformed output consistency across targets** — Zod `.transform()` and Effect `Schema.transform()` produce transformed values consistently across command args, prompt parsing, and store validator/persistence
+5. **Error shape consistency across targets** — all targets produce `{ message, path }` issues; matching paths and messages for the same invalid input; matching `VALIDATION` error codes between command and prompt; store VALIDATION error carries issues matching raw validator result
+6. **Sync and async parity** — `validateStandard` vs `validateStandardSync`, `storeValidator` vs `storeValidatorSync`, `parsePromptValue` vs `parsePromptValueSync` produce identical results for both success and failure
+7. **Zod and Effect produce consistent issue shapes** — equivalent Zod/Effect schemas produce issues pointing to the same paths and both return string messages
+8. **Full lifecycle: command → prompt → store** — end-to-end flow validating theme via command arg, retries via prompt parse, then persisting combined config to store; plus rejection at each stage
+
+### Files Changed
+
+- `packages/validate/tests/cross-target-integration.test.ts` — new: 54 integration tests (1151 lines)
+- `packages/validate/package.json` — added `@crustjs/store: "workspace:*"` to devDependencies
+- `bun.lock` — updated with workspace dependency resolution
+
+### Decisions
+
+- **`@crustjs/store` as devDependency only**: The store package is only needed for integration tests, not for the validate package's runtime. Added as `devDependencies` to keep the production dependency graph clean.
+- **Helper function `extractIssues()`**: Created to safely access `CrustError<"VALIDATION">.details?.issues` without non-null assertions, satisfying both TypeScript and Biome's `noNonNullAssertion` rule.
+- **Structural compatibility assertions**: Tests verify that all three targets produce issues with identical `{ message, path }` shape and matching values for the same invalid input, not just that errors are thrown.
+- **No terminal-interactive behavior**: All command tests use `runCommand()` with `{ argv: [...] }` — no interactive prompts or terminal I/O, as specified in the task constraints.
+- **Temp directory per test**: Store tests use `beforeEach`/`afterEach` with unique temp directories (`randomUUID()`) for isolation.
+
+### Notes
+
+- This is the final task in the PRD. All 9 tasks are now complete.
+- The integration test file serves as a living specification for cross-target validation semantics — any change to issue normalization, path formatting, or error shapes will be caught by these tests.

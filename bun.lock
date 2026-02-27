@@ -181,6 +181,7 @@
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/plugins": "workspace:*",
+        "@crustjs/store": "workspace:*",
         "bunup": "catalog:",
         "effect": "^3.19.0",
         "zod": "^4.0.0",
