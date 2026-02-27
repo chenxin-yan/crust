@@ -12,7 +12,7 @@
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
 			"notes": "SPEC decisions: no `kind` parameter and XDG on macOS for a unified Unix mental model. Keep path helper API explicit and deterministic.",
-			"passed": false
+			"passed": true
 		},
 		{
 			"description": "Redesign store public types from field-definition schema to object-default schema for nested app state",
@@ -68,7 +68,7 @@
 				"Run `bun run check:types` to ensure no type errors",
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
-			"notes": "Examples should lead with CLI scenarios using separate config/state/cache/data stores and avoid introducing a `kind` option.",
+			"notes": "Examples should lead with CLI scenarios using separate config/state/cache/data stores and avoid introducing a `kind` option. Note: macOS configDir changed from ~/Library/Application Support to ~/.config (XDG) — README and docs must be updated to reflect this. Windows data/state/cache use bucket subdirectories under %LOCALAPPDATA%/<appName>/Data|State|Cache.",
 			"passed": false
 		}
 	]
