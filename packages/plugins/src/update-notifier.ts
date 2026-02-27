@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { CrustPlugin } from "@crustjs/core";
+import { configDir, createStore } from "@crustjs/store";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Options
@@ -214,6 +215,29 @@ export async function fetchLatestVersion(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Store schema — notifier state fields
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Store name used for the update-notifier cache file. */
+const STORE_NAME = "update-notifier";
+
+/** Key used in plugin state for process-level dedupe. */
+const DEDUPE_STATE_KEY = "update-notifier:checked";
+
+/**
+ * Store field definitions for the update-notifier persistent cache.
+ *
+ * - `lastCheckedAt` — Unix timestamp (ms) of the last network check.
+ * - `latestVersion` — The latest version string from the registry.
+ * - `lastNotifiedVersion` — The version last shown in a notice (dedupe).
+ */
+const NOTIFIER_STORE_FIELDS = {
+	lastCheckedAt: { type: "number", default: 0 },
+	latestVersion: { type: "string" },
+	lastNotifiedVersion: { type: "string" },
+} as const;
+
+// ────────────────────────────────────────────────────────────────────────────
 // Plugin factory
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -258,10 +282,10 @@ export function updateNotifierPlugin(
 	const {
 		currentVersion,
 		packageName: explicitPackageName,
-		intervalMs: _intervalMs = DEFAULT_INTERVAL_MS,
+		intervalMs = DEFAULT_INTERVAL_MS,
 		enabled = true,
-		timeoutMs: _timeoutMs = DEFAULT_TIMEOUT_MS,
-		registryUrl: _registryUrl = DEFAULT_REGISTRY_URL,
+		timeoutMs = DEFAULT_TIMEOUT_MS,
+		registryUrl = DEFAULT_REGISTRY_URL,
 	} = options;
 
 	// Early bail: disabled plugin returns a no-op
@@ -276,17 +300,103 @@ export function updateNotifierPlugin(
 			// Always let the command execute first
 			await next();
 
-			// Resolve package name: explicit option → root command meta name
-			const _resolvedPackageName =
-				explicitPackageName ?? context.rootCommand.meta.name;
+			try {
+				// ── Process-level dedupe guard ────────────────────────────
+				// Prevents duplicate checks when multiple commands run in
+				// a single process (e.g. subcommands sharing the same plugin).
+				if (context.state.has(DEDUPE_STATE_KEY)) {
+					return;
+				}
+				context.state.set(DEDUPE_STATE_KEY, true);
 
-			// ──────────────────────────────────────────────────────────────
-			// Runtime implementation will be added in subsequent tasks:
-			// - Task 2: npm latest-version fetch + version comparison
-			// - Task 3: persistent cache, middleware flow, notification
-			// ──────────────────────────────────────────────────────────────
+				// ── Resolve package name ─────────────────────────────────
+				const resolvedPackageName =
+					explicitPackageName ?? context.rootCommand.meta.name;
 
-			void currentVersion;
+				// ── Create persistent store ──────────────────────────────
+				const store = createStore({
+					dirPath: configDir(resolvedPackageName),
+					name: STORE_NAME,
+					fields: NOTIFIER_STORE_FIELDS,
+				});
+
+				const state = await store.read();
+
+				// ── Cache gate: skip network if within interval ──────────
+				const now = Date.now();
+				const elapsed = now - state.lastCheckedAt;
+
+				if (elapsed < intervalMs) {
+					// Cache is still fresh — use cached version if available
+					if (
+						state.latestVersion &&
+						isNewerVersion(currentVersion, state.latestVersion) &&
+						state.lastNotifiedVersion !== state.latestVersion
+					) {
+						emitUpdateNotice(currentVersion, state.latestVersion);
+						await store.update((s) => ({
+							...s,
+							lastNotifiedVersion: state.latestVersion,
+						}));
+					}
+					return;
+				}
+
+				// ── Network check: fetch latest version ──────────────────
+				const latestVersion = await fetchLatestVersion(
+					resolvedPackageName,
+					registryUrl,
+					timeoutMs,
+				);
+
+				if (latestVersion === null) {
+					// Soft failure — update timestamp to avoid retrying too soon
+					await store.update((s) => ({
+						...s,
+						lastCheckedAt: now,
+					}));
+					return;
+				}
+
+				// ── Persist fetched version and timestamp ─────────────────
+				await store.update((s) => ({
+					...s,
+					lastCheckedAt: now,
+					latestVersion,
+				}));
+
+				// ── Emit notice if newer and not already notified ─────────
+				if (
+					isNewerVersion(currentVersion, latestVersion) &&
+					state.lastNotifiedVersion !== latestVersion
+				) {
+					emitUpdateNotice(currentVersion, latestVersion);
+					await store.update((s) => ({
+						...s,
+						lastNotifiedVersion: latestVersion,
+					}));
+				}
+			} catch {
+				// All notifier internal errors are silently swallowed.
+				// The plugin must never affect command exit codes or output.
+			}
 		},
 	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal — Update notice output
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Emits a concise update notice to stderr.
+ *
+ * Uses stderr so it does not interfere with piped stdout output.
+ *
+ * @internal
+ */
+function emitUpdateNotice(currentVersion: string, latestVersion: string): void {
+	console.error(
+		`\nUpdate available: ${currentVersion} → ${latestVersion}\nRun "npm update" to update.\n`,
+	);
 }
