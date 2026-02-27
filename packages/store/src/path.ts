@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/store — Cross-platform config path resolution
+// @crustjs/store — Cross-platform path resolution for config/data/state/cache
 // ────────────────────────────────────────────────────────────────────────────
 
 import { homedir } from "node:os";
@@ -137,16 +137,48 @@ function validateDirPath(dirPath: string): void {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Platform-standard config directory resolution
+// Internal: XDG-based directory resolver for Unix (Linux + macOS)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns an XDG-based directory for Unix platforms using the given env var
+ * name and fallback relative path segment.
+ */
+function resolveUnixDir(
+	env: PlatformEnv,
+	xdgEnvVar: string,
+	fallbackSegments: string[],
+	appName: string,
+): string {
+	const xdgValue = env.env[xdgEnvVar];
+	const base =
+		xdgValue && xdgValue.trim().length > 0
+			? xdgValue
+			: join(env.homedir, ...fallbackSegments);
+	return join(base, appName);
+}
+
+/**
+ * Throws an unsupported platform error.
+ */
+function throwUnsupportedPlatform(platform: string): never {
+	throw new CrustStoreError("PATH", `Unsupported platform: ${platform}`, {
+		path: platform,
+	});
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// configDir — Platform-standard config directory
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Resolves the platform-standard config directory for the given app.
  *
  * Platform conventions:
- * - **Linux**: `$XDG_CONFIG_HOME/<appName>` or `~/.config/<appName>`
- * - **macOS**: `~/Library/Application Support/<appName>`
+ * - **Linux / macOS**: `$XDG_CONFIG_HOME/<appName>` or `~/.config/<appName>`
  * - **Windows**: `%APPDATA%/<appName>` or `~/AppData/Roaming/<appName>`
+ *
+ * macOS uses XDG conventions for consistency with Linux.
  *
  * @param appName - Application name used as directory name. Must be a non-empty
  *   string without path separators.
@@ -160,33 +192,23 @@ function validateDirPath(dirPath: string): void {
  *
  * const dir = configDir("my-cli");
  * // → "/home/user/.config/my-cli" (Linux)
- * // → "/Users/user/Library/Application Support/my-cli" (macOS)
+ * // → "/Users/user/.config/my-cli" (macOS)
  * // → "C:\\Users\\user\\AppData\\Roaming\\my-cli" (Windows)
  * ```
  */
 export function configDir(appName: string, env?: PlatformEnv): string {
 	validateAppName(appName);
-
 	const resolvedEnv = env ?? getRuntimeEnv();
 
 	switch (resolvedEnv.platform) {
-		case "linux": {
-			const xdgConfig = resolvedEnv.env.XDG_CONFIG_HOME;
-			const base =
-				xdgConfig && xdgConfig.trim().length > 0
-					? xdgConfig
-					: join(resolvedEnv.homedir, ".config");
-			return join(base, appName);
-		}
-
-		case "darwin": {
-			return join(
-				resolvedEnv.homedir,
-				"Library",
-				"Application Support",
+		case "linux":
+		case "darwin":
+			return resolveUnixDir(
+				resolvedEnv,
+				"XDG_CONFIG_HOME",
+				[".config"],
 				appName,
 			);
-		}
 
 		case "win32": {
 			const appData = resolvedEnv.env.APPDATA;
@@ -198,13 +220,173 @@ export function configDir(appName: string, env?: PlatformEnv): string {
 		}
 
 		default:
-			throw new CrustStoreError(
-				"PATH",
-				`Unsupported platform: ${resolvedEnv.platform}`,
-				{
-					path: resolvedEnv.platform,
-				},
+			throwUnsupportedPlatform(resolvedEnv.platform);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// dataDir — Platform-standard data directory
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the platform-standard data directory for the given app.
+ *
+ * Platform conventions:
+ * - **Linux / macOS**: `$XDG_DATA_HOME/<appName>` or `~/.local/share/<appName>`
+ * - **Windows**: `%LOCALAPPDATA%/<appName>/Data` or `~/AppData/Local/<appName>/Data`
+ *
+ * macOS uses XDG conventions for consistency with Linux.
+ *
+ * @param appName - Application name used as directory name. Must be a non-empty
+ *   string without path separators.
+ * @param env - Optional platform environment override for testing.
+ * @returns Absolute path to the app's data directory.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ *
+ * @example
+ * ```ts
+ * import { dataDir } from "@crustjs/store";
+ *
+ * const dir = dataDir("my-cli");
+ * // → "/home/user/.local/share/my-cli" (Linux)
+ * // → "/Users/user/.local/share/my-cli" (macOS)
+ * // → "C:\\Users\\user\\AppData\\Local\\my-cli\\Data" (Windows)
+ * ```
+ */
+export function dataDir(appName: string, env?: PlatformEnv): string {
+	validateAppName(appName);
+	const resolvedEnv = env ?? getRuntimeEnv();
+
+	switch (resolvedEnv.platform) {
+		case "linux":
+		case "darwin":
+			return resolveUnixDir(
+				resolvedEnv,
+				"XDG_DATA_HOME",
+				[".local", "share"],
+				appName,
 			);
+
+		case "win32": {
+			const localAppData = resolvedEnv.env.LOCALAPPDATA;
+			const base =
+				localAppData && localAppData.trim().length > 0
+					? localAppData
+					: join(resolvedEnv.homedir, "AppData", "Local");
+			return join(base, appName, "Data");
+		}
+
+		default:
+			throwUnsupportedPlatform(resolvedEnv.platform);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// stateDir — Platform-standard state directory
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the platform-standard state directory for the given app.
+ *
+ * Platform conventions:
+ * - **Linux / macOS**: `$XDG_STATE_HOME/<appName>` or `~/.local/state/<appName>`
+ * - **Windows**: `%LOCALAPPDATA%/<appName>/State` or `~/AppData/Local/<appName>/State`
+ *
+ * macOS uses XDG conventions for consistency with Linux.
+ *
+ * @param appName - Application name used as directory name. Must be a non-empty
+ *   string without path separators.
+ * @param env - Optional platform environment override for testing.
+ * @returns Absolute path to the app's state directory.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ *
+ * @example
+ * ```ts
+ * import { stateDir } from "@crustjs/store";
+ *
+ * const dir = stateDir("my-cli");
+ * // → "/home/user/.local/state/my-cli" (Linux)
+ * // → "/Users/user/.local/state/my-cli" (macOS)
+ * // → "C:\\Users\\user\\AppData\\Local\\my-cli\\State" (Windows)
+ * ```
+ */
+export function stateDir(appName: string, env?: PlatformEnv): string {
+	validateAppName(appName);
+	const resolvedEnv = env ?? getRuntimeEnv();
+
+	switch (resolvedEnv.platform) {
+		case "linux":
+		case "darwin":
+			return resolveUnixDir(
+				resolvedEnv,
+				"XDG_STATE_HOME",
+				[".local", "state"],
+				appName,
+			);
+
+		case "win32": {
+			const localAppData = resolvedEnv.env.LOCALAPPDATA;
+			const base =
+				localAppData && localAppData.trim().length > 0
+					? localAppData
+					: join(resolvedEnv.homedir, "AppData", "Local");
+			return join(base, appName, "State");
+		}
+
+		default:
+			throwUnsupportedPlatform(resolvedEnv.platform);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// cacheDir — Platform-standard cache directory
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the platform-standard cache directory for the given app.
+ *
+ * Platform conventions:
+ * - **Linux / macOS**: `$XDG_CACHE_HOME/<appName>` or `~/.cache/<appName>`
+ * - **Windows**: `%LOCALAPPDATA%/<appName>/Cache` or `~/AppData/Local/<appName>/Cache`
+ *
+ * macOS uses XDG conventions for consistency with Linux.
+ *
+ * @param appName - Application name used as directory name. Must be a non-empty
+ *   string without path separators.
+ * @param env - Optional platform environment override for testing.
+ * @returns Absolute path to the app's cache directory.
+ * @throws {CrustStoreError} `PATH` if `appName` is invalid or platform is unsupported.
+ *
+ * @example
+ * ```ts
+ * import { cacheDir } from "@crustjs/store";
+ *
+ * const dir = cacheDir("my-cli");
+ * // → "/home/user/.cache/my-cli" (Linux)
+ * // → "/Users/user/.cache/my-cli" (macOS)
+ * // → "C:\\Users\\user\\AppData\\Local\\my-cli\\Cache" (Windows)
+ * ```
+ */
+export function cacheDir(appName: string, env?: PlatformEnv): string {
+	validateAppName(appName);
+	const resolvedEnv = env ?? getRuntimeEnv();
+
+	switch (resolvedEnv.platform) {
+		case "linux":
+		case "darwin":
+			return resolveUnixDir(resolvedEnv, "XDG_CACHE_HOME", [".cache"], appName);
+
+		case "win32": {
+			const localAppData = resolvedEnv.env.LOCALAPPDATA;
+			const base =
+				localAppData && localAppData.trim().length > 0
+					? localAppData
+					: join(resolvedEnv.homedir, "AppData", "Local");
+			return join(base, appName, "Cache");
+		}
+
+		default:
+			throwUnsupportedPlatform(resolvedEnv.platform);
 	}
 }
 
@@ -213,7 +395,7 @@ export function configDir(appName: string, env?: PlatformEnv): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Constructs the absolute config file path from a directory and store name.
+ * Constructs the absolute store file path from a directory and store name.
  *
  * Validates `dirPath` (must be absolute, not end in `.json`) and `name`
  * (no path separators, no `.json` suffix), then joins them as
@@ -221,7 +403,7 @@ export function configDir(appName: string, env?: PlatformEnv): string {
  *
  * @param dirPath - Absolute directory path.
  * @param name - Optional store name (defaults to `"config"`).
- * @returns Absolute path to the config file.
+ * @returns Absolute path to the store file.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  */
 export function resolveStorePath(dirPath: string, name?: string): string {

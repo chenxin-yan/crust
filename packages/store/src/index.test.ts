@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { CrustStoreError, configDir, createStore } from "./index.ts";
+import {
+	CrustStoreError,
+	cacheDir,
+	configDir,
+	createStore,
+	dataDir,
+	stateDir,
+} from "./index.ts";
 
 describe("@crustjs/store", () => {
 	it("should be importable", async () => {
@@ -15,6 +22,21 @@ describe("@crustjs/store", () => {
 	it("should export configDir", () => {
 		expect(configDir).toBeDefined();
 		expect(typeof configDir).toBe("function");
+	});
+
+	it("should export dataDir", () => {
+		expect(dataDir).toBeDefined();
+		expect(typeof dataDir).toBe("function");
+	});
+
+	it("should export stateDir", () => {
+		expect(stateDir).toBeDefined();
+		expect(typeof stateDir).toBe("function");
+	});
+
+	it("should export cacheDir", () => {
+		expect(cacheDir).toBeDefined();
+		expect(typeof cacheDir).toBe("function");
 	});
 
 	it("should export CrustStoreError", () => {
