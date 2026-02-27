@@ -118,8 +118,8 @@
 				"Run monorepo type checks with bun run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Documentation should optimize for DX-first onboarding: one schema mental model across all targets. Keep examples aligned with new strict store behavior and prompt adapters. Include explicit parser metadata (ParserMeta) usage examples for ambiguous schema scenarios — show { type, description, required } overrides in arg()/flag() options.",
-			"passed": false
+			"notes": "Completed. Validate README rewritten with Standard Schema-first architecture, target matrix, all-target examples (command/prompt/store), ParserMeta docs, type export reference. Store README updated with validation section, VALIDATION error code, validator types. Scaffold tests enhanced with exact export surface assertions and reference identity tests. 308 validate tests, 157 store tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Add cross-package integration coverage to verify consistent validation semantics across command, prompt, and store",

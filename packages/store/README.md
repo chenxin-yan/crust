@@ -124,7 +124,7 @@ const store = createStore(options);
 | `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.             |
 | `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`).  |
 | `defaults`     | `T`                        | Yes      | Default values defining the store's data shape and fallbacks.      |
-| `validate`     | `(state: T) => void \| Promise<void>` | No | Validation function called before `write`, `update`, and `patch`.  |
+| `validator`    | `StoreValidator<T>`        | No       | Validation function applied on read, write, update, and patch.     |
 | `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).              |
 
 ### `store.read()`
@@ -145,7 +145,7 @@ Atomically persists a full state object. The entire previous state is replaced.
 await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
 ```
 
-Calls `validate` (if provided) before writing. Parent directories are created if missing.
+Calls `validator` (if provided) before writing. Parent directories are created if missing.
 
 ### `store.update(updater)`
 
@@ -158,7 +158,7 @@ await store.update((current) => ({
 }));
 ```
 
-When no persisted file exists, the updater receives `defaults` as the current value. Calls `validate` before writing.
+When no persisted file exists, the updater receives `defaults` as the current value. Calls `validator` before writing.
 
 ### `store.patch(partial)`
 
@@ -168,7 +168,7 @@ Applies a deep partial update to the current state and persists. Only the provid
 await store.patch({ ui: { theme: "solarized" } });
 ```
 
-Arrays are replaced wholesale (not merged element-by-element). Calls `validate` before writing.
+Arrays are replaced wholesale (not merged element-by-element). Calls `validator` before writing.
 
 ### `store.reset()`
 
@@ -295,35 +295,113 @@ Merged defaults exist only in memory. The persisted file remains unchanged until
 
 ## Validation
 
-Add a `validate` function to check state before it's written to disk:
+Add schema validation to enforce config integrity on every read, write, update, and patch. When a `validator` is configured, validation is **strict by default** — invalid config fails loudly.
+
+### Using `@crustjs/validate`
+
+The easiest way to add validation is with store adapters from `@crustjs/validate`:
 
 ```ts
+import { z } from "zod";
+import { storeValidator } from "@crustjs/validate/zod";
+import { createStore, configDir } from "@crustjs/store";
+
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: { port: 3000, host: "localhost" as string },
-  validate(state) {
-    if (state.port < 1 || state.port > 65535) {
-      throw new Error("port must be between 1 and 65535");
-    }
-  },
+  defaults: { theme: "light" as string, verbose: false },
+  validator: storeValidator(
+    z.object({
+      theme: z.enum(["light", "dark"]),
+      verbose: z.boolean(),
+    }),
+  ),
 });
 
-// Throws CrustStoreError with VALIDATION code
-await store.write({ port: 0, host: "localhost" });
+// write() validates before persisting
+await store.write({ theme: "neon", verbose: true });
+// → throws CrustStoreError("VALIDATION")
+
+// read() validates after applying defaults
+const config = await store.read();
+// → throws if persisted config is invalid
 ```
 
-`validate` is called on `write`, `update`, and `patch` — never on `read` or `reset`.
+`storeValidatorSync()` is also available for synchronous schemas.
+
+For Effect schemas, wrap with `Schema.standardSchemaV1()`:
+
+```ts
+import * as Schema from "effect/Schema";
+import { storeValidator } from "@crustjs/validate/effect";
+
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  defaults: { theme: "light" as string },
+  validator: storeValidator(
+    Schema.standardSchemaV1(
+      Schema.Struct({ theme: Schema.Literal("light", "dark") }),
+    ),
+  ),
+});
+```
+
+### Custom validators
+
+You can also provide a validator function directly without `@crustjs/validate`:
+
+```ts
+import type { StoreValidator } from "@crustjs/store";
+
+const validator: StoreValidator<{ theme: string }> = (value) => {
+  const config = value as { theme: string };
+  if (config.theme !== "light" && config.theme !== "dark") {
+    return {
+      ok: false,
+      issues: [{ message: 'Must be "light" or "dark"', path: "theme" }],
+    };
+  }
+  return { ok: true, value: config };
+};
+```
+
+The `StoreValidator<T>` contract is `(value: unknown) => StoreValidatorResult<T> | Promise<StoreValidatorResult<T>>`, where `StoreValidatorResult<T>` is `{ ok: true, value: T } | { ok: false, issues: StoreValidatorIssue[] }`.
+
+### Validation behavior
+
+- **Write**: Validates before persisting. If the validator transforms the value, the transformed result is persisted.
+- **Read**: Validates after applying defaults. Invalid persisted config fails loudly — no silent fallback to defaults.
+- **Update**: Reads raw config (no validation), applies updater, validates the result, then persists.
+- **Patch**: Reads raw config, applies deep partial merge, validates the result, then persists.
+- **Reset**: No validation — just removes the persisted file.
+
+### Catching validation errors
+
+```ts
+import { CrustStoreError } from "@crustjs/store";
+
+try {
+  await store.read();
+} catch (err) {
+  if (err instanceof CrustStoreError && err.is("VALIDATION")) {
+    // err.details is { operation: "read" | "write" | "update" | "patch", issues: StoreValidationIssue[] }
+    console.error(`Validation failed during ${err.details.operation}:`);
+    for (const issue of err.details.issues) {
+      console.error(`  ${issue.path || "(root)"}: ${issue.message}`);
+    }
+  }
+}
+```
 
 ## Error Handling
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                        |
-| ------------ | ------------------------------------------------------- | ------------------------------ |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`            |
-| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`            |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`         |
-| `VALIDATION` | `validate` function rejected the state                  | `{ operation }`               |
+| Code         | When                                                            | Details                     |
+| ------------ | --------------------------------------------------------------- | --------------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform         | `{ path: string }`         |
+| `PARSE`      | Malformed JSON in persisted config file                         | `{ path: string }`         |
+| `IO`         | Filesystem read, write, or delete failure                       | `{ path, operation }`      |
+| `VALIDATION` | Config fails validator on read, write, update, or patch         | `{ operation, issues }`    |
 
 ### Catching errors by code
 
@@ -381,19 +459,33 @@ import type {
   CreateStoreOptions,
   Store,
   StoreUpdater,
+  StoreValidator,
+  StoreValidatorResult,
+  StoreValidatorSuccess,
+  StoreValidatorFailure,
+  StoreValidatorIssue,
   StoreErrorCode,
+  StoreValidationIssue,
+  ValidationErrorDetails,
   PlatformEnv,
 } from "@crustjs/store";
 ```
 
-| Type                 | Description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| `CreateStoreOptions` | Options object for `createStore()`.                             |
-| `Store`              | Store instance with `read`, `write`, `update`, `patch`, `reset`.|
-| `StoreUpdater`       | Updater function type `(current: T) => T`.                      |
-| `StoreErrorCode`     | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`. |
-| `PlatformEnv`        | Injectable platform environment for testing path helpers.       |
-| `CrustStoreError`    | Typed error class with `code`, `details`, and `cause`.          |
+| Type                      | Description                                                             |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `CreateStoreOptions`      | Options object for `createStore()`.                                     |
+| `Store`                   | Store instance with `read`, `write`, `update`, `patch`, `reset`.        |
+| `StoreUpdater`            | Updater function type `(current: T) => T`.                              |
+| `StoreValidator`          | Validator function contract `(value: unknown) => StoreValidatorResult`. |
+| `StoreValidatorResult`    | Discriminated union: `StoreValidatorSuccess \| StoreValidatorFailure`.  |
+| `StoreValidatorSuccess`   | `{ ok: true, value: T }`.                                              |
+| `StoreValidatorFailure`   | `{ ok: false, issues: StoreValidatorIssue[] }`.                        |
+| `StoreValidatorIssue`     | `{ message: string, path: string }`.                                   |
+| `StoreValidationIssue`    | Validation issue in error details payload.                              |
+| `ValidationErrorDetails`  | Error details for `VALIDATION` code: `{ operation, issues }`.          |
+| `StoreErrorCode`          | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.    |
+| `PlatformEnv`             | Injectable platform environment for testing path helpers.               |
+| `CrustStoreError`         | Typed error class with `code`, `details`, and `cause`.                  |
 
 ## Scope & Non-Goals
 
@@ -402,6 +494,7 @@ import type {
 - **Cross-process locking** — assumes single-process usage for write coordination.
 - **Built-in encryption or keychain integration.**
 - **Sync API variants** (`readSync`, `writeSync`, etc.).
+- **Automatic migration of invalid persisted config** — validation fails loudly; callers handle recovery.
 - **Alternative formats** (YAML, TOML, JSON5) — JSON is the only on-disk format.
 - **Remote/cloud synchronization** or multi-device sync.
 - **Domain-specific migration frameworks** beyond simple store-level upgrade hooks.

@@ -289,3 +289,46 @@
 - The `ParserMeta` interface is identical in both Zod and Effect types files. If a shared types module is ever created, these could be unified.
 - For the cross-package integration tests (Task 9), note that the explicit metadata feature only affects definition-time — it doesn't change validation runtime behavior. The middleware (`buildValidatedRunner`) works the same regardless of how metadata was derived.
 - The test error message pattern `/explicit type "..." conflicts with schema-inferred type "..."/` is consistent across both providers and can be used in integration test assertions if needed.
+
+---
+
+## Task: Publish unified API surface and documentation for standard, zod, and effect entrypoints across command/prompt/store workflows
+
+### Completed
+
+- Rewrote `packages/validate/README.md` with Standard Schema-first architecture overview, target matrix (command/prompt/store), all four entrypoint descriptions, and comprehensive usage examples
+- Added documentation for prompt validation (`promptValidator`, `parsePromptValue`, error strategies), store validation (`storeValidator`, `storeValidatorSync`), and explicit parser metadata (`ParserMeta` with `type`/`description`/`required` overrides)
+- Added Effect schema wrapping examples (`Schema.standardSchemaV1()`) for prompt and store targets
+- Added complete type export documentation for all four entrypoints (root, standard, zod, effect)
+- Updated `packages/store/README.md`: added `validator` option to options table, added full "Validation" section with `@crustjs/validate` integration examples, custom validator pattern, validation behavior docs, and `VALIDATION` error catching examples
+- Updated store error table to include `VALIDATION` code
+- Updated store Types section with all validation-related types (`StoreValidator`, `StoreValidatorResult`, `StoreValidatorSuccess`, `StoreValidatorFailure`, `StoreValidatorIssue`, `StoreValidationIssue`, `ValidationErrorDetails`)
+- Replaced "Built-in validation — will be added later" non-goal with "Automatic migration of invalid persisted config" (validation is now implemented)
+- Enhanced `scaffold.test.ts` with exact API surface assertions for all three entrypoints (sorted export name arrays)
+- Added `arg`/`flag`/`withZod`/`withEffect` function checks to zod/effect entrypoint tests
+- Added reference identity tests proving prompt and store adapters are the same function across entrypoints (re-exports, not copies)
+- Added runtime API surface test to `packages/store/src/index.test.ts`
+- All 308 validate tests pass, 157 store tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/README.md` — rewritten with Standard Schema-first architecture, target matrix, all-target examples, ParserMeta docs, type export reference
+- `packages/store/README.md` — added validation section, updated options table/error table/types table/v1 scope
+- `packages/validate/src/scaffold.test.ts` — enhanced with exact export surface tests, function reference identity tests, arg/flag/withZod/withEffect checks
+- `packages/store/src/index.test.ts` — added runtime API surface export test
+
+### Decisions
+
+- **README rewrite vs incremental edit**: The validate README was rewritten from scratch rather than incrementally patched. The old README only covered command validation; the new one covers all three targets and the Standard Schema architecture, making an incremental approach fragile.
+- **Target matrix table**: Added a target matrix early in the README showing which APIs are available from which entrypoints, with a footnote about Effect `standardSchemaV1()` wrapping.
+- **Exact export surface tests**: Scaffold tests now assert sorted arrays of export names rather than just checking individual functions exist. This catches accidental export additions/removals.
+- **Reference identity tests**: Added tests proving `zod.promptValidator === standard.promptValidator` and similar. This documents and enforces the re-export architecture (not wrapper functions).
+- **Store README validation section**: Placed before the existing "Error Handling" section so readers encounter validation patterns before error handling details.
+- **No separate API reference docs**: All API documentation lives in README.md files per package convention. Type exports are documented with import examples.
+
+### Notes for Future Agent
+
+- Task 9 (cross-package integration tests) is the final remaining task. It should exercise one shared schema across command, prompt, and store validation targets and assert consistent issue paths, message rendering, and error behavior.
+- The scaffold tests now provide a safety net for the public API surface — if any export is added or removed, the exact-match test will fail.
+- The store README examples use `@crustjs/validate/zod` and `@crustjs/validate/effect` import paths, matching the documented entrypoints.
+- The validate README includes a "Standard Schema directly" section showing the standard entrypoint for provider-agnostic usage — this is relevant for libraries building on top of `@crustjs/validate`.
