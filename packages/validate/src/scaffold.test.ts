@@ -9,6 +9,18 @@ describe("@crustjs/validate scaffold", () => {
 		expect(Object.keys(mod)).toEqual([]);
 	});
 
+	it("standard entrypoint is importable", async () => {
+		const mod = await import("./standard/index.ts");
+		expect(mod).toBeDefined();
+		expect(typeof mod.isStandardSchema).toBe("function");
+		expect(typeof mod.validateStandard).toBe("function");
+		expect(typeof mod.validateStandardSync).toBe("function");
+		expect(typeof mod.normalizeStandardIssues).toBe("function");
+		expect(typeof mod.normalizeStandardPath).toBe("function");
+		expect(typeof mod.success).toBe("function");
+		expect(typeof mod.failure).toBe("function");
+	});
+
 	it("zod entrypoint is importable", async () => {
 		const mod = await import("./zod/index.ts");
 		expect(mod).toBeDefined();

@@ -30,6 +30,10 @@
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
 		},
+		"./standard": {
+			"import": "./dist/standard/index.js",
+			"types": "./dist/standard/index.d.ts"
+		},
 		"./effect": {
 			"import": "./dist/effect/index.js",
 			"types": "./dist/effect/index.d.ts"
@@ -69,5 +73,8 @@
 		"zod": {
 			"optional": true
 		}
+	},
+	"dependencies": {
+		"@standard-schema/spec": "^1.1.0"
 	}
 }
