@@ -1,5 +1,26 @@
 # create-crust
 
+## 0.0.15
+
+### Patch Changes
+
+- a1f233e: Enable minification for all package builds, reducing bundle sizes by ~27%. Also shorten error messages in `@crustjs/core` for smaller output.
+- b17db37: Improve input prompt UX: `default` value is now shown as placeholder text when `placeholder` is not explicitly set, reducing API redundancy. When both are provided, `placeholder` is used visually and the default hint `(value)` still appears.
+
+  Updated `create-crust` to collect all prompts before executing file operations, preventing partial scaffolding on mid-prompt cancellation. The project directory prompt now uses `default: "my-cli"` so users can press Enter to accept it.
+
+- 4f4bddf: Add `isInGitRepo` utility to detect if a directory is inside an existing git repository.
+
+  Updated `create-crust` to skip the "Initialize a git repository?" prompt when scaffolding inside an existing repo, preventing accidental nested `.git` directories.
+
+- Updated dependencies [a1f233e]
+- Updated dependencies [b17db37]
+- Updated dependencies [e3624b2]
+- Updated dependencies [4f4bddf]
+  - @crustjs/core@0.0.9
+  - @crustjs/prompts@0.0.6
+  - @crustjs/create@0.0.4
+
 ## 0.0.14
 
 ### Patch Changes

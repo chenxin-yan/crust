@@ -1,5 +1,12 @@
 # @crustjs/core
 
+## 0.0.9
+
+### Patch Changes
+
+- a1f233e: Enable minification for all package builds, reducing bundle sizes by ~27%. Also shorten error messages in `@crustjs/core` for smaller output.
+- e3624b2: Add pre-compile validation to `crust build`. Before compiling, the build command now spawns your entry file in a validation-only subprocess to check the full command tree (including plugin-injected flags and subcommands) for definition errors such as flag alias collisions and reserved `no-` prefix misuse. Disable with `--no-validate`.
+
 ## 0.0.8
 
 ### Patch Changes

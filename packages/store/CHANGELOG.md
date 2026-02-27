@@ -1,5 +1,11 @@
 # @crustjs/store
 
+## 0.0.2
+
+### Patch Changes
+
+- a1f233e: Enable minification for all package builds, reducing bundle sizes by ~27%. Also shorten error messages in `@crustjs/core` for smaller output.
+
 ## 0.0.1
 
 ### Patch Changes
