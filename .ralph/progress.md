@@ -243,3 +243,49 @@
 - Task 7 (explicit parser metadata) is independent and can proceed without store adapter changes.
 - Task 8 (documentation) should include store adapter usage examples showing the `validator` option with Zod and Effect schemas.
 - Task 9 (cross-package integration tests) should exercise a shared schema across command, prompt, and store targets — the store adapter is now ready for this.
+
+---
+
+## Task: Unify command arg/flag schema DX by adding explicit parser metadata fallback when schema introspection is ambiguous
+
+### Completed
+
+- Defined `ParserMeta` interface in both `zod/types.ts` and `effect/types.ts` with `type`, `description`, and `required` override fields
+- Extended `ArgOptions` and `FlagOptions` to inherit from `ParserMeta` in both providers
+- Exported `ParserMeta` type from `@crustjs/validate/zod` and `@crustjs/validate/effect` entrypoints
+- Refactored schema introspection in both providers to use `tryResolveInputShape()` (returns `undefined` instead of throwing) for graceful fallback
+- Removed now-unused `resolveInputShape()` functions from both `zod/schema.ts` and `effect/schema.ts`
+- Implemented metadata resolution with precedence: explicit > inferred for all three fields
+- Implemented conflict detection: if explicit metadata is provided AND schema introspection succeeds with a conflicting value, a `DEFINITION` error is thrown with a clear message
+- Description overrides are additive (no conflict check) — explicit always wins
+- Updated `arg()` and `flag()` docstrings in both providers to document the explicit metadata override pattern and precedence rules
+- Added 24 new Zod tests covering: explicit description override, matching/conflicting type overrides, required/optional conflict detection, combined metadata, end-to-end precedence validation
+- Added 24 new Effect tests covering the same scenarios adapted for Effect schema API (annotations, UndefinedOr patterns)
+- Added precedence documentation tests in both providers
+- All 303 validate tests pass, 156 store tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/src/zod/types.ts` — added `ParserMeta` interface, `ArgOptions` and `FlagOptions` now extend `ParserMeta`
+- `packages/validate/src/effect/types.ts` — added `ParserMeta` interface, `ArgOptions` and `FlagOptions` now extend `ParserMeta`
+- `packages/validate/src/zod/schema.ts` — refactored to `tryResolveInputShape()`, removed unused `resolveInputShape()`, `arg()` and `flag()` now support explicit metadata with conflict detection
+- `packages/validate/src/effect/schema.ts` — refactored to `tryResolveInputShape()`, removed unused `resolveInputShape()`, `arg()` and `flag()` now support explicit metadata with conflict detection
+- `packages/validate/src/zod/index.ts` — added `ParserMeta` type export
+- `packages/validate/src/effect/index.ts` — added `ParserMeta` type export
+- `packages/validate/src/zod/withZod.test.ts` — added 24 explicit metadata override tests
+- `packages/validate/src/effect/withEffect.test.ts` — added 24 explicit metadata override tests
+
+### Decisions
+
+- **Conflict detection over silent override**: When both explicit metadata and schema introspection agree, the explicit value is used. When they conflict, a `DEFINITION` error is thrown rather than silently overriding. This prevents latent bugs where the schema changes but the explicit metadata becomes stale.
+- **Description has no conflict check**: Unlike `type` and `required`, descriptions are always overridable without conflict detection. This is because descriptions are purely informational and having an explicit description that differs from a schema annotation is a legitimate use case (e.g., shorter help text for CLI vs verbose schema documentation).
+- **`tryResolveInputShape` replaces `resolveInputShape`**: The old throwing version is removed since `arg()` and `flag()` now handle the fallback logic directly. This avoids double error handling.
+- **Effect `tryResolveInputShape` does not catch all errors**: Structural definition errors (e.g., tuples with fixed elements) still propagate as `CrustError("DEFINITION")` since those are definite user mistakes, not ambiguity that metadata overrides should solve.
+- **`required: false` means optional in options**: The `ParserMeta.required` field uses `boolean` (not `true | undefined`) to allow explicitly marking as both required and optional. This differs from the core `ArgDef.required` which only accepts `true`.
+
+### Notes for Future Agent
+
+- Task 8 (documentation) should include examples of the explicit metadata pattern: `arg("input", complexSchema, { type: "string", description: "..." })`.
+- The `ParserMeta` interface is identical in both Zod and Effect types files. If a shared types module is ever created, these could be unified.
+- For the cross-package integration tests (Task 9), note that the explicit metadata feature only affects definition-time — it doesn't change validation runtime behavior. The middleware (`buildValidatedRunner`) works the same regardless of how metadata was derived.
+- The test error message pattern `/explicit type "..." conflicts with schema-inferred type "..."/` is consistent across both providers and can be used in integration test assertions if needed.

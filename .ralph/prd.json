@@ -103,8 +103,8 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Standard Schema does not fully solve parser-shape inference for all providers. This fallback keeps command DX robust and universal-ready.",
-			"passed": false
+			"notes": "Completed. ParserMeta interface added to both providers with type/description/required override fields. ArgOptions and FlagOptions extend ParserMeta. tryResolveInputShape() provides graceful fallback. Conflict detection throws clear DEFINITION errors. 48 new tests. 303 total validate tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Publish unified API surface and documentation for standard, zod, and effect entrypoints across command/prompt/store workflows",
@@ -118,7 +118,7 @@
 				"Run monorepo type checks with bun run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Documentation should optimize for DX-first onboarding: one schema mental model across all targets. Keep examples aligned with new strict store behavior and prompt adapters.",
+			"notes": "Documentation should optimize for DX-first onboarding: one schema mental model across all targets. Keep examples aligned with new strict store behavior and prompt adapters. Include explicit parser metadata (ParserMeta) usage examples for ambiguous schema scenarios — show { type, description, required } overrides in arg()/flag() options.",
 			"passed": false
 		},
 		{

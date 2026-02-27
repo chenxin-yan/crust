@@ -30,6 +30,7 @@ export type {
 	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
+	ParserMeta,
 	WithEffectHandler,
 } from "./types.ts";
 // Validated run middleware

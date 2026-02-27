@@ -526,6 +526,179 @@ describe("arg() / flag() generic type narrowing", () => {
 	});
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// Explicit parser metadata overrides
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("arg() explicit metadata overrides", () => {
+	it("uses explicit description over schema annotation", () => {
+		const a = arg(
+			"port",
+			Schema.Number.annotations({ description: "From schema" }),
+			{ description: "Explicit desc" },
+		);
+		expect(a.description).toBe("Explicit desc");
+	});
+
+	it("uses schema description when explicit description is not provided", () => {
+		const a = arg(
+			"port",
+			Schema.Number.annotations({ description: "From schema" }),
+		);
+		expect(a.description).toBe("From schema");
+	});
+
+	it("uses explicit type that matches inferred type without conflict", () => {
+		const a = arg("port", Schema.Number, { type: "number" });
+		expect(a.type).toBe("number");
+	});
+
+	it("throws when explicit type conflicts with inferred type", () => {
+		expect(() => arg("port", Schema.Number, { type: "string" })).toThrow(
+			/explicit type "string" conflicts with schema-inferred type "number"/,
+		);
+	});
+
+	it("throws when explicit required: true conflicts with optional schema", () => {
+		expect(() =>
+			arg("host", Schema.UndefinedOr(Schema.String), { required: true }),
+		).toThrow(
+			/explicit required: true conflicts with schema that accepts undefined/,
+		);
+	});
+
+	it("throws when explicit required: false conflicts with required schema", () => {
+		expect(() => arg("port", Schema.Number, { required: false })).toThrow(
+			/explicit required: false conflicts with schema that does not accept undefined/,
+		);
+	});
+
+	it("accepts explicit required: true that matches required schema", () => {
+		const a = arg("port", Schema.Number, { required: true });
+		expect(a.required).toBe(true);
+	});
+
+	it("accepts explicit required: false that matches optional schema", () => {
+		const a = arg("host", Schema.UndefinedOr(Schema.String), {
+			required: false,
+		});
+		expect(a.required).toBeUndefined();
+	});
+
+	it("combines explicit type and description", () => {
+		const a = arg("port", Schema.Number, {
+			type: "number",
+			description: "Port number",
+		});
+		expect(a.type).toBe("number");
+		expect(a.description).toBe("Port number");
+	});
+
+	it("uses explicit description when schema has no annotation", () => {
+		const a = arg("port", Schema.Number, {
+			description: "Explicit only",
+		});
+		expect(a.description).toBe("Explicit only");
+	});
+
+	it("falls back to schema annotation when no explicit description", () => {
+		// Effect's Schema.Number already has a built-in description annotation ("a number")
+		const a = arg("port", Schema.Number);
+		expect(a.description).toBe("a number");
+	});
+});
+
+describe("flag() explicit metadata overrides", () => {
+	it("uses explicit description over schema annotation", () => {
+		const f = flag(Schema.Boolean.annotations({ description: "From schema" }), {
+			description: "Explicit desc",
+		});
+		expect(f.description).toBe("Explicit desc");
+	});
+
+	it("uses explicit type that matches inferred type without conflict", () => {
+		const f = flag(Schema.Boolean, { type: "boolean" });
+		expect(f.type).toBe("boolean");
+	});
+
+	it("throws when explicit type conflicts with inferred type", () => {
+		expect(() => flag(Schema.Boolean, { type: "string" })).toThrow(
+			/explicit type "string" conflicts with schema-inferred type "boolean"/,
+		);
+	});
+
+	it("throws when explicit required: true conflicts with optional schema", () => {
+		expect(() =>
+			flag(Schema.UndefinedOr(Schema.Boolean), { required: true }),
+		).toThrow(/explicit required: true conflicts/);
+	});
+
+	it("throws when explicit required: false conflicts with required schema", () => {
+		expect(() => flag(Schema.String, { required: false })).toThrow(
+			/explicit required: false conflicts/,
+		);
+	});
+
+	it("accepts explicit required: true that matches required schema", () => {
+		const f = flag(Schema.String, { required: true });
+		expect(f.required).toBe(true);
+	});
+
+	it("accepts explicit required: false that matches optional schema", () => {
+		const f = flag(Schema.UndefinedOr(Schema.String), { required: false });
+		expect(f.required).toBeUndefined();
+	});
+
+	it("can combine explicit metadata with alias", () => {
+		const f = flag(Schema.Number, {
+			type: "number",
+			alias: "p",
+			description: "Port number",
+		});
+		expect(f.type).toBe("number");
+		expect(f.alias).toBe("p");
+		expect(f.description).toBe("Port number");
+	});
+
+	it("uses explicit description when schema has no annotation", () => {
+		const f = flag(Schema.Boolean, {
+			description: "Enable verbose output",
+		});
+		expect(f.description).toBe("Enable verbose output");
+	});
+});
+
+describe("explicit metadata precedence rules", () => {
+	it("explicit type takes priority when it matches inferred", () => {
+		const a = arg("name", Schema.String, { type: "string" });
+		expect(a.type).toBe("string");
+	});
+
+	it("explicit description always wins over schema description", () => {
+		const a = arg(
+			"name",
+			Schema.String.annotations({ description: "schema desc" }),
+			{ description: "explicit desc" },
+		);
+		expect(a.description).toBe("explicit desc");
+	});
+
+	it("explicit required matches schema — no error", () => {
+		const a1 = arg("name", Schema.String, { required: true });
+		expect(a1.required).toBe(true);
+		const a2 = arg("name2", Schema.UndefinedOr(Schema.String), {
+			required: false,
+		});
+		expect(a2.required).toBeUndefined();
+	});
+
+	it("type conflict is detected even when description override is present", () => {
+		expect(() =>
+			arg("name", Schema.String, { type: "number", description: "Name" }),
+		).toThrow(/explicit type "number" conflicts/);
+	});
+});
+
 describe("type-level InferValidatedArgs / InferValidatedFlags", () => {
 	it("infers correct validated types", () => {
 		const args = [

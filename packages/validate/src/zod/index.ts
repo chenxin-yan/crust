@@ -23,6 +23,7 @@ export type {
 	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
+	ParserMeta,
 	WithZodHandler,
 	ZodArgDef,
 	ZodFlagDef,

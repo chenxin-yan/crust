@@ -132,27 +132,29 @@ interface InputShape {
 	multiple: boolean;
 }
 
-/** Resolve Crust parser input shape from a Zod schema. */
-function resolveInputShape(schema: unknown, label: string): InputShape {
+/**
+ * Try to resolve Crust parser input shape from a Zod schema.
+ *
+ * Returns `undefined` if the schema type cannot be determined instead of
+ * throwing. Used internally to support explicit metadata fallback.
+ */
+function tryResolveInputShape(
+	schema: unknown,
+	_label: string,
+): InputShape | undefined {
 	const inputSchema = unwrapInputSchema(schema);
 
 	if (getSchemaType(inputSchema) === "array") {
 		const runtime = asRuntimeSchema(inputSchema);
 		if (typeof runtime?.unwrap !== "function") {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: unable to inspect array element schema`,
-			);
+			return undefined;
 		}
 		const elementSchema = unwrapInputSchema(runtime.unwrap());
 		const primitive = resolvePrimitiveInputType(elementSchema);
 		if (primitive) {
 			return { type: primitive, multiple: true };
 		}
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: array element type must be string, number, or boolean`,
-		);
+		return undefined;
 	}
 
 	const primitive = resolvePrimitiveInputType(inputSchema);
@@ -160,10 +162,7 @@ function resolveInputShape(schema: unknown, label: string): InputShape {
 		return { type: primitive, multiple: false };
 	}
 
-	throw new CrustError(
-		"DEFINITION",
-		`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these.`,
-	);
+	return undefined;
 }
 
 /** Check if the schema accepts `undefined` as input. */
@@ -296,14 +295,25 @@ export function resolveDescription(schema: unknown): string | undefined {
  * CLI metadata (`type`, `required`, `description`, `variadic`) is derived
  * from the schema automatically — single source of truth.
  *
+ * When automatic introspection fails (complex unions, opaque pipes, etc.),
+ * provide explicit parser metadata via options to override inferred values:
+ *
+ * ```ts
+ * arg("input", complexSchema, { type: "string" })
+ * ```
+ *
+ * **Precedence**: explicit metadata > schema introspection.
+ * If both are available and conflict, a `DEFINITION` error is thrown.
+ *
  * @param name - Positional arg name used in parser output and help text
  * @param schema - Zod schema (source of truth for type/optionality/description)
- * @param options - Optional CLI metadata (`variadic`)
+ * @param options - Optional CLI metadata (`variadic`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
  * arg("port", z.number().int().min(1).describe("Port to listen on"))
  * arg("files", z.string(), { variadic: true })
+ * arg("input", complexPipe, { type: "string", description: "Input value" })
  * ```
  */
 export function arg<
@@ -328,29 +338,79 @@ export function arg<
 		);
 	}
 
-	const shape = resolveInputShape(schema, `arg "${name}"`);
+	const label = `arg "${name}"`;
 	const variadic = options?.variadic;
+	const inferredShape = tryResolveInputShape(schema, label);
+	const explicitType = options?.type;
 
-	if (variadic && shape.multiple) {
+	// Resolve type: explicit > inferred
+	let resolvedType: "string" | "number" | "boolean";
+	let multiple: boolean;
+
+	if (explicitType !== undefined) {
+		// Conflict detection: if introspection succeeds with a different type, error
+		if (inferredShape && inferredShape.type !== explicitType) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit type "${explicitType}" conflicts with schema-inferred type "${inferredShape.type}". Remove the explicit type or change the schema.`,
+			);
+		}
+		resolvedType = explicitType;
+		multiple = inferredShape?.multiple ?? false;
+	} else if (inferredShape) {
+		resolvedType = inferredShape.type;
+		multiple = inferredShape.multiple;
+	} else {
 		throw new CrustError(
 			"DEFINITION",
-			`arg "${name}": variadic args must use a scalar schema; do not wrap the schema in z.array(...)`,
+			`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these, or provide an explicit { type } in options.`,
 		);
 	}
 
-	if (!variadic && shape.multiple) {
+	if (variadic && multiple) {
 		throw new CrustError(
 			"DEFINITION",
-			`arg "${name}": array schema requires { variadic: true }`,
+			`${label}: variadic args must use a scalar schema; do not wrap the schema in z.array(...)`,
 		);
 	}
 
-	const description = resolveDescription(schema);
-	const required = !isOptionalInputSchema(schema);
+	if (!variadic && multiple) {
+		throw new CrustError(
+			"DEFINITION",
+			`${label}: array schema requires { variadic: true }`,
+		);
+	}
+
+	// Resolve description: explicit > inferred
+	const inferredDescription = resolveDescription(schema);
+	const description = options?.description ?? inferredDescription;
+
+	// Resolve required: explicit > inferred
+	const inferredOptional = isOptionalInputSchema(schema);
+	let required: boolean;
+
+	if (options?.required !== undefined) {
+		// Conflict detection: explicit required vs schema optionality
+		if (options.required && inferredOptional) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit required: true conflicts with schema that accepts undefined. Remove the explicit required or change the schema.`,
+			);
+		}
+		if (!options.required && !inferredOptional) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit required: false conflicts with schema that does not accept undefined. Remove the explicit required or make the schema optional.`,
+			);
+		}
+		required = options.required;
+	} else {
+		required = !inferredOptional;
+	}
 
 	const def = {
 		name,
-		type: shape.type,
+		type: resolvedType,
 		...(description !== undefined && { description }),
 		variadic: variadic as Variadic,
 		...(required && { required: true as const }),
@@ -369,13 +429,24 @@ export function arg<
  * CLI metadata (`type`, `multiple`, `required`, `description`) is derived
  * from the schema automatically — single source of truth.
  *
+ * When automatic introspection fails (complex unions, opaque pipes, etc.),
+ * provide explicit parser metadata via options:
+ *
+ * ```ts
+ * flag(complexSchema, { type: "string", description: "Output format" })
+ * ```
+ *
+ * **Precedence**: explicit metadata > schema introspection.
+ * If both are available and conflict, a `DEFINITION` error is thrown.
+ *
  * @param schema - Zod schema (source of truth for type/optionality/description)
- * @param options - Optional flag metadata (`alias`)
+ * @param options - Optional flag metadata (`alias`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
  * flag(z.boolean().default(false).describe("Enable verbose logging"), { alias: "v" })
  * flag(z.enum(["json", "text"]).default("text"))
+ * flag(complexPipe, { type: "string", description: "Output format" })
  * ```
  */
 export function flag<
@@ -389,9 +460,60 @@ export function flag<
 		throw new CrustError("DEFINITION", "flag(): schema must be a Zod schema");
 	}
 
-	const shape = resolveInputShape(schema, "flag");
-	const required = !isOptionalInputSchema(schema);
-	const description = resolveDescription(schema);
+	const label = "flag";
+	const inferredShape = tryResolveInputShape(schema, label);
+	const explicitType = options?.type;
+
+	// Resolve type: explicit > inferred
+	let resolvedType: "string" | "number" | "boolean";
+	let multiple: boolean;
+
+	if (explicitType !== undefined) {
+		// Conflict detection: if introspection succeeds with a different type, error
+		if (inferredShape && inferredShape.type !== explicitType) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit type "${explicitType}" conflicts with schema-inferred type "${inferredShape.type}". Remove the explicit type or change the schema.`,
+			);
+		}
+		resolvedType = explicitType;
+		multiple = inferredShape?.multiple ?? false;
+	} else if (inferredShape) {
+		resolvedType = inferredShape.type;
+		multiple = inferredShape.multiple;
+	} else {
+		throw new CrustError(
+			"DEFINITION",
+			`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these, or provide an explicit { type } in options.`,
+		);
+	}
+
+	// Resolve description: explicit > inferred
+	const inferredDescription = resolveDescription(schema);
+	const description = options?.description ?? inferredDescription;
+
+	// Resolve required: explicit > inferred
+	const inferredOptional = isOptionalInputSchema(schema);
+	let resolvedRequired: boolean;
+
+	if (options?.required !== undefined) {
+		// Conflict detection: explicit required vs schema optionality
+		if (options.required && inferredOptional) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit required: true conflicts with schema that accepts undefined. Remove the explicit required or change the schema.`,
+			);
+		}
+		if (!options.required && !inferredOptional) {
+			throw new CrustError(
+				"DEFINITION",
+				`${label}: explicit required: false conflicts with schema that does not accept undefined. Remove the explicit required or make the schema optional.`,
+			);
+		}
+		resolvedRequired = options.required;
+	} else {
+		resolvedRequired = !inferredOptional;
+	}
 
 	// Convert readonly alias to mutable for core FlagDef compatibility
 	const alias: string | string[] | undefined =
@@ -402,11 +524,11 @@ export function flag<
 				: [...options.alias];
 
 	const def = {
-		type: shape.type,
-		...(shape.multiple && { multiple: true as const }),
+		type: resolvedType,
+		...(multiple && { multiple: true as const }),
 		alias,
 		...(description !== undefined && { description }),
-		...(required && { required: true as const }),
+		...(resolvedRequired && { required: true as const }),
 		[ZOD_SCHEMA]: schema,
 	};
 

@@ -142,14 +142,53 @@ export interface ZodFlagDef<
 // arg() / flag() option types
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Explicit parser metadata that overrides schema introspection.
+ *
+ * Use when the schema type is too complex for automatic introspection
+ * (e.g., discriminated unions, custom transforms, or opaque pipes) and
+ * the framework cannot determine CLI metadata automatically.
+ *
+ * **Precedence rules**:
+ * - Explicit metadata takes priority over schema introspection.
+ * - If explicit metadata is provided AND schema introspection succeeds
+ *   with a conflicting value, a `DEFINITION` error is thrown.
+ * - `description` from explicit metadata always wins without conflict
+ *   checks (descriptions are additive, not structural).
+ */
+export interface ParserMeta {
+	/**
+	 * Explicit CLI value type override.
+	 *
+	 * Use when the schema's input type cannot be automatically resolved
+	 * to a CLI primitive (e.g., complex union, opaque pipe).
+	 */
+	readonly type?: "string" | "number" | "boolean";
+
+	/**
+	 * Explicit description override.
+	 *
+	 * Takes priority over any description found via schema introspection.
+	 */
+	readonly description?: string;
+
+	/**
+	 * Explicit required/optional override.
+	 *
+	 * Set to `true` to mark as required, `false` to mark as optional.
+	 * When omitted, derived from schema optionality introspection.
+	 */
+	readonly required?: boolean;
+}
+
 /** Options for `arg()`. */
-export interface ArgOptions {
+export interface ArgOptions extends ParserMeta {
 	/** Collect remaining positionals into this arg as an array. */
 	readonly variadic?: true;
 }
 
 /** Options for `flag()`. */
-export interface FlagOptions {
+export interface FlagOptions extends ParserMeta {
 	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
 	readonly alias?: string | readonly string[];
 }
