@@ -147,3 +147,37 @@
 - `persistence.test.ts` and `index.test.ts` were not modified — they were already correct and didn't need changes for this task
 - The `errors.test.ts` file tests generic `CrustStoreError` construction but doesn't have specific VALIDATION tests — the store.test.ts validation section covers VALIDATION behavior end-to-end
 - 234 tests pass, type checks and lint are clean
+
+---
+
+## Task: Rewrite package documentation and metadata for the new multi-store DX model
+
+### Completed
+
+- Rewrote `packages/store/README.md` from scratch to document the new object-default API (`defaults` instead of `fields`), all four path helpers (`configDir`, `dataDir`, `stateDir`, `cacheDir`), `patch()` method, `validate` option, `pruneUnknown` option, `VALIDATION` error code, and `DeepPartial` type
+- Rewrote `apps/docs/content/docs/modules/store.mdx` with new Storage Intent section explaining config vs data vs state vs cache with platform paths table, XDG-on-macOS callout, validation section, updated API reference, and updated exports tables
+- Updated `packages/store/package.json` description from "config persistence" to "config/data/state/cache separation" and added keywords: `data`, `state`, `cache`, `xdg`
+- Added `0.1.0` CHANGELOG entry summarizing all API redesign changes
+- Removed all references to deprecated types (`FieldDef`, `FieldsDef`, `InferStoreConfig`, `ValueType`) and `fields` option from docs
+- Updated macOS path examples from `~/Library/Application Support` to `~/.config` (XDG) throughout
+
+### Files Changed
+
+- `packages/store/README.md` — complete rewrite for new API
+- `apps/docs/content/docs/modules/store.mdx` — complete rewrite for new API
+- `packages/store/package.json` — updated description and keywords
+- `packages/store/CHANGELOG.md` — added 0.1.0 entry
+
+### Decisions
+
+- README and docs both lead with CLI scenarios using separate config/state/cache/data stores, as specified in the task notes
+- No `kind` option introduced — intent comes from choosing the appropriate path helper
+- Quick start examples use `as string` type widening pattern (e.g., `"light" as string`) to avoid const narrowing issues, consistent with previous task notes
+- CHANGELOG uses semver 0.1.0 (minor bump) since this is a breaking API change from field-definition to object-default schema
+- Both README and MDX docs include a dedicated Validation section since `validate` is a new feature
+
+### Notes for Future Agent
+
+- All five tasks in prd.json are now complete
+- 234 tests pass, type checks and lint are clean
+- The docs reference `as string` type widening in examples — this is intentional for type inference correctness when literals would otherwise narrow to specific string values

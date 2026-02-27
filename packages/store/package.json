@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/store",
 	"version": "0.0.2",
-	"description": "Minimal, type-safe config persistence for CLI apps",
+	"description": "DX-first, typed persistence for CLI apps with config/data/state/cache separation",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
@@ -17,8 +17,12 @@
 	"keywords": [
 		"cli",
 		"config",
+		"data",
+		"state",
+		"cache",
 		"store",
 		"persistence",
+		"xdg",
 		"bun",
 		"typescript"
 	],
