@@ -190,12 +190,29 @@ const data = await spinner({
 });
 ```
 
-| Option    | Type                 | Default  | Description                                       |
-| --------- | -------------------- | -------- | ------------------------------------------------- |
-| `message` | `string`             | —        | Message displayed alongside the spinner           |
-| `task`    | `() => Promise<T>`   | —        | Async task to run                                 |
-| `spinner` | `SpinnerType`        | `"dots"` | Animation style: `"dots"`, `"line"`, `"arc"`, `"bounce"`, or custom `{ frames, interval }` |
-| `theme`   | `PartialPromptTheme` | —        | Per-prompt theme overrides                        |
+The task receives a `SpinnerController` that lets you update the displayed message mid-operation:
+
+```ts
+await spinner({
+  message: "Installing dependencies...",
+  task: async ({ updateMessage }) => {
+    await installDeps();
+    updateMessage("Building project...");
+    await buildProject();
+    updateMessage("Running checks...");
+    await runChecks();
+  },
+});
+```
+
+The success/error indicator always shows the latest message.
+
+| Option    | Type                                   | Default  | Description                                       |
+| --------- | -------------------------------------- | -------- | ------------------------------------------------- |
+| `message` | `string`                               | —        | Message displayed alongside the spinner           |
+| `task`    | `(controller: SpinnerController) => Promise<T>` | — | Async task to run (receives a controller for runtime updates) |
+| `spinner` | `SpinnerType`                          | `"dots"` | Animation style: `"dots"`, `"line"`, `"arc"`, `"bounce"`, or custom `{ frames, interval }` |
+| `theme`   | `PartialPromptTheme`                   | —        | Per-prompt theme overrides                        |
 
 ## Themes
 
@@ -368,6 +385,7 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `MultiselectOptions<T>` | Options for `multiselect()`                     |
 | `FilterOptions<T>`  | Options for `filter()`                              |
 | `SpinnerOptions<T>` | Options for `spinner()`                             |
+| `SpinnerController` | Controller passed to spinner task (`updateMessage`) |
 | `SpinnerType`       | Spinner animation type                              |
 | `PromptTheme`       | Complete theme with all style slots                 |
 | `PartialPromptTheme`| Partial theme for overrides                         |

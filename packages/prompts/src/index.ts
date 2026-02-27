@@ -56,7 +56,11 @@ export type { PasswordOptions } from "./prompts/password.ts";
 export { password } from "./prompts/password.ts";
 export type { SelectOptions } from "./prompts/select.ts";
 export { select } from "./prompts/select.ts";
-export type { SpinnerOptions, SpinnerType } from "./prompts/spinner.ts";
+export type {
+	SpinnerController,
+	SpinnerOptions,
+	SpinnerType,
+} from "./prompts/spinner.ts";
 export { spinner } from "./prompts/spinner.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

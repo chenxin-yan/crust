@@ -67,6 +67,26 @@ export type SpinnerType =
 	| { readonly frames: readonly string[]; readonly interval: number };
 
 /**
+ * Controller passed to the spinner task, allowing runtime updates.
+ *
+ * @example
+ * ```ts
+ * await spinner({
+ *   message: "Starting...",
+ *   task: async ({ updateMessage }) => {
+ *     await stepOne();
+ *     updateMessage("Running step two...");
+ *     await stepTwo();
+ *   },
+ * });
+ * ```
+ */
+export interface SpinnerController {
+	/** Update the message displayed alongside the spinner. */
+	updateMessage: (message: string) => void;
+}
+
+/**
  * Options for the {@link spinner} prompt.
  *
  * @example
@@ -79,12 +99,27 @@ export type SpinnerType =
  *   },
  * });
  * ```
+ *
+ * @example
+ * ```ts
+ * // Update the message during the task
+ * await spinner({
+ *   message: "Installing dependencies...",
+ *   task: async ({ updateMessage }) => {
+ *     await installDeps();
+ *     updateMessage("Building project...");
+ *     await buildProject();
+ *     updateMessage("Running checks...");
+ *     await runChecks();
+ *   },
+ * });
+ * ```
  */
 export interface SpinnerOptions<T> {
 	/** The message displayed alongside the spinner */
 	readonly message: string;
 	/** The async task to run while the spinner is displayed */
-	readonly task: () => Promise<T>;
+	readonly task: (controller: SpinnerController) => Promise<T>;
 	/** Spinner animation style (defaults to `"dots"`) */
 	readonly spinner?: SpinnerType;
 	/** Per-prompt theme overrides */
@@ -161,6 +196,21 @@ function renderError(message: string, theme: PromptTheme): string {
  *
  * @example
  * ```ts
+ * // Update the message during the task
+ * await spinner({
+ *   message: "Installing dependencies...",
+ *   task: async ({ updateMessage }) => {
+ *     await installDeps();
+ *     updateMessage("Building project...");
+ *     await buildProject();
+ *     updateMessage("Running checks...");
+ *     await runChecks();
+ *   },
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
  * // Custom spinner animation
  * await spinner({
  *   message: "Building project...",
@@ -184,39 +234,53 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 	const { frames, interval } = resolveSpinner(options.spinner);
 
 	let frameIndex = 0;
+	let currentMessage = options.message;
+	let finished = false;
 	let timerId: ReturnType<typeof setInterval> | undefined;
+
+	// Build controller for the task
+	const controller: SpinnerController = {
+		updateMessage(message: string) {
+			if (finished) return;
+			currentMessage = message;
+			// Re-render immediately with current frame so the update is visible
+			process.stderr.write(
+				renderFrame(frames[frameIndex] as string, currentMessage, theme),
+			);
+		},
+	};
 
 	// Hide cursor and render initial frame
 	process.stderr.write(HIDE_CURSOR);
-	process.stderr.write(
-		renderFrame(frames[0] as string, options.message, theme),
-	);
+	process.stderr.write(renderFrame(frames[0] as string, currentMessage, theme));
 
 	// Start frame animation
 	timerId = setInterval(() => {
 		frameIndex = (frameIndex + 1) % frames.length;
 		process.stderr.write(
-			renderFrame(frames[frameIndex] as string, options.message, theme),
+			renderFrame(frames[frameIndex] as string, currentMessage, theme),
 		);
 	}, interval);
 
 	try {
-		const result = await options.task();
+		const result = await options.task(controller);
 
 		// Success — clear spinner and show success indicator
+		finished = true;
 		clearInterval(timerId);
 		timerId = undefined;
-		process.stderr.write(renderSuccess(options.message, theme));
+		process.stderr.write(renderSuccess(currentMessage, theme));
 		process.stderr.write(SHOW_CURSOR);
 
 		return result;
 	} catch (error) {
 		// Error — clear spinner and show error indicator
+		finished = true;
 		if (timerId !== undefined) {
 			clearInterval(timerId);
 			timerId = undefined;
 		}
-		process.stderr.write(renderError(options.message, theme));
+		process.stderr.write(renderError(currentMessage, theme));
 		process.stderr.write(SHOW_CURSOR);
 
 		throw error;

@@ -168,11 +168,15 @@ async function main() {
 	});
 	console.log(`  -> Spinner result: ${JSON.stringify(data)}\n`);
 
-	// ── 16. Spinner (different style) ─────────────────────────────────────
+	// ── 16. Spinner (message updates) ─────────────────────────────────────
 	await spinner({
-		message: "Almost there...",
-		task: async () => {
-			await new Promise((resolve) => setTimeout(resolve, 1500));
+		message: "Installing dependencies...",
+		task: async ({ updateMessage }) => {
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+			updateMessage("Building project...");
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+			updateMessage("Running checks...");
+			await new Promise((resolve) => setTimeout(resolve, 500));
 		},
 		spinner: "arc",
 	});

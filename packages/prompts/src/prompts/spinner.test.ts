@@ -290,6 +290,114 @@ describe("spinner — animation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Message updates via controller
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("spinner — message updates", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("updates the displayed message via updateMessage", async () => {
+		await spinner({
+			message: "Step 1...",
+			task: async ({ updateMessage }) => {
+				updateMessage("Step 2...");
+				return "ok";
+			},
+		});
+
+		expect(stderrOutput).toContain("Step 1...");
+		expect(stderrOutput).toContain("Step 2...");
+	});
+
+	it("success line uses the latest message", async () => {
+		await spinner({
+			message: "Initial...",
+			task: async ({ updateMessage }) => {
+				updateMessage("Final...");
+				return "ok";
+			},
+		});
+
+		// The success line (with ✓) should contain the latest message
+		expect(stderrOutput).toContain("✓");
+		expect(stderrOutput).toContain("Final...");
+		// Extract the success line specifically — it's the last line before cursor restore
+		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
+		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
+		const lastNewline = beforeCursor.lastIndexOf("\n");
+		// Everything from last erase-line to the newline is the success render
+		expect(beforeCursor.slice(0, lastNewline + 1)).toContain("Final...");
+	});
+
+	it("error line uses the latest message", async () => {
+		try {
+			await spinner({
+				message: "Starting...",
+				task: async ({ updateMessage }) => {
+					updateMessage("Failed step...");
+					throw new Error("boom");
+				},
+			});
+		} catch {
+			// Expected
+		}
+
+		expect(stderrOutput).toContain("✗");
+		expect(stderrOutput).toContain("Failed step...");
+	});
+
+	it("supports multiple message updates", async () => {
+		await spinner({
+			message: "Phase 1...",
+			task: async ({ updateMessage }) => {
+				updateMessage("Phase 2...");
+				updateMessage("Phase 3...");
+				updateMessage("Phase 4...");
+				return "ok";
+			},
+		});
+
+		expect(stderrOutput).toContain("Phase 1...");
+		expect(stderrOutput).toContain("Phase 2...");
+		expect(stderrOutput).toContain("Phase 3...");
+		expect(stderrOutput).toContain("Phase 4...");
+	});
+
+	it("ignores updateMessage calls after task completes", async () => {
+		let savedController: { updateMessage: (msg: string) => void } | undefined;
+
+		await spinner({
+			message: "Running...",
+			task: async (controller) => {
+				savedController = controller;
+				return "ok";
+			},
+		});
+
+		const outputAfterComplete = stderrOutput;
+
+		// Call updateMessage after the spinner has finished
+		savedController?.updateMessage("Late update...");
+
+		// Output should not change
+		expect(stderrOutput).toBe(outputAfterComplete);
+		expect(stderrOutput).not.toContain("Late update...");
+	});
+
+	it("works with no controller usage (backward compatible)", async () => {
+		const result = await spinner({
+			message: "Simple task...",
+			task: async () => 42,
+		});
+
+		expect(result).toBe(42);
+		expect(stderrOutput).toContain("Simple task...");
+		expect(stderrOutput).toContain("✓");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Cleanup
 // ────────────────────────────────────────────────────────────────────────────
 
