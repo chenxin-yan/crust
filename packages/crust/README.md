@@ -60,6 +60,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
 | `--outdir`  | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries       |
 | `--resolver` | `-r` | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
+| `--validate` | —    | `"boolean"` | `true`              | Pre-compile validation of command definitions |
 
 #### Output
 

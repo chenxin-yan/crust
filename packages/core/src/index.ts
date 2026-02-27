@@ -23,7 +23,7 @@ export { resolveCommand } from "./router.ts";
 
 // Command execution
 export type { RunOptions } from "./run.ts";
-export { runCommand, runMain } from "./run.ts";
+export { runCommand, runMain, VALIDATION_MODE_ENV } from "./run.ts";
 
 // Core types
 export type {

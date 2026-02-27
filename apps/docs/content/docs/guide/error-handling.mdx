@@ -109,3 +109,54 @@ run({ flags }) {
 ```
 
 Both are handled correctly — plain errors get wrapped in `CrustError("EXECUTION", ...)` automatically.
+
+## Validation Layers
+
+Crust catches command definition mistakes through three complementary layers. Each layer guards against the same class of issues, so errors are caught as early as possible — at compile time if types are narrowed, at definition time if `defineCommand` is called, and at build time before a binary is shipped.
+
+### 1. Compile-Time (TypeScript Types)
+
+When you use `defineCommand` with literal types (e.g. `as const` on args), TypeScript catches structural issues **before your code runs**. The error appears as a red squiggle on the exact offending arg or flag.
+
+| Check | Type Utility | Branded Error Property | Example |
+| --- | --- | --- | --- |
+| Only last arg can be variadic | `ValidateVariadicArgs` | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
+| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `alias: "v"` |
+| No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX` | Flag named `no-cache` or alias `no-store` |
+
+These checks are **bypassed** when types are widened (e.g. `as any`, dynamic construction, or non-const generics). The runtime layers below serve as defense-in-depth.
+
+### 2. Runtime (defineCommand + parseArgs)
+
+Even without TypeScript or when types are erased, Crust validates definitions at runtime:
+
+**`defineCommand` throws `CrustError("DEFINITION")`:**
+
+| Check | Error Message |
+| --- | --- |
+| Empty `meta.name` | `meta.name is required and must be a non-empty string` |
+| Flag name starts with `no-` | `Flag name "--no-cache" must not start with "no-"; define "cache" instead...` |
+| Alias starts with `no-` | `Alias "--no-store" on flag "--cache" must not start with "no-"...` |
+
+**`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
+
+| Check | Code | Error Message |
+| --- | --- | --- |
+| Alias collision (alias→name or alias→alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
+| `no-` prefixed flag name (defense-in-depth) | `DEFINITION` | `Flag name "--no-cache" must not start with "no-"...` |
+| `no-` prefixed alias (defense-in-depth) | `DEFINITION` | `Alias "--no-store" on flag "--cache" must not start with "no-"...` |
+| Unknown flag (strict mode) | `PARSE` | `Unknown flag "--unknown"` |
+| Invalid number coercion | `PARSE` | `Expected number for --port, got "abc"` |
+| Boolean value assignment (`--flag=true`) | `PARSE` | `Failed to parse command arguments` |
+| Negating an alias (`--no-loud`) | `PARSE` | `Cannot negate alias "--no-loud"; use "--no-verbose" instead` |
+
+**`parseArgs` throws `CrustError("VALIDATION")`:**
+
+| Check | Error Message |
+| --- | --- |
+| Missing required argument | `Missing required argument "<name>"` |
+| Missing required flag | `Missing required flag "--config"` |
+
+### 3. Pre-Compile (crust build)
+
+[`crust build`](/docs/guide/build#pre-compile-validation) runs the same definition checks above across the full command tree — including plugin-injected flags and subcommands — before compiling. This catches issues like plugin-introduced alias collisions before shipping a binary. See the [build guide](/docs/guide/build#pre-compile-validation) for details.

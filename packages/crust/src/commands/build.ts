@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { defineCommand } from "@crustjs/core";
+import { defineCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
@@ -378,6 +379,75 @@ async function execBuild(
 	}
 }
 
+/**
+ * Validate CLI entry by spawning the entry file as a subprocess with
+ * `CRUST_INTERNAL_VALIDATE_ONLY=1`. This ensures module resolution runs
+ * in the user's project context (their node_modules), not inside the
+ * compiled `crust` binary.
+ *
+ * Uses `process.execPath` (the current binary) with `BUN_BE_BUN=1` so
+ * that compiled standalone executables act as the full Bun runtime and
+ * can run arbitrary `.ts` files — no separate `bun` install on PATH needed.
+ */
+const VALIDATE_TIMEOUT_MS = 30_000;
+
+async function validateEntrypoint(entryPath: string): Promise<void> {
+	const absoluteEntry = resolve(entryPath);
+	const proc = Bun.spawn([process.execPath, absoluteEntry], {
+		env: {
+			...process.env,
+			[VALIDATION_MODE_ENV]: "1",
+			BUN_BE_BUN: "1",
+		},
+		cwd: process.cwd(),
+		stdout: "ignore",
+		stderr: "pipe",
+	});
+
+	const stderrPromise = new Response(proc.stderr).text();
+
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let timedOut = false;
+	const exitCode = await Promise.race([
+		proc.exited,
+		new Promise<never>((_, reject) => {
+			timer = setTimeout(() => {
+				timedOut = true;
+				proc.kill();
+				reject(
+					new Error(
+						`Pre-compile validation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  A plugin setup() hook may be hanging. Use --no-validate to skip.`,
+					),
+				);
+			}, VALIDATE_TIMEOUT_MS);
+		}),
+	]).finally(() => {
+		clearTimeout(timer);
+		// Always consume stderr to avoid resource leaks on the stream
+		if (timedOut) stderrPromise.catch(() => {});
+	});
+
+	const stderr = (await stderrPromise).trim();
+
+	if (exitCode !== 0) {
+		// stderr contains the raw error message from the validation subprocess
+		throw new Error(stderr || "Pre-compile validation failed");
+	}
+
+	if (stderr) {
+		// Style Warning: prefixed lines from validation subprocess
+		const styled = stderr
+			.split("\n")
+			.map((line) =>
+				line.startsWith("Warning:")
+					? `${yellow("Warning:")}${line.slice("Warning:".length)}`
+					: line,
+			)
+			.join("\n");
+		process.stderr.write(`${styled}\n`);
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
@@ -449,6 +519,12 @@ export const buildCommand = defineCommand({
 			default: "cli",
 			alias: "r",
 		},
+		validate: {
+			type: "boolean",
+			description:
+				"Validate command runtime rules before compiling (disable with --no-validate)",
+			default: true,
+		},
 	},
 	async run({ flags }) {
 		const cwd = process.cwd();
@@ -461,6 +537,10 @@ export const buildCommand = defineCommand({
 			throw new Error(
 				`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
 			);
+		}
+
+		if (flags.validate) {
+			await validateEntrypoint(entryPath);
 		}
 
 		// Resolve targets: default is all platforms, --target narrows to specific ones
@@ -483,14 +563,18 @@ export const buildCommand = defineCommand({
 				flags.outdir,
 			);
 
-			console.log(`Building ${entryPath} → ${outfilePath}...`);
+			console.log(
+				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
+			);
 			await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
-			console.log(`Built successfully: ${outfilePath}`);
+			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		} else {
 			// Multi-target build: multiple binaries + JS resolver
 			const baseName = resolveBaseName(flags.name, entryPath, cwd);
 
-			console.log(`Building ${entryPath} for ${targets.length} target(s)...`);
+			console.log(
+				`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
+			);
 
 			const results: string[] = [];
 			for (const target of targets) {
@@ -501,7 +585,7 @@ export const buildCommand = defineCommand({
 					flags.outdir,
 				);
 
-				console.log(`  → ${target}: ${targetOutfile}`);
+				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
 				await execBuild(entryPath, targetOutfile, flags.minify, target);
 				results.push(targetOutfile);
 			}
@@ -510,11 +594,15 @@ export const buildCommand = defineCommand({
 			const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
 			writeResolver(resolverPath, baseName, targets);
 
-			console.log(`\nBuilt ${results.length} target(s) successfully:`);
+			console.log(
+				`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
+			);
 			for (const r of results) {
 				console.log(`  ${r}`);
 			}
-			console.log(`\nResolver: ${resolverPath} (+ ${resolverPath}.cmd)`);
+			console.log(
+				`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
+			);
 		}
 	},
 });

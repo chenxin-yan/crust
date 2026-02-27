@@ -80,12 +80,14 @@ Available setup actions:
 
 | Action | Description |
 | --- | --- |
-| `addFlag(command, name, def)` | Inject a flag into a command's flags object |
-| `addSubCommand(parent, name, command)` | Inject a subcommand (silently skipped if user already defined one with the same name) |
+| `addFlag(command, name, def)` | Inject a flag into a command's flags object (overrides if name exists) |
+| `addSubCommand(parent, name, command)` | Inject a subcommand (skipped if user already defined one with the same name) |
 
 #### Injecting Subcommands
 
-Plugins can register subcommands during setup. If the user already defined a subcommand with the same name, the plugin's injection is silently skipped — user definitions always take priority:
+Plugins can register subcommands during setup. If the user already defined a subcommand with the same name, the plugin's injection is skipped — user definitions always take priority.
+
+Both `addFlag` overrides and `addSubCommand` skips are silent at runtime but produce warnings during [`crust build` pre-compile validation](/docs/guide/build#pre-compile-validation), so you can catch unintentional conflicts before shipping.
 
 ```ts
 const myPlugin: CrustPlugin = {

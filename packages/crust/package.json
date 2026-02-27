@@ -34,12 +34,14 @@
 	"scripts": {
 		"build": "bunup && bun dist/cli.js build --entry src/cli.ts --name crust",
 		"dev": "bun ./src/cli.ts",
+		"start": "./dist/cli",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:*",
-		"@crustjs/plugins": "workspace:*"
+		"@crustjs/plugins": "workspace:*",
+		"@crustjs/style": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

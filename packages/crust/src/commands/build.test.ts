@@ -34,6 +34,7 @@ describe("buildCommand definition", () => {
 		const result = parseArgs(buildCommand, []);
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
+		expect(result.flags.validate).toBe(true);
 		expect(result.flags.resolver).toBe("cli");
 		expect(result.flags.outdir).toBe("dist");
 		expect(result.flags.outfile).toBeUndefined();
@@ -69,6 +70,11 @@ describe("buildCommand definition", () => {
 	it("supports --no-minify to disable minification", () => {
 		const result = parseArgs(buildCommand, ["--no-minify"]);
 		expect(result.flags.minify).toBe(false);
+	});
+
+	it("supports --no-validate to skip pre-compile validation", () => {
+		const result = parseArgs(buildCommand, ["--no-validate"]);
+		expect(result.flags.validate).toBe(false);
 	});
 
 	it("defines --target/-t as repeatable string flag", () => {
@@ -635,6 +641,60 @@ describe("buildCommand error handling", () => {
 					],
 				}),
 			).rejects.toThrow(/--outfile cannot be used/);
+		} finally {
+			process.cwd = originalCwd;
+			console.log = originalLog;
+			console.error = originalError;
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("fails early when runtime validation detects flag alias conflicts", async () => {
+		const originalCwd = process.cwd;
+		const tmpDir = join(import.meta.dir, ".tmp-runtime-validation");
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+
+		// Resolve absolute path to @crustjs/core so the subprocess can find it
+		// without needing node_modules in the temp directory.
+		const corePath = join(
+			import.meta.dir,
+			"..",
+			"..",
+			"..",
+			"core",
+			"src",
+			"index.ts",
+		);
+		writeFileSync(
+			join(tmpDir, "src", "cli.ts"),
+			`import { runMain } from "${corePath}";
+
+const command = {
+	meta: { name: "bad-cli" },
+	flags: {
+		verbose: { type: "boolean", alias: "v" },
+		version: { type: "boolean", alias: "v" },
+	},
+	subCommands: {},
+};
+
+runMain(command);
+`,
+		);
+
+		process.cwd = () => tmpDir;
+
+		const originalLog = console.log;
+		const originalError = console.error;
+		console.log = () => {};
+		console.error = () => {};
+
+		try {
+			await expect(
+				runCommand(buildCommand, {
+					argv: ["--entry", "src/cli.ts", "--target", "linux-x64"],
+				}),
+			).rejects.toThrow(/failed runtime validation|alias collision/i);
 		} finally {
 			process.cwd = originalCwd;
 			console.log = originalLog;

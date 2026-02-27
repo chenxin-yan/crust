@@ -258,8 +258,8 @@ interface SetupActions {
 }
 ```
 
-- `addFlag` — inject a flag into a command's flags object.
-- `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is silently skipped — user definitions always take priority.
+- `addFlag` — inject a flag into a command's flags object. If the command already has a flag with the same name, the plugin's flag overrides it. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
+- `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is skipped — user definitions always take priority. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
 
 ### `MiddlewareContext`
 

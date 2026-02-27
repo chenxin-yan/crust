@@ -1,6 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { defineCommand } from "../src/command.ts";
-import { runCommand, runMain } from "../src/run.ts";
+import {
+	runCommand,
+	runMain,
+	VALIDATION_MODE_ENV,
+	VALIDATION_RESULT_GLOBAL_KEY,
+} from "../src/run.ts";
 import type { CrustPlugin } from "./plugins.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -723,5 +728,166 @@ describe("runMain", () => {
 		} finally {
 			process.argv = originalArgv;
 		}
+	});
+
+	/** Run `fn` with validation mode enabled, then restore env/globalThis. */
+	async function withValidationMode(
+		fn: (
+			exitSpy: ReturnType<typeof spyOn<typeof process, "exit">>,
+		) => Promise<void>,
+	): Promise<void> {
+		const originalMode = process.env[VALIDATION_MODE_ENV];
+		const originalExitCode = process.exitCode;
+		const exitSpy = spyOn(process, "exit").mockImplementation(
+			(() => {}) as () => never,
+		);
+
+		process.env[VALIDATION_MODE_ENV] = "1";
+
+		try {
+			await fn(exitSpy);
+		} finally {
+			exitSpy.mockRestore();
+			if (originalMode === undefined) {
+				delete process.env[VALIDATION_MODE_ENV];
+			} else {
+				process.env[VALIDATION_MODE_ENV] = originalMode;
+			}
+			delete (globalThis as Record<string, unknown>)[
+				VALIDATION_RESULT_GLOBAL_KEY
+			];
+			process.exitCode = originalExitCode;
+		}
+	}
+
+	it("validation mode stores success result and skips run", async () => {
+		await withValidationMode(async (exitSpy) => {
+			let executed = false;
+
+			const cmd = defineCommand({
+				meta: { name: "test" },
+				run() {
+					executed = true;
+				},
+			});
+
+			await runMain(cmd);
+
+			const resultPromise = (globalThis as Record<string, unknown>)[
+				VALIDATION_RESULT_GLOBAL_KEY
+			] as Promise<{ ok: boolean }>;
+
+			expect(resultPromise).toBeDefined();
+			expect(await resultPromise).toEqual({ ok: true });
+			expect(executed).toBe(false);
+			expect(exitSpy).toHaveBeenCalledWith(0);
+		});
+	});
+
+	it("validation mode warns when plugin flag overrides user-defined flag", async () => {
+		await withValidationMode(async () => {
+			const cmd = defineCommand({
+				meta: { name: "cli" },
+				flags: {
+					verbose: { type: "boolean", alias: "v" },
+				},
+			});
+
+			const plugin: CrustPlugin = {
+				name: "override-flag",
+				setup(context, actions) {
+					actions.addFlag(context.rootCommand, "verbose", {
+						type: "boolean",
+						description: "Plugin verbose",
+					});
+				},
+			};
+
+			await runMain(cmd, { plugins: [plugin] });
+			expect(getStderr()).toContain(
+				'Plugin flag "--verbose" on command "cli" overrides an existing flag',
+			);
+		});
+	});
+
+	it("validation mode warns when plugin subcommand is skipped", async () => {
+		await withValidationMode(async () => {
+			const userSub = defineCommand({
+				meta: { name: "deploy" },
+				run() {},
+			});
+
+			const cmd = defineCommand({
+				meta: { name: "cli" },
+				subCommands: { deploy: userSub },
+			});
+
+			const plugin: CrustPlugin = {
+				name: "override-sub",
+				setup(context, actions) {
+					const pluginSub = defineCommand({
+						meta: { name: "deploy" },
+						run() {},
+					});
+					actions.addSubCommand(context.rootCommand, "deploy", pluginSub);
+				},
+			};
+
+			await runMain(cmd, { plugins: [plugin] });
+			expect(getStderr()).toContain(
+				'Plugin subcommand "deploy" on command "cli" was skipped',
+			);
+		});
+	});
+
+	it("runtime mode does not emit plugin override warnings", async () => {
+		const cmd = defineCommand({
+			meta: { name: "cli" },
+			flags: {
+				verbose: { type: "boolean" },
+			},
+			subCommands: {
+				deploy: defineCommand({ meta: { name: "deploy" }, run() {} }),
+			},
+		});
+
+		const plugin: CrustPlugin = {
+			name: "override-both",
+			setup(context, actions) {
+				actions.addFlag(context.rootCommand, "verbose", {
+					type: "boolean",
+				});
+				const sub = defineCommand({ meta: { name: "deploy" }, run() {} });
+				actions.addSubCommand(context.rootCommand, "deploy", sub);
+			},
+		};
+
+		await runCommand(cmd, { argv: ["deploy"], plugins: [plugin] });
+		expect(getStderr()).toBe("");
+	});
+
+	it("validation mode stores failures instead of printing errors", async () => {
+		await withValidationMode(async (exitSpy) => {
+			const invalid: import("./types.ts").AnyCommand = {
+				meta: { name: "invalid" },
+				flags: {
+					verbose: { type: "boolean", alias: "v" },
+					version: { type: "boolean", alias: "v" },
+				},
+				subCommands: {},
+			};
+
+			await runMain(invalid);
+
+			const resultPromise = (globalThis as Record<string, unknown>)[
+				VALIDATION_RESULT_GLOBAL_KEY
+			] as Promise<{ ok: boolean; error?: unknown }>;
+			const result = await resultPromise;
+
+			expect(result.ok).toBe(false);
+			// Validation mode now surfaces errors to stderr for subprocess consumers
+			expect(getStderr()).toContain("failed runtime validation");
+			expect(exitSpy).toHaveBeenCalledWith(1);
+		});
 	});
 });

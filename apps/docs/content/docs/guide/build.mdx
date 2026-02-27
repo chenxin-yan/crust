@@ -31,6 +31,7 @@ crust build --target darwin-arm64
 | `--target` | `-t` | `"string"` (repeatable) | all platforms | Target platform(s) |
 | `--outdir` | `-d` | `"string"` | `dist` | Output directory for compiled binaries |
 | `--resolver` | `-r` | `"string"` | `cli` | Resolver script filename (multi-target only, no extension) |
+| `--validate` | — | `"boolean"` | `true` | Pre-compile validation of command definitions |
 
 ## Supported Targets
 
@@ -134,6 +135,38 @@ Minification is enabled by default. Disable it with:
 ```sh
 crust build --no-minify
 ```
+
+## Pre-compile Validation
+
+Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
+
+The validation works by spawning `bun <entry>` as a subprocess with `CRUST_INTERNAL_VALIDATE_ONLY=1`. When [`runMain`](/docs/api/run-main) detects this environment variable, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers.
+
+### What it catches
+
+| Issue | Error Code | Example |
+| --- | --- | --- |
+| Flag alias collision | `DEFINITION` | Two flags share `-v` as alias |
+| `no-` prefixed flag name | `DEFINITION` | Flag named `no-cache` instead of `cache` |
+| `no-` prefixed alias | `DEFINITION` | Alias `no-store` on a flag |
+| Long alias shadowing flag name | `DEFINITION` | Alias `out` when another flag is named `out` |
+
+In addition to hard errors, the validation emits **warnings** for plugin conflicts that are allowed at runtime but may indicate unintentional behavior:
+
+| Warning | Example |
+| --- | --- |
+| Plugin flag overrides user-defined flag | Plugin calls `addFlag(cmd, "verbose", ...)` but `verbose` already exists |
+| Plugin subcommand skipped | Plugin calls `addSubCommand(cmd, "deploy", ...)` but `deploy` already exists |
+
+### Skipping validation
+
+Validation is enabled by default. To skip it:
+
+```sh
+crust build --no-validate
+```
+
+This can be useful if the validation subprocess cannot resolve your project's dependencies in a particular environment (e.g., non-standard module resolution setups).
 
 ## package.json Setup
 
