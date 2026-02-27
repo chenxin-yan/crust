@@ -12,6 +12,7 @@ import { runCommand } from "@crustjs/core";
 import {
 	autoCompletePlugin,
 	helpPlugin,
+	updateNotifierPlugin,
 	versionPlugin,
 } from "@crustjs/plugins";
 import { crustCommand } from "../src/cli.ts";
@@ -75,6 +76,7 @@ const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
 const expectedVersion = pkg.version;
 const plugins = [
 	versionPlugin(expectedVersion),
+	updateNotifierPlugin({ currentVersion: expectedVersion, enabled: false }),
 	helpPlugin(),
 	autoCompletePlugin({ mode: "help" }),
 ];
@@ -193,6 +195,33 @@ describe("crust CLI entry point", () => {
 		it("should have version that matches package.json", () => {
 			expect(typeof expectedVersion).toBe("string");
 			expect(expectedVersion.length).toBeGreaterThan(0);
+		});
+	});
+
+	describe("update notifier plugin wiring", () => {
+		it("should include updateNotifierPlugin without affecting help output", async () => {
+			await runCommand(crustCommand, { argv: ["--help"], plugins });
+			const output = getStdout();
+
+			// Help output should still render correctly with updateNotifierPlugin present
+			expect(output).toContain("USAGE:");
+			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("build");
+		});
+
+		it("should include updateNotifierPlugin without affecting version output", async () => {
+			await runCommand(crustCommand, { argv: ["--version"], plugins });
+			const output = getStdout();
+
+			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
+		});
+
+		it("should coexist with all other plugins during command execution", async () => {
+			// Run without arguments — should show help (no crash)
+			await runCommand(crustCommand, { argv: [], plugins });
+			const output = getStdout();
+
+			expect(output).toContain("USAGE:");
 		});
 	});
 });
