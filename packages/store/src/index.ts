@@ -13,7 +13,6 @@ export { createStore } from "./store.ts";
 // Types
 export type {
 	CreateStoreOptions,
-	DeepPartial,
 	Store,
 	StoreUpdater,
 } from "./types.ts";

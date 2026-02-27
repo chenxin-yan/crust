@@ -124,7 +124,7 @@ const store = createStore(options);
 | `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.             |
 | `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`).  |
 | `defaults`     | `T`                        | Yes      | Default values defining the store's data shape and fallbacks.      |
-| `validate`     | `(state: T) => void`       | No       | Validation function called before `write`, `update`, and `patch`.  |
+| `validate`     | `(state: T) => void \| Promise<void>` | No | Validation function called before `write`, `update`, and `patch`.  |
 | `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).              |
 
 ### `store.read()`
@@ -379,7 +379,6 @@ All types are exported for use in your application:
 ```ts
 import type {
   CreateStoreOptions,
-  DeepPartial,
   Store,
   StoreUpdater,
   StoreErrorCode,
@@ -390,7 +389,6 @@ import type {
 | Type                 | Description                                                     |
 | -------------------- | --------------------------------------------------------------- |
 | `CreateStoreOptions` | Options object for `createStore()`.                             |
-| `DeepPartial`        | Recursive partial type for `patch()` arguments.                 |
 | `Store`              | Store instance with `read`, `write`, `update`, `patch`, `reset`.|
 | `StoreUpdater`       | Updater function type `(current: T) => T`.                      |
 | `StoreErrorCode`     | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`. |

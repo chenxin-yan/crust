@@ -51,8 +51,9 @@ No explicit generics needed — types are inferred from your `defaults` object.
 2. `createStore()` resolves the file path once (`<dirPath>/<name>.json`) and returns a typed store instance.
 3. `read()` loads persisted JSON, deep-merges defaults for missing keys, and returns the complete state.
 4. `write()` atomically persists the full state (temp file + rename — no partial writes on crash).
-5. `patch()` deep-merges a partial update into the current state and persists.
-6. `reset()` deletes the persisted file, reverting to defaults-on-read behavior.
+5. `update()` reads the current state, applies an updater function, and persists the result.
+6. `patch()` deep-merges a partial update into the current state and persists.
+7. `reset()` deletes the persisted file, reverting to defaults-on-read behavior.
 
 ## Storage Intent
 
@@ -158,7 +159,7 @@ const store = createStore(options);
 | `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.            |
 | `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`). |
 | `defaults`     | `T`                        | Yes      | Default values defining the store's data shape and fallbacks.     |
-| `validate`     | `(state: T) => void`       | No       | Validation function called before `write`, `update`, and `patch`. |
+| `validate`     | `(state: T) => void \| Promise<void>` | No | Validation function called before `write`, `update`, and `patch`. |
 | `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).             |
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
@@ -355,7 +356,6 @@ if (err instanceof CrustStoreError && err.is("VALIDATION")) {
 | Type                 | Description                                                     |
 | -------------------- | --------------------------------------------------------------- |
 | `CreateStoreOptions` | Options object for `createStore()`.                             |
-| `DeepPartial`        | Recursive partial type for `patch()` arguments.                 |
 | `Store`              | Store instance with `read`, `write`, `update`, `patch`, `reset`.|
 | `StoreUpdater`       | Updater function type `(current: T) => T`.                      |
 | `StoreErrorCode`     | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`. |
