@@ -1,7 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { renderBulletList } from "../validation.ts";
-import type { StandardSchema } from "./types.ts";
-import { validateStandard } from "./validate.ts";
+import { renderBulletList, throwValidationError } from "../validation.ts";
+import type { InferOutput, StandardSchema } from "./types.ts";
+import { validateStandard, validateStandardSync } from "./validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompt error rendering strategies
@@ -87,6 +87,94 @@ export function promptValidator<S extends StandardSchema>(
 
 		return renderPromptError(result.issues, errorStrategy);
 	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Error rendering helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────────
+// Typed prompt parsing helpers — validate + return transformed output
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a prompt answer through a Standard Schema and return the typed
+ * output value.
+ *
+ * Unlike {@link promptValidator}, which only validates and returns
+ * `true | string` for prompt integration, this function returns the
+ * transformed schema output — preserving coercions, defaults, and type
+ * refinements applied by the schema.
+ *
+ * On validation failure, throws a `CrustError("VALIDATION")` with
+ * normalized issues.
+ *
+ * @param schema — A Standard Schema v1-compatible schema
+ * @param value — The raw prompt answer to validate and parse
+ * @returns The transformed output value typed as `InferOutput<S>`
+ * @throws {CrustError} With code `"VALIDATION"` if the value is invalid
+ *
+ * @example
+ * ```ts
+ * import { z } from "zod";
+ * import { parsePromptValue } from "@crustjs/validate/standard";
+ * import { input } from "@crustjs/prompts";
+ *
+ * const raw = await input({ message: "Enter port" });
+ * const port = await parsePromptValue(z.coerce.number().int().positive(), raw);
+ * // port is typed as `number` — coerced from the string input
+ * ```
+ */
+export async function parsePromptValue<S extends StandardSchema>(
+	schema: S,
+	value: StandardSchemaV1.InferInput<S>,
+): Promise<InferOutput<S>> {
+	const result = await validateStandard(schema, value);
+
+	if (result.ok) {
+		return result.value;
+	}
+
+	return throwValidationError(result.issues, "Prompt validation failed");
+}
+
+/**
+ * Synchronously parse a prompt answer through a Standard Schema and return
+ * the typed output value.
+ *
+ * Use this when you know the schema is synchronous (e.g., most Zod schemas,
+ * simple validators). If the schema returns a Promise, a `TypeError` is
+ * thrown.
+ *
+ * On validation failure, throws a `CrustError("VALIDATION")` with
+ * normalized issues.
+ *
+ * @param schema — A Standard Schema v1-compatible schema
+ * @param value — The raw prompt answer to validate and parse
+ * @returns The transformed output value typed as `InferOutput<S>`
+ * @throws {CrustError} With code `"VALIDATION"` if the value is invalid
+ * @throws {TypeError} If the schema returns a Promise
+ *
+ * @example
+ * ```ts
+ * import { z } from "zod";
+ * import { parsePromptValueSync } from "@crustjs/validate/standard";
+ *
+ * const port = parsePromptValueSync(z.coerce.number().int().positive(), "8080");
+ * // port is typed as `number`
+ * ```
+ */
+export function parsePromptValueSync<S extends StandardSchema>(
+	schema: S,
+	value: StandardSchemaV1.InferInput<S>,
+): InferOutput<S> {
+	const result = validateStandardSync(schema, value);
+
+	if (result.ok) {
+		return result.value;
+	}
+
+	return throwValidationError(result.issues, "Prompt validation failed");
 }
 
 // ────────────────────────────────────────────────────────────────────────────

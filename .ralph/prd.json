@@ -57,8 +57,8 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "This task is separate from ValidateFn adapter behavior (completed in Task 3). Focus on strongly typed output-oriented DX for prompt workflows. promptValidator() from standard/prompt.ts only validates — it does NOT return transformed schema output. Parsing helpers should use validateStandard() and return the typed output value. For provider wrappers, promptValidator can be re-exported directly since it works with any Standard Schema. Effect schemas need standardSchemaV1() wrapping at the caller level.",
-			"passed": false
+			"notes": "Completed. parsePromptValue() (async) and parsePromptValueSync() (sync) validate and return typed output. Throw CrustError(VALIDATION) on failure. Re-exported from zod/effect entrypoints. 228 tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Introduce store validation contract in @crustjs/store and enforce strict validation on both read and write paths by default",

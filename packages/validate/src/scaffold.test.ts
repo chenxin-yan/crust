@@ -20,15 +20,23 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.success).toBe("function");
 		expect(typeof mod.failure).toBe("function");
 		expect(typeof mod.promptValidator).toBe("function");
+		expect(typeof mod.parsePromptValue).toBe("function");
+		expect(typeof mod.parsePromptValueSync).toBe("function");
 	});
 
 	it("zod entrypoint is importable", async () => {
 		const mod = await import("./zod/index.ts");
 		expect(mod).toBeDefined();
+		expect(typeof mod.promptValidator).toBe("function");
+		expect(typeof mod.parsePromptValue).toBe("function");
+		expect(typeof mod.parsePromptValueSync).toBe("function");
 	});
 
 	it("effect entrypoint is importable", async () => {
 		const mod = await import("./effect/index.ts");
 		expect(mod).toBeDefined();
+		expect(typeof mod.promptValidator).toBe("function");
+		expect(typeof mod.parsePromptValue).toBe("function");
+		expect(typeof mod.parsePromptValueSync).toBe("function");
 	});
 });

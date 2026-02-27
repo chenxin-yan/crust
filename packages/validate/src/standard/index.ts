@@ -7,7 +7,11 @@ export type {
 	PromptErrorStrategy,
 	PromptValidatorOptions,
 } from "./prompt.ts";
-export { promptValidator } from "./prompt.ts";
+export {
+	parsePromptValue,
+	parsePromptValueSync,
+	promptValidator,
+} from "./prompt.ts";
 // Types
 export type {
 	InferInput,

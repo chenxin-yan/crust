@@ -119,3 +119,41 @@
 - The `promptValidator` function only validates — it does NOT return the transformed schema output. Task 4's parsing helpers will address that gap for typed output workflows.
 - For provider wrapper exports in zod/effect entrypoints (mentioned in Task 4 subtasks), `promptValidator` can be re-exported directly since it already works with any Standard Schema. Zod schemas are natively compatible; Effect schemas need `standardSchemaV1()` wrapping at the caller level.
 - The `renderBulletList` function from `validation.ts` is now shared between command validation error rendering (via `middleware.ts`) and prompt "all" strategy. Any changes to its format will affect both surfaces.
+
+---
+
+## Task: Add typed prompt parsing helpers for schema-transformed prompt outputs to improve end-to-end DX
+
+### Completed
+
+- Implemented `parsePromptValue()` (async) and `parsePromptValueSync()` (sync) in `standard/prompt.ts` that validate a raw prompt answer through a Standard Schema and return the typed output value
+- Both functions return `InferOutput<S>` — preserving coercions, defaults, and type refinements applied by the schema
+- On validation failure, both throw `CrustError("VALIDATION")` with normalized issues (same error shape as command validation)
+- `parsePromptValueSync()` throws `TypeError` if the schema returns a Promise, matching `validateStandardSync()` behavior
+- Re-exported `promptValidator`, `parsePromptValue`, `parsePromptValueSync`, `PromptErrorStrategy`, and `PromptValidatorOptions` from both `@crustjs/validate/zod` and `@crustjs/validate/effect` entrypoints
+- Added 34 new unit tests covering: passthrough values, sync/async transforms, coercion (string→number), default values, optional schemas, object/array transforms, CrustError shape with structured issues, TypeError for async schemas in sync path, null handling, and edge cases
+- Updated scaffold tests to verify `parsePromptValue` and `parsePromptValueSync` exports from all three entrypoints (standard, zod, effect)
+- All 228 package tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/src/standard/prompt.ts` — added `parsePromptValue()` and `parsePromptValueSync()` functions
+- `packages/validate/src/standard/index.ts` — added exports for `parsePromptValue` and `parsePromptValueSync`
+- `packages/validate/src/zod/index.ts` — added re-exports for prompt adapter types and functions from standard
+- `packages/validate/src/effect/index.ts` — added re-exports for prompt adapter types and functions from standard
+- `packages/validate/src/standard/prompt.test.ts` — added 34 tests for parsing helpers
+- `packages/validate/src/scaffold.test.ts` — extended with export checks for zod/effect entrypoints
+
+### Decisions
+
+- **Throw on failure, not return errors**: Parsing helpers throw `CrustError("VALIDATION")` rather than returning a result union. This matches the command validation pattern (`throwValidationError`) and fits the "parse or fail" workflow where callers want the typed value directly.
+- **Error prefix "Prompt validation failed"**: Distinguishes prompt parsing errors from command validation errors ("withZod: validation failed") in error messages, while using the same `CrustError` code and issue structure.
+- **Direct re-export from standard**: Zod and Effect entrypoints re-export `parsePromptValue`/`parsePromptValueSync`/`promptValidator` directly from `../standard/prompt.ts` rather than creating wrapper functions. Since these functions accept any Standard Schema, no provider-specific wrapping is needed. Effect schemas require `Schema.standardSchemaV1()` at the caller level — this is documented in the export comment.
+- **No `parsePromptValue` overload for prompt-integrated workflows**: Kept the API surface minimal with a single `parsePromptValue(schema, value)` signature. Prompt-integrated workflows can compose `promptValidator` for validation + `parsePromptValue` for typed output.
+
+### Notes for Future Agent
+
+- `parsePromptValue` and `promptValidator` are complementary: use `promptValidator` in prompt `validate` options (returns `true | string`), then `parsePromptValue` after the prompt resolves to get the typed output.
+- For Effect schemas, callers must wrap with `Schema.standardSchemaV1()` before passing to any prompt adapter function. This is consistent with how `withEffect.ts` handles Effect schemas internally.
+- The store adapter (Task 6) can follow the same pattern: use `validateStandard()` for schema execution and `throwValidationError()` for failure handling.
+- The `throwValidationError` function from `validation.ts` is now used by both command middleware and prompt parsing helpers — it's the canonical way to throw `CrustError("VALIDATION")` with structured issues.
