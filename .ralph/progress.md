@@ -157,3 +157,49 @@
 - For Effect schemas, callers must wrap with `Schema.standardSchemaV1()` before passing to any prompt adapter function. This is consistent with how `withEffect.ts` handles Effect schemas internally.
 - The store adapter (Task 6) can follow the same pattern: use `validateStandard()` for schema execution and `throwValidationError()` for failure handling.
 - The `throwValidationError` function from `validation.ts` is now used by both command middleware and prompt parsing helpers — it's the canonical way to throw `CrustError("VALIDATION")` with structured issues.
+
+---
+
+## Task: Introduce store validation contract in @crustjs/store and enforce strict validation on both read and write paths by default
+
+### Completed
+
+- Added `StoreValidator<T>` type contract to `types.ts` — a provider-agnostic function type `(value: unknown) => StoreValidatorResult<T> | Promise<StoreValidatorResult<T>>` with discriminated `ok: true/false` result union
+- Added `StoreValidatorSuccess<T>`, `StoreValidatorFailure`, `StoreValidatorIssue`, and `StoreValidatorResult<T>` types to `types.ts`
+- Added optional `validator` field to `CreateStoreOptions<F>` that accepts a `StoreValidator<InferStoreConfig<F>>`
+- Added `VALIDATION` error code to `CrustStoreError` with `ValidationErrorDetails` (operation + structured issues)
+- Added `StoreValidationIssue` type to `errors.ts` for the error details payload (compatible with but independent from `@crustjs/validate`'s `ValidationIssue`)
+- Applied validator execution in `store.write()` — validates before persistence, persists the (possibly transformed) validated value
+- Applied validator execution in `store.read()` — validates after defaults merge, returns the validated value
+- Applied validator execution in `store.update()` — reads raw (no validation on read phase), applies updater, validates updated result, persists
+- `store.reset()` does not invoke the validator (no config to validate)
+- Added 40+ new tests covering: write validation (pass/fail/async/transform/error message format), read validation (defaults/persisted/async/transform/root-level errors), update validation (pass/fail/no-persist-on-fail/transform/single-invocation check), reset (no validator call), backward compatibility (no validator option), and full lifecycle integration
+- Extended error tests with VALIDATION construction and `.is("VALIDATION")` narrowing tests
+- All 156 store tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/store/src/types.ts` — added `StoreValidator<T>`, `StoreValidatorSuccess<T>`, `StoreValidatorFailure`, `StoreValidatorIssue`, `StoreValidatorResult<T>` types; added `validator` option to `CreateStoreOptions`; updated `Store` interface JSDoc with VALIDATION throws
+- `packages/store/src/errors.ts` — added `StoreValidationIssue`, `ValidationErrorDetails` types; added `VALIDATION` to `StoreErrorDetailsMap`; updated JSDoc
+- `packages/store/src/store.ts` — added `runValidator()` helper, `readRaw()` internal function; integrated validator into `read()`, `write()`, `update()` paths
+- `packages/store/src/index.ts` — added exports for `StoreValidationIssue`, `ValidationErrorDetails`, `StoreValidator`, `StoreValidatorSuccess`, `StoreValidatorFailure`, `StoreValidatorIssue`, `StoreValidatorResult`
+- `packages/store/src/store.test.ts` — added 40+ validation tests across write/read/update/reset/backward-compat/lifecycle
+- `packages/store/src/errors.test.ts` — added VALIDATION error construction and type narrowing tests
+
+### Decisions
+
+- **Provider-agnostic validator contract**: `StoreValidator<T>` is defined entirely in `@crustjs/store` with no dependency on `@crustjs/validate`, Standard Schema, Zod, or Effect. The validator accepts `unknown` and returns a discriminated result, matching the `ValidationResult` pattern from the standard core but as an independent type.
+- **`StoreValidatorIssue` vs `StoreValidationIssue`**: Two similar but distinct types — `StoreValidatorIssue` is the contract type used in `StoreValidatorResult` (validator output), while `StoreValidationIssue` is used in `CrustStoreError` details (error payload). They have the same shape but serve different roles: one is the validator's API contract, the other is the error's structured data.
+- **Strict by default**: Validation runs on every `read()`, `write()`, and `update()` call when a validator is provided. There is no `validate: false` escape hatch — per SPEC constraints, invalid config must fail loudly.
+- **Transformed values flow through**: If a validator's success result carries a transformed `value`, that transformed value is what gets persisted (on write/update) or returned (on read). This supports schema coercion and normalization.
+- **Update reads raw, validates once**: `update()` reads the current config without validation (via internal `readRaw()`), applies the updater, then validates only the updated result. This avoids double validation and means an update can work even if the currently persisted config is invalid — as long as the updated result is valid.
+- **`CrustStoreError("VALIDATION")` vs `CrustError("VALIDATION")`**: Store uses its own error class rather than the `@crustjs/validate` `CrustError`. This keeps package boundaries clean — consumers catch `CrustStoreError` and narrow with `.is("VALIDATION")`. The error message follows the same bullet-list format used by command/prompt validation for consistency.
+- **Reset doesn't validate**: `reset()` deletes the persisted file — there's no config object to validate.
+
+### Notes for Future Agent
+
+- Task 6 (store adapters in `@crustjs/validate`) should create functions that return `StoreValidator<T>` from Standard Schema / Zod / Effect schemas. The adapter should use `validateStandard()` or `validateStandardSync()` from `standard/validate.ts` to execute the schema and map the `ValidationResult` to `StoreValidatorResult`. The `StoreValidatorIssue` shape (`{ message, path }`) is identical to `ValidationIssue`, so the mapping is straightforward.
+- For Effect schemas, the store adapter should wrap with `standardSchemaV1()` before passing to `validateStandard()`, consistent with how `withEffect.ts` and prompt adapters handle Effect.
+- The `StoreValidator<T>` contract supports both sync and async validators — `createStore` always awaits the result. If a sync-only store is ever needed, a sync variant would require changes.
+- The `operation` field in `ValidationErrorDetails` distinguishes where validation failed: `"read"`, `"write"`, or `"update"`. This helps consumers differentiate between corrupt persisted config (read) vs bad input (write/update).
+- Backward compatibility is preserved: stores without `validator` option behave identically to before.

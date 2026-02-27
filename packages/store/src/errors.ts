@@ -35,13 +35,30 @@ export interface IOErrorDetails {
 }
 
 /**
+ * A single validation issue reported by a store validator.
+ *
+ * Mirrors the canonical `ValidationIssue` shape used across the Crust
+ * validation platform, but is defined independently to keep `@crustjs/store`
+ * free of `@crustjs/validate` dependencies.
+ */
+export interface StoreValidationIssue {
+	/** Human-readable description of the validation failure. */
+	message: string;
+	/** Dot-path to the invalid field (e.g. `"theme"`, `"nested.key"`), or empty string for root-level issues. */
+	path: string;
+}
+
+/**
  * Contextual details attached to a `VALIDATION` error.
  *
- * Returned when user-supplied `validate` function rejects the state.
+ * Returned when a store validator rejects a config object during
+ * read, write, update, or patch operations.
  */
 export interface ValidationErrorDetails {
-	/** The store operation that triggered validation (e.g. `"write"`, `"update"`, `"patch"`). */
-	operation: "write" | "update" | "patch";
+	/** The store operation during which validation failed. */
+	operation: "read" | "write" | "update" | "patch";
+	/** Structured validation issues for programmatic handling. */
+	issues: readonly StoreValidationIssue[];
 }
 
 /**
@@ -62,7 +79,7 @@ export interface StoreErrorDetailsMap {
  * - `PATH` — Invalid or unsupported config file path
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
- * - `VALIDATION` — User-supplied `validate` function rejected the state
+ * - `VALIDATION` — Config object rejected by a store validator
  *
  * @example
  * ```ts
@@ -75,6 +92,11 @@ export interface StoreErrorDetailsMap {
  *     switch (err.code) {
  *       case "PARSE":
  *         console.error(`Corrupt config at ${err.details.path}`);
+ *         break;
+ *       case "VALIDATION":
+ *         for (const issue of err.details.issues) {
+ *           console.error(`${issue.path}: ${issue.message}`);
+ *         }
  *         break;
  *       case "IO":
  *         console.error(`File ${err.details.operation} failed: ${err.message}`);
@@ -95,7 +117,7 @@ export type StoreErrorDetails<C extends StoreErrorCode> =
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A typed error thrown by `@crustjs/store` for path, parse, and IO failures.
+ * A typed error thrown by `@crustjs/store` for path, parse, IO, and validation failures.
  *
  * Every `CrustStoreError` carries a {@link StoreErrorCode} that identifies the failure
  * category, along with structured {@link StoreErrorDetails} for programmatic handling

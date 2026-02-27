@@ -29,6 +29,75 @@ export type DeepPartial<T> = T extends readonly unknown[]
 		: T;
 
 // ────────────────────────────────────────────────────────────────────────────
+// StoreValidator — Provider-agnostic validation contract
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Result returned by a {@link StoreValidator} when validation succeeds.
+ *
+ * Carries the (possibly transformed) config value from the schema.
+ */
+export interface StoreValidatorSuccess<T> {
+	readonly ok: true;
+	readonly value: T;
+}
+
+/**
+ * A single validation issue reported by a {@link StoreValidator}.
+ *
+ * Compatible with the canonical `ValidationIssue` shape used across the Crust
+ * validation platform.
+ */
+export interface StoreValidatorIssue {
+	/** Human-readable description of the validation failure. */
+	message: string;
+	/** Dot-path to the invalid field, or empty string for root-level issues. */
+	path: string;
+}
+
+/**
+ * Result returned by a {@link StoreValidator} when validation fails.
+ *
+ * Carries structured issues for programmatic handling and error rendering.
+ */
+export interface StoreValidatorFailure {
+	readonly ok: false;
+	readonly issues: readonly StoreValidatorIssue[];
+}
+
+/**
+ * Discriminated union result from a {@link StoreValidator}.
+ */
+export type StoreValidatorResult<T> =
+	| StoreValidatorSuccess<T>
+	| StoreValidatorFailure;
+
+/**
+ * A provider-agnostic validator function for full config objects.
+ *
+ * Accepts a config value and returns a discriminated result indicating
+ * success (with a possibly-transformed value) or failure (with structured issues).
+ *
+ * Store adapters in `@crustjs/validate` produce functions matching this contract
+ * from Standard Schema, Zod, or Effect schemas.
+ *
+ * @typeParam T - The expected config type.
+ *
+ * @example
+ * ```ts
+ * const validator: StoreValidator<Config> = (config) => {
+ *   if (typeof config.theme !== "string") {
+ *     return { ok: false, issues: [{ message: "Expected string", path: "theme" }] };
+ *   }
+ *   return { ok: true, value: config };
+ * };
+ * ```
+ */
+export type StoreValidator<T> = (
+	value: unknown,
+) => StoreValidatorResult<T> | Promise<StoreValidatorResult<T>>;
+
+// ────────────────────────────────────────────────────────────────────────────
 // CreateStoreOptions — Factory configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -78,16 +147,29 @@ export interface CreateStoreOptions<T extends Record<string, unknown>> {
 	defaults: T;
 
 	/**
-	 * Optional validation function called before every write and patch.
+	 * Optional validator function applied to config objects during read, write,
+	 * update, and patch operations.
 	 *
-	 * Receives the full state that is about to be persisted. Throw an error
-	 * (or return a rejected promise) to prevent the write.
+	 * When provided, validation is **strict by default**: invalid config will
+	 * cause a `CrustStoreError` with `VALIDATION` code to be thrown on both
+	 * persistence (write/update/patch) and load (read) paths.
 	 *
-	 * @param state - The candidate state to validate.
-	 * @throws When the state is invalid — the error is wrapped in a
-	 *   `CrustStoreError` with `VALIDATION` code.
+	 * Use store adapters from `@crustjs/validate/standard`, `@crustjs/validate/zod`,
+	 * or `@crustjs/validate/effect` to create validators from schema definitions.
+	 *
+	 * @example
+	 * ```ts
+	 * import { storeValidator } from "@crustjs/validate/zod";
+	 * import { z } from "zod";
+	 *
+	 * const store = createStore({
+	 *   dirPath: configDir("my-cli"),
+	 *   defaults: { theme: "light", verbose: false },
+	 *   validator: storeValidator(z.object({ theme: z.enum(["light", "dark"]) })),
+	 * });
+	 * ```
 	 */
-	validate?: (state: T) => void | Promise<void>;
+	validator?: StoreValidator<T>;
 
 	/**
 	 * When `true` (the default), persisted keys not present in `defaults`
@@ -153,8 +235,12 @@ export interface Store<T> {
 	 * Always returns a complete `T` — missing persisted keys are filled
 	 * from `defaults`.
 	 *
-	 * @returns The effective state.
+	 * When a validator is configured, the merged config is validated after
+	 * defaults are applied. Invalid persisted config fails loudly.
+	 *
+	 * @returns The effective config value (possibly transformed by the validator).
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `VALIDATION` if the config fails validation.
 	 * @throws {CrustStoreError} `IO` on filesystem read failures.
 	 */
 	read(): Promise<T>;
@@ -162,8 +248,10 @@ export interface Store<T> {
 	/**
 	 * Atomically persists the full state object.
 	 *
+	 * When a validator is configured, the config is validated before persistence.
+	 *
 	 * @param state - The complete state to persist.
-	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the state.
+	 * @throws {CrustStoreError} `VALIDATION` if the config fails validation.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
 	write(state: NoInfer<T>): Promise<void>;
@@ -171,9 +259,13 @@ export interface Store<T> {
 	/**
 	 * Reads current effective state, applies the updater, and persists.
 	 *
+	 * When a validator is configured, the updated config is validated before
+	 * persistence. The read step during update does **not** validate separately
+	 * to avoid double-validation overhead.
+	 *
 	 * @param updater - Function receiving current state and returning updated state.
-	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the result.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `VALIDATION` if the updated config fails validation.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
 	update(updater: StoreUpdater<T>): Promise<void>;

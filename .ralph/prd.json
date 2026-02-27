@@ -73,8 +73,8 @@
 				"Run type checks with bun --cwd packages/store run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Per SPEC constraints, store validation is strict by default and must fail loudly for invalid persisted config. Keep @crustjs/store provider-agnostic and avoid hard dependency on zod/effect.",
-			"passed": false
+			"notes": "Completed. StoreValidator<T> contract added to types.ts, VALIDATION error code added to CrustStoreError, validator integrated into read/write/update paths. Strict by default, provider-agnostic. 156 store tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Implement Standard Schema store adapters in @crustjs/validate and expose provider wrappers for zod/effect",
@@ -88,7 +88,7 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "This task implements adapters only; store core contract work belongs to the previous task. Keep boundaries clear to avoid overlapping file ownership. Use validateStandard()/validateStandardSync() from standard/validate.ts for schema execution. For Effect schemas, wrap with standardSchemaV1() before passing to validateStandard().",
+			"notes": "This task implements adapters only; store core contract (Task 5) is complete. The adapter must return StoreValidator<T> from @crustjs/store/types.ts. Use validateStandard()/validateStandardSync() from standard/validate.ts for schema execution. Map ValidationResult to StoreValidatorResult (same ok/issues shape, just different types). StoreValidatorIssue has {message, path} matching ValidationIssue. For Effect schemas, wrap with standardSchemaV1() before passing to validateStandard().",
 			"passed": false
 		},
 		{

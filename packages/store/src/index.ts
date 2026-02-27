@@ -3,7 +3,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 // Errors
-export type { StoreErrorCode } from "./errors.ts";
+export type {
+	StoreErrorCode,
+	StoreValidationIssue,
+	ValidationErrorDetails,
+} from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
 export type { PlatformEnv } from "./path.ts";
 // Path
@@ -15,4 +19,9 @@ export type {
 	CreateStoreOptions,
 	Store,
 	StoreUpdater,
+	StoreValidator,
+	StoreValidatorFailure,
+	StoreValidatorIssue,
+	StoreValidatorResult,
+	StoreValidatorSuccess,
 } from "./types.ts";

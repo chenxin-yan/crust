@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CrustStoreError } from "./errors.ts";
 import { createStore } from "./store.ts";
+import type { StoreValidator } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -536,252 +537,6 @@ describe("store.reset", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// validate option
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("store validate option", () => {
-	let tempDir: string;
-
-	beforeEach(async () => {
-		tempDir = createTempDir();
-		await mkdir(tempDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
-	});
-
-	it("should call validate on write and allow valid state", async () => {
-		let validated = false;
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (_state) => {
-				validated = true;
-			},
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-		expect(validated).toBe(true);
-	});
-
-	it("should throw VALIDATION error on write when validate rejects", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") {
-					throw new Error("theme must be light or dark");
-				}
-			},
-		});
-
-		try {
-			await store.write({ theme: "invalid", verbose: false });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("VALIDATION")).toBe(true);
-			if (storeErr.is("VALIDATION")) {
-				expect(storeErr.details.operation).toBe("write");
-			}
-			expect(storeErr.message).toBe("theme must be light or dark");
-			expect(storeErr.cause).toBeInstanceOf(Error);
-		}
-	});
-
-	it("should not persist state when write validation fails", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") throw new Error("bad theme");
-			},
-		});
-
-		try {
-			await store.write({ theme: "invalid", verbose: false });
-		} catch {
-			// expected
-		}
-
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(false);
-	});
-
-	it("should throw VALIDATION error on update when validate rejects", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") {
-					throw new Error("bad theme");
-				}
-			},
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		try {
-			await store.update(() => ({ theme: "invalid", verbose: false }));
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("VALIDATION")).toBe(true);
-			if (storeErr.is("VALIDATION")) {
-				expect(storeErr.details.operation).toBe("update");
-			}
-		}
-	});
-
-	it("should not persist state when update validation fails", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") throw new Error("bad");
-			},
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		try {
-			await store.update(() => ({ theme: "invalid", verbose: false }));
-		} catch {
-			// expected
-		}
-
-		// Original state should be preserved
-		const result = await store.read();
-		expect(result.theme).toBe("dark");
-	});
-
-	it("should throw VALIDATION error on patch when validate rejects", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") {
-					throw new Error("bad theme");
-				}
-			},
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		try {
-			await store.patch({ theme: "invalid" });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("VALIDATION")).toBe(true);
-			if (storeErr.is("VALIDATION")) {
-				expect(storeErr.details.operation).toBe("patch");
-			}
-		}
-	});
-
-	it("should not persist state when patch validation fails", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme === "invalid") throw new Error("bad");
-			},
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		try {
-			await store.patch({ theme: "invalid" });
-		} catch {
-			// expected
-		}
-
-		// Original state should be preserved
-		const result = await store.read();
-		expect(result.theme).toBe("dark");
-	});
-
-	it("should support async validate functions", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: async (state) => {
-				await Promise.resolve(); // simulate async
-				if (state.theme === "invalid") {
-					throw new Error("async validation failed");
-				}
-			},
-		});
-
-		// Valid write should succeed
-		await store.write({ theme: "dark", verbose: true });
-
-		// Invalid write should fail
-		try {
-			await store.write({ theme: "invalid", verbose: false });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			expect((err as CrustStoreError).is("VALIDATION")).toBe(true);
-		}
-	});
-
-	it("should handle non-Error thrown values from validate", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: () => {
-				throw "string error"; // non-Error value
-			},
-		});
-
-		try {
-			await store.write({ theme: "dark", verbose: false });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustStoreError);
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.is("VALIDATION")).toBe(true);
-			expect(storeErr.message).toBe("Validation failed");
-			expect(storeErr.cause).toBe("string error");
-		}
-	});
-
-	it("should not call validate on read", async () => {
-		let validateCalled = false;
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: () => {
-				validateCalled = true;
-			},
-		});
-
-		await store.read();
-		expect(validateCalled).toBe(false);
-	});
-
-	it("should not call validate on reset", async () => {
-		let validateCalled = false;
-		const store = createStore({
-			dirPath: tempDir,
-			defaults: BASIC_DEFAULTS,
-			validate: () => {
-				validateCalled = true;
-			},
-		});
-
-		await store.reset();
-		expect(validateCalled).toBe(false);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // pruneUnknown option
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1001,11 +756,7 @@ describe("store lifecycle", () => {
 		const store = createStore({
 			dirPath: tempDir,
 			defaults: BASIC_DEFAULTS,
-			validate: (state) => {
-				if (state.theme !== "light" && state.theme !== "dark") {
-					throw new Error("invalid theme");
-				}
-			},
+			validator: conditionalValidator,
 		});
 
 		// Valid operations succeed
@@ -1098,5 +849,607 @@ describe("multiple stores with name option", () => {
 		// Verify different files exist
 		expect(existsSync(join(tempDir, "config.json"))).toBe(true);
 		expect(existsSync(join(tempDir, "auth.json"))).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Validator helpers for tests
+// ────────────────────────────────────────────────────────────────────────────
+
+type BasicConfig = { theme: string; verbose: boolean };
+
+/** A sync validator that accepts any config with a string theme and boolean verbose. */
+const passingValidator: StoreValidator<BasicConfig> = (value) => ({
+	ok: true,
+	value: value as BasicConfig,
+});
+
+/** A sync validator that always rejects with structured issues. */
+const failingValidator: StoreValidator<BasicConfig> = () => ({
+	ok: false,
+	issues: [
+		{ message: "theme must be 'light' or 'dark'", path: "theme" },
+		{ message: "verbose is required", path: "verbose" },
+	],
+});
+
+/** An async validator that accepts any config. */
+const asyncPassingValidator: StoreValidator<BasicConfig> = async (value) => ({
+	ok: true,
+	value: value as BasicConfig,
+});
+
+/** An async validator that always rejects. */
+const asyncFailingValidator: StoreValidator<BasicConfig> = async () => ({
+	ok: false,
+	issues: [{ message: "invalid config", path: "" }],
+});
+
+/** A validator that transforms values (uppercases theme). */
+const transformingValidator: StoreValidator<BasicConfig> = (value) => {
+	const config = value as BasicConfig;
+	return {
+		ok: true,
+		value: { ...config, theme: config.theme.toUpperCase() },
+	};
+};
+
+/** A validator that conditionally passes/fails based on theme value. */
+const conditionalValidator: StoreValidator<BasicConfig> = (value) => {
+	const config = value as BasicConfig;
+	if (config.theme !== "light" && config.theme !== "dark") {
+		return {
+			ok: false,
+			issues: [
+				{
+					message: "theme must be 'light' or 'dark'",
+					path: "theme",
+				},
+			],
+		};
+	}
+	return { ok: true, value: config };
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store validation — write path
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store.write with validator", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should persist valid config when validator passes", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: passingValidator,
+		});
+
+		await store.write({ theme: "dark", verbose: true });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
+	});
+
+	it("should throw VALIDATION error when validator rejects on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: failingValidator,
+		});
+
+		try {
+			await store.write({ theme: "dark", verbose: true });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			const storeErr = err as CrustStoreError;
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			if (storeErr.is("VALIDATION")) {
+				expect(storeErr.details.operation).toBe("write");
+				expect(storeErr.details.issues).toHaveLength(2);
+				expect(storeErr.details.issues[0]?.path).toBe("theme");
+				expect(storeErr.details.issues[0]?.message).toBe(
+					"theme must be 'light' or 'dark'",
+				);
+				expect(storeErr.details.issues[1]?.path).toBe("verbose");
+			}
+		}
+	});
+
+	it("should not persist config when validator rejects on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: failingValidator,
+		});
+
+		try {
+			await store.write({ theme: "invalid", verbose: true });
+		} catch {
+			// expected
+		}
+
+		const filePath = join(tempDir, "config.json");
+		expect(existsSync(filePath)).toBe(false);
+	});
+
+	it("should support async validators on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: asyncPassingValidator,
+		});
+
+		await store.write({ theme: "dark", verbose: true });
+
+		const filePath = join(tempDir, "config.json");
+		expect(existsSync(filePath)).toBe(true);
+	});
+
+	it("should throw VALIDATION for async validator rejection on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: asyncFailingValidator,
+		});
+
+		try {
+			await store.write({ theme: "dark", verbose: true });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).is("VALIDATION")).toBe(true);
+		}
+	});
+
+	it("should persist transformed value when validator transforms on write", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: transformingValidator,
+		});
+
+		await store.write({ theme: "dark", verbose: true });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "DARK", verbose: true });
+	});
+
+	it("should include formatted message with paths and issues", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: failingValidator,
+		});
+
+		try {
+			await store.write({ theme: "dark", verbose: true });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			const storeErr = err as CrustStoreError<"VALIDATION">;
+			expect(storeErr.message).toContain("Store validation failed (write)");
+			expect(storeErr.message).toContain(
+				"theme: theme must be 'light' or 'dark'",
+			);
+			expect(storeErr.message).toContain("verbose: verbose is required");
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store validation — read path
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store.read with validator", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should return validated config on read when validator passes", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: passingValidator,
+		});
+
+		const result = await store.read();
+		expect(result.theme).toBe("light");
+		expect(result.verbose).toBe(false);
+	});
+
+	it("should throw VALIDATION error on read when defaults fail validation", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: failingValidator,
+		});
+
+		try {
+			await store.read();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			const storeErr = err as CrustStoreError;
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			if (storeErr.is("VALIDATION")) {
+				expect(storeErr.details.operation).toBe("read");
+				expect(storeErr.details.issues.length).toBeGreaterThan(0);
+			}
+		}
+	});
+
+	it("should throw VALIDATION for invalid persisted config on read", async () => {
+		// Write valid JSON that the conditional validator will reject
+		const filePath = join(tempDir, "config.json");
+		await writeFile(
+			filePath,
+			JSON.stringify({ theme: "neon", verbose: false }),
+		);
+
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		try {
+			await store.read();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			const storeErr = err as CrustStoreError;
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			if (storeErr.is("VALIDATION")) {
+				expect(storeErr.details.operation).toBe("read");
+				expect(storeErr.details.issues[0]?.message).toBe(
+					"theme must be 'light' or 'dark'",
+				);
+			}
+		}
+	});
+
+	it("should return transformed value from validator on read", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: transformingValidator,
+		});
+
+		const result = await store.read();
+		// Default "light" → uppercased to "LIGHT"
+		expect(result.theme).toBe("LIGHT");
+		expect(result.verbose).toBe(false);
+	});
+
+	it("should support async validators on read", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: asyncPassingValidator,
+		});
+
+		const result = await store.read();
+		expect(result.theme).toBe("light");
+	});
+
+	it("should validate persisted config merged with defaults on read", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ theme: "dark" }));
+
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		const result = await store.read();
+		expect(result.theme).toBe("dark");
+		expect(result.verbose).toBe(false);
+	});
+
+	it("should handle root-level error messages (empty path)", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: asyncFailingValidator,
+		});
+
+		try {
+			await store.read();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			const storeErr = err as CrustStoreError<"VALIDATION">;
+			expect(storeErr.details.issues[0]?.path).toBe("");
+			// Root-level messages should not have a path prefix in the rendered message
+			expect(storeErr.message).toContain("  - invalid config");
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store validation — update path
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store.update with validator", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should persist valid updated config when validator passes", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		await store.update((current) => ({ ...current, theme: "dark" }));
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: false });
+	});
+
+	it("should throw VALIDATION error when updated config fails validation", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		try {
+			await store.update((current) => ({
+				...current,
+				theme: "neon",
+			}));
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			const storeErr = err as CrustStoreError;
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			if (storeErr.is("VALIDATION")) {
+				expect(storeErr.details.operation).toBe("update");
+				expect(storeErr.details.issues[0]?.path).toBe("theme");
+			}
+		}
+	});
+
+	it("should not persist when updated config fails validation", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		// First, write a valid config
+		await store.update((current) => ({ ...current, theme: "dark" }));
+
+		// Now attempt invalid update
+		try {
+			await store.update((current) => ({
+				...current,
+				theme: "neon",
+			}));
+		} catch {
+			// expected
+		}
+
+		// Original valid config should remain
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: false });
+	});
+
+	it("should persist transformed value from validator on update", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: transformingValidator,
+		});
+
+		await store.update((current) => ({ ...current, theme: "dark" }));
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "DARK", verbose: false });
+	});
+
+	it("should not validate during the read phase of update (avoids double validation)", async () => {
+		let callCount = 0;
+		const countingValidator: StoreValidator<BasicConfig> = (value) => {
+			callCount++;
+			return { ok: true, value: value as BasicConfig };
+		};
+
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: countingValidator,
+		});
+
+		await store.update((current) => ({ ...current, theme: "dark" }));
+
+		// Validator should be called exactly once (for the updated value, not the read)
+		expect(callCount).toBe(1);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store validation — reset path
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store.reset with validator", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should reset without calling validator", async () => {
+		let called = false;
+		const trackingValidator: StoreValidator<BasicConfig> = (value) => {
+			called = true;
+			return { ok: true, value: value as BasicConfig };
+		};
+
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: trackingValidator,
+		});
+
+		// Write first (triggers validator)
+		await store.write({ theme: "dark", verbose: true });
+		called = false; // reset tracking
+
+		// Reset should not call validator
+		await store.reset();
+		expect(called).toBe(false);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store without validator — backward compatibility
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store without validator (backward compatibility)", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should work identically without validator option", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+		});
+
+		// Full lifecycle without validator
+		const defaults = await store.read();
+		expect(defaults.theme).toBe("light");
+		expect(defaults.verbose).toBe(false);
+
+		await store.write({ theme: "dark", verbose: true });
+		const written = await store.read();
+		expect(written.theme).toBe("dark");
+
+		await store.update((c) => ({ ...c, verbose: false }));
+		const updated = await store.read();
+		expect(updated.verbose).toBe(false);
+
+		await store.reset();
+		const reset = await store.read();
+		expect(reset.theme).toBe("light");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store validation — full lifecycle integration
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store validation lifecycle", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should support full validated read → write → update → reset cycle", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		// Read returns validated defaults
+		const step1 = await store.read();
+		expect(step1.theme).toBe("light");
+
+		// Write valid config
+		await store.write({ theme: "dark", verbose: true });
+		const step2 = await store.read();
+		expect(step2.theme).toBe("dark");
+
+		// Update valid
+		await store.update((c) => ({ ...c, theme: "light" }));
+		const step3 = await store.read();
+		expect(step3.theme).toBe("light");
+
+		// Reset and read defaults
+		await store.reset();
+		const step4 = await store.read();
+		expect(step4.theme).toBe("light");
+
+		// Invalid write should be rejected
+		try {
+			await store.write({ theme: "neon", verbose: true });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect((err as CrustStoreError).is("VALIDATION")).toBe(true);
+		}
+	});
+
+	it("should detect corrupt persisted config on read with validator", async () => {
+		// Manually write invalid JSON data (valid JSON, but fails schema)
+		const filePath = join(tempDir, "config.json");
+		await writeFile(
+			filePath,
+			JSON.stringify({ theme: "invalid-theme", verbose: false }),
+		);
+
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		try {
+			await store.read();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).is("VALIDATION")).toBe(true);
+		}
 	});
 });
