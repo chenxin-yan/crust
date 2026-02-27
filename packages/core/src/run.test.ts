@@ -436,7 +436,7 @@ describe("runCommand", () => {
 
 		expect(
 			runCommand(rootCmd, { argv: [], plugins: [plugin] }),
-		).rejects.toThrow("addSubCommand: name is required");
+		).rejects.toThrow("addSubCommand: name must be a non-empty string");
 	});
 
 	// ── Subcommand routing ──────────────────────────────────────────────
@@ -805,7 +805,7 @@ describe("runMain", () => {
 
 			await runMain(cmd, { plugins: [plugin] });
 			expect(getStderr()).toContain(
-				'Plugin flag "--verbose" on command "cli" overrides an existing flag',
+				'Plugin flag "--verbose" on "cli" overrides existing flag',
 			);
 		});
 	});
@@ -835,7 +835,7 @@ describe("runMain", () => {
 
 			await runMain(cmd, { plugins: [plugin] });
 			expect(getStderr()).toContain(
-				'Plugin subcommand "deploy" on command "cli" was skipped',
+				'Plugin subcommand "deploy" on "cli" skipped (already exists)',
 			);
 		});
 	});

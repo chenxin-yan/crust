@@ -5,4 +5,5 @@ export default defineConfig({
 	format: ["esm"],
 	target: "bun",
 	dts: false,
+	minify: true,
 });

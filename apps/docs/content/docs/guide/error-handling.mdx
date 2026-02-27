@@ -134,17 +134,17 @@ Even without TypeScript or when types are erased, Crust validates definitions at
 
 | Check | Error Message |
 | --- | --- |
-| Empty `meta.name` | `meta.name is required and must be a non-empty string` |
-| Flag name starts with `no-` | `Flag name "--no-cache" must not start with "no-"; define "cache" instead...` |
-| Alias starts with `no-` | `Alias "--no-store" on flag "--cache" must not start with "no-"...` |
+| Empty `meta.name` | `meta.name must be a non-empty string` |
+| Flag name starts with `no-` | `Flag "--no-cache" must not use "no-" prefix; define "cache" and negate with "--no-cache"` |
+| Alias starts with `no-` | `Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)` |
 
 **`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
 
 | Check | Code | Error Message |
 | --- | --- | --- |
 | Alias collision (alias→name or alias→alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
-| `no-` prefixed flag name (defense-in-depth) | `DEFINITION` | `Flag name "--no-cache" must not start with "no-"...` |
-| `no-` prefixed alias (defense-in-depth) | `DEFINITION` | `Alias "--no-store" on flag "--cache" must not start with "no-"...` |
+| `no-` prefixed flag name (defense-in-depth) | `DEFINITION` | `Flag "--no-cache" must not use "no-" prefix...` |
+| `no-` prefixed alias (defense-in-depth) | `DEFINITION` | `Alias "--no-store" on "--cache" must not use "no-" prefix...` |
 | Unknown flag (strict mode) | `PARSE` | `Unknown flag "--unknown"` |
 | Invalid number coercion | `PARSE` | `Expected number for --port, got "abc"` |
 | Boolean value assignment (`--flag=true`) | `PARSE` | `Failed to parse command arguments` |

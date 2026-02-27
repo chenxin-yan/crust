@@ -48,10 +48,7 @@ export function defineCommand<
 ): Command<A, F> {
 	// Validate required meta.name
 	if (!config.meta.name.trim()) {
-		throw new CrustError(
-			"DEFINITION",
-			"defineCommand: meta.name is required and must be a non-empty string",
-		);
+		throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
 	}
 
 	// Runtime guard: reject flag names and aliases starting with "no-"
@@ -61,7 +58,7 @@ export function defineCommand<
 				const base = name.slice(3);
 				throw new CrustError(
 					"DEFINITION",
-					`Flag name "--${name}" must not start with "no-"; define "${base}" instead and use "--no-${base}" at runtime`,
+					`Flag "--${name}" must not use "no-" prefix; define "${base}" and negate with "--no-${base}"`,
 				);
 			}
 			if (def.alias) {
@@ -70,7 +67,7 @@ export function defineCommand<
 					if (alias.startsWith("no-")) {
 						throw new CrustError(
 							"DEFINITION",
-							`Alias "--${alias}" on flag "--${name}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`,
+							`Alias "--${alias}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
 						);
 					}
 				}
@@ -81,7 +78,7 @@ export function defineCommand<
 	// Deep copy data objects to decouple from the original config.
 	// Functions (preRun, run, postRun) are kept as-is since they can't be cloned.
 	// subCommands values are already frozen Command objects, so shallow copy is sufficient.
-	const copy: Command<A, F> = {
+	const cmd: Command<A, F> = {
 		...config,
 		meta: { ...config.meta },
 		...(config.args && {
@@ -95,6 +92,5 @@ export function defineCommand<
 		subCommands: config.subCommands ? { ...config.subCommands } : {},
 	};
 
-	// Freeze and return as immutable Command
-	return Object.freeze(copy) as Command<A, F>;
+	return Object.freeze(cmd) as Command<A, F>;
 }

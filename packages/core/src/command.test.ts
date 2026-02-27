@@ -47,7 +47,9 @@ describe("defineCommand", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("meta.name is required");
+			expect((err as CrustError).message).toContain(
+				"meta.name must be a non-empty string",
+			);
 		}
 	});
 
@@ -58,7 +60,9 @@ describe("defineCommand", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("meta.name is required");
+			expect((err as CrustError).message).toContain(
+				"meta.name must be a non-empty string",
+			);
 		}
 	});
 
@@ -383,7 +387,7 @@ describe('defineCommand "no-" prefix validation', () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toBe(
-				'Flag name "--no-cache" must not start with "no-"; define "cache" instead and use "--no-cache" at runtime',
+				'Flag "--no-cache" must not use "no-" prefix; define "cache" and negate with "--no-cache"',
 			);
 		}
 	});
@@ -400,7 +404,7 @@ describe('defineCommand "no-" prefix validation', () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toBe(
-				'Alias "--no-store" on flag "--cache" must not start with "no-"; the "no-" prefix is reserved for boolean negation',
+				'Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)',
 			);
 		}
 	});
@@ -419,7 +423,7 @@ describe('defineCommand "no-" prefix validation', () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toBe(
-				'Alias "--no-store" on flag "--cache" must not start with "no-"; the "no-" prefix is reserved for boolean negation',
+				'Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)',
 			);
 		}
 	});

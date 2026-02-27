@@ -63,12 +63,12 @@ function createSetupActions(warnings?: string[]): SetupActions {
 			if (!target.flags) {
 				throw new CrustError(
 					"DEFINITION",
-					`Cannot add flag "${name}": command "${target.meta.name}" has no flags object.`,
+					`Cannot add flag "${name}": "${target.meta.name}" has no flags object`,
 				);
 			}
 			if (name in target.flags) {
 				warnings?.push(
-					`Plugin flag "--${name}" on command "${target.meta.name}" overrides an existing flag`,
+					`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
 				);
 			}
 			target.flags[name] = def;
@@ -77,13 +77,13 @@ function createSetupActions(warnings?: string[]): SetupActions {
 			if (!name.trim()) {
 				throw new CrustError(
 					"DEFINITION",
-					"addSubCommand: name is required and must be a non-empty string",
+					"addSubCommand: name must be a non-empty string",
 				);
 			}
 			// User-defined subcommands take priority — skip
 			if (parent.subCommands[name]) {
 				warnings?.push(
-					`Plugin subcommand "${name}" on command "${parent.meta.name}" was skipped because a subcommand with the same name already exists`,
+					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped (already exists)`,
 				);
 				return;
 			}

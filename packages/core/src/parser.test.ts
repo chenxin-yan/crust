@@ -968,7 +968,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toContain(
-				'Flag name "--no-cache" must not start with "no-"',
+				'Flag "--no-cache" must not use "no-" prefix',
 			);
 		}
 	});
@@ -986,7 +986,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toContain(
-				'Alias "--no-store" on flag "--cache" must not start with "no-"',
+				'Alias "--no-store" on "--cache" must not use "no-" prefix',
 			);
 		}
 	});

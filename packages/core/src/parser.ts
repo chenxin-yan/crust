@@ -53,7 +53,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			const base = name.slice(3);
 			throw new CrustError(
 				"DEFINITION",
-				`Flag name "--${name}" must not start with "no-"; define "${base}" instead and use "--no-${base}" at runtime`,
+				`Flag "--${name}" must not use "no-" prefix; define "${base}" and negate with "--no-${base}"`,
 			);
 		}
 
@@ -77,7 +77,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 				if (alias.startsWith("no-")) {
 					throw new CrustError(
 						"DEFINITION",
-						`Alias "--${alias}" on flag "--${name}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`,
+						`Alias "--${alias}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
 					);
 				}
 
