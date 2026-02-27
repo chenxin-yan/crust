@@ -14,6 +14,10 @@ export {
 	parsePromptValueSync,
 	promptValidator,
 } from "../standard/prompt.ts";
+// Store adapters — re-exported from standard
+// Note: Effect schemas require wrapping with Schema.standardSchemaV1() before
+// passing to storeValidator/storeValidatorSync.
+export { storeValidator, storeValidatorSync } from "../standard/store.ts";
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
 // Public types

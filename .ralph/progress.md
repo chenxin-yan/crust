@@ -203,3 +203,43 @@
 - The `StoreValidator<T>` contract supports both sync and async validators — `createStore` always awaits the result. If a sync-only store is ever needed, a sync variant would require changes.
 - The `operation` field in `ValidationErrorDetails` distinguishes where validation failed: `"read"`, `"write"`, or `"update"`. This helps consumers differentiate between corrupt persisted config (read) vs bad input (write/update).
 - Backward compatibility is preserved: stores without `validator` option behave identically to before.
+
+---
+
+## Task: Implement Standard Schema store adapters in @crustjs/validate and expose provider wrappers for zod/effect
+
+### Completed
+
+- Implemented `storeValidator()` (async) and `storeValidatorSync()` (sync) in `standard/store.ts` that convert a Standard Schema into `StoreValidator<T>`-compatible functions
+- Both functions delegate to `validateStandard()` / `validateStandardSync()` from the standard core for schema execution and issue normalization
+- The returned validator functions accept `unknown` and return a discriminated `{ ok: true, value }` / `{ ok: false, issues }` result structurally compatible with `StoreValidatorResult<T>`
+- Defined internal `StoreValidatorResultLike<T>` structural type to match `StoreValidatorResult<T>` without importing from `@crustjs/store` (keeps package boundaries clean)
+- Exported `storeValidator` and `storeValidatorSync` from `@crustjs/validate/standard`, `@crustjs/validate/zod`, and `@crustjs/validate/effect` entrypoints
+- Zod and Effect entrypoints re-export directly from `standard/store.ts` — no provider-specific wrapping needed since the functions accept any Standard Schema
+- Added 27 new unit tests covering: valid passthrough, transformed output, async schemas, invalid configs with single/multiple/nested/array/root-level/PathSegment issues, null/undefined input, successive calls, empty issues, sync TypeError on async schema, and structural compatibility assertions
+- Updated scaffold tests to verify `storeValidator` and `storeValidatorSync` exports from all three entrypoints
+- All 255 validate tests pass, 156 store tests pass, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/src/standard/store.ts` — new: `storeValidator()`, `storeValidatorSync()`, `StoreValidatorResultLike<T>` type
+- `packages/validate/src/standard/store.test.ts` — new: 27 unit tests for store adapter
+- `packages/validate/src/standard/index.ts` — added exports for `storeValidator`, `storeValidatorSync`
+- `packages/validate/src/zod/index.ts` — added re-exports for store adapters from standard
+- `packages/validate/src/effect/index.ts` — added re-exports for store adapters from standard
+- `packages/validate/src/scaffold.test.ts` — extended with `storeValidator`/`storeValidatorSync` export checks for all entrypoints
+
+### Decisions
+
+- **No dependency on `@crustjs/store`**: The adapter uses a structural `StoreValidatorResultLike<T>` type that matches `StoreValidatorResult<T>` without importing from `@crustjs/store`. This keeps the package boundary clean — `@crustjs/validate` never imports from `@crustjs/store`.
+- **No mapping needed**: `ValidationResult<T>` from the standard core is structurally identical to `StoreValidatorResult<T>` — both use `{ ok: true, value: T }` | `{ ok: false, issues: { message, path }[] }`. The adapter simply returns the `validateStandard()` result directly.
+- **Async and sync variants**: `storeValidator()` (async, always safe) and `storeValidatorSync()` (sync, throws TypeError on async schemas) mirror the pattern established by `validateStandard()`/`validateStandardSync()` and `parsePromptValue()`/`parsePromptValueSync()`.
+- **Direct re-export from standard**: Zod and Effect entrypoints re-export directly — no wrapper functions needed since the adapters accept any Standard Schema. Effect schemas need `Schema.standardSchemaV1()` wrapping at the caller level, consistent with prompt adapters.
+
+### Notes for Future Agent
+
+- The store adapter is now complete. `createStore({ validator: storeValidator(schema) })` works for any Standard Schema-compatible library.
+- For Effect schemas, callers must wrap: `storeValidator(Schema.standardSchemaV1(effectSchema))`.
+- Task 7 (explicit parser metadata) is independent and can proceed without store adapter changes.
+- Task 8 (documentation) should include store adapter usage examples showing the `validator` option with Zod and Effect schemas.
+- Task 9 (cross-package integration tests) should exercise a shared schema across command, prompt, and store targets — the store adapter is now ready for this.

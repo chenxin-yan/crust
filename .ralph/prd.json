@@ -88,8 +88,8 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "This task implements adapters only; store core contract (Task 5) is complete. The adapter must return StoreValidator<T> from @crustjs/store/types.ts. Use validateStandard()/validateStandardSync() from standard/validate.ts for schema execution. Map ValidationResult to StoreValidatorResult (same ok/issues shape, just different types). StoreValidatorIssue has {message, path} matching ValidationIssue. For Effect schemas, wrap with standardSchemaV1() before passing to validateStandard().",
-			"passed": false
+			"notes": "Completed. storeValidator() (async) and storeValidatorSync() (sync) convert Standard Schema to StoreValidator<T>-compatible functions. Re-exported from zod/effect entrypoints. No @crustjs/store dependency — uses structural type compatibility. 255 validate tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Unify command arg/flag schema DX by adding explicit parser metadata fallback when schema introspection is ambiguous",

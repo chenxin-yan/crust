@@ -12,6 +12,8 @@ export {
 	parsePromptValueSync,
 	promptValidator,
 } from "../standard/prompt.ts";
+// Store adapters — re-exported from standard (Zod v4 implements Standard Schema natively)
+export { storeValidator, storeValidatorSync } from "../standard/store.ts";
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
 // Public types
