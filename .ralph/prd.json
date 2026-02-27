@@ -1,0 +1,75 @@
+{
+	"tasks": [
+		{
+			"description": "Implement intent-based path helpers for config/data/state/cache with XDG conventions on Linux and macOS",
+			"subtasks": [
+				"Refactor `packages/store/src/path.ts` to expose `configDir`, `dataDir`, `stateDir`, and `cacheDir` using shared app-name validation and per-platform base directory resolvers",
+				"Apply XDG environment variable support for Unix platforms: `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` with fallback to `~/.config`, `~/.local/share`, `~/.local/state`, and `~/.cache`",
+				"Keep Windows behavior explicit: `config` from `%APPDATA%` fallback `~/AppData/Roaming`; `data`, `state`, and `cache` from `%LOCALAPPDATA%` fallback `~/AppData/Local/<app>/<Bucket>`",
+				"Update `packages/store/src/path.test.ts` to cover all four helpers across Linux/macOS/Windows plus env override and invalid input cases",
+				"Run `bun run test --filter @crustjs/store` to verify store package tests pass",
+				"Run `bun run check:types` to ensure no type errors",
+				"Run `bun run check` to ensure lint/format checks pass"
+			],
+			"notes": "SPEC decisions: no `kind` parameter and XDG on macOS for a unified Unix mental model. Keep path helper API explicit and deterministic.",
+			"passed": false
+		},
+		{
+			"description": "Redesign store public types from field-definition schema to object-default schema for nested app state",
+			"subtasks": [
+				"Replace field-centric contracts in `packages/store/src/types.ts` with generic object contracts: `CreateStoreOptions<T>`, `Store<T>`, `StoreUpdater<T>`, and `DeepPartial<T>`",
+				"Define options to include `defaults`, optional `validate`, and optional `pruneUnknown` while keeping `dirPath` and optional `name`",
+				"Add or rewrite `packages/store/src/types.test.ts` type-level tests to verify inference for nested objects, arrays, optional members, and updater signatures",
+				"Update `packages/store/src/index.ts` type exports to remove deprecated field-definition types and expose the new contracts",
+				"Run `bun run test --filter @crustjs/store` to verify store package tests pass",
+				"Run `bun run check:types` to ensure no type errors",
+				"Run `bun run check` to ensure lint/format checks pass"
+			],
+			"notes": "This is the core DX change: users provide one typed defaults object and get a typed store without primitive-only limitations.",
+			"passed": false
+		},
+		{
+			"description": "Implement deep merge and pruning primitives for defaults + persisted JSON",
+			"subtasks": [
+				"Refactor `packages/store/src/merge.ts` to implement deep object merge behavior where persisted values override defaults, arrays replace wholesale, and missing keys fall back to defaults",
+				"Add support for `pruneUnknown` behavior so unknown persisted keys are dropped by default and preserved only when explicitly disabled",
+				"Ensure merge logic clones mutable structures (`objects` and `arrays`) to avoid shared-reference mutation from defaults",
+				"Rewrite `packages/store/src/merge.test.ts` to cover nested object merges, array replacement, unknown-key handling, and immutability guarantees",
+				"Run `bun run test --filter @crustjs/store` to verify store package tests pass",
+				"Run `bun run check:types` to ensure no type errors",
+				"Run `bun run check` to ensure lint/format checks pass"
+			],
+			"notes": "Keep semantics deterministic and simple; this task must not introduce store IO behavior changes yet.",
+			"passed": false
+		},
+		{
+			"description": "Refactor createStore runtime to support read/write/update/patch/reset with optional validation",
+			"subtasks": [
+				"Update `packages/store/src/store.ts` to consume new options (`defaults`, `validate`, `pruneUnknown`) and merge persisted JSON through the new merge primitives",
+				"Add `patch(partial)` to the store runtime using deep partial updates before persistence",
+				"Apply `validate` checks consistently in `write`, `update`, and `patch` before writing to disk and surface failures with `CrustStoreError`",
+				"Adjust `packages/store/src/persistence.ts` and `packages/store/src/errors.ts` only as needed to keep error details accurate for new operations",
+				"Rewrite `packages/store/src/store.test.ts`, `packages/store/src/persistence.test.ts`, and `packages/store/src/index.test.ts` for the new API and runtime semantics",
+				"Run `bun run test --filter @crustjs/store` to verify store package tests pass",
+				"Run `bun run check:types` to ensure no type errors",
+				"Run `bun run check` to ensure lint/format checks pass"
+			],
+			"notes": "No backward compatibility requirement: remove field-based behavior cleanly and keep the runtime API minimal and intuitive.",
+			"passed": false
+		},
+		{
+			"description": "Rewrite package documentation and metadata for the new multi-store DX model",
+			"subtasks": [
+				"Update `packages/store/README.md` quick start and API docs to show object-default stores and the four path helpers (`configDir`, `dataDir`, `stateDir`, `cacheDir`)",
+				"Update module docs in `apps/docs/content/docs/modules/store.mdx` to explain config vs data vs state vs cache intent and XDG-on-macOS rationale",
+				"Adjust `packages/store/package.json` description/keywords to remove config-only positioning",
+				"Add an entry to `packages/store/CHANGELOG.md` summarizing the API redesign and path convention changes",
+				"Run `bun run test --filter @crustjs/store` to verify store package tests pass",
+				"Run `bun run check:types` to ensure no type errors",
+				"Run `bun run check` to ensure lint/format checks pass"
+			],
+			"notes": "Examples should lead with CLI scenarios using separate config/state/cache/data stores and avoid introducing a `kind` option.",
+			"passed": false
+		}
+	]
+}
