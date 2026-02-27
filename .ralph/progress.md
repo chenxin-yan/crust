@@ -45,3 +45,38 @@
 - The `ValidationResult` type from `standard/types.ts` is similar but distinct from the `ValidationResult` in `middleware.ts` — Task 2 should unify these
 - Both Zod v4 and Effect Schema implement Standard Schema v1, so the standard core can be the single execution path for both providers
 - The `success()`/`failure()` helpers will be useful for store adapters (Task 6) and prompt adapters (Task 3)
+
+---
+
+## Task: Refactor command validation runtime to use the Standard Schema core while keeping provider-specific command DSL ergonomics
+
+### Completed
+
+- Refactored `withZod.ts` to delegate schema execution to `validateStandard()` from the standard core, removing direct `zod/v4/core` `safeParseAsync` dependency and manual issue normalization
+- Refactored `withEffect.ts` to delegate schema execution to `validateStandard()` from the standard core via `standardSchemaV1()` wrapper, removing direct `effect/Effect`, `effect/Either`, `effect/ParseResult`, and `effect/Schema.decodeUnknown` dependencies
+- Unified `ValidationResult` type: `middleware.ts` now re-exports `ValidationResult` from `standard/types.ts` instead of defining its own duplicate type
+- Removed duplicated provider-specific issue mapping logic (`normalizeIssues` calls with manual prefix prepending) from both `withZod.ts` and `withEffect.ts` — all issue normalization now flows through `normalizeStandardIssues()` in the standard core
+- Updated `withEffect` docstring to reflect that async schemas are now supported (previously was sync-only due to `Effect.runSync`)
+- All 168 existing tests pass unchanged, monorepo type checks clean, biome lint clean
+
+### Files Changed
+
+- `packages/validate/src/middleware.ts` — replaced local `ValidationResult` type with re-export from `standard/types.ts`
+- `packages/validate/src/zod/withZod.ts` — replaced Zod-specific `validateValue` with inline `validateStandard()` call, removed `safeParseAsync` and `normalizeIssues` imports
+- `packages/validate/src/effect/withEffect.ts` — replaced Effect-specific `validateValue` with inline `validateStandard()` + `standardSchemaV1()` call, removed all Effect runtime imports (`Effect`, `Either`, `ParseResult`, `decodeUnknown`)
+
+### Decisions
+
+- **Zod schemas are Standard Schema-native**: Zod v4 schemas already implement `~standard.validate` directly, so `validateStandard()` can consume them without any wrapper
+- **Effect schemas need `standardSchemaV1()` wrapper**: Effect Schema v3.19 does not implement `~standard` on schema objects natively but provides `Schema.standardSchemaV1()` to create a compatible wrapper — this is called at validation time in `withEffect`
+- **No backward-compat break**: The public API surface (`withZod`, `withEffect`, `arg`, `flag`) remains identical. The refactoring is purely internal delegation changes
+- **Unified `ValidationResult`**: Rather than maintaining two identical types, `middleware.ts` now re-exports from `standard/types.ts`. The standard version carries `readonly issues` and optional inverse fields (`issues?: undefined` on success, `value?: undefined` on failure) which is a superset of the old middleware type
+- **`withEffect` is no longer sync-only**: Since `validateStandard()` always awaits, Effect schemas that return async results (e.g., via `Schema.filterEffect`) now work correctly instead of throwing `AsyncFiberException`
+
+### Notes for Future Agent
+
+- The `normalizeIssues` function in `validation.ts` is no longer used by any provider — it's only referenced in its own test file. It may be removable or kept for external consumers
+- The `ValidateValueFn` type in `middleware.ts` now accepts `ValidationResult` from `standard/types.ts` which includes optional `value?: undefined` / `issues?: undefined` fields — this is structurally compatible with how `buildValidatedRunner` consumes results
+- Effect's `standardSchemaV1()` returns a function object (not a plain object) with `~standard` interface. The `as StandardSchema` cast is safe because it matches the structural contract
+- For prompt adapters (Task 3) and store adapters (Task 6), the same `validateStandard()` function can be reused directly — no need to go through provider-specific validation paths
+- The `formatPath`/`normalizeIssues`/`renderBulletList`/`throwValidationError` utilities in `validation.ts` are still used by `middleware.ts` for error rendering — they remain unchanged

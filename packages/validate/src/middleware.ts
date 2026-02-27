@@ -1,4 +1,5 @@
 import type { CommandContext } from "@crustjs/core";
+import type { ValidationResult } from "./standard/types.ts";
 import type { ValidatedContext, ValidationIssue } from "./types.ts";
 import { throwValidationError } from "./validation.ts";
 
@@ -6,10 +7,9 @@ import { throwValidationError } from "./validation.ts";
 // Shared types for provider-agnostic validation
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Result of validating a single value against a schema. */
-export type ValidationResult =
-	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly issues: ValidationIssue[] };
+// Re-export ValidationResult from the Standard Schema core so consumers
+// that previously imported it from middleware.ts continue to work.
+export type { ValidationResult } from "./standard/types.ts";
 
 /**
  * Provider-specific function that validates a single value against a schema.

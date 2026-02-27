@@ -1,33 +1,9 @@
 import type { ArgsDef, CommandContext, FlagsDef } from "@crustjs/core";
-import { safeParseAsync } from "zod/v4/core";
-import type { ValidationResult } from "../middleware.ts";
 import { buildValidatedRunner } from "../middleware.ts";
-import { normalizeIssues } from "../validation.ts";
-import type { WithZodHandler, ZodSchemaLike } from "./types.ts";
+import type { StandardSchema } from "../standard/types.ts";
+import { validateStandard } from "../standard/validate.ts";
+import type { WithZodHandler } from "./types.ts";
 import { ZOD_SCHEMA } from "./types.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Provider-specific validation
-// ────────────────────────────────────────────────────────────────────────────
-
-async function validateValue(
-	schema: unknown,
-	value: unknown,
-	prefix: readonly PropertyKey[],
-): Promise<ValidationResult> {
-	const parseResult = await safeParseAsync(schema as ZodSchemaLike, value);
-
-	if (parseResult.success) {
-		return { ok: true, value: parseResult.data };
-	}
-
-	const prefixed = parseResult.error.issues.map((issue) => ({
-		message: issue.message,
-		path: [...prefix, ...(issue.path ?? [])],
-	}));
-
-	return { ok: false, issues: normalizeIssues(prefixed) };
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // withZod — validated run middleware for defineCommand
@@ -73,7 +49,8 @@ export function withZod<
 		handler as (
 			ctx: import("../types.ts").ValidatedContext<unknown, unknown>,
 		) => void | Promise<void>,
-		validateValue,
+		(schema, value, prefix) =>
+			validateStandard(schema as StandardSchema, value, prefix),
 		ZOD_SCHEMA,
 		"withZod",
 	) as (context: CommandContext<A, F>) => Promise<void>;

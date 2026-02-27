@@ -27,8 +27,8 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "No backward-compat constraints are required, but the resulting command DX should remain clean and equivalent or better. Ensure middleware behavior in packages/validate/src/middleware.ts remains deterministic. Key integration points: validateStandard() from standard/validate.ts can replace the provider-specific validateValue functions in withZod.ts/withEffect.ts. The ValidationResult type in standard/types.ts is similar to middleware.ts's ValidationResult — consider unifying. Both Zod v4 and Effect Schema implement Standard Schema v1, so ~standard.validate should work directly.",
-			"passed": false
+			"notes": "Completed. Both providers now delegate to validateStandard() from standard core. ValidationResult unified. Effect uses standardSchemaV1() wrapper. All 168 tests pass unchanged.",
+			"passed": true
 		},
 		{
 			"description": "Add first-class prompt validation adapters in @crustjs/validate/standard with consistent error rendering and async support",
@@ -42,7 +42,7 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "Prompt integration must not require changes to @crustjs/prompts internals. The adapter should fit the existing ValidateFn<T> contract from packages/prompts/src/core/types.ts.",
+			"notes": "Prompt integration must not require changes to @crustjs/prompts internals. The adapter should fit the existing ValidateFn<T> contract from packages/prompts/src/core/types.ts. Use validateStandard() from standard/validate.ts for schema execution — it handles both sync and async schemas and returns normalized ValidationResult.",
 			"passed": false
 		},
 		{
@@ -88,7 +88,7 @@
 				"Run type checks with bun --cwd packages/validate run check:types",
 				"Run monorepo lint/format checks with bun run check"
 			],
-			"notes": "This task implements adapters only; store core contract work belongs to the previous task. Keep boundaries clear to avoid overlapping file ownership.",
+			"notes": "This task implements adapters only; store core contract work belongs to the previous task. Keep boundaries clear to avoid overlapping file ownership. Use validateStandard()/validateStandardSync() from standard/validate.ts for schema execution. For Effect schemas, wrap with standardSchemaV1() before passing to validateStandard().",
 			"passed": false
 		},
 		{
