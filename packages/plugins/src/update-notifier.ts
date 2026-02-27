@@ -90,6 +90,130 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Internal utilities — version parsing & comparison
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parsed representation of a standard semver version (major.minor.patch).
+ * Prerelease and build metadata are intentionally ignored — the plugin
+ * only compares stable release versions.
+ */
+interface SemverParts {
+	major: number;
+	minor: number;
+	patch: number;
+}
+
+/**
+ * Attempt to parse a version string into numeric semver parts.
+ *
+ * Accepts `"major.minor.patch"` with an optional leading `"v"`.
+ * Returns `null` for any input that does not match the expected format
+ * or contains non-finite numeric segments.
+ *
+ * **Note:** Prerelease suffixes (e.g. `-beta.1`) and build metadata
+ * (e.g. `+sha.abc`) are intentionally stripped before parsing. The
+ * plugin treats prerelease versions as equivalent to their base version
+ * for comparison purposes, which avoids false-positive update notices for
+ * users on prerelease channels.
+ *
+ * @internal
+ */
+export function parseSemver(version: string): SemverParts | null {
+	// Strip optional leading "v"
+	const cleaned = version.startsWith("v") ? version.slice(1) : version;
+
+	// Strip prerelease / build-metadata suffix (anything after first - or +)
+	const base = cleaned.split(/[-+]/)[0] ?? "";
+
+	const parts = base.split(".");
+	if (parts.length !== 3) return null;
+
+	const [rawMajor, rawMinor, rawPatch] = parts as [string, string, string];
+	const major = Number(rawMajor);
+	const minor = Number(rawMinor);
+	const patch = Number(rawPatch);
+
+	if (
+		!Number.isFinite(major) ||
+		!Number.isFinite(minor) ||
+		!Number.isFinite(patch)
+	) {
+		return null;
+	}
+
+	if (major < 0 || minor < 0 || patch < 0) return null;
+
+	return { major, minor, patch };
+}
+
+/**
+ * Returns `true` when `latest` represents a strictly newer stable version
+ * than `current`. Returns `false` for equal versions, older versions, or
+ * when either input is unparsable.
+ *
+ * @internal
+ */
+export function isNewerVersion(current: string, latest: string): boolean {
+	const cur = parseSemver(current);
+	const lat = parseSemver(latest);
+	if (!cur || !lat) return false;
+
+	if (lat.major !== cur.major) return lat.major > cur.major;
+	if (lat.minor !== cur.minor) return lat.minor > cur.minor;
+	return lat.patch > cur.patch;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal utilities — npm registry fetch
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the `dist-tags.latest` version string for a package from an npm
+ * registry.
+ *
+ * Uses `AbortController` with `setTimeout` to enforce a hard timeout so
+ * network stalls cannot hang the CLI process.
+ *
+ * Returns `null` on any failure (network error, timeout, non-OK status,
+ * missing/malformed response body).
+ *
+ * @internal
+ */
+export async function fetchLatestVersion(
+	packageName: string,
+	registryUrl: string,
+	timeoutMs: number,
+): Promise<string | null> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+	try {
+		const url = `${registryUrl.replace(/\/+$/, "")}/${encodeURIComponent(packageName)}`;
+		const response = await fetch(url, {
+			signal: controller.signal,
+			headers: { Accept: "application/vnd.npm.install-v1+json" },
+		});
+
+		if (!response.ok) return null;
+
+		const data = (await response.json()) as {
+			"dist-tags"?: Record<string, string>;
+		};
+
+		const latest = data?.["dist-tags"]?.latest;
+		if (typeof latest !== "string" || latest.length === 0) return null;
+
+		return latest;
+	} catch {
+		// Network error, abort, JSON parse failure — all soft failures
+		return null;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Plugin factory
 // ────────────────────────────────────────────────────────────────────────────
 
