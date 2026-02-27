@@ -35,6 +35,16 @@ export interface IOErrorDetails {
 }
 
 /**
+ * Contextual details attached to a `VALIDATION` error.
+ *
+ * Returned when user-supplied `validate` function rejects the state.
+ */
+export interface ValidationErrorDetails {
+	/** The store operation that triggered validation (e.g. `"write"`, `"update"`, `"patch"`). */
+	operation: "write" | "update" | "patch";
+}
+
+/**
  * Maps each {@link StoreErrorCode} to its structured details type.
  *
  * Used internally for conditional constructor parameters and type narrowing.
@@ -43,6 +53,7 @@ export interface StoreErrorDetailsMap {
 	PATH: PathErrorDetails;
 	PARSE: ParseErrorDetails;
 	IO: IOErrorDetails;
+	VALIDATION: ValidationErrorDetails;
 }
 
 /**
@@ -51,6 +62,7 @@ export interface StoreErrorDetailsMap {
  * - `PATH` — Invalid or unsupported config file path
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
+ * - `VALIDATION` — User-supplied `validate` function rejected the state
  *
  * @example
  * ```ts

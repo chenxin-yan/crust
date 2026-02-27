@@ -2,6 +2,7 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
+import { CrustStoreError } from "./errors.ts";
 import { applyDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
@@ -52,10 +53,33 @@ import type {
 export function createStore<const T extends Record<string, unknown>>(
 	options: CreateStoreOptions<T>,
 ): Store<T> {
-	const { dirPath, name, defaults } = options;
+	const { dirPath, name, defaults, validate, pruneUnknown } = options;
 
 	// Resolve the store file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
+
+	// Resolve pruneUnknown — defaults to true when not provided
+	const shouldPrune = pruneUnknown ?? true;
+
+	// ──────────────────────────────────────────────────────────────────────
+	// runValidate — Call user-supplied validate before persisting
+	// ──────────────────────────────────────────────────────────────────────
+
+	async function runValidate(
+		state: T,
+		operation: "write" | "update" | "patch",
+	): Promise<void> {
+		if (!validate) return;
+		try {
+			await validate(state);
+		} catch (cause) {
+			const message =
+				cause instanceof Error ? cause.message : "Validation failed";
+			throw new CrustStoreError("VALIDATION", message, {
+				operation,
+			}).withCause(cause);
+		}
+	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// read — Load persisted state, apply defaults for missing keys
@@ -66,37 +90,44 @@ export function createStore<const T extends Record<string, unknown>>(
 		return applyDefaults(
 			persisted as Record<string, unknown> | undefined,
 			defaults,
+			shouldPrune,
 		) as T;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// write — Atomically persist full state
+	// write — Validate then atomically persist full state
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function write(state: T): Promise<void> {
+		await runValidate(state, "write");
 		await writeJson(filePath, state);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current, apply updater, persist
+	// update — Read current, apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<T>): Promise<void> {
 		const current = await read();
 		const updated = updater(current);
+		await runValidate(updated, "update");
 		await writeJson(filePath, updated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// patch — Deep partial update (placeholder — full impl in task 3/4)
+	// patch — Deep partial merge into current state, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function patch(partial: DeepPartial<T>): Promise<void> {
 		const current = await read();
+		// Use applyDefaults with current as defaults and partial as persisted.
+		// pruneUnknown=false so keys in current not in partial are preserved.
 		const merged = applyDefaults(
 			partial as Record<string, unknown>,
 			current as Record<string, unknown>,
+			false,
 		) as T;
+		await runValidate(merged, "patch");
 		await writeJson(filePath, merged);
 	}
 

@@ -54,8 +54,8 @@
 				"Run `bun run check:types` to ensure no type errors",
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
-			"notes": "No backward compatibility requirement. The type contracts are already in place: `CreateStoreOptions<T>` has `defaults`, `validate`, and `pruneUnknown`. `Store<T>` already has `patch` method stub. Wire `validate` (call before writeJson in write/update/patch, throw CrustStoreError with VALIDATION code on failure) and `pruneUnknown` (pass to merge via 3rd arg: `applyDefaults(persisted, defaults, pruneUnknown)`). Add VALIDATION to StoreErrorCode in errors.ts. The `patch` method in store.ts currently uses `applyDefaults(partial, current)` — this now works for deep partial updates since applyDefaults does proper deep merge. Verify patch behavior in tests. Use `as string`/`as boolean` type widening in test defaults to avoid const narrowing.",
-			"passed": false
+			"notes": "DONE. Added VALIDATION error code to errors.ts. Wired validate (called before writeJson in write/update/patch, throws CrustStoreError VALIDATION on failure with cause). Wired pruneUnknown through to applyDefaults in read(). Fixed patch to use applyDefaults(partial, current, false) for correct deep partial merge preserving all current keys. 234 tests pass.",
+			"passed": true
 		},
 		{
 			"description": "Rewrite package documentation and metadata for the new multi-store DX model",
@@ -68,7 +68,7 @@
 				"Run `bun run check:types` to ensure no type errors",
 				"Run `bun run check` to ensure lint/format checks pass"
 			],
-			"notes": "Examples should lead with CLI scenarios using separate config/state/cache/data stores and avoid introducing a `kind` option. Note: macOS configDir changed from ~/Library/Application Support to ~/.config (XDG) — README and docs must be updated to reflect this. Windows data/state/cache use bucket subdirectories under %LOCALAPPDATA%/<appName>/Data|State|Cache.",
+			"notes": "Examples should lead with CLI scenarios using separate config/state/cache/data stores and avoid introducing a `kind` option. Note: macOS configDir changed from ~/Library/Application Support to ~/.config (XDG) — README and docs must be updated to reflect this. Windows data/state/cache use bucket subdirectories under %LOCALAPPDATA%/<appName>/Data|State|Cache. New API: createStore takes `defaults` (not `fields`), plus optional `validate`, `pruneUnknown`. Store has 5 methods: read/write/update/patch/reset. validate is called on write/update/patch. VALIDATION error code added. patch does deep partial merge. pruneUnknown defaults true.",
 			"passed": false
 		}
 	]

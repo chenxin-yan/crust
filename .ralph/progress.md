@@ -110,3 +110,40 @@
 - `store.ts` currently calls `applyDefaults(persisted, defaults)` without passing `pruneUnknown` — task 4 should wire `options.pruneUnknown` through to get the `pruneUnknown=false` behavior working end-to-end
 - The `patch` method in `store.ts` uses `applyDefaults` with `current` as defaults and `partial` as persisted — this should work correctly now for deep partial updates since `applyDefaults` does proper deep merge. Verify in task 4 tests.
 - 212 tests pass, type checks and lint are clean
+
+---
+
+## Task: Refactor createStore runtime to support read/write/update/patch/reset with optional validation
+
+### Completed
+
+- Added `VALIDATION` error code to `StoreErrorDetailsMap` in `errors.ts` with `ValidationErrorDetails` interface (includes `operation` field: `"write" | "update" | "patch"`)
+- Wired `validate` option in `createStore`: calls user-supplied `validate(state)` before `writeJson` in `write`, `update`, and `patch` — throws `CrustStoreError` with `VALIDATION` code on failure, wrapping the original error as `cause`
+- Wired `pruneUnknown` option through to `applyDefaults` in `read()` — defaults to `true` when not provided
+- Fixed `patch` method: uses `applyDefaults(partial, current, false)` so all current keys are preserved and partial values override via deep merge
+- Rewrote `store.test.ts` with comprehensive test coverage:
+  - New `store.patch` section (5 tests): deep partial merge, array replacement, nested updates
+  - New `store validate option` section (11 tests): validate on write/update/patch, async validate, non-Error causes, no validate on read/reset, state not persisted on validation failure
+  - New `store pruneUnknown option` section (4 tests): default pruning, explicit true/false, nested unknown keys
+  - Updated lifecycle tests to include patch in the full cycle
+  - Added deep merge nested defaults test to read section
+
+### Files Changed
+
+- `packages/store/src/errors.ts` — added `ValidationErrorDetails` interface and `VALIDATION` to `StoreErrorDetailsMap`
+- `packages/store/src/store.ts` — wired `validate`, `pruneUnknown`, added `runValidate` helper, fixed `patch` with `pruneUnknown=false`
+- `packages/store/src/store.test.ts` — comprehensive rewrite with validation, pruneUnknown, and patch test sections
+
+### Decisions
+
+- `validate` is called before `writeJson` in all mutation operations (write, update, patch) — never on read or reset
+- Validation errors wrap the original thrown value as `cause` and use the error's `message` if it's an `Error` instance, otherwise use the generic `"Validation failed"` message
+- `ValidationErrorDetails` includes the `operation` field so consumers can distinguish which operation triggered the validation failure
+- `patch` uses `applyDefaults(partial, current, false)` — `pruneUnknown=false` ensures all current state keys are preserved even though the partial doesn't contain them
+- The store-level `pruneUnknown` option is only applied during `read()` (when merging persisted data with defaults), not during `patch` (which always preserves current state keys)
+
+### Notes for Future Agent
+
+- `persistence.test.ts` and `index.test.ts` were not modified — they were already correct and didn't need changes for this task
+- The `errors.test.ts` file tests generic `CrustStoreError` construction but doesn't have specific VALIDATION tests — the store.test.ts validation section covers VALIDATION behavior end-to-end
+- 234 tests pass, type checks and lint are clean
