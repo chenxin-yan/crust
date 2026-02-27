@@ -1,5 +1,14 @@
 # @crustjs/create
 
+## 0.0.4
+
+### Patch Changes
+
+- a1f233e: Enable minification for all package builds, reducing bundle sizes by ~27%. Also shorten error messages in `@crustjs/core` for smaller output.
+- 4f4bddf: Add `isInGitRepo` utility to detect if a directory is inside an existing git repository.
+
+  Updated `create-crust` to skip the "Initialize a git repository?" prompt when scaffolding inside an existing repo, preventing accidental nested `.git` directories.
+
 ## 0.0.3
 
 ### Patch Changes
