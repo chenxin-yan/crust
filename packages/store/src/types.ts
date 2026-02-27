@@ -261,7 +261,9 @@ export interface Store<T> {
 	 *
 	 * When a validator is configured, the updated config is validated before
 	 * persistence. The read step during update does **not** validate separately
-	 * to avoid double-validation overhead.
+	 * to avoid double-validation overhead — the `current` value passed to the
+	 * updater may not have been validated (e.g. if the persisted file was
+	 * manually edited).
 	 *
 	 * @param updater - Function receiving current state and returning updated state.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
@@ -277,7 +279,7 @@ export interface Store<T> {
 	 * Arrays are replaced wholesale (not merged element-by-element).
 	 *
 	 * @param partial - A deep-partial subset of the state to merge in.
-	 * @throws {CrustStoreError} `VALIDATION` if `validate` rejects the result.
+	 * @throws {CrustStoreError} `VALIDATION` if the merged config fails validation.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */

@@ -1,3 +1,5 @@
+import type { StoreValidatorIssue } from "./types.ts";
+
 // ────────────────────────────────────────────────────────────────────────────
 // StoreErrorCode — Discriminated error codes for @crustjs/store
 // ────────────────────────────────────────────────────────────────────────────
@@ -37,16 +39,12 @@ export interface IOErrorDetails {
 /**
  * A single validation issue reported by a store validator.
  *
- * Mirrors the canonical `ValidationIssue` shape used across the Crust
- * validation platform, but is defined independently to keep `@crustjs/store`
- * free of `@crustjs/validate` dependencies.
+ * Alias for {@link StoreValidatorIssue} — both names refer to the same
+ * `{ message, path }` shape. `StoreValidationIssue` is used in error
+ * details payloads, while `StoreValidatorIssue` appears in the
+ * validator contract.
  */
-export interface StoreValidationIssue {
-	/** Human-readable description of the validation failure. */
-	message: string;
-	/** Dot-path to the invalid field (e.g. `"theme"`, `"nested.key"`), or empty string for root-level issues. */
-	path: string;
-}
+export type StoreValidationIssue = StoreValidatorIssue;
 
 /**
  * Contextual details attached to a `VALIDATION` error.

@@ -31,9 +31,9 @@ import { validateStandard, validateStandardSync } from "./validate.ts";
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   fields: {
- *     theme: { type: "string", default: "light" },
- *     verbose: { type: "boolean", default: false },
+ *   defaults: {
+ *     theme: "light" as const,
+ *     verbose: false,
  *   },
  *   validator: storeValidator(
  *     z.object({
@@ -75,7 +75,7 @@ export function storeValidator<S extends StandardSchema>(
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   fields: { theme: { type: "string", default: "light" } },
+ *   defaults: { theme: "light" as const },
  *   validator: storeValidatorSync(
  *     z.object({ theme: z.enum(["light", "dark"]) }),
  *   ),

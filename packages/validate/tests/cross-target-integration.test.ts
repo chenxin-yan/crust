@@ -17,7 +17,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CrustError, defineCommand, runCommand } from "@crustjs/core";
-import type { FieldsDef } from "@crustjs/store";
 import { CrustStoreError, createStore } from "@crustjs/store";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
@@ -177,14 +176,14 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 	// ── Store target ──────────────────────────────────────────────────────
 
 	it("store: validates valid config on write and read", async () => {
-		const fields = {
-			theme: { type: "string", default: "light" },
-			verbose: { type: "boolean", default: false },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			verbose: false,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: storeValidator(configSchema),
 		});
 
@@ -195,14 +194,14 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 	});
 
 	it("store: rejects invalid config on write with VALIDATION error", async () => {
-		const fields = {
-			theme: { type: "string", default: "light" },
-			verbose: { type: "boolean", default: false },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			verbose: false,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: storeValidator(configSchema),
 		});
 
@@ -344,14 +343,14 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	// ── Store target ──────────────────────────────────────────────────────
 
 	it("store: validates valid config on write and read", async () => {
-		const fields = {
-			theme: { type: "string", default: "light" },
-			verbose: { type: "boolean", default: false },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			verbose: false,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: effectStoreValidator(configStandard),
 		});
 
@@ -362,14 +361,14 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	});
 
 	it("store: rejects invalid config on write with VALIDATION error", async () => {
-		const fields = {
-			theme: { type: "string", default: "light" },
-			verbose: { type: "boolean", default: false },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			verbose: false,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: effectStoreValidator(configStandard),
 		});
 
@@ -454,11 +453,6 @@ describe("consistent issue path formatting across targets", () => {
 		});
 
 		it("store: nested paths in VALIDATION error issues", async () => {
-			const _fields = {
-				database: { type: "string", default: "{}" },
-				logging: { type: "string", default: "{}" },
-			} as const satisfies FieldsDef;
-
 			// Use the storeValidator directly to check issue paths
 			const validator = storeValidatorSync(nestedSchema);
 			const result = validator({
@@ -646,14 +640,14 @@ describe("transformed output consistency across targets", () => {
 				retries: z.number(),
 			});
 
-			const fields = {
-				theme: { type: "string", default: "light" },
-				retries: { type: "number", default: 3 },
-			} as const satisfies FieldsDef;
+			const defaults = {
+				theme: "light" as string,
+				retries: 3,
+			};
 
 			const store = createStore({
 				dirPath: tempDir,
-				fields,
+				defaults,
 				validator: storeValidator(transformedConfig),
 			});
 
@@ -858,14 +852,14 @@ describe("error shape consistency across targets", () => {
 	});
 
 	it("store VALIDATION error carries structured issues matching validator result", async () => {
-		const fields = {
-			name: { type: "string", default: "" },
-			age: { type: "number", default: 0 },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			name: "" as string,
+			age: 0,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: storeValidator(schema),
 		});
 
@@ -1077,14 +1071,14 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		expect(retries).toBe(5);
 
 		// 3. Store validation: combine and persist
-		const fields = {
-			theme: { type: "string", default: "light" },
-			retries: { type: "number", default: 3 },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			retries: 3,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: storeValidator(configSchema),
 		});
 
@@ -1126,14 +1120,14 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		}
 
 		// 3. Store rejects invalid config
-		const fields = {
-			theme: { type: "string", default: "light" },
-			retries: { type: "number", default: 3 },
-		} as const satisfies FieldsDef;
+		const defaults = {
+			theme: "light" as string,
+			retries: 3,
+		};
 
 		const store = createStore({
 			dirPath: tempDir,
-			fields,
+			defaults,
 			validator: storeValidator(configSchema),
 		});
 
