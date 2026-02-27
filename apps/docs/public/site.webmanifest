@@ -1,6 +1,6 @@
 {
-  "name": "Crust.js",
-  "short_name": "Crust",
+  "name": "CrustJS CLI Framework",
+  "short_name": "CrustJS",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
