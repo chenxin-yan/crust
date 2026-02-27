@@ -6,18 +6,13 @@ import {
 } from "@tanstack/react-router";
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 import type * as React from "react";
-import { buildPageMeta, buildSiteJsonLd } from "@/lib/seo";
+import { buildSiteJsonLd, siteConfig } from "@/lib/seo";
 import appCss from "@/styles/app.css?url";
 
-const { meta: defaultMeta, links: seoLinks } = buildPageMeta({
-  canonical: "/",
-});
-const jsonLd = buildSiteJsonLd();
+const siteScripts = buildSiteJsonLd();
 
 export const Route = createRootRoute({
   head: () => ({
-    // MetaDescriptor supports title, script:ld+json, og:*, etc. at runtime
-    // but React type augmentation restricts to HTMLMetaElement props
     meta: [
       {
         charSet: "utf-8",
@@ -26,9 +21,10 @@ export const Route = createRootRoute({
         name: "viewport",
         content: "width=device-width, initial-scale=1",
       },
-      ...defaultMeta,
-      ...jsonLd,
-    ] as never[],
+      { title: siteConfig.titleTemplate() },
+      { name: "description", content: siteConfig.defaultDescription },
+    ],
+    scripts: siteScripts,
     links: [
       { rel: "stylesheet", href: appCss },
       {
@@ -45,7 +41,6 @@ export const Route = createRootRoute({
         href: "/apple-touch-icon.png",
       },
       { rel: "manifest", href: "/site.webmanifest" },
-      ...seoLinks,
     ],
   }),
   component: RootComponent,

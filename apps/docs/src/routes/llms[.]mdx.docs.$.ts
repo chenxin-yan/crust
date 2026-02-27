@@ -12,7 +12,6 @@ export const Route = createFileRoute("/llms.mdx/docs/$")({
         return new Response(await page.data.getText("processed"), {
           headers: {
             "Content-Type": "text/markdown",
-            "X-Robots-Tag": "noindex, nofollow",
           },
         });
       },

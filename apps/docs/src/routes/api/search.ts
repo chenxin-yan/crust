@@ -10,11 +10,7 @@ const server = createFromSource(source, {
 export const Route = createFileRoute("/api/search")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        const response = await server.GET(request);
-        response.headers.set("X-Robots-Tag", "noindex, nofollow");
-        return response;
-      },
+      GET: async ({ request }) => server.GET(request),
     },
   },
 });

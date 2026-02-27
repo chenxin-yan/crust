@@ -7,9 +7,7 @@ export const Route = createFileRoute("/llms-full.txt")({
       GET: async () => {
         const scan = source.getPages().map(getLLMText);
         const scanned = await Promise.all(scan);
-        return new Response(scanned.join("\n\n"), {
-          headers: { "X-Robots-Tag": "noindex, nofollow" },
-        });
+        return new Response(scanned.join("\n\n"));
       },
     },
   },

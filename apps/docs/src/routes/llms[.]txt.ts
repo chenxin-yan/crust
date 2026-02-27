@@ -13,9 +13,7 @@ export const Route = createFileRoute("/llms.txt")({
             `- [${page.data.title}](${page.url}): ${page.data.description}`,
           );
         }
-        return new Response(lines.join("\n"), {
-          headers: { "X-Robots-Tag": "noindex, nofollow" },
-        });
+        return new Response(lines.join("\n"));
       },
     },
   },

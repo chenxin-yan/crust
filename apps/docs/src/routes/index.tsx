@@ -72,7 +72,7 @@ const { meta: homeMeta, links: homeLinks } = buildPageMeta({
 export const Route = createFileRoute("/")({
   component: FurnaceHome,
   head: () => ({
-    meta: homeMeta as never[],
+    meta: homeMeta,
     links: homeLinks,
   }),
   loader: async () => {
@@ -763,8 +763,8 @@ function FurnaceHome() {
                     fontWeight: 400,
                   }}
                 >
-                  CrustJS is a TypeScript-first, Bun-native CLI framework with
-                  composable modules. Zero dependencies, full type inference.
+                  A TypeScript-first, Bun-native CLI framework with composable
+                  modules.
                 </p>
 
                 {/* Install — click to copy */}

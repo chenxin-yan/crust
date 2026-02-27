@@ -32,7 +32,7 @@ export const Route = createFileRoute("/docs/$")({
       canonical: loaderData.url,
     });
     return {
-      meta: pageMeta as never[],
+      meta: pageMeta,
       links: pageLinks,
     };
   },
