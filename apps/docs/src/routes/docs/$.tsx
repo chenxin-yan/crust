@@ -13,6 +13,7 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
 import { baseOptions, gitConfig } from "@/lib/layout.shared";
+import { buildPageMeta } from "@/lib/seo";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -22,6 +23,18 @@ export const Route = createFileRoute("/docs/$")({
     const data = await serverLoader({ data: slugs });
     await clientLoader.preload(data.path);
     return data;
+  },
+  head: ({ loaderData }) => {
+    if (!loaderData) return {};
+    const { meta: pageMeta, links: pageLinks } = buildPageMeta({
+      title: loaderData.meta.title,
+      description: loaderData.meta.description,
+      canonical: loaderData.url,
+    });
+    return {
+      meta: pageMeta,
+      links: pageLinks,
+    };
   },
 });
 
@@ -36,6 +49,10 @@ const serverLoader = createServerFn({
     return {
       url: page.url,
       path: page.path,
+      meta: {
+        title: page.data.title,
+        description: page.data.description,
+      },
       pageTree: await source.serializePageTree(source.getPageTree()),
     };
   });

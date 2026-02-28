@@ -8,6 +8,7 @@ import langTypescript from "shiki/langs/typescript.mjs";
 import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import { baseOptions } from "@/lib/layout.shared";
+import { buildPageMeta } from "@/lib/seo";
 
 let highlighterPromise: Promise<
   Awaited<ReturnType<typeof createHighlighterCore>>
@@ -62,8 +63,18 @@ const getHighlightedCode = createServerFn({ method: "GET" }).handler(
   },
 );
 
+const { meta: homeMeta, links: homeLinks } = buildPageMeta({
+  description:
+    "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules. Zero dependencies, full type inference, middleware plugins.",
+  canonical: "/",
+});
+
 export const Route = createFileRoute("/")({
   component: FurnaceHome,
+  head: () => ({
+    meta: homeMeta,
+    links: homeLinks,
+  }),
   loader: async () => {
     let highlightedCode = FALLBACK_HIGHLIGHTED_CODE;
     let npmVersions: Record<string, string | null> = {};

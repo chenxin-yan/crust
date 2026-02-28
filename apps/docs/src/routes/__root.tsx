@@ -6,7 +6,10 @@ import {
 } from "@tanstack/react-router";
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 import type * as React from "react";
+import { buildSiteJsonLd, siteConfig } from "@/lib/seo";
 import appCss from "@/styles/app.css?url";
+
+const siteScripts = buildSiteJsonLd();
 
 export const Route = createRootRoute({
   head: () => ({
@@ -18,15 +21,10 @@ export const Route = createRootRoute({
         name: "viewport",
         content: "width=device-width, initial-scale=1",
       },
-      {
-        title: "Crust - Build CLIs with Types",
-      },
-      {
-        name: "description",
-        content:
-          "A TypeScript-first, Bun-native CLI framework with composable modules.",
-      },
+      { title: siteConfig.titleTemplate() },
+      { name: "description", content: siteConfig.defaultDescription },
     ],
+    scripts: siteScripts,
     links: [
       { rel: "stylesheet", href: appCss },
       {
