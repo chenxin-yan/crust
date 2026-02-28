@@ -38,11 +38,14 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
 }
 
 /**
- * Performs automatic install/update reconciliation for detected agents.
+ * Performs automatic updates for already-installed skills when the version
+ * has changed.
  *
  * Runs during plugin setup so behavior is independent of middleware ordering.
+ * Only updates skills that are already installed — first-time installation
+ * should be done via the interactive command or programmatically by the user.
  */
-async function autoSyncSkills(
+async function autoUpdateSkills(
 	rootCmd: AnyCommand,
 	options: SkillPluginOptions,
 ): Promise<void> {
@@ -52,8 +55,6 @@ async function autoSyncSkills(
 		return;
 	}
 
-	const autoInstall = options.autoInstall ?? false;
-	const autoUpdate = options.autoUpdate ?? true;
 	const meta = deriveSkillMeta(rootCmd, options.version);
 
 	const status = await skillStatus({
@@ -62,11 +63,9 @@ async function autoSyncSkills(
 		scope,
 	});
 
-	const needsUpdate = status.agents.filter((a) => {
-		if (!a.installed) return autoInstall;
-		if (a.version !== meta.version) return autoUpdate;
-		return false;
-	});
+	const needsUpdate = status.agents.filter(
+		(a) => a.installed && a.version !== meta.version,
+	);
 
 	if (needsUpdate.length === 0) {
 		return;
@@ -74,7 +73,7 @@ async function autoSyncSkills(
 
 	try {
 		await spinner({
-			message: "Syncing skills...",
+			message: "Updating skills...",
 			task: async ({ updateMessage }) => {
 				const res = await generateSkill({
 					command: rootCmd,
@@ -83,42 +82,21 @@ async function autoSyncSkills(
 					scope: options.scope,
 				});
 
-				const installedAgents = res.agents
-					.filter((a) => a.status === "installed")
-					.map((a) => AGENT_LABELS[a.agent]);
 				const updatedAgents = res.agents
 					.filter((a) => a.status === "updated")
 					.map((a) => AGENT_LABELS[a.agent]);
 
-				const parts: string[] = [];
-				if (installedAgents.length > 0) {
-					parts.push(
-						`Installed skill "${resolveSkillName(meta.name)}" v${meta.version} for ${installedAgents.join(", ")}`,
-					);
-				}
 				if (updatedAgents.length > 0) {
-					parts.push(
+					updateMessage(
 						`Updated skill "${resolveSkillName(meta.name)}" to v${meta.version} for ${updatedAgents.join(", ")}`,
 					);
 				}
 
-				let finalMessage = parts.join(". ");
-				if (installedAgents.length > 0 && options.command !== false) {
-					const skillCommandName =
-						typeof options.command === "string"
-							? options.command
-							: DEFAULT_SKILL_COMMAND_NAME;
-					const manageCommand = `${rootCmd.meta.name} ${skillCommandName}`;
-					finalMessage += `. Manage with \`${manageCommand}\``;
-				}
-
-				updateMessage(finalMessage);
 				return res;
 			},
 		});
 	} catch (err) {
 		if (err instanceof SkillConflictError) {
-			// Spinner already showed the error indicator; log the conflict detail
 			console.warn(
 				yellow(
 					`Skill conflict: "${err.details.outputDir}" already exists ` +
@@ -147,12 +125,11 @@ async function autoSyncSkills(
  * - `scope: "project"` checks project-local config roots in the cwd, then
  *   falls back to global roots in the home directory
  *
- * Only detected agents are managed by automatic setup reconciliation and the
- * interactive command.
+ * Only detected agents are managed by automatic update and the interactive
+ * command.
  *
  * **Auto-update** (default): silently updates already-installed skills when a
- * new version is detected. Set `autoInstall: true` to also install skills that
- * are not yet present.
+ * new version is detected. Disable with `autoUpdate: false`.
  *
  * **Interactive command** (default): registers a `skill` subcommand that
  * presents a single multiselect prompt for toggling agent installations.
@@ -160,6 +137,10 @@ async function autoSyncSkills(
  * The system reconciles the desired state: newly selected agents are installed,
  * deselected agents are uninstalled, and already-correct agents are skipped.
  * Set `command: false` to disable command injection.
+ *
+ * For first-time installation, use the interactive command or build custom
+ * auto-install logic with the exported primitives (`detectInstalledAgents`,
+ * `skillStatus`, `generateSkill`).
  *
  * @param options - Plugin configuration with version and scope
  * @returns A `CrustPlugin` to register in a command's `plugins` array
@@ -177,7 +158,6 @@ async function autoSyncSkills(
  *   plugins: [
  *     skillPlugin({
  *       version: "1.0.0",
- *       autoInstall: true,
  *       command: true, // registers "my-cli skill" subcommand
  *     }),
  *   ],
@@ -210,12 +190,15 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 				return;
 			}
 
-			// Skip auto-install when the skill command itself is being executed
+			// Skip auto-update when the skill command itself is being executed
 			if (options.command !== false && context.argv[0] === skillCommandName) {
 				return;
 			}
 
-			await autoSyncSkills(rootCmd, options);
+			// Auto-update already-installed skills when version changes
+			if (options.autoUpdate !== false) {
+				await autoUpdateSkills(rootCmd, options);
+			}
 		},
 	};
 }

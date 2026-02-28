@@ -39,7 +39,7 @@ for (const agent of result.agents) {
 }
 ```
 
-### Runtime Plugin (`autoInstall` / `autoUpdate`)
+### Runtime Plugin (`autoUpdate`)
 
 `skillPlugin()` is a runtime plugin. Register it in `runMain(..., { plugins })`.
 Do not put a `plugins` field inside `defineCommand(...)`.
@@ -59,20 +59,57 @@ runMain(app, {
   plugins: [
     skillPlugin({
       version: "1.0.0",
-      autoInstall: true,
-      autoUpdate: true,
+      // autoUpdate: true (default) — silently updates installed skills
+      // command: true (default) — registers "my-cli skill" subcommand
     }),
   ],
 });
 ```
 
-If `autoInstall` appears to do nothing:
+The plugin automatically updates already-installed skills when the version changes. First-time installation is done via the interactive `skill` subcommand, or programmatically using the exported primitives.
 
-- Ensure `autoInstall: true` is set (default is `false`).
+### Programmatic Auto-Install
+
+For full control over first-time installation, use the exported primitives
+directly in your own setup logic:
+
+```ts
+import { defineCommand, runMain } from "@crustjs/core";
+import { detectInstalledAgents, generateSkill, skillStatus } from "@crustjs/skills";
+
+const app = defineCommand({
+  meta: { name: "my-cli", description: "My CLI" },
+  async run() {
+    // Detect agents and install skills if not yet present
+    const agents = await detectInstalledAgents({ scope: "global" });
+    const status = await skillStatus({ name: "my-cli", agents, scope: "global" });
+
+    const notInstalled = status.agents
+      .filter((a) => !a.installed)
+      .map((a) => a.agent);
+
+    if (notInstalled.length > 0) {
+      await generateSkill({
+        command: app,
+        meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
+        agents: notInstalled,
+        scope: "global",
+      });
+    }
+  },
+});
+
+runMain(app);
+```
+
+#### Troubleshooting
+
+If auto-update does not appear to work:
+
 - Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
 - Ensure at least one supported agent is detected for your scope:
-- `scope: "global"` -> `~/.claude` or `~/.config/opencode`
-- `scope: "project"` -> `<cwd>/.claude` or `<cwd>/.opencode` (falls back to global roots)
+  - `scope: "global"` -> `~/.claude` or `~/.config/opencode`
+  - `scope: "project"` -> `<cwd>/.claude` or `<cwd>/.opencode` (falls back to global roots)
 - Check for existing conflicting skill directories without `crust.json`.
 
 ## Recommended Export Pattern

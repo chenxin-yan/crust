@@ -351,8 +351,11 @@ export interface StatusResult {
  * Only detected agents are managed.
  *
  * **Auto-update** (default): silently updates already-installed skills when a
- * new version is detected. Set `autoInstall: true` to also install skills that
- * are not yet present.
+ * new version is detected. Disable with `autoUpdate: false`.
+ *
+ * For first-time installation, use the interactive `skill` subcommand or
+ * build custom auto-install logic with the exported primitives
+ * (`detectInstalledAgents`, `skillStatus`, `generateSkill`).
  *
  * **Interactive command** (default): registers a `skill` subcommand that
  * presents a single multiselect prompt for toggling agent installations.
@@ -366,13 +369,6 @@ export interface SkillPluginOptions {
 	 * @default "global"
 	 */
 	scope?: Scope;
-	/**
-	 * Automatically install skills when not yet present.
-	 * Set to `true` to install on first CLI invocation without requiring the
-	 * interactive skill command.
-	 * @default false
-	 */
-	autoInstall?: boolean;
 	/**
 	 * Automatically update skills when the installed version is outdated.
 	 * @default true

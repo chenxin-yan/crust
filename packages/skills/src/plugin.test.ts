@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
 import { defineCommand, runCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { generateSkill } from "./generate.ts";
 import { skillPlugin } from "./plugin.ts";
+import { readInstalledVersion } from "./version.ts";
 
 function shortCircuitPlugin(): CrustPlugin {
 	return {
@@ -31,7 +33,7 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-describe("skillPlugin auto-install ordering", () => {
+describe("skillPlugin auto-update", () => {
 	let tmpDir: string;
 
 	beforeEach(async () => {
@@ -46,9 +48,9 @@ describe("skillPlugin auto-install ordering", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	it("auto-installs even when a prior plugin short-circuits middleware", async () => {
+	it("does not install skills that are not yet present", async () => {
 		const cmd = defineCommand({
-			meta: { name: "order-test-a", description: "order test" },
+			meta: { name: "no-auto-install", description: "test" },
 			run() {},
 		});
 
@@ -56,10 +58,8 @@ describe("skillPlugin auto-install ordering", () => {
 			runCommand(cmd, {
 				argv: [],
 				plugins: [
-					shortCircuitPlugin(),
 					skillPlugin({
 						version: "1.0.0",
-						autoInstall: true,
 						scope: "project",
 						command: false,
 					}),
@@ -71,52 +71,109 @@ describe("skillPlugin auto-install ordering", () => {
 			tmpDir,
 			".opencode",
 			"skills",
-			"use-order-test-a",
+			"use-no-auto-install",
 			"crust.json",
 		);
 
-		expect(await exists(manifestPath)).toBe(true);
+		expect(await exists(manifestPath)).toBe(false);
 	});
 
-	it("auto-installs even when skillPlugin runs before a short-circuit plugin", async () => {
+	it("auto-updates already-installed skills when version changes", async () => {
 		const cmd = defineCommand({
-			meta: { name: "order-test-b", description: "order test" },
+			meta: { name: "update-test", description: "test" },
 			run() {},
 		});
 
+		// Pre-install v1.0.0
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: cmd,
+				meta: { name: "update-test", description: "test", version: "1.0.0" },
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const skillDir = join(tmpDir, ".opencode", "skills", "use-update-test");
+
+		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+
+		// Run plugin with v2.0.0 — should auto-update
 		await withCwd(tmpDir, () =>
 			runCommand(cmd, {
 				argv: [],
 				plugins: [
 					skillPlugin({
-						version: "1.0.0",
-						autoInstall: true,
+						version: "2.0.0",
 						scope: "project",
 						command: false,
 					}),
-					shortCircuitPlugin(),
 				],
 			}),
 		);
 
-		const manifestPath = join(
-			tmpDir,
-			".opencode",
-			"skills",
-			"use-order-test-b",
-			"crust.json",
-		);
-
-		expect(await exists(manifestPath)).toBe(true);
+		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 	});
 
-	it("does not auto-install during validation mode", async () => {
+	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
+		const cmd = defineCommand({
+			meta: { name: "order-test", description: "test" },
+			run() {},
+		});
+
+		// Pre-install v1.0.0
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: cmd,
+				meta: { name: "order-test", description: "test", version: "1.0.0" },
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const skillDir = join(tmpDir, ".opencode", "skills", "use-order-test");
+
+		// Run plugin with v2.0.0 behind a short-circuit — should still update
+		await withCwd(tmpDir, () =>
+			runCommand(cmd, {
+				argv: [],
+				plugins: [
+					shortCircuitPlugin(),
+					skillPlugin({
+						version: "2.0.0",
+						scope: "project",
+						command: false,
+					}),
+				],
+			}),
+		);
+
+		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+	});
+
+	it("does not auto-update during validation mode", async () => {
 		process.env[VALIDATION_MODE_ENV] = "1";
 
 		const cmd = defineCommand({
-			meta: { name: "order-test-validation", description: "order test" },
+			meta: { name: "validation-test", description: "test" },
 			run() {},
 		});
+
+		// Pre-install v1.0.0
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: cmd,
+				meta: {
+					name: "validation-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const skillDir = join(tmpDir, ".opencode", "skills", "use-validation-test");
 
 		try {
 			await withCwd(tmpDir, () =>
@@ -124,8 +181,7 @@ describe("skillPlugin auto-install ordering", () => {
 					argv: [],
 					plugins: [
 						skillPlugin({
-							version: "1.0.0",
-							autoInstall: true,
+							version: "2.0.0",
 							scope: "project",
 							command: false,
 						}),
@@ -136,14 +192,47 @@ describe("skillPlugin auto-install ordering", () => {
 			delete process.env[VALIDATION_MODE_ENV];
 		}
 
-		const manifestPath = join(
-			tmpDir,
-			".opencode",
-			"skills",
-			"use-order-test-validation",
-			"crust.json",
+		// Should still be v1.0.0 — validation mode skips auto-update
+		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+	});
+
+	it("does not auto-update when autoUpdate is false", async () => {
+		const cmd = defineCommand({
+			meta: { name: "no-update-test", description: "test" },
+			run() {},
+		});
+
+		// Pre-install v1.0.0
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: cmd,
+				meta: {
+					name: "no-update-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
 		);
 
-		expect(await exists(manifestPath)).toBe(false);
+		const skillDir = join(tmpDir, ".opencode", "skills", "use-no-update-test");
+
+		await withCwd(tmpDir, () =>
+			runCommand(cmd, {
+				argv: [],
+				plugins: [
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						scope: "project",
+						command: false,
+					}),
+				],
+			}),
+		);
+
+		// Should still be v1.0.0 — autoUpdate disabled
+		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 	});
 });
