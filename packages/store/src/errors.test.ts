@@ -61,6 +61,45 @@ describe("CrustStoreError", () => {
 		expect(err.details.operation).toBe("delete");
 	});
 
+	it("should construct VALIDATION error with issues", () => {
+		const err = new CrustStoreError("VALIDATION", "validation failed", {
+			operation: "write",
+			issues: [
+				{ message: "Expected string", path: "theme" },
+				{ message: "Required", path: "verbose" },
+			],
+		});
+
+		expect(err.code).toBe("VALIDATION");
+		expect(err.message).toBe("validation failed");
+		expect(err.details.operation).toBe("write");
+		expect(err.details.issues).toHaveLength(2);
+		expect(err.details.issues[0]?.message).toBe("Expected string");
+		expect(err.details.issues[0]?.path).toBe("theme");
+		expect(err.details.issues[1]?.message).toBe("Required");
+	});
+
+	it("should construct VALIDATION error for read operation", () => {
+		const err = new CrustStoreError("VALIDATION", "config drift detected", {
+			operation: "read",
+			issues: [{ message: "unknown field", path: "extra" }],
+		});
+
+		expect(err.code).toBe("VALIDATION");
+		expect(err.details.operation).toBe("read");
+	});
+
+	it("should construct VALIDATION error for update operation", () => {
+		const err = new CrustStoreError("VALIDATION", "invalid update", {
+			operation: "update",
+			issues: [],
+		});
+
+		expect(err.code).toBe("VALIDATION");
+		expect(err.details.operation).toBe("update");
+		expect(err.details.issues).toHaveLength(0);
+	});
+
 	// ──────────────────────────────────────────────────────────────────────
 	// Type narrowing via .is()
 	// ──────────────────────────────────────────────────────────────────────
@@ -105,6 +144,28 @@ describe("CrustStoreError", () => {
 		if (err.is("IO")) {
 			expect(err.details.operation).toBe("write");
 			expect(err.details.path).toBe("/tmp/config.json");
+		}
+	});
+
+	it("should narrow to VALIDATION with .is()", () => {
+		const err: CrustStoreError = new CrustStoreError(
+			"VALIDATION",
+			"validation failed",
+			{
+				operation: "write",
+				issues: [{ message: "bad value", path: "theme" }],
+			},
+		);
+
+		expect(err.is("VALIDATION")).toBe(true);
+		expect(err.is("PATH")).toBe(false);
+		expect(err.is("PARSE")).toBe(false);
+		expect(err.is("IO")).toBe(false);
+
+		if (err.is("VALIDATION")) {
+			expect(err.details.operation).toBe("write");
+			expect(err.details.issues).toHaveLength(1);
+			expect(err.details.issues[0]?.message).toBe("bad value");
 		}
 	});
 

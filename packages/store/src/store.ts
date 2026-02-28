@@ -11,6 +11,7 @@ import type {
 	DeepPartial,
 	Store,
 	StoreUpdater,
+	StoreValidatorIssue,
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ import type {
 export function createStore<const T extends Record<string, unknown>>(
 	options: CreateStoreOptions<T>,
 ): Store<T> {
-	const { dirPath, name, defaults, validate, pruneUnknown } = options;
+	const { dirPath, name, defaults, validator, pruneUnknown } = options;
 
 	// Resolve the store file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
@@ -62,30 +63,45 @@ export function createStore<const T extends Record<string, unknown>>(
 	const shouldPrune = pruneUnknown ?? true;
 
 	// ──────────────────────────────────────────────────────────────────────
-	// runValidate — Call user-supplied validate before persisting
+	// runValidator — Shared structured validation helper
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function runValidate(
+	async function runValidator(
 		state: T,
-		operation: "write" | "update" | "patch",
-	): Promise<void> {
-		if (!validate) return;
-		try {
-			await validate(state);
-		} catch (cause) {
-			const message =
-				cause instanceof Error ? cause.message : "Validation failed";
-			throw new CrustStoreError("VALIDATION", message, {
-				operation,
-			}).withCause(cause);
+		operation: "read" | "write" | "update" | "patch",
+	): Promise<T> {
+		if (!validator) return state;
+
+		const result = await validator(state);
+
+		if (result.ok) {
+			return result.value;
 		}
+
+		const issues: StoreValidatorIssue[] = result.issues.map((issue) => ({
+			message: issue.message,
+			path: issue.path,
+		}));
+
+		const lines = issues.map((i) =>
+			i.path ? `  - ${i.path}: ${i.message}` : `  - ${i.message}`,
+		);
+		const message =
+			lines.length > 0
+				? `Store validation failed (${operation})\n${lines.join("\n")}`
+				: `Store validation failed (${operation})`;
+
+		throw new CrustStoreError("VALIDATION", message, {
+			operation,
+			issues,
+		});
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// read — Load persisted state, apply defaults for missing keys
+	// readRaw — Load persisted state and apply defaults (no validation)
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function read(): Promise<T> {
+	async function readRaw(): Promise<T> {
 		const persisted = await readJson(filePath);
 		return applyDefaults(
 			persisted as Record<string, unknown> | undefined,
@@ -95,23 +111,32 @@ export function createStore<const T extends Record<string, unknown>>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
+	// read — Load persisted state, apply defaults, validate
+	// ──────────────────────────────────────────────────────────────────────
+
+	async function read(): Promise<T> {
+		const merged = await readRaw();
+		return runValidator(merged, "read");
+	}
+
+	// ──────────────────────────────────────────────────────────────────────
 	// write — Validate then atomically persist full state
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function write(state: T): Promise<void> {
-		await runValidate(state, "write");
-		await writeJson(filePath, state);
+		const validated = await runValidator(state, "write");
+		await writeJson(filePath, validated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current, apply updater, validate, persist
+	// update — Read current (raw), apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<T>): Promise<void> {
-		const current = await read();
+		const current = await readRaw();
 		const updated = updater(current);
-		await runValidate(updated, "update");
-		await writeJson(filePath, updated);
+		const validated = await runValidator(updated, "update");
+		await writeJson(filePath, validated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -119,7 +144,7 @@ export function createStore<const T extends Record<string, unknown>>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function patch(partial: DeepPartial<T>): Promise<void> {
-		const current = await read();
+		const current = await readRaw();
 		// Use applyDefaults with current as defaults and partial as persisted.
 		// pruneUnknown=false so keys in current not in partial are preserved.
 		const merged = applyDefaults(
@@ -127,8 +152,8 @@ export function createStore<const T extends Record<string, unknown>>(
 			current as Record<string, unknown>,
 			false,
 		) as T;
-		await runValidate(merged, "patch");
-		await writeJson(filePath, merged);
+		const validated = await runValidator(merged, "patch");
+		await writeJson(filePath, validated);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

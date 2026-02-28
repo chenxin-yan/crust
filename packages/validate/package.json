@@ -30,6 +30,10 @@
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
 		},
+		"./standard": {
+			"import": "./dist/standard/index.js",
+			"types": "./dist/standard/index.d.ts"
+		},
 		"./effect": {
 			"import": "./dist/effect/index.js",
 			"types": "./dist/effect/index.d.ts"
@@ -52,6 +56,7 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/plugins": "workspace:*",
+		"@crustjs/store": "workspace:*",
 		"bunup": "catalog:",
 		"effect": "^3.19.0",
 		"zod": "^4.0.0"
@@ -69,5 +74,8 @@
 		"zod": {
 			"optional": true
 		}
+	},
+	"dependencies": {
+		"@standard-schema/spec": "^1.1.0"
 	}
 }

@@ -1,26 +1,23 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/store — Typed persistence for CLI apps
+// @crustjs/validate/standard — Standard Schema-first validation core
 // ────────────────────────────────────────────────────────────────────────────
 
-// Errors
+// Prompt adapter
 export type {
-	StoreErrorCode,
-	ValidationErrorDetails,
-} from "./errors.ts";
-export { CrustStoreError } from "./errors.ts";
-export type { PlatformEnv } from "./path.ts";
-// Path
-export { cacheDir, configDir, dataDir, stateDir } from "./path.ts";
-// Store
-export { createStore } from "./store.ts";
+	PromptErrorStrategy,
+	PromptValidatorOptions,
+} from "./prompt.ts";
+export {
+	parsePromptValue,
+	parsePromptValueSync,
+	promptValidator,
+} from "./prompt.ts";
+// Store adapter
+export { storeValidator, storeValidatorSync } from "./store.ts";
 // Types
 export type {
-	CreateStoreOptions,
-	Store,
-	StoreUpdater,
-	StoreValidator,
-	StoreValidatorFailure,
-	StoreValidatorIssue,
-	StoreValidatorResult,
-	StoreValidatorSuccess,
+	InferInput,
+	InferOutput,
+	StandardSchema,
+	ValidationResult,
 } from "./types.ts";

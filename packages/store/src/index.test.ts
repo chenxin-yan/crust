@@ -43,4 +43,17 @@ describe("@crustjs/store", () => {
 		expect(CrustStoreError).toBeDefined();
 		expect(typeof CrustStoreError).toBe("function");
 	});
+
+	it("should export exactly the documented runtime API surface", async () => {
+		const mod = await import("./index.ts");
+		const exports = Object.keys(mod).sort();
+		expect(exports).toEqual([
+			"CrustStoreError",
+			"cacheDir",
+			"configDir",
+			"createStore",
+			"dataDir",
+			"stateDir",
+		]);
+	});
 });

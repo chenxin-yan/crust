@@ -4,6 +4,12 @@ import { encodedSchema, isSchema } from "effect/Schema";
 import type { AST } from "effect/SchemaAST";
 import { getDescriptionAnnotation } from "effect/SchemaAST";
 import {
+	resolveDescription as resolveDescriptionOption,
+	resolveRequired,
+	resolveType,
+	validateArgArrayShape,
+} from "../resolve-options.ts";
+import {
 	type ArgOptions,
 	EFFECT_SCHEMA,
 	type EffectArgDef,
@@ -178,10 +184,22 @@ function resolveTupleArrayShape(
 	return { type: primitive, multiple: true };
 }
 
-/** Resolve Crust parser input shape from an Effect schema. */
-function resolveInputShape(schema: unknown, label: string): InputShape {
+/**
+ * Try to resolve Crust parser input shape from an Effect schema.
+ *
+ * Returns `undefined` if the schema type cannot be determined instead of
+ * throwing. Re-throws `CrustError` for structural issues (e.g. fixed-element
+ * tuples) since those are definite user mistakes, not ambiguity.
+ */
+function tryResolveInputShape(
+	schema: unknown,
+	label: string,
+): InputShape | undefined {
 	const ast = unwrapInputAst(encodedSchema(schema as EffectSchemaLike).ast);
 
+	// resolveTupleArrayShape may throw CrustError for structural issues
+	// (e.g. tuples with fixed elements). Let those propagate — they are
+	// not ambiguity but definite definition errors.
 	const tupleShape = resolveTupleArrayShape(ast, label);
 	if (tupleShape) {
 		return tupleShape;
@@ -192,10 +210,7 @@ function resolveInputShape(schema: unknown, label: string): InputShape {
 		return { type: primitive, multiple: false };
 	}
 
-	throw new CrustError(
-		"DEFINITION",
-		`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these.`,
-	);
+	return undefined;
 }
 
 /** Check if the schema accepts `undefined` as encoded input. */
@@ -298,19 +313,30 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
  * Define a named positional argument from an Effect schema.
  *
  * Returns a core `ArgDef` (accepted by `defineCommand`) enriched with hidden
- * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `withEffect`.
+ * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `required`, `description`, `variadic`) is derived
  * from the schema automatically — single source of truth.
  *
+ * When automatic introspection fails (complex unions, opaque pipes, etc.),
+ * provide explicit parser metadata via options to override inferred values:
+ *
+ * ```ts
+ * arg("input", complexSchema, { type: "string" })
+ * ```
+ *
+ * **Precedence**: explicit metadata > schema introspection.
+ * If both are available and conflict, a `DEFINITION` error is thrown.
+ *
  * @param name - Positional arg name used in parser output and help text
  * @param schema - Effect schema (source of truth for type/optionality/description)
- * @param options - Optional CLI metadata (`variadic`)
+ * @param options - Optional CLI metadata (`variadic`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
  * arg("port", Schema.Number.annotations({ description: "Port to listen on" }))
  * arg("files", Schema.String, { variadic: true })
+ * arg("input", complexPipe, { type: "string", description: "Input value" })
  * ```
  */
 export function arg<
@@ -335,29 +361,30 @@ export function arg<
 		);
 	}
 
-	const shape = resolveInputShape(schema, `arg "${name}"`);
+	const label = `arg "${name}"`;
 	const variadic = options?.variadic;
+	const inferredShape = tryResolveInputShape(schema, label);
 
-	if (variadic && shape.multiple) {
-		throw new CrustError(
-			"DEFINITION",
-			`arg "${name}": variadic args must use a scalar schema; do not wrap the schema in Schema.Array(...)`,
-		);
-	}
+	const { type: resolvedType, multiple } = resolveType(
+		label,
+		inferredShape,
+		options?.type,
+	);
 
-	if (!variadic && shape.multiple) {
-		throw new CrustError(
-			"DEFINITION",
-			`arg "${name}": array schema requires { variadic: true }`,
-		);
-	}
+	validateArgArrayShape(label, variadic, multiple, "Schema.Array(...)");
 
-	const description = resolveDescription(schema);
-	const required = !isOptionalInputSchema(schema);
+	const inferredDescription = resolveDescription(schema);
+	const description = resolveDescriptionOption(
+		options?.description,
+		inferredDescription,
+	);
+
+	const inferredOptional = isOptionalInputSchema(schema);
+	const required = resolveRequired(label, inferredOptional, options?.required);
 
 	const def = {
 		name,
-		type: shape.type,
+		type: resolvedType,
 		...(description !== undefined && { description }),
 		variadic: variadic as Variadic,
 		...(required && { required: true as const }),
@@ -371,18 +398,29 @@ export function arg<
  * Define a flag from an Effect schema with optional alias.
  *
  * Returns a core `FlagDef` (accepted by `defineCommand`) enriched with hidden
- * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `withEffect`.
+ * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `multiple`, `required`, `description`) is derived
  * from the schema automatically — single source of truth.
  *
+ * When automatic introspection fails (complex unions, opaque pipes, etc.),
+ * provide explicit parser metadata via options:
+ *
+ * ```ts
+ * flag(complexSchema, { type: "string", description: "Output format" })
+ * ```
+ *
+ * **Precedence**: explicit metadata > schema introspection.
+ * If both are available and conflict, a `DEFINITION` error is thrown.
+ *
  * @param schema - Effect schema (source of truth for type/optionality/description)
- * @param options - Optional flag metadata (`alias`)
+ * @param options - Optional flag metadata (`alias`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
  * flag(Schema.Boolean.annotations({ description: "Enable verbose logging" }), { alias: "v" })
  * flag(Schema.UndefinedOr(Schema.Number))
+ * flag(complexPipe, { type: "string", description: "Output format" })
  * ```
  */
 export function flag<
@@ -399,9 +437,27 @@ export function flag<
 		);
 	}
 
-	const shape = resolveInputShape(schema, "flag");
-	const required = !isOptionalInputSchema(schema);
-	const description = resolveDescription(schema);
+	const label = "flag";
+	const inferredShape = tryResolveInputShape(schema, label);
+
+	const { type: resolvedType, multiple } = resolveType(
+		label,
+		inferredShape,
+		options?.type,
+	);
+
+	const inferredDescription = resolveDescription(schema);
+	const description = resolveDescriptionOption(
+		options?.description,
+		inferredDescription,
+	);
+
+	const inferredOptional = isOptionalInputSchema(schema);
+	const resolvedRequired = resolveRequired(
+		label,
+		inferredOptional,
+		options?.required,
+	);
 
 	// Convert readonly alias to mutable for core FlagDef compatibility
 	const alias: string | string[] | undefined =
@@ -412,11 +468,11 @@ export function flag<
 				: [...options.alias];
 
 	const def = {
-		type: shape.type,
-		...(shape.multiple && { multiple: true as const }),
+		type: resolvedType,
+		...(multiple && { multiple: true as const }),
 		alias,
 		...(description !== undefined && { description }),
-		...(required && { required: true as const }),
+		...(resolvedRequired && { required: true as const }),
 		[EFFECT_SCHEMA]: schema,
 	};
 

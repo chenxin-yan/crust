@@ -156,28 +156,42 @@ describe("CreateStoreOptions", () => {
 		expect(options.name).toBe("settings");
 	});
 
-	it("should accept optional validate function", () => {
+	it("should accept optional validator function", () => {
 		const options: CreateStoreOptions<{ count: number }> = {
 			dirPath: "/tmp/test",
 			defaults: { count: 0 },
-			validate: (state) => {
-				if (state.count < 0) throw new Error("count must be >= 0");
+			validator: (value) => {
+				const state = value as { count: number };
+				if (state.count < 0) {
+					return {
+						ok: false,
+						issues: [{ message: "count must be >= 0", path: "count" }],
+					};
+				}
+				return { ok: true, value: state };
 			},
 		};
 
-		expect(typeof options.validate).toBe("function");
+		expect(typeof options.validator).toBe("function");
 	});
 
-	it("should accept async validate function", () => {
+	it("should accept async validator function", () => {
 		const options: CreateStoreOptions<{ token: string }> = {
 			dirPath: "/tmp/test",
 			defaults: { token: "" },
-			validate: async (state) => {
-				if (!state.token) throw new Error("token required");
+			validator: async (value) => {
+				const state = value as { token: string };
+				if (!state.token) {
+					return {
+						ok: false,
+						issues: [{ message: "token required", path: "token" }],
+					};
+				}
+				return { ok: true, value: state };
 			},
 		};
 
-		expect(typeof options.validate).toBe("function");
+		expect(typeof options.validator).toBe("function");
 	});
 
 	it("should accept pruneUnknown option", () => {

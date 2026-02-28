@@ -142,14 +142,53 @@ export interface ZodFlagDef<
 // arg() / flag() option types
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Explicit parser metadata that overrides schema introspection.
+ *
+ * Use when the schema type is too complex for automatic introspection
+ * (e.g., discriminated unions, custom transforms, or opaque pipes) and
+ * the framework cannot determine CLI metadata automatically.
+ *
+ * **Precedence rules**:
+ * - Explicit metadata takes priority over schema introspection.
+ * - If explicit metadata is provided AND schema introspection succeeds
+ *   with a conflicting value, a `DEFINITION` error is thrown.
+ * - `description` from explicit metadata always wins without conflict
+ *   checks (descriptions are additive, not structural).
+ */
+export interface ParserMeta {
+	/**
+	 * Explicit CLI value type override.
+	 *
+	 * Use when the schema's input type cannot be automatically resolved
+	 * to a CLI primitive (e.g., complex union, opaque pipe).
+	 */
+	readonly type?: "string" | "number" | "boolean";
+
+	/**
+	 * Explicit description override.
+	 *
+	 * Takes priority over any description found via schema introspection.
+	 */
+	readonly description?: string;
+
+	/**
+	 * Explicit required/optional override.
+	 *
+	 * Set to `true` to mark as required, `false` to mark as optional.
+	 * When omitted, derived from schema optionality introspection.
+	 */
+	readonly required?: boolean;
+}
+
 /** Options for `arg()`. */
-export interface ArgOptions {
+export interface ArgOptions extends ParserMeta {
 	/** Collect remaining positionals into this arg as an array. */
 	readonly variadic?: true;
 }
 
 /** Options for `flag()`. */
-export interface FlagOptions {
+export interface FlagOptions extends ParserMeta {
 	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
 	readonly alias?: string | readonly string[];
 }
@@ -235,7 +274,7 @@ type AllFlagsHaveSchema<F extends FlagsDef> =
 
 /**
  * Resolves to `true` only when all args and flags carry schema metadata.
- * Used by `withZod` to enforce strict mode at compile time.
+ * Used by `commandValidator` to enforce strict mode at compile time.
  */
 export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 	AllArgsHaveSchema<A> extends true
@@ -245,17 +284,17 @@ export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 		: false;
 
 // ────────────────────────────────────────────────────────────────────────────
-// withZod handler type
+// commandValidator handler type
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The validated handler type for `withZod()`.
+ * The validated handler type for `commandValidator()`.
  *
  * When all args/flags carry schema metadata, resolves to a typed handler
  * receiving `ValidatedContext`. Otherwise resolves to `never`, causing
  * a compile error at the call site.
  */
-export type WithZodHandler<A extends ArgsDef, F extends FlagsDef> =
+export type CommandValidatorHandler<A extends ArgsDef, F extends FlagsDef> =
 	HasAllSchemas<A, F> extends true
 		? (
 				context: ValidatedContext<

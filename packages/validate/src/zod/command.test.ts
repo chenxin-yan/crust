@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { CrustError, defineCommand, runCommand } from "@crustjs/core";
 import { z } from "zod";
+import { commandValidator } from "./command.ts";
 import { arg, flag } from "./schema.ts";
 import type { InferValidatedArgs, InferValidatedFlags } from "./types.ts";
-import { withZod } from "./withZod.ts";
 
 function capture<T>(): { value: T | undefined; set(v: T): void } {
 	const box: { value: T | undefined; set(v: T): void } = {
@@ -82,10 +82,10 @@ describe("flag() produces core-compatible FlagDef", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// defineCommand + withZod composability
+// defineCommand + commandValidator composability
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("defineCommand + withZod", () => {
+describe("defineCommand + commandValidator", () => {
 	it("validates and transforms args and flags", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
@@ -98,7 +98,7 @@ describe("defineCommand + withZod", () => {
 			flags: {
 				verbose: flag(z.boolean().default(false), { alias: "v" }),
 			},
-			run: withZod(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -122,7 +122,7 @@ describe("defineCommand + withZod", () => {
 			flags: {
 				format: flag(z.string().default("text")),
 			},
-			run: withZod(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -152,7 +152,7 @@ describe("defineCommand + withZod", () => {
 						.transform((v) => v.toUpperCase()),
 				),
 			},
-			run: withZod(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -182,7 +182,7 @@ describe("defineCommand + withZod", () => {
 						.transform(async (v) => v + 1),
 				),
 			},
-			run: withZod(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -212,7 +212,7 @@ describe("defineCommand + withZod", () => {
 						.transform((n) => n + 1),
 				),
 			},
-			run: withZod(({ input, args, flags }) => {
+			run: commandValidator(({ input, args, flags }) => {
 				received.set({ input, args, flags });
 			}),
 		});
@@ -259,7 +259,7 @@ describe("defineCommand + withZod", () => {
 					count: flags.count,
 				});
 			},
-			run: withZod(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				phases.push({ phase: "run", port: args.port, count: flags.count });
 			}),
 			postRun({ args, flags }) {
@@ -289,7 +289,7 @@ describe("defineCommand + withZod", () => {
 				arg("mode", z.string()),
 				arg("files", z.string().min(1), { variadic: true }),
 			],
-			run: withZod(({ args }) => {
+			run: commandValidator(({ args }) => {
 				received.set(args);
 			}),
 		});
@@ -311,7 +311,7 @@ describe("defineCommand + withZod", () => {
 			flags: {
 				count: flag(z.number().min(1)),
 			},
-			run: withZod(() => {
+			run: commandValidator(() => {
 				expect.unreachable("handler should not run");
 			}),
 		});
@@ -342,7 +342,7 @@ describe("defineCommand + withZod", () => {
 					z.string().refine(async (v) => v === "secret", "Invalid token"),
 				),
 			},
-			run: withZod(() => {
+			run: commandValidator(() => {
 				expect.unreachable("handler should not run");
 			}),
 		});
@@ -428,7 +428,7 @@ describe("defineCommand + withZod", () => {
 			flags: {
 				env: flag(z.string().default("staging"), { alias: "e" }),
 			},
-			run: withZod(({ flags }) => {
+			run: commandValidator(({ flags }) => {
 				received.set(flags);
 			}),
 		});
@@ -569,6 +569,172 @@ describe("arg() / flag() generic type narrowing", () => {
 		const f = flag(z.boolean());
 		type _check = Expect<Equal<typeof f.alias, undefined>>;
 		expect(f.alias).toBeUndefined();
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Explicit parser metadata overrides
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("arg() explicit metadata overrides", () => {
+	it("uses explicit description over schema description", () => {
+		const a = arg("port", z.number().describe("From schema"), {
+			description: "Explicit desc",
+		});
+		expect(a.description).toBe("Explicit desc");
+	});
+
+	it("uses schema description when explicit description is not provided", () => {
+		const a = arg("port", z.number().describe("From schema"));
+		expect(a.description).toBe("From schema");
+	});
+
+	it("uses explicit type that matches inferred type without conflict", () => {
+		const a = arg("port", z.number(), { type: "number" });
+		expect(a.type).toBe("number");
+	});
+
+	it("throws when explicit type conflicts with inferred type", () => {
+		expect(() => arg("port", z.number(), { type: "string" })).toThrow(
+			/explicit type "string" conflicts with schema-inferred type "number"/,
+		);
+	});
+
+	it("throws when explicit required: true conflicts with optional schema", () => {
+		expect(() =>
+			arg("host", z.string().optional(), { required: true }),
+		).toThrow(
+			/explicit required: true conflicts with schema that accepts undefined/,
+		);
+	});
+
+	it("throws when explicit required: false conflicts with required schema", () => {
+		expect(() => arg("port", z.number(), { required: false })).toThrow(
+			/explicit required: false conflicts with schema that does not accept undefined/,
+		);
+	});
+
+	it("accepts explicit required: true that matches required schema", () => {
+		const a = arg("port", z.number(), { required: true });
+		expect(a.required).toBe(true);
+	});
+
+	it("accepts explicit required: false that matches optional schema", () => {
+		const a = arg("host", z.string().optional(), { required: false });
+		expect(a.required).toBeUndefined();
+	});
+
+	it("combines explicit type and description", () => {
+		const a = arg("port", z.number(), {
+			type: "number",
+			description: "Port number",
+		});
+		expect(a.type).toBe("number");
+		expect(a.description).toBe("Port number");
+	});
+
+	it("uses explicit description when schema has no description", () => {
+		const a = arg("port", z.number(), {
+			description: "Explicit only",
+		});
+		expect(a.description).toBe("Explicit only");
+	});
+
+	it("omits description when neither schema nor explicit provides one", () => {
+		const a = arg("port", z.number());
+		expect(a.description).toBeUndefined();
+	});
+});
+
+describe("flag() explicit metadata overrides", () => {
+	it("uses explicit description over schema description", () => {
+		const f = flag(z.boolean().describe("From schema"), {
+			description: "Explicit desc",
+		});
+		expect(f.description).toBe("Explicit desc");
+	});
+
+	it("uses explicit type that matches inferred type without conflict", () => {
+		const f = flag(z.boolean(), { type: "boolean" });
+		expect(f.type).toBe("boolean");
+	});
+
+	it("throws when explicit type conflicts with inferred type", () => {
+		expect(() => flag(z.boolean(), { type: "string" })).toThrow(
+			/explicit type "string" conflicts with schema-inferred type "boolean"/,
+		);
+	});
+
+	it("throws when explicit required: true conflicts with optional schema", () => {
+		expect(() => flag(z.boolean().default(false), { required: true })).toThrow(
+			/explicit required: true conflicts/,
+		);
+	});
+
+	it("throws when explicit required: false conflicts with required schema", () => {
+		expect(() => flag(z.string(), { required: false })).toThrow(
+			/explicit required: false conflicts/,
+		);
+	});
+
+	it("accepts explicit required: true that matches required schema", () => {
+		const f = flag(z.string(), { required: true });
+		expect(f.required).toBe(true);
+	});
+
+	it("accepts explicit required: false that matches optional schema", () => {
+		const f = flag(z.string().optional(), { required: false });
+		expect(f.required).toBeUndefined();
+	});
+
+	it("can combine explicit metadata with alias", () => {
+		const f = flag(z.number(), {
+			type: "number",
+			alias: "p",
+			description: "Port number",
+		});
+		expect(f.type).toBe("number");
+		expect(f.alias).toBe("p");
+		expect(f.description).toBe("Port number");
+	});
+
+	it("uses explicit description when schema has no description", () => {
+		const f = flag(z.boolean(), {
+			description: "Enable verbose output",
+		});
+		expect(f.description).toBe("Enable verbose output");
+	});
+});
+
+describe("explicit metadata precedence documented in code comments/tests", () => {
+	// Precedence rules:
+	// 1. Explicit type > schema-inferred type (conflict → DEFINITION error)
+	// 2. Explicit description > schema description (no conflict check — additive)
+	// 3. Explicit required > schema required (conflict → DEFINITION error)
+
+	it("explicit type takes priority when it matches inferred", () => {
+		const a = arg("name", z.string(), { type: "string" });
+		expect(a.type).toBe("string");
+	});
+
+	it("explicit description always wins over schema description", () => {
+		const a = arg("name", z.string().describe("schema desc"), {
+			description: "explicit desc",
+		});
+		expect(a.description).toBe("explicit desc");
+	});
+
+	it("explicit required matches schema — no error", () => {
+		const a1 = arg("name", z.string(), { required: true });
+		expect(a1.required).toBe(true);
+		const a2 = arg("name2", z.string().optional(), { required: false });
+		expect(a2.required).toBeUndefined();
+	});
+
+	it("type conflict is detected even when description override is present", () => {
+		expect(() =>
+			arg("name", z.string(), { type: "number", description: "Name" }),
+		).toThrow(/explicit type "number" conflicts/);
 	});
 });
 

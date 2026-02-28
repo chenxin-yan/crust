@@ -3,7 +3,13 @@ title: "Prompts"
 description: Interactive terminal prompts for CLI applications — input, password, confirm, select, multiselect, filter, and spinner.
 ---
 
+import { Callout } from "fumadocs-ui/components/callout";
+
 `@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
+
+<Callout>
+  For schema-based prompt validation, use `promptValidator()` from [`@crustjs/validate`](/docs/modules/validate#prompt-validation) to create a `validate` function from a Zod, Effect, or any Standard Schema-compatible schema.
+</Callout>
 
 All prompt UI renders to **stderr** so it never pollutes piped stdout. Every prompt accepts an `initial` option to skip interactivity — useful for prefilling from CLI flags or CI environments.
 
