@@ -41,7 +41,7 @@ export type ValidateValueFn = (
  * @param userRun - The user's validated handler
  * @param validateValue - Provider-specific single-value validation function
  * @param schemaKey - The symbol key used to attach schemas to defs
- * @param label - Label for error messages (e.g. `"withZod"`)
+ * @param label - Label for error messages (e.g. `"commandValidator"`)
  */
 export function buildValidatedRunner(
 	userRun: (ctx: ValidatedContext<unknown, unknown>) => void | Promise<void>,

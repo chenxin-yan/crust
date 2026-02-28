@@ -18,11 +18,14 @@ export {
 // Note: Effect schemas require wrapping with Schema.standardSchemaV1() before
 // passing to storeValidator/storeValidatorSync.
 export { storeValidator, storeValidatorSync } from "../standard/store.ts";
+// Command validation middleware
+export { commandValidator } from "./command.ts";
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
 // Public types
 export type {
 	ArgOptions,
+	CommandValidatorHandler,
 	EffectArgDef,
 	EffectFlagDef,
 	EffectSchemaLike,
@@ -31,7 +34,4 @@ export type {
 	InferValidatedArgs,
 	InferValidatedFlags,
 	ParserMeta,
-	WithEffectHandler,
 } from "./types.ts";
-// Validated run middleware
-export { withEffect } from "./withEffect.ts";

@@ -239,7 +239,7 @@ type AllFlagsHaveSchema<F extends FlagsDef> = string extends keyof F
 
 /**
  * Resolves to `true` only when all args and flags carry schema metadata.
- * Used by `withEffect` to enforce strict mode at compile time.
+ * Used by `commandValidator` to enforce strict mode at compile time.
  */
 export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 	AllArgsHaveSchema<A> extends true
@@ -249,13 +249,13 @@ export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 		: false;
 
 // ────────────────────────────────────────────────────────────────────────────
-// withEffect handler type
+// commandValidator handler type
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The validated handler type for `withEffect()`.
+ * The validated handler type for `commandValidator()`.
  */
-export type WithEffectHandler<A extends ArgsDef, F extends FlagsDef> =
+export type CommandValidatorHandler<A extends ArgsDef, F extends FlagsDef> =
 	HasAllSchemas<A, F> extends true
 		? (
 				context: ValidatedContext<

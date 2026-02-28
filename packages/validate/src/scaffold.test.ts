@@ -51,7 +51,7 @@ describe("@crustjs/validate scaffold", () => {
 		// Command DSL
 		expect(typeof mod.arg).toBe("function");
 		expect(typeof mod.flag).toBe("function");
-		expect(typeof mod.withZod).toBe("function");
+		expect(typeof mod.commandValidator).toBe("function");
 		// Prompt adapters (re-exported from standard)
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
@@ -66,13 +66,13 @@ describe("@crustjs/validate scaffold", () => {
 		const exports = Object.keys(mod).sort();
 		expect(exports).toEqual([
 			"arg",
+			"commandValidator",
 			"flag",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
 			"storeValidator",
 			"storeValidatorSync",
-			"withZod",
 		]);
 	});
 
@@ -82,7 +82,7 @@ describe("@crustjs/validate scaffold", () => {
 		// Command DSL
 		expect(typeof mod.arg).toBe("function");
 		expect(typeof mod.flag).toBe("function");
-		expect(typeof mod.withEffect).toBe("function");
+		expect(typeof mod.commandValidator).toBe("function");
 		// Prompt adapters (re-exported from standard)
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
@@ -97,13 +97,13 @@ describe("@crustjs/validate scaffold", () => {
 		const exports = Object.keys(mod).sort();
 		expect(exports).toEqual([
 			"arg",
+			"commandValidator",
 			"flag",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
 			"storeValidator",
 			"storeValidatorSync",
-			"withEffect",
 		]);
 	});
 

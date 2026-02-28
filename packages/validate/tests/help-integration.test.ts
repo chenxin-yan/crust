@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { defineCommand, runCommand } from "@crustjs/core";
 import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import { z } from "zod";
-import { arg, flag, withZod } from "../src/zod/index.ts";
+import { arg, commandValidator, flag } from "../src/zod/index.ts";
 
 let stdoutChunks: string[];
 let originalLog: typeof console.log;
@@ -24,7 +24,7 @@ function getStdout(): string {
 	return stdoutChunks.join("\n");
 }
 
-describe("help plugin integration with defineCommand + withZod", () => {
+describe("help plugin integration with defineCommand + commandValidator", () => {
 	it("renders help for a flags-only schema-first command", async () => {
 		const cmd = defineCommand({
 			meta: { name: "serve", description: "Start dev server" },
@@ -34,7 +34,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 					{ alias: "v" },
 				),
 			},
-			run: withZod(() => {}),
+			run: commandValidator(() => {}),
 		});
 
 		await runCommand(cmd, {
@@ -129,7 +129,7 @@ describe("help plugin integration with defineCommand + withZod", () => {
 					{ alias: "e" },
 				),
 			},
-			run: withZod(() => {}),
+			run: commandValidator(() => {}),
 		});
 
 		const root = defineCommand({

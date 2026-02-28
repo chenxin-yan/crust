@@ -3,11 +3,11 @@ import { standardSchemaV1 } from "effect/Schema";
 import { buildValidatedRunner } from "../middleware.ts";
 import type { StandardSchema } from "../standard/types.ts";
 import { validateStandard } from "../standard/validate.ts";
-import type { EffectSchemaLike, WithEffectHandler } from "./types.ts";
+import type { CommandValidatorHandler, EffectSchemaLike } from "./types.ts";
 import { EFFECT_SCHEMA } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// withEffect — validated run middleware for defineCommand
+// commandValidator — validated run middleware for defineCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -32,23 +32,23 @@ import { EFFECT_SCHEMA } from "./types.ts";
  * ```ts
  * import { defineCommand } from "@crustjs/core";
  * import * as Schema from "effect/Schema";
- * import { arg, flag, withEffect } from "@crustjs/validate/effect";
+ * import { arg, flag, commandValidator } from "@crustjs/validate/effect";
  *
  * const serve = defineCommand({
  *   meta: { name: "serve" },
  *   args: [arg("port", Schema.Number)],
  *   flags: { verbose: flag(Schema.Boolean, { alias: "v" }) },
- *   run: withEffect(({ args, flags }) => {
+ *   run: commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
  *   }),
  * });
  * ```
  */
-export function withEffect<
+export function commandValidator<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 >(
-	handler: WithEffectHandler<A, F>,
+	handler: CommandValidatorHandler<A, F>,
 ): (context: CommandContext<A, F>) => Promise<void> {
 	return buildValidatedRunner(
 		handler as (
@@ -61,6 +61,6 @@ export function withEffect<
 				prefix,
 			),
 		EFFECT_SCHEMA,
-		"withEffect",
+		"commandValidator",
 	) as (context: CommandContext<A, F>) => Promise<void>;
 }

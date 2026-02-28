@@ -14,20 +14,20 @@ export {
 } from "../standard/prompt.ts";
 // Store adapters — re-exported from standard (Zod v4 implements Standard Schema natively)
 export { storeValidator, storeValidatorSync } from "../standard/store.ts";
+// Command validation middleware
+export { commandValidator } from "./command.ts";
 // Schema-first DSL helpers
 export { arg, flag } from "./schema.ts";
 // Public types
 export type {
 	ArgOptions,
+	CommandValidatorHandler,
 	FlagOptions,
 	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
 	ParserMeta,
-	WithZodHandler,
 	ZodArgDef,
 	ZodFlagDef,
 	ZodSchemaLike,
 } from "./types.ts";
-// Validated run middleware
-export { withZod } from "./withZod.ts";

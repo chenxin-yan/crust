@@ -2,11 +2,11 @@ import type { ArgsDef, CommandContext, FlagsDef } from "@crustjs/core";
 import { buildValidatedRunner } from "../middleware.ts";
 import type { StandardSchema } from "../standard/types.ts";
 import { validateStandard } from "../standard/validate.ts";
-import type { WithZodHandler } from "./types.ts";
+import type { CommandValidatorHandler } from "./types.ts";
 import { ZOD_SCHEMA } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// withZod — validated run middleware for defineCommand
+// commandValidator — validated run middleware for defineCommand
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -27,23 +27,23 @@ import { ZOD_SCHEMA } from "./types.ts";
  * ```ts
  * import { defineCommand } from "@crustjs/core";
  * import { z } from "zod";
- * import { arg, flag, withZod } from "@crustjs/validate/zod";
+ * import { arg, flag, commandValidator } from "@crustjs/validate/zod";
  *
  * const serve = defineCommand({
  *   meta: { name: "serve" },
  *   args: [arg("port", z.number().min(1))],
  *   flags: { verbose: flag(z.boolean().default(false), { alias: "v" }) },
- *   run: withZod(({ args, flags }) => {
+ *   run: commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
  *   }),
  * });
  * ```
  */
-export function withZod<
+export function commandValidator<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 >(
-	handler: WithZodHandler<A, F>,
+	handler: CommandValidatorHandler<A, F>,
 ): (context: CommandContext<A, F>) => Promise<void> {
 	return buildValidatedRunner(
 		handler as (
@@ -52,6 +52,6 @@ export function withZod<
 		(schema, value, prefix) =>
 			validateStandard(schema as StandardSchema, value, prefix),
 		ZOD_SCHEMA,
-		"withZod",
+		"commandValidator",
 	) as (context: CommandContext<A, F>) => Promise<void>;
 }

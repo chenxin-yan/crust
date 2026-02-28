@@ -307,7 +307,7 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
  * Define a named positional argument from an Effect schema.
  *
  * Returns a core `ArgDef` (accepted by `defineCommand`) enriched with hidden
- * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `withEffect`.
+ * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `required`, `description`, `variadic`) is derived
  * from the schema automatically — single source of truth.
@@ -441,7 +441,7 @@ export function arg<
  * Define a flag from an Effect schema with optional alias.
  *
  * Returns a core `FlagDef` (accepted by `defineCommand`) enriched with hidden
- * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `withEffect`.
+ * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `multiple`, `required`, `description`) is derived
  * from the schema automatically — single source of truth.

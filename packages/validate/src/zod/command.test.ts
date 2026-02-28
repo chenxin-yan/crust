@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { CrustError, defineCommand, runCommand } from "@crustjs/core";
-import * as Schema from "effect/Schema";
+import { z } from "zod";
+import { commandValidator } from "./command.ts";
 import { arg, flag } from "./schema.ts";
 import type { InferValidatedArgs, InferValidatedFlags } from "./types.ts";
-import { withEffect } from "./withEffect.ts";
 
 function capture<T>(): { value: T | undefined; set(v: T): void } {
 	const box: { value: T | undefined; set(v: T): void } = {
@@ -21,94 +21,84 @@ function capture<T>(): { value: T | undefined; set(v: T): void } {
 
 describe("arg() produces core-compatible ArgDef", () => {
 	it("derives type and required from schema", () => {
-		const portArg = arg("port", Schema.Number);
+		const portArg = arg("port", z.number());
 		expect(portArg.name).toBe("port");
 		expect(portArg.type).toBe("number");
 		expect(portArg.required).toBe(true);
 	});
 
 	it("marks optional schema as not required", () => {
-		const hostArg = arg("host", Schema.UndefinedOr(Schema.String));
+		const hostArg = arg("host", z.string().default("localhost"));
 		expect(hostArg.type).toBe("string");
 		expect(hostArg.required).toBeUndefined();
 	});
 
-	it("extracts description from schema annotations", () => {
-		const a = arg(
-			"port",
-			Schema.Number.annotations({ description: "Port to listen on" }),
-		);
+	it("extracts description from schema", () => {
+		const a = arg("port", z.number().describe("Port to listen on"));
 		expect(a.description).toBe("Port to listen on");
 	});
 
 	it("supports variadic option", () => {
-		const a = arg("files", Schema.String, { variadic: true });
+		const a = arg("files", z.string(), { variadic: true });
 		expect(a.variadic).toBe(true);
 	});
 
 	it("throws DEFINITION for empty name", () => {
-		expect(() => arg("", Schema.String)).toThrow(CrustError);
+		expect(() => arg("", z.string())).toThrow(CrustError);
 	});
 
 	it("throws DEFINITION for array schema without variadic", () => {
-		expect(() => arg("files", Schema.Array(Schema.String))).toThrow(CrustError);
+		expect(() => arg("files", z.array(z.string()))).toThrow(CrustError);
 	});
 
 	it("throws DEFINITION for variadic with array schema", () => {
-		expect(() =>
-			arg("files", Schema.Array(Schema.String), { variadic: true }),
-		).toThrow(CrustError);
-	});
-
-	it("throws DEFINITION for tuple schemas with fixed elements", () => {
-		expect(() =>
-			arg("mixed", Schema.Tuple(Schema.String, Schema.Number), {
-				variadic: true,
-			}),
-		).toThrow(/tuple schemas with fixed elements/);
+		expect(() => arg("files", z.array(z.string()), { variadic: true })).toThrow(
+			CrustError,
+		);
 	});
 });
 
 describe("flag() produces core-compatible FlagDef", () => {
 	it("derives type from schema", () => {
-		const f = flag(Schema.UndefinedOr(Schema.Boolean));
+		const f = flag(z.boolean().default(false));
 		expect(f.type).toBe("boolean");
 		expect(f.required).toBeUndefined();
 	});
 
 	it("passes through alias", () => {
-		const f = flag(Schema.UndefinedOr(Schema.Boolean), { alias: "v" });
+		const f = flag(z.boolean().default(false), { alias: "v" });
 		expect(f.alias).toBe("v");
 	});
 
-	it("extracts description from schema annotations", () => {
-		const f = flag(Schema.String.annotations({ description: "Output dir" }));
+	it("extracts description from schema", () => {
+		const f = flag(z.string().describe("Output dir"));
 		expect(f.description).toBe("Output dir");
 	});
 
 	it("resolves description through wrappers", () => {
-		const f = flag(
-			Schema.UndefinedOr(Schema.Number.annotations({ description: "Count" })),
-		);
+		const f = flag(z.number().describe("Count").default(1));
 		expect(f.description).toBe("Count");
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// defineCommand + withEffect composability
+// defineCommand + commandValidator composability
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("defineCommand + withEffect", () => {
+describe("defineCommand + commandValidator", () => {
 	it("validates and transforms args and flags", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
 		const cmd = defineCommand({
 			meta: { name: "serve" },
-			args: [arg("port", Schema.Number), arg("host", Schema.String)],
+			args: [
+				arg("port", z.number().int().min(1)),
+				arg("host", z.string().default("localhost")),
+			],
 			flags: {
-				verbose: flag(Schema.Boolean, { alias: "v" }),
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
 			},
-			run: withEffect(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -123,16 +113,16 @@ describe("defineCommand + withEffect", () => {
 		expect(received.value?.flags).toEqual({ verbose: true });
 	});
 
-	it("applies schema defaults via UndefinedOr", async () => {
+	it("applies schema defaults", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
 		const cmd = defineCommand({
 			meta: { name: "greet" },
-			args: [arg("name", Schema.String)],
+			args: [arg("name", z.string())],
 			flags: {
-				format: flag(Schema.UndefinedOr(Schema.String)),
+				format: flag(z.string().default("text")),
 			},
-			run: withEffect(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -140,41 +130,67 @@ describe("defineCommand + withEffect", () => {
 		await runCommand(cmd, { argv: ["alice"] });
 
 		expect(received.value?.args).toEqual({ name: "alice" });
-		expect(received.value?.flags).toEqual({ format: undefined });
+		expect(received.value?.flags).toEqual({ format: "text" });
 	});
 
 	it("applies schema transforms", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
-		const UpperString = Schema.transform(Schema.String, Schema.String, {
-			strict: false,
-			decode: (s) => s.toUpperCase(),
-			encode: (s) => s,
-		});
-
 		const cmd = defineCommand({
 			meta: { name: "greet" },
-			args: [arg("name", UpperString)],
+			args: [
+				arg(
+					"name",
+					z.string().transform((s) => s.toUpperCase()),
+				),
+			],
 			flags: {
 				format: flag(
-					Schema.UndefinedOr(
-						Schema.transform(Schema.String, Schema.String, {
-							strict: false,
-							decode: (v) => v.toUpperCase(),
-							encode: (v) => v,
-						}),
-					),
+					z
+						.string()
+						.default("text")
+						.transform((v) => v.toUpperCase()),
 				),
 			},
-			run: withEffect(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
 
-		await runCommand(cmd, { argv: ["alice", "--format", "text"] });
+		await runCommand(cmd, { argv: ["alice"] });
 
 		expect(received.value?.args).toEqual({ name: "ALICE" });
 		expect(received.value?.flags).toEqual({ format: "TEXT" });
+	});
+
+	it("supports async transforms", async () => {
+		const received = capture<{ args: unknown; flags: unknown }>();
+
+		const cmd = defineCommand({
+			meta: { name: "async" },
+			args: [
+				arg(
+					"name",
+					z.string().transform(async (v) => v.toUpperCase()),
+				),
+			],
+			flags: {
+				count: flag(
+					z
+						.number()
+						.default(1)
+						.transform(async (v) => v + 1),
+				),
+			},
+			run: commandValidator(({ args, flags }) => {
+				received.set({ args, flags });
+			}),
+		});
+
+		await runCommand(cmd, { argv: ["alice"] });
+
+		expect(received.value?.args).toEqual({ name: "ALICE" });
+		expect(received.value?.flags).toEqual({ count: 2 });
 	});
 
 	it("preserves original parser output on context.input", async () => {
@@ -182,11 +198,21 @@ describe("defineCommand + withEffect", () => {
 
 		const cmd = defineCommand({
 			meta: { name: "demo" },
-			args: [arg("name", Schema.String)],
+			args: [
+				arg(
+					"name",
+					z.string().transform((s) => s.toUpperCase()),
+				),
+			],
 			flags: {
-				count: flag(Schema.UndefinedOr(Schema.Number)),
+				count: flag(
+					z
+						.number()
+						.default(2)
+						.transform((n) => n + 1),
+				),
 			},
-			run: withEffect(({ input, args, flags }) => {
+			run: commandValidator(({ input, args, flags }) => {
 				received.set({ input, args, flags });
 			}),
 		});
@@ -198,8 +224,8 @@ describe("defineCommand + withEffect", () => {
 				args: { name: "world" },
 				flags: { count: undefined },
 			},
-			args: { name: "world" },
-			flags: { count: undefined },
+			args: { name: "WORLD" },
+			flags: { count: 3 },
 		});
 	});
 
@@ -212,29 +238,35 @@ describe("defineCommand + withEffect", () => {
 
 		const cmd = defineCommand({
 			meta: { name: "hooks" },
-			args: [arg("port", Schema.Number)],
+			args: [
+				arg(
+					"port",
+					z.string().transform(async (v) => Number(v)),
+				),
+			],
 			flags: {
-				count: flag(Schema.UndefinedOr(Schema.Number)),
+				count: flag(
+					z
+						.string()
+						.default("1")
+						.transform(async (v) => Number(v)),
+				),
 			},
 			preRun({ args, flags }) {
-				const rawArgs = args as Record<string, unknown>;
-				const rawFlags = flags as Record<string, unknown>;
 				phases.push({
 					phase: "pre",
-					port: rawArgs.port,
-					count: rawFlags.count,
+					port: args.port,
+					count: flags.count,
 				});
 			},
-			run: withEffect(({ args, flags }) => {
+			run: commandValidator(({ args, flags }) => {
 				phases.push({ phase: "run", port: args.port, count: flags.count });
 			}),
 			postRun({ args, flags }) {
-				const rawArgs = args as Record<string, unknown>;
-				const rawFlags = flags as Record<string, unknown>;
 				phases.push({
 					phase: "post",
-					port: rawArgs.port,
-					count: rawFlags.count,
+					port: args.port,
+					count: flags.count,
 				});
 			},
 		});
@@ -242,9 +274,9 @@ describe("defineCommand + withEffect", () => {
 		await runCommand(cmd, { argv: ["8080"] });
 
 		expect(phases).toEqual([
-			{ phase: "pre", port: 8080, count: undefined },
-			{ phase: "run", port: 8080, count: undefined },
-			{ phase: "post", port: 8080, count: undefined },
+			{ phase: "pre", port: "8080", count: undefined },
+			{ phase: "run", port: 8080, count: 1 },
+			{ phase: "post", port: "8080", count: undefined },
 		]);
 	});
 
@@ -254,10 +286,10 @@ describe("defineCommand + withEffect", () => {
 		const cmd = defineCommand({
 			meta: { name: "lint" },
 			args: [
-				arg("mode", Schema.String),
-				arg("files", Schema.String, { variadic: true }),
+				arg("mode", z.string()),
+				arg("files", z.string().min(1), { variadic: true }),
 			],
-			run: withEffect(({ args }) => {
+			run: commandValidator(({ args }) => {
 				received.set(args);
 			}),
 		});
@@ -275,30 +307,54 @@ describe("defineCommand + withEffect", () => {
 	it("maps schema failures to CrustError(VALIDATION) with dot-paths", async () => {
 		const cmd = defineCommand({
 			meta: { name: "check" },
-			args: [arg("env", Schema.Literal("prod"))],
+			args: [arg("port", z.number().min(1))],
 			flags: {
-				mode: flag(Schema.Literal("strict")),
+				count: flag(z.number().min(1)),
 			},
-			run: withEffect(() => {
+			run: commandValidator(() => {
 				expect.unreachable("handler should not run");
 			}),
 		});
 
 		try {
-			await runCommand(cmd, { argv: ["dev", "--mode", "loose"] });
+			await runCommand(cmd, { argv: ["0", "--count", "0"] });
 			expect.unreachable("should have thrown");
 		} catch (error) {
 			expect(error).toBeInstanceOf(CrustError);
 			const crustErr = error as CrustError;
 			expect(crustErr.is("VALIDATION")).toBe(true);
-			expect(crustErr.message).toContain("args.env");
-			expect(crustErr.message).toContain("flags.mode");
+			expect(crustErr.message).toContain("args.port");
+			expect(crustErr.message).toContain("flags.count");
 			expect(crustErr.cause).toEqual(
 				expect.arrayContaining([
-					{ path: "args.env", message: expect.any(String) },
-					{ path: "flags.mode", message: expect.any(String) },
+					{ path: "args.port", message: expect.any(String) },
+					{ path: "flags.count", message: expect.any(String) },
 				]),
 			);
+		}
+	});
+
+	it("maps async schema failures to CrustError(VALIDATION)", async () => {
+		const cmd = defineCommand({
+			meta: { name: "check-async" },
+			flags: {
+				token: flag(
+					z.string().refine(async (v) => v === "secret", "Invalid token"),
+				),
+			},
+			run: commandValidator(() => {
+				expect.unreachable("handler should not run");
+			}),
+		});
+
+		try {
+			await runCommand(cmd, { argv: ["--token", "nope"] });
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			const crustErr = error as CrustError;
+			expect(crustErr.is("VALIDATION")).toBe(true);
+			expect(crustErr.message).toContain("flags.token");
 		}
 	});
 
@@ -306,19 +362,13 @@ describe("defineCommand + withEffect", () => {
 		const cmd = defineCommand({
 			meta: { name: "serve", description: "Start server" },
 			args: [
-				arg("port", Schema.Number.annotations({ description: "Port number" })),
-				arg(
-					"host",
-					Schema.UndefinedOr(
-						Schema.String.annotations({ description: "Host" }),
-					),
-				),
+				arg("port", z.number().describe("Port number")),
+				arg("host", z.string().optional().describe("Host")),
 			],
 			flags: {
-				verbose: flag(
-					Schema.Boolean.annotations({ description: "Verbose mode" }),
-					{ alias: "v" },
-				),
+				verbose: flag(z.boolean().default(false).describe("Verbose mode"), {
+					alias: "v",
+				}),
 			},
 		});
 
@@ -348,29 +398,25 @@ describe("defineCommand + withEffect", () => {
 		);
 	});
 
-	it("resolves description through Effect wrappers", () => {
+	it("resolves description through Zod wrappers", () => {
 		const cmd = defineCommand({
 			meta: { name: "unwrap" },
 			args: [
-				arg(
-					"name",
-					Schema.UndefinedOr(
-						Schema.String.annotations({ description: "Inner desc" }),
-					),
-				),
+				arg("name", z.string().describe("Inner desc").optional()),
+				arg("count", z.number().describe("Count desc").default(1)),
 			],
 			flags: {
 				mode: flag(
-					Schema.transform(
-						Schema.String.annotations({ description: "Mode desc" }),
-						Schema.String,
-						{ strict: false, decode: (v) => v, encode: (v) => v },
-					),
+					z
+						.string()
+						.describe("Mode desc")
+						.transform((v) => v.toUpperCase()),
 				),
 			},
 		});
 
 		expect(cmd.args?.[0]?.description).toBe("Inner desc");
+		expect(cmd.args?.[1]?.description).toBe("Count desc");
 		expect(cmd.flags?.mode?.description).toBe("Mode desc");
 	});
 
@@ -380,9 +426,9 @@ describe("defineCommand + withEffect", () => {
 		const deploy = defineCommand({
 			meta: { name: "deploy", description: "Deploy app" },
 			flags: {
-				env: flag(Schema.UndefinedOr(Schema.String), { alias: "e" }),
+				env: flag(z.string().default("staging"), { alias: "e" }),
 			},
-			run: withEffect(({ flags }) => {
+			run: commandValidator(({ flags }) => {
 				received.set(flags);
 			}),
 		});
@@ -407,8 +453,8 @@ describe("ValidateVariadicArgs (compile-time, via defineCommand)", () => {
 		const cmd = defineCommand({
 			meta: { name: "ok" },
 			args: [
-				arg("mode", Schema.String),
-				arg("files", Schema.String, { variadic: true }),
+				arg("mode", z.string()),
+				arg("files", z.string(), { variadic: true }),
 			],
 		});
 		expect(cmd.meta.name).toBe("ok");
@@ -417,7 +463,7 @@ describe("ValidateVariadicArgs (compile-time, via defineCommand)", () => {
 	it("accepts no variadic args", () => {
 		const cmd = defineCommand({
 			meta: { name: "ok2" },
-			args: [arg("port", Schema.Number), arg("host", Schema.String)],
+			args: [arg("port", z.number()), arg("host", z.string())],
 		});
 		expect(cmd.meta.name).toBe("ok2");
 	});
@@ -427,8 +473,8 @@ describe("ValidateVariadicArgs (compile-time, via defineCommand)", () => {
 			meta: { name: "bad-order" },
 			args: [
 				// @ts-expect-error — variadic is not last, caught at compile time
-				arg("files", Schema.String, { variadic: true }),
-				arg("mode", Schema.String),
+				arg("files", z.string(), { variadic: true }),
+				arg("mode", z.string()),
 			],
 		});
 		expect(true).toBe(true);
@@ -440,8 +486,8 @@ describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
 		const cmd = defineCommand({
 			meta: { name: "ok" },
 			flags: {
-				verbose: flag(Schema.Boolean, { alias: "v" }),
-				port: flag(Schema.Number, { alias: "p" }),
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
+				port: flag(z.number().default(3000), { alias: "p" }),
 			},
 		});
 		expect(cmd.meta.name).toBe("ok");
@@ -451,8 +497,8 @@ describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
 		const cmd = defineCommand({
 			meta: { name: "ok2" },
 			flags: {
-				verbose: flag(Schema.Boolean),
-				port: flag(Schema.Number),
+				verbose: flag(z.boolean().default(false)),
+				port: flag(z.number().default(3000)),
 			},
 		});
 		expect(cmd.meta.name).toBe("ok2");
@@ -462,9 +508,9 @@ describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
 		defineCommand({
 			meta: { name: "bad-alias" },
 			flags: {
-				out: flag(Schema.UndefinedOr(Schema.String)),
+				out: flag(z.string().optional()),
 				// @ts-expect-error — alias "out" collides with flag name "--out"
-				output: flag(Schema.UndefinedOr(Schema.String), { alias: "out" }),
+				output: flag(z.string().optional(), { alias: "out" }),
 			},
 		});
 		expect(true).toBe(true);
@@ -475,9 +521,9 @@ describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
 			meta: { name: "bad-alias-dup" },
 			flags: {
 				// @ts-expect-error — alias "v" collides with alias on other flag
-				verbose: flag(Schema.Boolean, { alias: "v" }),
+				verbose: flag(z.boolean().default(false), { alias: "v" }),
 				// @ts-expect-error — alias "v" collides with alias on other flag
-				version: flag(Schema.Boolean, { alias: "v" }),
+				version: flag(z.boolean().default(false), { alias: "v" }),
 			},
 		});
 		expect(true).toBe(true);
@@ -485,7 +531,7 @@ describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Type-level generic narrowing and inference
+// Type-level inference tests (compile-time only)
 // ────────────────────────────────────────────────────────────────────────────
 
 type Expect<T extends true> = T;
@@ -496,31 +542,31 @@ type Equal<A, B> =
 
 describe("arg() / flag() generic type narrowing", () => {
 	it("narrows variadic to literal true on arg() return type", () => {
-		const variadicArg = arg("files", Schema.String, { variadic: true });
+		const variadicArg = arg("files", z.string(), { variadic: true });
 		type _check = Expect<Equal<typeof variadicArg.variadic, true>>;
 		expect(variadicArg.variadic).toBe(true);
 	});
 
 	it("narrows variadic to undefined when not specified", () => {
-		const plainArg = arg("port", Schema.Number);
+		const plainArg = arg("port", z.number());
 		type _check = Expect<Equal<typeof plainArg.variadic, undefined>>;
 		expect(plainArg.variadic).toBeUndefined();
 	});
 
 	it("narrows alias to literal string on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: "v" });
+		const f = flag(z.boolean(), { alias: "v" });
 		type _check = Expect<Equal<typeof f.alias, "v">>;
 		expect(f.alias).toBe("v");
 	});
 
 	it("narrows alias to literal tuple on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: ["v", "V"] });
+		const f = flag(z.boolean(), { alias: ["v", "V"] });
 		type _check = Expect<Equal<typeof f.alias, readonly ["v", "V"]>>;
 		expect(f.alias).toEqual(["v", "V"]);
 	});
 
 	it("narrows alias to undefined when not specified", () => {
-		const f = flag(Schema.Boolean);
+		const f = flag(z.boolean());
 		type _check = Expect<Equal<typeof f.alias, undefined>>;
 		expect(f.alias).toBeUndefined();
 	});
@@ -531,62 +577,55 @@ describe("arg() / flag() generic type narrowing", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("arg() explicit metadata overrides", () => {
-	it("uses explicit description over schema annotation", () => {
-		const a = arg(
-			"port",
-			Schema.Number.annotations({ description: "From schema" }),
-			{ description: "Explicit desc" },
-		);
+	it("uses explicit description over schema description", () => {
+		const a = arg("port", z.number().describe("From schema"), {
+			description: "Explicit desc",
+		});
 		expect(a.description).toBe("Explicit desc");
 	});
 
 	it("uses schema description when explicit description is not provided", () => {
-		const a = arg(
-			"port",
-			Schema.Number.annotations({ description: "From schema" }),
-		);
+		const a = arg("port", z.number().describe("From schema"));
 		expect(a.description).toBe("From schema");
 	});
 
 	it("uses explicit type that matches inferred type without conflict", () => {
-		const a = arg("port", Schema.Number, { type: "number" });
+		const a = arg("port", z.number(), { type: "number" });
 		expect(a.type).toBe("number");
 	});
 
 	it("throws when explicit type conflicts with inferred type", () => {
-		expect(() => arg("port", Schema.Number, { type: "string" })).toThrow(
+		expect(() => arg("port", z.number(), { type: "string" })).toThrow(
 			/explicit type "string" conflicts with schema-inferred type "number"/,
 		);
 	});
 
 	it("throws when explicit required: true conflicts with optional schema", () => {
 		expect(() =>
-			arg("host", Schema.UndefinedOr(Schema.String), { required: true }),
+			arg("host", z.string().optional(), { required: true }),
 		).toThrow(
 			/explicit required: true conflicts with schema that accepts undefined/,
 		);
 	});
 
 	it("throws when explicit required: false conflicts with required schema", () => {
-		expect(() => arg("port", Schema.Number, { required: false })).toThrow(
+		expect(() => arg("port", z.number(), { required: false })).toThrow(
 			/explicit required: false conflicts with schema that does not accept undefined/,
 		);
 	});
 
 	it("accepts explicit required: true that matches required schema", () => {
-		const a = arg("port", Schema.Number, { required: true });
+		const a = arg("port", z.number(), { required: true });
 		expect(a.required).toBe(true);
 	});
 
 	it("accepts explicit required: false that matches optional schema", () => {
-		const a = arg("host", Schema.UndefinedOr(Schema.String), {
-			required: false,
-		});
+		const a = arg("host", z.string().optional(), { required: false });
 		expect(a.required).toBeUndefined();
 	});
 
 	it("combines explicit type and description", () => {
-		const a = arg("port", Schema.Number, {
+		const a = arg("port", z.number(), {
 			type: "number",
 			description: "Port number",
 		});
@@ -594,63 +633,62 @@ describe("arg() explicit metadata overrides", () => {
 		expect(a.description).toBe("Port number");
 	});
 
-	it("uses explicit description when schema has no annotation", () => {
-		const a = arg("port", Schema.Number, {
+	it("uses explicit description when schema has no description", () => {
+		const a = arg("port", z.number(), {
 			description: "Explicit only",
 		});
 		expect(a.description).toBe("Explicit only");
 	});
 
-	it("falls back to schema annotation when no explicit description", () => {
-		// Effect's Schema.Number already has a built-in description annotation ("a number")
-		const a = arg("port", Schema.Number);
-		expect(a.description).toBe("a number");
+	it("omits description when neither schema nor explicit provides one", () => {
+		const a = arg("port", z.number());
+		expect(a.description).toBeUndefined();
 	});
 });
 
 describe("flag() explicit metadata overrides", () => {
-	it("uses explicit description over schema annotation", () => {
-		const f = flag(Schema.Boolean.annotations({ description: "From schema" }), {
+	it("uses explicit description over schema description", () => {
+		const f = flag(z.boolean().describe("From schema"), {
 			description: "Explicit desc",
 		});
 		expect(f.description).toBe("Explicit desc");
 	});
 
 	it("uses explicit type that matches inferred type without conflict", () => {
-		const f = flag(Schema.Boolean, { type: "boolean" });
+		const f = flag(z.boolean(), { type: "boolean" });
 		expect(f.type).toBe("boolean");
 	});
 
 	it("throws when explicit type conflicts with inferred type", () => {
-		expect(() => flag(Schema.Boolean, { type: "string" })).toThrow(
+		expect(() => flag(z.boolean(), { type: "string" })).toThrow(
 			/explicit type "string" conflicts with schema-inferred type "boolean"/,
 		);
 	});
 
 	it("throws when explicit required: true conflicts with optional schema", () => {
-		expect(() =>
-			flag(Schema.UndefinedOr(Schema.Boolean), { required: true }),
-		).toThrow(/explicit required: true conflicts/);
+		expect(() => flag(z.boolean().default(false), { required: true })).toThrow(
+			/explicit required: true conflicts/,
+		);
 	});
 
 	it("throws when explicit required: false conflicts with required schema", () => {
-		expect(() => flag(Schema.String, { required: false })).toThrow(
+		expect(() => flag(z.string(), { required: false })).toThrow(
 			/explicit required: false conflicts/,
 		);
 	});
 
 	it("accepts explicit required: true that matches required schema", () => {
-		const f = flag(Schema.String, { required: true });
+		const f = flag(z.string(), { required: true });
 		expect(f.required).toBe(true);
 	});
 
 	it("accepts explicit required: false that matches optional schema", () => {
-		const f = flag(Schema.UndefinedOr(Schema.String), { required: false });
+		const f = flag(z.string().optional(), { required: false });
 		expect(f.required).toBeUndefined();
 	});
 
 	it("can combine explicit metadata with alias", () => {
-		const f = flag(Schema.Number, {
+		const f = flag(z.number(), {
 			type: "number",
 			alias: "p",
 			description: "Port number",
@@ -660,41 +698,42 @@ describe("flag() explicit metadata overrides", () => {
 		expect(f.description).toBe("Port number");
 	});
 
-	it("uses explicit description when schema has no annotation", () => {
-		const f = flag(Schema.Boolean, {
+	it("uses explicit description when schema has no description", () => {
+		const f = flag(z.boolean(), {
 			description: "Enable verbose output",
 		});
 		expect(f.description).toBe("Enable verbose output");
 	});
 });
 
-describe("explicit metadata precedence rules", () => {
+describe("explicit metadata precedence documented in code comments/tests", () => {
+	// Precedence rules:
+	// 1. Explicit type > schema-inferred type (conflict → DEFINITION error)
+	// 2. Explicit description > schema description (no conflict check — additive)
+	// 3. Explicit required > schema required (conflict → DEFINITION error)
+
 	it("explicit type takes priority when it matches inferred", () => {
-		const a = arg("name", Schema.String, { type: "string" });
+		const a = arg("name", z.string(), { type: "string" });
 		expect(a.type).toBe("string");
 	});
 
 	it("explicit description always wins over schema description", () => {
-		const a = arg(
-			"name",
-			Schema.String.annotations({ description: "schema desc" }),
-			{ description: "explicit desc" },
-		);
+		const a = arg("name", z.string().describe("schema desc"), {
+			description: "explicit desc",
+		});
 		expect(a.description).toBe("explicit desc");
 	});
 
 	it("explicit required matches schema — no error", () => {
-		const a1 = arg("name", Schema.String, { required: true });
+		const a1 = arg("name", z.string(), { required: true });
 		expect(a1.required).toBe(true);
-		const a2 = arg("name2", Schema.UndefinedOr(Schema.String), {
-			required: false,
-		});
+		const a2 = arg("name2", z.string().optional(), { required: false });
 		expect(a2.required).toBeUndefined();
 	});
 
 	it("type conflict is detected even when description override is present", () => {
 		expect(() =>
-			arg("name", Schema.String, { type: "number", description: "Name" }),
+			arg("name", z.string(), { type: "number", description: "Name" }),
 		).toThrow(/explicit type "number" conflicts/);
 	});
 });
@@ -702,24 +741,24 @@ describe("explicit metadata precedence rules", () => {
 describe("type-level InferValidatedArgs / InferValidatedFlags", () => {
 	it("infers correct validated types", () => {
 		const args = [
-			arg("port", Schema.Number),
-			arg("host", Schema.UndefinedOr(Schema.String)),
+			arg("port", z.number()),
+			arg("host", z.string().default("localhost")),
 		] as const;
 		type Args = InferValidatedArgs<typeof args>;
 		type _checkPort = Expect<Equal<Args["port"], number>>;
-		type _checkHost = Expect<Equal<Args["host"], string | undefined>>;
+		type _checkHost = Expect<Equal<Args["host"], string>>;
 	});
 
 	it("infers variadic as array", () => {
-		const args = [arg("files", Schema.String, { variadic: true })] as const;
+		const args = [arg("files", z.string(), { variadic: true })] as const;
 		type Args = InferValidatedArgs<typeof args>;
 		type _check = Expect<Equal<Args["files"], string[]>>;
 	});
 
 	it("infers flag output types", () => {
 		const flags = {
-			verbose: flag(Schema.Boolean),
-			format: flag(Schema.Literal("json", "text")),
+			verbose: flag(z.boolean().default(false)),
+			format: flag(z.enum(["json", "text"]).default("text")),
 		} as const;
 		type Flags = InferValidatedFlags<typeof flags>;
 		type _checkVerbose = Expect<Equal<Flags["verbose"], boolean>>;

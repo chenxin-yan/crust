@@ -18,7 +18,7 @@ The validation platform is organized around a **Standard Schema-first** core:
 ├────────────────────┬─────────────────────────────────┤
 │  /zod              │  /effect                        │
 │  arg(), flag(),    │  arg(), flag(),                 │
-│  withZod()         │  withEffect()                   │
+│  commandValidator()│  commandValidator()             │
 │  + prompt/store    │  + prompt/store                 │
 │    re-exports      │    re-exports                   │
 └────────────────────┴─────────────────────────────────┘
@@ -32,7 +32,7 @@ The validation platform is organized around a **Standard Schema-first** core:
 
 | Target  | What it does                                  | Standard | Zod | Effect |
 | ------- | --------------------------------------------- | :------: | :-: | :----: |
-| Command | Validates args/flags via `withZod`/`withEffect` middleware | —       | `arg`, `flag`, `withZod` | `arg`, `flag`, `withEffect` |
+| Command | Validates args/flags via `commandValidator` middleware | —       | `arg`, `flag`, `commandValidator` | `arg`, `flag`, `commandValidator` |
 | Prompt  | Validates interactive prompt input            | `promptValidator` | `promptValidator`¹ | `promptValidator`¹ |
 | Prompt (parse) | Validates + returns typed output       | `parsePromptValue` | `parsePromptValue`¹ | `parsePromptValue`¹ |
 | Store   | Validates config on read/write/update         | `storeValidator` | `storeValidator`¹ | `storeValidator`¹ |
@@ -45,8 +45,8 @@ The validation platform is organized around a **Standard Schema-first** core:
 | ---------------- | ---------------------------- | -------------------------------------------------------------- |
 | Shared contracts | `@crustjs/validate`          | Provider-agnostic types (`ValidatedContext`, `ValidationIssue`) |
 | Standard core    | `@crustjs/validate/standard` | Universal validation runtime + prompt/store adapters           |
-| Zod provider     | `@crustjs/validate/zod`      | `arg`, `flag`, `withZod` + prompt/store adapters               |
-| Effect provider  | `@crustjs/validate/effect`   | `arg`, `flag`, `withEffect` + prompt/store adapters            |
+| Zod provider     | `@crustjs/validate/zod`      | `arg`, `flag`, `commandValidator` + prompt/store adapters      |
+| Effect provider  | `@crustjs/validate/effect`   | `arg`, `flag`, `commandValidator` + prompt/store adapters      |
 
 ## Install
 
@@ -64,7 +64,7 @@ bun add effect
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { arg, flag, withZod } from "@crustjs/validate/zod";
+import { arg, flag, commandValidator } from "@crustjs/validate/zod";
 import { z } from "zod";
 
 const serve = defineCommand({
@@ -83,7 +83,7 @@ const serve = defineCommand({
 			{ alias: "f" },
 		),
 	},
-	run: withZod(({ args, flags, input }) => {
+	run: commandValidator(({ args, flags, input }) => {
 		// args: { port: number; host: string }
 		// flags: { verbose: boolean; format: "json" | "text" }
 		console.log(args.port, args.host, flags.verbose, flags.format);
@@ -98,7 +98,7 @@ runMain(serve);
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { arg, flag, withEffect } from "@crustjs/validate/effect";
+import { arg, flag, commandValidator } from "@crustjs/validate/effect";
 import * as Schema from "effect/Schema";
 
 const serve = defineCommand({
@@ -119,7 +119,7 @@ const serve = defineCommand({
 			{ alias: "f" },
 		),
 	},
-	run: withEffect(({ args, flags, input }) => {
+	run: commandValidator(({ args, flags, input }) => {
 		// args: { port: number; host: string | undefined }
 		// flags: { verbose: boolean; format: "json" | "text" }
 		console.log(args.port, args.host, flags.verbose, flags.format);
@@ -198,7 +198,7 @@ Both Zod and Effect providers export `ParserMeta`, `ArgOptions`, and `FlagOption
 
 ### Strict mode
 
-When using `withZod()` or `withEffect()`, **all** args and flags must be created
+When using `commandValidator()`, **all** args and flags must be created
 with the matching provider's `arg()` / `flag()` helpers. Mixing plain core
 definitions causes a compile-time error (handler parameter becomes `never`).
 
@@ -393,7 +393,7 @@ import type {
 	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
-	WithZodHandler,
+	CommandValidatorHandler,
 	PromptErrorStrategy,
 	PromptValidatorOptions,
 } from "@crustjs/validate/zod";
@@ -412,7 +412,7 @@ import type {
 	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
-	WithEffectHandler,
+	CommandValidatorHandler,
 	PromptErrorStrategy,
 	PromptValidatorOptions,
 } from "@crustjs/validate/effect";

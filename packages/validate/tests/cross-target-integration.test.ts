@@ -23,11 +23,11 @@ import { z } from "zod";
 
 import {
 	arg as effectArg,
+	commandValidator as effectCommandValidator,
 	flag as effectFlag,
 	parsePromptValue as effectParsePromptValue,
 	promptValidator as effectPromptValidator,
 	storeValidator as effectStoreValidator,
-	withEffect,
 } from "../src/effect/index.ts";
 import {
 	parsePromptValue,
@@ -38,7 +38,11 @@ import {
 	validateStandard,
 	validateStandardSync,
 } from "../src/standard/index.ts";
-import { withZod, arg as zodArg, flag as zodFlag } from "../src/zod/index.ts";
+import {
+	arg as zodArg,
+	commandValidator as zodCommandValidator,
+	flag as zodFlag,
+} from "../src/zod/index.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -97,7 +101,7 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 			flags: {
 				verbose: zodFlag(z.boolean().default(false), { alias: "v" }),
 			},
-			run: withZod(({ args, flags }) => {
+			run: zodCommandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -116,7 +120,7 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 			flags: {
 				verbose: zodFlag(z.boolean().default(false)),
 			},
-			run: withZod(() => {}),
+			run: zodCommandValidator(() => {}),
 		});
 
 		try {
@@ -271,7 +275,7 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 			flags: {
 				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
 			},
-			run: withEffect(({ args, flags }) => {
+			run: effectCommandValidator(({ args, flags }) => {
 				received.set({ args, flags });
 			}),
 		});
@@ -289,7 +293,7 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 			flags: {
 				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
 			},
-			run: withEffect(() => {}),
+			run: effectCommandValidator(() => {}),
 		});
 
 		try {
@@ -519,7 +523,7 @@ describe("consistent issue path formatting across targets", () => {
 						variadic: true,
 					}),
 				],
-				run: withZod(() => {}),
+				run: zodCommandValidator(() => {}),
 			});
 
 			try {
@@ -606,7 +610,7 @@ describe("transformed output consistency across targets", () => {
 			const cmd = defineCommand({
 				meta: { name: "theme" },
 				args: [zodArg("theme", normalizedTheme, { type: "string" })],
-				run: withZod(({ args }) => {
+				run: zodCommandValidator(({ args }) => {
 					received.set({ args });
 				}),
 			});
@@ -670,7 +674,7 @@ describe("transformed output consistency across targets", () => {
 			const cmd = defineCommand({
 				meta: { name: "theme" },
 				args: [effectArg("theme", TrimmedString, { type: "string" })],
-				run: withEffect(({ args }) => {
+				run: effectCommandValidator(({ args }) => {
 					received.set({ args });
 				}),
 			});
@@ -828,7 +832,7 @@ describe("error shape consistency across targets", () => {
 		const cmd = defineCommand({
 			meta: { name: "test" },
 			args: [zodArg("input", stringSchema)],
-			run: withZod(() => {}),
+			run: zodCommandValidator(() => {}),
 		});
 
 		let commandErrorCode: string | undefined;
@@ -1055,7 +1059,7 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		const cmd = defineCommand({
 			meta: { name: "init" },
 			args: [zodArg("theme", themeSchema)],
-			run: withZod(({ args }) => {
+			run: zodCommandValidator(({ args }) => {
 				received.set({ args });
 			}),
 		});
@@ -1099,7 +1103,7 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		const cmd = defineCommand({
 			meta: { name: "init" },
 			args: [zodArg("theme", themeSchema)],
-			run: withZod(() => {}),
+			run: zodCommandValidator(() => {}),
 		});
 		try {
 			await runCommand(cmd, { argv: ["blue"] });

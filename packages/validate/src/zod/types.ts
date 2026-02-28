@@ -274,7 +274,7 @@ type AllFlagsHaveSchema<F extends FlagsDef> =
 
 /**
  * Resolves to `true` only when all args and flags carry schema metadata.
- * Used by `withZod` to enforce strict mode at compile time.
+ * Used by `commandValidator` to enforce strict mode at compile time.
  */
 export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 	AllArgsHaveSchema<A> extends true
@@ -284,17 +284,17 @@ export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 		: false;
 
 // ────────────────────────────────────────────────────────────────────────────
-// withZod handler type
+// commandValidator handler type
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The validated handler type for `withZod()`.
+ * The validated handler type for `commandValidator()`.
  *
  * When all args/flags carry schema metadata, resolves to a typed handler
  * receiving `ValidatedContext`. Otherwise resolves to `never`, causing
  * a compile error at the call site.
  */
-export type WithZodHandler<A extends ArgsDef, F extends FlagsDef> =
+export type CommandValidatorHandler<A extends ArgsDef, F extends FlagsDef> =
 	HasAllSchemas<A, F> extends true
 		? (
 				context: ValidatedContext<
