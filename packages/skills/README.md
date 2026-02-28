@@ -31,10 +31,49 @@ const result = await generateSkill({
     description: "CLI tool for managing widgets",
     version: "1.0.0",
   },
+  agents: ["opencode", "claude-code"],
 });
 
-console.log(`Generated ${result.files.length} files to ${result.outputDir}`);
+for (const agent of result.agents) {
+  console.log(`${agent.agent}: ${agent.status} -> ${agent.outputDir}`);
+}
 ```
+
+### Runtime Plugin (`autoInstall` / `autoUpdate`)
+
+`skillPlugin()` is a runtime plugin. Register it in `runMain(..., { plugins })`.
+Do not put a `plugins` field inside `defineCommand(...)`.
+
+```ts
+import { defineCommand, runMain } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+
+const app = defineCommand({
+  meta: { name: "my-cli", description: "My CLI" },
+  run() {
+    console.log("hello");
+  },
+});
+
+runMain(app, {
+  plugins: [
+    skillPlugin({
+      version: "1.0.0",
+      autoInstall: true,
+      autoUpdate: true,
+    }),
+  ],
+});
+```
+
+If `autoInstall` appears to do nothing:
+
+- Ensure `autoInstall: true` is set (default is `false`).
+- Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
+- Ensure at least one supported agent is detected for your scope:
+- `scope: "global"` -> `~/.claude` or `~/.config/opencode`
+- `scope: "project"` -> `<cwd>/.claude` or `<cwd>/.opencode` (falls back to global roots)
+- Check for existing conflicting skill directories without `crust.json`.
 
 ## Recommended Export Pattern
 
@@ -69,20 +108,20 @@ crust skills generate <module> [options]
 
 ### Arguments
 
-| Argument | Description |
-| -------- | ----------- |
+| Argument | Description                                      |
+| -------- | ------------------------------------------------ |
 | `module` | Path to the command module (e.g. `./src/cli.ts`) |
 
 ### Flags
 
-| Flag | Alias | Required | Default | Description |
-| ---- | ----- | -------- | ------- | ----------- |
-| `--name` | `-n` | Yes | - | Skill name (used as directory name) |
-| `--description` | `-d` | Yes | - | Human-readable description |
-| `--version` | `-V` | No | - | Version string |
-| `--out-dir` | `-o` | No | `.` | Output directory |
-| `--clean` | - | No | `true` | Remove existing skill directory before writing |
-| `--export` | `-e` | No | `default` | Named export to use from the module |
+| Flag            | Alias | Required | Default   | Description                                    |
+| --------------- | ----- | -------- | --------- | ---------------------------------------------- |
+| `--name`        | `-n`  | Yes      | -         | Skill name (used as directory name)            |
+| `--description` | `-d`  | Yes      | -         | Human-readable description                     |
+| `--version`     | `-V`  | No       | -         | Version string                                 |
+| `--out-dir`     | `-o`  | No       | `.`       | Output directory                               |
+| `--clean`       | -     | No       | `true`    | Remove existing skill directory before writing |
+| `--export`      | `-e`  | No       | `default` | Named export to use from the module            |
 
 ### Examples
 
@@ -114,13 +153,13 @@ import { generateSkill } from "@crustjs/skills";
 const result = await generateSkill({
   command: rootCommand,
   meta: { name: "my-cli", description: "My CLI tool", version: "1.0.0" },
-  outDir: "./dist",  // default: "."
-  clean: true,       // default: true — removes existing skill dir first
-  force: false,      // default: false — throws SkillConflictError if dir exists without crust.json
+  agents: ["opencode"],
+  scope: "project", // default: "global"
+  clean: true, // default: true — removes existing skill dir first
+  force: false, // default: false — throws SkillConflictError if dir exists without crust.json
 });
 
-// result.outputDir — absolute path to the generated skill directory
-// result.files     — sorted list of written file paths (relative to outputDir)
+// result.agents — per-agent install results
 ```
 
 ### `buildManifest(command)`
@@ -145,7 +184,7 @@ const manifest = buildManifest(rootCommand);
 const files = renderSkill(manifest, { name: "my-cli", description: "My CLI" });
 
 for (const file of files) {
-  console.log(file.path);    // e.g. "SKILL.md", "commands/serve.md"
+  console.log(file.path); // e.g. "SKILL.md", "commands/serve.md"
   console.log(file.content); // markdown content
 }
 ```
@@ -157,9 +196,9 @@ Validates a skill name against the [Agent Skills spec](https://agentskills.io/sp
 ```ts
 import { isValidSkillName } from "@crustjs/skills";
 
-isValidSkillName("my-cli");     // true
-isValidSkillName("My_CLI");     // false — uppercase and underscores not allowed
-isValidSkillName("-leading");   // false — leading hyphen
+isValidSkillName("my-cli"); // true
+isValidSkillName("My_CLI"); // false — uppercase and underscores not allowed
+isValidSkillName("-leading"); // false — leading hyphen
 isValidSkillName("a".repeat(65)); // false — exceeds 64 characters
 ```
 
@@ -176,19 +215,19 @@ const meta: SkillMeta = {
   version: "1.0.0",
 
   // Optional fields — emitted in SKILL.md YAML frontmatter when set
-  allowedTools: "Bash(my-cli *) Read Grep",   // Pre-approved tools (avoids per-use prompts)
-  license: "MIT",                              // License name or reference
-  compatibility: "Requires my-cli on PATH",    // Environment requirements (max 500 chars)
-  disableModelInvocation: false,               // true = agent won't auto-load; user must invoke manually
+  allowedTools: "Bash(my-cli *) Read Grep", // Pre-approved tools (avoids per-use prompts)
+  license: "MIT", // License name or reference
+  compatibility: "Requires my-cli on PATH", // Environment requirements (max 500 chars)
+  disableModelInvocation: false, // true = agent won't auto-load; user must invoke manually
 };
 ```
 
-| Field | Frontmatter Key | Description |
-| ----- | --------------- | ----------- |
-| `allowedTools` | `allowed-tools` | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
-| `license` | `license` | License name or file reference |
-| `compatibility` | `compatibility` | Environment requirements or compatibility notes |
-| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill |
+| Field                    | Frontmatter Key            | Description                                                                  |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------- |
+| `allowedTools`           | `allowed-tools`            | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
+| `license`                | `license`                  | License name or file reference                                               |
+| `compatibility`          | `compatibility`            | Environment requirements or compatibility notes                              |
+| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill                     |
 
 ## Escaping
 
@@ -218,12 +257,12 @@ skills/use-my-cli/
 
 ### File Details
 
-| File | Purpose |
-| ---- | ------- |
-| `SKILL.md` | Agent entrypoint with YAML frontmatter. Directs agents to load specific command files on demand (lazy loading). |
-| `command-index.md` | Markdown table listing every command, its type (runnable/group), and documentation path. |
-| `commands/*.md` | Per-command reference files. Leaf commands include usage, arguments, flags, defaults, and aliases. Group commands list subcommands with links. |
-| `crust.json` | Crust-specific JSON metadata: name, description, version, entrypoint, and list of all command paths. Also serves as an ownership marker — its presence indicates the skill was generated by Crust. |
+| File               | Purpose                                                                                                                                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SKILL.md`         | Agent entrypoint with YAML frontmatter. Directs agents to load specific command files on demand (lazy loading).                                                                                    |
+| `command-index.md` | Markdown table listing every command, its type (runnable/group), and documentation path.                                                                                                           |
+| `commands/*.md`    | Per-command reference files. Leaf commands include usage, arguments, flags, defaults, and aliases. Group commands list subcommands with links.                                                     |
+| `crust.json`       | Crust-specific JSON metadata: name, description, version, entrypoint, and list of all command paths. Also serves as an ownership marker — its presence indicates the skill was generated by Crust. |
 
 ## Conflict Detection
 

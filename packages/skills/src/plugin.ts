@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
-import { defineCommand } from "@crustjs/core";
+import { defineCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { confirm, multiselect, spinner } from "@crustjs/prompts";
 import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
@@ -28,6 +28,87 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
 	};
 }
 
+/**
+ * Performs automatic install/update reconciliation for detected agents.
+ *
+ * Runs during plugin setup so behavior is independent of middleware ordering.
+ */
+async function autoSyncSkills(
+	rootCmd: AnyCommand,
+	options: SkillPluginOptions,
+): Promise<void> {
+	const scope = options.scope ?? "global";
+	const agents = await detectInstalledAgents({ scope });
+	if (agents.length === 0) {
+		return;
+	}
+
+	const autoInstall = options.autoInstall ?? false;
+	const autoUpdate = options.autoUpdate ?? true;
+	const meta = deriveSkillMeta(rootCmd, options.version);
+
+	const status = await skillStatus({
+		name: meta.name,
+		agents,
+		scope,
+	});
+
+	const needsUpdate = status.agents.filter((a) => {
+		if (!a.installed) return autoInstall;
+		if (a.version !== meta.version) return autoUpdate;
+		return false;
+	});
+
+	if (needsUpdate.length === 0) {
+		return;
+	}
+
+	try {
+		const result = await generateSkill({
+			command: rootCmd,
+			meta,
+			agents: needsUpdate.map((a) => a.agent),
+			scope: options.scope,
+		});
+
+		const installedAgents = result.agents
+			.filter((a) => a.status === "installed")
+			.map((a) => AGENT_LABELS[a.agent]);
+		const updatedAgents = result.agents
+			.filter((a) => a.status === "updated")
+			.map((a) => AGENT_LABELS[a.agent]);
+
+		if (installedAgents.length > 0) {
+			if (options.command !== false) {
+				const manageCommand = `${rootCmd.meta.name} skill`;
+				console.log(
+					`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}. Manage with \`${manageCommand}\`.`,
+				);
+			} else {
+				console.log(
+					`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}.`,
+				);
+			}
+		}
+
+		if (updatedAgents.length > 0) {
+			console.log(
+				`Updated skill "${meta.name}" to v${meta.version} for ${updatedAgents.join(", ")}.`,
+			);
+		}
+	} catch (err) {
+		if (err instanceof SkillConflictError) {
+			console.warn(
+				`Skill conflict: "${err.details.outputDir}" already exists ` +
+					`but was not created by ${meta.name}. Skipping auto-update. ` +
+					`Delete or rename the conflicting skill to resolve.`,
+			);
+		} else {
+			throw err;
+		}
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Skill plugin
 // ────────────────────────────────────────────────────────────────────────────
@@ -38,9 +119,13 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  * `name` and `description` are read from the root command's `meta` at setup
  * time — only `version` needs to be supplied in the options.
  *
- * Installed agents are detected automatically by checking for global
- * configuration directories. Only detected agents are managed by the
- * middleware and the interactive command.
+ * Installed agents are detected automatically based on the configured scope.
+ * - `scope: "global"` checks global config roots in the home directory
+ * - `scope: "project"` checks project-local config roots in the cwd, then
+ *   falls back to global roots in the home directory
+ *
+ * Only detected agents are managed by automatic setup reconciliation and the
+ * interactive command.
  *
  * **Auto-update** (default): silently updates already-installed skills when a
  * new version is detected. Set `autoInstall: true` to also install skills that
@@ -63,112 +148,49 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  *
  * const app = defineCommand({
  *   meta: { name: "my-cli", description: "My CLI" },
+ * });
+ *
+ * runMain(app, {
  *   plugins: [
  *     skillPlugin({
  *       version: "1.0.0",
+ *       autoInstall: true,
  *       command: true, // registers "my-cli skill" subcommand
  *     }),
  *   ],
  * });
- *
- * runMain(app);
  * ```
  */
 export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 	let rootCmd: AnyCommand;
-	let skillCmd: AnyCommand | null = null;
 
 	return {
 		name: "skills",
-		setup(context, actions) {
+		async setup(context, actions) {
 			rootCmd = context.rootCommand;
+			const skillCommandName =
+				typeof options.command === "string" ? options.command : "skill";
 
 			// Inject interactive skill command unless explicitly disabled
 			if (options.command !== false) {
-				const name =
-					typeof options.command === "string" ? options.command : "skill";
-				skillCmd = buildSkillCommand(rootCmd, options);
-				actions.addSubCommand(rootCmd, name, skillCmd);
+				actions.addSubCommand(
+					rootCmd,
+					skillCommandName,
+					buildSkillCommand(rootCmd, options),
+				);
 			}
-		},
-		async middleware(_context, next) {
-			// Skip auto-update when the skill command itself is being executed
-			if (skillCmd && _context.route?.command === skillCmd) {
-				await next();
+
+			// Build validation should never mutate user environments
+			if (process.env[VALIDATION_MODE_ENV] === "1") {
 				return;
 			}
 
-			const agents = await detectInstalledAgents();
-			if (agents.length === 0) {
-				await next();
+			// Skip auto-install when the skill command itself is being executed
+			if (options.command !== false && context.argv[0] === skillCommandName) {
 				return;
 			}
 
-			const autoInstall = options.autoInstall ?? false;
-			const autoUpdate = options.autoUpdate ?? true;
-			const meta = deriveSkillMeta(rootCmd, options.version);
-
-			const status = await skillStatus({
-				name: meta.name,
-				agents,
-				scope: options.scope ?? "global",
-			});
-
-			const needsUpdate = status.agents.filter((a) => {
-				if (!a.installed) return autoInstall;
-				if (a.version !== meta.version) return autoUpdate;
-				return false;
-			});
-
-			if (needsUpdate.length > 0) {
-				try {
-					const result = await generateSkill({
-						command: rootCmd,
-						meta,
-						agents: needsUpdate.map((a) => a.agent),
-						scope: options.scope,
-					});
-
-					// Print concise status summaries for auto-install and auto-update
-					const installedAgents = result.agents
-						.filter((a) => a.status === "installed")
-						.map((a) => AGENT_LABELS[a.agent]);
-					const updatedAgents = result.agents
-						.filter((a) => a.status === "updated")
-						.map((a) => AGENT_LABELS[a.agent]);
-
-					if (installedAgents.length > 0) {
-						if (options.command !== false) {
-							const manageCommand = `${rootCmd.meta.name} skill`;
-							console.log(
-								`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}. Manage with \`${manageCommand}\`.`,
-							);
-						} else {
-							console.log(
-								`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}.`,
-							);
-						}
-					}
-
-					if (updatedAgents.length > 0) {
-						console.log(
-							`Updated skill "${meta.name}" to v${meta.version} for ${updatedAgents.join(", ")}.`,
-						);
-					}
-				} catch (err) {
-					if (err instanceof SkillConflictError) {
-						console.warn(
-							`Skill conflict: "${err.details.outputDir}" already exists ` +
-								`but was not created by ${meta.name}. Skipping auto-update. ` +
-								`Delete or rename the conflicting skill to resolve.`,
-						);
-					} else {
-						throw err;
-					}
-				}
-			}
-
-			await next();
+			await autoSyncSkills(rootCmd, options);
 		},
 	};
 }
@@ -202,7 +224,9 @@ function buildSkillCommand(
 			const scope = options.scope ?? "global";
 
 			// Detect installed agents
-			const detectedAgents = await detectInstalledAgents();
+			const detectedAgents = await detectInstalledAgents({
+				scope,
+			});
 			if (detectedAgents.length === 0) {
 				console.log(
 					"No supported agents detected. Install Claude Code or OpenCode first.",

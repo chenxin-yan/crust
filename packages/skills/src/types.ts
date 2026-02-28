@@ -342,9 +342,13 @@ export interface StatusResult {
  * The plugin reads `name` and `description` from the root command's `meta`
  * at setup time, so only `version` is required here.
  *
- * Installed agents are detected automatically by checking for global
- * configuration directories (`~/.claude/` for Claude Code,
- * `~/.config/opencode/` for OpenCode). Only detected agents are managed.
+ * Installed agents are detected automatically based on the configured scope.
+ *
+ * - `scope: "global"` checks `~/.claude/` and `~/.config/opencode/`
+ * - `scope: "project"` checks `<cwd>/.claude/` / `<cwd>/.opencode/`, then
+ *   falls back to global roots when local roots are missing
+ *
+ * Only detected agents are managed.
  *
  * **Auto-update** (default): silently updates already-installed skills when a
  * new version is detected. Set `autoInstall: true` to also install skills that

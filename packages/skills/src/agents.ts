@@ -20,6 +20,24 @@ export const AGENT_LABELS: Record<AgentTarget, string> = {
 	opencode: "OpenCode",
 };
 
+/**
+ * Options for detecting installed agents.
+ */
+export interface DetectInstalledAgentsOptions {
+	/**
+	 * Detection scope.
+	 * - `global`: checks global config roots under home directory.
+	 * - `project`: checks project-local config roots under cwd, then falls back
+	 *   to global roots under home directory when local roots are missing.
+	 * @default "global"
+	 */
+	scope?: Scope;
+	/** Home directory override used for global detection (tests). */
+	home?: string;
+	/** Working directory override used for project detection (tests). */
+	cwd?: string;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
@@ -59,21 +77,19 @@ export function resolveAgentPath(
 }
 
 /**
- * Detects which supported agents are installed by checking for the
- * existence of their global configuration directories.
- *
- * Detection always checks global paths regardless of the intended
- * installation scope — if the agent's global config directory exists,
- * the agent is considered installed.
+ * Detects which supported agents are installed by checking for agent
+ * configuration roots for the requested scope.
  *
  * Detection table:
- * | Agent        | Config directory              |
- * | ------------ | ----------------------------- |
- * | `claude-code`| `<homedir>/.claude/`          |
- * | `opencode`   | `<homedir>/.config/opencode/` |
+ * | Scope     | Agent        | Config directories checked                 |
+ * | --------- | ------------ | ------------------------------------------ |
+ * | `global`  | `claude-code`| `<homedir>/.claude/`                       |
+ * | `global`  | `opencode`   | `<homedir>/.config/opencode/`              |
+ * | `project` | `claude-code`| `<cwd>/.claude/`, fallback `<homedir>/.claude/` |
+ * | `project` | `opencode`   | `<cwd>/.opencode/`, fallback `<homedir>/.config/opencode/` |
  *
- * @param home - Override the home directory for detection (defaults to `os.homedir()`).
- *               Primarily useful for testing.
+ * @param options - Optional scope/home/cwd overrides. For backwards
+ *                  compatibility, passing a string is treated as `home`.
  * @returns Array of detected agent targets (may be empty)
  *
  * @example
@@ -83,16 +99,32 @@ export function resolveAgentPath(
  * ```
  */
 export async function detectInstalledAgents(
-	home?: string,
+	options?: string | DetectInstalledAgentsOptions,
 ): Promise<AgentTarget[]> {
-	const resolvedHome = home ?? homedir();
+	const resolvedOptions: DetectInstalledAgentsOptions =
+		typeof options === "string" ? { home: options } : (options ?? {});
+	const scope = resolvedOptions.scope ?? "global";
+	const resolvedHome = resolvedOptions.home ?? homedir();
+	const resolvedCwd = resolvedOptions.cwd ?? process.cwd();
 	const detected: AgentTarget[] = [];
 
 	for (const agent of ALL_AGENTS) {
-		const configDir = resolveAgentConfigDir(resolvedHome, agent);
-		const exists = await access(configDir)
-			.then(() => true)
-			.catch(() => false);
+		const configDirs = resolveAgentConfigDirs(
+			agent,
+			scope,
+			resolvedHome,
+			resolvedCwd,
+		);
+
+		let exists = false;
+		for (const configDir of configDirs) {
+			exists = await access(configDir)
+				.then(() => true)
+				.catch(() => false);
+			if (exists) {
+				break;
+			}
+		}
 
 		if (exists) {
 			detected.push(agent);
@@ -112,11 +144,25 @@ export async function detectInstalledAgents(
  * This is the directory whose existence indicates the agent is installed,
  * distinct from the skill output directory.
  */
-function resolveAgentConfigDir(home: string, agent: AgentTarget): string {
+function resolveAgentConfigDirs(
+	agent: AgentTarget,
+	scope: Scope,
+	home: string,
+	cwd: string,
+): string[] {
+	if (scope === "project") {
+		switch (agent) {
+			case "claude-code":
+				return [join(cwd, ".claude"), join(home, ".claude")];
+			case "opencode":
+				return [join(cwd, ".opencode"), join(home, ".config", "opencode")];
+		}
+	}
+
 	switch (agent) {
 		case "claude-code":
-			return join(home, ".claude");
+			return [join(home, ".claude")];
 		case "opencode":
-			return join(home, ".config", "opencode");
+			return [join(home, ".config", "opencode")];
 	}
 }
