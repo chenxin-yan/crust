@@ -271,11 +271,12 @@ function buildSkillCommand(
 
 			// Single multiselect — pre-check currently installed agents
 			// In non-interactive mode (no TTY), install to all detected agents
+			const isInteractive = process.stdin.isTTY;
 			const selected = await multiselect({
 				message: "Select agents to install skills for",
 				choices,
 				default: installedAgents,
-				initial: detectedAgents,
+				initial: !isInteractive ? detectedAgents : undefined,
 				required: false,
 			});
 
@@ -318,7 +319,7 @@ function buildSkillCommand(
 								`"${err.details.outputDir}" already exists but was not ` +
 								`created by Crust. Overwrite?`,
 							default: false,
-							initial: false,
+							initial: !isInteractive ? false : undefined,
 						});
 
 						if (overwrite) {
