@@ -90,7 +90,7 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.13",
+      "version": "0.0.14",
       "bin": {
         "crust": "dist/cli",
       },
@@ -109,10 +109,7 @@
     },
     "packages/plugins": {
       "name": "@crustjs/plugins",
-      "version": "0.0.10",
-      "dependencies": {
-        "@crustjs/store": "workspace:*",
-      },
+      "version": "0.0.11",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
