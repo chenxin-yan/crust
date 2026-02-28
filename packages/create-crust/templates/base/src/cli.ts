@@ -1,9 +1,5 @@
 import { defineCommand, runMain } from "@crustjs/core";
-import {
-	helpPlugin,
-	updateNotifierPlugin,
-	versionPlugin,
-} from "@crustjs/plugins";
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const main = defineCommand({
@@ -33,9 +29,5 @@ const main = defineCommand({
 });
 
 runMain(main, {
-	plugins: [
-		versionPlugin(pkg.version),
-		updateNotifierPlugin({ currentVersion: pkg.version }),
-		helpPlugin(),
-	],
+	plugins: [versionPlugin(pkg.version), helpPlugin()],
 });

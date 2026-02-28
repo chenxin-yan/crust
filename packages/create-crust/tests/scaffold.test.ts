@@ -113,14 +113,11 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("defineCommand");
 		// Uses runMain
 		expect(cliContent).toContain("runMain");
-		// Uses help/version/updateNotifier plugins
+		// Uses help/version plugins
 		expect(cliContent).toContain("helpPlugin");
 		expect(cliContent).toContain("versionPlugin");
-		expect(cliContent).toContain("updateNotifierPlugin");
 		expect(cliContent).toContain('import pkg from "../package.json"');
 		expect(cliContent).toContain("versionPlugin(pkg.version)");
-		expect(cliContent).toContain("updateNotifierPlugin(");
-		expect(cliContent).toContain("currentVersion");
 		// Imports from @crustjs/core and @crustjs/plugins
 		expect(cliContent).toContain('"@crustjs/core"');
 		expect(cliContent).toContain('"@crustjs/plugins"');
@@ -146,7 +143,6 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("runMain(main, {");
 		expect(cliContent).toContain("plugins:");
 		expect(cliContent).toContain("versionPlugin(");
-		expect(cliContent).toContain("updateNotifierPlugin(");
 		expect(cliContent).toContain("helpPlugin()");
 		// Has proper structure: meta, args tuple, flags, run
 		expect(cliContent).toContain("meta:");

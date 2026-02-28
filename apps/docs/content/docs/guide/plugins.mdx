@@ -13,7 +13,11 @@ Pass plugins to `runMain` or `runCommand`:
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
+import {
+  helpPlugin,
+  versionPlugin,
+  autoCompletePlugin,
+} from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI" },
@@ -31,13 +35,14 @@ runMain(main, {
 });
 ```
 
-Crust ships with three official plugins:
+Crust ships with these official plugins:
 
-| Plugin | Description |
-| --- | --- |
-| [`helpPlugin()`](/docs/modules/plugins/help) | Adds `--help` / `-h` and auto-generates help text |
-| [`versionPlugin()`](/docs/modules/plugins/version) | Adds `--version` / `-v` to the root command |
-| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete) | Suggests corrections for mistyped subcommands |
+| Plugin                                                            | Description                                                 |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text           |
+| [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to the root command                 |
+| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands               |
+| [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays an update notice |
 
 ## Plugin Order
 
@@ -45,10 +50,10 @@ Plugins execute in the order they're listed. Each middleware wraps the next in a
 
 ```ts
 plugins: [
-  versionPlugin("1.0.0"),    // Runs first, can intercept early
-  autoCompletePlugin(),        // Runs second, catches routing errors
-  helpPlugin(),                // Runs third, handles --help
-]
+  versionPlugin("1.0.0"), // Runs first, can intercept early
+  autoCompletePlugin(), // Runs second, catches routing errors
+  helpPlugin(), // Runs third, handles --help
+];
 ```
 
 A typical order is: **version** → **autocomplete** → **help**.
@@ -78,9 +83,9 @@ const myPlugin: CrustPlugin = {
 
 Available setup actions:
 
-| Action | Description |
-| --- | --- |
-| `addFlag(command, name, def)` | Inject a flag into a command's flags object (overrides if name exists) |
+| Action                                 | Description                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| `addFlag(command, name, def)`          | Inject a flag into a command's flags object (overrides if name exists)       |
 | `addSubCommand(parent, name, command)` | Inject a subcommand (skipped if user already defined one with the same name) |
 
 #### Injecting Subcommands
@@ -131,7 +136,8 @@ const myPlugin: CrustPlugin = {
 ```
 
 <Callout type="warn">
-  Always call `next()` unless you intentionally want to prevent the command from running (e.g., when the help plugin intercepts `--help`).
+  Always call `next()` unless you intentionally want to prevent the command from
+  running (e.g., when the help plugin intercepts `--help`).
 </Callout>
 
 ## Writing a Custom Plugin
@@ -188,12 +194,12 @@ function authPlugin(): CrustPlugin {
 
 The state API:
 
-| Method | Description |
-| --- | --- |
-| `state.get<T>(key)` | Get a value (returns `T \| undefined`) |
-| `state.set(key, value)` | Set a value |
-| `state.has(key)` | Check if a key exists |
-| `state.delete(key)` | Delete a key |
+| Method                  | Description                            |
+| ----------------------- | -------------------------------------- |
+| `state.get<T>(key)`     | Get a value (returns `T \| undefined`) |
+| `state.set(key, value)` | Set a value                            |
+| `state.has(key)`        | Check if a key exists                  |
+| `state.delete(key)`     | Delete a key                           |
 
 ## Middleware Context
 
@@ -201,11 +207,11 @@ The full middleware context:
 
 ```ts
 interface MiddlewareContext {
-  readonly argv: readonly string[];       // Raw argv
-  readonly rootCommand: AnyCommand;       // Root command
-  readonly state: PluginState;            // Plugin state store
-  route: CommandRoute | null;              // Resolved route (null if routing failed)
-  input: ParseResult | null;               // Parsed input (null if parsing failed)
+  readonly argv: readonly string[]; // Raw argv
+  readonly rootCommand: AnyCommand; // Root command
+  readonly state: PluginState; // Plugin state store
+  route: CommandRoute | null; // Resolved route (null if routing failed)
+  input: ParseResult | null; // Parsed input (null if parsing failed)
 }
 ```
 

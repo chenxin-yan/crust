@@ -65,7 +65,7 @@ const getHighlightedCode = createServerFn({ method: "GET" }).handler(
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
   description:
-    "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules. Zero dependencies, full type inference, middleware plugins.",
+    "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
   canonical: "/",
 });
 
@@ -114,7 +114,7 @@ const MODULES: Array<{
   },
   {
     pkg: "@crustjs/plugins",
-    desc: "Official crust plugins",
+    desc: "Official Crust plugins",
     doc: "modules/plugins",
   },
   {

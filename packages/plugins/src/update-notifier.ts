@@ -3,7 +3,19 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { CrustPlugin } from "@crustjs/core";
-import { configDir, createStore } from "@crustjs/store";
+
+export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+export interface UpdateNotifierState {
+	lastCheckedAt: number;
+	latestVersion?: string;
+	lastNotifiedVersion?: string;
+}
+
+export interface UpdateNotifierCacheAdapter {
+	read(packageName: string): Promise<UpdateNotifierState | null | undefined>;
+	write(packageName: string, state: UpdateNotifierState): Promise<void>;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Options
@@ -44,7 +56,10 @@ export interface UpdateNotifierPluginOptions {
 	/**
 	 * Minimum interval in milliseconds between network update checks.
 	 *
-	 * Cached results are reused until this interval elapses.
+	 * When `cache` is provided, cached results are reused until this interval
+	 * elapses.
+	 *
+	 * Without a cache adapter, checks occur once per process execution.
 	 *
 	 * @default 86_400_000 (24 hours)
 	 */
@@ -75,6 +90,36 @@ export interface UpdateNotifierPluginOptions {
 	 * @default "https://registry.npmjs.org"
 	 */
 	registryUrl?: string;
+
+	/**
+	 * Package manager used to generate the suggested upgrade command.
+	 *
+	 * Set to "auto" (default) to infer from `npm_config_user_agent`.
+	 */
+	packageManager?: UpdateNotifierPackageManager | "auto";
+
+	/**
+	 * Override the upgrade command shown in the notice.
+	 *
+	 * Useful when users install the CLI through channels other than npm-style
+	 * package managers (e.g. Homebrew, custom installers).
+	 */
+	updateCommand?:
+		| string
+		| ((
+				packageName: string,
+				packageManager: UpdateNotifierPackageManager,
+		  ) => string);
+
+	/**
+	 * Optional persistence adapter for notifier state.
+	 *
+	 * By default, no cross-run persistence is used.
+	 *
+	 * Provide this when you want to integrate custom persistence (including
+	 * `@crustjs/store`) without making it a hard dependency of this package.
+	 */
+	cache?: UpdateNotifierCacheAdapter;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -215,27 +260,87 @@ export async function fetchLatestVersion(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Store schema — notifier state fields
+// Cache state — notifier persistence fields
 // ────────────────────────────────────────────────────────────────────────────
-
-/** Store name used for the update-notifier cache file. */
-const STORE_NAME = "update-notifier";
 
 /** Key used in plugin state for process-level dedupe. */
 const DEDUPE_STATE_KEY = "update-notifier:checked";
 
-/**
- * Store field definitions for the update-notifier persistent cache.
- *
- * - `lastCheckedAt` — Unix timestamp (ms) of the last network check.
- * - `latestVersion` — The latest version string from the registry.
- * - `lastNotifiedVersion` — The version last shown in a notice (dedupe).
- */
-const NOTIFIER_STORE_FIELDS = {
-	lastCheckedAt: { type: "number", default: 0 },
-	latestVersion: { type: "string" },
-	lastNotifiedVersion: { type: "string" },
-} as const;
+const EMPTY_NOTIFIER_STATE: UpdateNotifierState = { lastCheckedAt: 0 };
+
+function normalizeNotifierState(
+	input: UpdateNotifierState | null | undefined,
+): UpdateNotifierState {
+	if (!input || typeof input !== "object") return { ...EMPTY_NOTIFIER_STATE };
+
+	const lastCheckedAt =
+		typeof input.lastCheckedAt === "number" &&
+		Number.isFinite(input.lastCheckedAt)
+			? input.lastCheckedAt
+			: 0;
+	const latestVersion =
+		typeof input.latestVersion === "string" && input.latestVersion.length > 0
+			? input.latestVersion
+			: undefined;
+	const lastNotifiedVersion =
+		typeof input.lastNotifiedVersion === "string" &&
+		input.lastNotifiedVersion.length > 0
+			? input.lastNotifiedVersion
+			: undefined;
+
+	return {
+		lastCheckedAt,
+		latestVersion,
+		lastNotifiedVersion,
+	};
+}
+
+const NO_CACHE_ADAPTER: UpdateNotifierCacheAdapter = {
+	read: async () => null,
+	write: async () => {},
+};
+
+function detectPackageManagerFromUserAgent(): UpdateNotifierPackageManager {
+	const userAgent = process.env.npm_config_user_agent;
+	if (userAgent) {
+		if (userAgent.startsWith("bun")) return "bun";
+		if (userAgent.startsWith("pnpm")) return "pnpm";
+		if (userAgent.startsWith("yarn")) return "yarn";
+		if (userAgent.startsWith("npm")) return "npm";
+	}
+	return "npm";
+}
+
+function defaultUpdateCommand(
+	packageName: string,
+	packageManager: UpdateNotifierPackageManager,
+): string {
+	if (packageManager === "pnpm") return `pnpm add ${packageName}@latest`;
+	if (packageManager === "yarn") return `yarn add ${packageName}@latest`;
+	if (packageManager === "bun") return `bun add ${packageName}@latest`;
+	return `npm install ${packageName}@latest`;
+}
+
+function resolveUpdateCommand(
+	packageName: string,
+	packageManagerOption: UpdateNotifierPackageManager | "auto" | undefined,
+	override:
+		| string
+		| ((
+				packageName: string,
+				packageManager: UpdateNotifierPackageManager,
+		  ) => string)
+		| undefined,
+): string {
+	const detected =
+		packageManagerOption && packageManagerOption !== "auto"
+			? packageManagerOption
+			: detectPackageManagerFromUserAgent();
+
+	if (typeof override === "string") return override;
+	if (typeof override === "function") return override(packageName, detected);
+	return defaultUpdateCommand(packageName, detected);
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Plugin factory
@@ -247,9 +352,10 @@ const NOTIFIER_STORE_FIELDS = {
  * version is available.
  *
  * **Behavior:**
- * - Checks are cached locally and run at most once per `intervalMs` (default 24h).
+ * - With `cache`, checks are reused up to `intervalMs` (default 24h).
+ * - Without `cache`, checks run once per process execution.
  * - The network check is non-blocking — it never delays command execution.
- * - All internal errors (network, store, parsing) are silently swallowed.
+ * - All internal errors (network, cache, parsing) are silently swallowed.
  * - The update notice is emitted *after* the command handler completes.
  * - Duplicate notifications for the same version are suppressed.
  *
@@ -286,7 +392,12 @@ export function updateNotifierPlugin(
 		enabled = true,
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
+		packageManager = "auto",
+		updateCommand,
+		cache,
 	} = options;
+	const hasCache = cache !== undefined;
+	const cacheAdapter = cache ?? NO_CACHE_ADAPTER;
 
 	// Early bail: disabled plugin returns a no-op
 	if (!enabled) {
@@ -312,32 +423,35 @@ export function updateNotifierPlugin(
 				// ── Resolve package name ─────────────────────────────────
 				const resolvedPackageName =
 					explicitPackageName ?? context.rootCommand.meta.name;
-
-				// ── Create persistent store ──────────────────────────────
-				const store = createStore({
-					dirPath: configDir(resolvedPackageName),
-					name: STORE_NAME,
-					fields: NOTIFIER_STORE_FIELDS,
-				});
-
-				const state = await store.read();
+				const state = normalizeNotifierState(
+					await cacheAdapter.read(resolvedPackageName),
+				);
+				const resolvedUpdateCommand = resolveUpdateCommand(
+					resolvedPackageName,
+					packageManager,
+					updateCommand,
+				);
 
 				// ── Cache gate: skip network if within interval ──────────
 				const now = Date.now();
 				const elapsed = now - state.lastCheckedAt;
 
-				if (elapsed < intervalMs) {
+				if (hasCache && elapsed < intervalMs) {
 					// Cache is still fresh — use cached version if available
 					if (
 						state.latestVersion &&
 						isNewerVersion(currentVersion, state.latestVersion) &&
 						state.lastNotifiedVersion !== state.latestVersion
 					) {
-						emitUpdateNotice(currentVersion, state.latestVersion);
-						await store.update((s) => ({
-							...s,
+						emitUpdateNotice(
+							currentVersion,
+							state.latestVersion,
+							resolvedUpdateCommand,
+						);
+						await cacheAdapter.write(resolvedPackageName, {
+							...state,
 							lastNotifiedVersion: state.latestVersion,
-						}));
+						});
 					}
 					return;
 				}
@@ -351,31 +465,34 @@ export function updateNotifierPlugin(
 
 				if (latestVersion === null) {
 					// Soft failure — update timestamp to avoid retrying too soon
-					await store.update((s) => ({
-						...s,
+					await cacheAdapter.write(resolvedPackageName, {
+						...state,
 						lastCheckedAt: now,
-					}));
+					});
 					return;
 				}
 
 				// ── Persist fetched version and timestamp ─────────────────
-				await store.update((s) => ({
-					...s,
+				const nextState: UpdateNotifierState = {
+					...state,
 					lastCheckedAt: now,
 					latestVersion,
-				}));
+				};
 
 				// ── Emit notice if newer and not already notified ─────────
 				if (
 					isNewerVersion(currentVersion, latestVersion) &&
 					state.lastNotifiedVersion !== latestVersion
 				) {
-					emitUpdateNotice(currentVersion, latestVersion);
-					await store.update((s) => ({
-						...s,
-						lastNotifiedVersion: latestVersion,
-					}));
+					emitUpdateNotice(
+						currentVersion,
+						latestVersion,
+						resolvedUpdateCommand,
+					);
+					nextState.lastNotifiedVersion = latestVersion;
 				}
+
+				await cacheAdapter.write(resolvedPackageName, nextState);
 			} catch {
 				// All notifier internal errors are silently swallowed.
 				// The plugin must never affect command exit codes or output.
@@ -395,8 +512,12 @@ export function updateNotifierPlugin(
  *
  * @internal
  */
-function emitUpdateNotice(currentVersion: string, latestVersion: string): void {
+function emitUpdateNotice(
+	currentVersion: string,
+	latestVersion: string,
+	updateCommand: string,
+): void {
 	console.error(
-		`\nUpdate available: ${currentVersion} → ${latestVersion}\nRun "npm update" to update.\n`,
+		`\nUpdate available: ${currentVersion} → ${latestVersion}\nRun "${updateCommand}" to update.\n`,
 	);
 }

@@ -41,9 +41,6 @@
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},
-	"dependencies": {
-		"@crustjs/store": "workspace:*"
-	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",

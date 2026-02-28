@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { rm } from "node:fs/promises";
 import { defineCommand, runCommand } from "@crustjs/core";
-import { configDir, createStore } from "@crustjs/store";
 import {
 	fetchLatestVersion,
 	isNewerVersion,
 	parseSemver,
+	type UpdateNotifierCacheAdapter,
+	type UpdateNotifierState,
 	updateNotifierPlugin,
 } from "./update-notifier.ts";
 
@@ -360,16 +360,14 @@ describe("updateNotifierPlugin middleware", () => {
 	const originalFetch = globalThis.fetch;
 	let originalError: typeof console.error;
 	let stderrChunks: string[];
-
-	/** Tracks store dirs created during a test for cleanup. */
-	let storeDirsToClean: string[];
+	let cacheStateByPackage: Map<string, UpdateNotifierState>;
 
 	/** Auto-incrementing counter to generate unique package names per test. */
 	let testCounter = 0;
 
 	beforeEach(() => {
 		testCounter++;
-		storeDirsToClean = [];
+		cacheStateByPackage = new Map();
 
 		// Capture stderr (console.error) for update notice assertions
 		stderrChunks = [];
@@ -379,15 +377,10 @@ describe("updateNotifierPlugin middleware", () => {
 		};
 	});
 
-	afterEach(async () => {
+	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		console.error = originalError;
 		process.exitCode = 0;
-
-		// Clean up all store directories created during this test
-		for (const dir of storeDirsToClean) {
-			await rm(dir, { recursive: true, force: true }).catch(() => {});
-		}
 	});
 
 	function getStderr() {
@@ -395,27 +388,31 @@ describe("updateNotifierPlugin middleware", () => {
 	}
 
 	/**
-	 * Generate a unique package name for this test to isolate store state.
-	 * Returns the name and registers its configDir for cleanup.
+	 * Generate a unique package name for this test to isolate cache state.
 	 */
 	function uniquePackageName(suffix = ""): string {
-		const name = `__crust-test-${testCounter}-${Date.now()}${suffix ? `-${suffix}` : ""}`;
-		storeDirsToClean.push(configDir(name));
-		return name;
+		return `__crust-test-${testCounter}-${Date.now()}${suffix ? `-${suffix}` : ""}`;
 	}
 
-	/** Create a helper store for the given package name (same schema the plugin uses). */
-	function makeStore(packageName: string) {
-		return createStore({
-			dirPath: configDir(packageName),
-			name: "update-notifier",
-			fields: {
-				lastCheckedAt: { type: "number", default: 0 },
-				latestVersion: { type: "string" },
-				lastNotifiedVersion: { type: "string" },
-			} as const,
-		});
+	function setCachedState(
+		packageName: string,
+		state: UpdateNotifierState,
+	): void {
+		cacheStateByPackage.set(packageName, { ...state });
 	}
+
+	function getCachedState(
+		packageName: string,
+	): UpdateNotifierState | undefined {
+		return cacheStateByPackage.get(packageName);
+	}
+
+	const memoryCache = {
+		read: async (packageName: string) => getCachedState(packageName),
+		write: async (packageName: string, state: UpdateNotifierState) => {
+			setCachedState(packageName, state);
+		},
+	};
 
 	/** Create a basic command for testing. */
 	function makeCommand(name = "test-cli") {
@@ -446,13 +443,20 @@ describe("updateNotifierPlugin middleware", () => {
 			enabled?: boolean;
 			timeoutMs?: number;
 			registryUrl?: string;
+			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
+			updateCommand?: string;
+			cache?: UpdateNotifierCacheAdapter;
 		},
 		overrides?: {
 			commandName?: string;
 			state?: Map<string, unknown>;
+			disableDefaultCache?: boolean;
 		},
 	) {
-		const plugin = updateNotifierPlugin(options);
+		const pluginOptions = overrides?.disableDefaultCache
+			? options
+			: { ...options, cache: options.cache ?? memoryCache };
+		const plugin = updateNotifierPlugin(pluginOptions);
 
 		if (!plugin.middleware) {
 			return { plugin, ran: false, state: new Map<string, unknown>() };
@@ -508,9 +512,12 @@ describe("updateNotifierPlugin middleware", () => {
 			await runPluginMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
+				packageManager: "npm",
 			});
 
-			expect(getStderr()).toContain('Run "npm update" to update.');
+			expect(getStderr()).toContain(
+				`Run "npm install ${pkgName}@latest" to update.`,
+			);
 		});
 	});
 
@@ -547,10 +554,9 @@ describe("updateNotifierPlugin middleware", () => {
 	describe("cache gate logic", () => {
 		it("skips network check when cache is fresh (within intervalMs)", async () => {
 			const pkgName = uniquePackageName("cache-fresh");
-			const store = makeStore(pkgName);
 
 			// Write a recent timestamp with a cached newer version
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: Date.now(),
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: undefined,
@@ -578,10 +584,9 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("performs network check when cache is stale (exceeds intervalMs)", async () => {
 			const pkgName = uniquePackageName("cache-stale");
-			const store = makeStore(pkgName);
 
 			// Write an old timestamp (well beyond default 24h)
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: 0,
 				latestVersion: undefined,
 				lastNotifiedVersion: undefined,
@@ -599,10 +604,9 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("respects custom intervalMs — cache still fresh", async () => {
 			const pkgName = uniquePackageName("custom-interval-fresh");
-			const store = makeStore(pkgName);
 
 			// Set lastCheckedAt to 500ms ago
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: Date.now() - 500,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: undefined,
@@ -631,10 +635,9 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("refetches when custom intervalMs is exceeded", async () => {
 			const pkgName = uniquePackageName("interval-exceeded");
-			const store = makeStore(pkgName);
 
 			// Set lastCheckedAt to 2000ms ago
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: Date.now() - 2000,
 				latestVersion: "1.5.0",
 				lastNotifiedVersion: undefined,
@@ -683,7 +686,6 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("updates lastCheckedAt even on fetch failure to avoid hammering", async () => {
 			const pkgName = uniquePackageName("fail-timestamp");
-			const store = makeStore(pkgName);
 			mockRegistryFailure();
 
 			const beforeRun = Date.now();
@@ -692,7 +694,9 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			const state = await store.read();
+			const state = getCachedState(pkgName);
+			expect(state).toBeDefined();
+			if (!state) throw new Error("state should exist");
 			expect(state.lastCheckedAt).toBeGreaterThanOrEqual(beforeRun);
 		});
 
@@ -812,10 +816,9 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("does not re-notify for same version already notified (persisted dedupe)", async () => {
 			const pkgName = uniquePackageName("dedupe-persist");
-			const store = makeStore(pkgName);
 
 			// Pre-seed: we already notified about 2.0.0
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: 0,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: "2.0.0",
@@ -834,10 +837,9 @@ describe("updateNotifierPlugin middleware", () => {
 
 		it("notifies again when a newer version appears after previous notification", async () => {
 			const pkgName = uniquePackageName("dedupe-new-ver");
-			const store = makeStore(pkgName);
 
 			// Pre-seed: we already notified about 2.0.0
-			await store.write({
+			setCachedState(pkgName, {
 				lastCheckedAt: 0,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: "2.0.0",
@@ -888,6 +890,39 @@ describe("updateNotifierPlugin middleware", () => {
 			// Plugin has no middleware, so nothing to run
 			expect(plugin.middleware).toBeUndefined();
 			expect(getStderr()).toBe("");
+		});
+
+		it("does not persist cache by default when adapter is omitted", async () => {
+			const pkgName = uniquePackageName("no-default-cache");
+			let fetchCalls = 0;
+			mockFetch(() => {
+				fetchCalls++;
+				return Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+						status: 200,
+					}),
+				);
+			});
+
+			await runPluginMiddleware(
+				{
+					currentVersion: "1.0.0",
+					packageName: pkgName,
+					intervalMs: Number.MAX_SAFE_INTEGER,
+				},
+				{ disableDefaultCache: true },
+			);
+
+			await runPluginMiddleware(
+				{
+					currentVersion: "1.0.0",
+					packageName: pkgName,
+					intervalMs: Number.MAX_SAFE_INTEGER,
+				},
+				{ disableDefaultCache: true },
+			);
+
+			expect(fetchCalls).toBe(2);
 		});
 
 		it("uses explicit packageName over command meta name", async () => {
@@ -949,9 +984,6 @@ describe("updateNotifierPlugin middleware", () => {
 			);
 
 			expect(capturedUrl).toContain(encodeURIComponent(cmdName));
-
-			// Register for cleanup
-			storeDirsToClean.push(configDir(cmdName));
 		});
 
 		it("uses custom registryUrl for fetch", async () => {
@@ -973,6 +1005,19 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			expect(capturedUrl).toStartWith("https://custom-registry.example.com/");
+		});
+
+		it("uses custom updateCommand in the notice", async () => {
+			const pkgName = uniquePackageName("custom-update-cmd");
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				updateCommand: "brew upgrade my-cli",
+			});
+
+			expect(getStderr()).toContain('Run "brew upgrade my-cli" to update.');
 		});
 	});
 

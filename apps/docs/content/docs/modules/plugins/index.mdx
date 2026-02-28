@@ -1,6 +1,6 @@
 ---
 title: "Overview"
-description: Official plugins — help, version, and autocomplete.
+description: Official Crust plugins.
 ---
 
 The plugins package provides official plugins for common CLI features. It depends on `@crustjs/core`.
@@ -15,24 +15,27 @@ bun add @crustjs/plugins
 
 ### Plugin Factories
 
-| Export                                                        | Description                                       |
-| ------------------------------------------------------------- | ------------------------------------------------- |
-| [`helpPlugin()`](/docs/modules/plugins/help)                 | Adds `--help` / `-h` and auto-generates help text |
-| [`versionPlugin()`](/docs/modules/plugins/version)           | Adds `--version` / `-v` to display version        |
-| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete) | Suggests corrections for mistyped subcommands     |
+| Export                                                            | Description                                              |
+| ----------------------------------------------------------------- | -------------------------------------------------------- |
+| [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
+| [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
+| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands            |
+| [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
 
 ### Utilities
 
-| Export                      | Description                         |
-| --------------------------- | ----------------------------------- |
+| Export                       | Description                         |
+| ---------------------------- | ----------------------------------- |
 | `renderHelp(command, path?)` | Generate help text programmatically |
 
 ### Types
 
-| Type                        | Description                                       |
-| --------------------------- | ------------------------------------------------- |
-| `VersionValue`              | `string \| (() => string)` — version plugin input |
-| `AutoCompletePluginOptions` | Options for the autocomplete plugin               |
+| Type                          | Description                                       |
+| ----------------------------- | ------------------------------------------------- |
+| `VersionValue`                | `string \| (() => string)` — version plugin input |
+| `AutoCompletePluginOptions`   | Options for the autocomplete plugin               |
+| `UpdateNotifierPluginOptions` | Options for the update notifier plugin            |
+| `UpdateNotifierCacheAdapter`  | Cache adapter interface for update notifier       |
 
 ## Usage
 
@@ -41,6 +44,7 @@ import {
   helpPlugin,
   versionPlugin,
   autoCompletePlugin,
+  updateNotifierPlugin,
 } from "@crustjs/plugins";
 import { defineCommand, runMain } from "@crustjs/core";
 
@@ -56,6 +60,7 @@ runMain(main, {
     versionPlugin("1.0.0"),
     autoCompletePlugin({ mode: "help" }),
     helpPlugin(),
+    updateNotifierPlugin({ currentVersion: "1.0.0" }),
   ],
 });
 ```
