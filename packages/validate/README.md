@@ -35,7 +35,7 @@ The validation platform is organized around a **Standard Schema-first** core:
 | Command | Validates args/flags via `commandValidator` middleware | —       | `arg`, `flag`, `commandValidator` | `arg`, `flag`, `commandValidator` |
 | Prompt  | Validates interactive prompt input            | `promptValidator` | `promptValidator`¹ | `promptValidator`¹ |
 | Prompt (parse) | Validates + returns typed output       | `parsePromptValue` | `parsePromptValue`¹ | `parsePromptValue`¹ |
-| Store   | Validates config on read/write/update         | `storeValidator` | `storeValidator`¹ | `storeValidator`¹ |
+| Store   | Per-field store validation adapters           | `field` | `field`¹ | `field`¹ |
 
 ¹ Re-exported from `standard` — accepts any Standard Schema. Effect schemas require `Schema.standardSchemaV1()` wrapping.
 
@@ -285,49 +285,58 @@ const parsed = await parsePromptValue(schema, rawValue);
 
 ## Store Validation
 
-Use `storeValidator()` to add schema validation to `@crustjs/store`:
+Use `field()` to attach Standard Schema validation to individual store fields:
 
 ```ts
 import { z } from "zod";
-import { storeValidator } from "@crustjs/validate/zod";
+import { field } from "@crustjs/validate/zod";
 import { createStore, configDir } from "@crustjs/store";
-
-const configSchema = z.object({
-	theme: z.enum(["light", "dark"]),
-	verbose: z.boolean(),
-});
 
 const store = createStore({
 	dirPath: configDir("my-cli"),
 	fields: {
-		theme: { type: "string", default: "light" },
-		verbose: { type: "boolean", default: false },
+		theme: {
+			type: "string",
+			default: "light",
+			validate: field(z.enum(["light", "dark"])),
+		},
+		verbose: {
+			type: "boolean",
+			default: false,
+			validate: field(z.boolean()),
+		},
 	},
-	validator: storeValidator(configSchema),
 });
 ```
 
-When a validator is configured, validation is **strict by default** — invalid config causes a `CrustStoreError("VALIDATION")` on read, write, and update operations.
+Store field validators run on `read`, `write`, `update`, and `patch`. Invalid values raise `CrustStoreError("VALIDATION")` with structured `details.issues`.
 
-`storeValidatorSync()` is available for synchronous schemas.
+`fieldSync()` is available for synchronous schemas.
 
 ### Effect schemas with store adapters
 
 ```ts
 import * as Schema from "effect/Schema";
-import { storeValidator } from "@crustjs/validate/effect";
-
-const schema = Schema.standardSchemaV1(
-	Schema.Struct({
-		theme: Schema.Literal("light", "dark"),
-		verbose: Schema.Boolean,
-	}),
-);
+import { field } from "@crustjs/validate/effect";
 
 const store = createStore({
 	dirPath: configDir("my-cli"),
-	fields: { /* ... */ },
-	validator: storeValidator(schema),
+	fields: {
+		theme: {
+			type: "string",
+			default: "light",
+			validate: field(
+				Schema.standardSchemaV1(Schema.Literal("light", "dark")),
+			),
+		},
+		verbose: {
+			type: "boolean",
+			default: false,
+			validate: field(
+				Schema.standardSchemaV1(Schema.Boolean),
+			),
+		},
+	},
 });
 ```
 
@@ -336,11 +345,11 @@ const store = createStore({
 Any Standard Schema-compatible library works with the standard entrypoint:
 
 ```ts
-import { storeValidator, promptValidator } from "@crustjs/validate/standard";
+import { field, promptValidator } from "@crustjs/validate/standard";
 
 // Works with any library implementing Standard Schema v1
 const validate = promptValidator(anyStandardSchema);
-const storeVal = storeValidator(anyStandardSchema);
+const fieldValidate = field(anyStandardSchema);
 ```
 
 ## Validation Errors
@@ -407,4 +416,4 @@ import type {
 - Zod mode requires Zod 4+.
 - Effect schemas need `Schema.standardSchemaV1()` wrapping for prompt and store adapters.
 - No automatic schema inheritance across subcommands.
-- Command validation uses provider-specific DSL; prompt and store targets use the universal Standard Schema contract.
+- Command validation uses provider-specific DSL; prompt and store-field targets use the universal Standard Schema contract.

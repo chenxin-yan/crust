@@ -5,11 +5,7 @@ description: DX-first, typed persistence for CLI apps with config/data/state/cac
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/store` gives your CLI production-ready local persistence with near-zero setup. Provide a defaults object, pick a storage intent, and get a typed store with read/write/update/patch/reset — no manual type annotations needed.
-
-<Callout>
-  For schema-based store validation, use `storeValidator()` from [`@crustjs/validate`](/docs/modules/validate#store-validation) to create a `validator` from a Zod, Effect, or any Standard Schema-compatible schema.
-</Callout>
+`@crustjs/store` gives your CLI production-ready local persistence with near-zero setup. Provide a `fields` definition, pick a storage intent, and get a typed store with read/write/update/patch/reset — no manual type annotations needed.
 
 ## Install
 
@@ -24,39 +20,40 @@ import { createStore, configDir } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: {
-    ui: { theme: "light" as string, fontSize: 14 },
-    verbose: false,
+  fields: {
+    theme: { type: "string", default: "light" },
+    fontSize: { type: "number", default: 14 },
+    verbose: { type: "boolean", default: false },
   },
 });
 
 // Read state (returns defaults when no persisted file exists)
 const state = await store.read();
-// → { ui: { theme: "light", fontSize: 14 }, verbose: false }
+// → { theme: "light", fontSize: 14, verbose: false }
 
 // Write a full state object
-await store.write({ ui: { theme: "dark", fontSize: 16 }, verbose: true });
+await store.write({ theme: "dark", fontSize: 16, verbose: true });
 
 // Update with a function
 await store.update((current) => ({ ...current, verbose: false }));
 
-// Patch only specific nested keys
-await store.patch({ ui: { theme: "solarized" } });
+// Patch only specific keys
+await store.patch({ theme: "solarized" });
 
 // Reset to defaults (removes persisted file)
 await store.reset();
 ```
 
-No explicit generics needed — types are inferred from your `defaults` object.
+No explicit generics needed — types are inferred from your `fields` definition.
 
 ## How It Works
 
 1. Pick a path helper (`configDir`, `dataDir`, `stateDir`, `cacheDir`) to resolve a platform-standard directory.
 2. `createStore()` resolves the file path once (`<dirPath>/<name>.json`) and returns a typed store instance.
-3. `read()` loads persisted JSON, deep-merges defaults for missing keys, and returns the complete state.
+3. `read()` loads persisted JSON, applies field defaults for missing keys, and returns the complete state.
 4. `write()` atomically persists the full state (temp file + rename — no partial writes on crash).
 5. `update()` reads the current state, applies an updater function, and persists the result.
-6. `patch()` deep-merges a partial update into the current state and persists.
+6. `patch()` shallow-merges a partial update into the current state and persists.
 7. `reset()` deletes the persisted file, reverting to defaults-on-read behavior.
 
 ## Storage Intent
@@ -76,25 +73,36 @@ import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/st
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
   dirPath: configDir("my-cli"),
-  defaults: { theme: "light" as string, verbose: false },
+  fields: {
+    theme: { type: "string", default: "light" },
+    verbose: { type: "boolean", default: false },
+  },
 });
 
 // App data → ~/.local/share/my-cli/config.json
 const data = createStore({
   dirPath: dataDir("my-cli"),
-  defaults: { bookmarks: [] as string[] },
+  fields: {
+    bookmarks: { type: "string", array: true, default: [] },
+  },
 });
 
 // Runtime state → ~/.local/state/my-cli/config.json
 const state = createStore({
   dirPath: stateDir("my-cli"),
-  defaults: { lastOpened: "" as string, scrollY: 0 },
+  fields: {
+    lastOpened: { type: "string", default: "" },
+    scrollY: { type: "number", default: 0 },
+  },
 });
 
 // Cache → ~/.cache/my-cli/config.json
 const cache = createStore({
   dirPath: cacheDir("my-cli"),
-  defaults: { etag: "" as string, payload: "" as string },
+  fields: {
+    etag: { type: "string", default: "" },
+    payload: { type: "string", default: "" },
+  },
 });
 ```
 
@@ -128,9 +136,10 @@ const dir = configDir("my-cli");
 // ~/.config/my-cli/config.json (default)
 const settingsStore = createStore({
   dirPath: dir,
-  defaults: {
-    ui: { theme: "light" as string, fontSize: 14 },
-    verbose: false,
+  fields: {
+    theme: { type: "string", default: "light" },
+    fontSize: { type: "number", default: 14 },
+    verbose: { type: "boolean", default: false },
   },
 });
 
@@ -138,7 +147,9 @@ const settingsStore = createStore({
 const authStore = createStore({
   dirPath: dir,
   name: "auth",
-  defaults: { token: "" as string },
+  fields: {
+    token: { type: "string", default: "" },
+  },
 });
 ```
 
@@ -162,8 +173,7 @@ const store = createStore(options);
 | -------------- | -------------------------- | -------- | ----------------------------------------------------------------- |
 | `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.            |
 | `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`). |
-| `defaults`     | `T`                        | Yes      | Default values defining the store's data shape and fallbacks.     |
-| `validator`    | `StoreValidator<T>`            | No       | Validator function applied during `read`, `write`, `update`, and `patch`. Returns `{ ok, value }` or `{ ok: false, issues }`. Use `storeValidator()` from `@crustjs/validate` to create one from a schema. |
+| `fields`       | `FieldsDef`                | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
 | `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).             |
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
@@ -172,15 +182,15 @@ const store = createStore(options);
 
 ### `store.read()`
 
-Reads the persisted state file. Missing keys are filled from `defaults` via deep merge.
+Reads the persisted state file. Missing keys are filled from field `defaults`.
 
 ```ts
 const state = await store.read();
 ```
 
-Always returns a complete `T` — never `undefined`. Does not write merged defaults back to disk.
+Always returns the inferred store shape. Fields with defaults are guaranteed present; fields without defaults may be `undefined`. Does not write merged defaults back to disk.
 
-When a `validator` is configured, the merged config is validated after defaults are applied. Invalid persisted config fails loudly. The validator may transform the value (e.g. via schema coercion).
+When per-field `validate` functions are configured, each field is validated after defaults are applied. Invalid persisted config fails loudly.
 
 **Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
 
@@ -189,10 +199,10 @@ When a `validator` is configured, the merged config is validated after defaults 
 Atomically persists a full state object. The entire previous state is replaced. Parent directories are created if missing.
 
 ```ts
-await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
+await store.write({ theme: "dark", fontSize: 14, verbose: true });
 ```
 
-**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `IO` on filesystem failure.
 
 ### `store.update(updater)`
 
@@ -201,25 +211,23 @@ Reads the current effective state, applies the updater function, and atomically 
 ```ts
 await store.update((current) => ({
   ...current,
-  ui: { ...current.ui, theme: "dark" },
+  theme: "dark",
 }));
 ```
 
-When no persisted file exists, the updater receives `defaults` as the current value.
+When no persisted file exists, the updater receives field `defaults` as the current value.
 
-**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
 ### `store.patch(partial)`
 
-Applies a deep partial update to the current state and persists. Only the provided keys are updated; everything else is preserved.
+Applies a shallow partial update to the current state and persists. Only the provided keys are updated; everything else is preserved.
 
 ```ts
-await store.patch({ ui: { theme: "solarized" } });
+await store.patch({ theme: "solarized" });
 ```
 
-Arrays are replaced wholesale (not merged element-by-element).
-
-**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
 ### `store.reset()`
 
@@ -235,27 +243,27 @@ Reset is idempotent — calling it when no file exists is a no-op.
 
 ## Defaults & Merge
 
-When a persisted file exists, `read()` deep-merges defaults for any missing keys:
+When a persisted file exists, `read()` fills missing keys from field `defaults`:
 
 ```ts
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: {
-    ui: { theme: "light", fontSize: 14 },
-    verbose: false,
+  fields: {
+    theme: { type: "string", default: "light" },
+    fontSize: { type: "number", default: 14 },
+    verbose: { type: "boolean", default: false },
   },
 });
 
-// Persisted file contains: { "ui": { "theme": "dark" }, "verbose": true }
+// Persisted file contains: { "theme": "dark", "verbose": true }
 const state = await store.read();
-// → { ui: { theme: "dark", fontSize: 14 }, verbose: true }
+// → { theme: "dark", fontSize: 14, verbose: true }
 ```
 
 ### Merge Rules
 
-- Persisted values override defaults at every nesting level.
-- Missing keys fall back to defaults (recursively for nested objects).
-- Arrays are replaced wholesale — not merged element-by-element.
+- Persisted values override defaults.
+- Missing keys fall back to defaults.
 - Unknown persisted keys are dropped by default (`pruneUnknown: true`). Set `pruneUnknown: false` to preserve them.
 - All values are deep-cloned to prevent shared-reference mutation from defaults.
 - Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
@@ -267,21 +275,22 @@ const state = await store.read();
 
 ## Validation
 
-Add a `validator` function to check state during read, write, update, and patch operations. The validator follows a result-based contract — returning `{ ok: true, value }` on success or `{ ok: false, issues }` on failure:
+Add a `validate` function to individual field definitions to validate values during read, write, update, and patch operations. Per-field validators are throw-based — return `void` on success, throw on failure:
 
 ```ts
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: { port: 3000, host: "localhost" as string },
-  validator(value) {
-    const state = value as { port: number; host: string };
-    if (state.port < 1 || state.port > 65535) {
-      return {
-        ok: false,
-        issues: [{ message: "port must be between 1 and 65535", path: "port" }],
-      };
-    }
-    return { ok: true, value: state };
+  fields: {
+    port: {
+      type: "number",
+      default: 3000,
+      validate(value) {
+        if (value < 1 || value > 65535) {
+          throw new Error("port must be between 1 and 65535");
+        }
+      },
+    },
+    host: { type: "string", default: "localhost" },
   },
 });
 
@@ -291,25 +300,30 @@ await store.write({ port: 0, host: "localhost" });
 
 ### Schema-Based Validation
 
-For schema-driven validation, use `storeValidator()` from `@crustjs/validate` to create a validator from a Zod, Effect, or any Standard Schema-compatible schema:
+For schema-driven validation, use `field()` from `@crustjs/validate` to create a per-field validator from a Zod, Effect, or any Standard Schema-compatible schema:
 
 ```ts
-import { storeValidator } from "@crustjs/validate/zod";
+import { field } from "@crustjs/validate/zod";
 import { z } from "zod";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: { port: 3000, host: "localhost" as string },
-  validator: storeValidator(
-    z.object({
-      port: z.number().int().min(1).max(65535),
-      host: z.string().min(1),
-    }),
-  ),
+  fields: {
+    theme: {
+      type: "string",
+      default: "light",
+      validate: field(z.enum(["light", "dark"])),
+    },
+    verbose: { type: "boolean", default: false },
+  },
 });
 ```
 
-`validator` is called on `read`, `write`, `update`, and `patch` — never on `reset`. If the validator returns a failure result, the operation is aborted and a `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
+`validate` is called on `read`, `write`, `update`, and `patch` — never on `reset`. If a validator throws, the operation is aborted and a `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
+
+Store field validators are validation-only. If you use schema transforms/coercions in `field()` / `fieldSync()`, transformed outputs are not written back into store state.
+
+For synchronous validation, use `fieldSync()` from the appropriate `@crustjs/validate` entrypoint.
 
 ## Error Handling
 
@@ -320,7 +334,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`              |
 | `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`              |
 | `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`           |
-| `VALIDATION` | `validator` function rejected the state                 | `{ operation, issues }`         |
+| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }`         |
 
 ### Catching Errors
 
@@ -402,10 +416,9 @@ if (err instanceof CrustStoreError) {
 | `CreateStoreOptions`      | Options object for `createStore()`.                                         |
 | `Store`                   | Store instance with `read`, `write`, `update`, `patch`, `reset`.            |
 | `StoreUpdater`            | Updater function type `(current: T) => T`.                                  |
-| `StoreValidator`          | Validator function type `(value: unknown) => StoreValidatorResult<T>`.      |
-| `StoreValidatorResult`    | Discriminated union: `StoreValidatorSuccess<T> \| StoreValidatorFailure`.   |
-| `StoreValidatorSuccess`   | Success result with `{ ok: true, value: T }`.                               |
-| `StoreValidatorFailure`   | Failure result with `{ ok: false, issues: StoreValidatorIssue[] }`.         |
+| `FieldDef`                | Single field definition with `type`, optional `default`, and optional `validate`. |
+| `FieldsDef`               | Record of field names to `FieldDef` definitions.                            |
+| `InferStoreConfig`        | Inferred store state type from a `FieldsDef` definition.                    |
 | `StoreValidatorIssue`     | Issue object with `{ message: string, path: string }`.                      |
 | `ValidationErrorDetails`  | Details for `VALIDATION` errors: `{ operation, issues }`.                   |
 | `StoreErrorCode`          | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.         |

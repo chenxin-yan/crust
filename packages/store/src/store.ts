@@ -3,12 +3,14 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { CrustStoreError } from "./errors.ts";
-import { applyDefaults } from "./merge.ts";
+import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
-	DeepPartial,
+	FieldDef,
+	FieldsDef,
+	InferStoreConfig,
 	Store,
 	StoreUpdater,
 	StoreValidatorIssue,
@@ -19,13 +21,14 @@ import type {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates a typed async store backed by a local JSON file.
+ * Creates a typed async config store backed by a local JSON file.
  *
  * The store resolves its file path once at creation time from `dirPath` and
- * optional `name`. The `defaults` object declares the data shape — its
- * TypeScript type determines the store's type parameter `T`.
+ * optional `name`. Field definitions declare the config schema — each field's
+ * `type` determines its TypeScript type, and the presence of `default`
+ * determines whether the field is guaranteed or optional (`T | undefined`).
  *
- * @typeParam T - The store data shape (inferred from `defaults`).
+ * @typeParam F - Field definitions record (inferred via `const` generic).
  * @param options - Store configuration options.
  * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
@@ -36,128 +39,173 @@ import type {
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
- *   defaults: {
- *     ui: { theme: "light", fontSize: 14 },
- *     verbose: false,
+ *   fields: {
+ *     theme: { type: "string", default: "light" },
+ *     verbose: { type: "boolean", default: false },
+ *     token: { type: "string" },
  *   },
  * });
  *
- * const state = await store.read();
- * // → { ui: { theme: "light", fontSize: 14 }, verbose: false }
+ * const config = await store.read();
+ * // → { theme: "light", verbose: false, token: undefined }
  *
- * await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
- * await store.update((s) => ({ ...s, verbose: false }));
- * await store.patch({ ui: { theme: "dark" } });
+ * await store.write({ theme: "dark", verbose: true, token: "abc" });
+ * await store.update((c) => ({ ...c, theme: "light" }));
+ * await store.patch({ theme: "solarized" });
  * await store.reset();
  * ```
  */
-export function createStore<const T extends Record<string, unknown>>(
-	options: CreateStoreOptions<T>,
-): Store<T> {
-	const { dirPath, name, defaults, validator, pruneUnknown } = options;
+export function createStore<const F extends FieldsDef>(
+	options: CreateStoreOptions<F>,
+): Store<InferStoreConfig<F>> {
+	const { dirPath, name, fields, pruneUnknown } = options;
 
-	// Resolve the store file path once at creation time (synchronous)
+	// Resolve the config file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
 
 	// Resolve pruneUnknown — defaults to true when not provided
 	const shouldPrune = pruneUnknown ?? true;
 
 	// ──────────────────────────────────────────────────────────────────────
-	// runValidator — Shared structured validation helper
+	// normalizeStateTypes — Coerce values by field `type`
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function runValidator(
-		state: T,
-		operation: "read" | "write" | "update" | "patch",
-	): Promise<T> {
-		if (!validator) return state;
-
-		const result = await validator(state);
-
-		if (result.ok) {
-			return result.value;
+	function coerceByType(value: unknown, type: FieldDef["type"]): unknown {
+		if (type === "number" && typeof value === "string") {
+			const num = Number(value);
+			return Number.isNaN(num) ? value : num;
 		}
 
-		const issues: StoreValidatorIssue[] = result.issues.map((issue) => ({
-			message: issue.message,
-			path: issue.path,
-		}));
+		if (type === "boolean" && typeof value === "string") {
+			return value === "true" || value === "1";
+		}
 
-		const lines = issues.map((i) =>
-			i.path ? `  - ${i.path}: ${i.message}` : `  - ${i.message}`,
-		);
-		const message =
-			lines.length > 0
-				? `Store validation failed (${operation})\n${lines.join("\n")}`
-				: `Store validation failed (${operation})`;
+		return value;
+	}
 
-		throw new CrustStoreError("VALIDATION", message, {
-			operation,
-			issues,
-		});
+	function normalizeStateTypes(
+		state: InferStoreConfig<F>,
+	): InferStoreConfig<F> {
+		const record = state as Record<string, unknown>;
+		const normalized: Record<string, unknown> = { ...record };
+
+		for (const [key, def] of Object.entries(fields)) {
+			if (!(key in normalized)) continue;
+
+			const value = normalized[key];
+
+			if (def.array === true && Array.isArray(value)) {
+				normalized[key] = value.map((item) => coerceByType(item, def.type));
+				continue;
+			}
+
+			normalized[key] = coerceByType(value, def.type);
+		}
+
+		return normalized as InferStoreConfig<F>;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// readRaw — Load persisted state and apply defaults (no validation)
+	// runFieldValidators — Execute per-field validate functions
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function readRaw(): Promise<T> {
+	async function runFieldValidators(
+		state: InferStoreConfig<F>,
+		operation: "read" | "write" | "update" | "patch",
+	): Promise<void> {
+		const issues: StoreValidatorIssue[] = [];
+		const record = state as Record<string, unknown>;
+
+		for (const [key, def] of Object.entries(fields)) {
+			if (!def.validate) continue;
+
+			const value = record[key];
+
+			// Skip validation for undefined values (field has no default, not persisted)
+			if (value === undefined) continue;
+
+			try {
+				await def.validate(value as never);
+			} catch (cause) {
+				const message =
+					cause instanceof Error ? cause.message : "Validation failed";
+				issues.push({ message, path: key });
+			}
+		}
+
+		if (issues.length > 0) {
+			const lines = issues.map((i) => `  - ${i.path}: ${i.message}`);
+			const message = `Store validation failed (${operation})\n${lines.join("\n")}`;
+
+			throw new CrustStoreError("VALIDATION", message, {
+				operation,
+				issues,
+			});
+		}
+	}
+
+	// ──────────────────────────────────────────────────────────────────────
+	// readRaw — Load persisted config, apply field defaults (no validation)
+	// ──────────────────────────────────────────────────────────────────────
+
+	async function readRaw(): Promise<InferStoreConfig<F>> {
 		const persisted = await readJson(filePath);
-		return applyDefaults(
+		const merged = applyFieldDefaults(
 			persisted as Record<string, unknown> | undefined,
-			defaults,
+			fields,
 			shouldPrune,
-		) as T;
+		);
+		return normalizeStateTypes(merged);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// read — Load persisted state, apply defaults, validate
+	// read — Load persisted config, apply field defaults, validate
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function read(): Promise<T> {
+	async function read(): Promise<InferStoreConfig<F>> {
 		const merged = await readRaw();
-		return runValidator(merged, "read");
+		await runFieldValidators(merged, "read");
+		return merged;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// write — Validate then atomically persist full state
+	// write — Validate then atomically persist full config
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function write(state: T): Promise<void> {
-		const validated = await runValidator(state, "write");
-		await writeJson(filePath, validated);
+	async function write(config: InferStoreConfig<F>): Promise<void> {
+		const normalized = normalizeStateTypes(config);
+		await runFieldValidators(normalized, "write");
+		await writeJson(filePath, normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// update — Read current (raw), apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(updater: StoreUpdater<T>): Promise<void> {
+	async function update(
+		updater: StoreUpdater<InferStoreConfig<F>>,
+	): Promise<void> {
 		const current = await readRaw();
 		const updated = updater(current);
-		const validated = await runValidator(updated, "update");
-		await writeJson(filePath, validated);
+		const normalized = normalizeStateTypes(updated);
+		await runFieldValidators(normalized, "update");
+		await writeJson(filePath, normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// patch — Deep partial merge into current state, validate, persist
+	// patch — Shallow merge into current config, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function patch(partial: DeepPartial<T>): Promise<void> {
+	async function patch(partial: Partial<InferStoreConfig<F>>): Promise<void> {
 		const current = await readRaw();
-		// Use applyDefaults with current as defaults and partial as persisted.
-		// pruneUnknown=false so keys in current not in partial are preserved.
-		const merged = applyDefaults(
-			partial as Record<string, unknown>,
-			current as Record<string, unknown>,
-			false,
-		) as T;
-		const validated = await runValidator(merged, "patch");
-		await writeJson(filePath, validated);
+		const merged = { ...current, ...partial } as InferStoreConfig<F>;
+		const normalized = normalizeStateTypes(merged);
+		await runFieldValidators(normalized, "patch");
+		await writeJson(filePath, normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// reset — Remove persisted state file
+	// reset — Remove persisted config file
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function reset(): Promise<void> {

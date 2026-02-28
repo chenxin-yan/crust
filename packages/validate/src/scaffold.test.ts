@@ -15,19 +15,19 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
 		expect(typeof mod.parsePromptValueSync).toBe("function");
-		expect(typeof mod.storeValidator).toBe("function");
-		expect(typeof mod.storeValidatorSync).toBe("function");
+		expect(typeof mod.field).toBe("function");
+		expect(typeof mod.fieldSync).toBe("function");
 	});
 
 	it("standard entrypoint exports exactly the documented API surface", async () => {
 		const mod = await import("./standard/index.ts");
 		const exports = Object.keys(mod).sort();
 		expect(exports).toEqual([
+			"field",
+			"fieldSync",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
-			"storeValidator",
-			"storeValidatorSync",
 		]);
 	});
 
@@ -42,9 +42,9 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
 		expect(typeof mod.parsePromptValueSync).toBe("function");
-		// Store adapters (re-exported from standard)
-		expect(typeof mod.storeValidator).toBe("function");
-		expect(typeof mod.storeValidatorSync).toBe("function");
+		// Store field validator adapters (re-exported from standard)
+		expect(typeof mod.field).toBe("function");
+		expect(typeof mod.fieldSync).toBe("function");
 	});
 
 	it("zod entrypoint exports exactly the documented API surface", async () => {
@@ -53,12 +53,12 @@ describe("@crustjs/validate scaffold", () => {
 		expect(exports).toEqual([
 			"arg",
 			"commandValidator",
+			"field",
+			"fieldSync",
 			"flag",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
-			"storeValidator",
-			"storeValidatorSync",
 		]);
 	});
 
@@ -73,9 +73,9 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
 		expect(typeof mod.parsePromptValueSync).toBe("function");
-		// Store adapters (re-exported from standard)
-		expect(typeof mod.storeValidator).toBe("function");
-		expect(typeof mod.storeValidatorSync).toBe("function");
+		// Store field validator adapters (re-exported from standard)
+		expect(typeof mod.field).toBe("function");
+		expect(typeof mod.fieldSync).toBe("function");
 	});
 
 	it("effect entrypoint exports exactly the documented API surface", async () => {
@@ -84,12 +84,12 @@ describe("@crustjs/validate scaffold", () => {
 		expect(exports).toEqual([
 			"arg",
 			"commandValidator",
+			"field",
+			"fieldSync",
 			"flag",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
-			"storeValidator",
-			"storeValidatorSync",
 		]);
 	});
 
@@ -107,15 +107,15 @@ describe("@crustjs/validate scaffold", () => {
 		expect(effect.parsePromptValueSync).toBe(standard.parsePromptValueSync);
 	});
 
-	it("store adapters are identical across entrypoints", async () => {
+	it("store field validator adapters are identical across entrypoints", async () => {
 		const standard = await import("./standard/index.ts");
 		const zod = await import("./zod/index.ts");
 		const effect = await import("./effect/index.ts");
 
 		// Same function references (re-exports, not copies)
-		expect(zod.storeValidator).toBe(standard.storeValidator);
-		expect(zod.storeValidatorSync).toBe(standard.storeValidatorSync);
-		expect(effect.storeValidator).toBe(standard.storeValidator);
-		expect(effect.storeValidatorSync).toBe(standard.storeValidatorSync);
+		expect(zod.field).toBe(standard.field);
+		expect(zod.fieldSync).toBe(standard.fieldSync);
+		expect(effect.field).toBe(standard.field);
+		expect(effect.fieldSync).toBe(standard.fieldSync);
 	});
 });

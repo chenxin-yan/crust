@@ -129,7 +129,7 @@ const MODULES: Array<{
   },
   {
     pkg: "@crustjs/validate",
-    desc: "Input validation and coercion",
+    desc: "Schema-first validation adapters",
     doc: "modules/validate",
   },
   {

@@ -16,11 +16,11 @@ export { createStore } from "./store.ts";
 // Types
 export type {
 	CreateStoreOptions,
+	FieldDef,
+	FieldsDef,
+	InferStoreConfig,
 	Store,
 	StoreUpdater,
-	StoreValidator,
-	StoreValidatorFailure,
 	StoreValidatorIssue,
-	StoreValidatorResult,
-	StoreValidatorSuccess,
+	ValueType,
 } from "./types.ts";

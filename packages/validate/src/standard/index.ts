@@ -12,8 +12,8 @@ export {
 	parsePromptValueSync,
 	promptValidator,
 } from "./prompt.ts";
-// Store adapter
-export { storeValidator, storeValidatorSync } from "./store.ts";
+// Store field adapters
+export { field, fieldSync } from "./store.ts";
 // Types
 export type {
 	InferInput,

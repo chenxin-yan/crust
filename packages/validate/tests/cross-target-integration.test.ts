@@ -3,7 +3,7 @@
  * across command, prompt, and store targets using shared schemas.
  *
  * These tests exercise one schema definition across all three validation
- * surfaces (command handler, prompt validator, store validator) and assert:
+ * surfaces (command handler, prompt validator, store field validator) and assert:
  *
  * - Consistent issue path formatting (dot-paths, bracket-notation)
  * - Consistent message rendering (bullet lists, single-issue messages)
@@ -24,17 +24,17 @@ import { z } from "zod";
 import {
 	arg as effectArg,
 	commandValidator as effectCommandValidator,
+	field as effectFieldValidator,
 	flag as effectFlag,
 	parsePromptValue as effectParsePromptValue,
 	promptValidator as effectPromptValidator,
-	storeValidator as effectStoreValidator,
 } from "../src/effect/index.ts";
 import {
+	field,
+	fieldSync,
 	parsePromptValue,
 	parsePromptValueSync,
 	promptValidator,
-	storeValidator,
-	storeValidatorSync,
 } from "../src/standard/index.ts";
 import {
 	validateStandard,
@@ -77,11 +77,9 @@ function extractIssues(
 
 describe("Zod: shared schema across command, prompt, and store", () => {
 	// ── Shared schema ─────────────────────────────────────────────────────
-	// Config-level schema for store validation
-	const configSchema = z.object({
-		theme: z.enum(["light", "dark"]),
-		verbose: z.boolean(),
-	});
+	// Per-field schemas for field-level validation
+	const themeFieldSchema = z.enum(["light", "dark"]);
+	const verboseFieldSchema = z.boolean();
 
 	// ── Store setup ───────────────────────────────────────────────────────
 	let tempDir: string;
@@ -182,15 +180,20 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 	// ── Store target ──────────────────────────────────────────────────────
 
 	it("store: validates valid config on write and read", async () => {
-		const defaults = {
-			theme: "light" as string,
-			verbose: false,
-		};
-
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: storeValidator(configSchema),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: field(themeFieldSchema),
+				},
+				verbose: {
+					type: "boolean",
+					default: false,
+					validate: field(verboseFieldSchema),
+				},
+			},
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -200,20 +203,28 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 	});
 
 	it("store: rejects invalid config on write with VALIDATION error", async () => {
-		const defaults = {
-			theme: "light" as string,
-			verbose: false,
-		};
-
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: storeValidator(configSchema),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: field(themeFieldSchema),
+				},
+				verbose: {
+					type: "boolean",
+					default: false,
+					validate: field(verboseFieldSchema),
+				},
+			},
 		});
 
 		try {
 			// "blue" is not a valid theme
-			await store.write({ theme: "blue" as "light", verbose: false });
+			await store.write({
+				theme: "blue" as unknown as string,
+				verbose: false,
+			});
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustStoreError);
@@ -224,22 +235,16 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 		}
 	});
 
-	it("store: storeValidatorSync works for sync schemas", () => {
-		const validator = storeValidatorSync(configSchema);
-		const result = validator({ theme: "dark", verbose: true });
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.value).toEqual({ theme: "dark", verbose: true });
-		}
+	it("store: fieldSync works for sync schemas", () => {
+		const validate = fieldSync(themeFieldSchema);
+		// Valid — should not throw
+		expect(() => validate("dark")).not.toThrow();
 	});
 
-	it("store: storeValidatorSync rejects invalid config", () => {
-		const validator = storeValidatorSync(configSchema);
-		const result = validator({ theme: "invalid", verbose: "not-a-bool" });
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.issues.length).toBeGreaterThan(0);
-		}
+	it("store: fieldSync rejects invalid values", () => {
+		const validate = fieldSync(themeFieldSchema);
+		// Invalid — should throw
+		expect(() => validate("invalid")).toThrow();
 	});
 });
 
@@ -250,12 +255,9 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 describe("Effect: shared schema across command, prompt, and store", () => {
 	// ── Shared schema ─────────────────────────────────────────────────────
 	const ThemeSchema = Schema.Literal("light", "dark");
-	const ConfigSchema = Schema.Struct({
-		theme: ThemeSchema,
-		verbose: Schema.Boolean,
-	});
-	// Standard Schema wrapper for prompt/store adapters
-	const configStandard = Schema.standardSchemaV1(ConfigSchema);
+	// Standard Schema wrappers for prompt/store adapters
+	const themeStandard = Schema.standardSchemaV1(ThemeSchema);
+	const verboseStandard = Schema.standardSchemaV1(Schema.Boolean);
 
 	// ── Store setup ───────────────────────────────────────────────────────
 	let tempDir: string;
@@ -314,14 +316,12 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	// ── Prompt target ─────────────────────────────────────────────────────
 
 	it("prompt: validator returns true for valid input", async () => {
-		const themeStandard = Schema.standardSchemaV1(ThemeSchema);
 		const validate = effectPromptValidator(themeStandard);
 		const result = await validate("light");
 		expect(result).toBe(true);
 	});
 
 	it("prompt: validator returns error message for invalid input", async () => {
-		const themeStandard = Schema.standardSchemaV1(ThemeSchema);
 		const validate = effectPromptValidator(themeStandard);
 		const result = await validate("blue" as "light");
 		expect(typeof result).toBe("string");
@@ -329,13 +329,11 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	});
 
 	it("prompt: parsePromptValue returns typed output on valid input", async () => {
-		const themeStandard = Schema.standardSchemaV1(ThemeSchema);
 		const result = await effectParsePromptValue(themeStandard, "dark");
 		expect(result).toBe("dark");
 	});
 
 	it("prompt: parsePromptValue throws VALIDATION error on invalid input", async () => {
-		const themeStandard = Schema.standardSchemaV1(ThemeSchema);
 		try {
 			await effectParsePromptValue(themeStandard, "blue" as "light");
 			expect.unreachable("Should have thrown");
@@ -349,15 +347,20 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	// ── Store target ──────────────────────────────────────────────────────
 
 	it("store: validates valid config on write and read", async () => {
-		const defaults = {
-			theme: "light" as string,
-			verbose: false,
-		};
-
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: effectStoreValidator(configStandard),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: effectFieldValidator(themeStandard),
+				},
+				verbose: {
+					type: "boolean",
+					default: false,
+					validate: effectFieldValidator(verboseStandard),
+				},
+			},
 		});
 
 		await store.write({ theme: "dark", verbose: true });
@@ -367,19 +370,27 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 	});
 
 	it("store: rejects invalid config on write with VALIDATION error", async () => {
-		const defaults = {
-			theme: "light" as string,
-			verbose: false,
-		};
-
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: effectStoreValidator(configStandard),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: effectFieldValidator(themeStandard),
+				},
+				verbose: {
+					type: "boolean",
+					default: false,
+					validate: effectFieldValidator(verboseStandard),
+				},
+			},
 		});
 
 		try {
-			await store.write({ theme: "blue" as "light", verbose: false });
+			await store.write({
+				theme: "blue" as unknown as string,
+				verbose: false,
+			});
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustStoreError);
@@ -458,19 +469,37 @@ describe("consistent issue path formatting across targets", () => {
 			expect(msg).toContain("logging.level");
 		});
 
-		it("store: nested paths in VALIDATION error issues", async () => {
-			// Use the storeValidator directly to check issue paths
-			const validator = storeValidatorSync(nestedSchema);
-			const result = validator({
-				database: { host: "", port: -1 },
-				logging: { level: "invalid" },
+		it("store: per-field validation catches invalid values", async () => {
+			// Per-field validation only validates at the field level (flat keys).
+			// For nested object validation, use a field-level schema that covers the nested shape.
+			const store = createStore({
+				dirPath: tempDir,
+				fields: {
+					host: {
+						type: "string",
+						default: "localhost",
+						validate: field(z.string().min(1, "host is required")),
+					},
+					port: {
+						type: "number",
+						default: 5432,
+						validate: field(z.number().int().positive("port must be positive")),
+					},
+				},
 			});
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				const paths = result.issues.map((i) => i.path);
-				expect(paths).toContain("database.host");
-				expect(paths).toContain("database.port");
-				expect(paths).toContain("logging.level");
+
+			try {
+				await store.write({ host: "", port: -1 });
+				expect.unreachable("Should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(CrustStoreError);
+				const storeErr = err as CrustStoreError<"VALIDATION">;
+				expect(storeErr.is("VALIDATION")).toBe(true);
+				const paths = storeErr.details.issues.map(
+					(i: { message: string; path: string }) => i.path,
+				);
+				expect(paths).toContain("host");
+				expect(paths).toContain("port");
 			}
 		});
 	});
@@ -503,13 +532,30 @@ describe("consistent issue path formatting across targets", () => {
 			expect(result as string).toContain("items[1]");
 		});
 
-		it("store: array paths in validator result", () => {
-			const validator = storeValidatorSync(arraySchema);
-			const result = validator({ items: ["valid", ""] });
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				const paths = result.issues.map((i) => i.path);
-				expect(paths).toContain("items[1]");
+		it("store: field-level array validation catches invalid arrays", async () => {
+			const itemsSchema = z
+				.array(z.string().min(1, "item cannot be empty"))
+				.min(1);
+
+			const store = createStore({
+				dirPath: tempDir,
+				fields: {
+					items: {
+						type: "string",
+						array: true,
+						default: [] as string[],
+						validate: field(itemsSchema),
+					},
+				},
+			});
+
+			try {
+				await store.write({ items: ["valid", ""] });
+				expect.unreachable("Should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(CrustStoreError);
+				const storeErr = err as CrustStoreError<"VALIDATION">;
+				expect(storeErr.is("VALIDATION")).toBe(true);
 			}
 		});
 	});
@@ -564,13 +610,27 @@ describe("consistent issue path formatting across targets", () => {
 			expect(result).toBe("Value is required");
 		});
 
-		it("store: root-level issues in validator result", () => {
-			const validator = storeValidatorSync(rootSchema);
-			const result = validator("");
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.issues[0]?.path).toBe("");
-				expect(result.issues[0]?.message).toBe("Value is required");
+		it("store: field-level validation produces per-field path in error", async () => {
+			const store = createStore({
+				dirPath: tempDir,
+				fields: {
+					name: {
+						type: "string",
+						default: "",
+						validate: fieldSync(z.string().min(1, "Value is required")),
+					},
+				},
+			});
+
+			try {
+				await store.write({ name: "" });
+				expect.unreachable("Should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(CrustStoreError);
+				const storeErr = err as CrustStoreError<"VALIDATION">;
+				expect(storeErr.is("VALIDATION")).toBe(true);
+				// Per-field validation uses the field name as path
+				expect(storeErr.details.issues[0]?.path).toBe("name");
 			}
 		});
 
@@ -631,35 +691,31 @@ describe("transformed output consistency across targets", () => {
 			expect(result).toBe("light");
 		});
 
-		it("store: storeValidator returns transformed output", async () => {
-			const validator = storeValidator(normalizedTheme);
-			const result = await validator("  DARK  ");
-			expect(result.ok).toBe(true);
-			if (result.ok) {
-				expect(result.value).toBe("dark");
-			}
+		it("store: field does not throw for valid value", async () => {
+			const themeSchema = z.enum(["light", "dark"]);
+			const validate = field(themeSchema);
+			await expect(validate("dark")).resolves.toBeUndefined();
 		});
 
-		it("store: persists and reads transformed values", async () => {
-			const transformedConfig = z.object({
-				theme: z.string().transform((s) => s.toLowerCase()),
-				retries: z.number(),
-			});
-
-			const defaults = {
-				theme: "light" as string,
-				retries: 3,
-			};
-
+		it("store: validates fields on write and read", async () => {
 			const store = createStore({
 				dirPath: tempDir,
-				defaults,
-				validator: storeValidator(transformedConfig),
+				fields: {
+					theme: {
+						type: "string",
+						default: "light",
+						validate: field(z.enum(["light", "dark"])),
+					},
+					retries: {
+						type: "number",
+						default: 3,
+						validate: field(z.number()),
+					},
+				},
 			});
 
-			await store.write({ theme: "DARK", retries: 5 });
+			await store.write({ theme: "dark", retries: 5 });
 			const config = await store.read();
-			// Read-path also validates and transforms
 			expect(config.theme).toBe("dark");
 			expect(config.retries).toBe(5);
 		});
@@ -695,18 +751,10 @@ describe("transformed output consistency across targets", () => {
 			expect(result).toBe("dark");
 		});
 
-		it("store: storeValidator returns transformed output (Effect)", async () => {
-			const TrimmedString = Schema.transform(Schema.String, Schema.String, {
-				decode: (s) => s.trim().toLowerCase(),
-				encode: (s) => s,
-			});
-			const wrapped = Schema.standardSchemaV1(TrimmedString);
-			const validator = effectStoreValidator(wrapped);
-			const result = await validator("  DARK  ");
-			expect(result.ok).toBe(true);
-			if (result.ok) {
-				expect(result.value).toBe("dark");
-			}
+		it("store: field does not throw for valid value (Effect)", async () => {
+			const wrapped = Schema.standardSchemaV1(Schema.Literal("light", "dark"));
+			const validate = effectFieldValidator(wrapped);
+			await expect(validate("dark")).resolves.toBeUndefined();
 		});
 	});
 });
@@ -725,7 +773,10 @@ describe("error shape consistency across targets", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	const schema = z.object({
+	const nameSchema = z.string().min(1, "name is required");
+	const ageSchema = z.number().int().positive("age must be positive");
+
+	const objectSchema = z.object({
 		name: z.string().min(1, "name is required"),
 		age: z.number().int().positive("age must be positive"),
 	});
@@ -734,7 +785,7 @@ describe("error shape consistency across targets", () => {
 		const invalidInput = { name: "", age: -5 };
 
 		// Standard core
-		const coreResult = await validateStandard(schema, invalidInput);
+		const coreResult = await validateStandard(objectSchema, invalidInput);
 		expect(coreResult.ok).toBe(false);
 		if (!coreResult.ok) {
 			for (const issue of coreResult.issues) {
@@ -745,7 +796,7 @@ describe("error shape consistency across targets", () => {
 
 		// Prompt parsePromptValue
 		try {
-			await parsePromptValue(schema, invalidInput);
+			await parsePromptValue(objectSchema, invalidInput);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			const crustErr = err as CrustError<"VALIDATION">;
@@ -756,22 +807,40 @@ describe("error shape consistency across targets", () => {
 			}
 		}
 
-		// Store validator
-		const storeResult = storeValidatorSync(schema)(invalidInput);
-		expect(storeResult.ok).toBe(false);
-		if (!storeResult.ok) {
-			for (const issue of storeResult.issues) {
+		// Store — per-field validation produces issues with field-name paths
+		const store = createStore({
+			dirPath: tempDir,
+			fields: {
+				name: {
+					type: "string",
+					default: "",
+					validate: field(nameSchema),
+				},
+				age: {
+					type: "number",
+					default: 0,
+					validate: field(ageSchema),
+				},
+			},
+		});
+
+		try {
+			await store.write({ name: "", age: -5 });
+			expect.unreachable("Should have thrown");
+		} catch (err) {
+			const storeErr = err as CrustStoreError<"VALIDATION">;
+			for (const issue of storeErr.details.issues) {
 				expect(typeof issue.message).toBe("string");
 				expect(typeof issue.path).toBe("string");
 			}
 		}
 	});
 
-	it("all targets produce matching issue paths for the same invalid input", async () => {
+	it("standard core and prompt targets produce matching issue paths for the same invalid input", async () => {
 		const invalidInput = { name: "", age: -5 };
 
 		// Standard core
-		const coreResult = await validateStandard(schema, invalidInput);
+		const coreResult = await validateStandard(objectSchema, invalidInput);
 		const corePaths = !coreResult.ok
 			? coreResult.issues.map((i) => i.path)
 			: [];
@@ -779,30 +848,23 @@ describe("error shape consistency across targets", () => {
 		// Prompt parsePromptValue
 		let promptPaths: string[] = [];
 		try {
-			await parsePromptValue(schema, invalidInput);
+			await parsePromptValue(objectSchema, invalidInput);
 		} catch (err) {
 			const crustErr = err as CrustError<"VALIDATION">;
 			promptPaths = [...extractIssues(crustErr).map((i) => i.path)];
 		}
 
-		// Store validator
-		const storeResult = storeValidatorSync(schema)(invalidInput);
-		const storePaths = !storeResult.ok
-			? storeResult.issues.map((i) => i.path)
-			: [];
-
-		// All three should produce identical paths
+		// Core and prompt should produce identical paths
 		expect(corePaths).toEqual(promptPaths);
-		expect(corePaths).toEqual(storePaths);
 		expect(corePaths).toContain("name");
 		expect(corePaths).toContain("age");
 	});
 
-	it("all targets produce matching issue messages for the same invalid input", async () => {
+	it("standard core and prompt targets produce matching issue messages for the same invalid input", async () => {
 		const invalidInput = { name: "", age: -5 };
 
 		// Standard core
-		const coreResult = await validateStandard(schema, invalidInput);
+		const coreResult = await validateStandard(objectSchema, invalidInput);
 		const coreMessages = !coreResult.ok
 			? coreResult.issues.map((i) => i.message)
 			: [];
@@ -810,21 +872,14 @@ describe("error shape consistency across targets", () => {
 		// Prompt parsePromptValue
 		let promptMessages: string[] = [];
 		try {
-			await parsePromptValue(schema, invalidInput);
+			await parsePromptValue(objectSchema, invalidInput);
 		} catch (err) {
 			const crustErr = err as CrustError<"VALIDATION">;
 			promptMessages = [...extractIssues(crustErr).map((i) => i.message)];
 		}
 
-		// Store validator
-		const storeResult = storeValidatorSync(schema)(invalidInput);
-		const storeMessages = !storeResult.ok
-			? storeResult.issues.map((i) => i.message)
-			: [];
-
-		// All three should produce identical messages
+		// Core and prompt should produce identical messages
 		expect(coreMessages).toEqual(promptMessages);
-		expect(coreMessages).toEqual(storeMessages);
 	});
 
 	it("command and parsePromptValue throw same error code for validation failures", async () => {
@@ -857,41 +912,35 @@ describe("error shape consistency across targets", () => {
 		expect(commandErrorCode).toBe(promptErrorCode);
 	});
 
-	it("store VALIDATION error carries structured issues matching validator result", async () => {
-		const defaults = {
-			name: "" as string,
-			age: 0,
-		};
-
+	it("store VALIDATION error carries structured issues", async () => {
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: storeValidator(schema),
+			fields: {
+				name: {
+					type: "string",
+					default: "",
+					validate: field(nameSchema),
+				},
+				age: {
+					type: "number",
+					default: 0,
+					validate: field(ageSchema),
+				},
+			},
 		});
 
-		// Get raw validator issues
-		const validatorResult = storeValidatorSync(schema)({
-			name: "",
-			age: -5,
-		});
-		const validatorPaths = !validatorResult.ok
-			? validatorResult.issues.map((i) => i.path)
-			: [];
-
-		// Get store error issues
-		let storePaths: string[] = [];
 		try {
 			await store.write({ name: "", age: -5 });
+			expect.unreachable("Should have thrown");
 		} catch (err) {
 			const storeErr = err as CrustStoreError<"VALIDATION">;
-			storePaths = [
-				...storeErr.details.issues.map(
-					(i: { message: string; path: string }) => i.path,
-				),
-			];
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			const paths = storeErr.details.issues.map(
+				(i: { message: string; path: string }) => i.path,
+			);
+			expect(paths).toContain("name");
+			expect(paths).toContain("age");
 		}
-
-		expect(storePaths).toEqual(validatorPaths);
 	});
 });
 
@@ -930,26 +979,24 @@ describe("sync and async parity", () => {
 		}
 	});
 
-	it("storeValidator and storeValidatorSync produce identical success results", async () => {
-		const asyncResult = await storeValidator(schema)(validInput);
-		const syncResult = storeValidatorSync(schema)(validInput);
+	it("field and fieldSync produce identical behavior for valid input", async () => {
+		const hostSchema = z.string().min(1);
+		const asyncValidate = field(hostSchema);
+		const syncValidate = fieldSync(hostSchema);
 
-		expect(asyncResult.ok).toBe(true);
-		expect(syncResult.ok).toBe(true);
-		if (asyncResult.ok && syncResult.ok) {
-			expect(asyncResult.value).toEqual(syncResult.value);
-		}
+		// Both should succeed (not throw)
+		await expect(asyncValidate("localhost")).resolves.toBeUndefined();
+		expect(syncValidate("localhost")).toBeUndefined();
 	});
 
-	it("storeValidator and storeValidatorSync produce identical failure results", async () => {
-		const asyncResult = await storeValidator(schema)(invalidInput);
-		const syncResult = storeValidatorSync(schema)(invalidInput);
+	it("field and fieldSync produce identical behavior for invalid input", async () => {
+		const hostSchema = z.string().min(1);
+		const asyncValidate = field(hostSchema);
+		const syncValidate = fieldSync(hostSchema);
 
-		expect(asyncResult.ok).toBe(false);
-		expect(syncResult.ok).toBe(false);
-		if (!asyncResult.ok && !syncResult.ok) {
-			expect(asyncResult.issues).toEqual(syncResult.issues);
-		}
+		// Both should throw
+		await expect(asyncValidate("")).rejects.toThrow();
+		expect(() => syncValidate("")).toThrow();
 	});
 
 	it("parsePromptValue and parsePromptValueSync produce identical success values", async () => {
@@ -1049,12 +1096,8 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 	});
 
 	it("validates same data through command → prompt parse → store persist", async () => {
-		// Shared schema: a theme configuration
+		// Shared schemas
 		const themeSchema = z.enum(["light", "dark"]);
-		const configSchema = z.object({
-			theme: z.enum(["light", "dark"]),
-			retries: z.number().int().positive(),
-		});
 
 		// 1. Command validation: theme arrives as a CLI arg
 		const received = capture<{ args: unknown }>();
@@ -1076,16 +1119,21 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		);
 		expect(retries).toBe(5);
 
-		// 3. Store validation: combine and persist
-		const defaults = {
-			theme: "light" as string,
-			retries: 3,
-		};
-
+		// 3. Store validation: combine and persist with per-field validators
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: storeValidator(configSchema),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: field(themeSchema),
+				},
+				retries: {
+					type: "number",
+					default: 3,
+					validate: field(z.number().int().positive()),
+				},
+			},
 		});
 
 		await store.write({ theme: commandTheme, retries });
@@ -1096,10 +1144,6 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 
 	it("rejects invalid data at each stage consistently", async () => {
 		const themeSchema = z.enum(["light", "dark"]);
-		const configSchema = z.object({
-			theme: z.enum(["light", "dark"]),
-			retries: z.number().int().positive(),
-		});
 
 		// 1. Command rejects invalid theme
 		const cmd = defineCommand({
@@ -1126,20 +1170,25 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		}
 
 		// 3. Store rejects invalid config
-		const defaults = {
-			theme: "light" as string,
-			retries: 3,
-		};
-
 		const store = createStore({
 			dirPath: tempDir,
-			defaults,
-			validator: storeValidator(configSchema),
+			fields: {
+				theme: {
+					type: "string",
+					default: "light",
+					validate: field(themeSchema),
+				},
+				retries: {
+					type: "number",
+					default: 3,
+					validate: field(z.number().int().positive()),
+				},
+			},
 		});
 
 		try {
 			await store.write({
-				theme: "blue" as "light",
+				theme: "blue" as unknown as string,
 				retries: -1,
 			});
 			expect.unreachable("Store should have thrown");

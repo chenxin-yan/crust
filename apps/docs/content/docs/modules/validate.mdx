@@ -5,7 +5,7 @@ description: Standard Schema-based validation for CLI arguments, flags, prompts,
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/validate` provides schema-first validation and coercion for Crust commands, prompts, and stores. It is built on the [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema) — any schema library that implements this spec works with the prompt and store adapters out of the box.
+`@crustjs/validate` provides schema-first validation for Crust commands, prompts, and stores. It is built on the [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema) — any schema library that implements this spec works with the prompt and store adapters out of the box.
 
 For command validation, provider-specific entrypoints offer `arg()` / `flag()` helpers and `commandValidator()` middleware that derive CLI metadata (type, required, description, variadic) from the schema automatically — single source of truth.
 
@@ -44,6 +44,19 @@ bun add effect
 3. You pass these definitions to `defineCommand` and use `commandValidator()` as the `run` handler.
 4. At runtime, after Crust parses argv, the middleware validates and transforms each value through its schema before calling your handler.
 5. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
+
+### Transformation Behavior
+
+Transformation support differs by target:
+
+| Target / API | Validates | Applies schema transforms to returned value |
+| --- | --- | --- |
+| `commandValidator` | Yes | Yes |
+| `promptValidator` | Yes | No (returns `true` or error string only) |
+| `parsePromptValue` / `parsePromptValueSync` | Yes | Yes |
+| `field` / `fieldSync` (store fields) | Yes | No (validation-only adapter) |
+
+So command middleware can transform handler inputs, and prompt parsing can transform parsed prompt values. Store field adapters only validate; they do not write transformed schema outputs back into store state.
 
 Descriptions for help text are provided directly on the schema using the validator's native API (`.describe()` for Zod, `.annotations()` for Effect). The framework automatically extracts descriptions even through wrappers like `.optional()`, `.default()`, and `.transform()`.
 
@@ -140,7 +153,7 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 | `InferValidatedArgs<A>`         | type     | Infer validated args from definitions                 |
 | `InferValidatedFlags<F>`        | type     | Infer validated flags from definitions                |
 
-Prompt and store adapters (`promptValidator`, `parsePromptValue`, `parsePromptValueSync`, `storeValidator`, `storeValidatorSync`) are also re-exported — see [Prompt Validation](#prompt-validation) and [Store Validation](#store-validation). Zod 4 implements Standard Schema natively, so no wrapping is needed.
+Prompt and store adapters (`promptValidator`, `parsePromptValue`, `parsePromptValueSync`, `field`, `fieldSync`) are also re-exported — see [Prompt Validation](#prompt-validation) and [Store Validation](#store-validation). Zod 4 implements Standard Schema natively, so no wrapping is needed.
 
 ---
 
@@ -272,6 +285,8 @@ const name = await input({
 | --------------- | -------------------- | --------- | ---------------------------------------------- |
 | `errorStrategy` | `"first"` \| `"all"` | `"first"` | Show first issue only, or all issues as a list |
 
+`promptValidator` does validation only. It does not transform prompt values.
+
 ### `parsePromptValue(schema, value)` / `parsePromptValueSync`
 
 Parse a prompt answer through a schema and return the typed output. Useful for coercion (e.g. string to number). Throws `CrustError("VALIDATION")` on failure. The sync variant throws `TypeError` if the schema returns a Promise.
@@ -294,30 +309,39 @@ const port = await parsePromptValue(z.coerce.number().int().positive(), raw);
 
 ## Store Validation
 
-Validate store config objects with schema-driven validation. These adapters accept any Standard Schema v1 compatible schema and return functions matching the `StoreValidator<T>` contract from [`@crustjs/store`](/docs/modules/store).
+Validate store fields with schema-driven validation. These adapters accept any Standard Schema v1 compatible schema and return functions for use with the per-field `validate` option in [`@crustjs/store`](/docs/modules/store).
 
 Available from all three entrypoints: `@crustjs/validate/zod`, `@crustjs/validate/effect`, and `@crustjs/validate/standard`. Any Standard Schema library works directly.
 
-### `storeValidator(schema)` / `storeValidatorSync`
+### `field(schema)` / `fieldSync`
 
-Returns a validator function for use with `createStore`'s `validator` option. Returns `{ ok: true, value }` on success or `{ ok: false, issues }` on failure. The sync variant throws `TypeError` if the schema returns a Promise.
+Returns a validator function for use with a field's `validate` option. It returns `void` on success and throws on failure. The sync variant throws `TypeError` if the schema returns a Promise.
 
 ```ts
-import { storeValidator } from "@crustjs/validate/zod";
+import { field } from "@crustjs/validate/zod";
 import { createStore, configDir } from "@crustjs/store";
 import { z } from "zod";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
-  defaults: { theme: "light" as const, verbose: false },
-  validator: storeValidator(
-    z.object({ theme: z.enum(["light", "dark"]), verbose: z.boolean() }),
-  ),
+  fields: {
+    theme: {
+      type: "string",
+      default: "light",
+      validate: field(z.enum(["light", "dark"])),
+    },
+    verbose: { type: "boolean", default: false },
+  },
 });
 ```
 
 <Callout>
-  Effect schemas must be wrapped with `Schema.standardSchemaV1()` before passing to store adapters.
+  Effect schemas must be wrapped with `Schema.standardSchemaV1()` before passing to field adapters.
+</Callout>
+
+<Callout>
+  Store field adapters are validation-only. If your schema has transforms/coercions,
+  those transformed outputs are not written back into store state by `field()` / `fieldSync()`.
 </Callout>
 
 ---
@@ -376,8 +400,8 @@ The `@crustjs/validate/standard` entrypoint provides prompt and store adapters t
 | `promptValidator`        | function | Convert a Standard Schema into a prompt validate function        |
 | `parsePromptValue`       | function | Parse a prompt answer through a schema (async)                   |
 | `parsePromptValueSync`   | function | Parse a prompt answer through a schema (sync)                    |
-| `storeValidator`         | function | Convert a Standard Schema into an async store validator          |
-| `storeValidatorSync`     | function | Convert a Standard Schema into a sync store validator            |
+| `field`                  | function | Convert a Standard Schema into an async field validator          |
+| `fieldSync`              | function | Convert a Standard Schema into a sync field validator            |
 | `StandardSchema`         | type     | Standard Schema v1-compatible schema type alias                  |
 | `InferInput<S>`          | type     | Infer input type from a Standard Schema                          |
 | `InferOutput<S>`         | type     | Infer output type from a Standard Schema                         |
