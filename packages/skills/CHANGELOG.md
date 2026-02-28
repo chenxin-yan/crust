@@ -1,5 +1,12 @@
 # @crustjs/skills
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [81608ea]
+  - @crustjs/prompts@0.0.7
+
 ## 0.0.6
 
 ### Patch Changes
