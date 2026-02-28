@@ -1,5 +1,28 @@
 # @crustjs/skills
 
+## 0.0.8
+
+### Patch Changes
+
+- f7d68ea: Support non-interactive mode for the `skill` command.
+
+  - Detect TTY and conditionally pass `initial` to prompts so the command works in CI/piped environments.
+  - In non-interactive mode, install skills to all detected agents automatically.
+  - In non-interactive mode, skip conflict overwrite (safe default).
+
+- 8c87b69: Refactor skill plugin: remove `autoInstall`, keep auto-update, polish UI.
+
+  - Remove `autoInstall` option — the plugin now only auto-updates already-installed skills. First-time installation should be done via the interactive `skill` subcommand or programmatically using the exported primitives (`detectInstalledAgents`, `skillStatus`, `generateSkill`).
+  - Move auto-update logic from middleware to setup phase, making it independent of plugin registration order.
+  - Add scope-aware agent detection: `detectInstalledAgents()` now respects the configured scope (`global` or `project`) with fallback from project to global roots.
+  - Accept options object in `detectInstalledAgents()` with backwards-compatible string parameter support.
+  - Skip auto-update during build validation mode (`CRUST_INTERNAL_VALIDATE_ONLY`).
+  - Use spinner from `@crustjs/prompts` for auto-update messages instead of raw `console.log`.
+  - Style interactive command output with `@crustjs/style` (`bold`, `dim`, `yellow`).
+  - Replace hardcoded defaults with `DEFAULT_SKILL_COMMAND_NAME` and `DEFAULT_SKILL_SCOPE` constants.
+  - Move `@crustjs/prompts` and `@crustjs/style` from peer to direct dependencies.
+  - Fix incorrect `skillPlugin()` JSDoc example that placed `plugins` inside `defineCommand()` instead of `runMain()`.
+
 ## 0.0.7
 
 ### Patch Changes
