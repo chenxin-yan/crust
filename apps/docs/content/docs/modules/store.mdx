@@ -7,6 +7,10 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 `@crustjs/store` gives your CLI production-ready local persistence with near-zero setup. Provide a defaults object, pick a storage intent, and get a typed store with read/write/update/patch/reset — no manual type annotations needed.
 
+<Callout>
+  For schema-based store validation, use `storeValidator()` from [`@crustjs/validate`](/docs/modules/validate#store-validation) to create a `validator` from a Zod, Effect, or any Standard Schema-compatible schema.
+</Callout>
+
 ## Install
 
 ```sh
@@ -159,7 +163,7 @@ const store = createStore(options);
 | `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.            |
 | `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`). |
 | `defaults`     | `T`                        | Yes      | Default values defining the store's data shape and fallbacks.     |
-| `validate`     | `(state: T) => void \| Promise<void>` | No | Validation function called before `write`, `update`, and `patch`. |
+| `validator`    | `StoreValidator<T>`            | No       | Validator function applied during `read`, `write`, `update`, and `patch`. Returns `{ ok, value }` or `{ ok: false, issues }`. Use `storeValidator()` from `@crustjs/validate` to create one from a schema. |
 | `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).             |
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
@@ -176,7 +180,9 @@ const state = await store.read();
 
 Always returns a complete `T` — never `undefined`. Does not write merged defaults back to disk.
 
-**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `IO` code on filesystem failure.
+When a `validator` is configured, the merged config is validated after defaults are applied. Invalid persisted config fails loudly. The validator may transform the value (e.g. via schema coercion).
+
+**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
 
 ### `store.write(state)`
 
@@ -186,7 +192,7 @@ Atomically persists a full state object. The entire previous state is replaced. 
 await store.write({ ui: { theme: "dark", fontSize: 14 }, verbose: true });
 ```
 
-**Throws:** `CrustStoreError` with `VALIDATION` if `validate` rejects, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `IO` on filesystem failure.
 
 ### `store.update(updater)`
 
@@ -201,7 +207,7 @@ await store.update((current) => ({
 
 When no persisted file exists, the updater receives `defaults` as the current value.
 
-**Throws:** `CrustStoreError` with `VALIDATION` if `validate` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
 ### `store.patch(partial)`
 
@@ -213,7 +219,7 @@ await store.patch({ ui: { theme: "solarized" } });
 
 Arrays are replaced wholesale (not merged element-by-element).
 
-**Throws:** `CrustStoreError` with `VALIDATION` if `validate` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if `validator` rejects, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
 ### `store.reset()`
 
@@ -261,16 +267,21 @@ const state = await store.read();
 
 ## Validation
 
-Add a `validate` function to check state before it's written to disk:
+Add a `validator` function to check state during read, write, update, and patch operations. The validator follows a result-based contract — returning `{ ok: true, value }` on success or `{ ok: false, issues }` on failure:
 
 ```ts
 const store = createStore({
   dirPath: configDir("my-cli"),
   defaults: { port: 3000, host: "localhost" as string },
-  validate(state) {
+  validator(value) {
+    const state = value as { port: number; host: string };
     if (state.port < 1 || state.port > 65535) {
-      throw new Error("port must be between 1 and 65535");
+      return {
+        ok: false,
+        issues: [{ message: "port must be between 1 and 65535", path: "port" }],
+      };
     }
+    return { ok: true, value: state };
   },
 });
 
@@ -278,18 +289,38 @@ const store = createStore({
 await store.write({ port: 0, host: "localhost" });
 ```
 
-`validate` is called on `write`, `update`, and `patch` — never on `read` or `reset`. If the validator throws, the state is not persisted and the error is wrapped in a `CrustStoreError` with `VALIDATION` code.
+### Schema-Based Validation
+
+For schema-driven validation, use `storeValidator()` from `@crustjs/validate` to create a validator from a Zod, Effect, or any Standard Schema-compatible schema:
+
+```ts
+import { storeValidator } from "@crustjs/validate/zod";
+import { z } from "zod";
+
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  defaults: { port: 3000, host: "localhost" as string },
+  validator: storeValidator(
+    z.object({
+      port: z.number().int().min(1).max(65535),
+      host: z.string().min(1),
+    }),
+  ),
+});
+```
+
+`validator` is called on `read`, `write`, `update`, and `patch` — never on `reset`. If the validator returns a failure result, the operation is aborted and a `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
 
 ## Error Handling
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                 |
-| ------------ | ------------------------------------------------------- | ----------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`     |
-| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`     |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`  |
-| `VALIDATION` | `validate` function rejected the state                  | `{ operation }`        |
+| Code         | When                                                    | Details                          |
+| ------------ | ------------------------------------------------------- | -------------------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`              |
+| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`              |
+| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`           |
+| `VALIDATION` | `validator` function rejected the state                 | `{ operation, issues }`         |
 
 ### Catching Errors
 
@@ -323,13 +354,26 @@ if (err instanceof CrustStoreError && err.is("IO")) {
 }
 ```
 
-### Cause Chaining
+### Validation Error Details
 
-`CrustStoreError` preserves the original error as `cause`:
+`VALIDATION` errors include structured issues for programmatic handling:
 
 ```ts
 if (err instanceof CrustStoreError && err.is("VALIDATION")) {
-  console.error("Validation error:", err.cause);
+  // err.details is { operation: string; issues: StoreValidatorIssue[] }
+  for (const issue of err.details.issues) {
+    console.error(`${issue.path}: ${issue.message}`);
+  }
+}
+```
+
+### Cause Chaining
+
+`CrustStoreError` preserves the original error as `cause` via the `.withCause()` method:
+
+```ts
+if (err instanceof CrustStoreError) {
+  console.error("Original error:", err.cause);
 }
 ```
 
@@ -353,14 +397,20 @@ if (err instanceof CrustStoreError && err.is("VALIDATION")) {
 
 ### Types
 
-| Type                 | Description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| `CreateStoreOptions` | Options object for `createStore()`.                             |
-| `Store`              | Store instance with `read`, `write`, `update`, `patch`, `reset`.|
-| `StoreUpdater`       | Updater function type `(current: T) => T`.                      |
-| `StoreErrorCode`     | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`. |
-| `PlatformEnv`        | Injectable platform environment for testing path helpers.       |
-| `CrustStoreError`    | Typed error class with `code`, `details`, and `cause`.          |
+| Type                      | Description                                                                 |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `CreateStoreOptions`      | Options object for `createStore()`.                                         |
+| `Store`                   | Store instance with `read`, `write`, `update`, `patch`, `reset`.            |
+| `StoreUpdater`            | Updater function type `(current: T) => T`.                                  |
+| `StoreValidator`          | Validator function type `(value: unknown) => StoreValidatorResult<T>`.      |
+| `StoreValidatorResult`    | Discriminated union: `StoreValidatorSuccess<T> \| StoreValidatorFailure`.   |
+| `StoreValidatorSuccess`   | Success result with `{ ok: true, value: T }`.                               |
+| `StoreValidatorFailure`   | Failure result with `{ ok: false, issues: StoreValidatorIssue[] }`.         |
+| `StoreValidatorIssue`     | Issue object with `{ message: string, path: string }`.                      |
+| `ValidationErrorDetails`  | Details for `VALIDATION` errors: `{ operation, issues }`.                   |
+| `StoreErrorCode`          | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.         |
+| `PlatformEnv`             | Injectable platform environment for testing path helpers.                   |
+| `CrustStoreError`         | Typed error class with `code`, `details`, and `cause`.                      |
 
 ## Design
 
