@@ -5,10 +5,19 @@
 import type { AnyCommand, CrustPlugin } from "@crustjs/core";
 import { defineCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { confirm, multiselect, spinner } from "@crustjs/prompts";
+import { bold, dim, yellow } from "@crustjs/style";
 import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
+import {
+	generateSkill,
+	resolveSkillName,
+	skillStatus,
+	uninstallSkill,
+} from "./generate.ts";
 import type { AgentTarget, SkillMeta, SkillPluginOptions } from "./types.ts";
+
+const DEFAULT_SKILL_COMMAND_NAME = "skill";
+const DEFAULT_SKILL_SCOPE = "global";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -37,7 +46,7 @@ async function autoSyncSkills(
 	rootCmd: AnyCommand,
 	options: SkillPluginOptions,
 ): Promise<void> {
-	const scope = options.scope ?? "global";
+	const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
 	const agents = await detectInstalledAgents({ scope });
 	if (agents.length === 0) {
 		return;
@@ -64,44 +73,58 @@ async function autoSyncSkills(
 	}
 
 	try {
-		const result = await generateSkill({
-			command: rootCmd,
-			meta,
-			agents: needsUpdate.map((a) => a.agent),
-			scope: options.scope,
+		await spinner({
+			message: "Syncing skills...",
+			task: async ({ updateMessage }) => {
+				const res = await generateSkill({
+					command: rootCmd,
+					meta,
+					agents: needsUpdate.map((a) => a.agent),
+					scope: options.scope,
+				});
+
+				const installedAgents = res.agents
+					.filter((a) => a.status === "installed")
+					.map((a) => AGENT_LABELS[a.agent]);
+				const updatedAgents = res.agents
+					.filter((a) => a.status === "updated")
+					.map((a) => AGENT_LABELS[a.agent]);
+
+				const parts: string[] = [];
+				if (installedAgents.length > 0) {
+					parts.push(
+						`Installed skill "${resolveSkillName(meta.name)}" v${meta.version} for ${installedAgents.join(", ")}`,
+					);
+				}
+				if (updatedAgents.length > 0) {
+					parts.push(
+						`Updated skill "${resolveSkillName(meta.name)}" to v${meta.version} for ${updatedAgents.join(", ")}`,
+					);
+				}
+
+				let finalMessage = parts.join(". ");
+				if (installedAgents.length > 0 && options.command !== false) {
+					const skillCommandName =
+						typeof options.command === "string"
+							? options.command
+							: DEFAULT_SKILL_COMMAND_NAME;
+					const manageCommand = `${rootCmd.meta.name} ${skillCommandName}`;
+					finalMessage += `. Manage with \`${manageCommand}\``;
+				}
+
+				updateMessage(finalMessage);
+				return res;
+			},
 		});
-
-		const installedAgents = result.agents
-			.filter((a) => a.status === "installed")
-			.map((a) => AGENT_LABELS[a.agent]);
-		const updatedAgents = result.agents
-			.filter((a) => a.status === "updated")
-			.map((a) => AGENT_LABELS[a.agent]);
-
-		if (installedAgents.length > 0) {
-			if (options.command !== false) {
-				const manageCommand = `${rootCmd.meta.name} skill`;
-				console.log(
-					`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}. Manage with \`${manageCommand}\`.`,
-				);
-			} else {
-				console.log(
-					`Auto-installed skill "${meta.name}" v${meta.version} for ${installedAgents.join(", ")}.`,
-				);
-			}
-		}
-
-		if (updatedAgents.length > 0) {
-			console.log(
-				`Updated skill "${meta.name}" to v${meta.version} for ${updatedAgents.join(", ")}.`,
-			);
-		}
 	} catch (err) {
 		if (err instanceof SkillConflictError) {
+			// Spinner already showed the error indicator; log the conflict detail
 			console.warn(
-				`Skill conflict: "${err.details.outputDir}" already exists ` +
-					`but was not created by ${meta.name}. Skipping auto-update. ` +
-					`Delete or rename the conflicting skill to resolve.`,
+				yellow(
+					`Skill conflict: "${err.details.outputDir}" already exists ` +
+						`but was not created by ${meta.name}. Skipping auto-update. ` +
+						`Delete or rename the conflicting skill to resolve.`,
+				),
 			);
 		} else {
 			throw err;
@@ -169,7 +192,9 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 		async setup(context, actions) {
 			rootCmd = context.rootCommand;
 			const skillCommandName =
-				typeof options.command === "string" ? options.command : "skill";
+				typeof options.command === "string"
+					? options.command
+					: DEFAULT_SKILL_COMMAND_NAME;
 
 			// Inject interactive skill command unless explicitly disabled
 			if (options.command !== false) {
@@ -216,12 +241,12 @@ function buildSkillCommand(
 ): AnyCommand {
 	return defineCommand({
 		meta: {
-			name: "skill",
+			name: DEFAULT_SKILL_COMMAND_NAME,
 			description: "Manage agent skill installations",
 		},
 		async run() {
 			const meta = deriveSkillMeta(rootCmd, options.version);
-			const scope = options.scope ?? "global";
+			const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
 
 			// Detect installed agents
 			const detectedAgents = await detectInstalledAgents({
@@ -229,7 +254,9 @@ function buildSkillCommand(
 			});
 			if (detectedAgents.length === 0) {
 				console.log(
-					"No supported agents detected. Install Claude Code or OpenCode first.",
+					yellow(
+						"No supported agents detected. Install Claude Code or OpenCode first.",
+					),
 				);
 				return;
 			}
@@ -295,9 +322,9 @@ function buildSkillCommand(
 							}),
 					});
 
-					console.log(`\nInstalled "${meta.name}" v${meta.version}`);
+					console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
 					for (const r of result.agents) {
-						console.log(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`);
+						console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
 					}
 				} catch (err) {
 					if (err instanceof SkillConflictError) {
@@ -321,12 +348,14 @@ function buildSkillCommand(
 									}),
 							});
 
-							console.log(`\nInstalled "${meta.name}" v${meta.version}`);
+							console.log(
+								`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`,
+							);
 							for (const r of result.agents) {
-								console.log(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`);
+								console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
 							}
 						} else {
-							console.log(`\nSkipped ${AGENT_LABELS[err.details.agent]}`);
+							console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}`));
 						}
 					} else {
 						throw err;
@@ -351,13 +380,13 @@ function buildSkillCommand(
 					.map((a) => AGENT_LABELS[a.agent]);
 
 				if (removed.length > 0) {
-					console.log(`\nRemoved from ${removed.join(", ")}`);
+					console.log(`\n${bold(`Removed from ${removed.join(", ")}`)}`);
 				}
 			}
 
 			// No changes
 			if (agentsToGenerate.length === 0 && toUninstall.length === 0) {
-				console.log("No changes.");
+				console.log(dim("No changes."));
 			}
 		},
 	});

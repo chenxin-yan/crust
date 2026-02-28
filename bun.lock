@@ -137,15 +137,17 @@
     "packages/skills": {
       "name": "@crustjs/skills",
       "version": "0.0.7",
+      "dependencies": {
+        "@crustjs/prompts": "workspace:*",
+        "@crustjs/style": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
-        "@crustjs/prompts": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:*",
-        "@crustjs/prompts": "workspace:*",
         "typescript": "catalog:",
       },
     },

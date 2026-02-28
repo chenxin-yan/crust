@@ -41,15 +41,17 @@
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},
+	"dependencies": {
+		"@crustjs/prompts": "workspace:*",
+		"@crustjs/style": "workspace:*"
+	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
-		"@crustjs/prompts": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:*",
-		"@crustjs/prompts": "workspace:*",
 		"typescript": "catalog:"
 	}
 }
