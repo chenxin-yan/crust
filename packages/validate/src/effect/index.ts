@@ -24,14 +24,9 @@ export { commandValidator } from "./command.ts";
 export { arg, flag } from "./schema.ts";
 // Public types
 export type {
-	ArgOptions,
 	CommandValidatorHandler,
 	EffectArgDef,
 	EffectFlagDef,
-	EffectSchemaLike,
-	FlagOptions,
-	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
-	ParserMeta,
 } from "./types.ts";

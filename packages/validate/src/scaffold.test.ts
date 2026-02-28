@@ -12,13 +12,6 @@ describe("@crustjs/validate scaffold", () => {
 	it("standard entrypoint is importable", async () => {
 		const mod = await import("./standard/index.ts");
 		expect(mod).toBeDefined();
-		expect(typeof mod.isStandardSchema).toBe("function");
-		expect(typeof mod.validateStandard).toBe("function");
-		expect(typeof mod.validateStandardSync).toBe("function");
-		expect(typeof mod.normalizeStandardIssues).toBe("function");
-		expect(typeof mod.normalizeStandardPath).toBe("function");
-		expect(typeof mod.success).toBe("function");
-		expect(typeof mod.failure).toBe("function");
 		expect(typeof mod.promptValidator).toBe("function");
 		expect(typeof mod.parsePromptValue).toBe("function");
 		expect(typeof mod.parsePromptValueSync).toBe("function");
@@ -30,18 +23,11 @@ describe("@crustjs/validate scaffold", () => {
 		const mod = await import("./standard/index.ts");
 		const exports = Object.keys(mod).sort();
 		expect(exports).toEqual([
-			"failure",
-			"isStandardSchema",
-			"normalizeStandardIssues",
-			"normalizeStandardPath",
 			"parsePromptValue",
 			"parsePromptValueSync",
 			"promptValidator",
 			"storeValidator",
 			"storeValidatorSync",
-			"success",
-			"validateStandard",
-			"validateStandardSync",
 		]);
 	});
 

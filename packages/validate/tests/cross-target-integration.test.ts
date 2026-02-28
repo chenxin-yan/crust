@@ -35,9 +35,11 @@ import {
 	promptValidator,
 	storeValidator,
 	storeValidatorSync,
+} from "../src/standard/index.ts";
+import {
 	validateStandard,
 	validateStandardSync,
-} from "../src/standard/index.ts";
+} from "../src/standard/validate.ts";
 import {
 	arg as zodArg,
 	commandValidator as zodCommandValidator,

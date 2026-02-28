@@ -139,10 +139,6 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 | `ZodArgDef<N, S, V, T>`  | `ArgDef` enriched with hidden Zod schema metadata  |
 | `ZodFlagDef<S, A, T>`    | `FlagDef` enriched with hidden Zod schema metadata |
 | `WithZodHandler<A, F>`   | Handler type receiving `ValidatedContext`          |
-| `ArgOptions`             | Options for `arg()` (`variadic`)                   |
-| `FlagOptions`            | Options for `flag()` (`alias`)                     |
-| `ZodSchemaLike`          | Zod schema type constraint                         |
-| `InferSchemaOutput<S>`   | Infer output type from a Zod schema                |
 | `InferValidatedArgs<A>`  | Infer validated args object from arg definitions   |
 | `InferValidatedFlags<F>` | Infer validated flags object from flag definitions |
 
@@ -251,10 +247,6 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 | `EffectArgDef<N, S, V, T>` | `ArgDef` enriched with hidden Effect schema metadata  |
 | `EffectFlagDef<S, A, T>`   | `FlagDef` enriched with hidden Effect schema metadata |
 | `WithEffectHandler<A, F>`  | Handler type receiving `ValidatedContext`             |
-| `ArgOptions`               | Options for `arg()` (`variadic`)                      |
-| `FlagOptions`              | Options for `flag()` (`alias`)                        |
-| `EffectSchemaLike`         | Effect schema type constraint (`R = never`)           |
-| `InferSchemaOutput<S>`     | Infer output type from an Effect schema               |
 | `InferValidatedArgs<A>`    | Infer validated args object from arg definitions      |
 | `InferValidatedFlags<F>`   | Infer validated flags object from flag definitions    |
 

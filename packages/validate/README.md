@@ -13,8 +13,8 @@ The validation platform is organized around a **Standard Schema-first** core:
 ```
 ┌──────────────────────────────────────────────────────┐
 │  @crustjs/validate/standard                          │
-│  Core: validateStandard(), issue normalization,       │
-│        result contracts, target adapters              │
+│  Core: prompt adapters, store adapters,               │
+│        result contracts                               │
 ├────────────────────┬─────────────────────────────────┤
 │  /zod              │  /effect                        │
 │  arg(), flag(),    │  arg(), flag(),                 │
@@ -24,7 +24,7 @@ The validation platform is organized around a **Standard Schema-first** core:
 └────────────────────┴─────────────────────────────────┘
 ```
 
-- **`@crustjs/validate/standard`** — Provider-agnostic runtime: schema execution, issue normalization, prompt adapters, store adapters.
+- **`@crustjs/validate/standard`** — Provider-agnostic runtime: prompt adapters, store adapters, result contracts.
 - **`@crustjs/validate/zod`** and **`@crustjs/validate/effect`** — Provider-specific command DSL (`arg`, `flag`, middleware) plus re-exported prompt and store adapters.
 - **`@crustjs/validate`** — Shared type-only contracts (`ValidatedContext`, `ValidationIssue`).
 
@@ -194,7 +194,7 @@ flag(z.string().optional(), { required: false, description: "API key" });
 - `type` and `required`: Explicit value takes priority. If both explicit and inferred values exist and **conflict**, a `DEFINITION` error is thrown to prevent stale metadata.
 - `description`: Explicit always wins without conflict checks (descriptions are additive).
 
-Both Zod and Effect providers export `ParserMeta`, `ArgOptions`, and `FlagOptions` types.
+The `ArgOptions` and `FlagOptions` interfaces (extending `ParserMeta`) are used internally by `arg()` and `flag()` — explicit overrides are passed as inline option objects.
 
 ### Strict mode
 
@@ -373,8 +373,6 @@ import type {
 	InferInput,
 	InferOutput,
 	ValidationResult,
-	ValidationSuccess,
-	ValidationFailure,
 	PromptErrorStrategy,
 	PromptValidatorOptions,
 } from "@crustjs/validate/standard";
@@ -384,18 +382,11 @@ import type {
 
 ```ts
 import type {
-	ZodSchemaLike,
 	ZodArgDef,
 	ZodFlagDef,
-	ArgOptions,
-	FlagOptions,
-	ParserMeta,
-	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
 	CommandValidatorHandler,
-	PromptErrorStrategy,
-	PromptValidatorOptions,
 } from "@crustjs/validate/zod";
 ```
 
@@ -403,18 +394,11 @@ import type {
 
 ```ts
 import type {
-	EffectSchemaLike,
 	EffectArgDef,
 	EffectFlagDef,
-	ArgOptions,
-	FlagOptions,
-	ParserMeta,
-	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
 	CommandValidatorHandler,
-	PromptErrorStrategy,
-	PromptValidatorOptions,
 } from "@crustjs/validate/effect";
 ```
 

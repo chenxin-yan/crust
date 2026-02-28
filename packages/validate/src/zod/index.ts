@@ -20,14 +20,9 @@ export { commandValidator } from "./command.ts";
 export { arg, flag } from "./schema.ts";
 // Public types
 export type {
-	ArgOptions,
 	CommandValidatorHandler,
-	FlagOptions,
-	InferSchemaOutput,
 	InferValidatedArgs,
 	InferValidatedFlags,
-	ParserMeta,
 	ZodArgDef,
 	ZodFlagDef,
-	ZodSchemaLike,
 } from "./types.ts";
