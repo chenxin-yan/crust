@@ -4,6 +4,12 @@ import { encodedSchema, isSchema } from "effect/Schema";
 import type { AST } from "effect/SchemaAST";
 import { getDescriptionAnnotation } from "effect/SchemaAST";
 import {
+	resolveDescription as resolveDescriptionOption,
+	resolveRequired,
+	resolveType,
+	validateArgArrayShape,
+} from "../resolve-options.ts";
+import {
 	type ArgOptions,
 	EFFECT_SCHEMA,
 	type EffectArgDef,
@@ -358,72 +364,23 @@ export function arg<
 	const label = `arg "${name}"`;
 	const variadic = options?.variadic;
 	const inferredShape = tryResolveInputShape(schema, label);
-	const explicitType = options?.type;
 
-	// Resolve type: explicit > inferred
-	let resolvedType: "string" | "number" | "boolean";
-	let multiple: boolean;
+	const { type: resolvedType, multiple } = resolveType(
+		label,
+		inferredShape,
+		options?.type,
+	);
 
-	if (explicitType !== undefined) {
-		// Conflict detection: if introspection succeeds with a different type, error
-		if (inferredShape && inferredShape.type !== explicitType) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit type "${explicitType}" conflicts with schema-inferred type "${inferredShape.type}". Remove the explicit type or change the schema.`,
-			);
-		}
-		resolvedType = explicitType;
-		multiple = inferredShape?.multiple ?? false;
-	} else if (inferredShape) {
-		resolvedType = inferredShape.type;
-		multiple = inferredShape.multiple;
-	} else {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these, or provide an explicit { type } in options.`,
-		);
-	}
+	validateArgArrayShape(label, variadic, multiple, "Schema.Array(...)");
 
-	if (variadic && multiple) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: variadic args must use a scalar schema; do not wrap the schema in Schema.Array(...)`,
-		);
-	}
-
-	if (!variadic && multiple) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: array schema requires { variadic: true }`,
-		);
-	}
-
-	// Resolve description: explicit > inferred
 	const inferredDescription = resolveDescription(schema);
-	const description = options?.description ?? inferredDescription;
+	const description = resolveDescriptionOption(
+		options?.description,
+		inferredDescription,
+	);
 
-	// Resolve required: explicit > inferred
 	const inferredOptional = isOptionalInputSchema(schema);
-	let required: boolean;
-
-	if (options?.required !== undefined) {
-		// Conflict detection: explicit required vs schema optionality
-		if (options.required && inferredOptional) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit required: true conflicts with schema that accepts undefined. Remove the explicit required or change the schema.`,
-			);
-		}
-		if (!options.required && !inferredOptional) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit required: false conflicts with schema that does not accept undefined. Remove the explicit required or make the schema optional.`,
-			);
-		}
-		required = options.required;
-	} else {
-		required = !inferredOptional;
-	}
+	const required = resolveRequired(label, inferredOptional, options?.required);
 
 	const def = {
 		name,
@@ -482,58 +439,25 @@ export function flag<
 
 	const label = "flag";
 	const inferredShape = tryResolveInputShape(schema, label);
-	const explicitType = options?.type;
 
-	// Resolve type: explicit > inferred
-	let resolvedType: "string" | "number" | "boolean";
-	let multiple: boolean;
+	const { type: resolvedType, multiple } = resolveType(
+		label,
+		inferredShape,
+		options?.type,
+	);
 
-	if (explicitType !== undefined) {
-		// Conflict detection: if introspection succeeds with a different type, error
-		if (inferredShape && inferredShape.type !== explicitType) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit type "${explicitType}" conflicts with schema-inferred type "${inferredShape.type}". Remove the explicit type or change the schema.`,
-			);
-		}
-		resolvedType = explicitType;
-		multiple = inferredShape?.multiple ?? false;
-	} else if (inferredShape) {
-		resolvedType = inferredShape.type;
-		multiple = inferredShape.multiple;
-	} else {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: unsupported schema type for CLI parsing. Use string, number, boolean, enum/literal, or array of these, or provide an explicit { type } in options.`,
-		);
-	}
-
-	// Resolve description: explicit > inferred
 	const inferredDescription = resolveDescription(schema);
-	const description = options?.description ?? inferredDescription;
+	const description = resolveDescriptionOption(
+		options?.description,
+		inferredDescription,
+	);
 
-	// Resolve required: explicit > inferred
 	const inferredOptional = isOptionalInputSchema(schema);
-	let resolvedRequired: boolean;
-
-	if (options?.required !== undefined) {
-		// Conflict detection: explicit required vs schema optionality
-		if (options.required && inferredOptional) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit required: true conflicts with schema that accepts undefined. Remove the explicit required or change the schema.`,
-			);
-		}
-		if (!options.required && !inferredOptional) {
-			throw new CrustError(
-				"DEFINITION",
-				`${label}: explicit required: false conflicts with schema that does not accept undefined. Remove the explicit required or make the schema optional.`,
-			);
-		}
-		resolvedRequired = options.required;
-	} else {
-		resolvedRequired = !inferredOptional;
-	}
+	const resolvedRequired = resolveRequired(
+		label,
+		inferredOptional,
+		options?.required,
+	);
 
 	// Convert readonly alias to mutable for core FlagDef compatibility
 	const alias: string | string[] | undefined =

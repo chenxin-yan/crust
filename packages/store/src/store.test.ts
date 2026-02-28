@@ -1300,6 +1300,83 @@ describe("store.update with validator", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Store validation — patch path
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("store.patch with validator", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("should persist transformed value from validator on patch", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: transformingValidator,
+		});
+
+		await store.write({ theme: "light", verbose: false });
+		await store.patch({ theme: "dark" });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		// transformingValidator uppercases theme
+		expect(JSON.parse(raw)).toEqual({ theme: "DARK", verbose: false });
+	});
+
+	it("should throw VALIDATION error when patched config fails validation", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		await store.write({ theme: "dark", verbose: true });
+
+		try {
+			await store.patch({ theme: "neon" });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			const storeErr = err as CrustStoreError;
+			expect(storeErr.is("VALIDATION")).toBe(true);
+			if (storeErr.is("VALIDATION")) {
+				expect(storeErr.details.operation).toBe("patch");
+				expect(storeErr.details.issues[0]?.path).toBe("theme");
+			}
+		}
+	});
+
+	it("should not persist when patched config fails validation", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			defaults: BASIC_DEFAULTS,
+			validator: conditionalValidator,
+		});
+
+		await store.write({ theme: "dark", verbose: true });
+
+		try {
+			await store.patch({ theme: "neon" });
+		} catch {
+			// expected
+		}
+
+		// Original valid config should remain
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Store validation — reset path
 // ────────────────────────────────────────────────────────────────────────────
 

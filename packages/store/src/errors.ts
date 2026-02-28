@@ -37,16 +37,6 @@ export interface IOErrorDetails {
 }
 
 /**
- * A single validation issue reported by a store validator.
- *
- * Alias for {@link StoreValidatorIssue} — both names refer to the same
- * `{ message, path }` shape. `StoreValidationIssue` is used in error
- * details payloads, while `StoreValidatorIssue` appears in the
- * validator contract.
- */
-export type StoreValidationIssue = StoreValidatorIssue;
-
-/**
  * Contextual details attached to a `VALIDATION` error.
  *
  * Returned when a store validator rejects a config object during
@@ -56,7 +46,7 @@ export interface ValidationErrorDetails {
 	/** The store operation during which validation failed. */
 	operation: "read" | "write" | "update" | "patch";
 	/** Structured validation issues for programmatic handling. */
-	issues: readonly StoreValidationIssue[];
+	issues: readonly StoreValidatorIssue[];
 }
 
 /**

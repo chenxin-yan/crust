@@ -5,7 +5,6 @@
 // Errors
 export type {
 	StoreErrorCode,
-	StoreValidationIssue,
 	ValidationErrorDetails,
 } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";

@@ -2,7 +2,6 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { StoreValidationIssue } from "./errors.ts";
 import { CrustStoreError } from "./errors.ts";
 import { applyDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
@@ -12,7 +11,7 @@ import type {
 	DeepPartial,
 	Store,
 	StoreUpdater,
-	StoreValidator,
+	StoreValidatorIssue,
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -73,13 +72,13 @@ export function createStore<const T extends Record<string, unknown>>(
 	): Promise<T> {
 		if (!validator) return state;
 
-		const result = await (validator as StoreValidator<T>)(state);
+		const result = await validator(state);
 
 		if (result.ok) {
 			return result.value;
 		}
 
-		const issues: StoreValidationIssue[] = result.issues.map((issue) => ({
+		const issues: StoreValidatorIssue[] = result.issues.map((issue) => ({
 			message: issue.message,
 			path: issue.path,
 		}));
