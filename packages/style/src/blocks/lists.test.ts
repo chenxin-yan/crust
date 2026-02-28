@@ -160,6 +160,13 @@ describe("orderedList", () => {
 		const result = orderedList([styledItem]);
 		expect(result).toBe(`1. ${styledItem}`);
 	});
+
+	it("supports marker formatter", () => {
+		const result = orderedList(["alpha", "beta"], {
+			markerFormatter: bold,
+		});
+		expect(result).toBe(`${bold("1.")} alpha\n${bold("2.")} beta`);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

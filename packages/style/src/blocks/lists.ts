@@ -58,6 +58,12 @@ export interface OrderedListOptions {
 	 * @default 0
 	 */
 	indent?: number;
+
+	/**
+	 * Optional formatter applied to each computed marker (for example,
+	 * ANSI styling).
+	 */
+	markerFormatter?: (marker: string) => string;
 }
 
 /**
@@ -207,6 +213,7 @@ export function orderedList(
 	const start = options?.start ?? 1;
 	const markerGap = options?.markerGap ?? 1;
 	const indent = options?.indent ?? 0;
+	const markerFormatter = options?.markerFormatter;
 
 	if (items.length === 0) {
 		return "";
@@ -226,9 +233,12 @@ export function orderedList(
 			const markerText = `${index}.`;
 			// Right-pad the marker so narrower numbers align with wider ones
 			const paddedMarker = markerText.padStart(maxMarkerWidth, " ");
+			const marker = markerFormatter
+				? markerFormatter(paddedMarker)
+				: paddedMarker;
 			const contentIndent = indent + maxMarkerWidth + markerGap;
 			const adjusted = indentMultiline(item, contentIndent);
-			return `${prefix}${paddedMarker}${gap}${adjusted}`;
+			return `${prefix}${marker}${gap}${adjusted}`;
 		})
 		.join("\n");
 }

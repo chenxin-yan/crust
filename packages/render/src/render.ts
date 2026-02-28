@@ -2,7 +2,14 @@
 // Render — mdast-to-terminal tree walker
 // ────────────────────────────────────────────────────────────────────────────
 
-import { visibleWidth, wrapText } from "@crustjs/style";
+import {
+	orderedList as formatOrderedList,
+	table as formatTable,
+	taskList as formatTaskList,
+	unorderedList as formatUnorderedList,
+	visibleWidth,
+	wrapText,
+} from "@crustjs/style";
 import type {
 	Blockquote,
 	Code,
@@ -378,28 +385,18 @@ function renderList(node: List, ctx: RenderContext): string {
 function renderUnorderedList(items: ListItem[], ctx: RenderContext): string {
 	const { theme } = ctx;
 	const marker = theme.listMarker("•");
-	const markerWidth = visibleWidth(marker);
-	const gap = " ";
-	const prefix = `${marker}${gap}`;
-	const prefixWidth = markerWidth + gap.length;
-	const continuation = " ".repeat(prefixWidth);
+	const prefixWidth = visibleWidth(marker) + 1;
+	const renderedItems = items.map((item) =>
+		renderListItemContent(item, ctx, prefixWidth),
+	);
 
-	const renderedItems: string[] = [];
-
-	for (const item of items) {
-		const content = renderListItemContent(item, ctx, prefixWidth);
-		const lines = content.split("\n");
-		const indented = lines
-			.map((line, i) =>
-				i === 0
-					? `${ctx.indent}${prefix}${line}`
-					: `${ctx.indent}${continuation}${line}`,
-			)
-			.join("\n");
-		renderedItems.push(indented);
-	}
-
-	return renderedItems.join("\n");
+	return applyIndent(
+		formatUnorderedList(renderedItems, {
+			marker,
+			markerGap: 1,
+		}),
+		ctx.indent,
+	);
 }
 
 /**
@@ -415,38 +412,19 @@ function renderOrderedList(
 ): string {
 	const { theme } = ctx;
 	const maxNum = start + items.length - 1;
-	const maxMarkerWidth = visibleWidth(`${maxNum}.`);
+	const prefixWidth = visibleWidth(`${maxNum}.`) + 1;
+	const renderedItems = items.map((item) =>
+		renderListItemContent(item, ctx, prefixWidth),
+	);
 
-	const renderedItems: string[] = [];
-
-	for (let i = 0; i < items.length; i++) {
-		const item = items[i];
-		if (!item) continue;
-
-		const num = start + i;
-		const rawMarker = `${num}.`;
-		// Right-align the marker so all items align
-		const paddedMarker = rawMarker.padStart(maxMarkerWidth);
-		const marker = theme.orderedListMarker(paddedMarker);
-		const actualMarkerWidth = visibleWidth(marker);
-		const gap = " ";
-		const prefix = `${marker}${gap}`;
-		const prefixWidth = actualMarkerWidth + gap.length;
-		const continuation = " ".repeat(prefixWidth);
-
-		const content = renderListItemContent(item, ctx, prefixWidth);
-		const lines = content.split("\n");
-		const indented = lines
-			.map((line, j) =>
-				j === 0
-					? `${ctx.indent}${prefix}${line}`
-					: `${ctx.indent}${continuation}${line}`,
-			)
-			.join("\n");
-		renderedItems.push(indented);
-	}
-
-	return renderedItems.join("\n");
+	return applyIndent(
+		formatOrderedList(renderedItems, {
+			start,
+			markerGap: 1,
+			markerFormatter: theme.orderedListMarker,
+		}),
+		ctx.indent,
+	);
 }
 
 /**
@@ -456,34 +434,27 @@ function renderOrderedList(
  */
 function renderTaskList(items: ListItem[], ctx: RenderContext): string {
 	const { theme } = ctx;
+	const checkedMarker = theme.taskChecked("[x]");
+	const uncheckedMarker = theme.taskUnchecked("[ ]");
+	const prefixWidth =
+		Math.max(visibleWidth(checkedMarker), visibleWidth(uncheckedMarker)) + 1;
 
-	const renderedItems: string[] = [];
+	const renderedItems = items.map((item) =>
+		renderListItemContent(item, ctx, prefixWidth),
+	);
+	const taskItems = items.map((item, index) => ({
+		text: renderedItems[index] ?? "",
+		checked: item.checked === true,
+	}));
 
-	for (const item of items) {
-		const isChecked = item.checked === true;
-		const markerText = isChecked ? "[x]" : "[ ]";
-		const marker = isChecked
-			? theme.taskChecked(markerText)
-			: theme.taskUnchecked(markerText);
-		const markerWidth = visibleWidth(marker);
-		const gap = " ";
-		const prefix = `${marker}${gap}`;
-		const prefixWidth = markerWidth + gap.length;
-		const continuation = " ".repeat(prefixWidth);
-
-		const content = renderListItemContent(item, ctx, prefixWidth);
-		const lines = content.split("\n");
-		const indented = lines
-			.map((line, i) =>
-				i === 0
-					? `${ctx.indent}${prefix}${line}`
-					: `${ctx.indent}${continuation}${line}`,
-			)
-			.join("\n");
-		renderedItems.push(indented);
-	}
-
-	return renderedItems.join("\n");
+	return applyIndent(
+		formatTaskList(taskItems, {
+			checkedMarker,
+			uncheckedMarker,
+			markerGap: 1,
+		}),
+		ctx.indent,
+	);
 }
 
 /**
@@ -540,7 +511,11 @@ function renderTable(node: Table, ctx: RenderContext): string {
 	const bodyRows = rows.slice(1);
 
 	// Column alignment from the table node
-	const alignments = node.align ?? [];
+	const alignments = (node.align ?? []).map((align) =>
+		align === "left" || align === "center" || align === "right"
+			? align
+			: "left",
+	);
 
 	// Extract and render cell contents
 	const headerCells = (headerRow.children as TableCell[]).map((cell) =>
@@ -553,96 +528,17 @@ function renderTable(node: Table, ctx: RenderContext): string {
 		),
 	);
 
-	// Compute column widths (max of header + all body cells per column)
-	const numCols = headerCells.length;
-	const colWidths: number[] = [];
-	for (let col = 0; col < numCols; col++) {
-		let maxWidth = visibleWidth(headerCells[col] ?? "");
-		for (const row of bodyCells) {
-			const cellWidth = visibleWidth(row[col] ?? "");
-			if (cellWidth > maxWidth) maxWidth = cellWidth;
-		}
-		colWidths.push(maxWidth);
-	}
-
-	// Render header row
-	const headerLine = renderTableRow(
-		headerCells,
-		colWidths,
-		alignments,
-		theme.tableHeader,
-		theme.tableBorder,
+	const rendered = formatTable(
+		headerCells.map((cell) => theme.tableHeader(cell)),
+		bodyCells.map((row) => row.map((cell) => theme.tableCell(cell))),
+		{
+			align: alignments,
+			separatorChar: theme.tableBorder("─"),
+			borderChar: theme.tableBorder("|"),
+		},
 	);
 
-	// Render separator row
-	const separatorCells = colWidths.map((w) => "─".repeat(w));
-	const separatorLine = renderTableRow(
-		separatorCells,
-		colWidths,
-		[],
-		theme.tableBorder,
-		theme.tableBorder,
-	);
-
-	// Render body rows
-	const bodyLines = bodyCells.map((row) =>
-		renderTableRow(
-			row,
-			colWidths,
-			alignments,
-			theme.tableCell,
-			theme.tableBorder,
-		),
-	);
-
-	const allLines = [headerLine, separatorLine, ...bodyLines];
-	return applyIndent(allLines.join("\n"), ctx.indent);
-}
-
-/**
- * Render a single table row with aligned cells.
- */
-function renderTableRow(
-	cells: string[],
-	colWidths: number[],
-	alignments: (string | null | undefined)[],
-	cellStyleFn: (v: string) => string,
-	borderStyleFn: (v: string) => string,
-): string {
-	const formattedCells = colWidths.map((targetWidth, i) => {
-		const cellContent = cells[i] ?? "";
-		const align = alignments[i] ?? "left";
-		const padded = alignCell(cellContent, targetWidth, align);
-		return ` ${cellStyleFn(padded)} `;
-	});
-
-	const border = borderStyleFn("|");
-	return `${border}${formattedCells.join(border)}${border}`;
-}
-
-/**
- * Align a cell's content within the target width.
- */
-function alignCell(
-	content: string,
-	targetWidth: number,
-	align: string | null,
-): string {
-	const currentWidth = visibleWidth(content);
-	const padding = Math.max(0, targetWidth - currentWidth);
-
-	switch (align) {
-		case "right":
-			return " ".repeat(padding) + content;
-		case "center": {
-			const leftPad = Math.floor(padding / 2);
-			const rightPad = padding - leftPad;
-			return " ".repeat(leftPad) + content + " ".repeat(rightPad);
-		}
-		default:
-			// left or null
-			return content + " ".repeat(padding);
-	}
+	return applyIndent(rendered, ctx.indent);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
