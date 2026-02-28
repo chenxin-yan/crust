@@ -141,7 +141,9 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("import {");
 		expect(cliContent).toContain("const main = defineCommand({");
 		expect(cliContent).toContain("runMain(main, {");
-		expect(cliContent).toContain("plugins: [versionPlugin");
+		expect(cliContent).toContain("plugins:");
+		expect(cliContent).toContain("versionPlugin(");
+		expect(cliContent).toContain("helpPlugin()");
 		// Has proper structure: meta, args tuple, flags, run
 		expect(cliContent).toContain("meta:");
 		expect(cliContent).toContain("args: [");

@@ -1,0 +1,147 @@
+---
+title: Update Notifier
+description: Check npm for newer versions and display an update notice.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The update notifier plugin checks the npm registry for newer versions of your package and displays a notice after command execution when an update is available.
+
+## Usage
+
+```ts
+import { defineCommand, runMain } from "@crustjs/core";
+import { updateNotifierPlugin } from "@crustjs/plugins";
+import pkg from "../package.json";
+
+const main = defineCommand({
+  meta: { name: "my-cli", description: "My CLI tool" },
+  run() {
+    console.log("Hello!");
+  },
+});
+
+runMain(main, {
+  plugins: [updateNotifierPlugin({ currentVersion: pkg.version })],
+});
+```
+
+You are responsible for passing `currentVersion` — typically sourced from your `package.json`.
+
+To override the package name used for registry lookups (for example, when it differs from the command name):
+
+```ts
+updateNotifierPlugin({
+  currentVersion: pkg.version,
+  packageName: "@my-org/my-cli",
+});
+```
+
+## Behavior
+
+- **No persistence by default** — Out of the box, the plugin does not persist notifier state across runs.
+- **Optional cache adapter** — If you provide `cache`, checks are reused up to `intervalMs` (default 24h) and notifications are deduped across runs.
+- **Non-blocking** — The update check runs after your command handler completes. It never delays command execution.
+- **Soft failure** — All internal errors (network timeouts, registry failures, cache errors, malformed responses) are silently swallowed. The plugin never affects exit codes or command output.
+- **Stderr output** — The update notice is written to stderr so it does not interfere with piped stdout.
+- **Package-manager-aware command** — The upgrade hint is inferred from `npm_config_user_agent` by default and can be overridden.
+
+## Configuration
+
+### Options
+
+| Option           | Type                                                  | Default                        | Description                                                             |
+| ---------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| `currentVersion` | `string`                                              | _(required)_                   | The current version of your CLI package.                                |
+| `packageName`    | `string`                                              | Root command `meta.name`       | The npm package name to check.                                          |
+| `intervalMs`     | `number`                                              | `86_400_000` (24h)             | Minimum interval in milliseconds between network checks.                |
+| `enabled`        | `boolean`                                             | `true`                         | Set to `false` to disable all check and notification behavior.          |
+| `timeoutMs`      | `number`                                              | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.   |
+| `registryUrl`    | `string`                                              | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                |
+| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`        | `"auto"`                       | Package manager used when building the default update command.          |
+| `updateCommand`  | `string \| ((packageName, packageManager) => string)` | inferred                       | Override the command shown in the update notice (for example Homebrew). |
+| `cache`          | `{ read, write }`                                     | none                           | Optional persistence adapter for cross-run cache/dedupe behavior.       |
+
+## Optional Persistence with `@crustjs/store`
+
+If you want cross-run cache behavior, pass an adapter:
+
+```ts
+import { stateDir, createStore } from "@crustjs/store";
+import { updateNotifierPlugin } from "@crustjs/plugins";
+import type { UpdateNotifierCacheAdapter } from "@crustjs/plugins";
+
+// Create a single store instance for your CLI
+const store = createStore({
+  dirPath: stateDir("my-cli"), // Replace with your package name
+  name: "update-notifier",
+  fields: {
+    lastCheckedAt: { type: "number", default: 0 },
+    latestVersion: { type: "string" },
+    lastNotifiedVersion: { type: "string" },
+  },
+});
+
+const cache: UpdateNotifierCacheAdapter = {
+  read: async () => store.read(),
+  write: async (_, state) => store.write(state),
+};
+
+updateNotifierPlugin({
+  currentVersion: "1.0.0",
+  cache,
+});
+```
+
+<Callout type="info">
+  Version comparison uses standard semver (`major.minor.patch`). Prerelease
+  suffixes are stripped before comparison — `1.2.3-beta.1` is treated as
+  `1.2.3`.
+</Callout>
+
+## Types
+
+```ts
+interface UpdateNotifierPluginOptions {
+  currentVersion: string;
+  packageName?: string;
+  intervalMs?: number;
+  enabled?: boolean;
+  timeoutMs?: number;
+  registryUrl?: string;
+  packageManager?: UpdateNotifierPackageManager | "auto";
+  updateCommand?:
+    | string
+    | ((
+        packageName: string,
+        packageManager: UpdateNotifierPackageManager,
+      ) => string);
+  cache?: UpdateNotifierCacheAdapter;
+}
+
+interface UpdateNotifierCacheAdapter {
+  read(packageName: string): Promise<
+    | {
+        lastCheckedAt: number;
+        latestVersion?: string;
+        lastNotifiedVersion?: string;
+      }
+    | null
+    | undefined
+  >;
+  write(
+    packageName: string,
+    state: {
+      lastCheckedAt: number;
+      latestVersion?: string;
+      lastNotifiedVersion?: string;
+    },
+  ): Promise<void>;
+}
+
+type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+function updateNotifierPlugin(
+  options: UpdateNotifierPluginOptions,
+): CrustPlugin;
+```

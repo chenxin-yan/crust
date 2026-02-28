@@ -110,6 +110,9 @@
     "packages/plugins": {
       "name": "@crustjs/plugins",
       "version": "0.0.10",
+      "dependencies": {
+        "@crustjs/store": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",

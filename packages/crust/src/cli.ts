@@ -4,6 +4,7 @@ import { type Command, defineCommand, runMain } from "@crustjs/core";
 import {
 	autoCompletePlugin,
 	helpPlugin,
+	updateNotifierPlugin,
 	versionPlugin,
 } from "@crustjs/plugins";
 import pkg from "../package.json";
@@ -31,6 +32,7 @@ export const crustCommand: Command = defineCommand({
 runMain(crustCommand, {
 	plugins: [
 		versionPlugin(pkg.version),
+		updateNotifierPlugin({ currentVersion: pkg.version }),
 		autoCompletePlugin({ mode: "help" }),
 		helpPlugin(),
 	],
