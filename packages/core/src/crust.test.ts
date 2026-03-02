@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust, type CrustCommandContext } from "./crust.ts";
 import { CrustError } from "./errors.ts";
 import type { CrustPlugin } from "./plugins.ts";
@@ -1400,5 +1400,551 @@ describe("Crust .use()", () => {
 
 		const app = new Crust("test").use(plugin);
 		expect(app._node.plugins.length).toBe(1);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .execute() — Full execution pipeline tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .execute()", () => {
+	// Save/restore console and process.exitCode around each test
+	let originalLog: typeof console.log;
+	let originalError: typeof console.error;
+	let originalWarn: typeof console.warn;
+	let originalExitCode: number | string | null | undefined;
+	let stdoutChunks: string[];
+	let stderrChunks: string[];
+
+	beforeEach(() => {
+		originalLog = console.log;
+		originalError = console.error;
+		originalWarn = console.warn;
+		originalExitCode = process.exitCode;
+		stdoutChunks = [];
+		stderrChunks = [];
+		console.log = (...args: unknown[]) => {
+			stdoutChunks.push(
+				args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
+			);
+		};
+		console.error = (...args: unknown[]) => {
+			stderrChunks.push(
+				args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
+			);
+		};
+		console.warn = (...args: unknown[]) => {
+			stderrChunks.push(
+				args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
+			);
+		};
+		// Reset exitCode — setting to 0 then deleting clears the value
+		process.exitCode = 0;
+	});
+
+	afterEach(() => {
+		console.log = originalLog;
+		console.error = originalError;
+		console.warn = originalWarn;
+		// Restore original exit code (0 acts as "no error")
+		process.exitCode = (originalExitCode as number) ?? 0;
+	});
+
+	it("runs root handler with parsed flags", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean", alias: "v" } })
+			.run((ctx) => {
+				receivedFlags = ctx.flags;
+			});
+
+		await app.execute({ argv: ["--verbose"] });
+
+		expect(receivedFlags.verbose).toBe(true);
+	});
+
+	it("runs root handler with parsed args", async () => {
+		let receivedArgs: Record<string, unknown> = {};
+
+		const app = new Crust("test")
+			.args([{ name: "file", type: "string", required: true }])
+			.run((ctx) => {
+				receivedArgs = ctx.args;
+			});
+
+		await app.execute({ argv: ["hello.txt"] });
+
+		expect(receivedArgs.file).toBe("hello.txt");
+	});
+
+	it("runs root handler with flags and args combined", async () => {
+		let receivedCtx: CrustCommandContext | undefined;
+
+		const app = new Crust("test")
+			.flags({
+				port: { type: "number", default: 3000 },
+				verbose: { type: "boolean" },
+			})
+			.args([{ name: "dir", type: "string", default: "." }])
+			.run((ctx) => {
+				receivedCtx = ctx as unknown as CrustCommandContext;
+			});
+
+		await app.execute({ argv: ["public", "--port", "8080"] });
+
+		expect(receivedCtx).toBeDefined();
+		expect(
+			(receivedCtx as unknown as { args: Record<string, unknown> }).args.dir,
+		).toBe("public");
+		expect(
+			(receivedCtx as unknown as { flags: Record<string, unknown> }).flags.port,
+		).toBe(8080);
+	});
+
+	it("routes to subcommand", async () => {
+		let handlerRan = "";
+
+		const app = new Crust("cli")
+			.run(() => {
+				handlerRan = "root";
+			})
+			.command("sub", (cmd) =>
+				cmd.run(() => {
+					handlerRan = "sub";
+				}),
+			);
+
+		await app.execute({ argv: ["sub"] });
+
+		expect(handlerRan).toBe("sub");
+	});
+
+	it("passes inherited flags to subcommand handler", async () => {
+		let subFlags: Record<string, unknown> = {};
+
+		const app = new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				port: { type: "number", default: 3000 },
+			})
+			.command("sub", (cmd) =>
+				cmd.run((ctx) => {
+					subFlags = ctx.flags;
+				}),
+			);
+
+		await app.execute({ argv: ["sub", "--verbose"] });
+
+		expect(subFlags.verbose).toBe(true);
+		// port is not inherited (no inherit: true)
+		expect(subFlags.port).toBeUndefined();
+	});
+
+	it("argv override works", async () => {
+		let receivedDir = "";
+
+		const app = new Crust("test")
+			.args([{ name: "dir", type: "string", default: "." }])
+			.run((ctx) => {
+				receivedDir = ctx.args.dir as string;
+			});
+
+		await app.execute({ argv: ["custom-dir"] });
+
+		expect(receivedDir).toBe("custom-dir");
+	});
+
+	it("runs plugin setup before handlers", async () => {
+		const order: string[] = [];
+
+		const plugin: CrustPlugin = {
+			name: "test-plugin",
+			setup: () => {
+				order.push("setup");
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {
+			order.push("run");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(order).toEqual(["setup", "run"]);
+	});
+
+	it("runs middleware chain", async () => {
+		const order: string[] = [];
+
+		const plugin: CrustPlugin = {
+			name: "test-plugin",
+			middleware: async (_ctx, next) => {
+				order.push("middleware:before");
+				await next();
+				order.push("middleware:after");
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {
+			order.push("run");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(order).toEqual(["middleware:before", "run", "middleware:after"]);
+	});
+
+	it("runs multiple middleware in registration order", async () => {
+		const order: string[] = [];
+
+		const plugin1: CrustPlugin = {
+			name: "p1",
+			middleware: async (_ctx, next) => {
+				order.push("p1:before");
+				await next();
+				order.push("p1:after");
+			},
+		};
+		const plugin2: CrustPlugin = {
+			name: "p2",
+			middleware: async (_ctx, next) => {
+				order.push("p2:before");
+				await next();
+				order.push("p2:after");
+			},
+		};
+
+		const app = new Crust("test")
+			.use(plugin1)
+			.use(plugin2)
+			.run(() => {
+				order.push("run");
+			});
+
+		await app.execute({ argv: [] });
+
+		expect(order).toEqual([
+			"p1:before",
+			"p2:before",
+			"run",
+			"p2:after",
+			"p1:after",
+		]);
+	});
+
+	it("runs preRun → run → postRun in order", async () => {
+		const order: string[] = [];
+
+		const app = new Crust("test")
+			.preRun(() => {
+				order.push("preRun");
+			})
+			.run(() => {
+				order.push("run");
+			})
+			.postRun(() => {
+				order.push("postRun");
+			});
+
+		await app.execute({ argv: [] });
+
+		expect(order).toEqual(["preRun", "run", "postRun"]);
+	});
+
+	it("postRun runs even if run throws", async () => {
+		const order: string[] = [];
+
+		const app = new Crust("test")
+			.preRun(() => {
+				order.push("preRun");
+			})
+			.run(() => {
+				order.push("run");
+				throw new Error("boom");
+			})
+			.postRun(() => {
+				order.push("postRun");
+			});
+
+		await app.execute({ argv: [] });
+
+		expect(order).toEqual(["preRun", "run", "postRun"]);
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("boom");
+	});
+
+	it("catches errors and sets exitCode", async () => {
+		const app = new Crust("test").run(() => {
+			throw new Error("execution failed");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("execution failed");
+	});
+
+	it("catches CrustError and sets exitCode", async () => {
+		const app = new Crust("test").run(() => {
+			throw new CrustError("EXECUTION", "custom crust error");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("custom crust error");
+	});
+
+	it("handles unknown flag error", async () => {
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.run(() => {});
+
+		await app.execute({ argv: ["--unknown"] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("Unknown flag");
+	});
+
+	it("handles missing required flag error", async () => {
+		const app = new Crust("test")
+			.flags({ name: { type: "string", required: true } })
+			.run(() => {});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("Missing required");
+	});
+
+	it("command not found error with no run on parent", async () => {
+		const app = new Crust("cli").command("sub", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["unknown-sub"] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("Unknown command");
+	});
+
+	it("no run handler is a no-op (no error)", async () => {
+		const app = new Crust("test").flags({ verbose: { type: "boolean" } });
+
+		await app.execute({ argv: ["--verbose"] });
+
+		// Should complete without error (exitCode stays 0)
+		expect(process.exitCode).toBe(0);
+	});
+
+	it("plugin setup can add flags recognized by parser", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const plugin: CrustPlugin = {
+			name: "version-plugin",
+			setup: (ctx, actions) => {
+				actions.addFlag(ctx.rootCommand, "version", {
+					type: "boolean",
+					alias: "V",
+				});
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run((ctx) => {
+			receivedFlags = ctx.flags;
+		});
+
+		await app.execute({ argv: ["--version"] });
+
+		expect(receivedFlags.version).toBe(true);
+	});
+
+	it("deeply nested subcommand routing works", async () => {
+		let handlerRan = "";
+
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean", inherit: true } })
+			.command("level1", (cmd) =>
+				cmd.command("level2", (cmd2) =>
+					cmd2.command("level3", (cmd3) =>
+						cmd3.run(() => {
+							handlerRan = "level3";
+						}),
+					),
+				),
+			);
+
+		await app.execute({ argv: ["level1", "level2", "level3"] });
+
+		expect(handlerRan).toBe("level3");
+	});
+
+	it("rawArgs are passed through", async () => {
+		let receivedRawArgs: string[] = [];
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.run((ctx) => {
+				receivedRawArgs = ctx.rawArgs;
+			});
+
+		await app.execute({ argv: ["--verbose", "--", "extra1", "extra2"] });
+
+		expect(receivedRawArgs).toEqual(["extra1", "extra2"]);
+	});
+
+	it("middleware receives route and input after resolution", async () => {
+		let middlewareRoute: unknown = null;
+		let middlewareInput: unknown = null;
+
+		const plugin: CrustPlugin = {
+			name: "inspect",
+			middleware: async (ctx, next) => {
+				middlewareRoute = ctx.route;
+				middlewareInput = ctx.input;
+				await next();
+			},
+		};
+
+		const app = new Crust("cli")
+			.use(plugin)
+			.command("sub", (cmd) =>
+				cmd
+					.flags({ output: { type: "string", default: "stdout" } })
+					.run(() => {}),
+			);
+
+		await app.execute({ argv: ["sub", "--output", "file.txt"] });
+
+		expect(middlewareRoute).toBeDefined();
+		expect(
+			(middlewareRoute as { command: { meta: { name: string } } }).command.meta
+				.name,
+		).toBe("sub");
+		expect(middlewareInput).toBeDefined();
+		expect(
+			(middlewareInput as { flags: Record<string, unknown> }).flags.output,
+		).toBe("file.txt");
+	});
+
+	it("middleware can short-circuit execution", async () => {
+		let handlerRan = false;
+
+		const plugin: CrustPlugin = {
+			name: "short-circuit",
+			middleware: async (_ctx, _next) => {
+				// Don't call next() — short circuit
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {
+			handlerRan = true;
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(handlerRan).toBe(false);
+	});
+
+	it("inherited flags work across file-boundary pattern", async () => {
+		// Simulate split-file pattern: define subcommand callback as separate function
+		let receivedVerbose: boolean | undefined;
+
+		const defineSubCommand = (
+			// biome-ignore lint/complexity/noBannedTypes: testing empty initial local state
+			cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
+		) =>
+			cmd.run((ctx) => {
+				receivedVerbose = ctx.flags.verbose;
+			});
+
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean", inherit: true } })
+			.command("sub", defineSubCommand);
+
+		await app.execute({ argv: ["sub", "--verbose"] });
+
+		expect(receivedVerbose).toBe(true);
+	});
+
+	it("default flag values work on subcommands", async () => {
+		let receivedPort: number | undefined;
+
+		const app = new Crust("cli")
+			.flags({
+				port: { type: "number", default: 3000, inherit: true },
+			})
+			.command("sub", (cmd) =>
+				cmd.run((ctx) => {
+					receivedPort = ctx.flags.port as number;
+				}),
+			);
+
+		await app.execute({ argv: ["sub"] });
+
+		expect(receivedPort).toBe(3000);
+	});
+
+	it("inherited flag alias works on subcommand", async () => {
+		let receivedVerbose: boolean | undefined;
+
+		const app = new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", alias: "v", inherit: true },
+			})
+			.command("sub", (cmd) =>
+				cmd.run((ctx) => {
+					receivedVerbose = ctx.flags.verbose;
+				}),
+			);
+
+		await app.execute({ argv: ["sub", "-v"] });
+
+		expect(receivedVerbose).toBe(true);
+	});
+
+	it("plugin setup error is caught and sets exitCode", async () => {
+		const plugin: CrustPlugin = {
+			name: "bad-plugin",
+			setup: () => {
+				throw new Error("setup failed");
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("setup failed");
+	});
+
+	it("async run handler works", async () => {
+		let result = "";
+
+		const app = new Crust("test").run(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			result = "done";
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(result).toBe("done");
+	});
+
+	it("command context contains the resolved command node", async () => {
+		let receivedCommand: unknown;
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.run((ctx) => {
+				receivedCommand = ctx.command;
+			});
+
+		await app.execute({ argv: [] });
+
+		expect(receivedCommand).toBeDefined();
+		expect((receivedCommand as { meta: { name: string } }).meta.name).toBe(
+			"test",
+		);
 	});
 });

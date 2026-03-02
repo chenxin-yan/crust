@@ -4,7 +4,15 @@ import {
 	computeEffectiveFlags,
 	createCommandNode,
 } from "./node.ts";
-import type { CrustPlugin } from "./plugins.ts";
+import { parseArgs } from "./parser.ts";
+import type {
+	CrustPlugin,
+	MiddlewareContext,
+	PluginState,
+	SetupActions,
+	SetupContext,
+} from "./plugins.ts";
+import { resolveCommand } from "./router.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
@@ -72,6 +80,170 @@ function validateNoPrefixFlags(flags: FlagsDef): void {
 			}
 		}
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal helpers — execution pipeline
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Build-time validation env var key (matches run.ts constant) */
+const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
+
+/** Key for storing validation result on globalThis (for in-process tests) */
+const VALIDATION_RESULT_GLOBAL_KEY = "__CRUST_VALIDATE_RESULT__";
+
+/** Create a fresh PluginState (key-value store per execution). */
+function createPluginState(): PluginState {
+	const map = new Map<string, unknown>();
+	return {
+		get<T = unknown>(key: string): T | undefined {
+			return map.get(key) as T | undefined;
+		},
+		has(key: string): boolean {
+			return map.has(key);
+		},
+		set(key: string, value: unknown): void {
+			map.set(key, value);
+		},
+		delete(key: string): boolean {
+			return map.delete(key);
+		},
+	};
+}
+
+/**
+ * Runtime check: is the target a `CommandNode`?
+ * CommandNode has `localFlags`; AnyCommand has `flags`.
+ */
+function isCommandNode(target: unknown): target is CommandNode {
+	return (
+		target !== null &&
+		typeof target === "object" &&
+		"localFlags" in (target as Record<string, unknown>)
+	);
+}
+
+/** Create SetupActions that work with CommandNode targets. */
+function createSetupActions(warnings?: string[]): SetupActions {
+	return {
+		addFlag(target, name, def) {
+			if (isCommandNode(target)) {
+				if (name in target.localFlags) {
+					warnings?.push(
+						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
+					);
+				}
+				target.localFlags[name] = def;
+				target.effectiveFlags[name] = def;
+			} else {
+				if (!target.flags) {
+					throw new CrustError(
+						"DEFINITION",
+						`Cannot add flag "${name}": "${target.meta.name}" has no flags object`,
+					);
+				}
+				if (name in target.flags) {
+					warnings?.push(
+						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
+					);
+				}
+				target.flags[name] = def;
+			}
+		},
+		addSubCommand(parent, name, subCommand) {
+			if (!name.trim()) {
+				throw new CrustError(
+					"DEFINITION",
+					"addSubCommand: name must be a non-empty string",
+				);
+			}
+			if (parent.subCommands[name]) {
+				warnings?.push(
+					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped (already exists)`,
+				);
+				return;
+			}
+			(parent.subCommands as Record<string, unknown>)[name] = subCommand;
+		},
+	};
+}
+
+/** Run plugin setup() hooks sequentially. */
+async function runSetupHooks(
+	plugins: readonly CrustPlugin[],
+	context: SetupContext,
+	actions: SetupActions,
+): Promise<void> {
+	for (const plugin of plugins) {
+		if (!plugin.setup) continue;
+		await plugin.setup(context, actions);
+	}
+}
+
+/** Run plugin middleware chain, terminating with `terminal`. */
+async function runMiddlewareChain(
+	plugins: readonly CrustPlugin[],
+	context: MiddlewareContext,
+	terminal: () => Promise<void>,
+): Promise<void> {
+	const stack = plugins
+		.map((plugin) => plugin.middleware)
+		.filter((middleware): middleware is NonNullable<typeof middleware> =>
+			Boolean(middleware),
+		);
+	let index = -1;
+
+	const dispatch = async (i: number): Promise<void> => {
+		if (i <= index) {
+			throw new CrustError(
+				"DEFINITION",
+				"Plugin middleware called next() multiple times",
+			);
+		}
+		index = i;
+
+		if (i === stack.length) {
+			await terminal();
+			return;
+		}
+
+		const middleware = stack[i];
+		if (!middleware) {
+			throw new CrustError("DEFINITION", "Plugin middleware stack is invalid");
+		}
+
+		await middleware(context, () => dispatch(i + 1));
+	};
+
+	await dispatch(0);
+}
+
+/**
+ * Collect all plugins from a CommandNode tree.
+ * Root plugins come first, then depth-first through subcommands.
+ */
+function collectPlugins(node: CommandNode): CrustPlugin[] {
+	const plugins: CrustPlugin[] = [...node.plugins];
+	for (const sub of Object.values(node.subCommands)) {
+		plugins.push(...collectPlugins(sub));
+	}
+	return plugins;
+}
+
+/**
+ * Recursively freeze a CommandNode tree (shallow freeze per node).
+ */
+function freezeTree(node: CommandNode): void {
+	Object.freeze(node);
+	Object.freeze(node.localFlags);
+	Object.freeze(node.effectiveFlags);
+	Object.freeze(node.meta);
+	Object.freeze(node.plugins);
+	if (node.args) Object.freeze(node.args);
+	for (const sub of Object.values(node.subCommands)) {
+		freezeTree(sub);
+	}
+	Object.freeze(node.subCommands);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -373,5 +545,157 @@ export class Crust<
 				[name]: childNode,
 			},
 		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
+	 * Parse `process.argv`, resolve subcommands, run plugins and middleware,
+	 * and execute the matched command handler.
+	 *
+	 * This is the entry point for CLI execution — call it on the root builder.
+	 *
+	 * @param options - Optional overrides (e.g. custom `argv` for testing)
+	 * @returns A promise that resolves when execution completes
+	 */
+	async execute(options?: { argv?: string[] }): Promise<void> {
+		const argv = options?.argv ?? process.argv.slice(2);
+		const rootNode = this._node;
+
+		// ── Step 1: Collect all plugins from the tree ──────────────────────
+		const allPlugins = collectPlugins(rootNode);
+
+		// ── Step 2: Run plugin setup() hooks ───────────────────────────────
+		const warnings: string[] = [];
+		const state = createPluginState();
+		const setupContext: SetupContext = {
+			argv: [...argv] as readonly string[],
+			rootCommand: rootNode,
+			state,
+		};
+		const actions = createSetupActions(warnings);
+
+		try {
+			await runSetupHooks(allPlugins, setupContext, actions);
+		} catch (error) {
+			if (error instanceof CrustError) {
+				console.error(`Error: ${error.message}`);
+				process.exitCode = 1;
+				return;
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(`Error: ${message}`);
+			process.exitCode = 1;
+			return;
+		}
+
+		// ── Step 3: Freeze the command tree ────────────────────────────────
+		freezeTree(rootNode);
+
+		// ── Step 4: Build-time validation mode ─────────────────────────────
+		if (process.env[VALIDATION_MODE_ENV] === "1") {
+			const result = (async () => {
+				try {
+					const { validateCommandTree } = await import("./validation.ts");
+					validateCommandTree(rootNode);
+					for (const warning of warnings) {
+						console.warn(`Warning: ${warning}`);
+					}
+					return { ok: true } as const;
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					console.error(message);
+					process.exitCode = 1;
+					return { ok: false, error } as const;
+				}
+			})();
+
+			// Store for in-process consumers (tests)
+			(globalThis as Record<string, unknown>)[VALIDATION_RESULT_GLOBAL_KEY] =
+				result;
+			await result;
+
+			// Force-exit the subprocess
+			return process.exit(process.exitCode ?? 0);
+		}
+
+		// Surface plugin warnings
+		for (const warning of warnings) {
+			console.warn(`Warning: ${warning}`);
+		}
+
+		// ── Steps 5–8: Resolve, parse, middleware, execute ─────────────────
+		const middlewareContext: MiddlewareContext = {
+			argv: [...argv] as readonly string[],
+			rootCommand: rootNode,
+			state,
+			route: null,
+			input: null,
+		};
+
+		try {
+			let resolvedNode: CommandNode;
+			let parsed: ReturnType<typeof parseArgs>;
+
+			try {
+				// Step 5: Resolve subcommand
+				const resolved = resolveCommand(rootNode, [...argv]);
+				middlewareContext.route = resolved;
+
+				// Step 6: Parse remaining argv
+				parsed = parseArgs(resolved.command, resolved.argv);
+				middlewareContext.input = parsed;
+				resolvedNode = resolved.command as CommandNode;
+			} catch (error) {
+				// Route/parse errors pass through middleware before surfacing
+				await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+					throw error;
+				});
+				return;
+			}
+
+			// Step 7: Run middleware chain → Step 8: lifecycle hooks
+			await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+				if (!resolvedNode.run) return;
+
+				const context: CrustCommandContext = {
+					args: parsed.args,
+					flags: parsed.flags,
+					rawArgs: parsed.rawArgs,
+					command: resolvedNode,
+				};
+
+				try {
+					// preRun
+					if (resolvedNode.preRun) {
+						await resolvedNode.preRun(context);
+					}
+
+					// run
+					await resolvedNode.run(context);
+				} finally {
+					// postRun always runs (even if run throws)
+					if (resolvedNode.postRun) {
+						await resolvedNode.postRun(context);
+					}
+				}
+			});
+		} catch (error) {
+			// Step 9: Error handling — wrap and surface
+			if (error instanceof CrustError) {
+				console.error(`Error: ${error.message}`);
+				process.exitCode = 1;
+				return;
+			}
+			if (error instanceof Error) {
+				const wrapped = new CrustError("EXECUTION", error.message).withCause(
+					error,
+				);
+				console.error(`Error: ${wrapped.message}`);
+				process.exitCode = 1;
+				return;
+			}
+			console.error(`Error: ${String(error)}`);
+			process.exitCode = 1;
+		}
 	}
 }
