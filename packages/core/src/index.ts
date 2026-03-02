@@ -23,7 +23,7 @@ export type {
 } from "./plugins.ts";
 
 // Subcommand routing
-export type { CommandRoute } from "./router.ts";
+export type { CommandRoute, RoutableCommand } from "./router.ts";
 export { resolveCommand } from "./router.ts";
 
 // Command execution

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { defineCommand } from "./command.ts";
 import { CrustError } from "./errors.ts";
+import type { CommandNode } from "./node.ts";
+import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -425,6 +427,282 @@ describe("resolveCommand", () => {
 					available: ["build", "dev"],
 				});
 			}
+		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// resolveCommand — CommandNode tree routing
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolveCommand — CommandNode tree", () => {
+	function createNodeLeaf(name: string, hasRun = true): CommandNode {
+		const node = createCommandNode(name);
+		if (hasRun) {
+			node.run = () => {
+				/* noop */
+			};
+		}
+		return node;
+	}
+
+	function createNodeRootWithSubcommands(hasRun = false): CommandNode {
+		const buildNode = createCommandNode({
+			name: "build",
+			description: "Build the project",
+		});
+		buildNode.localFlags = {
+			entry: {
+				type: "string",
+				description: "Entry file",
+				default: "src/cli.ts",
+			},
+		};
+		buildNode.effectiveFlags = { ...buildNode.localFlags };
+		buildNode.run = () => {
+			/* noop */
+		};
+
+		const devNode = createCommandNode({
+			name: "dev",
+			description: "Start dev server",
+		});
+		devNode.localFlags = {
+			port: { type: "number", description: "Port number", default: 3000 },
+		};
+		devNode.effectiveFlags = { ...devNode.localFlags };
+		devNode.run = () => {
+			/* noop */
+		};
+
+		const root = createCommandNode({
+			name: "crust",
+			description: "Crust CLI",
+		});
+		root.subCommands = { build: buildNode, dev: devNode };
+		if (hasRun) {
+			root.run = () => {
+				/* noop */
+			};
+		}
+		return root;
+	}
+
+	describe("basic resolution", () => {
+		it("resolves to root node with empty argv", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, []);
+
+			expect(result.command).toBe(root);
+			expect(result.argv).toEqual([]);
+			expect(result.commandPath).toEqual(["crust"]);
+		});
+
+		it("resolves single-level subcommand node", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, ["build"]);
+
+			expect(result.command.meta.name).toBe("build");
+			expect(result.argv).toEqual([]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
+		});
+
+		it("resolves node subcommand with remaining flags", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, ["build", "--entry", "src/index.ts"]);
+
+			expect(result.command.meta.name).toBe("build");
+			expect(result.argv).toEqual(["--entry", "src/index.ts"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
+		});
+	});
+
+	describe("nested subcommand resolution", () => {
+		it("resolves nested CommandNode (2 levels)", () => {
+			const templateNode = createNodeLeaf("template");
+			const commandNode = createNodeLeaf("command");
+
+			const generateNode = createCommandNode({
+				name: "generate",
+				description: "Generate files",
+			});
+			generateNode.subCommands = {
+				command: commandNode,
+				template: templateNode,
+			};
+
+			const root = createCommandNode({
+				name: "crust",
+				description: "Crust CLI",
+			});
+			root.subCommands = { generate: generateNode };
+
+			const result = resolveCommand(root, ["generate", "command"]);
+
+			expect(result.command.meta.name).toBe("command");
+			expect(result.argv).toEqual([]);
+			expect(result.commandPath).toEqual(["crust", "generate", "command"]);
+		});
+
+		it("resolves deeply nested CommandNode (3 levels)", () => {
+			const deepNode = createNodeLeaf("deep");
+
+			const level2 = createCommandNode("level2");
+			level2.subCommands = { deep: deepNode };
+
+			const level1 = createCommandNode("level1");
+			level1.subCommands = { level2 };
+
+			const root = createCommandNode("root");
+			root.subCommands = { level1 };
+
+			const result = resolveCommand(root, ["level1", "level2", "deep"]);
+
+			expect(result.command.meta.name).toBe("deep");
+			expect(result.argv).toEqual([]);
+			expect(result.commandPath).toEqual(["root", "level1", "level2", "deep"]);
+		});
+
+		it("resolves nested node with remaining argv", () => {
+			const commandNode = createCommandNode({
+				name: "command",
+				description: "Generate a command",
+			});
+			commandNode.args = [{ name: "name", type: "string", required: true }];
+			commandNode.run = () => {
+				/* noop */
+			};
+
+			const generateNode = createCommandNode({
+				name: "generate",
+				description: "Generate files",
+			});
+			generateNode.subCommands = { command: commandNode };
+
+			const root = createCommandNode({
+				name: "crust",
+				description: "Crust CLI",
+			});
+			root.subCommands = { generate: generateNode };
+
+			const result = resolveCommand(root, [
+				"generate",
+				"command",
+				"my-cmd",
+				"--verbose",
+			]);
+
+			expect(result.command.meta.name).toBe("command");
+			expect(result.argv).toEqual(["my-cmd", "--verbose"]);
+			expect(result.commandPath).toEqual(["crust", "generate", "command"]);
+		});
+	});
+
+	describe("fallback and errors", () => {
+		it("falls back to parent node when no subcmd matches and parent has run()", () => {
+			const root = createNodeRootWithSubcommands(true);
+			const result = resolveCommand(root, ["unknown-positional"]);
+
+			expect(result.command).toBe(root);
+			expect(result.argv).toEqual(["unknown-positional"]);
+			expect(result.commandPath).toEqual(["crust"]);
+		});
+
+		it("falls back to parent node when argv starts with a flag", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, ["--help"]);
+
+			expect(result.command).toBe(root);
+			expect(result.argv).toEqual(["--help"]);
+			expect(result.commandPath).toEqual(["crust"]);
+		});
+
+		it("throws error for unknown subcommand when parent node has no run()", () => {
+			const root = createNodeRootWithSubcommands();
+
+			expect(() => resolveCommand(root, ["unknown"])).toThrow(
+				'Unknown command "unknown"',
+			);
+		});
+
+		it("throws CrustError with structured details for CommandNode", () => {
+			const root = createNodeRootWithSubcommands();
+
+			try {
+				resolveCommand(root, ["buld"]);
+				expect(true).toBe(false);
+			} catch (error) {
+				expect(error).toBeInstanceOf(CrustError);
+				const crustError = error as CrustError;
+				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
+				expect(crustError.message).toContain('Unknown command "buld"');
+				expect(crustError.details).toMatchObject({
+					input: "buld",
+					available: ["build", "dev"],
+					commandPath: ["crust"],
+				});
+				// parentCommand should be the CommandNode
+				expect(
+					(crustError.details as { parentCommand: CommandNode }).parentCommand,
+				).toBe(root);
+			}
+		});
+	});
+
+	describe("commandPath tracks node names correctly", () => {
+		it("single level path", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, ["dev"]);
+			expect(result.commandPath).toEqual(["crust", "dev"]);
+		});
+
+		it("multi-level path", () => {
+			const leafNode = createNodeLeaf("leaf");
+
+			const mid = createCommandNode("mid");
+			mid.subCommands = { leaf: leafNode };
+
+			const root = createCommandNode("app");
+			root.subCommands = { mid };
+
+			const result = resolveCommand(root, ["mid", "leaf"]);
+			expect(result.commandPath).toEqual(["app", "mid", "leaf"]);
+		});
+	});
+
+	describe("argv slicing after subcommand resolution", () => {
+		it("correctly slices argv for resolved subcommand node", () => {
+			const root = createNodeRootWithSubcommands();
+			const argv = ["build", "src/index.ts", "--entry", "main.ts", "--minify"];
+			const result = resolveCommand(root, argv);
+
+			expect(result.command.meta.name).toBe("build");
+			expect(result.argv).toEqual([
+				"src/index.ts",
+				"--entry",
+				"main.ts",
+				"--minify",
+			]);
+		});
+
+		it("handles subcommand node followed by -- separator", () => {
+			const root = createNodeRootWithSubcommands();
+			const result = resolveCommand(root, ["build", "--", "extra"]);
+
+			expect(result.command.meta.name).toBe("build");
+			expect(result.argv).toEqual(["--", "extra"]);
+			expect(result.commandPath).toEqual(["crust", "build"]);
+		});
+	});
+
+	describe("command with no subcommands", () => {
+		it("resolves to root node when node has no subcommands", () => {
+			const node = createNodeLeaf("serve");
+			const result = resolveCommand(node, ["--port", "3000"]);
+
+			expect(result.command).toBe(node);
+			expect(result.argv).toEqual(["--port", "3000"]);
+			expect(result.commandPath).toEqual(["serve"]);
 		});
 	});
 });

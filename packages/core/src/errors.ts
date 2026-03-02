@@ -1,3 +1,4 @@
+import type { CommandNode } from "./node.ts";
 import type { AnyCommand } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -8,7 +9,7 @@ export interface CommandNotFoundErrorDetails {
 	input: string;
 	available: string[];
 	commandPath: string[];
-	parentCommand: AnyCommand;
+	parentCommand: AnyCommand | CommandNode;
 }
 
 export interface ValidationErrorDetails {
