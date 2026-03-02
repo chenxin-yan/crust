@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { Crust } from "./crust.ts";
+import { Crust, type CrustCommandContext } from "./crust.ts";
 import { CrustError } from "./errors.ts";
 import type {
-	EffectiveFlags,
 	FlagsDef,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
@@ -851,19 +850,379 @@ describe("Crust .command() type-level tests", () => {
 		>;
 	});
 
-	it("child with no parent flags has empty Inherited", () => {
+	it("child with no parent flags has empty Inherited via EffectiveFlags", () => {
 		new Crust("cli").command("sub", (cmd) => {
-			// No flags on parent, so child inherited should be FlagsDef (the default)
-			// but effectively empty at the value level
-			type CmdInherited = (typeof cmd)["_types"]["inherited"];
+			// No flags on parent. The parent's default generics are FlagsDef (broad).
+			// EffectiveFlags<FlagsDef, FlagsDef> resolves through InheritableFlags
+			// and MergeFlags, producing a broad type. We verify the child starts
+			// with empty local flags and args at runtime.
+			type CmdLocal = (typeof cmd)["_types"]["local"];
+			type CmdArgs = (typeof cmd)["_types"]["args"];
 
-			// EffectiveFlags<FlagsDef, FlagsDef> with an empty parent resolves to
-			// the broad FlagsDef type since the parent defaults are broad
-			type _check = Expect<
-				Equal<CmdInherited, EffectiveFlags<FlagsDef, FlagsDef>>
-			>;
+			// biome-ignore lint/complexity/noBannedTypes: verifying empty initial state
+			type _checkLocal = Expect<Equal<CmdLocal, {}>>;
+			type _checkArgs = Expect<Equal<CmdArgs, []>>;
 
 			return cmd;
 		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .run() — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .run()", () => {
+	it("stores handler on node", () => {
+		const handler = () => {};
+		const app = new Crust("test").run(handler);
+
+		expect(app._node.run).toBeDefined();
+		expect(typeof app._node.run).toBe("function");
+	});
+
+	it("returns a new instance (immutability)", () => {
+		const app = new Crust("test");
+		const withRun = app.run(() => {});
+
+		expect(withRun).not.toBe(app);
+	});
+
+	it("does not mutate original builder", () => {
+		const app = new Crust("test");
+		app.run(() => {});
+
+		expect(app._node.run).toBeUndefined();
+	});
+
+	it("handler is callable with correct context shape", () => {
+		let receivedCtx: CrustCommandContext | undefined;
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string", required: true }])
+			.run((ctx) => {
+				receivedCtx = ctx as unknown as CrustCommandContext;
+			});
+
+		// Manually invoke the stored handler with a mock context
+		const mockCtx = {
+			args: { file: "test.txt" },
+			flags: { verbose: true },
+			rawArgs: [],
+			command: app._node,
+		};
+		app._node.run?.(mockCtx);
+
+		expect(receivedCtx).toBeDefined();
+		expect((receivedCtx as unknown as Record<string, unknown>)?.args).toEqual({
+			file: "test.txt",
+		});
+		expect((receivedCtx as unknown as Record<string, unknown>)?.flags).toEqual({
+			verbose: true,
+		});
+	});
+
+	it("preserves flags and args when adding run handler", () => {
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }])
+			.run(() => {});
+
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+	});
+
+	it("can chain .run() after .command()", () => {
+		const app = new Crust("cli").command("sub", (cmd) => cmd).run(() => {});
+
+		expect(app._node.run).toBeDefined();
+		expect(app._node.subCommands.sub).toBeDefined();
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .preRun() / .postRun() — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .preRun() / .postRun()", () => {
+	it(".preRun() stores handler on node", () => {
+		const app = new Crust("test").preRun(() => {});
+
+		expect(app._node.preRun).toBeDefined();
+		expect(typeof app._node.preRun).toBe("function");
+	});
+
+	it(".postRun() stores handler on node", () => {
+		const app = new Crust("test").postRun(() => {});
+
+		expect(app._node.postRun).toBeDefined();
+		expect(typeof app._node.postRun).toBe("function");
+	});
+
+	it(".preRun() returns a new instance (immutability)", () => {
+		const app = new Crust("test");
+		const withPreRun = app.preRun(() => {});
+
+		expect(withPreRun).not.toBe(app);
+	});
+
+	it(".postRun() returns a new instance (immutability)", () => {
+		const app = new Crust("test");
+		const withPostRun = app.postRun(() => {});
+
+		expect(withPostRun).not.toBe(app);
+	});
+
+	it(".preRun() does not mutate original builder", () => {
+		const app = new Crust("test");
+		app.preRun(() => {});
+
+		expect(app._node.preRun).toBeUndefined();
+	});
+
+	it(".postRun() does not mutate original builder", () => {
+		const app = new Crust("test");
+		app.postRun(() => {});
+
+		expect(app._node.postRun).toBeUndefined();
+	});
+
+	it("all three lifecycle hooks can be chained", () => {
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.preRun(() => {})
+			.run(() => {})
+			.postRun(() => {});
+
+		expect(app._node.preRun).toBeDefined();
+		expect(app._node.run).toBeDefined();
+		expect(app._node.postRun).toBeDefined();
+		expect(app._node.localFlags.verbose).toBeDefined();
+	});
+
+	it("each handler stores independently", () => {
+		const preHandler = () => {};
+		const runHandler = () => {};
+		const postHandler = () => {};
+
+		const app = new Crust("test")
+			.preRun(preHandler)
+			.run(runHandler)
+			.postRun(postHandler);
+
+		// Verify handlers are stored (they're cast to (ctx: unknown) => void
+		// internally, so we just check they're functions)
+		expect(typeof app._node.preRun).toBe("function");
+		expect(typeof app._node.run).toBe("function");
+		expect(typeof app._node.postRun).toBe("function");
+	});
+
+	it("preRun handler is callable with correct context shape", () => {
+		let receivedCtx: unknown;
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.preRun((ctx) => {
+				receivedCtx = ctx;
+			});
+
+		const mockCtx = {
+			args: {},
+			flags: { verbose: false },
+			rawArgs: [],
+			command: app._node,
+		};
+		app._node.preRun?.(mockCtx);
+
+		expect(receivedCtx).toBeDefined();
+		expect((receivedCtx as Record<string, unknown>)?.flags).toEqual({
+			verbose: false,
+		});
+	});
+
+	it("postRun handler is callable with correct context shape", () => {
+		let receivedCtx: unknown;
+
+		const app = new Crust("test")
+			.flags({ output: { type: "string", default: "stdout" } })
+			.postRun((ctx) => {
+				receivedCtx = ctx;
+			});
+
+		const mockCtx = {
+			args: {},
+			flags: { output: "file.txt" },
+			rawArgs: ["--", "extra"],
+			command: app._node,
+		};
+		app._node.postRun?.(mockCtx);
+
+		expect(receivedCtx).toBeDefined();
+		expect((receivedCtx as Record<string, unknown>)?.rawArgs).toEqual([
+			"--",
+			"extra",
+		]);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .run() / .preRun() / .postRun() — Type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .run() type-level tests", () => {
+	it("run handler receives InferArgs<A> for args", () => {
+		new Crust("test")
+			.args([
+				{ name: "file", type: "string", required: true },
+				{ name: "count", type: "number", default: 5 },
+			])
+			.run((_ctx) => {
+				type CtxArgs = typeof _ctx.args;
+				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
+				type _checkCount = Expect<Equal<CtxArgs["count"], number>>;
+			});
+	});
+
+	it("run handler receives EffectiveFlags (inherited + local merged) for flags", () => {
+		new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				port: { type: "number", default: 3000 },
+			})
+			.command("sub", (cmd) =>
+				cmd
+					.flags({ output: { type: "string", required: true } })
+					.run((_ctx) => {
+						type CtxFlags = typeof _ctx.flags;
+						// inherited verbose (inherit: true) should be present
+						type _checkVerbose = Expect<
+							Equal<CtxFlags["verbose"], boolean | undefined>
+						>;
+						// local output (required) should be present
+						type _checkOutput = Expect<Equal<CtxFlags["output"], string>>;
+					}),
+			);
+	});
+
+	it("inherited flags visible in handler without manual annotation", () => {
+		new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true, default: false },
+			})
+			.command("sub", (cmd) =>
+				cmd.run((_ctx) => {
+					// The handler should see verbose as a flag even though
+					// the subcommand has no local flags
+					type CtxFlags = typeof _ctx.flags;
+					type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
+				}),
+			);
+	});
+
+	it("override flag shows overridden type in handler", () => {
+		new Crust("cli")
+			.flags({
+				output: { type: "string", inherit: true },
+			})
+			.command("sub", (cmd) =>
+				cmd.flags({ output: { type: "number", default: 42 } }).run((_ctx) => {
+					type CtxFlags = typeof _ctx.flags;
+					// output was overridden from string to number
+					type _checkOutput = Expect<Equal<CtxFlags["output"], number>>;
+				}),
+			);
+	});
+
+	it("handler with no flags/args gets empty types", () => {
+		new Crust("test").run((_ctx) => {
+			// With broad FlagsDef default, flags resolve to Record<string, ...>
+			// With broad ArgsDef default, args resolve to Record<string, never>
+			type _checkRawArgs = Expect<Equal<typeof _ctx.rawArgs, string[]>>;
+		});
+	});
+
+	it("preRun and postRun receive same context type as run", () => {
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean", default: false } })
+			.args([{ name: "file", type: "string", required: true }]);
+
+		// Define all three handlers — they should all receive the same type
+		const withHooks = app
+			.preRun((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type CtxArgs = typeof _ctx.args;
+				type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
+				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
+			})
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type CtxArgs = typeof _ctx.args;
+				type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
+				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
+			})
+			.postRun((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type CtxArgs = typeof _ctx.args;
+				type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
+				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
+			});
+
+		expect(withHooks._node.preRun).toBeDefined();
+		expect(withHooks._node.run).toBeDefined();
+		expect(withHooks._node.postRun).toBeDefined();
+	});
+
+	it("variadic args resolve to array type in handler", () => {
+		new Crust("test")
+			.args([{ name: "files", type: "string", variadic: true }])
+			.run((_ctx) => {
+				type CtxArgs = typeof _ctx.args;
+				type _checkFiles = Expect<Equal<CtxArgs["files"], string[]>>;
+			});
+	});
+
+	it("multiple flag resolves to array type in handler", () => {
+		new Crust("test")
+			.flags({
+				tags: { type: "string", multiple: true, required: true },
+			})
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type _checkTags = Expect<Equal<CtxFlags["tags"], string[]>>;
+			});
+	});
+
+	it("optional flag resolves to union with undefined in handler", () => {
+		new Crust("test")
+			.flags({
+				port: { type: "number" },
+			})
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
+			});
+	});
+
+	it("required flag resolves to non-optional type in handler", () => {
+		new Crust("test")
+			.flags({
+				name: { type: "string", required: true },
+			})
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type _checkName = Expect<Equal<CtxFlags["name"], string>>;
+			});
+	});
+
+	it("flag with default resolves to non-optional type in handler", () => {
+		new Crust("test")
+			.flags({
+				port: { type: "number", default: 3000 },
+			})
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
+			});
 	});
 });

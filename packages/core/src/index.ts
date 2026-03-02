@@ -1,5 +1,9 @@
+// Crust builder API
+
 // Command definition
 export { defineCommand } from "./command.ts";
+export type { CrustCommandContext } from "./crust.ts";
+export { Crust } from "./crust.ts";
 
 // Errors
 export type { CrustErrorCode } from "./errors.ts";

@@ -9,10 +9,38 @@ import type {
 	CommandMeta,
 	EffectiveFlags,
 	FlagsDef,
+	InferArgs,
+	InferFlags,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// CrustCommandContext — Runtime context for lifecycle hooks
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The runtime context object passed to `preRun()`, `run()`, and `postRun()`
+ * lifecycle hooks on the `Crust` builder.
+ *
+ * Generic parameters:
+ * - `A` — positional argument definitions tuple
+ * - `F` — the effective (inherited + local merged) flag definitions
+ */
+export interface CrustCommandContext<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+> {
+	/** Resolved positional arguments, keyed by arg name */
+	args: InferArgs<A>;
+	/** Resolved flags, keyed by flag name */
+	flags: InferFlags<F>;
+	/** Raw arguments that appeared after the `--` separator */
+	rawArgs: string[];
+	/** The resolved command node that is being executed */
+	command: CommandNode;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers — runtime flag validation
@@ -112,8 +140,10 @@ export class Crust<
 	static _createChild<I extends FlagsDef>(
 		meta: string | CommandMeta,
 		inheritedFlags: FlagsDef,
-	): Crust<I, FlagsDef, ArgsDef> {
-		const instance = new Crust<I, FlagsDef, ArgsDef>(meta);
+		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+	): Crust<I, {}, []> {
+		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+		const instance = new Crust<I, {}, []>(meta);
 		// Override the inherited flags set by constructor (which defaults to {})
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags =
 			inheritedFlags;
@@ -190,6 +220,67 @@ export class Crust<
 	}
 
 	/**
+	 * Set the main command handler.
+	 *
+	 * The handler receives a {@link CrustCommandContext} with `args` typed from
+	 * `.args()` and `flags` typed as `EffectiveFlags<Inherited, Local>` (inherited
+	 * flags merged with local flags).
+	 *
+	 * Returns a new builder with the handler stored. The original builder is
+	 * not mutated.
+	 *
+	 * @param handler - The main command handler function
+	 * @returns A new `Crust` instance with the handler registered
+	 */
+	run(
+		handler: (
+			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+		) => void | Promise<void>,
+	): Crust<Inherited, Local, A> {
+		return this._clone({
+			run: handler as (ctx: unknown) => void | Promise<void>,
+		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
+	 * Set the pre-run lifecycle hook.
+	 *
+	 * Called before `run()` — useful for initialization and setup.
+	 * Receives the same {@link CrustCommandContext} as `run()`.
+	 *
+	 * @param handler - The pre-run handler function
+	 * @returns A new `Crust` instance with the preRun handler registered
+	 */
+	preRun(
+		handler: (
+			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+		) => void | Promise<void>,
+	): Crust<Inherited, Local, A> {
+		return this._clone({
+			preRun: handler as (ctx: unknown) => void | Promise<void>,
+		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
+	 * Set the post-run lifecycle hook.
+	 *
+	 * Called after `run()` (even if it throws) — useful for teardown and cleanup.
+	 * Receives the same {@link CrustCommandContext} as `run()`.
+	 *
+	 * @param handler - The post-run handler function
+	 * @returns A new `Crust` instance with the postRun handler registered
+	 */
+	postRun(
+		handler: (
+			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+		) => void | Promise<void>,
+	): Crust<Inherited, Local, A> {
+		return this._clone({
+			postRun: handler as (ctx: unknown) => void | Promise<void>,
+		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
 	 * Register a named subcommand.
 	 *
 	 * The callback receives a fresh `Crust` builder pre-typed with this
@@ -205,7 +296,8 @@ export class Crust<
 	command<N extends string>(
 		name: N,
 		cb: (
-			cmd: Crust<EffectiveFlags<Inherited, Local>, FlagsDef, ArgsDef>,
+			// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+			cmd: Crust<EffectiveFlags<Inherited, Local>, {}, []>,
 		) => Crust<
 			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
 			any,
