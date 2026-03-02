@@ -89,6 +89,8 @@ interface FlagDefBase {
 	alias?: string | string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
+	/** When `true`, the flag is inherited by subcommands */
+	inherit?: true;
 }
 
 // ── Single-value flags ────────────────────────────────────────────────────
@@ -332,6 +334,67 @@ export type ValidateVariadicArgs<A extends readonly object[]> =
 				: readonly [Head, ...ValidateVariadicArgs<Tail>]
 			: readonly [Head]
 		: A;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flag inheritance utility types
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Picks only the flags from `F` that have `inherit: true`.
+ *
+ * Flags without `inherit` (or with `inherit` omitted) are excluded.
+ *
+ * @example
+ * ```ts
+ * type Flags = {
+ *   verbose: { type: "boolean"; inherit: true };
+ *   port: { type: "number" };
+ * };
+ * type Result = InheritableFlags<Flags>;
+ * // Result = { verbose: { type: "boolean"; inherit: true } }
+ * ```
+ */
+export type InheritableFlags<F extends FlagsDef> = {
+	[K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
+};
+
+/**
+ * Merges parent flags with local flags, where local keys override parent keys.
+ *
+ * @example
+ * ```ts
+ * type Parent = { verbose: { type: "boolean" }; port: { type: "number" } };
+ * type Local = { port: { type: "string" } };
+ * type Result = MergeFlags<Parent, Local>;
+ * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
+ * ```
+ */
+export type MergeFlags<
+	Parent extends FlagsDef,
+	Local extends FlagsDef,
+> = Simplify<Omit<Parent, keyof Local> & Local>;
+
+/**
+ * Computes the effective flags for a command by filtering the inherited flags
+ * (only those with `inherit: true`) and merging them with local flags.
+ *
+ * Local flags override inherited flags with the same key.
+ *
+ * @example
+ * ```ts
+ * type Inherited = {
+ *   verbose: { type: "boolean"; inherit: true };
+ *   port: { type: "number" };
+ * };
+ * type Local = { output: { type: "string" } };
+ * type Result = EffectiveFlags<Inherited, Local>;
+ * // Result = { verbose: { type: "boolean"; inherit: true }; output: { type: "string" } }
+ * ```
+ */
+export type EffectiveFlags<
+	Inherited extends FlagsDef,
+	Local extends FlagsDef,
+> = MergeFlags<InheritableFlags<Inherited>, Local>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

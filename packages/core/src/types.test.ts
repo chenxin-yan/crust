@@ -5,10 +5,13 @@ import type {
 	Command,
 	CommandContext,
 	CommandMeta,
+	EffectiveFlags,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	InheritableFlags,
+	MergeFlags,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
@@ -820,6 +823,292 @@ describe("ValidateNoPrefixedFlags type inference", () => {
 		type Result = ValidateNoPrefixedFlags<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
 
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// InheritableFlags type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("InheritableFlags type inference", () => {
+	it("picks only flags with inherit: true", () => {
+		type Flags = {
+			verbose: { type: "boolean"; inherit: true };
+			port: { type: "number" };
+			output: { type: "string"; inherit: true };
+		};
+		type Result = InheritableFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean"; inherit: true };
+					output: { type: "string"; inherit: true };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns empty object when no flags have inherit: true", () => {
+		type Flags = {
+			verbose: { type: "boolean" };
+			port: { type: "number" };
+		};
+		type Result = InheritableFlags<Flags>;
+		// biome-ignore lint/complexity/noBannedTypes: empty object is the expected result
+		type _check = Expect<Equal<Result, {}>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns empty object for empty flags", () => {
+		// biome-ignore lint/complexity/noBannedTypes: empty object is the expected result
+		type Result = InheritableFlags<{}>;
+		// biome-ignore lint/complexity/noBannedTypes: empty object is the expected result
+		type _check = Expect<Equal<Result, {}>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("picks all flags when all have inherit: true", () => {
+		type Flags = {
+			verbose: { type: "boolean"; inherit: true };
+			port: { type: "number"; inherit: true };
+		};
+		type Result = InheritableFlags<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("preserves full flag definition including alias, required, etc.", () => {
+		type Flags = {
+			verbose: {
+				type: "boolean";
+				inherit: true;
+				alias: "v";
+				description: "Enable verbose";
+			};
+		};
+		type Result = InheritableFlags<Flags>;
+		type _check = Expect<Equal<Result, Flags>>;
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// MergeFlags type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("MergeFlags type inference", () => {
+	it("merges parent and local flags", () => {
+		type Parent = {
+			verbose: { type: "boolean" };
+			port: { type: "number" };
+		};
+		type Local = {
+			output: { type: "string" };
+		};
+		type Result = MergeFlags<Parent, Local>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean" };
+					port: { type: "number" };
+					output: { type: "string" };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("local overrides parent when keys conflict", () => {
+		type Parent = {
+			verbose: { type: "boolean" };
+			port: { type: "number" };
+		};
+		type Local = {
+			port: { type: "string" };
+		};
+		type Result = MergeFlags<Parent, Local>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean" };
+					port: { type: "string" };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns parent when local is empty", () => {
+		type Parent = {
+			verbose: { type: "boolean" };
+		};
+		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
+		type Result = MergeFlags<Parent, {}>;
+		type _check = Expect<Equal<Result, { verbose: { type: "boolean" } }>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns local when parent is empty", () => {
+		type Local = {
+			output: { type: "string" };
+		};
+		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
+		type Result = MergeFlags<{}, Local>;
+		type _check = Expect<Equal<Result, { output: { type: "string" } }>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns empty when both are empty", () => {
+		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
+		type Result = MergeFlags<{}, {}>;
+		// biome-ignore lint/complexity/noBannedTypes: empty object is the expected result
+		type _check = Expect<Equal<Result, {}>>;
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// EffectiveFlags type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("EffectiveFlags type inference", () => {
+	it("filters inherited to inherit:true and merges with local", () => {
+		type Inherited = {
+			verbose: { type: "boolean"; inherit: true };
+			port: { type: "number" };
+		};
+		type Local = {
+			output: { type: "string" };
+		};
+		type Result = EffectiveFlags<Inherited, Local>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean"; inherit: true };
+					output: { type: "string" };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("local overrides inherited flag with same key", () => {
+		type Inherited = {
+			verbose: { type: "boolean"; inherit: true };
+			port: { type: "number"; inherit: true };
+		};
+		type Local = {
+			port: { type: "string" };
+		};
+		type Result = EffectiveFlags<Inherited, Local>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean"; inherit: true };
+					port: { type: "string" };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns only local when no inherited flags have inherit: true", () => {
+		type Inherited = {
+			verbose: { type: "boolean" };
+			port: { type: "number" };
+		};
+		type Local = {
+			output: { type: "string" };
+		};
+		type Result = EffectiveFlags<Inherited, Local>;
+		type _check = Expect<Equal<Result, { output: { type: "string" } }>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns only inheritable flags when local is empty", () => {
+		type Inherited = {
+			verbose: { type: "boolean"; inherit: true };
+			port: { type: "number" };
+		};
+		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
+		type Result = EffectiveFlags<Inherited, {}>;
+		type _check = Expect<
+			Equal<Result, { verbose: { type: "boolean"; inherit: true } }>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("returns empty when both inherited and local are empty", () => {
+		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
+		type Result = EffectiveFlags<{}, {}>;
+		// biome-ignore lint/complexity/noBannedTypes: empty object is the expected result
+		type _check = Expect<Equal<Result, {}>>;
+
+		expect(true).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// FlagDef inherit toggle field tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("FlagDef inherit toggle field", () => {
+	it("accepts inherit: true on flag definitions", () => {
+		const flag: FlagDef = { type: "boolean", inherit: true };
+		expect(flag.inherit).toBe(true);
+	});
+
+	it("accepts inherit: true alongside other fields", () => {
+		const flag: FlagDef = {
+			type: "string",
+			inherit: true,
+			alias: "v",
+			required: true,
+		};
+		expect(flag.inherit).toBe(true);
+		expect(flag.required).toBe(true);
+	});
+
+	it("accepts inherit: true on multi-value flags", () => {
+		const flag: FlagDef = {
+			type: "string",
+			multiple: true,
+			inherit: true,
+		};
+		expect(flag.inherit).toBe(true);
+		expect(flag.multiple).toBe(true);
+	});
+
+	it("rejects inherit: false at type level", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not `false`
+		const _bad: FlagDef = { type: "boolean", inherit: false };
+		expect(true).toBe(true);
+	});
+
+	it("rejects non-boolean values for inherit", () => {
+		// @ts-expect-error — toggle fields only accept `true`, not string
+		const _bad: FlagDef = { type: "boolean", inherit: "yes" };
 		expect(true).toBe(true);
 	});
 });
