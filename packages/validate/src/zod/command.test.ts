@@ -381,7 +381,8 @@ describe("Crust builder + commandValidator", () => {
 	});
 
 	it("generates help-compatible definitions", () => {
-		const app = new Crust({ name: "serve", description: "Start server" })
+		const app = new Crust("serve")
+			.meta({ description: "Start server" })
 			.args([
 				arg("port", z.number().describe("Port number")),
 				arg("host", z.string().optional().describe("Host")),

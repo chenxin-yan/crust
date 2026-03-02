@@ -2,10 +2,8 @@ import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
-const main = new Crust({
-	name: "{{name}}",
-	description: "A CLI built with Crust",
-})
+const main = new Crust("{{name}}")
+	.meta({ description: "A CLI built with Crust" })
 	.use(versionPlugin(pkg.version))
 	.use(helpPlugin())
 	.args([

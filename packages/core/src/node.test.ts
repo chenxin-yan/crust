@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
-import type { CommandMeta, FlagsDef } from "./types.ts";
+import type { FlagsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // createCommandNode
@@ -21,32 +21,17 @@ describe("createCommandNode", () => {
 		expect(node.postRun).toBeUndefined();
 	});
 
-	it("creates a node from a CommandMeta object", () => {
-		const meta: CommandMeta = {
-			name: "deploy",
-			description: "Deploy the application",
-			usage: "deploy [options]",
-		};
-		const node = createCommandNode(meta);
+	it("creates a node with only the name set", () => {
+		const node = createCommandNode("deploy");
 
-		expect(node.meta).toEqual({
-			name: "deploy",
-			description: "Deploy the application",
-			usage: "deploy [options]",
-		});
+		expect(node.meta).toEqual({ name: "deploy" });
+		expect(node.meta.description).toBeUndefined();
+		expect(node.meta.usage).toBeUndefined();
 		expect(node.localFlags).toEqual({});
 		expect(node.effectiveFlags).toEqual({});
 		expect(node.args).toBeUndefined();
 		expect(node.subCommands).toEqual({});
 		expect(node.plugins).toEqual([]);
-	});
-
-	it("copies CommandMeta so mutations don't affect the node", () => {
-		const meta: CommandMeta = { name: "test", description: "original" };
-		const node = createCommandNode(meta);
-
-		meta.description = "mutated";
-		expect(node.meta.description).toBe("original");
 	});
 
 	it("creates independent nodes with separate references", () => {

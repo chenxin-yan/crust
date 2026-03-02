@@ -19,10 +19,8 @@ import { buildCommand } from "./commands/build.ts";
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
  */
-export const crustApp = new Crust({
-	name: pkg.name,
-	description: pkg.description,
-})
+export const crustApp = new Crust(pkg.name)
+	.meta({ description: pkg.description })
 	.use(versionPlugin(pkg.version))
 	.use(updateNotifierPlugin({ currentVersion: pkg.version }))
 	.use(autoCompletePlugin({ mode: "help" }))

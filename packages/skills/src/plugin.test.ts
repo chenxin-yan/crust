@@ -49,7 +49,8 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("does not install skills that are not yet present", async () => {
-		const app = new Crust({ name: "no-auto-install", description: "test" })
+		const app = new Crust("no-auto-install")
+			.meta({ description: "test" })
 			.run(() => {})
 			.use(
 				skillPlugin({
@@ -73,7 +74,8 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("auto-updates already-installed skills when version changes", async () => {
-		const app = new Crust({ name: "update-test", description: "test" })
+		const app = new Crust("update-test")
+			.meta({ description: "test" })
 			.run(() => {})
 			.use(
 				skillPlugin({
@@ -104,7 +106,8 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
-		const app = new Crust({ name: "order-test", description: "test" })
+		const app = new Crust("order-test")
+			.meta({ description: "test" })
 			.run(() => {})
 			.use(shortCircuitPlugin())
 			.use(
@@ -136,7 +139,8 @@ describe("skillPlugin auto-update", () => {
 	it("does not auto-update during validation mode", async () => {
 		process.env[VALIDATION_MODE_ENV] = "1";
 
-		const app = new Crust({ name: "validation-test", description: "test" })
+		const app = new Crust("validation-test")
+			.meta({ description: "test" })
 			.run(() => {})
 			.use(
 				skillPlugin({
@@ -173,7 +177,8 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("does not auto-update when autoUpdate is false", async () => {
-		const app = new Crust({ name: "no-update-test", description: "test" })
+		const app = new Crust("no-update-test")
+			.meta({ description: "test" })
 			.run(() => {})
 			.use(
 				skillPlugin({

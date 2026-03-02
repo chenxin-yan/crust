@@ -77,9 +77,7 @@ export async function executeCrust(
 		}
 
 		// Restore original exit code
-		if (originalExitCode !== undefined) {
-			process.exitCode = originalExitCode;
-		}
+		process.exitCode = originalExitCode;
 	}
 
 	return {

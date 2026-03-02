@@ -270,18 +270,17 @@ export class Crust<
 	/**
 	 * Create a new root or standalone command builder.
 	 *
-	 * @param meta - Either a string (command name) or a full `CommandMeta` object.
+	 * @param name - The command name.
 	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
 	 */
-	constructor(meta: string | CommandMeta) {
-		const name = typeof meta === "string" ? meta : meta.name;
+	constructor(name: string) {
 		if (!name.trim()) {
 			throw new CrustError(
 				"DEFINITION",
 				"meta.name must be a non-empty string",
 			);
 		}
-		this._node = createCommandNode(meta);
+		this._node = createCommandNode(name);
 		this._inheritedFlags = {};
 	}
 
@@ -290,12 +289,12 @@ export class Crust<
 	 * Used by `.command()` to propagate parent flags to the child.
 	 */
 	static _createChild<I extends FlagsDef>(
-		meta: string | CommandMeta,
+		name: string,
 		inheritedFlags: FlagsDef,
 		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
 	): Crust<I, {}, []> {
 		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
-		const instance = new Crust<I, {}, []>(meta);
+		const instance = new Crust<I, {}, []>(name);
 		// Override the inherited flags set by constructor (which defaults to {})
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags =
 			inheritedFlags;
@@ -324,6 +323,24 @@ export class Crust<
 	}
 
 	/**
+	 * Set metadata (description, usage) for this command.
+	 *
+	 * The command name is already set via the constructor or `.command()`,
+	 * so only `description` and `usage` can be provided here.
+	 *
+	 * Returns a new builder with updated metadata. The original builder
+	 * is not mutated.
+	 *
+	 * @param meta - Metadata fields to set (description, usage)
+	 * @returns A new `Crust` instance with updated metadata
+	 */
+	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A> {
+		return this._clone({
+			meta: { ...this._node.meta, ...meta },
+		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
 	 * Define local flags for this command.
 	 *
 	 * Returns a new builder with updated local flag types. The original
@@ -347,7 +364,7 @@ export class Crust<
 
 		return this._clone({
 			localFlags: copiedFlags,
-			effectiveFlags: copiedFlags,
+			effectiveFlags: { ...copiedFlags },
 		}) as unknown as Crust<Inherited, F, A>;
 	}
 
@@ -644,6 +661,7 @@ export class Crust<
 					command: resolvedNode,
 				};
 
+				let runError: unknown;
 				try {
 					// preRun
 					if (resolvedNode.preRun) {
@@ -652,11 +670,29 @@ export class Crust<
 
 					// run
 					await resolvedNode.run(context);
-				} finally {
-					// postRun always runs (even if run throws)
-					if (resolvedNode.postRun) {
+				} catch (error) {
+					runError = error;
+				}
+
+				// postRun always runs (even if run/preRun threw)
+				if (resolvedNode.postRun) {
+					try {
 						await resolvedNode.postRun(context);
+					} catch (postRunError) {
+						// If run already threw, preserve the original error and log postRun error
+						if (!runError) {
+							runError = postRunError;
+						} else {
+							console.error(
+								`Error in postRun: ${postRunError instanceof Error ? postRunError.message : String(postRunError)}`,
+							);
+						}
 					}
+				}
+
+				// Re-throw the original error if any
+				if (runError) {
+					throw runError;
 				}
 			});
 		} catch (error) {

@@ -16,7 +16,11 @@ function makeNode(config: {
 	subCommands?: Record<string, CommandNode>;
 	run?: (ctx: unknown) => void | Promise<void>;
 }): CommandNode {
-	const node = createCommandNode(config.meta);
+	const meta =
+		typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const node = createCommandNode(meta.name);
+	if (meta.description) node.meta.description = meta.description;
+	if (meta.usage) node.meta.usage = meta.usage;
 	if (config.flags) {
 		node.localFlags = { ...config.flags };
 		node.effectiveFlags = { ...config.flags };

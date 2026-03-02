@@ -28,17 +28,6 @@ describe("Crust constructor", () => {
 		expect(app._node.meta.name).toBe("my-cli");
 	});
 
-	it("creates builder with CommandMeta object", () => {
-		const app = new Crust({
-			name: "my-cli",
-			description: "My CLI tool",
-			usage: "my-cli [options]",
-		});
-		expect(app._node.meta.name).toBe("my-cli");
-		expect(app._node.meta.description).toBe("My CLI tool");
-		expect(app._node.meta.usage).toBe("my-cli [options]");
-	});
-
 	it("throws CrustError DEFINITION on empty name", () => {
 		try {
 			new Crust("");
@@ -55,16 +44,6 @@ describe("Crust constructor", () => {
 	it("throws CrustError DEFINITION on whitespace-only name", () => {
 		try {
 			new Crust("   ");
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-		}
-	});
-
-	it("throws CrustError DEFINITION on empty meta.name in object", () => {
-		try {
-			new Crust({ name: "" });
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -140,10 +119,7 @@ describe("Crust .flags()", () => {
 	});
 
 	it("preserves meta from original builder", () => {
-		const app = new Crust({
-			name: "my-cli",
-			description: "desc",
-		});
+		const app = new Crust("my-cli").meta({ description: "desc" });
 		const withFlags = app.flags({ verbose: { type: "boolean" } });
 
 		expect(withFlags._node.meta.name).toBe("my-cli");
@@ -248,7 +224,7 @@ describe("Crust .args()", () => {
 	});
 
 	it("preserves meta and flags from original builder", () => {
-		const app = new Crust({ name: "my-cli", description: "desc" }).flags({
+		const app = new Crust("my-cli").meta({ description: "desc" }).flags({
 			verbose: { type: "boolean" },
 		});
 		const withArgs = app.args([{ name: "file", type: "string" }]);
@@ -300,6 +276,80 @@ describe("Crust chaining", () => {
 
 		expect(withArgs._node.localFlags.verbose).toBeDefined();
 		expect(withArgs._node.args?.length).toBe(1);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .meta()
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .meta()", () => {
+	it("sets description and usage on the node", () => {
+		const app = new Crust("test").meta({
+			description: "A test command",
+			usage: "test [options]",
+		});
+
+		expect(app._node.meta.description).toBe("A test command");
+		expect(app._node.meta.usage).toBe("test [options]");
+	});
+
+	it("preserves the command name", () => {
+		const app = new Crust("my-cli").meta({ description: "desc" });
+		expect(app._node.meta.name).toBe("my-cli");
+	});
+
+	it("returns a new instance (immutability)", () => {
+		const app = new Crust("test");
+		const withMeta = app.meta({ description: "desc" });
+
+		expect(withMeta).not.toBe(app);
+	});
+
+	it("does not mutate original builder", () => {
+		const app = new Crust("test");
+		app.meta({ description: "desc" });
+
+		expect(app._node.meta.description).toBeUndefined();
+	});
+
+	it("preserves flags and args from original builder", () => {
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }])
+			.meta({ description: "desc" });
+
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+		expect(app._node.meta.description).toBe("desc");
+	});
+
+	it("can be chained before .flags() and .args()", () => {
+		const app = new Crust("test")
+			.meta({ description: "desc" })
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }]);
+
+		expect(app._node.meta.description).toBe("desc");
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+	});
+
+	it("sets only description when usage is omitted", () => {
+		const app = new Crust("test").meta({ description: "desc" });
+		expect(app._node.meta.description).toBe("desc");
+		expect(app._node.meta.usage).toBeUndefined();
+	});
+
+	it("works in subcommand callbacks", () => {
+		const app = new Crust("cli").command("sub", (cmd) =>
+			cmd.meta({ description: "A subcommand", usage: "cli sub [options]" }),
+		);
+
+		const subNode = app._node.subCommands.sub;
+		expect(subNode?.meta.description).toBe("A subcommand");
+		expect(subNode?.meta.usage).toBe("cli sub [options]");
+		expect(subNode?.meta.name).toBe("sub");
 	});
 });
 

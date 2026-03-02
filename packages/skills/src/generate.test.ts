@@ -26,7 +26,8 @@ function makeCommand(opts: {
 	run?: () => void;
 	subCommands?: Record<string, CommandNode>;
 }): CommandNode {
-	const node = createCommandNode(opts.meta);
+	const node = createCommandNode(opts.meta.name);
+	Object.assign(node.meta, opts.meta);
 	if (opts.args) node.args = opts.args as ArgDef[];
 	if (opts.flags) {
 		node.localFlags = { ...opts.flags };

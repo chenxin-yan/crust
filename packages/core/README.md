@@ -15,7 +15,8 @@ bun add @crustjs/core
 ```ts
 import { Crust } from "@crustjs/core";
 
-const app = new Crust({ name: "greet", description: "Say hello" })
+const app = new Crust("greet")
+  .meta({ description: "Say hello" })
   .args([{ name: "name", type: "string", default: "world" }] as const)
   .flags({
     loud: { type: "boolean", description: "Shout it", alias: "l" },

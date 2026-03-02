@@ -41,16 +41,13 @@ export interface CommandNode {
 /**
  * Creates a new `CommandNode` with all fields initialized to defaults.
  *
- * @param meta - Either a string (command name) or a full `CommandMeta` object.
+ * @param name - The command name.
  * @returns A fresh `CommandNode` with empty flags, no args, no subcommands,
  *          no plugins, and no lifecycle handlers.
  */
-export function createCommandNode(meta: string | CommandMeta): CommandNode {
-	const normalizedMeta: CommandMeta =
-		typeof meta === "string" ? { name: meta } : { ...meta };
-
+export function createCommandNode(name: string): CommandNode {
 	return {
-		meta: normalizedMeta,
+		meta: { name },
 		localFlags: {},
 		effectiveFlags: {},
 		args: undefined,

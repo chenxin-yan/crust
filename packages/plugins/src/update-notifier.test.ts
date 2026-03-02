@@ -416,7 +416,7 @@ describe("updateNotifierPlugin middleware", () => {
 
 	/** Create a basic command node for testing. */
 	function makeCommand(name = "test-cli") {
-		const node = createCommandNode({ name, description: "Test CLI" });
+		const node = createCommandNode(name);
 		node.run = () => {};
 		return node;
 	}
@@ -1094,7 +1094,8 @@ describe("updateNotifierPlugin middleware", () => {
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
-			const app = new Crust({ name: pkgName, description: "Test" })
+			const app = new Crust(pkgName)
+				.meta({ description: "Test" })
 				.use(
 					updateNotifierPlugin({
 						currentVersion: "1.0.0",
@@ -1131,7 +1132,8 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 			};
 
-			const app = new Crust({ name: pkgName, description: "Test" })
+			const app = new Crust(pkgName)
+				.meta({ description: "Test" })
 				.use(otherPlugin)
 				.use(
 					updateNotifierPlugin({
@@ -1154,7 +1156,8 @@ describe("updateNotifierPlugin middleware", () => {
 			mockRegistryFailure();
 
 			let commandExecuted = false;
-			const app = new Crust({ name: pkgName, description: "Test" })
+			const app = new Crust(pkgName)
+				.meta({ description: "Test" })
 				.use(
 					updateNotifierPlugin({
 						currentVersion: "1.0.0",

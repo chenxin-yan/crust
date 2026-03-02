@@ -473,11 +473,8 @@ async function validateEntrypoint(entryPath: string): Promise<void> {
  */
 // biome-ignore lint/suspicious/noExplicitAny: callback signature uses any for parent generics
 export function buildCommand(cmd: Crust<any, any, any>) {
-	// Set description on the internal node — the builder API doesn't expose
-	// a .describe() method, so we set it directly for help text rendering.
-	cmd._node.meta.description = "Compile your CLI to a standalone executable";
-
 	return cmd
+		.meta({ description: "Compile your CLI to a standalone executable" })
 		.flags({
 			entry: {
 				type: "string",

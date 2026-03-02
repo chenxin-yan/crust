@@ -150,7 +150,7 @@ async function autoUpdateSkills(
  * import { Crust } from "@crustjs/core";
  * import { skillPlugin } from "@crustjs/skills";
  *
- * const app = new Crust({ name: "my-cli", description: "My CLI" })
+ * const app = new Crust("my-cli").meta({ description: "My CLI" })
  *   .use(skillPlugin({
  *     version: "1.0.0",
  *     command: true, // registers "my-cli skill" subcommand
@@ -218,10 +218,8 @@ function buildSkillCommand(
 	rootCmd: CommandNode,
 	options: SkillPluginOptions,
 ): CommandNode {
-	const node = createCommandNode({
-		name: DEFAULT_SKILL_COMMAND_NAME,
-		description: "Manage agent skill installations",
-	});
+	const node = createCommandNode(DEFAULT_SKILL_COMMAND_NAME);
+	node.meta.description = "Manage agent skill installations";
 	node.run = async () => {
 		const meta = deriveSkillMeta(rootCmd, options.version);
 		const scope = options.scope ?? DEFAULT_SKILL_SCOPE;

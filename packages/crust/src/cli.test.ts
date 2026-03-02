@@ -87,10 +87,8 @@ const expectedVersion = pkg.version;
  * This mirrors the production `crustApp` in cli.ts but allows test-specific plugins.
  */
 function makeCrustApp() {
-	return new Crust({
-		name: pkg.name,
-		description: pkg.description,
-	})
+	return new Crust(pkg.name)
+		.meta({ description: pkg.description })
 		.use(versionPlugin(expectedVersion))
 		.use(
 			updateNotifierPlugin({
@@ -113,7 +111,7 @@ describe("crust CLI entry point", () => {
 			const app = makeCrustApp();
 			expect(app._node.meta.name).toBe("@crustjs/crust");
 			expect(app._node.meta.description).toBe(
-				"CLI tooling for the Crust framework — build and distribute standalone executables.",
+				"CLI tooling for the Crust framework",
 			);
 		});
 

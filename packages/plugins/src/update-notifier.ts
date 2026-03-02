@@ -368,7 +368,7 @@ function resolveUpdateCommand(
  * import { updateNotifierPlugin } from "@crustjs/plugins";
  * import pkg from "../package.json";
  *
- * const app = new Crust({ name: "my-cli", description: "My awesome CLI" })
+ * const app = new Crust("my-cli").meta({ description: "My awesome CLI" })
  *   .use(updateNotifierPlugin({ currentVersion: pkg.version }))
  *   .run(() => {
  *     console.log("Hello!");

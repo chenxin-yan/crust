@@ -55,7 +55,8 @@ describe("built-in plugins", () => {
 	it("help plugin ignores help-like args after --", async () => {
 		let capturedRawArgs: string[] = [];
 
-		const app = new Crust({ name: "app", description: "Test app" })
+		const app = new Crust("app")
+			.meta({ description: "Test app" })
 			.use(helpPlugin())
 			.command("build", (cmd) =>
 				cmd.run((ctx) => {
@@ -116,7 +117,8 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin flag appears in help output", async () => {
-		const app = new Crust({ name: "app", description: "Test app" })
+		const app = new Crust("app")
+			.meta({ description: "Test app" })
 			.use(versionPlugin("1.0.0"))
 			.use(helpPlugin())
 			.run(() => {});

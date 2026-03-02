@@ -26,10 +26,8 @@ const serveCmd = new Crust("serve")
 		console.log(`serve ${args.dir} on ${flags.port}`);
 	});
 
-const rootCmd = new Crust({
-	name: "myapp",
-	description: "Integration test app",
-})
+const rootCmd = new Crust("myapp")
+	.meta({ description: "Integration test app" })
 	.flags({
 		help: { type: "boolean", alias: "h" },
 	} as const)

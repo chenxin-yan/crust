@@ -26,7 +26,8 @@ function getStdout(): string {
 
 describe("help plugin integration with Crust builder + commandValidator", () => {
 	it("renders help for a flags-only schema-first command", async () => {
-		const app = new Crust({ name: "serve", description: "Start dev server" })
+		const app = new Crust("serve")
+			.meta({ description: "Start dev server" })
 			.flags({
 				verbose: flag(
 					z.boolean().default(false).describe("Enable verbose logging"),
@@ -107,7 +108,8 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 
 	it("renders parent and subcommand help correctly", async () => {
 		function createApp() {
-			return new Crust({ name: "app", description: "App CLI" })
+			return new Crust("app")
+				.meta({ description: "App CLI" })
 				.command("deploy", (cmd) =>
 					cmd
 						.flags({

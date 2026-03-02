@@ -26,7 +26,8 @@ function getStdout(): string {
 
 describe("help plugin integration with Crust builder + commandValidator", () => {
 	it("renders help for a flags-only schema-first command", async () => {
-		const app = new Crust({ name: "serve", description: "Start dev server" })
+		const app = new Crust("serve")
+			.meta({ description: "Start dev server" })
 			.flags({
 				verbose: flag(
 					Schema.UndefinedOr(

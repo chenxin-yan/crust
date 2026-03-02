@@ -15,7 +15,11 @@ function makeNode(config: {
 	subCommands?: Record<string, CommandNode>;
 	run?: (ctx: unknown) => void | Promise<void>;
 }): CommandNode {
-	const node = createCommandNode(config.meta);
+	const meta =
+		typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const node = createCommandNode(meta.name);
+	if (meta.description) node.meta.description = meta.description;
+	if (meta.usage) node.meta.usage = meta.usage;
 	if (config.flags) {
 		node.localFlags = { ...config.flags };
 		node.effectiveFlags = { ...config.flags };
@@ -37,7 +41,8 @@ function makeNode(config: {
 // ────────────────────────────────────────────────────────────────────────────
 
 function createLeafCommand(name: string, hasRun = true): CommandNode {
-	const node = createCommandNode({ name, description: `${name} command` });
+	const node = createCommandNode(name);
+	node.meta.description = `${name} command`;
 	if (hasRun) {
 		node.run = () => {
 			/* noop */
@@ -47,10 +52,8 @@ function createLeafCommand(name: string, hasRun = true): CommandNode {
 }
 
 function createRootWithSubcommands(hasRun = false): CommandNode {
-	const buildNode = createCommandNode({
-		name: "build",
-		description: "Build the project",
-	});
+	const buildNode = createCommandNode("build");
+	buildNode.meta.description = "Build the project";
 	buildNode.localFlags = {
 		entry: {
 			type: "string",
@@ -63,10 +66,8 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 		/* noop */
 	};
 
-	const devNode = createCommandNode({
-		name: "dev",
-		description: "Start dev server",
-	});
+	const devNode = createCommandNode("dev");
+	devNode.meta.description = "Start dev server";
 	devNode.localFlags = {
 		port: { type: "number", description: "Port number", default: 3000 },
 	};
@@ -75,10 +76,8 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 		/* noop */
 	};
 
-	const root = createCommandNode({
-		name: "crust",
-		description: "Crust CLI",
-	});
+	const root = createCommandNode("crust");
+	root.meta.description = "Crust CLI";
 	root.subCommands = { build: buildNode, dev: devNode };
 	if (hasRun) {
 		root.run = () => {
@@ -475,10 +474,8 @@ describe("resolveCommand — CommandNode tree", () => {
 	}
 
 	function createNodeRootWithSubcommands(hasRun = false): CommandNode {
-		const buildNode = createCommandNode({
-			name: "build",
-			description: "Build the project",
-		});
+		const buildNode = createCommandNode("build");
+		buildNode.meta.description = "Build the project";
 		buildNode.localFlags = {
 			entry: {
 				type: "string",
@@ -491,10 +488,8 @@ describe("resolveCommand — CommandNode tree", () => {
 			/* noop */
 		};
 
-		const devNode = createCommandNode({
-			name: "dev",
-			description: "Start dev server",
-		});
+		const devNode = createCommandNode("dev");
+		devNode.meta.description = "Start dev server";
 		devNode.localFlags = {
 			port: { type: "number", description: "Port number", default: 3000 },
 		};
@@ -503,10 +498,8 @@ describe("resolveCommand — CommandNode tree", () => {
 			/* noop */
 		};
 
-		const root = createCommandNode({
-			name: "crust",
-			description: "Crust CLI",
-		});
+		const root = createCommandNode("crust");
+		root.meta.description = "Crust CLI";
 		root.subCommands = { build: buildNode, dev: devNode };
 		if (hasRun) {
 			root.run = () => {
@@ -550,19 +543,15 @@ describe("resolveCommand — CommandNode tree", () => {
 			const templateNode = createNodeLeaf("template");
 			const commandNode = createNodeLeaf("command");
 
-			const generateNode = createCommandNode({
-				name: "generate",
-				description: "Generate files",
-			});
+			const generateNode = createCommandNode("generate");
+			generateNode.meta.description = "Generate files";
 			generateNode.subCommands = {
 				command: commandNode,
 				template: templateNode,
 			};
 
-			const root = createCommandNode({
-				name: "crust",
-				description: "Crust CLI",
-			});
+			const root = createCommandNode("crust");
+			root.meta.description = "Crust CLI";
 			root.subCommands = { generate: generateNode };
 
 			const result = resolveCommand(root, ["generate", "command"]);
@@ -592,25 +581,19 @@ describe("resolveCommand — CommandNode tree", () => {
 		});
 
 		it("resolves nested node with remaining argv", () => {
-			const commandNode = createCommandNode({
-				name: "command",
-				description: "Generate a command",
-			});
+			const commandNode = createCommandNode("command");
+			commandNode.meta.description = "Generate a command";
 			commandNode.args = [{ name: "name", type: "string", required: true }];
 			commandNode.run = () => {
 				/* noop */
 			};
 
-			const generateNode = createCommandNode({
-				name: "generate",
-				description: "Generate files",
-			});
+			const generateNode = createCommandNode("generate");
+			generateNode.meta.description = "Generate files";
 			generateNode.subCommands = { command: commandNode };
 
-			const root = createCommandNode({
-				name: "crust",
-				description: "Crust CLI",
-			});
+			const root = createCommandNode("crust");
+			root.meta.description = "Crust CLI";
 			root.subCommands = { generate: generateNode };
 
 			const result = resolveCommand(root, [

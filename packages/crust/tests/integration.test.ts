@@ -3,7 +3,6 @@ import type {
 	ArgDef,
 	ArgsDef,
 	CommandMeta,
-	CommandRoute,
 	FlagDef,
 	FlagsDef,
 	ParseResult,
