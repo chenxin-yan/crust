@@ -1,63 +1,50 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "./command.ts";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
-import type { AnyCommand } from "./types.ts";
 import { validateCommandTree } from "./validation.ts";
 
 describe("validateCommandTree", () => {
 	it("passes commands with required args and flags", () => {
-		const cmd = defineCommand({
-			meta: { name: "build" },
-			args: [
-				{ name: "entry", type: "string", required: true },
-				{ name: "count", type: "number", required: true },
-			],
-			flags: {
-				output: { type: "string", required: true },
-				port: { type: "number", required: true },
-				verbose: { type: "boolean", required: true },
-			},
-		});
+		const node = createCommandNode("build");
+		node.args = [
+			{ name: "entry", type: "string", required: true },
+			{ name: "count", type: "number", required: true },
+		];
+		node.localFlags = {
+			output: { type: "string", required: true },
+			port: { type: "number", required: true },
+			verbose: { type: "boolean", required: true },
+		};
+		node.effectiveFlags = { ...node.localFlags };
 
-		expect(() => validateCommandTree(cmd)).not.toThrow();
+		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
 	it("throws with command path when parser-level validation fails", () => {
-		const cmd: AnyCommand = {
-			meta: { name: "root" },
-			flags: {
-				verbose: { type: "boolean", alias: "v" },
-				version: { type: "boolean", alias: "v" },
-			},
-			subCommands: {},
+		const node = createCommandNode("root");
+		node.localFlags = {
+			verbose: { type: "boolean", alias: "v" },
+			version: { type: "boolean", alias: "v" },
 		};
+		node.effectiveFlags = { ...node.localFlags };
 
-		expect(() => validateCommandTree(cmd)).toThrow(
+		expect(() => validateCommandTree(node)).toThrow(
 			'Command "root" failed runtime validation',
 		);
 	});
 
 	it("validates nested subcommands", () => {
-		const invalidLeaf: AnyCommand = {
-			meta: { name: "leaf" },
-			flags: {
-				out: { type: "string" },
-				output: { type: "string", alias: "out" },
-			},
-			subCommands: {},
+		const invalidLeaf = createCommandNode("leaf");
+		invalidLeaf.localFlags = {
+			out: { type: "string" },
+			output: { type: "string", alias: "out" },
 		};
+		invalidLeaf.effectiveFlags = { ...invalidLeaf.localFlags };
 
-		const root = defineCommand({
-			meta: { name: "root" },
-			subCommands: {
-				generate: defineCommand({
-					meta: { name: "generate" },
-					subCommands: {
-						leaf: invalidLeaf,
-					},
-				}),
-			},
-		});
+		const generate = createCommandNode("generate");
+		generate.subCommands = { leaf: invalidLeaf };
+
+		const root = createCommandNode("root");
+		root.subCommands = { generate };
 
 		expect(() => validateCommandTree(root)).toThrow(
 			'Command "root generate leaf" failed runtime validation',
@@ -275,15 +262,12 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("mixed AnyCommand and CommandNode in tree is not supported but AnyCommand subCommands work", () => {
-		// validateCommandTree with AnyCommand root still works
-		const root: AnyCommand = {
-			meta: { name: "root" },
-			flags: {
-				verbose: { type: "boolean", alias: "v" },
-			},
-			subCommands: {},
+	it("CommandNode with local flags validates correctly", () => {
+		const root = createCommandNode("root");
+		root.localFlags = {
+			verbose: { type: "boolean", alias: "v" },
 		};
+		root.effectiveFlags = { ...root.localFlags };
 
 		expect(() => validateCommandTree(root)).not.toThrow();
 	});

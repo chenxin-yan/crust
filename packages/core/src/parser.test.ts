@@ -1,16 +1,44 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "./command.ts";
 import { CrustError } from "./errors.ts";
+import type { CommandNode } from "./node.ts";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { parseArgs } from "./parser.ts";
-import type { AnyCommand } from "./types.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
+
+/**
+ * Test helper: creates a CommandNode from a defineCommand-style config.
+ * Replaces defineCommand for test fixtures.
+ */
+function makeNode(config: {
+	meta: string | CommandMeta;
+	args?: ArgsDef;
+	flags?: FlagsDef;
+	subCommands?: Record<string, CommandNode>;
+	run?: (ctx: unknown) => void | Promise<void>;
+}): CommandNode {
+	const node = createCommandNode(config.meta);
+	if (config.flags) {
+		node.localFlags = { ...config.flags };
+		node.effectiveFlags = { ...config.flags };
+	}
+	if (config.args) {
+		node.args = [...config.args];
+	}
+	if (config.subCommands) {
+		node.subCommands = { ...config.subCommands };
+	}
+	if (config.run) {
+		node.run = config.run;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Boolean flags
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — boolean flags", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			verbose: { type: "boolean", description: "Enable verbose logging" },
@@ -28,7 +56,7 @@ describe("parseArgs — boolean flags", () => {
 	});
 
 	it("parses --no-verbose as false", () => {
-		const cmdWithDefault = defineCommand({
+		const cmdWithDefault = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean", default: true },
@@ -44,7 +72,7 @@ describe("parseArgs — boolean flags", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — string flags", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			output: { type: "string", description: "Output directory" },
@@ -72,7 +100,7 @@ describe("parseArgs — string flags", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — number flags", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			port: { type: "number", description: "Port number" },
@@ -134,7 +162,7 @@ describe("parseArgs — number flags", () => {
 
 describe("parseArgs — aliases", () => {
 	it("parses short alias -v", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean", alias: "v" },
@@ -145,7 +173,7 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("parses short alias -p with value", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				port: { type: "number", alias: "p" },
@@ -156,7 +184,7 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("supports array of aliases", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				output: { type: "string", alias: ["o", "out"] },
@@ -173,13 +201,11 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on alias collision", () => {
-		const cmd: AnyCommand = {
-			meta: { name: "test" },
+		const cmd = {
 			flags: {
-				verbose: { type: "boolean", alias: "v" },
-				version: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean" as const, alias: "v" },
+				version: { type: "boolean" as const, alias: "v" },
 			},
-			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);
@@ -194,13 +220,11 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on long alias shadowing flag name", () => {
-		const cmd: AnyCommand = {
-			meta: { name: "test" },
+		const cmd = {
 			flags: {
-				out: { type: "string", description: "Output format" },
-				output: { type: "string", alias: ["o", "out"] },
+				out: { type: "string" as const, description: "Output format" },
+				output: { type: "string" as const, alias: ["o", "out"] },
 			},
-			subCommands: {},
 		};
 		try {
 			parseArgs(cmd, []);
@@ -221,7 +245,7 @@ describe("parseArgs — aliases", () => {
 
 describe("parseArgs — multiple flags", () => {
 	it("collects multiple string values into an array", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true },
@@ -232,7 +256,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("single value with multiple: true still returns array", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true },
@@ -243,7 +267,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("coerces multiple number values individually", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				port: { type: "number", multiple: true },
@@ -254,7 +278,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("throws on non-numeric value in multiple number flag", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				port: { type: "number", multiple: true },
@@ -266,7 +290,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("collects multiple boolean values into an array", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean", multiple: true },
@@ -277,7 +301,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("collects mixed --flag and --no-flag into array with multiple: true", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean", multiple: true },
@@ -288,7 +312,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("collects only --no-flag values into array with multiple: true", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean", multiple: true },
@@ -299,7 +323,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("returns undefined when multiple flag is not provided and has no default", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true },
@@ -310,7 +334,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("applies default array when multiple flag is not provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, default: ["default.ts"] },
@@ -321,7 +345,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("throws when required multiple flag is not provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, required: true },
@@ -331,7 +355,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("works with short alias on multiple flag", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, alias: "f" },
@@ -342,7 +366,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("works with long alias on multiple flag", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, alias: ["f", "input"] },
@@ -353,7 +377,7 @@ describe("parseArgs — multiple flags", () => {
 	});
 
 	it("merges values from canonical name and aliases", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, alias: ["f", "input"] },
@@ -377,7 +401,7 @@ describe("parseArgs — multiple flags", () => {
 
 describe("parseArgs — default values", () => {
 	it("applies default flag value when not provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				port: { type: "number", default: 3000 },
@@ -388,16 +412,16 @@ describe("parseArgs — default values", () => {
 	});
 
 	it("applies default arg value when not provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string", default: "index.ts" }],
 		});
 		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBe("index.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("index.ts");
 	});
 
 	it("overrides default when value is provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				port: { type: "number", default: 3000 },
@@ -408,7 +432,7 @@ describe("parseArgs — default values", () => {
 	});
 
 	it("applies default boolean value", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				minify: { type: "boolean", default: true },
@@ -419,7 +443,7 @@ describe("parseArgs — default values", () => {
 	});
 
 	it("all-defaults scenario", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string", default: "src/cli.ts" }],
 			flags: {
@@ -429,7 +453,7 @@ describe("parseArgs — default values", () => {
 			},
 		});
 		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBe("src/cli.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("src/cli.ts");
 		expect(result.flags.port).toBe(3000);
 		expect(result.flags.verbose).toBe(false);
 		expect(result.flags.output).toBe("./dist");
@@ -441,14 +465,14 @@ describe("parseArgs — default values", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — required args", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		args: [{ name: "file", type: "string", required: true }],
 	});
 
 	it("succeeds when required arg is provided", () => {
 		const result = parseArgs(cmd, ["input.ts"]);
-		expect(result.args.file).toBe("input.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
 	});
 
 	it("throws CrustError with VALIDATION code when required arg is missing", () => {
@@ -465,7 +489,7 @@ describe("parseArgs — required args", () => {
 	});
 
 	it("required arg with a default does not throw when missing", () => {
-		const cmdWithDefault = defineCommand({
+		const cmdWithDefault = makeNode({
 			meta: { name: "test" },
 			args: [
 				{ name: "file", type: "string", required: true, default: "index.ts" },
@@ -474,7 +498,7 @@ describe("parseArgs — required args", () => {
 		// When default is present, it should be applied even if required
 		// (the default satisfies the requirement)
 		const result = parseArgs(cmdWithDefault, []);
-		expect(result.args.file).toBe("index.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("index.ts");
 	});
 });
 
@@ -483,7 +507,7 @@ describe("parseArgs — required args", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — required flags", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			name: { type: "string", required: true },
@@ -515,16 +539,20 @@ describe("parseArgs — required flags", () => {
 
 describe("parseArgs — variadic args", () => {
 	it("collects remaining positionals into an array", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts", "c.ts"]);
-		expect(result.args.files).toEqual(["a.ts", "b.ts", "c.ts"]);
+		expect((result.args as Record<string, unknown>).files).toEqual([
+			"a.ts",
+			"b.ts",
+			"c.ts",
+		]);
 	});
 
 	it("variadic with preceding regular arg", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [
 				{ name: "target", type: "string", required: true },
@@ -532,30 +560,33 @@ describe("parseArgs — variadic args", () => {
 			],
 		});
 		const result = parseArgs(cmd, ["build", "a.ts", "b.ts"]);
-		expect(result.args.target).toBe("build");
-		expect(result.args.files).toEqual(["a.ts", "b.ts"]);
+		expect((result.args as Record<string, unknown>).target).toBe("build");
+		expect((result.args as Record<string, unknown>).files).toEqual([
+			"a.ts",
+			"b.ts",
+		]);
 	});
 
 	it("variadic with no remaining args produces empty array", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, []);
-		expect(result.args.files).toEqual([]);
+		expect((result.args as Record<string, unknown>).files).toEqual([]);
 	});
 
 	it("variadic with number coercion", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["1", "2", "3"]);
-		expect(result.args.numbers).toEqual([1, 2, 3]);
+		expect((result.args as Record<string, unknown>).numbers).toEqual([1, 2, 3]);
 	});
 
 	it("throws CrustError with PARSE code on variadic non-numeric value", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
@@ -572,7 +603,7 @@ describe("parseArgs — variadic args", () => {
 	});
 
 	it("throws CrustError with VALIDATION code when required variadic arg receives no values", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
@@ -589,12 +620,12 @@ describe("parseArgs — variadic args", () => {
 	});
 
 	it("required variadic succeeds when at least one value is provided", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts"]);
-		expect(result.args.files).toEqual(["a.ts"]);
+		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts"]);
 	});
 });
 
@@ -604,7 +635,7 @@ describe("parseArgs — variadic args", () => {
 
 describe("parseArgs — '--' separator", () => {
 	it("passes args after -- as rawArgs", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean" },
@@ -616,7 +647,7 @@ describe("parseArgs — '--' separator", () => {
 	});
 
 	it("args after -- are not parsed as flags", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				verbose: { type: "boolean" },
@@ -628,7 +659,7 @@ describe("parseArgs — '--' separator", () => {
 	});
 
 	it("-- with no following args produces empty rawArgs", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 		});
 		const result = parseArgs(cmd, ["--"]);
@@ -636,7 +667,7 @@ describe("parseArgs — '--' separator", () => {
 	});
 
 	it("rawArgs are empty when no -- separator is used", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 		});
 		const result = parseArgs(cmd, ["hello"]);
@@ -644,12 +675,12 @@ describe("parseArgs — '--' separator", () => {
 	});
 
 	it("positional args before -- are parsed, after -- go to rawArgs", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string", required: true }],
 		});
 		const result = parseArgs(cmd, ["input.ts", "--", "--extra"]);
-		expect(result.args.file).toBe("input.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
 		expect(result.rawArgs).toEqual(["--extra"]);
 	});
 });
@@ -659,7 +690,7 @@ describe("parseArgs — '--' separator", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — strict mode (unknown flags)", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			verbose: { type: "boolean" },
@@ -701,7 +732,7 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 
 describe("parseArgs — empty argv", () => {
 	it("handles empty argv with no definitions", () => {
-		const cmd = defineCommand({ meta: { name: "test" } });
+		const cmd = makeNode({ meta: { name: "test" } });
 		const result = parseArgs(cmd, []);
 		expect(result.args).toEqual({});
 		expect(result.flags).toEqual({});
@@ -709,7 +740,7 @@ describe("parseArgs — empty argv", () => {
 	});
 
 	it("handles empty argv with optional args/flags", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string" }],
 			flags: {
@@ -717,7 +748,7 @@ describe("parseArgs — empty argv", () => {
 			},
 		});
 		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBeUndefined();
+		expect((result.args as Record<string, unknown>).file).toBeUndefined();
 		expect(result.flags.verbose).toBeUndefined();
 	});
 });
@@ -728,7 +759,7 @@ describe("parseArgs — empty argv", () => {
 
 describe("parseArgs — complex scenarios", () => {
 	it("parses mixed positionals and flags", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "serve" },
 			args: [{ name: "entry", type: "string", required: true }],
 			flags: {
@@ -737,13 +768,13 @@ describe("parseArgs — complex scenarios", () => {
 			},
 		});
 		const result = parseArgs(cmd, ["src/cli.ts", "-p", "8080", "-v"]);
-		expect(result.args.entry).toBe("src/cli.ts");
+		expect((result.args as Record<string, unknown>).entry).toBe("src/cli.ts");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.verbose).toBe(true);
 	});
 
 	it("parses positionals and flags in any order", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string", required: true }],
 			flags: {
@@ -752,30 +783,30 @@ describe("parseArgs — complex scenarios", () => {
 		});
 		// Flags before positionals
 		const result = parseArgs(cmd, ["--output", "./build", "input.ts"]);
-		expect(result.args.file).toBe("input.ts");
+		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
 		expect(result.flags.output).toBe("./build");
 	});
 
 	it("number arg coercion", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "count", type: "number", required: true }],
 		});
 		const result = parseArgs(cmd, ["42"]);
-		expect(result.args.count).toBe(42);
+		expect((result.args as Record<string, unknown>).count).toBe(42);
 	});
 
 	it("boolean arg coercion", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "force", type: "boolean" }],
 		});
 		const result = parseArgs(cmd, ["true"]);
-		expect(result.args.force).toBe(true);
+		expect((result.args as Record<string, unknown>).force).toBe(true);
 	});
 
 	it("full complex command with all features", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "build" },
 			args: [
 				{ name: "entry", type: "string", default: "src/cli.ts" },
@@ -800,8 +831,11 @@ describe("parseArgs — complex scenarios", () => {
 			"--",
 			"--some-extra-flag",
 		]);
-		expect(result.args.entry).toBe("main.ts");
-		expect(result.args.extras).toEqual(["extra1.ts", "extra2.ts"]);
+		expect((result.args as Record<string, unknown>).entry).toBe("main.ts");
+		expect((result.args as Record<string, unknown>).extras).toEqual([
+			"extra1.ts",
+			"extra2.ts",
+		]);
 		expect(result.flags.output).toBe("./build");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.minify).toBe(false);
@@ -810,7 +844,7 @@ describe("parseArgs — complex scenarios", () => {
 	});
 
 	it("multiple positional args in order", () => {
-		const cmd = defineCommand({
+		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [
 				{ name: "source", type: "string", required: true },
@@ -818,8 +852,8 @@ describe("parseArgs — complex scenarios", () => {
 			],
 		});
 		const result = parseArgs(cmd, ["./src", "./dest"]);
-		expect(result.args.source).toBe("./src");
-		expect(result.args.destination).toBe("./dest");
+		expect((result.args as Record<string, unknown>).source).toBe("./src");
+		expect((result.args as Record<string, unknown>).destination).toBe("./dest");
 	});
 });
 
@@ -828,7 +862,7 @@ describe("parseArgs — complex scenarios", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — boolean flag value assignment", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			verbose: { type: "boolean" },
@@ -875,7 +909,7 @@ describe("parseArgs — boolean flag value assignment", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — negated boolean flag with value assignment", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			verbose: { type: "boolean" },
@@ -902,7 +936,7 @@ describe("parseArgs — negated boolean flag with value assignment", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — canonical-only negation", () => {
-	const cmd = defineCommand({
+	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
 			verbose: { type: "boolean", alias: ["v", "loud"] },
@@ -957,10 +991,8 @@ describe("parseArgs — canonical-only negation", () => {
 
 describe("parseArgs — no- prefix defense-in-depth", () => {
 	it("throws CrustError with DEFINITION code on no- prefixed flag name", () => {
-		const cmd: AnyCommand = {
-			meta: { name: "test" },
-			flags: { "no-cache": { type: "boolean" } },
-			subCommands: {},
+		const cmd = {
+			flags: { "no-cache": { type: "boolean" as const } },
 		};
 		try {
 			parseArgs(cmd, []);
@@ -975,10 +1007,8 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on no- prefixed alias", () => {
-		const cmd: AnyCommand = {
-			meta: { name: "test" },
-			flags: { cache: { type: "boolean", alias: "no-store" } },
-			subCommands: {},
+		const cmd = {
+			flags: { cache: { type: "boolean" as const, alias: "no-store" } },
 		};
 		try {
 			parseArgs(cmd, []);

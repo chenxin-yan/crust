@@ -1,15 +1,13 @@
 /**
- * Test utility for running commands and capturing output.
+ * Test utility for running Crust builders and capturing output.
  *
- * Accepts a Command + RunOptions, captures stdout/stderr via mocked console,
- * and returns { stdout, stderr, exitCode }.
+ * Accepts a Crust builder instance + optional argv, captures stdout/stderr
+ * via mocked console, and returns { stdout, stderr, exitCode }.
  *
- * Uses the real runCommand execution pipeline from @crustjs/core.
+ * Uses the real .execute() pipeline from the Crust builder.
  */
 
-import type { RunOptions } from "../src/run.ts";
-import { runCommand as coreRunCommand } from "../src/run.ts";
-import type { AnyCommand } from "../src/types.ts";
+import type { Crust } from "../src/crust.ts";
 
 export interface RunResult {
 	stdout: string;
@@ -18,16 +16,17 @@ export interface RunResult {
 }
 
 /**
- * Run a command with the given options and capture all output.
+ * Execute a Crust builder with the given argv and capture all output.
  *
  * Usage:
- *   const result = await runCommand(myCmd, { argv: ["--flag", "value"] });
+ *   const result = await executeCrust(myApp, ["--flag", "value"]);
  *   expect(result.stdout).toContain("expected output");
  *   expect(result.exitCode).toBe(0);
  */
-export async function runCommand(
-	_command: AnyCommand,
-	_options?: RunOptions,
+export async function executeCrust(
+	// biome-ignore lint/suspicious/noExplicitAny: accepts any Crust generic params
+	builder: Crust<any, any, any>,
+	argv?: string[],
 ): Promise<RunResult> {
 	const stdoutChunks: string[] = [];
 	const stderrChunks: string[] = [];
@@ -57,7 +56,7 @@ export async function runCommand(
 	};
 
 	try {
-		await coreRunCommand(_command, _options);
+		await builder.execute({ argv });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		stderrChunks.push(message);

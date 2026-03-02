@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 import type {
 	ArgDef,
 	ArgsDef,
-	Command,
-	CommandContext,
 	CommandMeta,
 	EffectiveFlags,
 	FlagDef,
@@ -491,95 +489,10 @@ describe("CommandMeta interface", () => {
 	});
 });
 
-describe("Command interface", () => {
-	it("accepts a minimal definition (meta only)", () => {
-		const cmd: Command = {
-			meta: { name: "test" },
-			subCommands: {},
-		};
-		expect(cmd.meta.name).toBe("test");
-	});
-
-	it("accepts a full definition with args, flags, and lifecycle hooks", () => {
-		const cmd: Command = {
-			meta: { name: "serve", description: "Start server" },
-			args: [{ name: "path", type: "string", required: true }],
-			flags: {
-				port: { type: "number", default: 3000 },
-				verbose: { type: "boolean", alias: "v" },
-			},
-			subCommands: {},
-			preRun: (_ctx) => {
-				/* init */
-			},
-			run: (_ctx) => {
-				/* execute */
-			},
-			postRun: (_ctx) => {
-				/* teardown */
-			},
-		};
-
-		expect(cmd.meta.name).toBe("serve");
-		expect(cmd.args).toBeDefined();
-		expect(cmd.flags).toBeDefined();
-		expect(cmd.run).toBeFunction();
-	});
-});
-
-describe("Command runtime shape", () => {
-	it("accepts a command value used at runtime", () => {
-		const cmd: Command = {
-			meta: { name: "test" },
-			subCommands: {},
-			run: (_ctx) => {
-				/* execute */
-			},
-		};
-
-		expect(cmd.meta.name).toBe("test");
-		expect(cmd.run).toBeFunction();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// CommandContext tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("CommandContext interface", () => {
-	it("has correct shape with default generics", () => {
-		const ctx: CommandContext = {
-			args: {},
-			flags: {},
-			rawArgs: ["--verbose"],
-			command: { meta: { name: "test" }, subCommands: {} },
-		};
-
-		expect(ctx.rawArgs).toEqual(["--verbose"]);
-		expect(ctx.command.meta.name).toBe("test");
-	});
-
-	it("infers typed args and flags from generics", () => {
-		type MyArgs = readonly [{ name: "name"; type: "string"; required: true }];
-		type MyFlags = { verbose: { type: "boolean" } };
-
-		const ctx: CommandContext<MyArgs, MyFlags> = {
-			args: { name: "hello" },
-			flags: { verbose: true },
-			rawArgs: [],
-			command: { meta: { name: "test" }, subCommands: {} },
-		};
-
-		// These are compile-time verified type checks
-		type _checkName = Expect<Equal<typeof ctx.args.name, string>>;
-		type _checkVerbose = Expect<
-			Equal<typeof ctx.flags.verbose, boolean | undefined>
-		>;
-
-		expect(ctx.args.name).toBe("hello");
-		expect(ctx.flags.verbose).toBe(true);
-	});
-});
+// NOTE: Command, AnyCommand, CommandDef, and CommandContext interfaces have
+// been removed as part of the old API cleanup. Tests for the new builder API
+// live in crust.test.ts. CrustCommandContext (the replacement for
+// CommandContext) is tested there as well.
 
 // ────────────────────────────────────────────────────────────────────────────
 // ValidateFlagAliases type-level tests

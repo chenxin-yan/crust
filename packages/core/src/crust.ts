@@ -86,8 +86,14 @@ function validateNoPrefixFlags(flags: FlagsDef): void {
 // Internal helpers — execution pipeline
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Build-time validation env var key (matches run.ts constant) */
-const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
+/**
+ * Build-time validation protocol.
+ *
+ * `crust build` spawns the user's entrypoint as a subprocess with
+ * `CRUST_INTERNAL_VALIDATE_ONLY=1`. When `.execute()` detects this env flag
+ * it runs validation, surfaces errors via stderr/exitCode, then force-exits.
+ */
+export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
 
 /** Key for storing validation result on globalThis (for in-process tests) */
 const VALIDATION_RESULT_GLOBAL_KEY = "__CRUST_VALIDATE_RESULT__";
@@ -111,44 +117,17 @@ function createPluginState(): PluginState {
 	};
 }
 
-/**
- * Runtime check: is the target a `CommandNode`?
- * CommandNode has `localFlags`; AnyCommand has `flags`.
- */
-function isCommandNode(target: unknown): target is CommandNode {
-	return (
-		target !== null &&
-		typeof target === "object" &&
-		"localFlags" in (target as Record<string, unknown>)
-	);
-}
-
 /** Create SetupActions that work with CommandNode targets. */
 function createSetupActions(warnings?: string[]): SetupActions {
 	return {
 		addFlag(target, name, def) {
-			if (isCommandNode(target)) {
-				if (name in target.localFlags) {
-					warnings?.push(
-						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
-					);
-				}
-				target.localFlags[name] = def;
-				target.effectiveFlags[name] = def;
-			} else {
-				if (!target.flags) {
-					throw new CrustError(
-						"DEFINITION",
-						`Cannot add flag "${name}": "${target.meta.name}" has no flags object`,
-					);
-				}
-				if (name in target.flags) {
-					warnings?.push(
-						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
-					);
-				}
-				target.flags[name] = def;
+			if (name in target.localFlags) {
+				warnings?.push(
+					`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
+				);
 			}
+			target.localFlags[name] = def;
+			target.effectiveFlags[name] = def;
 		},
 		addSubCommand(parent, name, subCommand) {
 			if (!name.trim()) {
@@ -642,9 +621,10 @@ export class Crust<
 				middlewareContext.route = resolved;
 
 				// Step 6: Parse remaining argv
-				parsed = parseArgs(resolved.command, resolved.argv);
-				middlewareContext.input = parsed;
+				// Safe cast: rootNode is always CommandNode, so all resolved descendants are too
 				resolvedNode = resolved.command as CommandNode;
+				parsed = parseArgs(resolvedNode, resolved.argv);
+				middlewareContext.input = parsed;
 			} catch (error) {
 				// Route/parse errors pass through middleware before surfacing
 				await runMiddlewareChain(allPlugins, middlewareContext, async () => {

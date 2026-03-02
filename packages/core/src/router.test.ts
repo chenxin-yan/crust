@@ -1,63 +1,91 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "./command.ts";
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
+
+/**
+ * Test helper: creates a CommandNode from a defineCommand-style config.
+ */
+function makeNode(config: {
+	meta: string | CommandMeta;
+	args?: ArgsDef;
+	flags?: FlagsDef;
+	subCommands?: Record<string, CommandNode>;
+	run?: (ctx: unknown) => void | Promise<void>;
+}): CommandNode {
+	const node = createCommandNode(config.meta);
+	if (config.flags) {
+		node.localFlags = { ...config.flags };
+		node.effectiveFlags = { ...config.flags };
+	}
+	if (config.args) {
+		node.args = [...config.args];
+	}
+	if (config.subCommands) {
+		node.subCommands = { ...config.subCommands };
+	}
+	if (config.run) {
+		node.run = config.run;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-function createLeafCommand(name: string, hasRun = true) {
-	return defineCommand({
-		meta: { name, description: `${name} command` },
-		...(hasRun
-			? {
-					run() {
-						/* noop */
-					},
-				}
-			: {}),
-	});
+function createLeafCommand(name: string, hasRun = true): CommandNode {
+	const node = createCommandNode({ name, description: `${name} command` });
+	if (hasRun) {
+		node.run = () => {
+			/* noop */
+		};
+	}
+	return node;
 }
 
-function createRootWithSubcommands(hasRun = false) {
-	const buildCmd = defineCommand({
-		meta: { name: "build", description: "Build the project" },
-		flags: {
-			entry: {
-				type: "string",
-				description: "Entry file",
-				default: "src/cli.ts",
-			},
-		},
-		run() {
-			/* noop */
-		},
+function createRootWithSubcommands(hasRun = false): CommandNode {
+	const buildNode = createCommandNode({
+		name: "build",
+		description: "Build the project",
 	});
+	buildNode.localFlags = {
+		entry: {
+			type: "string",
+			description: "Entry file",
+			default: "src/cli.ts",
+		},
+	};
+	buildNode.effectiveFlags = { ...buildNode.localFlags };
+	buildNode.run = () => {
+		/* noop */
+	};
 
-	const devCmd = defineCommand({
-		meta: { name: "dev", description: "Start dev server" },
-		flags: {
-			port: { type: "number", description: "Port number", default: 3000 },
-		},
-		run() {
-			/* noop */
-		},
+	const devNode = createCommandNode({
+		name: "dev",
+		description: "Start dev server",
 	});
+	devNode.localFlags = {
+		port: { type: "number", description: "Port number", default: 3000 },
+	};
+	devNode.effectiveFlags = { ...devNode.localFlags };
+	devNode.run = () => {
+		/* noop */
+	};
 
-	return defineCommand({
-		meta: { name: "crust", description: "Crust CLI" },
-		subCommands: { build: buildCmd, dev: devCmd },
-		...(hasRun
-			? {
-					run() {
-						/* noop */
-					},
-				}
-			: {}),
+	const root = createCommandNode({
+		name: "crust",
+		description: "Crust CLI",
 	});
+	root.subCommands = { build: buildNode, dev: devNode };
+	if (hasRun) {
+		root.run = () => {
+			/* noop */
+		};
+	}
+	return root;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -108,12 +136,12 @@ describe("resolveCommand", () => {
 			const templateCmd = createLeafCommand("template");
 			const commandCmd = createLeafCommand("command");
 
-			const generateCmd = defineCommand({
+			const generateCmd = makeNode({
 				meta: { name: "generate", description: "Generate files" },
 				subCommands: { command: commandCmd, template: templateCmd },
 			});
 
-			const root = defineCommand({
+			const root = makeNode({
 				meta: { name: "crust", description: "Crust CLI" },
 				subCommands: { generate: generateCmd },
 			});
@@ -128,17 +156,17 @@ describe("resolveCommand", () => {
 		it("resolves deeply nested subcommand (3+ levels)", () => {
 			const deepCmd = createLeafCommand("deep");
 
-			const level2 = defineCommand({
+			const level2 = makeNode({
 				meta: { name: "level2", description: "Level 2" },
 				subCommands: { deep: deepCmd },
 			});
 
-			const level1 = defineCommand({
+			const level1 = makeNode({
 				meta: { name: "level1", description: "Level 1" },
 				subCommands: { level2 },
 			});
 
-			const root = defineCommand({
+			const root = makeNode({
 				meta: { name: "root", description: "Root" },
 				subCommands: { level1 },
 			});
@@ -151,7 +179,7 @@ describe("resolveCommand", () => {
 		});
 
 		it("resolves nested subcommand with remaining argv", () => {
-			const commandCmd = defineCommand({
+			const commandCmd = makeNode({
 				meta: { name: "command", description: "Generate a command" },
 				args: [{ name: "name", type: "string", required: true }],
 				run() {
@@ -159,12 +187,12 @@ describe("resolveCommand", () => {
 				},
 			});
 
-			const generateCmd = defineCommand({
+			const generateCmd = makeNode({
 				meta: { name: "generate", description: "Generate files" },
 				subCommands: { command: commandCmd },
 			});
 
-			const root = defineCommand({
+			const root = makeNode({
 				meta: { name: "crust", description: "Crust CLI" },
 				subCommands: { generate: generateCmd },
 			});
@@ -243,12 +271,12 @@ describe("resolveCommand", () => {
 		it("throws error for unknown nested subcommand", () => {
 			const commandCmd = createLeafCommand("command");
 
-			const generateCmd = defineCommand({
+			const generateCmd = makeNode({
 				meta: { name: "generate", description: "Generate files" },
 				subCommands: { command: commandCmd },
 			});
 
-			const root = defineCommand({
+			const root = makeNode({
 				meta: { name: "crust", description: "Crust CLI" },
 				subCommands: { generate: generateCmd },
 			});
@@ -317,7 +345,7 @@ describe("resolveCommand", () => {
 		});
 
 		it("handles positional arguments correctly", () => {
-			const cmd = defineCommand({
+			const cmd = makeNode({
 				meta: { name: "greet" },
 				args: [{ name: "name", type: "string", required: true }],
 				run() {
@@ -334,7 +362,7 @@ describe("resolveCommand", () => {
 
 	describe("edge cases", () => {
 		it("handles empty subCommands record", () => {
-			const cmd = defineCommand({
+			const cmd = makeNode({
 				meta: { name: "empty" },
 				subCommands: {},
 				run() {
@@ -381,13 +409,13 @@ describe("resolveCommand", () => {
 		it("mid-level subcommand with no run and no matching child throws error", () => {
 			const commandCmd = createLeafCommand("command");
 
-			const generateCmd = defineCommand({
+			const generateCmd = makeNode({
 				meta: { name: "generate", description: "Generate files" },
 				subCommands: { command: commandCmd },
 				// no run()
 			});
 
-			const root = defineCommand({
+			const root = makeNode({
 				meta: { name: "crust", description: "Crust CLI" },
 				subCommands: { generate: generateCmd },
 			});

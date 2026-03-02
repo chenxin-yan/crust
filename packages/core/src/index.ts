@@ -1,9 +1,6 @@
 // Crust builder API
-
-// Command definition
-export { defineCommand } from "./command.ts";
 export type { CrustCommandContext } from "./crust.ts";
-export { Crust } from "./crust.ts";
+export { Crust, VALIDATION_MODE_ENV } from "./crust.ts";
 
 // Errors
 export type { CrustErrorCode } from "./errors.ts";
@@ -26,18 +23,10 @@ export type {
 export type { CommandRoute, RoutableCommand } from "./router.ts";
 export { resolveCommand } from "./router.ts";
 
-// Command execution
-export type { RunOptions } from "./run.ts";
-export { runCommand, runMain, VALIDATION_MODE_ENV } from "./run.ts";
-
 // Core types
 export type {
-	AnyCommand,
 	ArgDef,
 	ArgsDef,
-	Command,
-	CommandContext,
-	CommandDef,
 	CommandMeta,
 	EffectiveFlags,
 	FlagDef,

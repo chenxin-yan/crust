@@ -1,6 +1,6 @@
 import type { CommandNode } from "./node.ts";
 import type { CommandRoute } from "./router.ts";
-import type { AnyCommand, FlagDef, ParseResult } from "./types.ts";
+import type { FlagDef, ParseResult } from "./types.ts";
 
 export interface PluginState {
 	get<T = unknown>(key: string): T | undefined;
@@ -13,8 +13,8 @@ export interface PluginState {
 // Setup actions — available only during the setup phase
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A command target accepted by SetupActions — either old Command or new CommandNode */
-type CommandTarget = AnyCommand | CommandNode;
+/** A command target accepted by SetupActions */
+type CommandTarget = CommandNode;
 
 export interface SetupActions {
 	/**
@@ -24,11 +24,10 @@ export interface SetupActions {
 	 * (e.g. `--version`, `--help`) so they are recognized by the parser
 	 * and rendered in help text.
 	 *
-	 * For `CommandNode` targets (new builder API), the flag is added to both
-	 * `localFlags` and `effectiveFlags`. For `AnyCommand` targets (old API),
-	 * the flag is added to `flags`.
+	 * The flag is added to both `localFlags` and `effectiveFlags` on the
+	 * `CommandNode` target.
 	 *
-	 * @param command - The command to add the flag to (Command or CommandNode)
+	 * @param command - The command node to add the flag to
 	 * @param name - The flag name (e.g. "version")
 	 * @param def - The flag definition
 	 */
@@ -42,9 +41,9 @@ export interface SetupActions {
 	 * subcommand with the same name (user-defined), the call is silently
 	 * skipped — user definitions always take priority over plugin injections.
 	 *
-	 * @param parent - The parent command to add the subcommand to (Command or CommandNode)
+	 * @param parent - The parent command node to add the subcommand to
 	 * @param name - The subcommand name (used for routing)
-	 * @param command - The subcommand to register (Command or CommandNode)
+	 * @param command - The subcommand node to register
 	 */
 	addSubCommand(
 		parent: CommandTarget,
@@ -60,7 +59,7 @@ export interface SetupActions {
 /** Shared context fields available in both setup and middleware phases. */
 export interface BaseContext {
 	readonly argv: readonly string[];
-	readonly rootCommand: AnyCommand | CommandNode;
+	readonly rootCommand: CommandNode;
 	readonly state: PluginState;
 }
 

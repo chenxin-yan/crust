@@ -1,8 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type {
 	ArgDef,
 	ArgsDef,
-	Command,
 	CommandMeta,
 	CommandRoute,
 	FlagDef,
@@ -10,79 +9,68 @@ import type {
 	InferArgs,
 	ParseResult,
 } from "../src/index";
-import {
-	defineCommand,
-	parseArgs,
-	resolveCommand,
-	runMain,
-} from "../src/index";
-import { runCommand as runTestCommand } from "./helpers";
+import { Crust, parseArgs, resolveCommand } from "../src/index";
+import { executeCrust } from "./helpers";
 
-const serveCmd = defineCommand({
-	meta: { name: "serve", description: "Start the dev server" },
-	args: [{ name: "dir", type: "string", default: "." }],
-	flags: {
+const serveCmd = new Crust("serve")
+	.args([{ name: "dir", type: "string", default: "." }] as const)
+	.flags({
 		port: { type: "number", default: 3000, alias: "p" },
-	},
-	run({ args, flags }) {
+	} as const)
+	.run(({ args, flags }) => {
 		console.log(`serve ${args.dir} on ${flags.port}`);
-	},
-});
+	});
 
-const rootCmd = defineCommand({
-	meta: { name: "myapp", description: "Integration test app" },
-	flags: {
+const rootCmd = new Crust({
+	name: "myapp",
+	description: "Integration test app",
+})
+	.flags({
 		help: { type: "boolean", alias: "h" },
-	},
-	subCommands: { serve: serveCmd },
-	run({ flags }) {
+	} as const)
+	.command("serve", () => serveCmd)
+	.run(({ flags }) => {
 		if (flags.help) {
 			console.log("help");
 		}
-	},
-});
-
-describe("integration: core APIs", () => {
-	it("parseArgs parses args and flags", () => {
-		const result = parseArgs(serveCmd, ["public", "--port", "8080"]);
-		expect(result.args.dir).toBe("public");
-		expect(result.flags.port).toBe(8080);
 	});
 
-	it("resolveCommand resolves subcommands", () => {
-		const result = resolveCommand(rootCmd, ["serve", "--port", "9000"]);
+describe("integration: core APIs", () => {
+	beforeEach(() => {
+		process.exitCode = 0;
+	});
+
+	it("parseArgs parses args and flags using CommandNode", () => {
+		const result = parseArgs(serveCmd._node, ["public", "--port", "8080"]);
+		expect((result.args as Record<string, unknown>).dir).toBe("public");
+		expect((result.flags as Record<string, unknown>).port).toBe(8080);
+	});
+
+	it("resolveCommand resolves subcommands using CommandNode", () => {
+		const result = resolveCommand(rootCmd._node, ["serve", "--port", "9000"]);
 		expect(result.command.meta.name).toBe("serve");
 		expect(result.argv).toEqual(["--port", "9000"]);
 		expect(result.commandPath).toEqual(["myapp", "serve"]);
 	});
 
-	it("runCommand executes using options.argv", async () => {
-		const result = await runTestCommand(rootCmd, {
-			argv: ["serve", "src", "--port", "4000"],
-		});
+	it("execute() runs using argv override", async () => {
+		const result = await executeCrust(rootCmd, [
+			"serve",
+			"src",
+			"--port",
+			"4000",
+		]);
 		expect(result.stdout).toContain("serve src on 4000");
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("runMain catches errors and sets exit code", async () => {
-		const originalExitCode = process.exitCode;
-		const originalArgv = process.argv;
+	it("execute() catches errors and sets exit code", async () => {
+		const failCmd = new Crust("fail").run(() => {
+			throw new Error("boom");
+		});
 
-		try {
-			process.argv = ["bun", "script.ts"];
-			const cmd = defineCommand({
-				meta: { name: "fail" },
-				run() {
-					throw new Error("boom");
-				},
-			});
-
-			await runMain(cmd);
-			expect(process.exitCode).toBe(1);
-		} finally {
-			process.argv = originalArgv;
-			process.exitCode = originalExitCode;
-		}
+		const result = await executeCrust(failCmd, []);
+		expect(result.exitCode).toBe(1);
 	});
 });
 
@@ -94,21 +82,13 @@ describe("integration: exported types", () => {
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 
-		const cmdDef: Command = {
-			meta,
-			args: argsDef,
-			flags: flagsDef,
-			subCommands: {},
-		};
-		const cmd: Command = defineCommand({ meta: { name: "typed-cmd" } });
-
 		const parsed: ParseResult = {
 			args: {},
 			flags: {},
 			rawArgs: [],
 		};
 		const resolved: CommandRoute = {
-			command: cmd,
+			command: new Crust("typed-cmd")._node,
 			argv: [],
 			commandPath: ["typed-cmd"],
 		};
@@ -122,7 +102,6 @@ describe("integration: exported types", () => {
 		void flagDef;
 		void argsDef;
 		void flagsDef;
-		void cmdDef;
 		void parsed;
 		void resolved;
 		expect(inferred.file).toBe("index.ts");

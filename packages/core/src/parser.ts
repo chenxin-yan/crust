@@ -7,7 +7,6 @@ import type { CommandNode } from "./node.ts";
 import type {
 	ArgDef,
 	ArgsDef,
-	Command,
 	FlagDef,
 	FlagsDef,
 	ParseResult,
@@ -19,13 +18,11 @@ import type {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Structural type that both `Command` and `CommandNode` satisfy.
+ * Structural type that `CommandNode` satisfies.
  *
- * `parseArgs` uses this to accept either the old `Command` shape (with
- * `flags?: FlagsDef`) or the new `CommandNode` shape (with
- * `effectiveFlags: FlagsDef`). When a `CommandNode` is detected (via the
- * `effectiveFlags` property), its effective flags are used for parsing;
- * otherwise the `flags` property is used.
+ * `parseArgs` uses this to accept a `CommandNode` shape (with
+ * `effectiveFlags: FlagsDef`) or a plain structural object. When
+ * `effectiveFlags` is present, it takes precedence over `flags`.
  */
 export type ParseableCommand = {
 	flags?: FlagsDef;
@@ -379,9 +376,9 @@ function validateCanonicalNegationUsage(
  * positional arg mapping, type coercion, alias expansion, default values,
  * required validation, variadic args, and strict mode.
  *
- * Accepts both the old `Command` shape (with `flags`) and the new
- * `CommandNode` shape (with `effectiveFlags`). When `effectiveFlags` is
- * present it takes precedence over `flags`.
+ * Accepts `CommandNode` (with `effectiveFlags`) and `ParseableCommand`
+ * (structural). When `effectiveFlags` is present it takes precedence
+ * over `flags`.
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
@@ -391,7 +388,7 @@ function validateCanonicalNegationUsage(
 export function parseArgs<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
->(command: Command<A, F> | CommandNode | ParseableCommand, argv: string[]) {
+>(command: CommandNode | ParseableCommand, argv: string[]) {
 	const argsDef = command.args as ArgsDef | undefined;
 	// Prefer effectiveFlags (CommandNode) over flags (old Command)
 	const flagsDef = (

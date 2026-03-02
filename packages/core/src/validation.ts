@@ -1,26 +1,7 @@
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { parseArgs } from "./parser.ts";
-import type {
-	AnyCommand,
-	ArgDef,
-	ArgsDef,
-	FlagDef,
-	FlagsDef,
-} from "./types.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// ValidatableCommand — Structural type accepted by validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Union of command shapes that `validateCommandTree` can validate.
- *
- * Both `AnyCommand` (old API) and `CommandNode` (new builder API) satisfy
- * this type. The validator uses `effectiveFlags` when present (CommandNode),
- * falling back to `flags` (AnyCommand).
- */
-type ValidatableCommand = AnyCommand | CommandNode;
+import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -39,39 +20,27 @@ function sampleToken(def: ArgDef | FlagDef): string {
 }
 
 /**
- * Resolves the flags to validate for a command.
- *
- * For `CommandNode`, uses `effectiveFlags` (inherited + local merged).
- * For `AnyCommand`, uses `flags`.
+ * Resolves the flags to validate for a command node.
+ * Uses `effectiveFlags` (inherited + local merged).
  */
-function resolveValidationFlags(
-	command: ValidatableCommand,
-): FlagsDef | undefined {
-	if ("effectiveFlags" in command && command.effectiveFlags) {
-		return command.effectiveFlags;
-	}
-	if ("flags" in command) {
-		return command.flags as FlagsDef | undefined;
-	}
-	return undefined;
+function resolveValidationFlags(command: CommandNode): FlagsDef | undefined {
+	return command.effectiveFlags;
 }
 
 /**
- * Resolves the args to validate for a command.
+ * Resolves the args to validate for a command node.
  */
-function resolveValidationArgs(
-	command: ValidatableCommand,
-): ArgsDef | undefined {
+function resolveValidationArgs(command: CommandNode): ArgsDef | undefined {
 	return command.args as ArgsDef | undefined;
 }
 
 /**
  * Build a synthetic argv that satisfies `parseArgs` for the given command.
  *
- * Uses `effectiveFlags` when available (CommandNode) so inherited required
- * flags are included in the synthetic argv.
+ * Uses `effectiveFlags` so inherited required flags are included in the
+ * synthetic argv.
  */
-function createValidationArgv(command: ValidatableCommand): string[] {
+function createValidationArgv(command: CommandNode): string[] {
 	const argv: string[] = [];
 
 	const flags = resolveValidationFlags(command);
@@ -117,19 +86,17 @@ function createValidationArgv(command: ValidatableCommand): string[] {
  * - Required flag/arg validation
  * - Variadic arg position violations
  *
- * Accepts both the old `AnyCommand` shape and the new `CommandNode` shape.
- * When validating a `CommandNode`, its `effectiveFlags` (inherited + local
- * merged) are used — so alias collisions between an inherited flag and a
- * local flag are caught.
+ * Uses `effectiveFlags` (inherited + local merged) so alias collisions
+ * between an inherited flag and a local flag are caught.
  *
- * @param root - The root command to validate
+ * @param root - The root command node to validate
  * @throws {CrustError} `DEFINITION` with the full command path on failure
  */
-export function validateCommandTree(root: ValidatableCommand): void {
-	const stack: Array<{ command: ValidatableCommand; path: string[] }> = [
+export function validateCommandTree(root: CommandNode): void {
+	const stack: Array<{ command: CommandNode; path: string[] }> = [
 		{ command: root, path: [root.meta.name] },
 	];
-	const visited = new Set<ValidatableCommand>();
+	const visited = new Set<CommandNode>();
 
 	while (stack.length > 0) {
 		const item = stack.pop();
@@ -152,7 +119,7 @@ export function validateCommandTree(root: ValidatableCommand): void {
 
 		for (const [name, subCommand] of Object.entries(command.subCommands)) {
 			stack.push({
-				command: subCommand as ValidatableCommand,
+				command: subCommand,
 				path: [...path, name],
 			});
 		}
