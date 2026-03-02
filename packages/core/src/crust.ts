@@ -468,12 +468,65 @@ export class Crust<
 	}
 
 	/**
-	 * Register a named subcommand.
+	 * Create a subcommand builder pre-typed with this command's inheritable flags.
+	 *
+	 * This is the factory method for the file-splitting pattern. The returned
+	 * builder carries this command's effective flags (filtered for `inherit: true`)
+	 * as its `Inherited` generic, enabling full type inference in split files
+	 * without needing `Crust<any, any, any>`.
+	 *
+	 * Register the resulting builder with `.command(builder)` on the parent.
+	 *
+	 * @param name - Subcommand name (must be non-empty)
+	 * @returns A new `Crust` builder pre-typed with inherited flags
+	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
+	 *
+	 * @example
+	 * ```ts
+	 * // shared.ts
+	 * export const app = new Crust("my-cli")
+	 *   .flags({ verbose: { type: "boolean", inherit: true } });
+	 *
+	 * // commands/deploy.ts
+	 * export const deployCmd = app.sub("deploy")
+	 *   .flags({ env: { type: "string", required: true } })
+	 *   .run(({ flags }) => {
+	 *     flags.verbose; // boolean | undefined  — typed!
+	 *     flags.env;     // string               — typed!
+	 *   });
+	 *
+	 * // cli.ts
+	 * app.command(deployCmd).execute();
+	 * ```
+	 */
+	sub<N extends string>(
+		name: N,
+		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+	): Crust<EffectiveFlags<Inherited, Local>, {}, []> {
+		if (!name.trim()) {
+			throw new CrustError(
+				"DEFINITION",
+				"Subcommand name must be a non-empty string",
+			);
+		}
+
+		const parentEffective = computeEffectiveFlags(
+			this._inheritedFlags,
+			this._node.localFlags,
+		);
+
+		return Crust._createChild<EffectiveFlags<Inherited, Local>>(
+			name,
+			parentEffective,
+		);
+	}
+
+	/**
+	 * Register a named subcommand via inline callback.
 	 *
 	 * The callback receives a fresh `Crust` builder pre-typed with this
 	 * command's effective inheritable flags, enabling TypeScript contextual
-	 * typing to flow inherited flag types into subcommand definitions —
-	 * even across split files.
+	 * typing to flow inherited flag types into subcommand definitions.
 	 *
 	 * @param name - Subcommand name (must be non-empty, unique among siblings)
 	 * @param cb - Callback that receives a child builder and returns the configured builder
@@ -493,8 +546,94 @@ export class Crust<
 			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
 			any
 		>,
+	): Crust<Inherited, Local, A>;
+
+	/**
+	 * Register a pre-built subcommand builder (from `.sub()`).
+	 *
+	 * The builder's name (from its constructor or `.sub()`) is used as the
+	 * subcommand name. This is the complement to `.sub()` for the
+	 * file-splitting pattern.
+	 *
+	 * @param builder - A pre-configured `Crust` builder instance
+	 * @returns A new `Crust` instance with the subcommand registered
+	 * @throws {CrustError} `DEFINITION` if builder name is empty or already registered
+	 */
+	command(
+		// biome-ignore lint/suspicious/noExplicitAny: accepts any Crust builder instance
+		builder: Crust<any, any, any>,
+	): Crust<Inherited, Local, A>;
+
+	// Implementation
+	command(
+		// biome-ignore lint/suspicious/noExplicitAny: union of overload parameter types
+		nameOrBuilder: string | Crust<any, any, any>,
+		// biome-ignore lint/suspicious/noExplicitAny: callback parameter from first overload
+		cb?: (cmd: Crust<any, any, any>) => Crust<any, any, any>,
 	): Crust<Inherited, Local, A> {
-		// Validate name
+		if (typeof nameOrBuilder === "string") {
+			// ── Inline callback path ──────────────────────────────────────────
+			const name = nameOrBuilder;
+
+			if (!cb) {
+				throw new CrustError(
+					"DEFINITION",
+					"command(name, cb) requires a callback",
+				);
+			}
+
+			// Validate name
+			if (!name.trim()) {
+				throw new CrustError(
+					"DEFINITION",
+					"Subcommand name must be a non-empty string",
+				);
+			}
+
+			// Check for duplicate subcommand
+			if (this._node.subCommands[name]) {
+				throw new CrustError(
+					"DEFINITION",
+					`Subcommand "${name}" is already registered`,
+				);
+			}
+
+			// Compute the effective flags for this node (inherited + local merged)
+			const parentEffective = computeEffectiveFlags(
+				this._inheritedFlags,
+				this._node.localFlags,
+			);
+
+			// Create a child builder pre-typed with the parent's effective flags
+			const childBuilder = Crust._createChild<EffectiveFlags<Inherited, Local>>(
+				name,
+				parentEffective,
+			);
+
+			// Pass the child builder to the callback to let the user configure it
+			const configuredChild = cb(childBuilder);
+
+			// Extract the internal node from the configured child and register it
+			const childNode = configuredChild._node;
+
+			// Recompute the child's effectiveFlags based on its inherited + local flags
+			childNode.effectiveFlags = computeEffectiveFlags(
+				configuredChild._inheritedFlags,
+				childNode.localFlags,
+			);
+
+			return this._clone({
+				subCommands: {
+					...this._node.subCommands,
+					[name]: childNode,
+				},
+			}) as unknown as Crust<Inherited, Local, A>;
+		}
+
+		// ── Pre-built builder path ──────────────────────────────────────────
+		const builder = nameOrBuilder;
+		const name = builder._node.meta.name;
+
 		if (!name.trim()) {
 			throw new CrustError(
 				"DEFINITION",
@@ -502,7 +641,6 @@ export class Crust<
 			);
 		}
 
-		// Check for duplicate subcommand
 		if (this._node.subCommands[name]) {
 			throw new CrustError(
 				"DEFINITION",
@@ -510,27 +648,9 @@ export class Crust<
 			);
 		}
 
-		// Compute the effective flags for this node (inherited + local merged)
-		const parentEffective = computeEffectiveFlags(
-			this._inheritedFlags,
-			this._node.localFlags,
-		);
-
-		// Create a child builder pre-typed with the parent's effective flags
-		const childBuilder = Crust._createChild<EffectiveFlags<Inherited, Local>>(
-			name,
-			parentEffective,
-		);
-
-		// Pass the child builder to the callback to let the user configure it
-		const configuredChild = cb(childBuilder);
-
-		// Extract the internal node from the configured child and register it
-		const childNode = configuredChild._node;
-
-		// Recompute the child's effectiveFlags based on its inherited + local flags
+		const childNode = builder._node;
 		childNode.effectiveFlags = computeEffectiveFlags(
-			configuredChild._inheritedFlags,
+			builder._inheritedFlags,
 			childNode.localFlags,
 		);
 

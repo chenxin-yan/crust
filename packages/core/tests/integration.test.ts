@@ -698,6 +698,124 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 // Boolean negation with inherited flags
 // ────────────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────────────────
+// .sub() factory pattern — file-splitting integration tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("integration: .sub() factory → .command(builder) pattern", () => {
+	beforeEach(() => {
+		process.exitCode = 0;
+	});
+
+	it("basic .sub() → .command(builder) works end-to-end", async () => {
+		// Simulate shared.ts
+		const app = new Crust("my-cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		// Simulate commands/deploy.ts
+		const deployCommand = app
+			.sub("deploy")
+			.meta({ description: "Deploy" })
+			.flags({ env: { type: "string", required: true } })
+			.run((ctx) => {
+				console.log(`deploy env=${ctx.flags.env} verbose=${ctx.flags.verbose}`);
+			});
+
+		// Simulate cli.ts
+		const result = await executeCrust(app.command(deployCommand), [
+			"deploy",
+			"--env",
+			"production",
+			"--verbose",
+		]);
+		expect(result.stdout).toContain("deploy env=production verbose=true");
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("inherited flags flow through .sub() without explicit passing", async () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			port: { type: "number", default: 3000, inherit: true },
+		});
+
+		const sub = app.sub("sub").run((ctx) => {
+			console.log(`verbose=${ctx.flags.verbose} port=${ctx.flags.port}`);
+		});
+
+		const result = await executeCrust(app.command(sub), ["sub"]);
+		expect(result.stdout).toContain("verbose=undefined port=3000");
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("nested .sub().sub() chains work end-to-end", async () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deployCmd = app
+			.sub("deploy")
+			.flags({ env: { type: "string", inherit: true } });
+
+		const statusCmd = deployCmd.sub("status").run((ctx) => {
+			console.log(`verbose=${ctx.flags.verbose} env=${ctx.flags.env}`);
+		});
+
+		const result = await executeCrust(
+			app.command(deployCmd.command(statusCmd)),
+			["deploy", "status", "--verbose", "--env", "staging"],
+		);
+		expect(result.stdout).toContain("verbose=true env=staging");
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("non-inherit flags excluded from .sub() children", async () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			rootOnly: { type: "string" },
+		});
+
+		const sub = app.sub("sub").run(() => {
+			console.log("sub ran");
+		});
+
+		// rootOnly should not be recognized on the subcommand
+		const result = await executeCrust(app.command(sub), [
+			"sub",
+			"--rootOnly",
+			"val",
+		]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("Unknown flag");
+	});
+
+	it("mixing .command(name, cb) and .command(builder) works", async () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deployCmd = app.sub("deploy").run((ctx) => {
+			console.log(`deploy verbose=${ctx.flags.verbose}`);
+		});
+
+		const cli = app
+			.command("status", (cmd) =>
+				cmd.run((ctx) => {
+					console.log(`status verbose=${ctx.flags.verbose}`);
+				}),
+			)
+			.command(deployCmd);
+
+		const deployResult = await executeCrust(cli, ["deploy", "--verbose"]);
+		expect(deployResult.stdout).toContain("deploy verbose=true");
+		expect(deployResult.exitCode).toBe(0);
+
+		const statusResult = await executeCrust(cli, ["status", "--verbose"]);
+		expect(statusResult.stdout).toContain("status verbose=true");
+		expect(statusResult.exitCode).toBe(0);
+	});
+});
+
 describe("integration: inherited boolean flag negation", () => {
 	beforeEach(() => {
 		process.exitCode = 0;

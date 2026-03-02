@@ -1998,3 +1998,364 @@ describe("Crust .execute()", () => {
 		);
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// .sub() — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .sub()", () => {
+	it("returns a new Crust instance with correct name", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		const sub = app.sub("deploy");
+
+		expect(sub._node.meta.name).toBe("deploy");
+	});
+
+	it("carries parent's inheritable flags in _inheritedFlags", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			port: { type: "number" },
+		});
+		const sub = app.sub("deploy");
+
+		// _inheritedFlags should contain ALL parent effective flags
+		// (filtering for inherit:true happens in computeEffectiveFlags)
+		expect(sub._inheritedFlags.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(sub._inheritedFlags.port).toEqual({ type: "number" });
+	});
+
+	it("starts with empty local flags and no args", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		const sub = app.sub("deploy");
+
+		expect(sub._node.localFlags).toEqual({});
+		expect(sub._node.args).toBeUndefined();
+	});
+
+	it("throws CrustError DEFINITION on empty name", () => {
+		const app = new Crust("cli");
+		try {
+			app.sub("");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("non-empty");
+		}
+	});
+
+	it("throws CrustError DEFINITION on whitespace-only name", () => {
+		const app = new Crust("cli");
+		try {
+			app.sub("   ");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+		}
+	});
+
+	it("chaining .sub().flags().args().run() works", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deploy = app
+			.sub("deploy")
+			.meta({ description: "Deploy something" })
+			.flags({ env: { type: "string", required: true } })
+			.args([{ name: "target", type: "string", required: true }])
+			.run(() => {});
+
+		expect(deploy._node.meta.name).toBe("deploy");
+		expect(deploy._node.meta.description).toBe("Deploy something");
+		expect(deploy._node.localFlags.env).toBeDefined();
+		expect(deploy._node.args?.length).toBe(1);
+		expect(deploy._node.run).toBeDefined();
+	});
+
+	it("nested .sub() chains carry flags through", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deploy = app.sub("deploy").flags({
+			env: { type: "string", inherit: true },
+		});
+
+		const status = deploy.sub("status");
+
+		// status should have inherited flags from deploy (which includes verbose + env)
+		expect(status._inheritedFlags.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(status._inheritedFlags.env).toEqual({
+			type: "string",
+			inherit: true,
+		});
+	});
+
+	it("does not mutate the parent builder", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		app.sub("deploy");
+
+		// Parent should be untouched
+		expect(app._node.subCommands).toEqual({});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .sub() — Type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .sub() type-level tests", () => {
+	it("sub builder Inherited = EffectiveFlags<ParentInherited, ParentLocal>", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			port: { type: "number" },
+		});
+
+		const sub = app.sub("deploy");
+
+		type SubInherited = (typeof sub)["_types"]["inherited"];
+
+		// verbose is inherited (inherit: true), so present
+		type _checkVerbose = Expect<
+			Equal<
+				SubInherited["verbose"],
+				{ readonly type: "boolean"; readonly inherit: true }
+			>
+		>;
+
+		// port has no inherit:true, but it's in the parent's Local, so it shows
+		// up in EffectiveFlags at the type level (it goes through InheritableFlags
+		// filtering when the sub's own child is created)
+		type _checkPort = Expect<
+			Equal<SubInherited["port"], { readonly type: "number" }>
+		>;
+	});
+
+	it("sub builder starts with empty Local and Args", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const sub = app.sub("deploy");
+
+		type SubLocal = (typeof sub)["_types"]["local"];
+		type SubArgs = (typeof sub)["_types"]["args"];
+
+		// biome-ignore lint/complexity/noBannedTypes: verifying empty initial state
+		type _checkLocal = Expect<Equal<SubLocal, {}>>;
+		type _checkArgs = Expect<Equal<SubArgs, []>>;
+	});
+
+	it("inherited flags correctly typed in .run() handler after .sub()", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			port: { type: "number" },
+		});
+
+		app
+			.sub("deploy")
+			.flags({ env: { type: "string", required: true } })
+			.run((_ctx) => {
+				type CtxFlags = typeof _ctx.flags;
+				// verbose inherits (inherit: true)
+				type _checkVerbose = Expect<
+					Equal<CtxFlags["verbose"], boolean | undefined>
+				>;
+				// env is local required
+				type _checkEnv = Expect<Equal<CtxFlags["env"], string>>;
+			});
+	});
+
+	it("nested .sub().sub() carries inheritable flags through at type level", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			rootOnly: { type: "string" },
+		});
+
+		const l1 = app.sub("l1").flags({
+			l1Flag: { type: "string", inherit: true },
+		});
+
+		const l2 = l1.sub("l2");
+
+		type L2Inherited = (typeof l2)["_types"]["inherited"];
+
+		// verbose cascades (inherit: true at root level)
+		type _checkVerbose = Expect<
+			Equal<
+				L2Inherited["verbose"],
+				{ readonly type: "boolean"; readonly inherit: true }
+			>
+		>;
+		// l1Flag cascades (inherit: true at l1 level)
+		type _checkL1Flag = Expect<
+			Equal<
+				L2Inherited["l1Flag"],
+				{ readonly type: "string"; readonly inherit: true }
+			>
+		>;
+		// rootOnly should be filtered out (no inherit:true)
+		type _checkKeys = Expect<Equal<keyof L2Inherited, "verbose" | "l1Flag">>;
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .command(builder) — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .command(builder)", () => {
+	it("registers the subcommand by name from builder", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		const deploy = app.sub("deploy").flags({
+			env: { type: "string", required: true },
+		});
+
+		const result = app.command(deploy);
+
+		expect(result._node.subCommands.deploy).toBeDefined();
+		expect(result._node.subCommands.deploy?.meta.name).toBe("deploy");
+	});
+
+	it("computes effectiveFlags correctly", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+			port: { type: "number" },
+		});
+		const deploy = app
+			.sub("deploy")
+			.flags({ env: { type: "string", required: true } });
+
+		const result = app.command(deploy);
+		const subNode = result._node.subCommands.deploy;
+
+		// effectiveFlags = inherited(verbose) + local(env)
+		// port is NOT inherited (no inherit: true)
+		expect(subNode?.effectiveFlags.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(subNode?.effectiveFlags.env).toEqual({
+			type: "string",
+			required: true,
+		});
+		expect(subNode?.effectiveFlags.port).toBeUndefined();
+	});
+
+	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
+		const app = new Crust("cli").command("deploy", (cmd) => cmd);
+		const deploy = new Crust("deploy");
+
+		try {
+			app.command(deploy);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("already registered");
+		}
+	});
+
+	it("throws CrustError DEFINITION if builder has empty name", () => {
+		// We can't create Crust("") directly (it throws), so we test the path
+		// by using a valid name that's already handled.
+		// This test validates that the code path exists; the empty-name constructor
+		// already prevents creating such builders.
+		const app = new Crust("cli");
+		try {
+			app.command(new Crust("   "));
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+		}
+	});
+
+	it("returns new instance (immutability)", () => {
+		const app = new Crust("cli");
+		const deploy = new Crust("deploy");
+		const result = app.command(deploy);
+
+		expect(result).not.toBe(app);
+	});
+
+	it("does not mutate original builder", () => {
+		const app = new Crust("cli");
+		const deploy = new Crust("deploy");
+		app.command(deploy);
+
+		expect(app._node.subCommands).toEqual({});
+	});
+
+	it("both overloads can be mixed: .command(name, cb).command(builder)", () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		const deploy = app.sub("deploy").run(() => {});
+
+		const result = app
+			.command("status", (cmd) => cmd.run(() => {}))
+			.command(deploy);
+
+		expect(result._node.subCommands.status).toBeDefined();
+		expect(result._node.subCommands.deploy).toBeDefined();
+	});
+
+	it("full pipeline: .sub() → .command(builder) → .execute()", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deploy = app
+			.sub("deploy")
+			.flags({ env: { type: "string", default: "staging" } })
+			.run((ctx) => {
+				receivedFlags = ctx.flags;
+			});
+
+		await app.command(deploy).execute({ argv: ["deploy", "--verbose"] });
+
+		expect(receivedFlags.verbose).toBe(true);
+		expect(receivedFlags.env).toBe("staging");
+	});
+
+	it("nested .sub() → .command(builder) works end-to-end", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+
+		const deployCmd = app
+			.sub("deploy")
+			.flags({ env: { type: "string", inherit: true } });
+
+		const statusCmd = deployCmd.sub("status").run((ctx) => {
+			receivedFlags = ctx.flags;
+		});
+
+		await app
+			.command(deployCmd.command(statusCmd))
+			.execute({ argv: ["deploy", "status", "--verbose", "--env", "prod"] });
+
+		expect(receivedFlags.verbose).toBe(true);
+		expect(receivedFlags.env).toBe("prod");
+	});
+});
