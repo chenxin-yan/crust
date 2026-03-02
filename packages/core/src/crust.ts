@@ -4,6 +4,7 @@ import {
 	computeEffectiveFlags,
 	createCommandNode,
 } from "./node.ts";
+import type { CrustPlugin } from "./plugins.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
@@ -277,6 +278,25 @@ export class Crust<
 	): Crust<Inherited, Local, A> {
 		return this._clone({
 			postRun: handler as (ctx: unknown) => void | Promise<void>,
+		}) as unknown as Crust<Inherited, Local, A>;
+	}
+
+	/**
+	 * Register a plugin on this command.
+	 *
+	 * Plugins are collected during `.execute()` and their `setup()` hooks
+	 * receive `SetupContext` and `SetupActions`. Middleware hooks run in
+	 * registration order.
+	 *
+	 * Returns a new builder with the plugin appended. The original builder
+	 * is not mutated.
+	 *
+	 * @param plugin - The plugin to register
+	 * @returns A new `Crust` instance with the plugin registered
+	 */
+	use(plugin: CrustPlugin): Crust<Inherited, Local, A> {
+		return this._clone({
+			plugins: [...this._node.plugins, plugin],
 		}) as unknown as Crust<Inherited, Local, A>;
 	}
 

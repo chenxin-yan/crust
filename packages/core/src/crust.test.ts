@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Crust, type CrustCommandContext } from "./crust.ts";
 import { CrustError } from "./errors.ts";
+import type { CrustPlugin } from "./plugins.ts";
 import type {
 	FlagsDef,
 	ValidateFlagAliases,
@@ -1224,5 +1225,180 @@ describe("Crust .run() type-level tests", () => {
 				type CtxFlags = typeof _ctx.flags;
 				type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
 			});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .use() — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .use()", () => {
+	it("registers a plugin on the node's plugins array", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+		const app = new Crust("test").use(plugin);
+
+		expect(app._node.plugins.length).toBe(1);
+		expect(app._node.plugins[0]).toBe(plugin);
+	});
+
+	it("returns a new instance (immutability)", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+		const app = new Crust("test");
+		const withPlugin = app.use(plugin);
+
+		expect(withPlugin).not.toBe(app);
+	});
+
+	it("does not mutate original builder", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+		const app = new Crust("test");
+		app.use(plugin);
+
+		expect(app._node.plugins.length).toBe(0);
+	});
+
+	it("multiple .use() calls chain correctly", () => {
+		const plugin1: CrustPlugin = { name: "plugin-1" };
+		const plugin2: CrustPlugin = { name: "plugin-2" };
+		const plugin3: CrustPlugin = { name: "plugin-3" };
+
+		const app = new Crust("test").use(plugin1).use(plugin2).use(plugin3);
+
+		expect(app._node.plugins.length).toBe(3);
+		expect(app._node.plugins[0]).toBe(plugin1);
+		expect(app._node.plugins[1]).toBe(plugin2);
+		expect(app._node.plugins[2]).toBe(plugin3);
+	});
+
+	it("preserves plugin order (registration order)", () => {
+		const names: string[] = [];
+		const plugin1: CrustPlugin = {
+			name: "first",
+			setup: () => {
+				names.push("first");
+			},
+		};
+		const plugin2: CrustPlugin = {
+			name: "second",
+			setup: () => {
+				names.push("second");
+			},
+		};
+
+		const app = new Crust("test").use(plugin1).use(plugin2);
+
+		expect(app._node.plugins[0]?.name).toBe("first");
+		expect(app._node.plugins[1]?.name).toBe("second");
+	});
+
+	it("plugin setup hook is callable with correct context shape", () => {
+		const plugin: CrustPlugin = {
+			name: "test-plugin",
+			setup: (context, actions) => {
+				expect(context).toBeDefined();
+				expect(context.argv).toBeDefined();
+				expect(context.state).toBeDefined();
+				expect(actions).toBeDefined();
+				expect(typeof actions.addFlag).toBe("function");
+				expect(typeof actions.addSubCommand).toBe("function");
+			},
+		};
+
+		const app = new Crust("test").use(plugin);
+
+		// Verify the plugin is stored and its setup is a function
+		expect(app._node.plugins[0]?.setup).toBeDefined();
+		expect(typeof app._node.plugins[0]?.setup).toBe("function");
+	});
+
+	it("plugin with middleware hook is stored correctly", () => {
+		const plugin: CrustPlugin = {
+			name: "middleware-plugin",
+			middleware: async (_ctx, next) => {
+				await next();
+			},
+		};
+
+		const app = new Crust("test").use(plugin);
+
+		expect(app._node.plugins[0]?.middleware).toBeDefined();
+		expect(typeof app._node.plugins[0]?.middleware).toBe("function");
+	});
+
+	it("preserves flags, args, and handlers when adding plugin", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }])
+			.run(() => {})
+			.use(plugin);
+
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+		expect(app._node.run).toBeDefined();
+		expect(app._node.plugins.length).toBe(1);
+	});
+
+	it("preserves subcommands when adding plugin", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+
+		const app = new Crust("test")
+			.command("sub", (cmd) => cmd.flags({ output: { type: "string" } }))
+			.use(plugin);
+
+		expect(app._node.subCommands.sub).toBeDefined();
+		expect(app._node.plugins.length).toBe(1);
+	});
+
+	it(".use() can be chained with .flags(), .args(), .command(), .run()", () => {
+		const plugin: CrustPlugin = { name: "test-plugin" };
+
+		const app = new Crust("test")
+			.use(plugin)
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }])
+			.command("sub", (cmd) => cmd)
+			.run(() => {});
+
+		expect(app._node.plugins.length).toBe(1);
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+		expect(app._node.subCommands.sub).toBeDefined();
+		expect(app._node.run).toBeDefined();
+	});
+
+	it("intermediate builder retains its own plugins independently", () => {
+		const plugin1: CrustPlugin = { name: "plugin-1" };
+		const plugin2: CrustPlugin = { name: "plugin-2" };
+
+		const base = new Crust("test").use(plugin1);
+		const extended = base.use(plugin2);
+
+		// base should only have plugin1
+		expect(base._node.plugins.length).toBe(1);
+		expect(base._node.plugins[0]).toBe(plugin1);
+
+		// extended should have both plugins
+		expect(extended._node.plugins.length).toBe(2);
+		expect(extended._node.plugins[0]).toBe(plugin1);
+		expect(extended._node.plugins[1]).toBe(plugin2);
+	});
+
+	it("plugin without name is accepted", () => {
+		const plugin: CrustPlugin = {
+			setup: () => {},
+		};
+
+		const app = new Crust("test").use(plugin);
+		expect(app._node.plugins.length).toBe(1);
+		expect(app._node.plugins[0]?.name).toBeUndefined();
+	});
+
+	it("empty plugin object is accepted", () => {
+		const plugin: CrustPlugin = {};
+
+		const app = new Crust("test").use(plugin);
+		expect(app._node.plugins.length).toBe(1);
 	});
 });

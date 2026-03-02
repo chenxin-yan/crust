@@ -1,4 +1,5 @@
 import { CrustError } from "./errors.ts";
+import type { CommandNode } from "./node.ts";
 import { parseArgs } from "./parser.ts";
 import type {
 	CrustPlugin,
@@ -9,6 +10,16 @@ import type {
 } from "./plugins.ts";
 import { resolveCommand } from "./router.ts";
 import type { AnyCommand, CommandContext, ParseResult } from "./types.ts";
+
+/**
+ * Runtime check: is the target a `CommandNode` (new builder API)?
+ * CommandNode has `localFlags`; AnyCommand has `flags`.
+ */
+function isCommandNode(
+	target: AnyCommand | CommandNode,
+): target is CommandNode {
+	return "localFlags" in target;
+}
 
 /**
  * Build-time validation protocol.
@@ -60,18 +71,30 @@ async function runSetupHooks(
 function createSetupActions(warnings?: string[]): SetupActions {
 	return {
 		addFlag(target, name, def) {
-			if (!target.flags) {
-				throw new CrustError(
-					"DEFINITION",
-					`Cannot add flag "${name}": "${target.meta.name}" has no flags object`,
-				);
+			if (isCommandNode(target)) {
+				// CommandNode: add to both localFlags and effectiveFlags
+				if (name in target.localFlags) {
+					warnings?.push(
+						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
+					);
+				}
+				target.localFlags[name] = def;
+				target.effectiveFlags[name] = def;
+			} else {
+				// AnyCommand (old API): add to flags
+				if (!target.flags) {
+					throw new CrustError(
+						"DEFINITION",
+						`Cannot add flag "${name}": "${target.meta.name}" has no flags object`,
+					);
+				}
+				if (name in target.flags) {
+					warnings?.push(
+						`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
+					);
+				}
+				target.flags[name] = def;
 			}
-			if (name in target.flags) {
-				warnings?.push(
-					`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
-				);
-			}
-			target.flags[name] = def;
 		},
 		addSubCommand(parent, name, subCommand) {
 			if (!name.trim()) {
@@ -87,7 +110,7 @@ function createSetupActions(warnings?: string[]): SetupActions {
 				);
 				return;
 			}
-			parent.subCommands[name] = subCommand;
+			(parent.subCommands as Record<string, unknown>)[name] = subCommand;
 		},
 	};
 }
