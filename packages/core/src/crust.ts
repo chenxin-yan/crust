@@ -121,12 +121,11 @@ function createPluginState(): PluginState {
 function createSetupActions(warnings?: string[]): SetupActions {
 	return {
 		addFlag(target, name, def) {
-			if (name in target.localFlags) {
+			if (name in target.effectiveFlags) {
 				warnings?.push(
 					`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
 				);
 			}
-			target.localFlags[name] = def;
 			target.effectiveFlags[name] = def;
 		},
 		addSubCommand(parent, name, subCommand) {

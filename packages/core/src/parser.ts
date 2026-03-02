@@ -14,23 +14,6 @@ import type {
 } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// ParseableCommand — Structural type accepted by parseArgs
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Structural type that `CommandNode` satisfies.
- *
- * `parseArgs` uses this to accept a `CommandNode` shape (with
- * `effectiveFlags: FlagsDef`) or a plain structural object. When
- * `effectiveFlags` is present, it takes precedence over `flags`.
- */
-export type ParseableCommand = {
-	flags?: FlagsDef;
-	args?: ArgsDef;
-	effectiveFlags?: FlagsDef;
-};
-
-// ────────────────────────────────────────────────────────────────────────────
 // Internal types
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -65,7 +48,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	}
 
 	for (const [name, def] of Object.entries(flagsDef)) {
-		// Defense-in-depth: reject "no-" prefixed names even when bypassing defineCommand
+		// Defense-in-depth: reject "no-" prefixed names even when bypassing the builder
 		if (name.startsWith("no-")) {
 			const base = name.slice(3);
 			throw new CrustError(
@@ -376,10 +359,6 @@ function validateCanonicalNegationUsage(
  * positional arg mapping, type coercion, alias expansion, default values,
  * required validation, variadic args, and strict mode.
  *
- * Accepts `CommandNode` (with `effectiveFlags`) and `ParseableCommand`
- * (structural). When `effectiveFlags` is present it takes precedence
- * over `flags`.
- *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @returns Parsed args, flags, and rawArgs (everything after `--`)
@@ -388,16 +367,9 @@ function validateCanonicalNegationUsage(
 export function parseArgs<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
->(command: CommandNode | ParseableCommand, argv: string[]) {
+>(command: CommandNode, argv: string[]) {
 	const argsDef = command.args as ArgsDef | undefined;
-	// Prefer effectiveFlags (CommandNode) over flags (old Command)
-	const flagsDef = (
-		"effectiveFlags" in command && command.effectiveFlags
-			? command.effectiveFlags
-			: "flags" in command
-				? command.flags
-				: undefined
-	) as FlagsDef | undefined;
+	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
 
 	const { options: parseOptions, aliasToName } =
 		buildParseArgsOptionDescriptor(flagsDef);

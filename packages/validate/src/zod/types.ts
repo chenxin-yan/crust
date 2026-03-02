@@ -9,7 +9,7 @@ import type { ValidatedContext } from "../types.ts";
 /**
  * Unique symbol used to attach a Zod schema to a core `ArgDef` or `FlagDef`.
  *
- * Survives `{ ...def }` spread in `defineCommand` and `Object.freeze`,
+ * Survives `{ ...def }` spread in the Crust builder and `Object.freeze`,
  * making the schema available at runtime via `def[ZOD_SCHEMA]`.
  */
 export const ZOD_SCHEMA: unique symbol = Symbol.for("crustjs.validate.zod");

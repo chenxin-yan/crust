@@ -1,23 +1,5 @@
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
-import type { CommandMeta } from "./types.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// RoutableCommand — Structural type for routing
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Minimal structural type accepted by the router.
- *
- * `CommandNode` (builder API) satisfies this shape. Other consumers can
- * implement this interface to use `resolveCommand` without depending on
- * the concrete `CommandNode` type.
- */
-export interface RoutableCommand {
-	meta: CommandMeta;
-	subCommands: Record<string, RoutableCommand>;
-	run?: ((...args: unknown[]) => unknown) | undefined;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandRoute — Output of resolveCommand
@@ -31,7 +13,7 @@ export interface RoutableCommand {
  */
 export interface CommandRoute {
 	/** The routed command (may be a subcommand of the original) */
-	command: CommandNode | RoutableCommand;
+	command: CommandNode;
 	/** The argv after subcommand names have been consumed */
 	argv: string[];
 	/** The command path for help text (e.g. ["crust", "generate", "command"]) */
@@ -45,9 +27,6 @@ export interface CommandRoute {
 /**
  * Resolve a command from an argv array by walking the subcommand tree.
  *
- * Accepts `CommandNode` (builder API) as the root, as well as any object
- * matching the `RoutableCommand` structural type.
- *
  * Subcommand matching happens BEFORE flag parsing, so:
  * `crust build --entry src/cli.ts` first resolves "build" as a subcommand,
  * then passes `["--entry", "src/cli.ts"]` to the build command's parser.
@@ -59,18 +38,18 @@ export interface CommandRoute {
  *    should show help (the `showHelp` flag is set in the result)
  * 4. Unknown subcommands produce a structured COMMAND_NOT_FOUND error
  *
- * @param command - The root command to resolve from (CommandNode or RoutableCommand)
+ * @param command - The root command to resolve from
  * @param argv - The argv array to resolve against
  * @returns The resolved command, argv, and the command path
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  */
 export function resolveCommand(
-	command: CommandNode | RoutableCommand,
+	command: CommandNode,
 	argv: string[],
 ): CommandRoute {
 	const path = [command.meta.name];
 
-	let current: CommandNode | RoutableCommand = command;
+	let current: CommandNode = command;
 	let routedArgv = argv;
 
 	while (routedArgv.length > 0) {
@@ -82,14 +61,14 @@ export function resolveCommand(
 
 		const candidate = routedArgv[0];
 
-		// Skip if the candidate looks like a flag (starts with -) or doesn't exists
+		// Skip if the candidate looks like a flag (starts with -) or doesn't exist
 		if (!candidate || candidate.startsWith("-")) {
 			break;
 		}
 
 		// Check if it matches a known subcommand
-		if (candidate in subCommands) {
-			current = subCommands[candidate] as CommandNode | RoutableCommand;
+		if (candidate in subCommands && subCommands[candidate]) {
+			current = subCommands[candidate];
 			path.push(candidate);
 			routedArgv = routedArgv.slice(1);
 			continue;
@@ -110,13 +89,13 @@ export function resolveCommand(
 				input: candidate,
 				available,
 				commandPath: [...path],
-				parentCommand: current as CommandNode,
+				parentCommand: current,
 			},
 		);
 	}
 
 	return {
-		command: current as CommandNode | RoutableCommand,
+		command: current,
 		argv: routedArgv,
 		commandPath: path,
 	};

@@ -6,7 +6,7 @@ import { resolveCommand } from "./router.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
 
 /**
- * Test helper: creates a CommandNode from a defineCommand-style config.
+ * Test helper: creates a CommandNode from a config object for test fixtures.
  */
 function makeNode(config: {
 	meta: string | CommandMeta;

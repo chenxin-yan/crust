@@ -9,7 +9,6 @@ export type { CommandNode } from "./node.ts";
 export { computeEffectiveFlags, createCommandNode } from "./node.ts";
 
 // Argument & flag parsing
-export type { ParseableCommand } from "./parser.ts";
 export { parseArgs } from "./parser.ts";
 
 // Plugin runtime contracts
@@ -22,7 +21,7 @@ export type {
 } from "./plugins.ts";
 
 // Subcommand routing
-export type { CommandRoute, RoutableCommand } from "./router.ts";
+export type { CommandRoute } from "./router.ts";
 export { resolveCommand } from "./router.ts";
 
 // Core types

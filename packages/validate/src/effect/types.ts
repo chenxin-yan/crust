@@ -9,7 +9,7 @@ import type { ValidatedContext } from "../types.ts";
 /**
  * Unique symbol used to attach an Effect schema to a core `ArgDef` or `FlagDef`.
  *
- * Survives `{ ...def }` spread in `defineCommand` and `Object.freeze`,
+ * Survives `{ ...def }` spread in the Crust builder and `Object.freeze`,
  * making the schema available at runtime via `def[EFFECT_SCHEMA]`.
  */
 export const EFFECT_SCHEMA: unique symbol = Symbol.for(

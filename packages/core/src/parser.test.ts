@@ -6,8 +6,7 @@ import { parseArgs } from "./parser.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
 
 /**
- * Test helper: creates a CommandNode from a defineCommand-style config.
- * Replaces defineCommand for test fixtures.
+ * Test helper: creates a CommandNode from a config object for test fixtures.
  */
 function makeNode(config: {
 	meta: string | CommandMeta;
@@ -205,12 +204,13 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on alias collision", () => {
-		const cmd = {
+		const cmd = makeNode({
+			meta: "alias-collision",
 			flags: {
 				verbose: { type: "boolean" as const, alias: "v" },
 				version: { type: "boolean" as const, alias: "v" },
 			},
-		};
+		});
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -224,12 +224,13 @@ describe("parseArgs — aliases", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on long alias shadowing flag name", () => {
-		const cmd = {
+		const cmd = makeNode({
+			meta: "alias-shadow",
 			flags: {
 				out: { type: "string" as const, description: "Output format" },
 				output: { type: "string" as const, alias: ["o", "out"] },
 			},
-		};
+		});
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -995,9 +996,10 @@ describe("parseArgs — canonical-only negation", () => {
 
 describe("parseArgs — no- prefix defense-in-depth", () => {
 	it("throws CrustError with DEFINITION code on no- prefixed flag name", () => {
-		const cmd = {
+		const cmd = makeNode({
+			meta: "no-prefix",
 			flags: { "no-cache": { type: "boolean" as const } },
-		};
+		});
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -1011,9 +1013,10 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 	});
 
 	it("throws CrustError with DEFINITION code on no- prefixed alias", () => {
-		const cmd = {
+		const cmd = makeNode({
+			meta: "no-prefix-alias",
 			flags: { cache: { type: "boolean" as const, alias: "no-store" } },
-		};
+		});
 		try {
 			parseArgs(cmd, []);
 			expect.unreachable("should have thrown");
@@ -1182,33 +1185,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
 		expect(result.flags.verbose).toBe(true);
 		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
-	});
-
-	it("effectiveFlags takes precedence over flags property", () => {
-		// Create a command-like object with both flags and effectiveFlags
-		// to verify effectiveFlags wins
-		const cmd = {
-			flags: {
-				output: { type: "string" as const },
-			},
-			effectiveFlags: {
-				verbose: { type: "boolean" as const },
-			},
-		};
-
-		// Should use effectiveFlags (verbose), not flags (output)
-		const result = parseArgs(cmd, ["--verbose"]);
-		expect(result.flags.verbose).toBe(true);
-
-		// output is on flags but not effectiveFlags — should be unknown
-		try {
-			parseArgs(cmd, ["--output", "test"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("Unknown flag");
-		}
 	});
 
 	it("inherited boolean negation works on subcommand", () => {
