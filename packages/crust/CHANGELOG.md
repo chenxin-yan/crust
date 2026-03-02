@@ -1,5 +1,13 @@
 # @crustjs/crust
 
+## 0.0.14
+
+### Patch Changes
+
+- cae6ea2: Add `updateNotifierPlugin` to `@crustjs/plugins`. The plugin checks the npm registry for newer versions of your package and displays a non-blocking update notice after command execution. It is non-persistent by default, supports optional cache adapters (including `@crustjs/store`) for cross-run caching and dedupe, and uses package-manager-aware update commands with override support. Adopted in the `crust` CLI and the `create-crust` scaffold template by default.
+- Updated dependencies [cae6ea2]
+  - @crustjs/plugins@0.0.11
+
 ## 0.0.13
 
 ### Patch Changes
