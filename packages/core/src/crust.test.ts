@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Crust } from "./crust.ts";
 import { CrustError } from "./errors.ts";
 import type {
+	EffectiveFlags,
 	FlagsDef,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
@@ -475,5 +476,394 @@ describe("Crust._createChild", () => {
 		const child = Crust._createChild("sub", {});
 		expect(child._node.localFlags).toEqual({});
 		expect(child._node.args).toBeUndefined();
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .command() — Runtime tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .command()", () => {
+	it("registers a subcommand in the node's subCommands", () => {
+		const app = new Crust("cli").command("sub", (cmd) =>
+			cmd.flags({ output: { type: "string" } }),
+		);
+
+		const subNode = app._node.subCommands.sub;
+		expect(subNode).toBeDefined();
+		expect(subNode?.meta.name).toBe("sub");
+	});
+
+	it("subcommand node has correct local flags", () => {
+		const app = new Crust("cli").command("sub", (cmd) =>
+			cmd.flags({ output: { type: "string" } }),
+		);
+
+		expect(app._node.subCommands.sub?.localFlags).toEqual({
+			output: { type: "string" },
+		});
+	});
+
+	it("subcommand node computes effectiveFlags from inherited + local", () => {
+		const app = new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				port: { type: "number" },
+			})
+			.command("sub", (cmd) => cmd.flags({ output: { type: "string" } }));
+
+		const subNode = app._node.subCommands.sub;
+		expect(subNode).toBeDefined();
+		// Should include inherited verbose (inherit: true) and local output
+		// Should NOT include port (no inherit)
+		expect(subNode?.effectiveFlags.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(subNode?.effectiveFlags.output).toEqual({ type: "string" });
+		expect(subNode?.effectiveFlags.port).toBeUndefined();
+	});
+
+	it("throws CrustError DEFINITION on empty subcommand name", () => {
+		const app = new Crust("cli");
+		try {
+			app.command("", (cmd) => cmd);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("non-empty");
+		}
+	});
+
+	it("throws CrustError DEFINITION on whitespace-only subcommand name", () => {
+		const app = new Crust("cli");
+		try {
+			app.command("   ", (cmd) => cmd);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+		}
+	});
+
+	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
+		const app = new Crust("cli").command("sub", (cmd) => cmd);
+		try {
+			app.command("sub", (cmd) => cmd);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toContain("already registered");
+		}
+	});
+
+	it("returns a new Crust instance (immutability)", () => {
+		const app = new Crust("cli");
+		const withSub = app.command("sub", (cmd) => cmd);
+
+		expect(withSub).not.toBe(app);
+	});
+
+	it("does not mutate original builder", () => {
+		const app = new Crust("cli");
+		app.command("sub", (cmd) => cmd);
+
+		expect(app._node.subCommands).toEqual({});
+	});
+
+	it("callback receives a fresh builder (not the parent)", () => {
+		let receivedBuilder: Crust | undefined;
+
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean", inherit: true } })
+			.command("sub", (cmd) => {
+				receivedBuilder = cmd;
+				return cmd;
+			});
+
+		expect(receivedBuilder).toBeDefined();
+		expect(receivedBuilder).not.toBe(app);
+		expect(receivedBuilder?._node.meta.name).toBe("sub");
+		// Child should start with empty local flags
+		expect(receivedBuilder?._node.localFlags).toEqual({});
+	});
+
+	it("callback child builder carries parent effective flags at runtime", () => {
+		let childInherited: FlagsDef = {};
+
+		new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				port: { type: "number" },
+			})
+			.command("sub", (cmd) => {
+				childInherited = cmd._inheritedFlags;
+				return cmd;
+			});
+
+		// _inheritedFlags carries ALL parent effective flags (not just inheritable)
+		// The filtering for inherit:true happens when computeEffectiveFlags is called
+		// during the child's own .command() or effectiveFlags computation
+		expect(childInherited.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(childInherited.port).toEqual({
+			type: "number",
+		});
+	});
+
+	it("nested .command() chains work", () => {
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean", inherit: true } })
+			.command("level1", (cmd) =>
+				cmd
+					.flags({ output: { type: "string", inherit: true } })
+					.command("level2", (cmd2) =>
+						cmd2.flags({ format: { type: "string" } }),
+					),
+			);
+
+		const level1 = app._node.subCommands.level1;
+		expect(level1).toBeDefined();
+		expect(level1?.subCommands.level2).toBeDefined();
+
+		const level2 = level1?.subCommands.level2;
+		// level2 should have effective flags: verbose (from root), output (from level1), format (local)
+		expect(level2?.effectiveFlags.verbose).toEqual({
+			type: "boolean",
+			inherit: true,
+		});
+		expect(level2?.effectiveFlags.output).toEqual({
+			type: "string",
+			inherit: true,
+		});
+		expect(level2?.effectiveFlags.format).toEqual({ type: "string" });
+	});
+
+	it("multiple subcommands can be registered", () => {
+		const app = new Crust("cli")
+			.command("sub1", (cmd) => cmd.flags({ a: { type: "string" } }))
+			.command("sub2", (cmd) => cmd.flags({ b: { type: "number" } }));
+
+		expect(app._node.subCommands.sub1).toBeDefined();
+		expect(app._node.subCommands.sub2).toBeDefined();
+		expect(app._node.subCommands.sub1?.localFlags.a).toBeDefined();
+		expect(app._node.subCommands.sub2?.localFlags.b).toBeDefined();
+	});
+
+	it("preserves parent flags and args when registering subcommand", () => {
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean" } })
+			.args([{ name: "file", type: "string" }])
+			.command("sub", (cmd) => cmd);
+
+		expect(app._node.localFlags.verbose).toBeDefined();
+		expect(app._node.args?.length).toBe(1);
+		expect(app._node.args?.[0]?.name).toBe("file");
+	});
+
+	it("child flag override replaces inherited flag at runtime", () => {
+		const app = new Crust("cli")
+			.flags({
+				output: { type: "string", inherit: true },
+			})
+			.command("sub", (cmd) =>
+				// Override output with a number type
+				cmd.flags({ output: { type: "number", default: 42 } }),
+			);
+
+		const subNode = app._node.subCommands.sub;
+		expect(subNode).toBeDefined();
+		expect(subNode?.effectiveFlags.output).toEqual({
+			type: "number",
+			default: 42,
+		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .command() — Type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .command() type-level tests", () => {
+	it("callback parameter carries parent effective flags as Inherited", () => {
+		const app = new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				port: { type: "number" },
+			})
+			.command("sub", (cmd) => {
+				// The callback's Inherited = EffectiveFlags<ParentInherited, ParentLocal>
+				// Since root Inherited defaults to FlagsDef (broad), EffectiveFlags
+				// computes to just the parent's Local flags.
+				type CmdInherited = (typeof cmd)["_types"]["inherited"];
+
+				// verbose should be present in inherited
+				type _checkVerbose = Expect<
+					Equal<
+						CmdInherited["verbose"],
+						{ readonly type: "boolean"; readonly inherit: true }
+					>
+				>;
+
+				// port is also present in the Inherited generic (all parent effective flags)
+				// but will be filtered out by InheritableFlags when computing the child's
+				// EffectiveFlags in .run() or further .command() calls
+				type _checkPort = Expect<
+					Equal<CmdInherited["port"], { readonly type: "number" }>
+				>;
+
+				return cmd;
+			});
+
+		expect(app).toBeDefined();
+	});
+
+	it("override flag in child replaces inherited type", () => {
+		new Crust("cli")
+			.flags({
+				output: { type: "string", inherit: true },
+			})
+			.command("sub", (cmd) => {
+				const configured = cmd.flags({
+					output: { type: "number", default: 42 },
+				});
+
+				type ConfiguredLocal = (typeof configured)["_types"]["local"];
+				type _checkOutput = Expect<
+					Equal<
+						ConfiguredLocal["output"],
+						{ readonly type: "number"; readonly default: 42 }
+					>
+				>;
+
+				return configured;
+			});
+	});
+
+	it("deeply nested command inherits through chain", () => {
+		new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", inherit: true },
+				rootOnly: { type: "string" },
+			})
+			.command("level1", (cmd) => {
+				// level1 inherits verbose from root
+				type L1Inherited = (typeof cmd)["_types"]["inherited"];
+				type _checkVerboseL1 = Expect<
+					Equal<
+						L1Inherited["verbose"],
+						{ readonly type: "boolean"; readonly inherit: true }
+					>
+				>;
+
+				return cmd
+					.flags({ l1Flag: { type: "string", inherit: true } })
+					.command("level2", (cmd2) => {
+						// level2's Inherited = EffectiveFlags of level1
+						// EffectiveFlags<L1Inherited, L1Local> filters L1Inherited
+						// for inherit:true (only verbose) then merges with l1Flag
+						type L2Inherited = (typeof cmd2)["_types"]["inherited"];
+						type _checkVerboseL2 = Expect<
+							Equal<
+								L2Inherited["verbose"],
+								{ readonly type: "boolean"; readonly inherit: true }
+							>
+						>;
+						type _checkL1FlagL2 = Expect<
+							Equal<
+								L2Inherited["l1Flag"],
+								{ readonly type: "string"; readonly inherit: true }
+							>
+						>;
+
+						// rootOnly has no inherit:true, so it's filtered by
+						// EffectiveFlags at level1→level2 boundary
+						// Verify only verbose and l1Flag are keys (rootOnly excluded)
+						type _checkKeys = Expect<
+							Equal<keyof L2Inherited, "verbose" | "l1Flag">
+						>;
+
+						return cmd2;
+					});
+			});
+	});
+
+	it("non-inherit flags filtered at nested boundary via EffectiveFlags", () => {
+		new Crust("cli")
+			.flags({
+				local1: { type: "string" },
+				global: { type: "boolean", inherit: true },
+			})
+			.command("level1", (cmd) =>
+				cmd.flags({ l1Local: { type: "number" } }).command("level2", (cmd2) => {
+					// At level2, Inherited = EffectiveFlags<Level1Inherited, Level1Local>
+					// Level1Inherited includes both local1 and global (from root)
+					// InheritableFlags<Level1Inherited> filters to only global
+					// Then merges with l1Local → level2 Inherited = { global, l1Local }
+					type L2Inherited = (typeof cmd2)["_types"]["inherited"];
+
+					type _checkGlobal = Expect<
+						Equal<
+							L2Inherited["global"],
+							{ readonly type: "boolean"; readonly inherit: true }
+						>
+					>;
+					type _checkL1Local = Expect<
+						Equal<L2Inherited["l1Local"], { readonly type: "number" }>
+					>;
+
+					// local1 should NOT be in L2Inherited (filtered by EffectiveFlags)
+					// Verify only global and l1Local are keys (local1 excluded)
+					type _checkKeys = Expect<
+						Equal<keyof L2Inherited, "global" | "l1Local">
+					>;
+
+					return cmd2;
+				}),
+			);
+	});
+
+	it(".command() preserves parent's Inherited and Local generics", () => {
+		const app = new Crust("cli")
+			.flags({
+				verbose: { type: "boolean", alias: "v" },
+				port: { type: "number", default: 3000 },
+			})
+			.command("sub", (cmd) => cmd);
+
+		// Parent's Local generic should be preserved
+		type AppLocal = (typeof app)["_types"]["local"];
+		type _checkVerbose = Expect<
+			Equal<
+				AppLocal["verbose"],
+				{ readonly type: "boolean"; readonly alias: "v" }
+			>
+		>;
+		type _checkPort = Expect<
+			Equal<
+				AppLocal["port"],
+				{ readonly type: "number"; readonly default: 3000 }
+			>
+		>;
+	});
+
+	it("child with no parent flags has empty Inherited", () => {
+		new Crust("cli").command("sub", (cmd) => {
+			// No flags on parent, so child inherited should be FlagsDef (the default)
+			// but effectively empty at the value level
+			type CmdInherited = (typeof cmd)["_types"]["inherited"];
+
+			// EffectiveFlags<FlagsDef, FlagsDef> with an empty parent resolves to
+			// the broad FlagsDef type since the parent defaults are broad
+			type _check = Expect<
+				Equal<CmdInherited, EffectiveFlags<FlagsDef, FlagsDef>>
+			>;
+
+			return cmd;
+		});
 	});
 });

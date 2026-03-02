@@ -1,8 +1,13 @@
 import { CrustError } from "./errors.ts";
-import { type CommandNode, createCommandNode } from "./node.ts";
+import {
+	type CommandNode,
+	computeEffectiveFlags,
+	createCommandNode,
+} from "./node.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
+	EffectiveFlags,
 	FlagsDef,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
@@ -182,5 +187,79 @@ export class Crust<
 		return this._clone({
 			args: copiedArgs,
 		}) as unknown as Crust<Inherited, Local, NewA>;
+	}
+
+	/**
+	 * Register a named subcommand.
+	 *
+	 * The callback receives a fresh `Crust` builder pre-typed with this
+	 * command's effective inheritable flags, enabling TypeScript contextual
+	 * typing to flow inherited flag types into subcommand definitions —
+	 * even across split files.
+	 *
+	 * @param name - Subcommand name (must be non-empty, unique among siblings)
+	 * @param cb - Callback that receives a child builder and returns the configured builder
+	 * @returns A new `Crust` instance with the subcommand registered
+	 * @throws {CrustError} `DEFINITION` if name is empty or already registered
+	 */
+	command<N extends string>(
+		name: N,
+		cb: (
+			cmd: Crust<EffectiveFlags<Inherited, Local>, FlagsDef, ArgsDef>,
+		) => Crust<
+			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			any,
+			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			any,
+			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			any
+		>,
+	): Crust<Inherited, Local, A> {
+		// Validate name
+		if (!name.trim()) {
+			throw new CrustError(
+				"DEFINITION",
+				"Subcommand name must be a non-empty string",
+			);
+		}
+
+		// Check for duplicate subcommand
+		if (this._node.subCommands[name]) {
+			throw new CrustError(
+				"DEFINITION",
+				`Subcommand "${name}" is already registered`,
+			);
+		}
+
+		// Compute the effective flags for this node (inherited + local merged)
+		const parentEffective = computeEffectiveFlags(
+			this._inheritedFlags,
+			this._node.localFlags,
+		);
+
+		// Create a child builder pre-typed with the parent's effective flags
+		const childBuilder = Crust._createChild<EffectiveFlags<Inherited, Local>>(
+			name,
+			parentEffective,
+		);
+
+		// Pass the child builder to the callback to let the user configure it
+		const configuredChild = cb(childBuilder);
+
+		// Extract the internal node from the configured child and register it
+		const childNode = configuredChild._node;
+
+		// Recompute the child's effectiveFlags based on its inherited + local flags
+		childNode.effectiveFlags = computeEffectiveFlags(
+			configuredChild._inheritedFlags,
+			childNode.localFlags,
+		);
+
+		return this._clone({
+			subCommands: {
+				...this._node.subCommands,
+				[name]: childNode,
+			},
+		}) as unknown as Crust<Inherited, Local, A>;
 	}
 }
