@@ -24,8 +24,8 @@ export interface SetupActions {
 	 * (e.g. `--version`, `--help`) so they are recognized by the parser
 	 * and rendered in help text.
 	 *
-	 * The flag is added to both `localFlags` and `effectiveFlags` on the
-	 * `CommandNode` target.
+	 * The flag is added to `effectiveFlags` only — `localFlags` is left
+	 * unchanged to distinguish user-defined flags from plugin-injected ones.
 	 *
 	 * @param command - The command node to add the flag to
 	 * @param name - The flag name (e.g. "version")

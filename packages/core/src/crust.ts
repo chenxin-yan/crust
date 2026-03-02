@@ -614,13 +614,14 @@ export class Crust<
 			const configuredChild = cb(childBuilder);
 
 			// Extract the internal node from the configured child and register it
-			const childNode = configuredChild._node;
-
-			// Recompute the child's effectiveFlags based on its inherited + local flags
-			childNode.effectiveFlags = computeEffectiveFlags(
-				configuredChild._inheritedFlags,
-				childNode.localFlags,
-			);
+			// Clone the node to avoid mutating the original builder's _node
+			const childNode = {
+				...configuredChild._node,
+				effectiveFlags: computeEffectiveFlags(
+					configuredChild._inheritedFlags,
+					configuredChild._node.localFlags,
+				),
+			};
 
 			return this._clone({
 				subCommands: {
@@ -648,11 +649,14 @@ export class Crust<
 			);
 		}
 
-		const childNode = builder._node;
-		childNode.effectiveFlags = computeEffectiveFlags(
-			builder._inheritedFlags,
-			childNode.localFlags,
-		);
+		// Clone the node to avoid mutating the original builder's _node
+		const childNode = {
+			...builder._node,
+			effectiveFlags: computeEffectiveFlags(
+				builder._inheritedFlags,
+				builder._node.localFlags,
+			),
+		};
 
 		return this._clone({
 			subCommands: {
