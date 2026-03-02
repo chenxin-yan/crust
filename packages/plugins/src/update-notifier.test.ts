@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { defineCommand, runCommand } from "@crustjs/core";
+import { Crust, createCommandNode } from "@crustjs/core";
 import {
 	fetchLatestVersion,
 	isNewerVersion,
@@ -414,12 +414,11 @@ describe("updateNotifierPlugin middleware", () => {
 		},
 	};
 
-	/** Create a basic command for testing. */
+	/** Create a basic command node for testing. */
 	function makeCommand(name = "test-cli") {
-		return defineCommand({
-			meta: { name, description: "Test CLI" },
-			run() {},
-		});
+		const node = createCommandNode({ name, description: "Test CLI" });
+		node.run = () => {};
+		return node;
 	}
 
 	/** Build a mock PluginState from a Map. */
@@ -1087,30 +1086,26 @@ describe("updateNotifierPlugin middleware", () => {
 		});
 	});
 
-	// ── Integration with runCommand ───────────────────────────────────────
+	// ── Integration with Crust.execute() ────────────────────────────────
 
-	describe("runCommand integration", () => {
-		it("works as a plugin passed to runCommand", async () => {
+	describe("Crust.execute() integration", () => {
+		it("works as a plugin passed to Crust.execute()", async () => {
 			const pkgName = uniquePackageName("runcommand");
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
-			const cmd = defineCommand({
-				meta: { name: pkgName, description: "Test" },
-				run() {
-					commandExecuted = true;
-				},
-			});
-
-			await runCommand(cmd, {
-				argv: [],
-				plugins: [
+			const app = new Crust({ name: pkgName, description: "Test" })
+				.use(
 					updateNotifierPlugin({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
-				],
-			});
+				)
+				.run(() => {
+					commandExecuted = true;
+				});
+
+			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
 			expect(getStderr()).toContain("Update available");
@@ -1122,12 +1117,6 @@ describe("updateNotifierPlugin middleware", () => {
 			mockRegistryResponse("2.0.0");
 
 			let commandExecuted = false;
-			const cmd = defineCommand({
-				meta: { name: pkgName, description: "Test" },
-				run() {
-					commandExecuted = true;
-				},
-			});
 
 			// Combine with a custom no-op plugin
 			const otherPlugin = {
@@ -1142,16 +1131,19 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 			};
 
-			await runCommand(cmd, {
-				argv: [],
-				plugins: [
-					otherPlugin,
+			const app = new Crust({ name: pkgName, description: "Test" })
+				.use(otherPlugin)
+				.use(
 					updateNotifierPlugin({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
-				],
-			});
+				)
+				.run(() => {
+					commandExecuted = true;
+				});
+
+			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
 			expect(getStderr()).toContain("Update available");
@@ -1162,22 +1154,18 @@ describe("updateNotifierPlugin middleware", () => {
 			mockRegistryFailure();
 
 			let commandExecuted = false;
-			const cmd = defineCommand({
-				meta: { name: pkgName, description: "Test" },
-				run() {
-					commandExecuted = true;
-				},
-			});
-
-			await runCommand(cmd, {
-				argv: [],
-				plugins: [
+			const app = new Crust({ name: pkgName, description: "Test" })
+				.use(
 					updateNotifierPlugin({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
-				],
-			});
+				)
+				.run(() => {
+					commandExecuted = true;
+				});
+
+			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
 			expect(getStderr()).toBe("");

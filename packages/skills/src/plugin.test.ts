@@ -3,7 +3,7 @@ import { access, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
-import { defineCommand, runCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { generateSkill } from "./generate.ts";
 import { skillPlugin } from "./plugin.ts";
 import { readInstalledVersion } from "./version.ts";
@@ -49,23 +49,17 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("does not install skills that are not yet present", async () => {
-		const cmd = defineCommand({
-			meta: { name: "no-auto-install", description: "test" },
-			run() {},
-		});
+		const app = new Crust({ name: "no-auto-install", description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					scope: "project",
+					command: false,
+				}),
+			);
 
-		await withCwd(tmpDir, () =>
-			runCommand(cmd, {
-				argv: [],
-				plugins: [
-					skillPlugin({
-						version: "1.0.0",
-						scope: "project",
-						command: false,
-					}),
-				],
-			}),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		const manifestPath = join(
 			tmpDir,
@@ -79,15 +73,20 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("auto-updates already-installed skills when version changes", async () => {
-		const cmd = defineCommand({
-			meta: { name: "update-test", description: "test" },
-			run() {},
-		});
+		const app = new Crust({ name: "update-test", description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					scope: "project",
+					command: false,
+				}),
+			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: app._node,
 				meta: { name: "update-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -99,32 +98,27 @@ describe("skillPlugin auto-update", () => {
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 
 		// Run plugin with v2.0.0 — should auto-update
-		await withCwd(tmpDir, () =>
-			runCommand(cmd, {
-				argv: [],
-				plugins: [
-					skillPlugin({
-						version: "2.0.0",
-						scope: "project",
-						command: false,
-					}),
-				],
-			}),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 	});
 
 	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
-		const cmd = defineCommand({
-			meta: { name: "order-test", description: "test" },
-			run() {},
-		});
+		const app = new Crust({ name: "order-test", description: "test" })
+			.run(() => {})
+			.use(shortCircuitPlugin())
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					scope: "project",
+					command: false,
+				}),
+			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: app._node,
 				meta: { name: "order-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -134,19 +128,7 @@ describe("skillPlugin auto-update", () => {
 		const skillDir = join(tmpDir, ".opencode", "skills", "use-order-test");
 
 		// Run plugin with v2.0.0 behind a short-circuit — should still update
-		await withCwd(tmpDir, () =>
-			runCommand(cmd, {
-				argv: [],
-				plugins: [
-					shortCircuitPlugin(),
-					skillPlugin({
-						version: "2.0.0",
-						scope: "project",
-						command: false,
-					}),
-				],
-			}),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 	});
@@ -154,15 +136,20 @@ describe("skillPlugin auto-update", () => {
 	it("does not auto-update during validation mode", async () => {
 		process.env[VALIDATION_MODE_ENV] = "1";
 
-		const cmd = defineCommand({
-			meta: { name: "validation-test", description: "test" },
-			run() {},
-		});
+		const app = new Crust({ name: "validation-test", description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					scope: "project",
+					command: false,
+				}),
+			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: app._node,
 				meta: {
 					name: "validation-test",
 					description: "test",
@@ -176,18 +163,7 @@ describe("skillPlugin auto-update", () => {
 		const skillDir = join(tmpDir, ".opencode", "skills", "use-validation-test");
 
 		try {
-			await withCwd(tmpDir, () =>
-				runCommand(cmd, {
-					argv: [],
-					plugins: [
-						skillPlugin({
-							version: "2.0.0",
-							scope: "project",
-							command: false,
-						}),
-					],
-				}),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: [] }));
 		} finally {
 			delete process.env[VALIDATION_MODE_ENV];
 		}
@@ -197,15 +173,21 @@ describe("skillPlugin auto-update", () => {
 	});
 
 	it("does not auto-update when autoUpdate is false", async () => {
-		const cmd = defineCommand({
-			meta: { name: "no-update-test", description: "test" },
-			run() {},
-		});
+		const app = new Crust({ name: "no-update-test", description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+					scope: "project",
+					command: false,
+				}),
+			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: app._node,
 				meta: {
 					name: "no-update-test",
 					description: "test",
@@ -218,19 +200,7 @@ describe("skillPlugin auto-update", () => {
 
 		const skillDir = join(tmpDir, ".opencode", "skills", "use-no-update-test");
 
-		await withCwd(tmpDir, () =>
-			runCommand(cmd, {
-				argv: [],
-				plugins: [
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						scope: "project",
-						command: false,
-					}),
-				],
-			}),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		// Should still be v1.0.0 — autoUpdate disabled
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");

@@ -1,11 +1,36 @@
 import type {
-	AnyCommand,
 	ArgDef,
 	CommandMeta,
+	CommandNode,
 	CrustPlugin,
 	FlagDef,
 	FlagsDef,
 } from "@crustjs/core";
+
+/**
+ * A structural type for objects that renderHelp can accept.
+ * Both CommandNode and legacy shapes satisfy this interface.
+ */
+interface HelpableCommand {
+	meta: CommandMeta;
+	subCommands?: Record<string, HelpableCommand>;
+	run?: (...args: unknown[]) => unknown;
+	args?: readonly ArgDef[];
+	flags?: FlagsDef;
+	effectiveFlags?: FlagsDef;
+	localFlags?: FlagsDef;
+}
+
+/** Resolve the flags to display in help — effectiveFlags takes precedence. */
+function resolveHelpFlags(command: HelpableCommand): FlagsDef | undefined {
+	if (
+		command.effectiveFlags &&
+		Object.keys(command.effectiveFlags).length > 0
+	) {
+		return command.effectiveFlags;
+	}
+	return command.flags;
+}
 
 function formatArgToken(arg: ArgDef): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;
@@ -14,7 +39,7 @@ function formatArgToken(arg: ArgDef): string {
 
 function formatUsage(
 	meta: CommandMeta,
-	command: AnyCommand,
+	command: HelpableCommand,
 	path: string[],
 ): string {
 	if (meta.usage) return meta.usage;
@@ -35,7 +60,8 @@ function formatUsage(
 		}
 	}
 
-	if (command.flags && Object.keys(command.flags).length > 0) {
+	const flags = resolveHelpFlags(command);
+	if (flags && Object.keys(flags).length > 0) {
 		usageParts.push("[options]");
 	}
 
@@ -67,7 +93,7 @@ function formatFlagsSection(flagsDef: FlagsDef | undefined): string[] {
 	return lines;
 }
 
-function formatArgsSection(command: AnyCommand): string[] {
+function formatArgsSection(command: HelpableCommand): string[] {
 	if (!command.args || command.args.length === 0) return [];
 
 	const lines = ["ARGS:"];
@@ -79,7 +105,7 @@ function formatArgsSection(command: AnyCommand): string[] {
 	return lines;
 }
 
-function formatCommandsSection(command: AnyCommand): string[] {
+function formatCommandsSection(command: HelpableCommand): string[] {
 	if (!command.subCommands || Object.keys(command.subCommands).length === 0) {
 		return [];
 	}
@@ -93,7 +119,7 @@ function formatCommandsSection(command: AnyCommand): string[] {
 	return lines;
 }
 
-export function renderHelp(command: AnyCommand, path?: string[]): string {
+export function renderHelp(command: HelpableCommand, path?: string[]): string {
 	const resolvedPath = path ?? [command.meta.name];
 	const lines: string[] = [];
 	lines.push(
@@ -117,7 +143,7 @@ export function renderHelp(command: AnyCommand, path?: string[]): string {
 		lines.push(...argsSection);
 	}
 
-	const optionsSection = formatFlagsSection(command.flags);
+	const optionsSection = formatFlagsSection(resolveHelpFlags(command));
 	if (optionsSection.length > 0) {
 		lines.push("");
 		lines.push(...optionsSection);
@@ -133,8 +159,8 @@ const helpFlagDef: FlagDef = {
 };
 
 function injectHelpFlags(
-	command: AnyCommand,
-	addFlag: (command: AnyCommand, name: string, def: FlagDef) => void,
+	command: CommandNode,
+	addFlag: (command: CommandNode, name: string, def: FlagDef) => void,
 ): void {
 	addFlag(command, "help", helpFlagDef);
 

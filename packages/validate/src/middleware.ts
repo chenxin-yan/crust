@@ -1,4 +1,4 @@
-import type { CommandContext } from "@crustjs/core";
+import type { CrustCommandContext } from "@crustjs/core";
 import type { ValidationResult } from "./standard/types.ts";
 import type { ValidatedContext, ValidationIssue } from "./types.ts";
 import { throwValidationError } from "./validation.ts";
@@ -48,8 +48,8 @@ export function buildValidatedRunner(
 	validateValue: ValidateValueFn,
 	schemaKey: symbol,
 	label: string,
-): (context: CommandContext) => Promise<void> {
-	return async (context: CommandContext) => {
+): (context: CrustCommandContext) => Promise<void> {
+	return async (context: CrustCommandContext) => {
 		const issues: ValidationIssue[] = [];
 
 		// ── Validate args ─────────────────────────────────────────────────
@@ -57,7 +57,7 @@ export function buildValidatedRunner(
 		const validatedArgs: Record<string, unknown> = {};
 
 		for (const def of argDefs) {
-			const schema = (def as Record<symbol, unknown>)[schemaKey];
+			const schema = (def as unknown as Record<symbol, unknown>)[schemaKey];
 			if (!schema) {
 				// Skip args without schema metadata — they may be injected by
 				// plugins. Compile-time `HasAllSchemas` catches user mistakes;
@@ -105,11 +105,11 @@ export function buildValidatedRunner(
 		}
 
 		// ── Validate flags ────────────────────────────────────────────────
-		const flagDefs = context.command.flags ?? {};
+		const flagDefs = context.command.effectiveFlags ?? {};
 		const validatedFlags: Record<string, unknown> = {};
 
 		for (const [name, def] of Object.entries(flagDefs)) {
-			const schema = (def as Record<symbol, unknown>)[schemaKey];
+			const schema = (def as unknown as Record<symbol, unknown>)[schemaKey];
 			if (!schema) {
 				// Skip flags without schema metadata — they may be injected by
 				// plugins (e.g. helpPlugin injects --help). Compile-time

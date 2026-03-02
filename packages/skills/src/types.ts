@@ -2,7 +2,7 @@
 // @crustjs/skills — Public types for agent skill generation
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnyCommand } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Skill metadata — describes the generated skill bundle
@@ -220,7 +220,7 @@ export interface RenderedFile {
  */
 export interface GenerateOptions {
 	/** Root command to generate the skill from */
-	command: AnyCommand;
+	command: CommandNode;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
 	/** Agent targets to install skills for */

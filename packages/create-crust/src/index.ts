@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
 	detectPackageManager,
 	isInGitRepo,
@@ -31,19 +31,18 @@ function validateProjectName(name: string): true | string {
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-const command = defineCommand({
-	meta: {
-		name: "create-crust",
-		description: "Scaffold a new Crust CLI project",
-	},
-	args: [
+const app = new Crust({
+	name: "create-crust",
+	description: "Scaffold a new Crust CLI project",
+})
+	.args([
 		{
 			name: "directory",
 			type: "string",
 			description: "Project directory to scaffold into",
 		},
-	],
-	async run({ args }) {
+	])
+	.run(async ({ args }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 
@@ -133,7 +132,6 @@ const command = defineCommand({
 		}
 		console.log("  bun run dev");
 		console.log("  bun run build");
-	},
-});
+	});
 
-runMain(command);
+await app.execute();

@@ -1,8 +1,33 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "@crustjs/core";
+import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import { createCommandNode } from "@crustjs/core";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helper — builds a CommandNode for introspection tests
+// ────────────────────────────────────────────────────────────────────────────
+
+function makeCommand(opts: {
+	meta: { name: string; description?: string; usage?: string };
+	args?: readonly ArgDef[];
+	flags?: Record<string, FlagDef>;
+	run?: () => void;
+	subCommands?: Record<string, CommandNode>;
+}): CommandNode {
+	const node = createCommandNode(opts.meta);
+	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.flags) {
+		node.localFlags = { ...opts.flags };
+		node.effectiveFlags = { ...opts.flags };
+	}
+	if (opts.run) node.run = opts.run;
+	if (opts.subCommands) {
+		node.subCommands = opts.subCommands;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -25,10 +50,10 @@ function findFile(
 }
 
 /**
- * Builds a simple manifest from a defineCommand call for testing.
+ * Builds a simple manifest from a makeCommand call for testing.
  */
 function buildSimpleManifest(): ManifestNode {
-	const cmd = defineCommand({
+	const cmd = makeCommand({
 		meta: { name: "test-cli", description: "A test CLI tool" },
 		run() {},
 	});
@@ -72,19 +97,19 @@ describe("renderSkill", () => {
 		});
 
 		it("produces command files mirroring the command hierarchy", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				run() {},
 			});
-			const remove = defineCommand({
+			const remove = makeCommand({
 				meta: { name: "remove", description: "Remove a remote" },
 				run() {},
 			});
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				subCommands: { add, remove },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git", description: "Version control" },
 				subCommands: { remote },
 			});
@@ -157,15 +182,15 @@ describe("renderSkill", () => {
 		});
 
 		it("lists available subcommands with links", () => {
-			const serve = defineCommand({
+			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
 			});
-			const build = defineCommand({
+			const build = makeCommand({
 				meta: { name: "build", description: "Build project" },
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app", description: "App CLI" },
 				subCommands: { serve, build },
 			});
@@ -195,11 +220,11 @@ describe("renderSkill", () => {
 		});
 
 		it("omits usage section when root is not runnable", () => {
-			const child = defineCommand({
+			const child = makeCommand({
 				meta: { name: "child" },
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app", description: "App" },
 				subCommands: { child },
 			});
@@ -370,11 +395,11 @@ describe("renderSkill", () => {
 		});
 
 		it("lists all commands with correct paths", () => {
-			const serve = defineCommand({
+			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app", description: "App CLI" },
 				subCommands: { serve },
 			});
@@ -395,15 +420,15 @@ describe("renderSkill", () => {
 		});
 
 		it("shows correct type labels for runnable vs group", () => {
-			const leaf = defineCommand({
+			const leaf = makeCommand({
 				meta: { name: "leaf" },
 				run() {},
 			});
-			const group = defineCommand({
+			const group = makeCommand({
 				meta: { name: "group" },
 				subCommands: { leaf },
 			});
-			const hybrid = defineCommand({
+			const hybrid = makeCommand({
 				meta: { name: "hybrid" },
 				subCommands: { group },
 				run() {},
@@ -433,11 +458,11 @@ describe("renderSkill", () => {
 
 	describe("leaf command files", () => {
 		it("renders a heading with full invocation", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "deploy", description: "Deploy the app" },
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: { deploy: cmd },
 			});
@@ -456,7 +481,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders description when present", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve", description: "Start the dev server" },
 				run() {},
 			});
@@ -474,18 +499,18 @@ describe("renderSkill", () => {
 		});
 
 		it("renders auto-generated usage line", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "deploy" },
 				args: [
 					{ name: "env", type: "string", required: true },
 					{ name: "tag", type: "string" },
-				] as const,
+				] as ArgDef[],
 				flags: {
 					force: { type: "boolean" },
 				},
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: { deploy: cmd },
 			});
@@ -503,7 +528,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders custom usage when provided", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: {
 					name: "build",
 					usage: "build [--watch] [entry...]",
@@ -524,7 +549,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders an arguments table with required/optional/variadic", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "copy" },
 				args: [
 					{
@@ -544,7 +569,7 @@ describe("renderSkill", () => {
 						variadic: true,
 						description: "Extra files",
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -570,7 +595,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders argument default values", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				args: [
 					{
@@ -579,7 +604,7 @@ describe("renderSkill", () => {
 						default: 3000,
 						description: "Port number",
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -596,7 +621,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders a flags table with aliases and defaults", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
 					verbose: {
@@ -637,7 +662,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders multiple flag indicator", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "lint" },
 				flags: {
 					ignore: {
@@ -662,7 +687,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders variadic args in usage line", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "install" },
 				args: [
 					{
@@ -671,7 +696,7 @@ describe("renderSkill", () => {
 						variadic: true,
 						required: true,
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -688,7 +713,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders navigation with link to command index", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
@@ -707,15 +732,15 @@ describe("renderSkill", () => {
 		});
 
 		it("renders navigation with link to parent command", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				run() {},
 			});
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				subCommands: { add },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git" },
 				subCommands: { remote },
 			});
@@ -734,7 +759,7 @@ describe("renderSkill", () => {
 		});
 
 		it("omits arguments section when command has no args", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
@@ -752,7 +777,7 @@ describe("renderSkill", () => {
 		});
 
 		it("omits flags section when command has no flags", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
@@ -770,9 +795,9 @@ describe("renderSkill", () => {
 		});
 
 		it("renders dash in description cell when arg has no description or default", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
-				args: [{ name: "file", type: "string" }] as const,
+				args: [{ name: "file", type: "string" }] as ArgDef[],
 				run() {},
 			});
 
@@ -789,7 +814,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders dash in description cell when flag has no description or default", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
 					quiet: { type: "boolean" },
@@ -816,19 +841,19 @@ describe("renderSkill", () => {
 
 	describe("group command files", () => {
 		it("lists subcommands with links", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				run() {},
 			});
-			const remove = defineCommand({
+			const remove = makeCommand({
 				meta: { name: "remove", description: "Remove a remote" },
 				run() {},
 			});
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				subCommands: { add, remove },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git" },
 				subCommands: { remote },
 			});
@@ -850,11 +875,11 @@ describe("renderSkill", () => {
 		});
 
 		it("includes usage section when group is also runnable", () => {
-			const sub = defineCommand({
+			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
 			});
-			const parent = defineCommand({
+			const parent = makeCommand({
 				meta: { name: "parent", description: "Parent command" },
 				flags: {
 					verbose: {
@@ -881,11 +906,11 @@ describe("renderSkill", () => {
 		});
 
 		it("omits usage/args/flags sections when group is not runnable", () => {
-			const sub = defineCommand({
+			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
 			});
-			const parent = defineCommand({
+			const parent = makeCommand({
 				meta: { name: "parent", description: "Parent command" },
 				subCommands: { sub },
 			});
@@ -906,15 +931,15 @@ describe("renderSkill", () => {
 		});
 
 		it("uses relative links to child command files", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add" },
 				run() {},
 			});
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote" },
 				subCommands: { add },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git" },
 				subCommands: { remote },
 			});
@@ -939,15 +964,15 @@ describe("renderSkill", () => {
 
 	describe("link integrity", () => {
 		it("all file references in SKILL.md point to existing files", () => {
-			const serve = defineCommand({
+			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
 			});
-			const build = defineCommand({
+			const build = makeCommand({
 				meta: { name: "build", description: "Build project" },
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app", description: "App CLI" },
 				subCommands: { serve, build },
 			});
@@ -982,15 +1007,15 @@ describe("renderSkill", () => {
 		});
 
 		it("command-index.md references all generated command files", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add" },
 				run() {},
 			});
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote" },
 				subCommands: { add },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git" },
 				subCommands: { remote },
 			});
@@ -1019,16 +1044,16 @@ describe("renderSkill", () => {
 
 	describe("deterministic output", () => {
 		it("produces identical output from the same input", () => {
-			const serve = defineCommand({
+			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
-				args: [{ name: "port", type: "number", default: 3000 }] as const,
+				args: [{ name: "port", type: "number", default: 3000 }] as ArgDef[],
 				flags: {
 					watch: { type: "boolean", alias: "w" },
 					host: { type: "string", default: "localhost" },
 				},
 				run() {},
 			});
-			const build = defineCommand({
+			const build = makeCommand({
 				meta: { name: "build", description: "Build project" },
 				flags: {
 					minify: { type: "boolean" },
@@ -1036,7 +1061,7 @@ describe("renderSkill", () => {
 				},
 				run() {},
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app", description: "App CLI" },
 				subCommands: { serve, build },
 			});
@@ -1065,7 +1090,7 @@ describe("renderSkill", () => {
 
 	describe("complex command tree fixture", () => {
 		it("renders a realistic git-like CLI correctly", () => {
-			const clone = defineCommand({
+			const clone = makeCommand({
 				meta: { name: "clone", description: "Clone a repository" },
 				args: [
 					{
@@ -1079,7 +1104,7 @@ describe("renderSkill", () => {
 						type: "string",
 						description: "Target directory",
 					},
-				] as const,
+				] as ArgDef[],
 				flags: {
 					branch: {
 						type: "string",
@@ -1092,29 +1117,29 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const remoteAdd = defineCommand({
+			const remoteAdd = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				args: [
 					{ name: "name", type: "string", required: true },
 					{ name: "url", type: "string", required: true },
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
-			const remoteRemove = defineCommand({
+			const remoteRemove = makeCommand({
 				meta: { name: "remove", description: "Remove a remote" },
-				args: [{ name: "name", type: "string", required: true }] as const,
+				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
 				run() {},
 			});
 
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				flags: { verbose: { type: "boolean", alias: "v" } },
 				subCommands: { add: remoteAdd, remove: remoteRemove },
 				run() {},
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: {
 					name: "git",
 					description: "A distributed version control system",
@@ -1186,7 +1211,7 @@ describe("renderSkill", () => {
 
 	describe("edge cases", () => {
 		it("handles root command with no description", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 				run() {},
 			});
@@ -1205,19 +1230,19 @@ describe("renderSkill", () => {
 		});
 
 		it("handles deeply nested commands (4 levels)", () => {
-			const deep = defineCommand({
+			const deep = makeCommand({
 				meta: { name: "deep", description: "Deep command" },
 				run() {},
 			});
-			const level3 = defineCommand({
+			const level3 = makeCommand({
 				meta: { name: "level3" },
 				subCommands: { deep },
 			});
-			const level2 = defineCommand({
+			const level2 = makeCommand({
 				meta: { name: "level2" },
 				subCommands: { level3 },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "root" },
 				subCommands: { level2 },
 			});
@@ -1238,7 +1263,7 @@ describe("renderSkill", () => {
 		});
 
 		it("escapes pipe characters in description within table cells", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
 					mode: {
@@ -1272,7 +1297,7 @@ describe("renderSkill", () => {
 		});
 
 		it("preserves pipe in command description outside tables", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: {
 					name: "test",
 					description: "Use `--flag` to enable | disable features",
@@ -1296,7 +1321,7 @@ describe("renderSkill", () => {
 		});
 
 		it("escapes pipe characters in arg description within table cells", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
 				args: [
 					{
@@ -1304,7 +1329,7 @@ describe("renderSkill", () => {
 						type: "string",
 						description: "File path | URL to process",
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -1321,7 +1346,7 @@ describe("renderSkill", () => {
 		});
 
 		it("root command file does not have parent navigation", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 				run() {},
 			});

@@ -364,22 +364,17 @@ function resolveUpdateCommand(
  *
  * @example
  * ```ts
- * import { defineCommand, runMain } from "@crustjs/core";
+ * import { Crust } from "@crustjs/core";
  * import { updateNotifierPlugin } from "@crustjs/plugins";
  * import pkg from "../package.json";
  *
- * const root = defineCommand({
- *   meta: { name: "my-cli", description: "My awesome CLI" },
- *   run() {
+ * const app = new Crust({ name: "my-cli", description: "My awesome CLI" })
+ *   .use(updateNotifierPlugin({ currentVersion: pkg.version }))
+ *   .run(() => {
  *     console.log("Hello!");
- *   },
- * });
+ *   });
  *
- * runMain(root, {
- *   plugins: [
- *     updateNotifierPlugin({ currentVersion: pkg.version }),
- *   ],
- * });
+ * await app.execute();
  * ```
  */
 export function updateNotifierPlugin(

@@ -99,7 +99,7 @@ describe("scaffold", () => {
 		expect(tsconfig.include).toEqual(["src"]);
 	});
 
-	it("generates a valid CLI entry file with defineCommand and runMain", async () => {
+	it("generates a valid CLI entry file with Crust builder API", async () => {
 		await scaffoldBase(TEST_DIR, { name: "test-cli" });
 
 		const cliContent = readFileSync(
@@ -109,10 +109,10 @@ describe("scaffold", () => {
 
 		// No shebang — compiled binary is standalone
 		expect(cliContent.startsWith("import")).toBe(true);
-		// Uses defineCommand
-		expect(cliContent).toContain("defineCommand");
-		// Uses runMain
-		expect(cliContent).toContain("runMain");
+		// Uses Crust builder
+		expect(cliContent).toContain("new Crust(");
+		// Uses execute()
+		expect(cliContent).toContain(".execute()");
 		// Uses help/version plugins
 		expect(cliContent).toContain("helpPlugin");
 		expect(cliContent).toContain("versionPlugin");
@@ -126,7 +126,7 @@ describe("scaffold", () => {
 		// Has a positional name argument with string literal type
 		expect(cliContent).toContain('type: "string"');
 		// Has a run function
-		expect(cliContent).toContain("run(");
+		expect(cliContent).toContain(".run(");
 	});
 
 	it("generates CLI file that is valid TypeScript (compile check)", async () => {
@@ -139,16 +139,16 @@ describe("scaffold", () => {
 		);
 
 		expect(cliContent).toContain("import {");
-		expect(cliContent).toContain("const main = defineCommand({");
-		expect(cliContent).toContain("runMain(main, {");
-		expect(cliContent).toContain("plugins:");
+		expect(cliContent).toContain("const main = new Crust(");
+		expect(cliContent).toContain("await main.execute()");
+		expect(cliContent).toContain(".use(");
 		expect(cliContent).toContain("versionPlugin(");
 		expect(cliContent).toContain("helpPlugin()");
-		// Has proper structure: meta, args tuple, flags, run
-		expect(cliContent).toContain("meta:");
-		expect(cliContent).toContain("args: [");
-		expect(cliContent).toContain("flags:");
-		expect(cliContent).toContain("run(");
+		// Has proper structure: name, args, flags, run
+		expect(cliContent).toContain('name: "compile-test-cli"');
+		expect(cliContent).toContain(".args([");
+		expect(cliContent).toContain(".flags(");
+		expect(cliContent).toContain(".run(");
 	});
 
 	it("creates project in nested directory (creates parent dirs)", async () => {

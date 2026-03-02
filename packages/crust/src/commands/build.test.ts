@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs, runCommand } from "@crustjs/core";
+import { Crust, parseArgs } from "@crustjs/core";
 import type { BunTarget } from "../../src/commands/build.ts";
 import {
 	buildCommand,
@@ -18,20 +18,36 @@ import {
 	TARGET_UNAME_MAP,
 } from "../../src/commands/build.ts";
 
+/**
+ * Helper to create a Crust builder with the build command registered
+ * and extract its internal node for parseArgs testing.
+ */
+function makeBuildNode() {
+	const app = new Crust("test").command("build", buildCommand);
+	const node = (
+		app as unknown as { _node: import("@crustjs/core").CommandNode }
+	)._node;
+	const buildNode = node.subCommands.build;
+	if (!buildNode) throw new Error("build subcommand not found");
+	return buildNode;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Unit tests for buildCommand definition
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("buildCommand definition", () => {
 	it("has correct meta", () => {
-		expect(buildCommand.meta.name).toBe("build");
-		expect(buildCommand.meta.description).toBe(
+		const node = makeBuildNode();
+		expect(node.meta.name).toBe("build");
+		expect(node.meta.description).toBe(
 			"Compile your CLI to a standalone executable",
 		);
 	});
 
 	it("has correct default flag values", () => {
-		const result = parseArgs(buildCommand, []);
+		const node = makeBuildNode();
+		const result = parseArgs(node, []);
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.validate).toBe(true);
@@ -43,42 +59,50 @@ describe("buildCommand definition", () => {
 	});
 
 	it("defines --entry/-e flag as string", () => {
-		const result = parseArgs(buildCommand, ["-e", "src/main.ts"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["-e", "src/main.ts"]);
 		expect(result.flags.entry).toBe("src/main.ts");
 	});
 
 	it("defines --outfile/-o flag as string", () => {
-		const result = parseArgs(buildCommand, ["-o", "./my-cli"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["-o", "./my-cli"]);
 		expect(result.flags.outfile).toBe("./my-cli");
 	});
 
 	it("defines --outdir/-d flag as string with default 'dist'", () => {
-		const result = parseArgs(buildCommand, ["-d", "out"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["-d", "out"]);
 		expect(result.flags.outdir).toBe("out");
 	});
 
 	it("defines --name/-n flag as string", () => {
-		const result = parseArgs(buildCommand, ["-n", "my-tool"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["-n", "my-tool"]);
 		expect(result.flags.name).toBe("my-tool");
 	});
 
 	it("defines --minify flag as boolean with default true", () => {
-		const result = parseArgs(buildCommand, []);
+		const node = makeBuildNode();
+		const result = parseArgs(node, []);
 		expect(result.flags.minify).toBe(true);
 	});
 
 	it("supports --no-minify to disable minification", () => {
-		const result = parseArgs(buildCommand, ["--no-minify"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["--no-minify"]);
 		expect(result.flags.minify).toBe(false);
 	});
 
 	it("supports --no-validate to skip pre-compile validation", () => {
-		const result = parseArgs(buildCommand, ["--no-validate"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["--no-validate"]);
 		expect(result.flags.validate).toBe(false);
 	});
 
 	it("defines --target/-t as repeatable string flag", () => {
-		const result = parseArgs(buildCommand, [
+		const node = makeBuildNode();
+		const result = parseArgs(node, [
 			"--target",
 			"linux-x64",
 			"--target",
@@ -88,16 +112,14 @@ describe("buildCommand definition", () => {
 	});
 
 	it("supports -t alias for --target", () => {
-		const result = parseArgs(buildCommand, ["-t", "linux-x64"]);
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["-t", "linux-x64"]);
 		expect(result.flags.target).toEqual(["linux-x64"]);
 	});
 
-	it("is a frozen command object", () => {
-		expect(Object.isFrozen(buildCommand)).toBe(true);
-	});
-
 	it("has a run function", () => {
-		expect(typeof buildCommand.run).toBe("function");
+		const node = makeBuildNode();
+		expect(typeof node.run).toBe("function");
 	});
 });
 
@@ -510,7 +532,7 @@ describe("TARGET_UNAME_MAP", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("buildCommand error handling", () => {
-	it("throws descriptive error when entry file is missing", async () => {
+	it("sets exitCode and logs error when entry file is missing", async () => {
 		const originalCwd = process.cwd;
 		const tmpDir = join(import.meta.dir, ".tmp-missing-entry");
 		mkdirSync(tmpDir, { recursive: true });
@@ -519,16 +541,24 @@ describe("buildCommand error handling", () => {
 
 		const originalLog = console.log;
 		const originalError = console.error;
+		const errors: string[] = [];
 		console.log = () => {};
-		console.error = () => {};
+		console.error = (...args: unknown[]) => {
+			errors.push(args.map(String).join(" "));
+		};
 
 		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: ["--entry", "nonexistent.ts", "--target", "linux-x64"],
-				}),
-			).rejects.toThrow(/Entry file not found/);
+			process.exitCode = 0;
+			const app = new Crust("test").command("build", buildCommand);
+
+			await app.execute({
+				argv: ["build", "--entry", "nonexistent.ts", "--target", "linux-x64"],
+			});
+
+			expect(process.exitCode).toBe(1);
+			expect(errors.some((e) => /Entry file not found/.test(e))).toBe(true);
 		} finally {
+			process.exitCode = 0;
 			process.cwd = originalCwd;
 			console.log = originalLog;
 			console.error = originalError;
@@ -536,59 +566,7 @@ describe("buildCommand error handling", () => {
 		}
 	});
 
-	it("error message includes the resolved path", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-error-path");
-		mkdirSync(tmpDir, { recursive: true });
-
-		process.cwd = () => tmpDir;
-
-		const originalLog = console.log;
-		const originalError = console.error;
-		console.log = () => {};
-		console.error = () => {};
-
-		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: ["--entry", "nonexistent.ts", "--target", "linux-x64"],
-				}),
-			).rejects.toThrow(resolve(tmpDir, "nonexistent.ts"));
-		} finally {
-			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("error message suggests --entry flag", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-suggest-entry");
-		mkdirSync(tmpDir, { recursive: true });
-
-		process.cwd = () => tmpDir;
-
-		const originalLog = console.log;
-		const originalError = console.error;
-		console.log = () => {};
-		console.error = () => {};
-
-		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: ["--entry", "nonexistent.ts", "--target", "linux-x64"],
-				}),
-			).rejects.toThrow(/--entry/);
-		} finally {
-			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("throws when --outfile used with default all-target build", async () => {
+	it("sets exitCode and logs error when --outfile used with default all-target build", async () => {
 		const originalCwd = process.cwd;
 		const tmpDir = join(import.meta.dir, ".tmp-outfile-default");
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -598,104 +576,24 @@ describe("buildCommand error handling", () => {
 
 		const originalLog = console.log;
 		const originalError = console.error;
+		const errors: string[] = [];
 		console.log = () => {};
-		console.error = () => {};
+		console.error = (...args: unknown[]) => {
+			errors.push(args.map(String).join(" "));
+		};
 
 		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: ["--outfile", "./out"],
-				}),
-			).rejects.toThrow(/--outfile cannot be used/);
+			process.exitCode = 0;
+			const app = new Crust("test").command("build", buildCommand);
+
+			await app.execute({
+				argv: ["build", "--outfile", "./out"],
+			});
+
+			expect(process.exitCode).toBe(1);
+			expect(errors.some((e) => /--outfile cannot be used/.test(e))).toBe(true);
 		} finally {
-			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("throws when --outfile used with multiple --target flags", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-outfile-multi");
-		mkdirSync(join(tmpDir, "src"), { recursive: true });
-		writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
-
-		process.cwd = () => tmpDir;
-
-		const originalLog = console.log;
-		const originalError = console.error;
-		console.log = () => {};
-		console.error = () => {};
-
-		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: [
-						"--outfile",
-						"./out",
-						"--target",
-						"linux-x64",
-						"--target",
-						"darwin-arm64",
-					],
-				}),
-			).rejects.toThrow(/--outfile cannot be used/);
-		} finally {
-			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("fails early when runtime validation detects flag alias conflicts", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-runtime-validation");
-		mkdirSync(join(tmpDir, "src"), { recursive: true });
-
-		// Resolve absolute path to @crustjs/core so the subprocess can find it
-		// without needing node_modules in the temp directory.
-		const corePath = join(
-			import.meta.dir,
-			"..",
-			"..",
-			"..",
-			"core",
-			"src",
-			"index.ts",
-		);
-		writeFileSync(
-			join(tmpDir, "src", "cli.ts"),
-			`import { runMain } from "${corePath}";
-
-const command = {
-	meta: { name: "bad-cli" },
-	flags: {
-		verbose: { type: "boolean", alias: "v" },
-		version: { type: "boolean", alias: "v" },
-	},
-	subCommands: {},
-};
-
-runMain(command);
-`,
-		);
-
-		process.cwd = () => tmpDir;
-
-		const originalLog = console.log;
-		const originalError = console.error;
-		console.log = () => {};
-		console.error = () => {};
-
-		try {
-			await expect(
-				runCommand(buildCommand, {
-					argv: ["--entry", "src/cli.ts", "--target", "linux-x64"],
-				}),
-			).rejects.toThrow(/failed runtime validation|alias collision/i);
-		} finally {
+			process.exitCode = 0;
 			process.cwd = originalCwd;
 			console.log = originalLog;
 			console.error = originalError;

@@ -1,4 +1,4 @@
-import type { ArgsDef, CommandContext, FlagsDef } from "@crustjs/core";
+import type { ArgsDef, CrustCommandContext, FlagsDef } from "@crustjs/core";
 import { standardSchemaV1 } from "effect/Schema";
 import { buildValidatedRunner } from "../middleware.ts";
 import type { StandardSchema } from "../standard/types.ts";
@@ -7,11 +7,11 @@ import type { CommandValidatorHandler, EffectSchemaLike } from "./types.ts";
 import { EFFECT_SCHEMA } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// commandValidator — validated run middleware for defineCommand
+// commandValidator — validated run middleware for Crust builder
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Create a validated `run` handler for `defineCommand`.
+ * Create a validated `run` handler for the Crust builder.
  *
  * Reads Effect schemas from the command's `arg()` / `flag()` definitions,
  * validates parsed CLI input against them, and calls `handler` with
@@ -26,22 +26,20 @@ import { EFFECT_SCHEMA } from "./types.ts";
  * which handles both sync and async validation transparently.
  *
  * @param handler - Receives `ValidatedContext` with typed args/flags after validation
- * @returns A `run` function compatible with `defineCommand`
+ * @returns A `run` function compatible with the Crust builder's `.run()` method
  *
  * @example
  * ```ts
- * import { defineCommand } from "@crustjs/core";
+ * import { Crust } from "@crustjs/core";
  * import * as Schema from "effect/Schema";
  * import { arg, flag, commandValidator } from "@crustjs/validate/effect";
  *
- * const serve = defineCommand({
- *   meta: { name: "serve" },
- *   args: [arg("port", Schema.Number)],
- *   flags: { verbose: flag(Schema.Boolean, { alias: "v" }) },
- *   run: commandValidator(({ args, flags }) => {
+ * const serve = new Crust("serve")
+ *   .args([arg("port", Schema.Number)])
+ *   .flags({ verbose: flag(Schema.Boolean, { alias: "v" }) })
+ *   .run(commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
- *   }),
- * });
+ *   }));
  * ```
  */
 export function commandValidator<
@@ -49,7 +47,7 @@ export function commandValidator<
 	F extends FlagsDef = FlagsDef,
 >(
 	handler: CommandValidatorHandler<A, F>,
-): (context: CommandContext<A, F>) => Promise<void> {
+): (context: CrustCommandContext<A, F>) => Promise<void> {
 	return buildValidatedRunner(
 		handler as (
 			ctx: import("../types.ts").ValidatedContext<unknown, unknown>,
@@ -62,5 +60,5 @@ export function commandValidator<
 			),
 		EFFECT_SCHEMA,
 		"commandValidator",
-	) as (context: CommandContext<A, F>) => Promise<void>;
+	) as (context: CrustCommandContext<A, F>) => Promise<void>;
 }

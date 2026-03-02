@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { defineCommand } from "@crustjs/core";
+import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import { createCommandNode } from "@crustjs/core";
 
 import { SkillConflictError } from "./errors.ts";
 import {
@@ -13,6 +14,30 @@ import {
 } from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
 import { CRUST_MANIFEST } from "./version.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helper — builds a CommandNode for introspection tests
+// ────────────────────────────────────────────────────────────────────────────
+
+function makeCommand(opts: {
+	meta: { name: string; description?: string; usage?: string };
+	args?: readonly ArgDef[];
+	flags?: Record<string, FlagDef>;
+	run?: () => void;
+	subCommands?: Record<string, CommandNode>;
+}): CommandNode {
+	const node = createCommandNode(opts.meta);
+	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.flags) {
+		node.localFlags = { ...opts.flags };
+		node.effectiveFlags = { ...opts.flags };
+	}
+	if (opts.run) node.run = opts.run;
+	if (opts.subCommands) {
+		node.subCommands = opts.subCommands;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -66,13 +91,13 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Simple single-command CLI (leaf, runnable). */
-function simpleCommand() {
-	return defineCommand({
+function simpleCommand(): CommandNode {
+	return makeCommand({
 		meta: { name: "my-cli", description: "A simple CLI tool" },
-		args: [{ name: "file", type: "string" as const, required: true }],
+		args: [{ name: "file", type: "string", required: true }] as ArgDef[],
 		flags: {
 			verbose: {
-				type: "boolean" as const,
+				type: "boolean",
 				description: "Enable verbose output",
 				alias: "v",
 			},
@@ -82,39 +107,41 @@ function simpleCommand() {
 }
 
 /** CLI with nested subcommands (git-like). */
-function nestedCommand() {
-	return defineCommand({
+function nestedCommand(): CommandNode {
+	return makeCommand({
 		meta: { name: "git", description: "A distributed VCS" },
 		subCommands: {
-			remote: defineCommand({
+			remote: makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				subCommands: {
-					add: defineCommand({
+					add: makeCommand({
 						meta: { name: "add", description: "Add a remote" },
 						args: [
-							{ name: "name", type: "string" as const, required: true },
-							{ name: "url", type: "string" as const, required: true },
-						],
+							{ name: "name", type: "string", required: true },
+							{ name: "url", type: "string", required: true },
+						] as ArgDef[],
 						run() {},
 					}),
-					remove: defineCommand({
+					remove: makeCommand({
 						meta: { name: "remove", description: "Remove a remote" },
-						args: [{ name: "name", type: "string" as const, required: true }],
+						args: [
+							{ name: "name", type: "string", required: true },
+						] as ArgDef[],
 						run() {},
 					}),
 				},
 			}),
-			commit: defineCommand({
+			commit: makeCommand({
 				meta: { name: "commit", description: "Record changes" },
 				flags: {
 					message: {
-						type: "string" as const,
+						type: "string",
 						description: "Commit message",
 						alias: "m",
 						required: true,
 					},
 					amend: {
-						type: "boolean" as const,
+						type: "boolean",
 						description: "Amend the last commit",
 					},
 				},
@@ -876,7 +903,7 @@ describe("generateSkill", () => {
 
 	describe("edge cases", () => {
 		it("handles command with no subcommands, no args, no flags", async () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "minimal", description: "Bare minimum" },
 				run() {},
 			});
@@ -901,16 +928,16 @@ describe("generateSkill", () => {
 		});
 
 		it("handles deeply nested command hierarchy", async () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "top" },
 				subCommands: {
-					level1: defineCommand({
+					level1: makeCommand({
 						meta: { name: "level1" },
 						subCommands: {
-							level2: defineCommand({
+							level2: makeCommand({
 								meta: { name: "level2" },
 								subCommands: {
-									level3: defineCommand({
+									level3: makeCommand({
 										meta: { name: "level3", description: "Deep" },
 										run() {},
 									}),

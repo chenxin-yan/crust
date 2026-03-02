@@ -13,21 +13,19 @@ bun add @crustjs/core
 ## Quick Example
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const main = defineCommand({
-  meta: { name: "greet", description: "Say hello" },
-  args: [{ name: "name", type: "string", default: "world" }],
-  flags: {
+const app = new Crust({ name: "greet", description: "Say hello" })
+  .args([{ name: "name", type: "string", default: "world" }] as const)
+  .flags({
     loud: { type: "boolean", description: "Shout it", alias: "l" },
-  },
-  run({ args, flags }) {
+  })
+  .run(({ args, flags }) => {
     const msg = `Hello, ${args.name}!`;
     console.log(flags.loud ? msg.toUpperCase() : msg);
-  },
-});
+  });
 
-runMain(main);
+app.execute();
 ```
 
 ## Documentation

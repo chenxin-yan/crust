@@ -1,4 +1,4 @@
-import type { AnyCommand } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Normalized validation issue — internal canonical form
@@ -37,7 +37,7 @@ export interface ValidatedContext<ArgsOut, FlagsOut> {
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
 	/** The resolved command being executed */
-	command: AnyCommand;
+	command: CommandNode;
 	/** Original pre-validation parsed values from the Crust parser */
 	input: {
 		/** Original parsed args before schema transformation */
