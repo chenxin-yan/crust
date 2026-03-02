@@ -10,6 +10,7 @@ export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 
 // Argument & flag parsing
+export type { ParseableCommand } from "./parser.ts";
 export { parseArgs } from "./parser.ts";
 
 // Plugin runtime contracts
