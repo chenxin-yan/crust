@@ -28,7 +28,7 @@ bun add -d @crustjs/crust
 ```
 
 ```ts title="src/cli.ts"
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 ```
 
@@ -44,16 +44,15 @@ Here's the minimal code to create a working CLI:
 ```ts title="src/cli.ts"
 #!/usr/bin/env bun
 
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run() {
+const main = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .run(() => {
     console.log("Hello from my CLI!");
-  },
-});
+  });
 
-runMain(main);
+await main.execute();
 ```
 
 Run it:

@@ -1,23 +1,28 @@
 ---
 title: "Overview"
-description: Complete API reference for every function, type, and error in Crust.
+description: Complete API reference for every class, function, type, and error in Crust.
 ---
 
 All exports listed here come from `@crustjs/core`.
+
+## Classes
+
+| Class | Description |
+| --- | --- |
+| [`Crust`](/docs/api/crust) | Chainable builder for defining CLI commands with full type inference |
 
 ## Functions
 
 | Function | Description |
 | --- | --- |
-| [`defineCommand()`](/docs/api/define-command) | Define a CLI command with full type inference |
 | [`parseArgs()`](/docs/api/parse-args) | Parse argv against arg/flag definitions |
 | [`resolveCommand()`](/docs/api/resolve-command) | Resolve a subcommand from an argv array |
-| [`runCommand()`](/docs/api/run-command) | Execute a command with plugins (throws on error) |
-| [`runMain()`](/docs/api/run-main) | Top-level CLI entry point (catches errors, sets exit code) |
+| [`createCommandNode()`](/docs/api/crust#createcommandnodename) | Create a fresh CommandNode (for downstream packages) |
+| [`computeEffectiveFlags()`](/docs/api/crust#computeeffectiveflagsinherited-local) | Merge inherited + local flags at runtime |
 
 ## Types & Errors
 
 | Page | Description |
 | --- | --- |
-| [Types](/docs/api/types) | All type definitions — ArgDef, FlagDef, Command, InferArgs, InferFlags, and more |
+| [Types](/docs/api/types) | All type definitions — ArgDef, FlagDef, CommandNode, CrustCommandContext, InferArgs, InferFlags, and more |
 | [Errors](/docs/api/errors) | CrustError class, error codes, and structured error details |

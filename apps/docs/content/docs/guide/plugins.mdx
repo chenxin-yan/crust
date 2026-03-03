@@ -9,30 +9,26 @@ Crust's plugin system lets you extend CLI behavior through two phases: **setup**
 
 ## Using Plugins
 
-Pass plugins to `runMain` or `runCommand`:
+Register plugins with `.use()`:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
   helpPlugin,
   versionPlugin,
   autoCompletePlugin,
 } from "@crustjs/plugins";
 
-const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI" },
-  run() {
+const main = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(versionPlugin("1.0.0"))
+  .use(autoCompletePlugin({ mode: "help" }))
+  .use(helpPlugin())
+  .run(() => {
     console.log("Running!");
-  },
-});
+  });
 
-runMain(main, {
-  plugins: [
-    versionPlugin("1.0.0"),
-    autoCompletePlugin({ mode: "help" }),
-    helpPlugin(),
-  ],
-});
+await main.execute();
 ```
 
 Crust ships with these official plugins:
@@ -46,17 +42,16 @@ Crust ships with these official plugins:
 
 ## Plugin Order
 
-Plugins execute in the order they're listed. Each middleware wraps the next in a chain, so the first plugin in the array is the outermost wrapper:
+Plugins execute in the order they're registered. Each middleware wraps the next in a chain, so the first plugin registered is the outermost wrapper:
 
 ```ts
-plugins: [
-  versionPlugin("1.0.0"), // Runs first, can intercept early
-  autoCompletePlugin(), // Runs second, catches routing errors
-  helpPlugin(), // Runs third, handles --help
-];
+new Crust("my-cli")
+  .use(versionPlugin("1.0.0")) // Runs first, can intercept early
+  .use(autoCompletePlugin())   // Runs second, catches routing errors
+  .use(helpPlugin())           // Runs third, handles --help
 ```
 
-A typical order is: **version** → **autocomplete** → **help**.
+A typical order is: **version** -> **autocomplete** -> **help**.
 
 ## Plugin Lifecycle
 
@@ -68,7 +63,7 @@ The `setup` function runs once during CLI initialization, before any command par
 const myPlugin: CrustPlugin = {
   name: "my-plugin",
   setup(context, actions) {
-    // context.rootCommand — the root command
+    // context.rootCommand — the root command node
     // context.argv — raw argv
     // context.state — plugin state store
 
@@ -85,7 +80,7 @@ Available setup actions:
 
 | Action                                 | Description                                                                  |
 | -------------------------------------- | ---------------------------------------------------------------------------- |
-| `addFlag(command, name, def)`          | Inject a flag into a command's flags object (overrides if name exists)       |
+| `addFlag(command, name, def)`          | Inject a flag into a command's effective flags (overrides if name exists)    |
 | `addSubCommand(parent, name, command)` | Inject a subcommand (skipped if user already defined one with the same name) |
 
 #### Injecting Subcommands
@@ -95,18 +90,19 @@ Plugins can register subcommands during setup. If the user already defined a sub
 Both `addFlag` overrides and `addSubCommand` skips are silent at runtime but produce warnings during [`crust build` pre-compile validation](/docs/guide/build#pre-compile-validation), so you can catch unintentional conflicts before shipping.
 
 ```ts
+import { createCommandNode } from "@crustjs/core";
+
 const myPlugin: CrustPlugin = {
   name: "my-plugin",
   setup(context, actions) {
-    const statusCmd = defineCommand({
-      meta: { name: "status", description: "Show status" },
-      run() {
-        console.log("Status: OK");
-      },
-    });
+    const statusNode = createCommandNode("status");
+    statusNode.meta.description = "Show status";
+    statusNode.run = () => {
+      console.log("Status: OK");
+    };
 
     // Inject "status" as a subcommand of the root command
-    actions.addSubCommand(context.rootCommand, "status", statusCmd);
+    actions.addSubCommand(context.rootCommand, "status", statusNode);
   },
 };
 ```
@@ -121,7 +117,7 @@ const myPlugin: CrustPlugin = {
   middleware(context, next) {
     // context.route — resolved command route (or null)
     // context.input — parsed args/flags (or null)
-    // context.rootCommand — the root command
+    // context.rootCommand — the root command node
     // context.argv — raw argv
     // context.state — plugin state store
 
@@ -163,9 +159,9 @@ function timingPlugin(): CrustPlugin {
 Use it like any other plugin:
 
 ```ts
-runMain(main, {
-  plugins: [timingPlugin(), helpPlugin()],
-});
+new Crust("my-cli")
+  .use(timingPlugin())
+  .use(helpPlugin())
 ```
 
 ### Plugin State
@@ -207,12 +203,16 @@ The full middleware context:
 
 ```ts
 interface MiddlewareContext {
-  readonly argv: readonly string[]; // Raw argv
-  readonly rootCommand: AnyCommand; // Root command
-  readonly state: PluginState; // Plugin state store
-  route: CommandRoute | null; // Resolved route (null if routing failed)
-  input: ParseResult | null; // Parsed input (null if parsing failed)
+  readonly argv: readonly string[];      // Raw argv
+  readonly rootCommand: CommandNode;     // Root command node
+  readonly state: PluginState;           // Plugin state store
+  route: CommandRoute | null;            // Resolved route (null if routing failed)
+  input: ParseResult | null;            // Parsed input (null if parsing failed)
 }
 ```
 
 `route` and `input` may be `null` if routing or parsing failed — the error is re-thrown inside the middleware chain, allowing error-handling plugins (like autocomplete) to catch it.
+
+## Plugin Collection
+
+Plugins are collected from the entire command tree during `.execute()`. Root plugins come first, then depth-first through subcommands. This means you can register plugins on specific subcommands if needed, though most plugins are registered on the root command.

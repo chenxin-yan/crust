@@ -90,18 +90,20 @@ try {
 
 ## Catching Errors
 
+`.execute()` catches all errors internally, prints them to stderr, and sets `process.exitCode = 1`. For programmatic error handling (e.g., in tests), you can catch errors from lower-level functions like `parseArgs` and `resolveCommand`:
+
 ```ts
-import { CrustError } from "@crustjs/core";
+import { CrustError, parseArgs, resolveCommand } from "@crustjs/core";
 
 try {
-  await runCommand(cmd, { argv });
+  const route = resolveCommand(app._node, argv);
+  const result = parseArgs(route.command, route.argv);
 } catch (error) {
   if (!(error instanceof CrustError)) throw error;
 
   switch (error.code) {
     case "VALIDATION":
       console.error(error.message);
-      // Show help text
       break;
     case "PARSE":
       console.error(error.message);
@@ -114,3 +116,5 @@ try {
   }
 }
 ```
+
+In plugin middleware, you can also catch and handle errors within the middleware chain. See [Plugins](/docs/guide/plugins) for details.

@@ -10,12 +10,14 @@ The autocomplete plugin catches `COMMAND_NOT_FOUND` errors and provides "Did you
 ## Usage
 
 ```ts
-import { runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { autoCompletePlugin } from "@crustjs/plugins";
 
-runMain(main, {
-  plugins: [autoCompletePlugin()],
-});
+const main = new Crust("my-cli")
+  .use(autoCompletePlugin())
+  .run(() => { /* ... */ });
+
+await main.execute();
 ```
 
 ```sh
@@ -88,16 +90,15 @@ Only the top suggestion appears in the "Did you mean?" message. All available co
 The autocomplete plugin wraps the middleware chain in a try/catch. Place it **before** the help plugin so it can catch routing errors:
 
 ```ts
-plugins: [
-  versionPlugin("1.0.0"),
-  autoCompletePlugin({ mode: "help" }),
-  helpPlugin(),
-]
+new Crust("my-cli")
+  .use(versionPlugin("1.0.0"))
+  .use(autoCompletePlugin({ mode: "help" }))
+  .use(helpPlugin())
 ```
 
 ## Non-Matching Errors
 
-The plugin only handles `COMMAND_NOT_FOUND` errors. All other errors are re-thrown and handled normally by the middleware chain or `runMain`.
+The plugin only handles `COMMAND_NOT_FOUND` errors. All other errors are re-thrown and handled normally by the middleware chain or `.execute()`.
 
 ## Type
 

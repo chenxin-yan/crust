@@ -9,7 +9,7 @@ Walks the subcommand tree to find the target command for the given argv. Subcomm
 
 ```ts
 function resolveCommand(
-  command: AnyCommand,
+  command: CommandNode,
   argv: string[],
 ): CommandRoute;
 ```
@@ -18,14 +18,14 @@ function resolveCommand(
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `command` | `AnyCommand` | The root command to resolve from |
+| `command` | `CommandNode` | The root command node to resolve from |
 | `argv` | `string[]` | The argv array to resolve against |
 
 ## Returns
 
 ```ts
 interface CommandRoute {
-  command: AnyCommand;     // The resolved (sub)command
+  command: CommandNode;    // The resolved (sub)command
   argv: string[];           // Remaining argv after subcommand names consumed
   commandPath: string[];    // Full command path (e.g., ["my-cli", "build"])
 }
@@ -42,7 +42,7 @@ interface CommandNotFoundErrorDetails {
   input: string;              // The unknown subcommand name
   available: string[];         // Valid subcommand names
   commandPath: string[];       // Path to the parent command
-  parentCommand: AnyCommand;   // The parent command object
+  parentCommand: CommandNode;  // The parent command node
 }
 ```
 
@@ -61,20 +61,15 @@ interface CommandNotFoundErrorDetails {
 ### Basic Resolution
 
 ```ts
-import { defineCommand, resolveCommand } from "@crustjs/core";
+import { Crust, resolveCommand } from "@crustjs/core";
 
-const build = defineCommand({
-  meta: { name: "build" },
-  run() {},
-});
+const app = new Crust("my-cli")
+  .command("build", (cmd) =>
+    cmd.run(() => {})
+  );
 
-const main = defineCommand({
-  meta: { name: "my-cli" },
-  subCommands: { build },
-});
-
-const route = resolveCommand(main, ["build", "--minify"]);
-// route.command === build
+const route = resolveCommand(app._node, ["build", "--minify"]);
+// route.command.meta.name === "build"
 // route.argv === ["--minify"]
 // route.commandPath === ["my-cli", "build"]
 ```
@@ -82,8 +77,8 @@ const route = resolveCommand(main, ["build", "--minify"]);
 ### Nested Subcommands
 
 ```ts
-const route = resolveCommand(main, ["create", "component", "Button"]);
-// route.command === createComponent
+const route = resolveCommand(app._node, ["create", "component", "Button"]);
+// route.command.meta.name === "component"
 // route.argv === ["Button"]
 // route.commandPath === ["my-cli", "create", "component"]
 ```
@@ -91,12 +86,12 @@ const route = resolveCommand(main, ["create", "component", "Button"]);
 ### No Subcommand Match
 
 ```ts
-// If main has run(), unknown tokens are positional args
-const route = resolveCommand(main, ["readme.md"]);
-// route.command === main
+// If command has run(), unknown tokens are positional args
+const route = resolveCommand(app._node, ["readme.md"]);
+// route.command === app._node
 // route.argv === ["readme.md"]
 
-// If main has NO run(), unknown tokens throw COMMAND_NOT_FOUND
-resolveCommand(containerCmd, ["unknown"]);
+// If command has NO run(), unknown tokens throw COMMAND_NOT_FOUND
+resolveCommand(containerCmd._node, ["unknown"]);
 // Throws: CrustError("COMMAND_NOT_FOUND", ...)
 ```

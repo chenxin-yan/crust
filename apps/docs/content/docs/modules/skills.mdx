@@ -16,20 +16,17 @@ bun add @crustjs/skills
 Add `skillPlugin()` to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { skillPlugin } from "@crustjs/skills";
 
-const app = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  plugins: [
-    skillPlugin({
-      version: "1.0.0",
-      // command defaults to true and registers "my-cli skill"
-    }),
-  ],
-});
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .use(skillPlugin({
+    version: "1.0.0",
+    // command defaults to true and registers "my-cli skill"
+  }));
 
-runMain(app);
+await app.execute();
 ```
 
 This gives you:

@@ -10,20 +10,18 @@ The update notifier plugin checks the npm registry for newer versions of your pa
 ## Usage
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { updateNotifierPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
-const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run() {
+const main = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .use(updateNotifierPlugin({ currentVersion: pkg.version }))
+  .run(() => {
     console.log("Hello!");
-  },
-});
+  });
 
-runMain(main, {
-  plugins: [updateNotifierPlugin({ currentVersion: pkg.version })],
-});
+await main.execute();
 ```
 
 You are responsible for passing `currentVersion` — typically sourced from your `package.json`.

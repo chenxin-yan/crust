@@ -12,7 +12,7 @@ function parseArgs<
   A extends ArgsDef = ArgsDef,
   F extends FlagsDef = FlagsDef,
 >(
-  command: Command<A, F>,
+  command: CommandNode,
   argv: string[],
 ): ParseResult<A, F>;
 ```
@@ -21,7 +21,7 @@ function parseArgs<
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `command` | `Command<A, F>` | The command whose definitions drive parsing |
+| `command` | `CommandNode` | The command node whose definitions drive parsing. Uses `command.effectiveFlags` for flag parsing and `command.args` for positional argument parsing. |
 | `argv` | `string[]` | The argument array to parse (typically `process.argv.slice(2)`) |
 
 ## Returns
@@ -50,6 +50,7 @@ interface ParseResult<A, F> {
 - **Positionals allowed** — Positional arguments are captured and mapped
 - **Negative flags** — `--no-<canonical-flag>` syntax is supported for boolean flags; `--no-<alias>` is not supported
 - **Token-based** — Uses `util.parseArgs` tokens for accurate `--` separator handling
+- **Effective flags** — Parses against `command.effectiveFlags` (inherited + local merged), not just local flags
 
 ### Type Coercion
 
@@ -57,7 +58,7 @@ interface ParseResult<A, F> {
 | --- | --- |
 | `"string"` | Kept as-is |
 | `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
-| `"boolean"` | Toggle flags. `--flag` → `true`, `--no-flag` → `false`. Value assignment forms like `--flag=true` are rejected |
+| `"boolean"` | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected |
 
 ### Alias Resolution
 
@@ -88,27 +89,25 @@ Everything after `--` is collected into `rawArgs` and excluded from positional/f
 
 ```ts
 parseArgs(cmd, ["file.txt", "--", "--verbose"]);
-// result.args → { file: "file.txt" }
-// result.rawArgs → ["--verbose"]
+// result.args -> { file: "file.txt" }
+// result.rawArgs -> ["--verbose"]
 ```
 
 ## Example
 
 ```ts
-import { defineCommand, parseArgs } from "@crustjs/core";
+import { Crust, parseArgs } from "@crustjs/core";
 
-const cmd = defineCommand({
-  meta: { name: "example" },
-  args: [
+const cmd = new Crust("example")
+  .args([
     { name: "file", type: "string", required: true },
-  ] as const,
-  flags: {
+  ])
+  .flags({
     output: { type: "string", default: "dist", alias: "o" },
     verbose: { type: "boolean", alias: "v" },
-  },
-});
+  });
 
-const result = parseArgs(cmd, ["input.ts", "-o", "build", "--verbose"]);
+const result = parseArgs(cmd._node, ["input.ts", "-o", "build", "--verbose"]);
 // result.args.file === "input.ts"
 // result.flags.output === "build"
 // result.flags.verbose === true

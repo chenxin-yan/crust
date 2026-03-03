@@ -41,7 +41,7 @@ bun add effect
 
 1. You declare args with `arg(name, schema)` and flags with `flag(schema, options)` from a provider entrypoint.
 2. Each helper introspects the schema to generate core-compatible `ArgDef` / `FlagDef` with hidden schema metadata attached via a symbol key.
-3. You pass these definitions to `defineCommand` and use `commandValidator()` as the `run` handler.
+3. You pass these definitions to `.args()` and `.flags()` on the `Crust` builder, and use `commandValidator()` as the `.run()` handler.
 4. At runtime, after Crust parses argv, the middleware validates and transforms each value through its schema before calling your handler.
 5. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
 
@@ -69,26 +69,25 @@ Import from `@crustjs/validate/zod`.
 ### Quick Example (Zod)
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { arg, flag, commandValidator } from "@crustjs/validate/zod";
 import { z } from "zod";
 
-const greet = defineCommand({
-  meta: { name: "greet", description: "Say hello" },
-  args: [arg("name", z.string().describe("Person to greet"))],
-  flags: {
+const greet = new Crust("greet")
+  .meta({ description: "Say hello" })
+  .args([arg("name", z.string().describe("Person to greet"))])
+  .flags({
     loud: flag(z.boolean().default(false).describe("Shout the greeting"), {
       alias: "l",
     }),
-  },
-  run: commandValidator(({ args, flags }) => {
+  })
+  .run(commandValidator(({ args, flags }) => {
     // args.name is string, flags.loud is boolean — fully typed
     const msg = `Hello, ${args.name}!`;
     console.log(flags.loud ? msg.toUpperCase() : msg);
-  }),
-});
+  }));
 
-runMain(greet);
+await greet.execute();
 ```
 
 ### Descriptions (Zod)
@@ -126,16 +125,14 @@ Schemas are introspected at definition time to determine CLI parser types (`stri
 The last positional arg can be variadic, collecting all remaining positionals into an array:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "rm" },
-  args: [arg("files", z.string(), { variadic: true })],
-  run: commandValidator(({ args }) => {
+const cmd = new Crust("rm")
+  .args([arg("files", z.string(), { variadic: true })])
+  .run(commandValidator(({ args }) => {
     // args.files is string[]
     for (const file of args.files) {
       console.log(`Removing ${file}`);
     }
-  }),
-});
+  }));
 ```
 
 Use a scalar schema (not `z.array()`). The framework handles array collection. Compile-time validation ensures variadic args are only in the last position.
@@ -166,29 +163,28 @@ Import from `@crustjs/validate/effect`.
 ### Quick Example (Effect)
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { arg, flag, commandValidator } from "@crustjs/validate/effect";
 import { Schema } from "effect";
 
-const greet = defineCommand({
-  meta: { name: "greet", description: "Say hello" },
-  args: [
+const greet = new Crust("greet")
+  .meta({ description: "Say hello" })
+  .args([
     arg("name", Schema.String.annotations({ description: "Person to greet" })),
-  ],
-  flags: {
+  ])
+  .flags({
     loud: flag(
       Schema.Boolean.annotations({ description: "Shout the greeting" }),
       { alias: "l" },
     ),
-  },
-  run: commandValidator(({ args, flags }) => {
+  })
+  .run(commandValidator(({ args, flags }) => {
     // args.name is string, flags.loud is boolean — fully typed
     const msg = `Hello, ${args.name}!`;
     console.log(flags.loud ? msg.toUpperCase() : msg);
-  }),
-});
+  }));
 
-runMain(greet);
+await greet.execute();
 ```
 
 ### Descriptions (Effect)
@@ -229,16 +225,14 @@ Schemas are introspected via AST at definition time to determine CLI parser type
 The last positional arg can be variadic, collecting all remaining positionals into an array:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "rm" },
-  args: [arg("files", Schema.String, { variadic: true })],
-  run: commandValidator(({ args }) => {
+const cmd = new Crust("rm")
+  .args([arg("files", Schema.String, { variadic: true })])
+  .run(commandValidator(({ args }) => {
     // args.files is string[]
     for (const file of args.files) {
       console.log(`Removing ${file}`);
     }
-  }),
-});
+  }));
 ```
 
 Use a scalar schema (not `Schema.Array()`). The framework handles array collection. Compile-time validation ensures variadic args are only in the last position.
@@ -358,7 +352,7 @@ Plugin-injected flags (e.g. `--help` from `helpPlugin`) are silently skipped at 
 
 ### Compile-Time Validation
 
-Both providers inherit the same compile-time checks as `defineCommand`:
+Both providers inherit the same compile-time checks as the `Crust` builder:
 
 - **Variadic position** — only the last arg can be `{ variadic: true }`
 - **Flag alias collisions** — aliases must not conflict with other flag names or aliases

@@ -1,11 +1,11 @@
 ---
 title: Flags
-description: Define named flags with types, aliases, defaults, and multiple values.
+description: Define named flags with types, aliases, defaults, multiple values, and inheritance.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Flags are named options passed with `--` (long form) or `-` (short alias). They're defined as a record of flag names to definitions.
+Flags are named options passed with `--` (long form) or `-` (short alias). They're defined as a record via `.flags()`.
 
 ```sh
 my-cli --port 3000 --verbose -o dist
@@ -15,12 +15,11 @@ my-cli --port 3000 --verbose -o dist
 
 ## Defining Flags
 
-Flags are defined in the `flags` object:
+Flags are defined with the `.flags()` method:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "serve" },
-  flags: {
+const cmd = new Crust("serve")
+  .flags({
     port: {
       type: "number",
       description: "Port to listen on",
@@ -32,28 +31,27 @@ const cmd = defineCommand({
       description: "Enable verbose logging",
       alias: "v",
     },
-  },
-  run({ flags }) {
+  })
+  .run(({ flags }) => {
     console.log(`Port: ${flags.port}`);       // number (has default)
     console.log(`Verbose: ${flags.verbose}`); // boolean | undefined
-  },
-});
+  });
 ```
 
 ## Flag Properties
 
-Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `alias`, and `multiple`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
+Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `alias`, `multiple`, and `inherit`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
 
 ## Types
 
 Crust supports three flag type literals:
 
 ```ts
-flags: {
+.flags({
   output: { type: "string" },   // --output value (string)
   port: { type: "number" },      // --port 3000 (coerced to number)
   verbose: { type: "boolean" },  // --verbose (boolean toggle)
-}
+})
 ```
 
 - **`"string"`** — Requires a value: `--output dist`
@@ -84,11 +82,11 @@ Boolean flags are toggles and do not accept explicit value assignment. Forms lik
 Provide short aliases with the `alias` property:
 
 ```ts
-flags: {
+.flags({
   output: { type: "string", alias: "o" },       // -o dist
   verbose: { type: "boolean", alias: "v" },      // -v
   target: { type: "string", alias: ["t", "T"] }, // -t or -T
-}
+})
 ```
 
 Single-character aliases use the `-x` short form. You can provide multiple aliases as an array.
@@ -106,9 +104,9 @@ Single-character aliases use the `-x` short form. You can provide multiple alias
 Mark a flag as `required` to error when it's missing:
 
 ```ts
-flags: {
+.flags({
   config: { type: "string", required: true },
-}
+})
 ```
 
 ```sh
@@ -121,11 +119,11 @@ $ my-cli
 Provide a `default` to use when the flag isn't passed:
 
 ```ts
-flags: {
+.flags({
   port: { type: "number", default: 3000 },
   format: { type: "string", default: "json" },
   minify: { type: "boolean", default: true },
-}
+})
 ```
 
 When a default is set, the inferred type is guaranteed (no `| undefined`).
@@ -135,14 +133,14 @@ When a default is set, the inferred type is guaranteed (no `| undefined`).
 Set `multiple: true` to collect repeated flag values into an array:
 
 ```ts
-flags: {
+.flags({
   target: {
     type: "string",
     multiple: true,
     description: "Target platform(s)",
     alias: "t",
   },
-}
+})
 ```
 
 ```sh
@@ -160,14 +158,44 @@ my-cli --verbose --no-verbose --verbose
 You can also provide a default array:
 
 ```ts
-flags: {
+.flags({
   include: {
     type: "string",
     multiple: true,
     default: ["src/**"],
   },
-}
+})
 ```
+
+## Flag Inheritance
+
+Set `inherit: true` on a flag to make it available to subcommands:
+
+```ts
+const app = new Crust("my-cli")
+  .flags({
+    verbose: { type: "boolean", alias: "v", inherit: true },
+    debug: { type: "boolean" }, // not inherited
+  })
+  .command("deploy", (cmd) =>
+    cmd
+      .flags({ env: { type: "string", required: true } })
+      .run(({ flags }) => {
+        flags.verbose; // boolean | undefined (inherited from parent)
+        flags.env;     // string (local)
+        // flags.debug — not available (not inherited)
+      })
+  );
+```
+
+Inherited flags are:
+- **Parsed** by the subcommand's parser alongside local flags
+- **Typed** correctly in the subcommand's handler via `EffectiveFlags<Inherited, Local>`
+- **Shown** in the subcommand's help output
+
+Local flags override inherited flags with the same key. Only flags with `inherit: true` are propagated — all other parent flags are excluded.
+
+See the [`.sub()` factory](/docs/api/crust#subname) for how to use flag inheritance with the file-splitting pattern.
 
 ## Unknown Flags
 

@@ -10,12 +10,14 @@ The help plugin adds `--help` / `-h` to all commands and auto-generates formatte
 ## Usage
 
 ```ts
-import { runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
 
-runMain(main, {
-  plugins: [helpPlugin()],
-});
+const main = new Crust("my-cli")
+  .use(helpPlugin())
+  .run(() => { /* ... */ });
+
+await main.execute();
 ```
 
 No configuration needed. The plugin injects a `--help` flag into every command (including subcommands) during the setup phase.
@@ -85,13 +87,9 @@ my-cli <command> [name] [options]
 Override the auto-generated usage with `meta.usage`:
 
 ```ts
-defineCommand({
-  meta: {
-    name: "deploy",
-    usage: "deploy <env> [--dry-run]",
-  },
+new Crust("deploy")
+  .meta({ usage: "deploy <env> [--dry-run]" })
   // ...
-});
 ```
 
 ## `renderHelp` Function
@@ -133,7 +131,7 @@ my-cli create plugin --help # Help for nested subcommand
 
 ```ts
 function helpPlugin(): CrustPlugin;
-function renderHelp(command: AnyCommand, path?: string[]): string;
+function renderHelp(command: CommandNode, path?: string[]): string;
 ```
 
 The help output includes the full command path:

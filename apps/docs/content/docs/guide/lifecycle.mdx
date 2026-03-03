@@ -5,36 +5,34 @@ description: Understand the command execution lifecycle and preRun, run, postRun
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Every command supports three lifecycle hooks: `preRun`, `run`, and `postRun`. These let you add initialization and cleanup logic around your main command handler.
+Every command supports three lifecycle hooks: `.preRun()`, `.run()`, and `.postRun()`. These let you add initialization and cleanup logic around your main command handler.
 
 ## Lifecycle Hooks
 
 ```ts
-import { defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const cmd = defineCommand({
-  meta: { name: "deploy" },
-  preRun({ args, flags }) {
+const cmd = new Crust("deploy")
+  .preRun(({ args, flags }) => {
     console.log("Validating configuration...");
-  },
-  run({ args, flags }) {
+  })
+  .run(({ args, flags }) => {
     console.log("Deploying...");
-  },
-  postRun({ args, flags }) {
+  })
+  .postRun(({ args, flags }) => {
     console.log("Cleaning up...");
-  },
-});
+  });
 ```
 
 ### Execution Order
 
 ```
-preRun  →  run  →  postRun
+preRun  ->  run  ->  postRun
 ```
 
-1. **`preRun`** — Called before `run()`. Use for initialization, validation, or setup
-2. **`run`** — The main command handler
-3. **`postRun`** — Called after `run()`, **even if `run()` throws**. Use for cleanup or teardown
+1. **`.preRun()`** — Called before `run()`. Use for initialization, validation, or setup
+2. **`.run()`** — The main command handler
+3. **`.postRun()`** — Called after `run()`, **even if `run()` throws**. Use for cleanup or teardown
 
 <Callout>
   `postRun` runs in a `finally` block, so it executes even when `run()` throws an error. The error is still re-thrown after `postRun` completes.
@@ -45,30 +43,28 @@ preRun  →  run  →  postRun
 All hooks support async functions:
 
 ```ts
-defineCommand({
-  meta: { name: "migrate" },
-  async preRun() {
+new Crust("migrate")
+  .preRun(async () => {
     await checkDatabaseConnection();
-  },
-  async run() {
+  })
+  .run(async () => {
     await runMigrations();
-  },
-  async postRun() {
+  })
+  .postRun(async () => {
     await closeDatabaseConnection();
-  },
-});
+  })
 ```
 
 ### Hook Context
 
-Each hook receives the same `CommandContext` object:
+Each hook receives the same `CrustCommandContext` object:
 
 ```ts
-interface CommandContext<A, F> {
+interface CrustCommandContext<A, F> {
   args: InferArgs<A>;       // Parsed positional arguments
-  flags: InferFlags<F>;     // Parsed flags
+  flags: InferFlags<F>;     // Parsed flags (inherited + local merged)
   rawArgs: string[];         // Arguments after `--`
-  command: AnyCommand;       // The resolved command
+  command: CommandNode;      // The resolved command node
 }
 ```
 
@@ -76,60 +72,56 @@ All hooks see the same parsed input — there's no data transformation between h
 
 ## Full Execution Lifecycle
 
-The complete lifecycle includes plugin middleware, routing, parsing, and hook execution:
+When you call `.execute()`, Crust runs through four phases:
+
+### 1. Initialization
+
+Plugins are collected from the command tree (root-first, depth-first) and each `setup()` hook runs sequentially. If any `setup()` throws, the lifecycle **aborts immediately**. After setup, the command tree is frozen and plugin warnings are surfaced.
+
+### 2. Routing & Parsing
+
+`resolveCommand()` walks `argv` against the subcommand tree, then `parseArgs()` validates args and flags for the matched command. If either step fails, the error still passes through the middleware chain — allowing plugins like `helpPlugin` to intercept it.
+
+### 3. Middleware & Hooks
+
+The middleware chain uses an onion model — each plugin wraps the next, with command hooks at the center:
 
 ```
-1. Plugin setup phase (one-time)
-   └─ Each plugin.setup() runs in order
-
-2. Command routing
-   └─ resolveCommand() walks the subcommand tree
-
-3. Argument parsing
-   └─ parseArgs() validates and coerces args/flags
-
-4. Plugin middleware chain
-   └─ Each plugin.middleware() wraps the next
-      └─ Terminal: command execution
-         ├─ preRun()
-         ├─ run()
-         └─ postRun()  (always runs, even on error)
+middleware A  →  middleware B  →  preRun → run → postRun
 ```
 
-### Error Handling in the Lifecycle
+- `preRun()` throws → `run()` is skipped, `postRun()` still runs
+- `postRun()` **always runs**, even on error. If both `run` and `postRun` throw, the original error is preserved
 
-- If `preRun()` throws, `run()` is skipped but `postRun()` still runs
-- If `run()` throws, `postRun()` still runs
-- If `postRun()` throws, the original error (if any) is replaced by the `postRun` error
-- Plugin middleware can catch errors thrown during command execution
-- `runMain()` catches all uncaught errors and prints them to stderr
+### 4. Error Handling
+
+`.execute()` catches all errors — they never propagate to the caller. Errors are printed to stderr and `process.exitCode` is set to `1`.
 
 ## Practical Example
 
 ```ts
-const deploy = defineCommand({
-  meta: { name: "deploy", description: "Deploy to production" },
-  flags: {
+const deploy = new Crust("deploy")
+  .meta({ description: "Deploy to production" })
+  .flags({
     env: { type: "string", required: true, description: "Target environment" },
     dryRun: { type: "boolean", description: "Simulate without deploying", alias: "d" },
-  },
-  async preRun({ flags }) {
+  })
+  .preRun(async ({ flags }) => {
     // Validate before running
     if (flags.env === "production" && flags.dryRun) {
       console.log("Dry run for production deployment");
     }
-  },
-  async run({ flags }) {
+  })
+  .run(async ({ flags }) => {
     if (flags.dryRun) {
       console.log(`[DRY RUN] Would deploy to ${flags.env}`);
       return;
     }
     console.log(`Deploying to ${flags.env}...`);
     // deployment logic
-  },
-  async postRun({ flags }) {
+  })
+  .postRun(async ({ flags }) => {
     // Always runs — send notification regardless of success/failure
     console.log(`Deployment to ${flags.env} finished`);
-  },
-});
+  });
 ```
