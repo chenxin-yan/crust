@@ -139,8 +139,8 @@ describe("scaffold", () => {
 		);
 
 		expect(cliContent).toContain("import {");
-		expect(cliContent).toContain("const main = new Crust(");
-		expect(cliContent).toContain("await main.execute()");
+		expect(cliContent).toContain("const cli = new Crust(");
+		expect(cliContent).toContain("await cli.execute()");
 		expect(cliContent).toContain(".use(");
 		expect(cliContent).toContain("versionPlugin(");
 		expect(cliContent).toContain("helpPlugin()");

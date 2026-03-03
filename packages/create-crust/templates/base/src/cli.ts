@@ -2,7 +2,7 @@ import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
-const main = new Crust("{{name}}")
+const cli = new Crust("{{name}}")
 	.meta({ description: "A CLI built with Crust" })
 	.use(versionPlugin(pkg.version))
 	.use(helpPlugin())
@@ -26,4 +26,4 @@ const main = new Crust("{{name}}")
 		console.log(`${flags.greet}, ${args.name}!`);
 	});
 
-await main.execute();
+await cli.execute();

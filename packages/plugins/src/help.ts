@@ -7,31 +7,6 @@ import type {
 	FlagsDef,
 } from "@crustjs/core";
 
-/**
- * A structural type for objects that renderHelp can accept.
- * Both CommandNode and legacy shapes satisfy this interface.
- */
-interface HelpableCommand {
-	meta: CommandMeta;
-	subCommands?: Record<string, HelpableCommand>;
-	run?: (...args: unknown[]) => unknown;
-	args?: readonly ArgDef[];
-	flags?: FlagsDef;
-	effectiveFlags?: FlagsDef;
-	localFlags?: FlagsDef;
-}
-
-/** Resolve the flags to display in help — effectiveFlags takes precedence. */
-function resolveHelpFlags(command: HelpableCommand): FlagsDef | undefined {
-	if (
-		command.effectiveFlags &&
-		Object.keys(command.effectiveFlags).length > 0
-	) {
-		return command.effectiveFlags;
-	}
-	return command.flags;
-}
-
 function formatArgToken(arg: ArgDef): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;
 	return arg.required ? `<${base}>` : `[${base}]`;
@@ -39,18 +14,14 @@ function formatArgToken(arg: ArgDef): string {
 
 function formatUsage(
 	meta: CommandMeta,
-	command: HelpableCommand,
+	command: CommandNode,
 	path: string[],
 ): string {
 	if (meta.usage) return meta.usage;
 
 	const usageParts: string[] = [path.join(" ")];
 
-	if (
-		command.subCommands &&
-		Object.keys(command.subCommands).length > 0 &&
-		!command.run
-	) {
+	if (Object.keys(command.subCommands).length > 0 && !command.run) {
 		usageParts.push("<command>");
 	}
 
@@ -60,8 +31,7 @@ function formatUsage(
 		}
 	}
 
-	const flags = resolveHelpFlags(command);
-	if (flags && Object.keys(flags).length > 0) {
+	if (Object.keys(command.effectiveFlags).length > 0) {
 		usageParts.push("[options]");
 	}
 
@@ -81,8 +51,8 @@ function formatFlagName(name: string, def: FlagDef): string {
 	return `--${name}`;
 }
 
-function formatFlagsSection(flagsDef: FlagsDef | undefined): string[] {
-	if (!flagsDef || Object.keys(flagsDef).length === 0) return [];
+function formatFlagsSection(flagsDef: FlagsDef): string[] {
+	if (Object.keys(flagsDef).length === 0) return [];
 
 	const lines = ["OPTIONS:"];
 	for (const [name, def] of Object.entries(flagsDef)) {
@@ -93,11 +63,11 @@ function formatFlagsSection(flagsDef: FlagsDef | undefined): string[] {
 	return lines;
 }
 
-function formatArgsSection(command: HelpableCommand): string[] {
+function formatArgsSection(command: CommandNode): string[] {
 	if (!command.args || command.args.length === 0) return [];
 
 	const lines = ["ARGS:"];
-	for (const arg of command.args) {
+	for (const arg of command.args as readonly ArgDef[]) {
 		const rendered = formatArgToken(arg).padEnd(18, " ");
 		lines.push(`  ${rendered}${arg.description ?? ""}`.trimEnd());
 	}
@@ -105,8 +75,8 @@ function formatArgsSection(command: HelpableCommand): string[] {
 	return lines;
 }
 
-function formatCommandsSection(command: HelpableCommand): string[] {
-	if (!command.subCommands || Object.keys(command.subCommands).length === 0) {
+function formatCommandsSection(command: CommandNode): string[] {
+	if (Object.keys(command.subCommands).length === 0) {
 		return [];
 	}
 
@@ -119,7 +89,7 @@ function formatCommandsSection(command: HelpableCommand): string[] {
 	return lines;
 }
 
-export function renderHelp(command: HelpableCommand, path?: string[]): string {
+export function renderHelp(command: CommandNode, path?: string[]): string {
 	const resolvedPath = path ?? [command.meta.name];
 	const lines: string[] = [];
 	lines.push(
@@ -143,7 +113,7 @@ export function renderHelp(command: HelpableCommand, path?: string[]): string {
 		lines.push(...argsSection);
 	}
 
-	const optionsSection = formatFlagsSection(resolveHelpFlags(command));
+	const optionsSection = formatFlagsSection(command.effectiveFlags);
 	if (optionsSection.length > 0) {
 		lines.push("");
 		lines.push(...optionsSection);
@@ -164,10 +134,8 @@ function injectHelpFlags(
 ): void {
 	addFlag(command, "help", helpFlagDef);
 
-	if (command.subCommands) {
-		for (const sub of Object.values(command.subCommands)) {
-			injectHelpFlags(sub, addFlag);
-		}
+	for (const sub of Object.values(command.subCommands)) {
+		injectHelpFlags(sub, addFlag);
 	}
 }
 
