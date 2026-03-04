@@ -168,7 +168,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				verbose: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean", short: "v" },
 			},
 		});
 		const result = parseArgs(cmd, ["-v"]);
@@ -179,7 +179,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				port: { type: "number", alias: "p" },
+				port: { type: "number", short: "p" },
 			},
 		});
 		const result = parseArgs(cmd, ["-p", "3000"]);
@@ -190,7 +190,7 @@ describe("parseArgs — aliases", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				output: { type: "string", alias: ["o", "out"] },
+				output: { type: "string", short: "o", aliases: ["out"] },
 			},
 		});
 
@@ -207,8 +207,8 @@ describe("parseArgs — aliases", () => {
 		const cmd = makeNode({
 			meta: "alias-collision",
 			flags: {
-				verbose: { type: "boolean" as const, alias: "v" },
-				version: { type: "boolean" as const, alias: "v" },
+				verbose: { type: "boolean" as const, short: "v" },
+				version: { type: "boolean" as const, short: "v" },
 			},
 		});
 		try {
@@ -228,7 +228,7 @@ describe("parseArgs — aliases", () => {
 			meta: "alias-shadow",
 			flags: {
 				out: { type: "string" as const, description: "Output format" },
-				output: { type: "string" as const, alias: ["o", "out"] },
+				output: { type: "string" as const, short: "o", aliases: ["out"] },
 			},
 		});
 		try {
@@ -363,7 +363,7 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				file: { type: "string", multiple: true, alias: "f" },
+				file: { type: "string", multiple: true, short: "f" },
 			},
 		});
 		const result = parseArgs(cmd, ["-f", "a.ts", "-f", "b.ts"]);
@@ -374,7 +374,12 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				file: { type: "string", multiple: true, alias: ["f", "input"] },
+				file: {
+					type: "string",
+					multiple: true,
+					short: "f",
+					aliases: ["input"],
+				},
 			},
 		});
 		const result = parseArgs(cmd, ["--input", "a.ts", "--input", "b.ts"]);
@@ -385,7 +390,12 @@ describe("parseArgs — multiple flags", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
-				file: { type: "string", multiple: true, alias: ["f", "input"] },
+				file: {
+					type: "string",
+					multiple: true,
+					short: "f",
+					aliases: ["input"],
+				},
 			},
 		});
 		const result = parseArgs(cmd, [
@@ -768,8 +778,8 @@ describe("parseArgs — complex scenarios", () => {
 			meta: { name: "serve" },
 			args: [{ name: "entry", type: "string", required: true }],
 			flags: {
-				port: { type: "number", default: 3000, alias: "p" },
-				verbose: { type: "boolean", alias: "v" },
+				port: { type: "number", default: 3000, short: "p" },
+				verbose: { type: "boolean", short: "v" },
 			},
 		});
 		const result = parseArgs(cmd, ["src/cli.ts", "-p", "8080", "-v"]);
@@ -818,10 +828,10 @@ describe("parseArgs — complex scenarios", () => {
 				{ name: "extras", type: "string", variadic: true },
 			],
 			flags: {
-				output: { type: "string", alias: "o", default: "./dist" },
-				port: { type: "number", alias: "p" },
+				output: { type: "string", short: "o", default: "./dist" },
+				port: { type: "number", short: "p" },
 				minify: { type: "boolean", default: true },
-				verbose: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean", short: "v" },
 			},
 		});
 		const result = parseArgs(cmd, [
@@ -944,7 +954,7 @@ describe("parseArgs — canonical-only negation", () => {
 	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
-			verbose: { type: "boolean", alias: ["v", "loud"] },
+			verbose: { type: "boolean", short: "v", aliases: ["loud"] },
 		},
 	});
 
@@ -1015,7 +1025,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 	it("throws CrustError with DEFINITION code on no- prefixed alias", () => {
 		const cmd = makeNode({
 			meta: "no-prefix-alias",
-			flags: { cache: { type: "boolean" as const, alias: "no-store" } },
+			flags: { cache: { type: "boolean" as const, aliases: ["no-store"] } },
 		});
 		try {
 			parseArgs(cmd, []);
@@ -1104,7 +1114,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const parentFlags = {
 			verbose: {
 				type: "boolean" as const,
-				alias: "v" as const,
+				short: "v" as const,
 				inherit: true as const,
 			},
 		};

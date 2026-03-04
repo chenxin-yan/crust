@@ -47,7 +47,7 @@ new Crust("greet")
     { name: "name", type: "string", required: true },
   ])
   .flags({
-    loud: { type: "boolean", alias: "l" },
+    loud: { type: "boolean", short: "l" },
   })
   .run(({ args, flags, rawArgs }) => {
     // args.name is typed as `string` (required)

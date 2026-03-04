@@ -36,7 +36,7 @@ import { EFFECT_SCHEMA } from "./types.ts";
  *
  * const serve = new Crust("serve")
  *   .args([arg("port", Schema.Number)])
- *   .flags({ verbose: flag(Schema.Boolean, { alias: "v" }) })
+ *   .flags({ verbose: flag(Schema.Boolean, { short: "v" }) })
  *   .run(commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
  *   }));

@@ -20,7 +20,7 @@ describe("crust package integration", () => {
 		const app = new Crust("parse-test")
 			.args([{ name: "file", type: "string", required: true }] as const)
 			.flags({
-				output: { type: "string", default: "dist", alias: "o" },
+				output: { type: "string", default: "dist", short: "o" },
 			} as const);
 
 		// Access the internal node to test parseArgs directly

@@ -78,7 +78,7 @@ const greet = new Crust("greet")
   .args([arg("name", z.string().describe("Person to greet"))])
   .flags({
     loud: flag(z.boolean().default(false).describe("Shout the greeting"), {
-      alias: "l",
+      short: "l",
     }),
   })
   .run(commandValidator(({ args, flags }) => {
@@ -142,7 +142,7 @@ Use a scalar schema (not `z.array()`). The framework handles array collection. C
 | Export                          | Kind     | Description                                           |
 | ------------------------------- | -------- | ----------------------------------------------------- |
 | `arg`                           | function | Declare a named positional argument with a Zod schema |
-| `flag`                          | function | Declare a flag with a Zod schema and optional alias   |
+| `flag`                          | function | Declare a flag with a Zod schema and optional short/aliases |
 | `commandValidator`              | function | Create a validated `run` handler via Zod schemas      |
 | `ZodArgDef<N, S, V, T>`         | type     | `ArgDef` with hidden Zod schema metadata              |
 | `ZodFlagDef<S, A, T>`           | type     | `FlagDef` with hidden Zod schema metadata             |
@@ -175,7 +175,7 @@ const greet = new Crust("greet")
   .flags({
     loud: flag(
       Schema.Boolean.annotations({ description: "Shout the greeting" }),
-      { alias: "l" },
+      { short: "l" },
     ),
   })
   .run(commandValidator(({ args, flags }) => {
@@ -242,7 +242,7 @@ Use a scalar schema (not `Schema.Array()`). The framework handles array collecti
 | Export                          | Kind     | Description                                               |
 | ------------------------------- | -------- | --------------------------------------------------------- |
 | `arg`                           | function | Declare a named positional argument with an Effect schema |
-| `flag`                          | function | Declare a flag with an Effect schema and optional alias   |
+| `flag`                          | function | Declare a flag with an Effect schema and optional short/aliases |
 | `commandValidator`              | function | Create a validated `run` handler via Effect schemas       |
 | `EffectArgDef<N, S, V, T>`      | type     | `ArgDef` with hidden Effect schema metadata               |
 | `EffectFlagDef<S, A, T>`        | type     | `FlagDef` with hidden Effect schema metadata              |

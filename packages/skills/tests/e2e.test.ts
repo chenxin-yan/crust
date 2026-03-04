@@ -182,12 +182,12 @@ function buildFixtureCommand(): CommandNode {
 			verbose: {
 				type: "boolean",
 				description: "Enable verbose output",
-				alias: "v",
+				short: "v",
 			},
 			region: {
 				type: "string",
 				description: "Cloud region to target",
-				alias: "r",
+				short: "r",
 				default: "us-east-1",
 			},
 		},
@@ -216,7 +216,7 @@ function buildFixtureCommand(): CommandNode {
 							template: {
 								type: "string",
 								description: "Application template",
-								alias: "t",
+								short: "t",
 								default: "default",
 							},
 							"dry-run": {
@@ -243,7 +243,7 @@ function buildFixtureCommand(): CommandNode {
 							force: {
 								type: "boolean",
 								description: "Skip confirmation",
-								alias: "f",
+								short: "f",
 							},
 						},
 						run() {},
@@ -277,7 +277,7 @@ function buildFixtureCommand(): CommandNode {
 					global: {
 						type: "boolean",
 						description: "Use global configuration",
-						alias: "g",
+						short: "g",
 					},
 				},
 				run() {},
@@ -329,7 +329,7 @@ function buildFixtureCommand(): CommandNode {
 					watch: {
 						type: "boolean",
 						description: "Watch for changes",
-						alias: "w",
+						short: "w",
 					},
 				},
 				run() {},

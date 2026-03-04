@@ -136,14 +136,14 @@ describe("computeEffectiveFlags", () => {
 			verbose: {
 				type: "boolean",
 				inherit: true,
-				alias: "v",
+				short: "v",
 				description: "Enable verbose logging",
 			},
 		};
 		const local: FlagsDef = {
 			output: {
 				type: "string",
-				alias: "o",
+				short: "o",
 				required: true,
 				description: "Output file",
 			},
@@ -154,12 +154,12 @@ describe("computeEffectiveFlags", () => {
 		expect(result.verbose).toEqual({
 			type: "boolean",
 			inherit: true,
-			alias: "v",
+			short: "v",
 			description: "Enable verbose logging",
 		});
 		expect(result.output).toEqual({
 			type: "string",
-			alias: "o",
+			short: "o",
 			required: true,
 			description: "Output file",
 		});

@@ -72,16 +72,16 @@ describe("Crust .flags()", () => {
 	it("returns new instance with correct flags", () => {
 		const app = new Crust("test");
 		const withFlags = app.flags({
-			verbose: { type: "boolean", alias: "v" },
+			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
 		});
 
 		expect(withFlags._node.localFlags).toEqual({
-			verbose: { type: "boolean", alias: "v" },
+			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
 		});
 		expect(withFlags._node.effectiveFlags).toEqual({
-			verbose: { type: "boolean", alias: "v" },
+			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
 		});
 	});
@@ -108,14 +108,14 @@ describe("Crust .flags()", () => {
 
 	it("deep copies flag definitions (decoupled from caller)", () => {
 		const flagDefs = {
-			verbose: { type: "boolean" as const, alias: "v" },
+			verbose: { type: "boolean" as const, short: "v" },
 		};
 
 		const app = new Crust("test").flags(flagDefs);
 
 		// Mutating the original defs should not affect the builder
-		flagDefs.verbose.alias = "V";
-		expect(app._node.localFlags.verbose?.alias).toBe("v");
+		flagDefs.verbose.short = "V";
+		expect(app._node.localFlags.verbose?.short).toBe("v");
 	});
 
 	it("preserves meta from original builder", () => {
@@ -139,11 +139,11 @@ describe("Crust .flags()", () => {
 		}
 	});
 
-	it("throws CrustError DEFINITION on alias starting with no-", () => {
+	it("throws CrustError DEFINITION on aliases starting with no-", () => {
 		const app = new Crust("test");
 		try {
 			app.flags({
-				cache: { type: "boolean", alias: "no-store" },
+				cache: { type: "boolean", aliases: ["no-store"] },
 			} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
 			expect.unreachable("should have thrown");
 		} catch (err) {
@@ -153,11 +153,11 @@ describe("Crust .flags()", () => {
 		}
 	});
 
-	it("throws CrustError DEFINITION on alias array containing no- entry", () => {
+	it("throws CrustError DEFINITION on aliases array containing no- entry", () => {
 		const app = new Crust("test");
 		try {
 			app.flags({
-				cache: { type: "boolean", alias: ["c", "no-store"] },
+				cache: { type: "boolean", short: "c", aliases: ["no-store"] },
 			} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
 			expect.unreachable("should have thrown");
 		} catch (err) {
@@ -243,7 +243,7 @@ describe("Crust chaining", () => {
 	it(".flags().args() preserves both on the final builder", () => {
 		const app = new Crust("test")
 			.flags({
-				verbose: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean", short: "v" },
 				port: { type: "number", default: 3000 },
 			})
 			.args([{ name: "file", type: "string", required: true }]);
@@ -360,7 +360,7 @@ describe("Crust .meta()", () => {
 describe("Crust type-level tests", () => {
 	it(".flags() updates Local generic", () => {
 		const app = new Crust("test").flags({
-			verbose: { type: "boolean", alias: "v" },
+			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
 		});
 
@@ -370,7 +370,7 @@ describe("Crust type-level tests", () => {
 		type _checkVerbose = Expect<
 			Equal<
 				AppLocal["verbose"],
-				{ readonly type: "boolean"; readonly alias: "v" }
+				{ readonly type: "boolean"; readonly short: "v" }
 			>
 		>;
 		type _checkPort = Expect<
@@ -413,16 +413,16 @@ describe("Crust type-level tests", () => {
 		// invalid definition below, TypeScript will produce a compile error:
 		//
 		// const app = new Crust("test").flags({
-		//   verbose: { type: "boolean", alias: "v" },
-		//   version: { type: "boolean", alias: "v" },
+		//   verbose: { type: "boolean", short: "v" },
+		//   version: { type: "boolean", short: "v" },
 		// });
 		//
 		// Error: Property 'FIX_ALIAS_COLLISION' is missing...
 
 		// Valid flags: no collision
 		const app = new Crust("test").flags({
-			verbose: { type: "boolean", alias: "v" },
-			version: { type: "boolean", alias: "V" },
+			verbose: { type: "boolean", short: "v" },
+			version: { type: "boolean", short: "V" },
 		});
 		expect(app).toBeDefined();
 	});
@@ -466,7 +466,7 @@ describe("Crust type-level tests", () => {
 	it("chaining .flags().args() preserves both generics", () => {
 		const app = new Crust("test")
 			.flags({
-				verbose: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean", short: "v" },
 				port: { type: "number", default: 3000 },
 			})
 			.args([{ name: "file", type: "string", required: true }]);
@@ -476,7 +476,7 @@ describe("Crust type-level tests", () => {
 		type _checkVerbose = Expect<
 			Equal<
 				AppLocal["verbose"],
-				{ readonly type: "boolean"; readonly alias: "v" }
+				{ readonly type: "boolean"; readonly short: "v" }
 			>
 		>;
 
@@ -880,7 +880,7 @@ describe("Crust .command() type-level tests", () => {
 	it(".command() preserves parent's Inherited and Local generics", () => {
 		const app = new Crust("cli")
 			.flags({
-				verbose: { type: "boolean", alias: "v" },
+				verbose: { type: "boolean", short: "v" },
 				port: { type: "number", default: 3000 },
 			})
 			.command("sub", (cmd) => cmd);
@@ -890,7 +890,7 @@ describe("Crust .command() type-level tests", () => {
 		type _checkVerbose = Expect<
 			Equal<
 				AppLocal["verbose"],
-				{ readonly type: "boolean"; readonly alias: "v" }
+				{ readonly type: "boolean"; readonly short: "v" }
 			>
 		>;
 		type _checkPort = Expect<
@@ -1504,7 +1504,7 @@ describe("Crust .execute()", () => {
 		let receivedFlags: Record<string, unknown> = {};
 
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean", alias: "v" } })
+			.flags({ verbose: { type: "boolean", short: "v" } })
 			.run((ctx) => {
 				receivedFlags = ctx.flags;
 			});
@@ -1794,7 +1794,7 @@ describe("Crust .execute()", () => {
 			setup: (ctx, actions) => {
 				actions.addFlag(ctx.rootCommand, "version", {
 					type: "boolean",
-					alias: "V",
+					short: "V",
 				});
 			},
 		};
@@ -1934,12 +1934,12 @@ describe("Crust .execute()", () => {
 		expect(receivedPort).toBe(3000);
 	});
 
-	it("inherited flag alias works on subcommand", async () => {
+	it("inherited flag short alias works on subcommand", async () => {
 		let receivedVerbose: boolean | undefined;
 
 		const app = new Crust("cli")
 			.flags({
-				verbose: { type: "boolean", alias: "v", inherit: true },
+				verbose: { type: "boolean", short: "v", inherit: true },
 			})
 			.command("sub", (cmd) =>
 				cmd.run((ctx) => {

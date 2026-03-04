@@ -104,7 +104,7 @@ const deploy = new Crust("deploy")
   .meta({ description: "Deploy to production" })
   .flags({
     env: { type: "string", required: true, description: "Target environment" },
-    dryRun: { type: "boolean", description: "Simulate without deploying", alias: "d" },
+    dryRun: { type: "boolean", description: "Simulate without deploying", short: "d" },
   })
   .preRun(async ({ flags }) => {
     // Validate before running

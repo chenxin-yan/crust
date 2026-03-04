@@ -38,7 +38,7 @@ interface ParseResult<A, F> {
 
 - **`CrustError("PARSE")`** — Unknown flag, number coercion failure
 - **`CrustError("VALIDATION")`** — Missing required argument or flag
-- **`CrustError("DEFINITION")`** — Invalid flag definition at runtime (alias collision, or flag name/alias starting with `"no-"`)
+- **`CrustError("DEFINITION")`** — Invalid flag definition at runtime (alias collision, or flag name/short/alias starting with `"no-"`)
 
 ## Behavior
 
@@ -66,16 +66,16 @@ Aliases are resolved to their canonical flag names:
 
 ```ts
 flags: {
-  verbose: { type: "boolean", alias: "v" },
+  verbose: { type: "boolean", short: "v" },
 }
 // --verbose and -v both resolve to flags.verbose
 ```
 
-Multiple aliases (including long aliases) are supported:
+Multiple aliases are supported via `short` and `aliases`:
 
 ```ts
 flags: {
-  target: { type: "string", alias: ["t", "T"] },
+  target: { type: "string", short: "t", aliases: ["T"] },
 }
 ```
 
@@ -103,8 +103,8 @@ const cmd = new Crust("example")
     { name: "file", type: "string", required: true },
   ])
   .flags({
-    output: { type: "string", default: "dist", alias: "o" },
-    verbose: { type: "boolean", alias: "v" },
+    output: { type: "string", default: "dist", short: "o" },
+    verbose: { type: "boolean", short: "v" },
   });
 
 const result = parseArgs(cmd._node, ["input.ts", "-o", "build", "--verbose"]);

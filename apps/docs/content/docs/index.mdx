@@ -44,7 +44,7 @@ const main = new Crust("greet")
     },
   ])
   .flags({
-    shout: { type: "boolean", description: "SHOUT the greeting", alias: "s" },
+    shout: { type: "boolean", description: "SHOUT the greeting", short: "s" },
   })
   .run(({ args, flags }) => {
     const message = `Hello, ${args.name}!`;

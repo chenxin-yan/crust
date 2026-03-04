@@ -31,7 +31,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			.flags({
 				verbose: flag(
 					z.boolean().default(false).describe("Enable verbose logging"),
-					{ alias: "v" },
+					{ short: "v" },
 				),
 			})
 			.run(commandValidator(() => {}))
@@ -57,7 +57,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			])
 			.flags({
 				outDir: flag(z.string().default("dist").describe("Output directory"), {
-					alias: "o",
+					short: "o",
 				}),
 			});
 
@@ -115,7 +115,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 						.flags({
 							env: flag(
 								z.string().default("staging").describe("Target environment"),
-								{ alias: "e" },
+								{ short: "e" },
 							),
 						})
 						.run(commandValidator(() => {})),

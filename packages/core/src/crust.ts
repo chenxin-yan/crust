@@ -69,9 +69,14 @@ function validateNoPrefixFlags(flags: FlagsDef): void {
 				`Flag "--${name}" must not use "no-" prefix; define "${base}" and negate with "--no-${base}"`,
 			);
 		}
-		if (def.alias) {
-			const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
-			for (const alias of aliases) {
+		if (def.short?.startsWith("no-")) {
+			throw new CrustError(
+				"DEFINITION",
+				`Short alias "-${def.short}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
+			);
+		}
+		if (def.aliases) {
+			for (const alias of def.aliases) {
 				if (alias.startsWith("no-")) {
 					throw new CrustError(
 						"DEFINITION",
@@ -241,7 +246,7 @@ function freezeTree(node: CommandNode): void {
  * ```ts
  * const app = new Crust("my-cli")
  *   .flags({
- *     verbose: { type: "boolean", alias: "v", inherit: true },
+ *     verbose: { type: "boolean", short: "v", inherit: true },
  *   })
  *   .args([{ name: "file", type: "string", required: true }])
  *   .run(({ args, flags }) => {

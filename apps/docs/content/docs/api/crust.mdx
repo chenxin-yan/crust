@@ -63,13 +63,13 @@ flags<const F extends FlagsDef>(
 ): Crust<Inherited, F, A>
 ```
 
-Validates at both compile time and runtime that flag names/aliases don't start with `no-` and aliases don't collide.
+Validates at both compile time and runtime that flag names/short/aliases don't start with `no-` and aliases don't collide.
 
 ```ts
 new Crust("serve")
   .flags({
-    port: { type: "number", default: 3000, alias: "p" },
-    verbose: { type: "boolean", alias: "v", inherit: true },
+    port: { type: "number", default: 3000, short: "p" },
+    verbose: { type: "boolean", short: "v", inherit: true },
   })
 ```
 
@@ -110,7 +110,7 @@ The handler receives a `CrustCommandContext` with `args` typed from `.args()` an
 ```ts
 new Crust("greet")
   .args([{ name: "name", type: "string", default: "world" }])
-  .flags({ shout: { type: "boolean", alias: "s" } })
+  .flags({ shout: { type: "boolean", short: "s" } })
   .run(({ args, flags }) => {
     const msg = `Hello, ${args.name}!`;
     console.log(flags.shout ? msg.toUpperCase() : msg);

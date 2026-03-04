@@ -29,7 +29,7 @@ const main = new Crust("my-cli")
   .command("dev", (cmd) =>
     cmd
       .meta({ description: "Start dev server" })
-      .flags({ port: { type: "number", default: 3000, alias: "p" } })
+      .flags({ port: { type: "number", default: 3000, short: "p" } })
       .run(({ flags }) => {
         console.log(`Dev server on port ${flags.port}`);
       })
@@ -127,7 +127,7 @@ For large CLIs, you can define subcommands in separate files using `.sub()`:
 import { Crust } from "@crustjs/core";
 
 export const app = new Crust("my-cli")
-  .flags({ verbose: { type: "boolean", alias: "v", inherit: true } });
+  .flags({ verbose: { type: "boolean", short: "v", inherit: true } });
 ```
 
 ```ts title="commands/deploy.ts"

@@ -480,18 +480,18 @@ export function buildCommand(cmd: Crust<any, any, any>) {
 				type: "string",
 				description: "Entry file path",
 				default: "src/cli.ts",
-				alias: "e",
+				short: "e",
 			},
 			outfile: {
 				type: "string",
 				description: "Output file path (single-target builds only)",
-				alias: "o",
+				short: "o",
 			},
 			name: {
 				type: "string",
 				description:
 					"Binary name (defaults to package.json name or entry filename)",
-				alias: "n",
+				short: "n",
 			},
 			minify: {
 				type: "boolean",
@@ -503,20 +503,20 @@ export function buildCommand(cmd: Crust<any, any, any>) {
 				multiple: true,
 				description:
 					"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
-				alias: "t",
+				short: "t",
 			},
 			outdir: {
 				type: "string",
 				description: "Output directory for compiled binaries",
 				default: "dist",
-				alias: "d",
+				short: "d",
 			},
 			resolver: {
 				type: "string",
 				description:
 					"Filename for the resolver script (multi-target builds, no extension)",
 				default: "cli",
-				alias: "r",
+				short: "r",
 			},
 			validate: {
 				type: "boolean",

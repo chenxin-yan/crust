@@ -277,7 +277,7 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("normalizes a required string flag with alias", () => {
+		it("normalizes a required string flag with short alias", () => {
 			const cmd = makeCommand({
 				meta: { name: "deploy" },
 				flags: {
@@ -285,7 +285,7 @@ describe("buildManifest", () => {
 						type: "string",
 						description: "Deploy target",
 						required: true,
-						alias: "t",
+						short: "t",
 					},
 				},
 				run() {},
@@ -296,16 +296,18 @@ describe("buildManifest", () => {
 
 			expect(flag?.name).toBe("target");
 			expect(flag?.required).toBe(true);
-			expect(flag?.aliases).toEqual(["t"]);
+			expect(flag?.short).toBe("t");
+			expect(flag?.aliases).toEqual([]);
 		});
 
-		it("normalizes a flag with multiple aliases sorted alphabetically", () => {
+		it("normalizes a flag with long aliases sorted alphabetically", () => {
 			const cmd = makeCommand({
 				meta: { name: "run" },
 				flags: {
 					output: {
 						type: "string",
-						alias: ["o", "O"],
+						short: "o",
+						aliases: ["out", "dest"],
 					},
 				},
 				run() {},
@@ -314,7 +316,8 @@ describe("buildManifest", () => {
 			const node = buildManifest(cmd);
 			const [flag] = node.flags;
 
-			expect(flag?.aliases).toEqual(["O", "o"]);
+			expect(flag?.short).toBe("o");
+			expect(flag?.aliases).toEqual(["dest", "out"]);
 		});
 
 		it("normalizes a multiple flag", () => {
@@ -581,7 +584,7 @@ describe("buildManifest", () => {
 				meta: { name: "deploy", description: "Deploy the app" },
 				args: [{ name: "env", type: "string", required: true }] as ArgDef[],
 				flags: {
-					force: { type: "boolean", alias: "f" },
+					force: { type: "boolean", short: "f" },
 					target: { type: "string", default: "production" },
 				},
 				run() {},
@@ -624,7 +627,7 @@ describe("buildManifest", () => {
 				flags: {
 					branch: {
 						type: "string",
-						alias: "b",
+						short: "b",
 						description: "Branch to clone",
 					},
 					depth: {
@@ -657,7 +660,7 @@ describe("buildManifest", () => {
 			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				flags: {
-					verbose: { type: "boolean", alias: "v" },
+					verbose: { type: "boolean", short: "v" },
 				},
 				subCommands: { add: remoteAdd, remove: remoteRemove },
 				run() {},
@@ -696,7 +699,8 @@ describe("buildManifest", () => {
 				"branch",
 				"depth",
 			]);
-			expect(cloneNode?.flags[1]?.aliases).toEqual(["b"]);
+			expect(cloneNode?.flags[1]?.short).toBe("b");
+			expect(cloneNode?.flags[1]?.aliases).toEqual([]);
 
 			// remote
 			const remoteNode = manifest.children[1];

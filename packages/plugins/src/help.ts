@@ -39,15 +39,7 @@ function formatUsage(
 }
 
 function formatFlagName(name: string, def: FlagDef): string {
-	if (!def.alias) return `--${name}`;
-
-	const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
-	const shortAlias = aliases.find((alias) => alias.length === 1);
-
-	if (shortAlias) {
-		return `-${shortAlias}, --${name}`;
-	}
-
+	if (def.short) return `-${def.short}, --${name}`;
 	return `--${name}`;
 }
 
@@ -124,7 +116,7 @@ export function renderHelp(command: CommandNode, path?: string[]): string {
 
 const helpFlagDef: FlagDef = {
 	type: "boolean",
-	alias: "h",
+	short: "h",
 	description: "Show help",
 };
 

@@ -90,17 +90,23 @@ export interface EffectArgDef<
  */
 export interface EffectFlagDef<
 	SchemaType extends EffectSchemaLike = EffectSchemaLike,
-	Alias extends string | readonly string[] | undefined =
-		| string
-		| readonly string[]
-		| undefined,
+	Short extends string | undefined = string | undefined,
+	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Type extends ValueType = ResolveEffectValueType<SchemaType>,
 > {
 	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
-	/** Non-optional so `ValidateFlagAliases` can extract narrow alias literals. */
-	readonly alias: Alias extends string | readonly string[] ? Alias : undefined;
+	/**
+	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
+	 * When `Short` is `undefined`, the runtime value is `undefined` (no short alias).
+	 */
+	readonly short: Short extends string ? Short : undefined;
+	/**
+	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
+	 * When `Aliases` is `undefined`, the runtime value is `undefined` (no long aliases).
+	 */
+	readonly aliases: Aliases extends readonly string[] ? Aliases : undefined;
 	readonly [EFFECT_SCHEMA]: SchemaType;
 }
 
@@ -155,8 +161,10 @@ export interface ArgOptions extends ParserMeta {
 
 /** Options for `flag()`. */
 export interface FlagOptions extends ParserMeta {
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
-	readonly alias?: string | readonly string[];
+	/** Single-character short alias (e.g. `"v"` → `-v`). */
+	readonly short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`). */
+	readonly aliases?: readonly string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

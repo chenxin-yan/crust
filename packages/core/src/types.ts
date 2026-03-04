@@ -85,8 +85,10 @@ export type ArgsDef = readonly ArgDef[];
 interface FlagDefBase {
 	/** Human-readable description for help text */
 	description?: string;
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`) */
-	alias?: string | string[];
+	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`) */
+	aliases?: string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
 	/** When `true`, the flag is inherited by subcommands */
@@ -160,7 +162,7 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
  * @example
  * ```ts
  * const flags = {
- *   verbose: { type: "boolean", description: "Enable verbose logging", alias: "v" },
+ *   verbose: { type: "boolean", description: "Enable verbose logging", short: "v" },
  *   port: { type: "number", description: "Port number", default: 3000 },
  *   files: { type: "string", multiple: true, default: ["index.ts"] },
  * } satisfies FlagsDef;
@@ -182,26 +184,42 @@ export type FlagsDef = Record<string, FlagDef>;
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Extract alias string literals from any value that has an `alias` field.
+ * Extract the `short` alias literal from a flag definition.
+ * Resolves to `never` when no `short` field exists or when the type
+ * is the broad `string` (not a narrowed literal).
+ */
+type ExtractShort<F> = F extends { short: infer S }
+	? S extends string
+		? string extends S
+			? never
+			: S
+		: never
+	: never;
+
+/**
+ * Extract alias string literals from the `aliases` array of a flag definition.
+ * Resolves to `never` when no `aliases` field exists or when the element type
+ * is the broad `string` (not narrowed literals).
+ */
+type ExtractLongAliases<F> = F extends { aliases: infer A }
+	? A extends readonly string[]
+		? string extends A[number]
+			? never
+			: A[number]
+		: never
+	: never;
+
+/**
+ * Extract all alias identifiers (short + long) from a flag definition.
  *
  * Generalized to work with any shape (`FlagDef`, `FlagSpec`, etc.) —
- * values without an `alias` field resolve to `never`.
+ * values without `short`/`aliases` fields resolve to `never`.
  *
- * Includes a `string extends A` guard so non-narrowed aliases (e.g. the
+ * Includes `string extends ...` guards so non-narrowed types (e.g. the
  * broad `string` type from a default generic) resolve to `never` instead
  * of causing false-positive collisions.
  */
-type ExtractAliases<F> = F extends { alias: infer A }
-	? A extends string
-		? string extends A
-			? never
-			: A
-		: A extends readonly string[]
-			? string extends A[number]
-				? never
-				: A[number]
-			: never
-	: never;
+type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
 
 /**
  * Collects aliases from every flag *except* flag K.
@@ -211,7 +229,7 @@ type AliasesExcluding<
 	F extends Record<string, unknown>,
 	K extends keyof F & string,
 > = {
-	[J in Exclude<keyof F & string, K>]: ExtractAliases<F[J]>;
+	[J in Exclude<keyof F & string, K>]: ExtractAllAliases<F[J]>;
 }[Exclude<keyof F & string, K>];
 
 /**
@@ -223,8 +241,8 @@ type CollidingAliases<
 	F extends Record<string, unknown>,
 	K extends keyof F & string,
 > =
-	| (ExtractAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
-	| (ExtractAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
+	| (ExtractAllAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
+	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
 /**
  * Per-flag validation mapped type. Resolves to `F` when no collisions exist.
@@ -235,9 +253,9 @@ type CollidingAliases<
  * it with `FlagsDef`, the validate package uses it with `FlagShape`, etc.
  *
  * ```
- * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; alias: "minify" }'
+ * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; short: "m" }'
  *   but required in type
- *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"minify\" collides with another flag name or alias" }'.
+ *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"m\" collides with another flag name or alias" }'.
  * ```
  */
 export type ValidateFlagAliases<F extends Record<string, unknown>> = {
@@ -260,7 +278,7 @@ type InheritedAliasesExcluding<
 	I extends Record<string, unknown>,
 	OverrideKeys extends string,
 > = {
-	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAliases<I[K]>;
+	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAllAliases<I[K]>;
 }[Exclude<keyof I & string, OverrideKeys>];
 
 /**
@@ -281,8 +299,8 @@ type CrossCollision<
 	F extends Record<string, unknown>,
 	K extends keyof F & string,
 > =
-	| (ExtractAliases<F[K]> & Exclude<keyof I & string, keyof F & string>) // child alias → inherited name (excluding overrides)
-	| (ExtractAliases<F[K]> & InheritedAliasesExcluding<I, keyof F & string>) // child alias → inherited alias
+	| (ExtractAllAliases<F[K]> & Exclude<keyof I & string, keyof F & string>) // child alias → inherited name (excluding overrides)
+	| (ExtractAllAliases<F[K]> & InheritedAliasesExcluding<I, keyof F & string>) // child alias → inherited alias
 	| (K & InheritedAliasesExcluding<I, keyof F & string>); // child name → inherited alias
 
 /**
@@ -294,7 +312,7 @@ type CrossCollision<
  * `keyof FlagsDef` is `string`.
  *
  * ```
- * Property 'FIX_INHERITED_COLLISION' is missing in type '{ type: "string"; alias: "verbose" }'
+ * Property 'FIX_INHERITED_COLLISION' is missing in type '{ type: "string"; aliases: ["verbose"] }'
  *   but required in type
  *     '{ readonly FIX_INHERITED_COLLISION: "\"verbose\" collides with inherited flag" }'.
  * ```
@@ -324,24 +342,16 @@ type NoPrefixedAlias<A> = A extends `no-${string}` ? A : never;
 
 /**
  * Collects all `"no-"`-prefixed alias literals from a flag definition.
- * Works with both `alias: "no-foo"` (string) and `alias: ["no-foo", "f"]` (array).
+ * Checks both `short` and `aliases` fields.
  * Non-narrowed `string` types resolve to `never` to avoid false positives.
  */
-type NoPrefixedAliases<F> = F extends { alias: infer A }
-	? A extends string
-		? string extends A
-			? never
-			: NoPrefixedAlias<A>
-		: A extends readonly string[]
-			? string extends A[number]
-				? never
-				: NoPrefixedAlias<A[number]>
-			: never
-	: never;
+type NoPrefixedAliases<F> =
+	| NoPrefixedAlias<ExtractShort<F>>
+	| NoPrefixedAlias<ExtractLongAliases<F>>;
 
 /**
  * Per-flag validation mapped type. Resolves to `F` when no `"no-"` prefixes
- * exist on flag names or aliases. For flags with offending names or aliases,
+ * exist on flag names, short aliases, or long aliases. For flags with offending values,
  * adds a branded error property causing a compile-time type error.
  *
  * The `"no-"` prefix is reserved for boolean flag negation (`--no-flag`).

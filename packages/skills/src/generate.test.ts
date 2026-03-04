@@ -100,7 +100,7 @@ function simpleCommand(): CommandNode {
 			verbose: {
 				type: "boolean",
 				description: "Enable verbose output",
-				alias: "v",
+				short: "v",
 			},
 		},
 		run() {},
@@ -138,7 +138,7 @@ function nestedCommand(): CommandNode {
 					message: {
 						type: "string",
 						description: "Commit message",
-						alias: "m",
+						short: "m",
 						required: true,
 					},
 					amend: {

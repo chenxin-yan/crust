@@ -19,7 +19,7 @@ const cli = new Crust("{{name}}")
 			type: "string",
 			description: "Greeting to use",
 			default: "Hello",
-			alias: "g",
+			short: "g",
 		},
 	})
 	.run(({ args, flags }) => {

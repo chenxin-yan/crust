@@ -31,7 +31,7 @@ import { ZOD_SCHEMA } from "./types.ts";
  *
  * const serve = new Crust("serve")
  *   .args([arg("port", z.number().min(1))])
- *   .flags({ verbose: flag(z.boolean().default(false), { alias: "v" }) })
+ *   .flags({ verbose: flag(z.boolean().default(false), { short: "v" }) })
  *   .run(commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
  *   }));

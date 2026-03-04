@@ -76,9 +76,9 @@ describe("flag() produces core-compatible FlagDef", () => {
 		expect(f.required).toBeUndefined();
 	});
 
-	it("passes through alias", () => {
-		const f = flag(Schema.UndefinedOr(Schema.Boolean), { alias: "v" });
-		expect(f.alias).toBe("v");
+	it("passes through short", () => {
+		const f = flag(Schema.UndefinedOr(Schema.Boolean), { short: "v" });
+		expect(f.short).toBe("v");
 	});
 
 	it("extracts description from schema annotations", () => {
@@ -105,7 +105,7 @@ describe("Crust builder + commandValidator", () => {
 		const app = new Crust("serve")
 			.args([arg("port", Schema.Number), arg("host", Schema.String)])
 			.flags({
-				verbose: flag(Schema.Boolean, { alias: "v" }),
+				verbose: flag(Schema.Boolean, { short: "v" }),
 			})
 			.run(
 				commandValidator(({ args, flags }) => {
@@ -328,7 +328,7 @@ describe("Crust builder + commandValidator", () => {
 			.flags({
 				verbose: flag(
 					Schema.Boolean.annotations({ description: "Verbose mode" }),
-					{ alias: "v" },
+					{ short: "v" },
 				),
 			});
 
@@ -351,7 +351,7 @@ describe("Crust builder + commandValidator", () => {
 			expect.objectContaining({
 				verbose: expect.objectContaining({
 					type: "boolean",
-					alias: "v",
+					short: "v",
 					description: "Verbose mode",
 				}),
 			}),
@@ -388,7 +388,7 @@ describe("Crust builder + commandValidator", () => {
 		const app = new Crust("app").command("deploy", (cmd) =>
 			cmd
 				.flags({
-					env: flag(Schema.UndefinedOr(Schema.String), { alias: "e" }),
+					env: flag(Schema.UndefinedOr(Schema.String), { short: "e" }),
 				})
 				.run(
 					commandValidator(({ flags }) => {
@@ -437,8 +437,8 @@ describe("ValidateVariadicArgs (compile-time, via Crust builder)", () => {
 describe("ValidateFlagAliases (compile-time, via Crust builder)", () => {
 	it("accepts non-colliding aliases", () => {
 		const app = new Crust("ok").flags({
-			verbose: flag(Schema.Boolean, { alias: "v" }),
-			port: flag(Schema.Number, { alias: "p" }),
+			verbose: flag(Schema.Boolean, { short: "v" }),
+			port: flag(Schema.Number, { short: "p" }),
 		});
 		expect(app._node.meta.name).toBe("ok");
 	});
@@ -455,7 +455,7 @@ describe("ValidateFlagAliases (compile-time, via Crust builder)", () => {
 		new Crust("bad-alias").flags({
 			out: flag(Schema.UndefinedOr(Schema.String)),
 			// @ts-expect-error — alias "out" collides with flag name "--out"
-			output: flag(Schema.UndefinedOr(Schema.String), { alias: "out" }),
+			output: flag(Schema.UndefinedOr(Schema.String), { aliases: ["out"] }),
 		});
 		expect(true).toBe(true);
 	});
@@ -463,9 +463,9 @@ describe("ValidateFlagAliases (compile-time, via Crust builder)", () => {
 	it("rejects duplicate aliases across flags (compile-time)", () => {
 		new Crust("bad-alias-dup").flags({
 			// @ts-expect-error — alias "v" collides with alias on other flag
-			verbose: flag(Schema.Boolean, { alias: "v" }),
+			verbose: flag(Schema.Boolean, { short: "v" }),
 			// @ts-expect-error — alias "v" collides with alias on other flag
-			version: flag(Schema.Boolean, { alias: "v" }),
+			version: flag(Schema.Boolean, { short: "v" }),
 		});
 		expect(true).toBe(true);
 	});
@@ -494,22 +494,28 @@ describe("arg() / flag() generic type narrowing", () => {
 		expect(plainArg.variadic).toBeUndefined();
 	});
 
-	it("narrows alias to literal string on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: "v" });
-		type _check = Expect<Equal<typeof f.alias, "v">>;
-		expect(f.alias).toBe("v");
+	it("narrows short to literal string on flag() return type", () => {
+		const f = flag(Schema.Boolean, { short: "v" });
+		type _check = Expect<Equal<typeof f.short, "v">>;
+		expect(f.short).toBe("v");
 	});
 
-	it("narrows alias to literal tuple on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: ["v", "V"] });
-		type _check = Expect<Equal<typeof f.alias, readonly ["v", "V"]>>;
-		expect(f.alias).toEqual(["v", "V"]);
+	it("narrows aliases to literal tuple on flag() return type", () => {
+		const f = flag(Schema.Boolean, { aliases: ["verbose", "verb"] });
+		type _check = Expect<Equal<typeof f.aliases, readonly ["verbose", "verb"]>>;
+		expect(f.aliases).toEqual(["verbose", "verb"]);
 	});
 
-	it("narrows alias to undefined when not specified", () => {
+	it("narrows short to undefined when not specified", () => {
 		const f = flag(Schema.Boolean);
-		type _check = Expect<Equal<typeof f.alias, undefined>>;
-		expect(f.alias).toBeUndefined();
+		type _check = Expect<Equal<typeof f.short, undefined>>;
+		expect(f.short).toBeUndefined();
+	});
+
+	it("narrows aliases to undefined when not specified", () => {
+		const f = flag(Schema.Boolean);
+		type _check = Expect<Equal<typeof f.aliases, undefined>>;
+		expect(f.aliases).toBeUndefined();
 	});
 });
 
@@ -636,14 +642,14 @@ describe("flag() explicit metadata overrides", () => {
 		expect(f.required).toBeUndefined();
 	});
 
-	it("can combine explicit metadata with alias", () => {
+	it("can combine explicit metadata with short alias", () => {
 		const f = flag(Schema.Number, {
 			type: "number",
-			alias: "p",
+			short: "p",
 			description: "Port number",
 		});
 		expect(f.type).toBe("number");
-		expect(f.alias).toBe("p");
+		expect(f.short).toBe("p");
 		expect(f.description).toBe("Port number");
 	});
 

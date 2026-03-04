@@ -5,12 +5,12 @@ description: Define named flags with types, aliases, defaults, multiple values, 
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Flags are named options passed with `--` (long form) or `-` (short alias). They're defined as a record via `.flags()`.
+Flags are named options passed with `--` (long form) or `-` (short form). They're defined as a record via `.flags()`.
 
 ```sh
 my-cli --port 3000 --verbose -o dist
 #      ^^^^^^^^^^^  ^^^^^^^^^  ^^^^^^
-#      flag         flag       alias
+#      flag         flag       short
 ```
 
 ## Defining Flags
@@ -24,12 +24,12 @@ const cmd = new Crust("serve")
       type: "number",
       description: "Port to listen on",
       default: 3000,
-      alias: "p",
+      short: "p",
     },
     verbose: {
       type: "boolean",
       description: "Enable verbose logging",
-      alias: "v",
+      short: "v",
     },
   })
   .run(({ flags }) => {
@@ -40,7 +40,7 @@ const cmd = new Crust("serve")
 
 ## Flag Properties
 
-Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `alias`, `multiple`, and `inherit`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
+Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `short`, `aliases`, `multiple`, and `inherit`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
 
 ## Types
 
@@ -77,26 +77,26 @@ Use the canonical flag name for negation (`--no-verbose`), not aliases like `--n
 
 Boolean flags are toggles and do not accept explicit value assignment. Forms like `--verbose=true` or `--verbose=false` are parse errors.
 
-## Aliases
+## Short & Aliases
 
-Provide short aliases with the `alias` property:
+Provide a single-character short form with the `short` property, and additional aliases with the `aliases` property:
 
 ```ts
 .flags({
-  output: { type: "string", alias: "o" },       // -o dist
-  verbose: { type: "boolean", alias: "v" },      // -v
-  target: { type: "string", alias: ["t", "T"] }, // -t or -T
+  output: { type: "string", short: "o" },                    // -o dist
+  verbose: { type: "boolean", short: "v" },                   // -v
+  target: { type: "string", short: "t", aliases: ["T"] },    // -t or -T
 })
 ```
 
-Single-character aliases use the `-x` short form. You can provide multiple aliases as an array.
+`short` accepts a single character for the `-x` short form. `aliases` accepts an array of additional aliases (single-char or long).
 
 <Callout type="warn">
   Alias collisions are caught at **compile time** and **runtime**. If an alias conflicts with another flag name or another alias, you'll get an error.
 </Callout>
 
 <Callout type="warn">
-  The `no-` prefix is reserved for boolean negation. Do not define flag names or aliases that start with `no-`.
+  The `no-` prefix is reserved for boolean negation. Do not define flag names, short forms, or aliases that start with `no-`.
 </Callout>
 
 ## Required Flags
@@ -138,7 +138,7 @@ Set `multiple: true` to collect repeated flag values into an array:
     type: "string",
     multiple: true,
     description: "Target platform(s)",
-    alias: "t",
+    short: "t",
   },
 })
 ```
@@ -174,7 +174,7 @@ Set `inherit: true` on a flag to make it available to subcommands:
 ```ts
 const app = new Crust("my-cli")
   .flags({
-    verbose: { type: "boolean", alias: "v", inherit: true },
+    verbose: { type: "boolean", short: "v", inherit: true },
     debug: { type: "boolean" }, // not inherited
   })
   .command("deploy", (cmd) =>

@@ -128,7 +128,9 @@ export interface ManifestFlag {
 	required: boolean;
 	/** Whether this flag accepts multiple values */
 	multiple: boolean;
-	/** Short alias(es) */
+	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`) */
 	aliases: string[];
 	/** Default value (serialized as string for deterministic output) */
 	default?: string;

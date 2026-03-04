@@ -135,7 +135,8 @@ function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 		type: flag.type,
 		required: flag.required === true,
 		multiple: flag.multiple === true,
-		aliases: normalizeAliases(flag.alias),
+		short: flag.short,
+		aliases: flag.aliases ? [...flag.aliases].sort() : [],
 	};
 
 	if (flag.description !== undefined) {
@@ -147,18 +148,6 @@ function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 	}
 
 	return result;
-}
-
-/**
- * Normalizes flag aliases into a sorted string array.
- *
- * Handles `undefined`, single string, and string[] inputs.
- * Result is sorted alphabetically for deterministic output.
- */
-function normalizeAliases(alias: string | string[] | undefined): string[] {
-	if (alias === undefined) return [];
-	if (typeof alias === "string") return [alias];
-	return [...alias].sort();
 }
 
 /**

@@ -395,7 +395,7 @@ export function arg<
 }
 
 /**
- * Define a flag from an Effect schema with optional alias.
+ * Define a flag from an Effect schema with optional short alias and long aliases.
  *
  * Returns a core `FlagDef` (accepted by the Crust builder) enriched with hidden
  * schema metadata (via `[EFFECT_SCHEMA]` symbol) for runtime validation by `commandValidator`.
@@ -414,22 +414,23 @@ export function arg<
  * If both are available and conflict, a `DEFINITION` error is thrown.
  *
  * @param schema - Effect schema (source of truth for type/optionality/description)
- * @param options - Optional flag metadata (`alias`, `type`, `description`, `required`)
+ * @param options - Optional flag metadata (`short`, `aliases`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
- * flag(Schema.Boolean.annotations({ description: "Enable verbose logging" }), { alias: "v" })
+ * flag(Schema.Boolean.annotations({ description: "Enable verbose logging" }), { short: "v" })
  * flag(Schema.UndefinedOr(Schema.Number))
  * flag(complexPipe, { type: "string", description: "Output format" })
  * ```
  */
 export function flag<
 	SchemaType extends EffectSchemaLike,
-	const Alias extends string | readonly string[] | undefined = undefined,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
 >(
 	schema: SchemaType,
-	options?: FlagOptions & { alias?: Alias },
-): EffectFlagDef<SchemaType, Alias> {
+	options?: FlagOptions & { short?: Short; aliases?: Aliases },
+): EffectFlagDef<SchemaType, Short, Aliases> {
 	if (!isSchema(schema)) {
 		throw new CrustError(
 			"DEFINITION",
@@ -459,22 +460,21 @@ export function flag<
 		options?.required,
 	);
 
-	// Convert readonly alias to mutable for core FlagDef compatibility
-	const alias: string | string[] | undefined =
-		options?.alias === undefined
-			? undefined
-			: typeof options.alias === "string"
-				? options.alias
-				: [...options.alias];
+	// Convert readonly aliases to mutable for core FlagDef compatibility
+	const short: string | undefined = options?.short;
+	const aliases: string[] | undefined = options?.aliases
+		? [...options.aliases]
+		: undefined;
 
 	const def = {
 		type: resolvedType,
 		...(multiple && { multiple: true as const }),
-		alias,
+		short,
+		aliases,
 		...(description !== undefined && { description }),
 		...(resolvedRequired && { required: true as const }),
 		[EFFECT_SCHEMA]: schema,
 	};
 
-	return def as EffectFlagDef<SchemaType, Alias>;
+	return def as EffectFlagDef<SchemaType, Short, Aliases>;
 }

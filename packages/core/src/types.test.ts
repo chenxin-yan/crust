@@ -314,16 +314,17 @@ describe("ArgDef interface", () => {
 
 describe("FlagDef interface", () => {
 	it("accepts valid flag definitions", () => {
-		const boolFlag: FlagDef = { type: "boolean", alias: "v" };
+		const boolFlag: FlagDef = { type: "boolean", short: "v" };
 		const stringFlag: FlagDef = {
 			type: "string",
-			alias: ["o", "out"],
+			short: "o",
+			aliases: ["out"],
 			required: true,
 		};
 		const numberFlag: FlagDef = { type: "number", default: 8080 };
 		const multipleFlag: FlagDef = { type: "string", multiple: true };
 
-		expect(boolFlag.alias).toBe("v");
+		expect(boolFlag.short).toBe("v");
 		expect(stringFlag.required).toBe(true);
 		expect(numberFlag.default).toBe(8080);
 		expect(multipleFlag.multiple).toBe(true);
@@ -331,7 +332,7 @@ describe("FlagDef interface", () => {
 
 	it("allows FlagsDef record", () => {
 		const flags: FlagsDef = {
-			verbose: { type: "boolean", alias: "v" },
+			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000, description: "Port number" },
 		};
 
@@ -502,8 +503,8 @@ describe("CommandMeta interface", () => {
 describe("ValidateFlagAliases type inference", () => {
 	it("resolves to identity when no aliases collide with flag names", () => {
 		type Flags = {
-			output: { type: "string"; alias: ["o"] };
-			verbose: { type: "boolean"; alias: "v" };
+			output: { type: "string"; short: "o" };
+			verbose: { type: "boolean"; short: "v" };
 		};
 		type Result = ValidateFlagAliases<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
@@ -525,7 +526,7 @@ describe("ValidateFlagAliases type inference", () => {
 	it("brands only the offending flag when a long alias shadows a flag name", () => {
 		type Flags = {
 			out: { type: "string" };
-			output: { type: "string"; alias: ["o", "out"] };
+			output: { type: "string"; short: "o"; aliases: ["out"] };
 		};
 		type Result = ValidateFlagAliases<Flags>;
 		// "out" flag is innocent — its name was shadowed, not its alias
@@ -545,8 +546,8 @@ describe("ValidateFlagAliases type inference", () => {
 
 	it("brands both flags when two flags share the same alias", () => {
 		type Flags = {
-			verbose: { type: "boolean"; alias: "v" };
-			version: { type: "boolean"; alias: "v" };
+			verbose: { type: "boolean"; short: "v" };
+			version: { type: "boolean"; short: "v" };
 		};
 		type Result = ValidateFlagAliases<Flags>;
 		type _checkVerbose = Expect<
@@ -571,9 +572,9 @@ describe("ValidateFlagAliases type inference", () => {
 
 	it("resolves to identity for single-char aliases that don't match flag names", () => {
 		type Flags = {
-			verbose: { type: "boolean"; alias: "v" };
-			port: { type: "number"; alias: "p" };
-			output: { type: "string"; alias: "o" };
+			verbose: { type: "boolean"; short: "v" };
+			port: { type: "number"; short: "p" };
+			output: { type: "string"; short: "o" };
 		};
 		type Result = ValidateFlagAliases<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
@@ -589,10 +590,10 @@ describe("ValidateFlagAliases type inference", () => {
 describe("ValidateCrossCollisions type inference", () => {
 	it("resolves to identity when no cross-collisions exist", () => {
 		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; alias: "v" };
+			verbose: { type: "boolean"; inherit: true; short: "v" };
 		};
 		type Local = {
-			output: { type: "string"; alias: "o" };
+			output: { type: "string"; short: "o" };
 		};
 		type Result = ValidateCrossCollisions<Inherited, Local>;
 		type _check = Expect<Equal<Result, Local>>;
@@ -605,7 +606,7 @@ describe("ValidateCrossCollisions type inference", () => {
 			verbose: { type: "boolean"; inherit: true };
 		};
 		type Local = {
-			output: { type: "string"; alias: "verbose" };
+			output: { type: "string"; aliases: ["verbose"] };
 		};
 		type Result = ValidateCrossCollisions<Inherited, Local>;
 		type _check = Expect<
@@ -622,10 +623,10 @@ describe("ValidateCrossCollisions type inference", () => {
 
 	it("brands flag whose alias collides with inherited flag alias", () => {
 		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; alias: "v" };
+			verbose: { type: "boolean"; inherit: true; short: "v" };
 		};
 		type Local = {
-			version: { type: "boolean"; alias: "v" };
+			version: { type: "boolean"; short: "v" };
 		};
 		type Result = ValidateCrossCollisions<Inherited, Local>;
 		type _check = Expect<
@@ -642,7 +643,7 @@ describe("ValidateCrossCollisions type inference", () => {
 
 	it("brands flag whose name collides with inherited flag alias", () => {
 		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; alias: "v" };
+			verbose: { type: "boolean"; inherit: true; short: "v" };
 		};
 		type Local = {
 			v: { type: "string" };
@@ -662,7 +663,7 @@ describe("ValidateCrossCollisions type inference", () => {
 
 	it("allows intentional name override (child redefines inherited flag by name)", () => {
 		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; alias: "v" };
+			verbose: { type: "boolean"; inherit: true; short: "v" };
 		};
 		type Local = {
 			verbose: { type: "string" };
@@ -675,7 +676,7 @@ describe("ValidateCrossCollisions type inference", () => {
 
 	it("skips validation when Inherited is the wide FlagsDef type (root command)", () => {
 		type Local = {
-			output: { type: "string"; alias: "verbose" };
+			output: { type: "string"; aliases: ["verbose"] };
 		};
 		type Result = ValidateCrossCollisions<FlagsDef, Local>;
 		type _check = Expect<Equal<Result, Local>>;
@@ -687,7 +688,7 @@ describe("ValidateCrossCollisions type inference", () => {
 		// biome-ignore lint/complexity/noBannedTypes: empty object for testing
 		type Inherited = {};
 		type Local = {
-			output: { type: "string"; alias: "o" };
+			output: { type: "string"; short: "o" };
 		};
 		type Result = ValidateCrossCollisions<Inherited, Local>;
 		type _check = Expect<Equal<Result, Local>>;
@@ -697,10 +698,10 @@ describe("ValidateCrossCollisions type inference", () => {
 
 	it("detects collision with inherited alias array entry", () => {
 		type Inherited = {
-			output: { type: "string"; inherit: true; alias: ["o", "out"] };
+			output: { type: "string"; inherit: true; short: "o"; aliases: ["out"] };
 		};
 		type Local = {
-			other: { type: "string"; alias: "out" };
+			other: { type: "string"; aliases: ["out"] };
 		};
 		type Result = ValidateCrossCollisions<Inherited, Local>;
 		type _check = Expect<
@@ -789,8 +790,8 @@ describe("ValidateNoPrefixedFlags type inference", () => {
 	it("resolves to identity when no flag names or aliases start with no-", () => {
 		type Flags = {
 			cache: { type: "boolean" };
-			verbose: { type: "boolean"; alias: "v" };
-			output: { type: "string"; alias: ["o", "out"] };
+			verbose: { type: "boolean"; short: "v" };
+			output: { type: "string"; short: "o"; aliases: ["out"] };
 		};
 		type Result = ValidateNoPrefixedFlags<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
@@ -832,7 +833,7 @@ describe("ValidateNoPrefixedFlags type inference", () => {
 
 	it("brands flag whose string alias starts with no-", () => {
 		type Flags = {
-			cache: { type: "boolean"; alias: "no-store" };
+			cache: { type: "boolean"; aliases: ["no-store"] };
 		};
 		type Result = ValidateNoPrefixedFlags<Flags>;
 		type _check = Expect<
@@ -849,7 +850,7 @@ describe("ValidateNoPrefixedFlags type inference", () => {
 
 	it("brands flag whose alias array contains a no- prefixed entry", () => {
 		type Flags = {
-			cache: { type: "boolean"; alias: ["c", "no-store"] };
+			cache: { type: "boolean"; short: "c"; aliases: ["no-store"] };
 		};
 		type Result = ValidateNoPrefixedFlags<Flags>;
 		type _check = Expect<
@@ -866,7 +867,7 @@ describe("ValidateNoPrefixedFlags type inference", () => {
 
 	it("allows short aliases (single char) without branding", () => {
 		type Flags = {
-			verbose: { type: "boolean"; alias: "v" };
+			verbose: { type: "boolean"; short: "v" };
 		};
 		type Result = ValidateNoPrefixedFlags<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
@@ -932,12 +933,12 @@ describe("InheritableFlags type inference", () => {
 		expect(true).toBe(true);
 	});
 
-	it("preserves full flag definition including alias, required, etc.", () => {
+	it("preserves full flag definition including short, required, etc.", () => {
 		type Flags = {
 			verbose: {
 				type: "boolean";
 				inherit: true;
-				alias: "v";
+				short: "v";
 				description: "Enable verbose";
 			};
 		};
@@ -1131,7 +1132,7 @@ describe("FlagDef inherit toggle field", () => {
 		const flag: FlagDef = {
 			type: "string",
 			inherit: true,
-			alias: "v",
+			short: "v",
 			required: true,
 		};
 		expect(flag.inherit).toBe(true);

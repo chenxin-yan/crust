@@ -35,7 +35,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 							description: "Enable verbose logging",
 						}),
 					),
-					{ alias: "v" },
+					{ short: "v" },
 				),
 			})
 			.run(commandValidator(() => {}))
@@ -67,7 +67,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			.flags({
 				outDir: flag(
 					Schema.String.annotations({ description: "Output directory" }),
-					{ alias: "o" },
+					{ short: "o" },
 				),
 			});
 
@@ -98,7 +98,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			.flags({
 				outDir: flag(
 					Schema.String.annotations({ description: "Output directory" }),
-					{ alias: "o" },
+					{ short: "o" },
 				),
 			})
 			.run(

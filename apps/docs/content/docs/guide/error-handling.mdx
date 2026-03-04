@@ -134,7 +134,7 @@ When you use `.flags()` and `.args()` with literal types, TypeScript catches str
 | Check | Type Utility | Branded Error Property | Example |
 | --- | --- | --- | --- |
 | Only last arg can be variadic | `ValidateVariadicArgs` | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
-| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `alias: "v"` |
+| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `short: "v"` |
 | No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX` | Flag named `no-cache` or alias `no-store` |
 
 These checks are **bypassed** when types are widened (e.g. `as any`, dynamic construction, or non-const generics). The runtime layers below serve as defense-in-depth.

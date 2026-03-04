@@ -10,7 +10,7 @@ export function versionPlugin(
 		setup(context, actions) {
 			actions.addFlag(context.rootCommand, "version", {
 				type: "boolean",
-				alias: "v",
+				short: "v",
 				description: "Show version number",
 			});
 		},

@@ -628,12 +628,12 @@ describe("renderSkill", () => {
 					verbose: {
 						type: "boolean",
 						description: "Enable verbose output",
-						alias: "v",
+						short: "v",
 					},
 					output: {
 						type: "string",
 						description: "Output directory",
-						alias: "o",
+						short: "o",
 						default: "dist",
 					},
 					target: {
@@ -1049,7 +1049,7 @@ describe("renderSkill", () => {
 				meta: { name: "serve", description: "Start server" },
 				args: [{ name: "port", type: "number", default: 3000 }] as ArgDef[],
 				flags: {
-					watch: { type: "boolean", alias: "w" },
+					watch: { type: "boolean", short: "w" },
 					host: { type: "string", default: "localhost" },
 				},
 				run() {},
@@ -1109,7 +1109,7 @@ describe("renderSkill", () => {
 				flags: {
 					branch: {
 						type: "string",
-						alias: "b",
+						short: "b",
 						description: "Branch to clone",
 					},
 					depth: { type: "number", description: "Shallow clone depth" },
@@ -1135,7 +1135,7 @@ describe("renderSkill", () => {
 
 			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
-				flags: { verbose: { type: "boolean", alias: "v" } },
+				flags: { verbose: { type: "boolean", short: "v" } },
 				subCommands: { add: remoteAdd, remove: remoteRemove },
 				run() {},
 			});

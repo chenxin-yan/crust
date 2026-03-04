@@ -20,7 +20,7 @@ import { executeCrust } from "./helpers";
 const serveCmd = new Crust("serve")
 	.args([{ name: "dir", type: "string", default: "." }] as const)
 	.flags({
-		port: { type: "number", default: 3000, alias: "p" },
+		port: { type: "number", default: 3000, short: "p" },
 	} as const)
 	.run(({ args, flags }) => {
 		console.log(`serve ${args.dir} on ${flags.port}`);
@@ -29,7 +29,7 @@ const serveCmd = new Crust("serve")
 const rootCmd = new Crust("myapp")
 	.meta({ description: "Integration test app" })
 	.flags({
-		help: { type: "boolean", alias: "h" },
+		help: { type: "boolean", short: "h" },
 	} as const)
 	.command("serve", () => serveCmd)
 	.run(({ flags }) => {
@@ -409,7 +409,7 @@ describe("integration: inherited flag alias works on subcommand", () => {
 	it("inherited single-char alias is recognized on subcommand", async () => {
 		const app = new Crust("cli")
 			.flags({
-				verbose: { type: "boolean", alias: "v", inherit: true },
+				verbose: { type: "boolean", short: "v", inherit: true },
 			})
 			.command("sub", (cmd) =>
 				cmd.run((ctx) => {
@@ -427,7 +427,8 @@ describe("integration: inherited flag alias works on subcommand", () => {
 			.flags({
 				output: {
 					type: "string",
-					alias: ["o", "out"],
+					short: "o",
+					aliases: ["out"],
 					inherit: true,
 				},
 			})
@@ -515,7 +516,7 @@ describe("integration: plugin adds flag visible to subcommand handler", () => {
 			setup: (ctx, actions) => {
 				actions.addFlag(ctx.rootCommand, "version", {
 					type: "boolean",
-					alias: "V",
+					short: "V",
 				});
 			},
 		};
@@ -568,7 +569,7 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 	it("3-level inline chained commands execute correctly", async () => {
 		const app = new Crust("git")
 			.flags({
-				verbose: { type: "boolean", alias: "v", inherit: true },
+				verbose: { type: "boolean", short: "v", inherit: true },
 			})
 			.command("remote", (cmd) =>
 				cmd
@@ -929,7 +930,7 @@ describe("integration: complex real-world CLI scenario", () => {
 
 		const app = new Crust("myctl")
 			.flags({
-				verbose: { type: "boolean", alias: "v", inherit: true },
+				verbose: { type: "boolean", short: "v", inherit: true },
 				config: {
 					type: "string",
 					default: "~/.myctl",

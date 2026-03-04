@@ -121,10 +121,8 @@ export interface ZodArgDef<
  */
 export interface ZodFlagDef<
 	Schema extends ZodSchemaLike = ZodSchemaLike,
-	Alias extends string | readonly string[] | undefined =
-		| string
-		| readonly string[]
-		| undefined,
+	Short extends string | undefined = string | undefined,
+	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Type extends ValueType = ResolveZodValueType<Schema>,
 > {
 	readonly type: Type;
@@ -132,9 +130,14 @@ export interface ZodFlagDef<
 	readonly required?: true;
 	/**
 	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
-	 * When `Alias` is `undefined`, the runtime value is `undefined` (no alias).
+	 * When `Short` is `undefined`, the runtime value is `undefined` (no short alias).
 	 */
-	readonly alias: Alias extends string | readonly string[] ? Alias : undefined;
+	readonly short: Short extends string ? Short : undefined;
+	/**
+	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
+	 * When `Aliases` is `undefined`, the runtime value is `undefined` (no long aliases).
+	 */
+	readonly aliases: Aliases extends readonly string[] ? Aliases : undefined;
 	readonly [ZOD_SCHEMA]: Schema;
 }
 
@@ -189,8 +192,10 @@ export interface ArgOptions extends ParserMeta {
 
 /** Options for `flag()`. */
 export interface FlagOptions extends ParserMeta {
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`). */
-	readonly alias?: string | readonly string[];
+	/** Single-character short alias (e.g. `"v"` → `-v`). */
+	readonly short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`). */
+	readonly aliases?: readonly string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

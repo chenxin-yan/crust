@@ -98,7 +98,7 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 		const app = new Crust("config")
 			.args([zodArg("theme", z.enum(["light", "dark"]))])
 			.flags({
-				verbose: zodFlag(z.boolean().default(false), { alias: "v" }),
+				verbose: zodFlag(z.boolean().default(false), { short: "v" }),
 			})
 			.run(
 				zodCommandValidator(({ args, flags }) => {

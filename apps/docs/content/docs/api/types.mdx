@@ -107,7 +107,8 @@ interface StringFlagDef {
   description?: string;        // Help text
   default?: string;            // Default value (type-safe)
   required?: true;             // Error if missing
-  alias?: string | string[];   // Short alias(es)
+  short?: string;              // Single-character short form (-x)
+  aliases?: string[];          // Additional aliases (single-char or long)
   multiple?: never;            // Absent for single-value flags
   inherit?: true;              // Inherited by subcommands
 }
@@ -118,7 +119,8 @@ interface StringMultiFlagDef {
   description?: string;        // Help text
   default?: string[];          // Default array value (type-safe)
   required?: true;             // Error if missing
-  alias?: string | string[];   // Short alias(es)
+  short?: string;              // Single-character short form (-x)
+  aliases?: string[];          // Additional aliases (single-char or long)
   multiple: true;              // Collect repeated values into array
   inherit?: true;              // Inherited by subcommands
 }
