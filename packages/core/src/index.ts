@@ -37,6 +37,7 @@ export type {
 	InheritableFlags,
 	MergeFlags,
 	ParseResult,
+	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,

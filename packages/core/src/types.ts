@@ -249,6 +249,70 @@ export type ValidateFlagAliases<F extends Record<string, unknown>> = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Inherited flag cross-collision detection (compile-time, per-flag granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Collects aliases from inherited flags, excluding those whose keys the
+ * child overrides (intentional override — child redefines a flag by name).
+ */
+type InheritedAliasesExcluding<
+	I extends Record<string, unknown>,
+	OverrideKeys extends string,
+> = {
+	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAliases<I[K]>;
+}[Exclude<keyof I & string, OverrideKeys>];
+
+/**
+ * Per-flag cross-collision detection between a child flag K (from local
+ * flags F) and the inherited flag set I. Resolves to the colliding
+ * identifier, or `never` when no collision exists.
+ *
+ * Detects three collision classes:
+ * 1. Child alias → inherited flag name
+ * 2. Child alias → inherited flag alias
+ * 3. Child flag name → inherited flag alias
+ *
+ * Intentional name overrides (child defines a flag with the same key as
+ * an inherited flag) are excluded — those are handled by `MergeFlags`.
+ */
+type CrossCollision<
+	I extends Record<string, unknown>,
+	F extends Record<string, unknown>,
+	K extends keyof F & string,
+> =
+	| (ExtractAliases<F[K]> & Exclude<keyof I & string, keyof F & string>) // child alias → inherited name (excluding overrides)
+	| (ExtractAliases<F[K]> & InheritedAliasesExcluding<I, keyof F & string>) // child alias → inherited alias
+	| (K & InheritedAliasesExcluding<I, keyof F & string>); // child name → inherited alias
+
+/**
+ * Per-flag validation mapped type for cross-collisions between inherited
+ * and local flags. Resolves to `F` when no collisions exist.
+ *
+ * When `Inherited` is the wide `FlagsDef` type (root commands with no
+ * parent), the validation is skipped to avoid false positives since
+ * `keyof FlagsDef` is `string`.
+ *
+ * ```
+ * Property 'FIX_INHERITED_COLLISION' is missing in type '{ type: "string"; alias: "verbose" }'
+ *   but required in type
+ *     '{ readonly FIX_INHERITED_COLLISION: "\"verbose\" collides with inherited flag" }'.
+ * ```
+ */
+export type ValidateCrossCollisions<
+	I extends Record<string, unknown>,
+	F extends Record<string, unknown>,
+> = string extends keyof I
+	? F // Wide type (root command) — skip validation
+	: {
+			[K in keyof F & string]: CrossCollision<I, F, K> extends never
+				? F[K]
+				: F[K] & {
+						readonly FIX_INHERITED_COLLISION: `"${CrossCollision<I, F, K> & string}" collides with inherited flag`;
+					};
+		};
+
+// ────────────────────────────────────────────────────────────────────────────
 // "no-" prefix validation (compile-time, per-flag granularity)
 // ────────────────────────────────────────────────────────────────────────────
 

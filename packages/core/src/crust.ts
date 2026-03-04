@@ -20,6 +20,7 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
@@ -350,7 +351,9 @@ export class Crust<
 	 * @throws {CrustError} `DEFINITION` if flag names/aliases violate constraints
 	 */
 	flags<const F extends FlagsDef>(
-		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
+		defs: F &
+			ValidateNoPrefixedFlags<ValidateFlagAliases<F>> &
+			ValidateCrossCollisions<Inherited, F>,
 	): Crust<Inherited, F, A> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
