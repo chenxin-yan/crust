@@ -98,12 +98,8 @@ If you want cross-run cache behavior without forcing `@crustjs/store` as a depen
 
 ```ts
 import { stateDir, createStore } from "@crustjs/store";
-import {
-  updateNotifierPlugin,
-  type UpdateNotifierCacheAdapter,
-} from "@crustjs/plugins";
+import { updateNotifierPlugin } from "@crustjs/plugins";
 
-// Create a single store instance for your CLI
 const store = createStore({
   dirPath: stateDir("my-cli"), // Replace with your package name
   name: "update-notifier",
@@ -114,14 +110,9 @@ const store = createStore({
   },
 });
 
-const cache: UpdateNotifierCacheAdapter = {
-  read: async () => store.read(),
-  write: async (_, state) => store.write(state),
-};
-
 updateNotifierPlugin({
   currentVersion: "1.0.0",
-  cache,
+  cache: store,
 });
 ```
 

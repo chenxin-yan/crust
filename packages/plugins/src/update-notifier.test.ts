@@ -360,14 +360,14 @@ describe("updateNotifierPlugin middleware", () => {
 	const originalFetch = globalThis.fetch;
 	let originalLog: typeof console.log;
 	let stdoutChunks: string[];
-	let cacheStateByPackage: Map<string, UpdateNotifierState>;
+	let cachedState: UpdateNotifierState | undefined;
 
 	/** Auto-incrementing counter to generate unique package names per test. */
 	let testCounter = 0;
 
 	beforeEach(() => {
 		testCounter++;
-		cacheStateByPackage = new Map();
+		cachedState = undefined;
 
 		// Capture stdout (console.log) for update notice assertions
 		stdoutChunks = [];
@@ -394,23 +394,18 @@ describe("updateNotifierPlugin middleware", () => {
 		return `__crust-test-${testCounter}-${Date.now()}${suffix ? `-${suffix}` : ""}`;
 	}
 
-	function setCachedState(
-		packageName: string,
-		state: UpdateNotifierState,
-	): void {
-		cacheStateByPackage.set(packageName, { ...state });
+	function setCachedState(state: UpdateNotifierState): void {
+		cachedState = { ...state };
 	}
 
-	function getCachedState(
-		packageName: string,
-	): UpdateNotifierState | undefined {
-		return cacheStateByPackage.get(packageName);
+	function getCachedState(): UpdateNotifierState | undefined {
+		return cachedState;
 	}
 
-	const memoryCache = {
-		read: async (packageName: string) => getCachedState(packageName),
-		write: async (packageName: string, state: UpdateNotifierState) => {
-			setCachedState(packageName, state);
+	const memoryCache: UpdateNotifierCacheAdapter = {
+		read: async () => getCachedState(),
+		write: async (state: UpdateNotifierState) => {
+			setCachedState(state);
 		},
 	};
 
@@ -553,7 +548,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("cache-fresh");
 
 			// Write a recent timestamp with a cached newer version
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: Date.now(),
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: undefined,
@@ -583,7 +578,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("cache-stale");
 
 			// Write an old timestamp (well beyond default 24h)
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: 0,
 				latestVersion: undefined,
 				lastNotifiedVersion: undefined,
@@ -603,7 +598,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("custom-interval-fresh");
 
 			// Set lastCheckedAt to 500ms ago
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: Date.now() - 500,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: undefined,
@@ -634,7 +629,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("interval-exceeded");
 
 			// Set lastCheckedAt to 2000ms ago
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: Date.now() - 2000,
 				latestVersion: "1.5.0",
 				lastNotifiedVersion: undefined,
@@ -691,7 +686,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			const state = getCachedState(pkgName);
+			const state = getCachedState();
 			expect(state).toBeDefined();
 			if (!state) throw new Error("state should exist");
 			expect(state.lastCheckedAt).toBeGreaterThanOrEqual(beforeRun);
@@ -815,7 +810,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("dedupe-persist");
 
 			// Pre-seed: we already notified about 2.0.0
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: 0,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: "2.0.0",
@@ -836,7 +831,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("dedupe-new-ver");
 
 			// Pre-seed: we already notified about 2.0.0
-			setCachedState(pkgName, {
+			setCachedState({
 				lastCheckedAt: 0,
 				latestVersion: "2.0.0",
 				lastNotifiedVersion: "2.0.0",

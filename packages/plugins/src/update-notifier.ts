@@ -14,8 +14,8 @@ export interface UpdateNotifierState {
 }
 
 export interface UpdateNotifierCacheAdapter {
-	read(packageName: string): Promise<UpdateNotifierState | null | undefined>;
-	write(packageName: string, state: UpdateNotifierState): Promise<void>;
+	read(): Promise<UpdateNotifierState | null | undefined>;
+	write(state: UpdateNotifierState): Promise<void>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -419,9 +419,7 @@ export function updateNotifierPlugin(
 				// ── Resolve package name ─────────────────────────────────
 				const resolvedPackageName =
 					explicitPackageName ?? context.rootCommand.meta.name;
-				const state = normalizeNotifierState(
-					await cacheAdapter.read(resolvedPackageName),
-				);
+				const state = normalizeNotifierState(await cacheAdapter.read());
 				const resolvedUpdateCommand = resolveUpdateCommand(
 					resolvedPackageName,
 					packageManager,
@@ -444,7 +442,7 @@ export function updateNotifierPlugin(
 							state.latestVersion,
 							resolvedUpdateCommand,
 						);
-						await cacheAdapter.write(resolvedPackageName, {
+						await cacheAdapter.write({
 							...state,
 							lastNotifiedVersion: state.latestVersion,
 						});
@@ -461,7 +459,7 @@ export function updateNotifierPlugin(
 
 				if (latestVersion === null) {
 					// Soft failure — update timestamp to avoid retrying too soon
-					await cacheAdapter.write(resolvedPackageName, {
+					await cacheAdapter.write({
 						...state,
 						lastCheckedAt: now,
 					});
@@ -488,7 +486,7 @@ export function updateNotifierPlugin(
 					nextState.lastNotifiedVersion = latestVersion;
 				}
 
-				await cacheAdapter.write(resolvedPackageName, nextState);
+				await cacheAdapter.write(nextState);
 			} catch {
 				// All notifier internal errors are silently swallowed.
 				// The plugin must never affect command exit codes or output.
