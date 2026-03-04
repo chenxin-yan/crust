@@ -20,21 +20,6 @@ function sampleToken(def: ArgDef | FlagDef): string {
 }
 
 /**
- * Resolves the flags to validate for a command node.
- * Uses `effectiveFlags` (inherited + local merged).
- */
-function resolveValidationFlags(command: CommandNode): FlagsDef | undefined {
-	return command.effectiveFlags;
-}
-
-/**
- * Resolves the args to validate for a command node.
- */
-function resolveValidationArgs(command: CommandNode): ArgsDef | undefined {
-	return command.args as ArgsDef | undefined;
-}
-
-/**
  * Build a synthetic argv that satisfies `parseArgs` for the given command.
  *
  * Uses `effectiveFlags` so inherited required flags are included in the
@@ -43,23 +28,21 @@ function resolveValidationArgs(command: CommandNode): ArgsDef | undefined {
 function createValidationArgv(command: CommandNode): string[] {
 	const argv: string[] = [];
 
-	const flags = resolveValidationFlags(command);
-	if (flags) {
-		for (const [name, def] of Object.entries(
-			flags as Record<string, FlagDef>,
-		)) {
-			// Skip flags that are optional or have defaults — parseArgs won't
-			// complain about them being absent.
-			if (def.required !== true || def.default !== undefined) continue;
+	const flags = command.effectiveFlags;
 
-			argv.push(`--${name}`);
-			if (def.type !== "boolean") {
-				argv.push(sampleToken(def));
-			}
+	for (const [name, def] of Object.entries(flags as Record<string, FlagDef>)) {
+		// Skip flags that are optional or have defaults — parseArgs won't
+		// complain about them being absent.
+		if (def.required !== true || def.default !== undefined) continue;
+
+		argv.push(`--${name}`);
+		if (def.type !== "boolean") {
+			argv.push(sampleToken(def));
 		}
 	}
 
-	const args = resolveValidationArgs(command);
+	const args = command.args;
+
 	if (args) {
 		for (const def of args as readonly ArgDef[]) {
 			// Skip args that are optional or have defaults.
