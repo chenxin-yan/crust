@@ -1,5 +1,14 @@
 # @crustjs/plugins
 
+## 0.0.14
+
+### Patch Changes
+
+- 7dc9ede: Simplify `UpdateNotifierCacheAdapter` by removing the unused `packageName` parameter from `read()` and `write()`, allowing `@crustjs/store` instances to be passed directly as the `cache` option.
+- Updated dependencies [9f81bcc]
+- Updated dependencies [72ea166]
+  - @crustjs/core@0.0.11
+
 ## 0.0.13
 
 ### Patch Changes
