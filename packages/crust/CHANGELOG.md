@@ -1,5 +1,14 @@
 # @crustjs/crust
 
+## 0.0.15
+
+### Patch Changes
+
+- 96ca6b2: Adopt the new builder-style command API across core and official packages, including inherited flags, lifecycle hooks, plugin usage, and command metadata improvements. Update related tooling, templates, and documentation to align with the new command authoring flow.
+- Updated dependencies [96ca6b2]
+  - @crustjs/core@0.0.10
+  - @crustjs/plugins@0.0.12
+
 ## 0.0.14
 
 ### Patch Changes
