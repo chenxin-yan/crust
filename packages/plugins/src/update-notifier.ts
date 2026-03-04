@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { CrustPlugin } from "@crustjs/core";
+import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -500,10 +501,34 @@ export function updateNotifierPlugin(
 // Internal — Update notice output
 // ────────────────────────────────────────────────────────────────────────────
 
+// Box-drawing characters (rounded corners)
+const BOX_TOP_LEFT = "╭";
+const BOX_TOP_RIGHT = "╮";
+const BOX_BOTTOM_LEFT = "╰";
+const BOX_BOTTOM_RIGHT = "╯";
+const BOX_HORIZONTAL = "─";
+const BOX_VERTICAL = "│";
+
 /**
- * Emits a concise update notice to stderr.
+ * Pad a line to a fixed visible width, accounting for ANSI escape codes.
  *
- * Uses stderr so it does not interfere with piped stdout output.
+ * @internal
+ */
+function padLine(text: string, width: number): string {
+	const padding = width - visibleWidth(text);
+	return padding > 0 ? text + " ".repeat(padding) : text;
+}
+
+/**
+ * Emits a styled, boxed update notice to stdout via `console.log`.
+ *
+ * Uses stdout (not stderr) because an update notice is informational,
+ * not an error.
+ *
+ * The notice uses rounded-corner box-drawing characters and ANSI colors:
+ * - Yellow box border
+ * - Dim current version, bold green latest version
+ * - Cyan update command
  *
  * @internal
  */
@@ -512,7 +537,32 @@ function emitUpdateNotice(
 	latestVersion: string,
 	updateCommand: string,
 ): void {
-	console.error(
-		`\nUpdate available: ${currentVersion} → ${latestVersion}\nRun "${updateCommand}" to update.\n`,
+	const PADDING = 3;
+
+	const versionLine = `Update available  ${dim(currentVersion)} ${yellow("→")} ${bold(green(latestVersion))}`;
+	const commandLine = `Run ${cyan(updateCommand)}`;
+
+	// Determine content width from the longest visible line
+	const contentWidth = Math.max(
+		visibleWidth(versionLine),
+		visibleWidth(commandLine),
 	);
+	const innerWidth = contentWidth + PADDING * 2;
+
+	const border = BOX_HORIZONTAL.repeat(innerWidth);
+	const pad = " ".repeat(PADDING);
+	const emptyLine = `${yellow(BOX_VERTICAL)}${" ".repeat(innerWidth)}${yellow(BOX_VERTICAL)}`;
+
+	const lines = [
+		"",
+		`${yellow(BOX_TOP_LEFT)}${yellow(border)}${yellow(BOX_TOP_RIGHT)}`,
+		emptyLine,
+		`${yellow(BOX_VERTICAL)}${pad}${padLine(versionLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		`${yellow(BOX_VERTICAL)}${pad}${padLine(commandLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		emptyLine,
+		`${yellow(BOX_BOTTOM_LEFT)}${yellow(border)}${yellow(BOX_BOTTOM_RIGHT)}`,
+		"",
+	];
+
+	console.log(lines.join("\n"));
 }

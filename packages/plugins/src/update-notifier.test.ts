@@ -358,8 +358,8 @@ describe("fetchLatestVersion", () => {
 
 describe("updateNotifierPlugin middleware", () => {
 	const originalFetch = globalThis.fetch;
-	let originalError: typeof console.error;
-	let stderrChunks: string[];
+	let originalLog: typeof console.log;
+	let stdoutChunks: string[];
 	let cacheStateByPackage: Map<string, UpdateNotifierState>;
 
 	/** Auto-incrementing counter to generate unique package names per test. */
@@ -369,22 +369,22 @@ describe("updateNotifierPlugin middleware", () => {
 		testCounter++;
 		cacheStateByPackage = new Map();
 
-		// Capture stderr (console.error) for update notice assertions
-		stderrChunks = [];
-		originalError = console.error;
-		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map((arg) => String(arg)).join(" "));
+		// Capture stdout (console.log) for update notice assertions
+		stdoutChunks = [];
+		originalLog = console.log;
+		console.log = (...args: unknown[]) => {
+			stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
 		};
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
-		console.error = originalError;
+		console.log = originalLog;
 		process.exitCode = 0;
 	});
 
-	function getStderr() {
-		return stderrChunks.join("\n");
+	function getStdout() {
+		return stdoutChunks.join("\n");
 	}
 
 	/**
@@ -499,9 +499,9 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStderr()).toContain("Update available");
-			expect(getStderr()).toContain("1.0.0");
-			expect(getStderr()).toContain("2.0.0");
+			expect(getStdout()).toContain("Update available");
+			expect(getStdout()).toContain("1.0.0");
+			expect(getStdout()).toContain("2.0.0");
 		});
 
 		it("includes upgrade instruction in update notice", async () => {
@@ -514,9 +514,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageManager: "npm",
 			});
 
-			expect(getStderr()).toContain(
-				`Run "npm install ${pkgName}@latest" to update.`,
-			);
+			expect(getStdout()).toContain(`npm install ${pkgName}@latest`);
 		});
 	});
 
@@ -532,7 +530,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("does not emit notice when current is newer than registry", async () => {
@@ -544,7 +542,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 	});
 
@@ -577,8 +575,8 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should emit notice from cached version, not from fetch
-			expect(getStderr()).toContain("2.0.0");
-			expect(getStderr()).not.toContain("3.0.0");
+			expect(getStdout()).toContain("2.0.0");
+			expect(getStdout()).not.toContain("3.0.0");
 		});
 
 		it("performs network check when cache is stale (exceeds intervalMs)", async () => {
@@ -598,7 +596,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStderr()).toContain("2.0.0");
+			expect(getStdout()).toContain("2.0.0");
 		});
 
 		it("respects custom intervalMs — cache still fresh", async () => {
@@ -628,8 +626,8 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Notice should come from cached version (2.0.0), not fetch (3.0.0)
-			expect(getStderr()).toContain("2.0.0");
-			expect(getStderr()).not.toContain("3.0.0");
+			expect(getStdout()).toContain("2.0.0");
+			expect(getStdout()).not.toContain("3.0.0");
 		});
 
 		it("refetches when custom intervalMs is exceeded", async () => {
@@ -652,7 +650,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Notice should come from fresh fetch (3.0.0)
-			expect(getStderr()).toContain("3.0.0");
+			expect(getStdout()).toContain("3.0.0");
 		});
 	});
 
@@ -668,7 +666,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("does not throw or set non-zero exit code on fetch failure", async () => {
@@ -712,7 +710,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			expect(process.exitCode).toBeFalsy();
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 	});
 
@@ -748,7 +746,7 @@ describe("updateNotifierPlugin middleware", () => {
 			// Should complete quickly (timeout + overhead), not hang
 			expect(elapsed).toBeLessThan(5000);
 			// No notice on timeout
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("respects custom timeoutMs", async () => {
@@ -797,10 +795,10 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 				{ state: sharedState },
 			);
-			expect(getStderr()).toContain("Update available");
+			expect(getStdout()).toContain("Update available");
 
 			// Clear stderr for second check
-			stderrChunks = [];
+			stdoutChunks = [];
 
 			// Second invocation with same state — should be deduped
 			await runPluginMiddleware(
@@ -810,7 +808,7 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 				{ state: sharedState },
 			);
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("does not re-notify for same version already notified (persisted dedupe)", async () => {
@@ -831,7 +829,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should NOT notify again since lastNotifiedVersion matches
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("notifies again when a newer version appears after previous notification", async () => {
@@ -853,7 +851,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should notify about the new 3.0.0 version
-			expect(getStderr()).toContain("3.0.0");
+			expect(getStdout()).toContain("3.0.0");
 		});
 	});
 
@@ -888,7 +886,7 @@ describe("updateNotifierPlugin middleware", () => {
 
 			// Plugin has no middleware, so nothing to run
 			expect(plugin.middleware).toBeUndefined();
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 
 		it("does not persist cache by default when adapter is omitted", async () => {
@@ -1016,7 +1014,7 @@ describe("updateNotifierPlugin middleware", () => {
 				updateCommand: "brew upgrade my-cli",
 			});
 
-			expect(getStderr()).toContain('Run "brew upgrade my-cli" to update.');
+			expect(getStdout()).toContain("brew upgrade my-cli");
 		});
 	});
 
@@ -1045,11 +1043,11 @@ describe("updateNotifierPlugin middleware", () => {
 				input: null,
 			};
 
-			// Override console.error to track ordering
-			const prevError = console.error;
-			console.error = (...args: unknown[]) => {
+			// Override console.log to track ordering
+			const prevLog = console.log;
+			console.log = (...args: unknown[]) => {
 				executionOrder.push("notice");
-				stderrChunks.push(args.map((arg) => String(arg)).join(" "));
+				stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
 			};
 
 			await plugin.middleware?.(
@@ -1059,7 +1057,7 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 			);
 
-			console.error = prevError;
+			console.log = prevLog;
 
 			// Command must run before notice
 			expect(executionOrder).toContain("command");
@@ -1109,8 +1107,8 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStderr()).toContain("Update available");
-			expect(getStderr()).toContain("5.0.0");
+			expect(getStdout()).toContain("Update available");
+			expect(getStdout()).toContain("5.0.0");
 		});
 
 		it("does not interfere with other plugins", async () => {
@@ -1148,7 +1146,7 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStderr()).toContain("Update available");
+			expect(getStdout()).toContain("Update available");
 		});
 
 		it("does not break command execution when registry is down", async () => {
@@ -1171,7 +1169,7 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStderr()).toBe("");
+			expect(getStdout()).toBe("");
 		});
 	});
 });

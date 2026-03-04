@@ -6,9 +6,9 @@
       "name": "crust",
       "devDependencies": {
         "@biomejs/biome": "2.4.4",
-        "@changesets/cli": "^2.29.8",
-        "@types/bun": "^1.3.9",
-        "turbo": "^2.8.12",
+        "@changesets/cli": "^2.30.0",
+        "@types/bun": "^1.3.10",
+        "turbo": "^2.8.13",
         "typescript": "5.9.3",
       },
     },
@@ -110,6 +110,9 @@
     "packages/plugins": {
       "name": "@crustjs/plugins",
       "version": "0.0.12",
+      "dependencies": {
+        "@crustjs/style": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
