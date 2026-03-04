@@ -1,5 +1,11 @@
 # @crustjs/prompts
 
+## 0.0.8
+
+### Patch Changes
+
+- f704195: Return `default` value in non-TTY environments instead of throwing `NonInteractiveError`. Add `isTTY()` utility. Add `default` option to `filter` prompt.
+
 ## 0.0.7
 
 ### Patch Changes

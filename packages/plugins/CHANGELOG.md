@@ -1,5 +1,11 @@
 # @crustjs/plugins
 
+## 0.0.13
+
+### Patch Changes
+
+- 1715c81: Style update notifier with a colored boxed notice using `@crustjs/style`
+
 ## 0.0.12
 
 ### Patch Changes

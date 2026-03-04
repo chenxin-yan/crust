@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/skills",
-	"version": "0.0.9",
+	"version": "0.0.10",
 	"description": "Agent skill generation from Crust command definitions",
 	"type": "module",
 	"license": "MIT",
