@@ -68,11 +68,6 @@ const app = new Crust("create-crust")
 			}
 		}
 
-		const installDeps = await confirm({
-			message: "Install dependencies?",
-			default: true,
-		});
-
 		const template = await select<"minimal" | "modular">({
 			message: "Template style",
 			choices: [
@@ -92,6 +87,11 @@ const app = new Crust("create-crust")
 
 		const templatePath =
 			template === "minimal" ? "templates/base" : "templates/modular";
+
+		const installDeps = await confirm({
+			message: "Install dependencies?",
+			default: true,
+		});
 
 		// Skip git init prompt if already inside a git repository.
 		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
