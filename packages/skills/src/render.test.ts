@@ -182,7 +182,7 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain("[command-index.md](command-index.md)");
 		});
 
-		it("lists available subcommands with links", () => {
+		it("does not include top-level command list in SKILL.md", () => {
 			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
@@ -205,10 +205,9 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("## Available Commands");
-			// Children sorted alphabetically
-			expect(skill?.content).toContain("[`build`](commands/build.md)");
-			expect(skill?.content).toContain("[`serve`](commands/serve.md)");
+			expect(skill?.content).not.toContain("## Available Commands");
+			expect(skill?.content).not.toContain("[`build`](commands/build.md)");
+			expect(skill?.content).not.toContain("[`serve`](commands/serve.md)");
 		});
 
 		it("includes usage section when root is runnable", () => {
@@ -257,6 +256,10 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain(
 				"Check [command-index.md](command-index.md) to find the relevant command",
 			);
+			expect(skill?.content).toContain(
+				"commands labeled `runnable` (including `runnable, group`) are executable",
+			);
+			expect(skill?.content).toContain("while `group` commands are not");
 		});
 
 		it("includes when-to-use guidance", () => {

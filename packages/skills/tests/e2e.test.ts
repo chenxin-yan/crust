@@ -458,7 +458,7 @@ describe("E2E: skill generation", () => {
 			);
 		});
 
-		it("lists all top-level subcommands", async () => {
+		it("does not include a top-level command list", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -466,9 +466,10 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
-			expect(content).toContain("`app`");
-			expect(content).toContain("`config`");
-			expect(content).toContain("`status`");
+			expect(content).not.toContain("## Available Commands");
+			expect(content).not.toContain("[`app`](commands/app.md)");
+			expect(content).not.toContain("[`config`](commands/config.md)");
+			expect(content).not.toContain("[`status`](commands/status.md)");
 		});
 
 		it("includes lazy-load instructions with directive phrasing", async () => {
@@ -481,6 +482,10 @@ describe("E2E: skill generation", () => {
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("command-index.md");
 			expect(content).toContain("**Do not read all command files at once.**");
+			expect(content).toContain(
+				"commands labeled `runnable` (including `runnable, group`) are executable",
+			);
+			expect(content).toContain("while `group` commands are not");
 		});
 
 		it("includes when-to-use guidance referencing the CLI name", async () => {

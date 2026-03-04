@@ -235,21 +235,12 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 		"1. Check [command-index.md](command-index.md) to find the relevant command",
 	);
 	lines.push(
-		"2. Read only the specific file from the `commands/` directory that you need",
+		"2. Use the `Type` column to choose what to execute: commands labeled `runnable` (including `runnable, group`) are executable, while `group` commands are not",
+	);
+	lines.push(
+		"3. Read only the specific file from the `commands/` directory that you need",
 	);
 	lines.push("");
-
-	// Top-level command summary
-	if (manifest.children.length > 0) {
-		lines.push("## Available Commands");
-		lines.push("");
-		for (const child of manifest.children) {
-			const filePath = commandFilePath(child);
-			const desc = child.description ? ` - ${child.description}` : "";
-			lines.push(`- [\`${child.name}\`](${filePath})${desc}`);
-		}
-		lines.push("");
-	}
 
 	// Root command details (if runnable)
 	if (manifest.runnable) {
