@@ -79,13 +79,13 @@ describe("renderSkill", () => {
 			}
 		});
 
-		it("always includes SKILL.md and command-index.md", () => {
+		it("always includes SKILL.md", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 
 			const paths = files.map((f) => f.path);
 			expect(paths).toContain("SKILL.md");
-			expect(paths).toContain("command-index.md");
+			expect(paths).not.toContain("command-index.md");
 		});
 
 		it("produces one command file for a root-only command", () => {
@@ -174,15 +174,16 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain("A test CLI tool");
 		});
 
-		it("links to command-index.md", () => {
+		it("includes a command reference table", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("[command-index.md](command-index.md)");
+			expect(skill?.content).toContain("| Command | Type | Documentation |");
+			expect(skill?.content).toContain("| `test-cli` | runnable |");
 		});
 
-		it("does not include top-level command list in SKILL.md", () => {
+		it("includes nested commands in SKILL.md command reference", () => {
 			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
@@ -205,9 +206,9 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).not.toContain("## Available Commands");
-			expect(skill?.content).not.toContain("[`build`](commands/build.md)");
-			expect(skill?.content).not.toContain("[`serve`](commands/serve.md)");
+			expect(skill?.content).toContain("| `app` | group |");
+			expect(skill?.content).toContain("| `app build` | runnable |");
+			expect(skill?.content).toContain("| `app serve` | runnable |");
 		});
 
 		it("includes usage section when root is runnable", () => {
@@ -254,7 +255,7 @@ describe("renderSkill", () => {
 				"**Do not read all command files at once.**",
 			);
 			expect(skill?.content).toContain(
-				"Check [command-index.md](command-index.md) to find the relevant command",
+				"Use the table below to find the relevant command",
 			);
 			expect(skill?.content).toContain(
 				"commands labeled `runnable` (including `runnable, group`) are executable",
@@ -384,18 +385,18 @@ describe("renderSkill", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// command-index.md content
+	// SKILL.md command reference content
 	// ────────────────────────────────────────────────────────────────────────
 
-	describe("command-index.md content", () => {
+	describe("SKILL.md command reference content", () => {
 		it("includes a markdown table header", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
-			const index = findFile(files, "command-index.md");
+			const skill = findFile(files, "SKILL.md");
 
-			expect(index).toBeDefined();
-			expect(index?.content).toContain("# Command Index");
-			expect(index?.content).toContain("| Command | Type | Documentation |");
+			expect(skill).toBeDefined();
+			expect(skill?.content).toContain("## Command Reference");
+			expect(skill?.content).toContain("| Command | Type | Documentation |");
 		});
 
 		it("lists all commands with correct paths", () => {
@@ -415,12 +416,12 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const index = findFile(files, "command-index.md");
+			const skill = findFile(files, "SKILL.md");
 
-			expect(index?.content).toContain("`app`");
-			expect(index?.content).toContain("`app serve`");
-			expect(index?.content).toContain("commands/app.md");
-			expect(index?.content).toContain("commands/serve.md");
+			expect(skill?.content).toContain("`app`");
+			expect(skill?.content).toContain("`app serve`");
+			expect(skill?.content).toContain("commands/app.md");
+			expect(skill?.content).toContain("commands/serve.md");
 		});
 
 		it("shows correct type labels for runnable vs group", () => {
@@ -445,14 +446,14 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const index = findFile(files, "command-index.md");
+			const skill = findFile(files, "SKILL.md");
 
 			// hybrid is both runnable and has children
-			expect(index?.content).toContain("| `hybrid` | runnable, group |");
+			expect(skill?.content).toContain("| `hybrid` | runnable, group |");
 			// group has children but is not runnable
-			expect(index?.content).toContain("| `hybrid group` | group |");
+			expect(skill?.content).toContain("| `hybrid group` | group |");
 			// leaf is runnable with no children
-			expect(index?.content).toContain("| `hybrid group leaf` | runnable |");
+			expect(skill?.content).toContain("| `hybrid group leaf` | runnable |");
 		});
 	});
 
@@ -716,7 +717,7 @@ describe("renderSkill", () => {
 			expect(install?.content).toContain("install <packages...>");
 		});
 
-		it("renders navigation with link to command index", () => {
+		it("renders navigation with link to SKILL.md", () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
@@ -731,8 +732,8 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
-			expect(serve?.content).toContain("[Command Index]");
-			expect(serve?.content).toContain("command-index.md");
+			expect(serve?.content).toContain("[Skill Overview]");
+			expect(serve?.content).toContain("SKILL.md");
 		});
 
 		it("renders navigation with link to parent command", () => {
@@ -1010,7 +1011,7 @@ describe("renderSkill", () => {
 			}
 		});
 
-		it("command-index.md references all generated command files", () => {
+		it("SKILL.md command reference lists all generated command files", () => {
 			const add = makeCommand({
 				meta: { name: "add" },
 				run() {},
@@ -1031,13 +1032,13 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const index = findFile(files, "command-index.md");
+			const skill = findFile(files, "SKILL.md");
 			const commandFiles = files
 				.filter((f) => f.path.startsWith("commands/"))
 				.map((f) => f.path);
 
 			for (const cmdPath of commandFiles) {
-				expect(index?.content).toContain(cmdPath);
+				expect(skill?.content).toContain(cmdPath);
 			}
 		});
 	});
@@ -1160,15 +1161,14 @@ describe("renderSkill", () => {
 			};
 			const files = renderSkill(manifest, meta);
 
-			// Verify file count: SKILL.md + command-index.md + 5 commands
+			// Verify file count: SKILL.md + 5 commands
 			// (git, clone, remote, remote/add, remote/remove)
-			expect(files).toHaveLength(7);
+			expect(files).toHaveLength(6);
 
 			// Verify all expected files exist
 			const paths = files.map((f) => f.path).sort();
 			expect(paths).toEqual([
 				"SKILL.md",
-				"command-index.md",
 				"commands/clone.md",
 				"commands/git.md",
 				"commands/remote.md",
@@ -1180,8 +1180,12 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 			expect(skill?.content).toContain("name: git");
 			expect(skill?.content).toContain('version: "2.0.0"');
-			expect(skill?.content).toContain("[`clone`](commands/clone.md)");
-			expect(skill?.content).toContain("[`remote`](commands/remote.md)");
+			expect(skill?.content).toContain(
+				"[commands/clone.md](commands/clone.md)",
+			);
+			expect(skill?.content).toContain(
+				"[commands/remote.md](commands/remote.md)",
+			);
 
 			// Verify clone leaf command has args and flags
 			const cloneFile = findFile(files, "commands/clone.md");

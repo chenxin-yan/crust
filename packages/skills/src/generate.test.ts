@@ -303,7 +303,7 @@ describe("generateSkill", () => {
 			expect(agent.status).toBe("installed");
 			expect(agent.files.length).toBeGreaterThan(0);
 			expect(agent.files).toContain("SKILL.md");
-			expect(agent.files).toContain("command-index.md");
+			expect(agent.files).not.toContain("command-index.md");
 			expect(agent.files).toContain(CRUST_MANIFEST);
 		});
 
@@ -344,7 +344,7 @@ describe("generateSkill", () => {
 			const agent = result.agents[0] as AgentResult;
 			const files = await listFiles(agent.outputDir);
 			expect(files).toContain("SKILL.md");
-			expect(files).toContain("command-index.md");
+			expect(files).not.toContain("command-index.md");
 			expect(files).toContain("commands/my-cli.md");
 			expect(files).toContain(CRUST_MANIFEST);
 		});
@@ -366,7 +366,7 @@ describe("generateSkill", () => {
 			const agent = result.agents[0] as AgentResult;
 			const files = await listFiles(agent.outputDir);
 			expect(files).toContain("SKILL.md");
-			expect(files).toContain("command-index.md");
+			expect(files).not.toContain("command-index.md");
 			expect(files).toContain("commands/git.md");
 			expect(files).toContain("commands/commit.md");
 			expect(files).toContain("commands/remote.md");
@@ -815,7 +815,7 @@ describe("generateSkill", () => {
 			expect(content).toContain('version: "1.0.0"');
 		});
 
-		it("command-index.md references existing command files", async () => {
+		it("SKILL.md command reference links resolve to command files", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
 					command: nestedCommand(),
@@ -830,13 +830,13 @@ describe("generateSkill", () => {
 			);
 
 			const agent = result.agents[0] as AgentResult;
-			const index = await readText(join(agent.outputDir, "command-index.md"));
+			const skill = await readText(join(agent.outputDir, "SKILL.md"));
 			const files = await listFiles(agent.outputDir);
 
 			const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
 			let match: RegExpExecArray | null;
 			// biome-ignore lint/suspicious/noAssignInExpressions: regex exec loop pattern
-			while ((match = linkPattern.exec(index)) !== null) {
+			while ((match = linkPattern.exec(skill)) !== null) {
 				const linked = match[2];
 				if (linked?.startsWith("commands/")) {
 					expect(files).toContain(linked);
@@ -925,7 +925,7 @@ describe("generateSkill", () => {
 			const agent = result.agents[0] as AgentResult;
 			expect(agent.files).toContain("SKILL.md");
 			expect(agent.files).toContain(CRUST_MANIFEST);
-			expect(agent.files).toContain("command-index.md");
+			expect(agent.files).not.toContain("command-index.md");
 		});
 
 		it("handles deeply nested command hierarchy", async () => {

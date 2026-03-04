@@ -49,7 +49,6 @@ function escapeTableCell(value: string): string {
  *
  * Produces:
  * - `SKILL.md` — entrypoint with frontmatter and lazy-load instructions
- * - `command-index.md` — maps command paths to documentation file paths
  * - `commands/` — per-command markdown files mirroring the command hierarchy
  *
  * @param manifest - The canonical manifest tree from {@link buildManifest}
@@ -80,16 +79,10 @@ export function renderSkill(
 	// 1. SKILL.md — entrypoint
 	files.push({
 		path: "SKILL.md",
-		content: renderSkillMd(manifest, meta),
+		content: renderSkillMd(manifest, meta, allNodes),
 	});
 
-	// 2. command-index.md — command-to-file mapping
-	files.push({
-		path: "command-index.md",
-		content: renderCommandIndex(manifest, allNodes),
-	});
-
-	// 3. commands/ — per-command markdown files
+	// 2. commands/ — per-command markdown files
 	for (const node of allNodes) {
 		const filePath = commandFilePath(node);
 		const content =
@@ -182,7 +175,11 @@ function relativePath(from: string, to: string): string {
  * Renders the `SKILL.md` entrypoint file with YAML frontmatter and
  * lazy-load instructions directing agents to supporting files.
  */
-function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
+function renderSkillMd(
+	manifest: ManifestNode,
+	meta: SkillMeta,
+	allNodes: ManifestNode[],
+): string {
 	const lines: string[] = [];
 
 	// YAML frontmatter
@@ -227,19 +224,19 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 	lines.push("## Command Reference");
 	lines.push("");
 	lines.push(
-		`For the full list of commands and their documentation paths, see [command-index.md](command-index.md). ` +
+		"This table lists all commands and their documentation paths. " +
 			"**Do not read all command files at once.** Instead:",
 	);
 	lines.push("");
-	lines.push(
-		"1. Check [command-index.md](command-index.md) to find the relevant command",
-	);
+	lines.push("1. Use the table below to find the relevant command");
 	lines.push(
 		"2. Use the `Type` column to choose what to execute: commands labeled `runnable` (including `runnable, group`) are executable, while `group` commands are not",
 	);
 	lines.push(
 		"3. Read only the specific file from the `commands/` directory that you need",
 	);
+	lines.push("");
+	lines.push(...renderCommandReferenceTable(allNodes));
 	lines.push("");
 
 	// Root command details (if runnable)
@@ -257,21 +254,16 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// command-index.md renderer
+// Command reference renderer
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Renders the `command-index.md` file mapping all command paths to their
+ * Renders a markdown table mapping all command paths to their
  * documentation file paths.
  */
-function renderCommandIndex(
-	_manifest: ManifestNode,
-	allNodes: ManifestNode[],
-): string {
+function renderCommandReferenceTable(allNodes: ManifestNode[]): string[] {
 	const lines: string[] = [];
 
-	lines.push("# Command Index");
-	lines.push("");
 	lines.push("| Command | Type | Documentation |");
 	lines.push("| ------- | ---- | ------------- |");
 
@@ -282,9 +274,7 @@ function renderCommandIndex(
 		lines.push(`| \`${invocation}\` | ${type} | [${filePath}](${filePath}) |`);
 	}
 
-	lines.push("");
-
-	return lines.join("\n");
+	return lines;
 }
 
 /**
@@ -538,7 +528,7 @@ function formatFlagDescription(flag: ManifestFlag): string {
 }
 
 /**
- * Renders navigation links back to the parent command and command index.
+ * Renders navigation links back to the parent command and skill entrypoint.
  */
 function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
 	const lines: string[] = [];
@@ -560,9 +550,9 @@ function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
 		}
 	}
 
-	// Link to command index
-	const indexRelative = relativePath(filePath, "command-index.md");
-	lines.push(`[Command Index](${indexRelative})`);
+	// Link to SKILL.md
+	const skillRelative = relativePath(filePath, "SKILL.md");
+	lines.push(`[Skill Overview](${skillRelative})`);
 	lines.push("");
 
 	return lines;

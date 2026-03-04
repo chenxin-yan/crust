@@ -19,12 +19,12 @@ Add `skillPlugin()` to your CLI. It reads `name` and `description` from your roo
 import { Crust } from "@crustjs/core";
 import { skillPlugin } from "@crustjs/skills";
 
-const app = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .use(skillPlugin({
+const app = new Crust("my-cli").meta({ description: "My CLI tool" }).use(
+  skillPlugin({
     version: "1.0.0",
     // command defaults to true and registers "my-cli skill"
-  }));
+  }),
+);
 
 await app.execute();
 ```
@@ -56,28 +56,19 @@ interface SkillPluginOptions {
 
 The plugin automatically detects which agents are installed by checking for their global configuration directories — no manual configuration needed. Only detected agents are managed by the middleware and shown in the interactive command.
 
-| Agent | Detection Path |
-| --- | --- |
-| `claude-code` | `~/.claude/` |
-| `opencode` | `~/.config/opencode/` |
+| Agent         | Detection Path        |
+| ------------- | --------------------- |
+| `claude-code` | `~/.claude/`          |
+| `opencode`    | `~/.config/opencode/` |
 
 Detection always checks global paths regardless of the installation scope.
 
-### Auto-Install vs Auto-Update
-
-| `autoInstall` | `autoUpdate` | Behavior |
-| --- | --- | --- |
-| `false` (default) | `true` (default) | Only update already-installed skills; user uses `my-cli skill` for first install |
-| `true` | `true` | Fully automatic — install and update on every invocation |
-| `true` | `false` | Auto-install once, never auto-update |
-| `false` | `false` | Plugin does nothing automatically (command-only mode) |
-
 ### Supported Agents
 
-| Agent | Global Path | Project Path |
-| --- | --- | --- |
-| `claude-code` | `~/.claude/skills/<name>/` | `.claude/skills/<name>/` |
-| `opencode` | `~/.config/opencode/skills/<name>/` | `.opencode/skills/<name>/` |
+| Agent         | Global Path                         | Project Path               |
+| ------------- | ----------------------------------- | -------------------------- |
+| `claude-code` | `~/.claude/skills/<name>/`          | `.claude/skills/<name>/`   |
+| `opencode`    | `~/.config/opencode/skills/<name>/` | `.opencode/skills/<name>/` |
 
 ## Interactive Command
 
@@ -99,11 +90,11 @@ Each generated skill directory contains a `crust.json` file that serves as an ow
 
 ### Behavior by context
 
-| Context | Conflict behavior |
-| --- | --- |
-| **Auto-update middleware** | Logs a warning and skips — the CLI continues running normally |
+| Context                         | Conflict behavior                                             |
+| ------------------------------- | ------------------------------------------------------------- |
+| **Auto-update middleware**      | Logs a warning and skips — the CLI continues running normally |
 | **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
-| **`generateSkill()` API** | Throws `SkillConflictError`. Pass `force: true` to overwrite |
+| **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite  |
 
 ### Handling conflicts programmatically
 
@@ -137,12 +128,12 @@ const meta: SkillMeta = {
 };
 ```
 
-| Field | Frontmatter Key | Description |
-| ----- | --------------- | ----------- |
-| `allowedTools` | `allowed-tools` | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
-| `license` | `license` | License name or file reference |
-| `compatibility` | `compatibility` | Environment requirements or compatibility notes |
-| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill |
+| Field                    | Frontmatter Key            | Description                                                                  |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------- |
+| `allowedTools`           | `allowed-tools`            | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
+| `license`                | `license`                  | License name or file reference                                               |
+| `compatibility`          | `compatibility`            | Environment requirements or compatibility notes                              |
+| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill                     |
 
 ## Name Validation
 
@@ -153,8 +144,8 @@ Use `isValidSkillName()` to check names before calling `generateSkill()`:
 ```ts
 import { isValidSkillName } from "@crustjs/skills";
 
-isValidSkillName("my-cli");   // true
-isValidSkillName("My_CLI");   // false
+isValidSkillName("my-cli"); // true
+isValidSkillName("My_CLI"); // false
 ```
 
 ## Low-Level Primitives

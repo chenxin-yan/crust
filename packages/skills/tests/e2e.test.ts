@@ -5,7 +5,7 @@
  * and validate:
  * - Complete output tree structure
  * - SKILL.md frontmatter and content
- * - command-index.md links resolve to real files
+ * - SKILL.md command reference links resolve to real files
  * - Leaf and group command file content
  * - Cross-file link integrity (every markdown link points to a real file)
  * - Generated bundle is usable as a downloaded skill (valid frontmatter, paths, structure)
@@ -378,7 +378,6 @@ describe("E2E: skill generation", () => {
 			const files = await listFiles(agent.outputDir);
 			const expected = [
 				"SKILL.md",
-				"command-index.md",
 				"commands/app.md",
 				"commands/app/create.md",
 				"commands/app/delete.md",
@@ -458,7 +457,7 @@ describe("E2E: skill generation", () => {
 			);
 		});
 
-		it("does not include a top-level command list", async () => {
+		it("includes all commands in the SKILL.md command reference table", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -466,10 +465,11 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
-			expect(content).not.toContain("## Available Commands");
-			expect(content).not.toContain("[`app`](commands/app.md)");
-			expect(content).not.toContain("[`config`](commands/config.md)");
-			expect(content).not.toContain("[`status`](commands/status.md)");
+			expect(content).toContain("| `deploy` | runnable, group |");
+			expect(content).toContain("| `deploy app` | group |");
+			expect(content).toContain("| `deploy app create` | runnable |");
+			expect(content).toContain("| `deploy config` | runnable, group |");
+			expect(content).toContain("| `deploy status` | runnable |");
 		});
 
 		it("includes lazy-load instructions with directive phrasing", async () => {
@@ -480,7 +480,9 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
-			expect(content).toContain("command-index.md");
+			expect(content).toContain(
+				"Use the table below to find the relevant command",
+			);
 			expect(content).toContain("**Do not read all command files at once.**");
 			expect(content).toContain(
 				"commands labeled `runnable` (including `runnable, group`) are executable",
@@ -533,10 +535,10 @@ describe("E2E: skill generation", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// E2E: command-index.md validation
+	// E2E: SKILL.md command reference validation
 	// ────────────────────────────────────────────────────────────────────────
 
-	describe("command-index.md", () => {
+	describe("SKILL.md command reference", () => {
 		it("lists every command in the tree", async () => {
 			const agent = await generateForTest(
 				tmpDir,
@@ -544,7 +546,7 @@ describe("E2E: skill generation", () => {
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "command-index.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			const expectedCommands = [
 				"deploy",
 				"deploy app",
@@ -569,7 +571,7 @@ describe("E2E: skill generation", () => {
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "command-index.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 
 			expect(content).toMatch(/`deploy`\s*\|\s*runnable, group/);
 			expect(content).toMatch(/`deploy app`\s*\|\s*group/);
@@ -584,13 +586,13 @@ describe("E2E: skill generation", () => {
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "command-index.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			const diskFiles = new Set(await listFiles(agent.outputDir));
 			const links = extractLinks(content);
 
 			expect(links.length).toBeGreaterThan(0);
 			for (const link of links) {
-				const resolved = resolveLink("command-index.md", link.href);
+				const resolved = resolveLink("SKILL.md", link.href);
 				expect(diskFiles.has(resolved)).toBe(true);
 			}
 		});
@@ -602,7 +604,7 @@ describe("E2E: skill generation", () => {
 				SKILL_META,
 			);
 
-			const content = await readText(join(agent.outputDir, "command-index.md"));
+			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("| Command | Type | Documentation |");
 			expect(content).toContain("| ------- | ---- | ------------- |");
 		});
@@ -665,7 +667,7 @@ describe("E2E: skill generation", () => {
 
 			expect(content).toContain("Parent:");
 			expect(content).toContain("`deploy app`");
-			expect(content).toContain("Command Index");
+			expect(content).toContain("Skill Overview");
 		});
 
 		it("deploy config get has arguments documented", async () => {
@@ -988,9 +990,7 @@ describe("E2E: skill generation", () => {
 			const manifest = JSON.parse(manifestContent);
 			const diskFiles = new Set(await listFiles(agent.outputDir));
 
-			const indexContent = await readText(
-				join(agent.outputDir, "command-index.md"),
-			);
+			const indexContent = await readText(join(agent.outputDir, "SKILL.md"));
 
 			for (const cmd of manifest.commands) {
 				expect(indexContent).toContain(`\`${cmd}\``);
