@@ -119,6 +119,20 @@ export interface UpdateNotifierPluginOptions {
 	 *
 	 * Provide this when you want to integrate custom persistence (including
 	 * `@crustjs/store`) without making it a hard dependency of this package.
+	 *
+	 * `write` receives a single `state` argument:
+	 * ```ts
+	 * cache: {
+	 *   read: async () => ({ lastCheckedAt: 0 }),
+	 *   write: async (state) => {
+	 *     await store.write({
+	 *       lastCheckedAt: state.lastCheckedAt,
+	 *       latestVersion: state.latestVersion,
+	 *       lastNotifiedVersion: state.lastNotifiedVersion,
+	 *     });
+	 *   },
+	 * }
+	 * ```
 	 */
 	cache?: UpdateNotifierCacheAdapter;
 }

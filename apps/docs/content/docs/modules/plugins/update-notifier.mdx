@@ -41,7 +41,7 @@ updateNotifierPlugin({
 - **Optional cache adapter** — If you provide `cache`, checks are reused up to `intervalMs` (default 24h) and notifications are deduped across runs.
 - **Non-blocking** — The update check runs after your command handler completes. It never delays command execution.
 - **Soft failure** — All internal errors (network timeouts, registry failures, cache errors, malformed responses) are silently swallowed. The plugin never affects exit codes or command output.
-- **Stderr output** — The update notice is written to stderr so it does not interfere with piped stdout.
+- **Stdout output** — The update notice is written to stdout as an informational message.
 - **Package-manager-aware command** — The upgrade hint is inferred from `npm_config_user_agent` by default and can be overridden.
 
 ## Configuration
@@ -62,11 +62,12 @@ updateNotifierPlugin({
 
 ## Optional Persistence with `@crustjs/store`
 
-If you want cross-run cache behavior, pass an adapter:
+If you want cross-run cache behavior, pass an adapter. `@crustjs/store` can be used directly via a thin wrapper:
 
 ```ts
 import { stateDir, createStore } from "@crustjs/store";
 import { updateNotifierPlugin } from "@crustjs/plugins";
+import type { UpdateNotifierCacheAdapter } from "@crustjs/plugins";
 
 const store = createStore({
   dirPath: stateDir("my-cli"), // Replace with your package name
@@ -78,11 +79,31 @@ const store = createStore({
   },
 });
 
+const cache: UpdateNotifierCacheAdapter = {
+  read: async () => {
+    const state = await store.read();
+    return {
+      lastCheckedAt: state.lastCheckedAt,
+      latestVersion: state.latestVersion,
+      lastNotifiedVersion: state.lastNotifiedVersion,
+    };
+  },
+  write: async (state) => {
+    await store.write({
+      lastCheckedAt: state.lastCheckedAt,
+      latestVersion: state.latestVersion,
+      lastNotifiedVersion: state.lastNotifiedVersion,
+    });
+  },
+};
+
 updateNotifierPlugin({
   currentVersion: "1.0.0",
-  cache: store,
+  cache,
 });
 ```
+
+`write` receives a single argument (`state`). If you pass a function with two parameters, TypeScript will report a signature mismatch.
 
 <Callout type="info">
   Version comparison uses standard semver (`major.minor.patch`). Prerelease
