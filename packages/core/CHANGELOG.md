@@ -1,5 +1,12 @@
 # @crustjs/core
 
+## 0.0.11
+
+### Patch Changes
+
+- 9f81bcc: Preserve effective flag typing across `Crust` builder chains by carrying an internal `Eff` generic, and short-circuit `EffectiveFlags` for wide inherited flag types to reduce TypeScript type-check overhead.
+- 72ea166: Reduce TypeScript type-check overhead in large projects by removing compile-time inherited/local flag cross-collision validation from `Crust#flags()`. Runtime collision checks remain in argument parsing and command-tree validation.
+
 ## 0.0.10
 
 ### Patch Changes

@@ -49,7 +49,7 @@
     },
     "packages/core": {
       "name": "@crustjs/core",
-      "version": "0.0.10",
+      "version": "0.0.11",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
@@ -71,7 +71,7 @@
     },
     "packages/create-crust": {
       "name": "create-crust",
-      "version": "0.0.18",
+      "version": "0.0.19",
       "bin": {
         "create-crust": "dist/index.js",
       },
@@ -90,7 +90,7 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.16",
+      "version": "0.0.17",
       "bin": {
         "crust": "dist/cli",
       },
@@ -109,7 +109,7 @@
     },
     "packages/plugins": {
       "name": "@crustjs/plugins",
-      "version": "0.0.13",
+      "version": "0.0.14",
       "dependencies": {
         "@crustjs/style": "workspace:*",
       },
@@ -139,7 +139,7 @@
     },
     "packages/skills": {
       "name": "@crustjs/skills",
-      "version": "0.0.10",
+      "version": "0.0.11",
       "dependencies": {
         "@crustjs/prompts": "workspace:*",
         "@crustjs/style": "workspace:*",
@@ -178,7 +178,7 @@
     },
     "packages/validate": {
       "name": "@crustjs/validate",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
       },

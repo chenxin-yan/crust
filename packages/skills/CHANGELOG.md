@@ -1,5 +1,14 @@
 # @crustjs/skills
 
+## 0.0.11
+
+### Patch Changes
+
+- c089f62: Generate a single-file command reference by embedding all commands (including nested commands) directly in SKILL.md and removing command-index.md. Also clarify executable routing by documenting that any command labeled `runnable` (including `runnable, group`) can be executed.
+- Updated dependencies [9f81bcc]
+- Updated dependencies [72ea166]
+  - @crustjs/core@0.0.11
+
 ## 0.0.10
 
 ### Patch Changes
