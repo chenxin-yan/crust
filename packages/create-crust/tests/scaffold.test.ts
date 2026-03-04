@@ -21,6 +21,19 @@ async function scaffoldBase(
 	});
 }
 
+async function scaffoldModular(
+	dest: string,
+	context: { name: string },
+	conflict: "abort" | "overwrite" = "overwrite",
+): Promise<void> {
+	await scaffold({
+		template: "templates/modular",
+		dest,
+		context,
+		conflict,
+	});
+}
+
 beforeEach(() => {
 	// Clean up before each test
 	if (existsSync(TEST_DIR)) {
@@ -149,6 +162,36 @@ describe("scaffold", () => {
 		expect(cliContent).toContain(".args([");
 		expect(cliContent).toContain(".flags(");
 		expect(cliContent).toContain(".run(");
+	});
+
+	it("generates modular template with file-splitting .sub() pattern", async () => {
+		await scaffoldModular(TEST_DIR, { name: "modular-cli" });
+
+		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
+		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
+		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(
+			true,
+		);
+
+		const appContent = readFileSync(
+			resolve(TEST_DIR, "src", "app.ts"),
+			"utf-8",
+		);
+		const cliContent = readFileSync(
+			resolve(TEST_DIR, "src", "cli.ts"),
+			"utf-8",
+		);
+		const greetContent = readFileSync(
+			resolve(TEST_DIR, "src", "commands", "greet.ts"),
+			"utf-8",
+		);
+
+		expect(appContent).toContain('new Crust("modular-cli")');
+		expect(appContent).toContain("inherit: true");
+		expect(greetContent).toContain('.sub("greet")');
+		expect(greetContent).toContain("flags.greet");
+		expect(cliContent).toContain(".command(greetCmd)");
+		expect(cliContent).toContain(".execute()");
 	});
 
 	it("creates project in nested directory (creates parent dirs)", async () => {

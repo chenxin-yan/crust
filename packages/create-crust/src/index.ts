@@ -9,7 +9,7 @@ import {
 	runSteps,
 	scaffold,
 } from "@crustjs/create";
-import { confirm, input, spinner } from "@crustjs/prompts";
+import { confirm, input, select, spinner } from "@crustjs/prompts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -73,6 +73,26 @@ const app = new Crust("create-crust")
 			default: true,
 		});
 
+		const template = await select<"minimal" | "modular">({
+			message: "Template style",
+			choices: [
+				{
+					label: "Minimal",
+					value: "minimal",
+					hint: "single-file starter",
+				},
+				{
+					label: "Modular",
+					value: "modular",
+					hint: "file split with .sub()",
+				},
+			],
+			default: "minimal",
+		});
+
+		const templatePath =
+			template === "minimal" ? "templates/base" : "templates/modular";
+
 		// Skip git init prompt if already inside a git repository.
 		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
 		// otherwise check the parent (directory will be created by scaffold).
@@ -94,7 +114,7 @@ const app = new Crust("create-crust")
 
 		// Scaffold the project using @crustjs/create
 		await scaffold({
-			template: "templates/base",
+			template: templatePath,
 			dest: resolvedDir,
 			context: { name },
 			conflict: "overwrite",
