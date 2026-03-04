@@ -319,6 +319,7 @@ export class Crust<
 			subCommands: { ...this._node.subCommands },
 			plugins: [...this._node.plugins],
 			meta: { ...this._node.meta },
+			args: this._node.args ? [...this._node.args] : undefined,
 			...nodeOverrides,
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
@@ -371,7 +372,7 @@ export class Crust<
 
 		return this._clone({
 			localFlags: copiedFlags,
-			effectiveFlags: { ...copiedFlags },
+			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
 		}) as unknown as Crust<Inherited, F, A>;
 	}
 

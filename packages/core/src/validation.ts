@@ -1,7 +1,7 @@
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { parseArgs } from "./parser.ts";
-import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "./types.ts";
+import type { ArgDef, FlagDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
