@@ -3,10 +3,10 @@ import {
 	type ParseArgsOptionDescriptor,
 } from "node:util";
 import { CrustError } from "./errors.ts";
+import type { CommandNode } from "./node.ts";
 import type {
 	ArgDef,
 	ArgsDef,
-	Command,
 	FlagDef,
 	FlagsDef,
 	ParseResult,
@@ -48,7 +48,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	}
 
 	for (const [name, def] of Object.entries(flagsDef)) {
-		// Defense-in-depth: reject "no-" prefixed names even when bypassing defineCommand
+		// Defense-in-depth: reject "no-" prefixed names even when bypassing the builder
 		if (name.startsWith("no-")) {
 			const base = name.slice(3);
 			throw new CrustError(
@@ -69,10 +69,31 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			opt.multiple = true;
 		}
 
-		// Handle aliases
-		if (def.alias) {
-			const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
-			for (const alias of aliases) {
+		// Handle short alias
+		if (def.short) {
+			// Defense-in-depth: reject "no-" prefixed short alias
+			if (def.short.startsWith("no-")) {
+				throw new CrustError(
+					"DEFINITION",
+					`Short alias "-${def.short}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
+				);
+			}
+
+			const existing = aliasRegistry.get(def.short);
+			if (existing) {
+				throw new CrustError(
+					"DEFINITION",
+					`Alias collision: "-${def.short}" is used by both "--${existing}" and "--${name}"`,
+				);
+			}
+			aliasRegistry.set(def.short, name);
+			aliasToName[def.short] = name;
+			opt.short = def.short;
+		}
+
+		// Handle long aliases
+		if (def.aliases) {
+			for (const alias of def.aliases) {
 				// Defense-in-depth: reject "no-" prefixed aliases
 				if (alias.startsWith("no-")) {
 					throw new CrustError(
@@ -81,7 +102,6 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 					);
 				}
 
-				// Check for collision
 				const existing = aliasRegistry.get(alias);
 				if (existing) {
 					throw new CrustError(
@@ -92,17 +112,11 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 				aliasRegistry.set(alias, name);
 				aliasToName[alias] = name;
 
-				// util.parseArgs only supports a single short alias (1 char)
-				if (alias.length === 1 && !opt.short) {
-					opt.short = alias;
-				} else {
-					// Long aliases and additional short aliases: register as separate option entries
-					const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
-					if (def.multiple) {
-						aliasOpt.multiple = true;
-					}
-					options[alias] = aliasOpt;
+				const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
+				if (def.multiple) {
+					aliasOpt.multiple = true;
 				}
+				options[alias] = aliasOpt;
 			}
 		}
 
@@ -367,9 +381,9 @@ function validateCanonicalNegationUsage(
 export function parseArgs<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
->(command: Command<A, F>, argv: string[]) {
+>(command: CommandNode, argv: string[]) {
 	const argsDef = command.args as ArgsDef | undefined;
-	const flagsDef = command.flags as FlagsDef | undefined;
+	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
 
 	const { options: parseOptions, aliasToName } =
 		buildParseArgsOptionDescriptor(flagsDef);

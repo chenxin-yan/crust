@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { type Command, defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
 	autoCompletePlugin,
 	helpPlugin,
@@ -19,21 +19,12 @@ import { buildCommand } from "./commands/build.ts";
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
  */
-export const crustCommand: Command = defineCommand({
-	meta: {
-		name: pkg.name,
-		description: pkg.description,
-	},
-	subCommands: {
-		build: buildCommand,
-	},
-});
+export const crustApp = new Crust(pkg.name)
+	.meta({ description: pkg.description })
+	.use(versionPlugin(pkg.version))
+	.use(updateNotifierPlugin({ currentVersion: pkg.version }))
+	.use(autoCompletePlugin({ mode: "help" }))
+	.use(helpPlugin())
+	.command("build", buildCommand);
 
-runMain(crustCommand, {
-	plugins: [
-		versionPlugin(pkg.version),
-		updateNotifierPlugin({ currentVersion: pkg.version }),
-		autoCompletePlugin({ mode: "help" }),
-		helpPlugin(),
-	],
-});
+crustApp.execute();

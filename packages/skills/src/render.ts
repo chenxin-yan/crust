@@ -519,8 +519,11 @@ function renderFlagsTable(flags: ManifestFlag[]): string[] {
  */
 function formatFlagName(flag: ManifestFlag): string {
 	const parts = [`\`--${flag.name}\``];
+	if (flag.short) {
+		parts.push(`\`-${flag.short}\``);
+	}
 	for (const alias of flag.aliases) {
-		parts.push(`\`-${alias}\``);
+		parts.push(`\`--${alias}\``);
 	}
 	return parts.join(", ");
 }

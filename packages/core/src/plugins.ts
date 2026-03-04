@@ -1,5 +1,6 @@
+import type { CommandNode } from "./node.ts";
 import type { CommandRoute } from "./router.ts";
-import type { AnyCommand, FlagDef, ParseResult } from "./types.ts";
+import type { FlagDef, ParseResult } from "./types.ts";
 
 export interface PluginState {
 	get<T = unknown>(key: string): T | undefined;
@@ -12,6 +13,9 @@ export interface PluginState {
 // Setup actions — available only during the setup phase
 // ────────────────────────────────────────────────────────────────────────────
 
+/** A command target accepted by SetupActions */
+type CommandTarget = CommandNode;
+
 export interface SetupActions {
 	/**
 	 * Inject a flag definition into a command's flags object.
@@ -20,11 +24,14 @@ export interface SetupActions {
 	 * (e.g. `--version`, `--help`) so they are recognized by the parser
 	 * and rendered in help text.
 	 *
-	 * @param command - The command to add the flag to
+	 * The flag is added to `effectiveFlags` only — `localFlags` is left
+	 * unchanged to distinguish user-defined flags from plugin-injected ones.
+	 *
+	 * @param command - The command node to add the flag to
 	 * @param name - The flag name (e.g. "version")
 	 * @param def - The flag definition
 	 */
-	addFlag(command: AnyCommand, name: string, def: FlagDef): void;
+	addFlag(command: CommandTarget, name: string, def: FlagDef): void;
 
 	/**
 	 * Inject a subcommand into a command's `subCommands` record.
@@ -34,11 +41,15 @@ export interface SetupActions {
 	 * subcommand with the same name (user-defined), the call is silently
 	 * skipped — user definitions always take priority over plugin injections.
 	 *
-	 * @param parent - The parent command to add the subcommand to
+	 * @param parent - The parent command node to add the subcommand to
 	 * @param name - The subcommand name (used for routing)
-	 * @param command - The subcommand to register
+	 * @param command - The subcommand node to register
 	 */
-	addSubCommand(parent: AnyCommand, name: string, command: AnyCommand): void;
+	addSubCommand(
+		parent: CommandTarget,
+		name: string,
+		command: CommandTarget,
+	): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -48,7 +59,7 @@ export interface SetupActions {
 /** Shared context fields available in both setup and middleware phases. */
 export interface BaseContext {
 	readonly argv: readonly string[];
-	readonly rootCommand: AnyCommand;
+	readonly rootCommand: CommandNode;
 	readonly state: PluginState;
 }
 

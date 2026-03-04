@@ -295,7 +295,7 @@ export function resolveDescription(schema: unknown): string | undefined {
 /**
  * Define a named positional argument from a Zod schema.
  *
- * Returns a core `ArgDef` (accepted by `defineCommand`) enriched with hidden
+ * Returns a core `ArgDef` (accepted by the Crust builder) enriched with hidden
  * schema metadata (via `[ZOD_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `required`, `description`, `variadic`) is derived
@@ -378,9 +378,9 @@ export function arg<
 }
 
 /**
- * Define a flag from a Zod schema with optional alias.
+ * Define a flag from a Zod schema with optional short alias and long aliases.
  *
- * Returns a core `FlagDef` (accepted by `defineCommand`) enriched with hidden
+ * Returns a core `FlagDef` (accepted by the Crust builder) enriched with hidden
  * schema metadata (via `[ZOD_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
  * CLI metadata (`type`, `multiple`, `required`, `description`) is derived
@@ -397,22 +397,23 @@ export function arg<
  * If both are available and conflict, a `DEFINITION` error is thrown.
  *
  * @param schema - Zod schema (source of truth for type/optionality/description)
- * @param options - Optional flag metadata (`alias`, `type`, `description`, `required`)
+ * @param options - Optional flag metadata (`short`, `aliases`, `type`, `description`, `required`)
  *
  * @example
  * ```ts
- * flag(z.boolean().default(false).describe("Enable verbose logging"), { alias: "v" })
+ * flag(z.boolean().default(false).describe("Enable verbose logging"), { short: "v" })
  * flag(z.enum(["json", "text"]).default("text"))
  * flag(complexPipe, { type: "string", description: "Output format" })
  * ```
  */
 export function flag<
 	Schema extends ZodSchemaLike,
-	const Alias extends string | readonly string[] | undefined = undefined,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
 >(
 	schema: Schema,
-	options?: FlagOptions & { alias?: Alias },
-): ZodFlagDef<Schema, Alias> {
+	options?: FlagOptions & { short?: Short; aliases?: Aliases },
+): ZodFlagDef<Schema, Short, Aliases> {
 	if (!isZodSchema(schema)) {
 		throw new CrustError("DEFINITION", "flag(): schema must be a Zod schema");
 	}
@@ -439,22 +440,21 @@ export function flag<
 		options?.required,
 	);
 
-	// Convert readonly alias to mutable for core FlagDef compatibility
-	const alias: string | string[] | undefined =
-		options?.alias === undefined
-			? undefined
-			: typeof options.alias === "string"
-				? options.alias
-				: [...options.alias];
+	// Convert readonly aliases to mutable for core FlagDef compatibility
+	const short: string | undefined = options?.short;
+	const aliases: string[] | undefined = options?.aliases
+		? [...options.aliases]
+		: undefined;
 
 	const def = {
 		type: resolvedType,
 		...(multiple && { multiple: true as const }),
-		alias,
+		short,
+		aliases,
 		...(description !== undefined && { description }),
 		...(resolvedRequired && { required: true as const }),
 		[ZOD_SCHEMA]: schema,
 	};
 
-	return def as ZodFlagDef<Schema, Alias>;
+	return def as ZodFlagDef<Schema, Short, Aliases>;
 }

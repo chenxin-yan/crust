@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { defineCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { type Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -471,141 +471,140 @@ async function validateEntrypoint(entryPath: string): Promise<void> {
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-export const buildCommand = defineCommand({
-	meta: {
-		name: "build",
-		description: "Compile your CLI to a standalone executable",
-	},
-	flags: {
-		entry: {
-			type: "string",
-			description: "Entry file path",
-			default: "src/cli.ts",
-			alias: "e",
-		},
-		outfile: {
-			type: "string",
-			description: "Output file path (single-target builds only)",
-			alias: "o",
-		},
-		name: {
-			type: "string",
-			description:
-				"Binary name (defaults to package.json name or entry filename)",
-			alias: "n",
-		},
-		minify: {
-			type: "boolean",
-			description: "Minify the output",
-			default: true,
-		},
-		target: {
-			type: "string",
-			multiple: true,
-			description:
-				"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
-			alias: "t",
-		},
-		outdir: {
-			type: "string",
-			description: "Output directory for compiled binaries",
-			default: "dist",
-			alias: "d",
-		},
-		resolver: {
-			type: "string",
-			description:
-				"Filename for the resolver script (multi-target builds, no extension)",
-			default: "cli",
-			alias: "r",
-		},
-		validate: {
-			type: "boolean",
-			description:
-				"Validate command runtime rules before compiling (disable with --no-validate)",
-			default: true,
-		},
-	},
-	async run({ flags }) {
-		const cwd = process.cwd();
+// biome-ignore lint/suspicious/noExplicitAny: callback signature uses any for parent generics
+export function buildCommand(cmd: Crust<any, any, any>) {
+	return cmd
+		.meta({ description: "Compile your CLI to a standalone executable" })
+		.flags({
+			entry: {
+				type: "string",
+				description: "Entry file path",
+				default: "src/cli.ts",
+				short: "e",
+			},
+			outfile: {
+				type: "string",
+				description: "Output file path (single-target builds only)",
+				short: "o",
+			},
+			name: {
+				type: "string",
+				description:
+					"Binary name (defaults to package.json name or entry filename)",
+				short: "n",
+			},
+			minify: {
+				type: "boolean",
+				description: "Minify the output",
+				default: true,
+			},
+			target: {
+				type: "string",
+				multiple: true,
+				description:
+					"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
+				short: "t",
+			},
+			outdir: {
+				type: "string",
+				description: "Output directory for compiled binaries",
+				default: "dist",
+				short: "d",
+			},
+			resolver: {
+				type: "string",
+				description:
+					"Filename for the resolver script (multi-target builds, no extension)",
+				default: "cli",
+				short: "r",
+			},
+			validate: {
+				type: "boolean",
+				description:
+					"Validate command runtime rules before compiling (disable with --no-validate)",
+				default: true,
+			},
+		} as const)
+		.run(async ({ flags }) => {
+			const cwd = process.cwd();
 
-		// Resolve entry file path relative to cwd
-		const entryPath = resolve(cwd, flags.entry);
+			// Resolve entry file path relative to cwd
+			const entryPath = resolve(cwd, flags.entry);
 
-		// Verify entry file exists
-		if (!existsSync(entryPath)) {
-			throw new Error(
-				`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-			);
-		}
+			// Verify entry file exists
+			if (!existsSync(entryPath)) {
+				throw new Error(
+					`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
+				);
+			}
 
-		if (flags.validate) {
-			await validateEntrypoint(entryPath);
-		}
+			if (flags.validate) {
+				await validateEntrypoint(entryPath);
+			}
 
-		// Resolve targets: default is all platforms, --target narrows to specific ones
-		const targets = resolveTargets(flags.target);
+			// Resolve targets: default is all platforms, --target narrows to specific ones
+			const targets = resolveTargets(flags.target);
 
-		// --outfile is only allowed with exactly one target
-		if (flags.outfile && targets.length > 1) {
-			throw new Error(
-				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
-			);
-		}
+			// --outfile is only allowed with exactly one target
+			if (flags.outfile && targets.length > 1) {
+				throw new Error(
+					"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+				);
+			}
 
-		if (targets.length === 1) {
-			// Single-target build: one binary, no resolver
-			const outfilePath = resolveOutfile(
-				flags.outfile,
-				flags.name,
-				entryPath,
-				cwd,
-				flags.outdir,
-			);
-
-			console.log(
-				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
-			);
-			await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
-			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
-		} else {
-			// Multi-target build: multiple binaries + JS resolver
-			const baseName = resolveBaseName(flags.name, entryPath, cwd);
-
-			console.log(
-				`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
-			);
-
-			const results: string[] = [];
-			for (const target of targets) {
-				const targetOutfile = resolveTargetOutfile(
-					baseName,
-					target,
+			if (targets.length === 1) {
+				// Single-target build: one binary, no resolver
+				const outfilePath = resolveOutfile(
+					flags.outfile,
+					flags.name,
+					entryPath,
 					cwd,
 					flags.outdir,
 				);
 
-				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-				await execBuild(entryPath, targetOutfile, flags.minify, target);
-				results.push(targetOutfile);
-			}
+				console.log(
+					`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
+				);
+				await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
+				console.log(`${green("✓")} Built successfully: ${outfilePath}`);
+			} else {
+				// Multi-target build: multiple binaries + JS resolver
+				const baseName = resolveBaseName(flags.name, entryPath, cwd);
 
-			// Generate resolver scripts
-			const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
-			writeResolver(resolverPath, baseName, targets);
+				console.log(
+					`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
+				);
 
-			console.log(
-				`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
-			);
-			for (const r of results) {
-				console.log(`  ${r}`);
+				const results: string[] = [];
+				for (const target of targets) {
+					const targetOutfile = resolveTargetOutfile(
+						baseName,
+						target,
+						cwd,
+						flags.outdir,
+					);
+
+					console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
+					await execBuild(entryPath, targetOutfile, flags.minify, target);
+					results.push(targetOutfile);
+				}
+
+				// Generate resolver scripts
+				const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
+				writeResolver(resolverPath, baseName, targets);
+
+				console.log(
+					`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
+				);
+				for (const r of results) {
+					console.log(`  ${r}`);
+				}
+				console.log(
+					`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
+				);
 			}
-			console.log(
-				`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
-			);
-		}
-	},
-});
+		});
+}
 
 /**
  * Resolve the list of Bun targets from flags.

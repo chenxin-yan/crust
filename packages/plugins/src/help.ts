@@ -1,7 +1,7 @@
 import type {
-	AnyCommand,
 	ArgDef,
 	CommandMeta,
+	CommandNode,
 	CrustPlugin,
 	FlagDef,
 	FlagsDef,
@@ -14,18 +14,14 @@ function formatArgToken(arg: ArgDef): string {
 
 function formatUsage(
 	meta: CommandMeta,
-	command: AnyCommand,
+	command: CommandNode,
 	path: string[],
 ): string {
 	if (meta.usage) return meta.usage;
 
 	const usageParts: string[] = [path.join(" ")];
 
-	if (
-		command.subCommands &&
-		Object.keys(command.subCommands).length > 0 &&
-		!command.run
-	) {
+	if (Object.keys(command.subCommands).length > 0 && !command.run) {
 		usageParts.push("<command>");
 	}
 
@@ -35,7 +31,7 @@ function formatUsage(
 		}
 	}
 
-	if (command.flags && Object.keys(command.flags).length > 0) {
+	if (Object.keys(command.effectiveFlags).length > 0) {
 		usageParts.push("[options]");
 	}
 
@@ -43,20 +39,12 @@ function formatUsage(
 }
 
 function formatFlagName(name: string, def: FlagDef): string {
-	if (!def.alias) return `--${name}`;
-
-	const aliases = Array.isArray(def.alias) ? def.alias : [def.alias];
-	const shortAlias = aliases.find((alias) => alias.length === 1);
-
-	if (shortAlias) {
-		return `-${shortAlias}, --${name}`;
-	}
-
+	if (def.short) return `-${def.short}, --${name}`;
 	return `--${name}`;
 }
 
-function formatFlagsSection(flagsDef: FlagsDef | undefined): string[] {
-	if (!flagsDef || Object.keys(flagsDef).length === 0) return [];
+function formatFlagsSection(flagsDef: FlagsDef): string[] {
+	if (Object.keys(flagsDef).length === 0) return [];
 
 	const lines = ["OPTIONS:"];
 	for (const [name, def] of Object.entries(flagsDef)) {
@@ -67,11 +55,11 @@ function formatFlagsSection(flagsDef: FlagsDef | undefined): string[] {
 	return lines;
 }
 
-function formatArgsSection(command: AnyCommand): string[] {
+function formatArgsSection(command: CommandNode): string[] {
 	if (!command.args || command.args.length === 0) return [];
 
 	const lines = ["ARGS:"];
-	for (const arg of command.args) {
+	for (const arg of command.args as readonly ArgDef[]) {
 		const rendered = formatArgToken(arg).padEnd(18, " ");
 		lines.push(`  ${rendered}${arg.description ?? ""}`.trimEnd());
 	}
@@ -79,8 +67,8 @@ function formatArgsSection(command: AnyCommand): string[] {
 	return lines;
 }
 
-function formatCommandsSection(command: AnyCommand): string[] {
-	if (!command.subCommands || Object.keys(command.subCommands).length === 0) {
+function formatCommandsSection(command: CommandNode): string[] {
+	if (Object.keys(command.subCommands).length === 0) {
 		return [];
 	}
 
@@ -93,7 +81,7 @@ function formatCommandsSection(command: AnyCommand): string[] {
 	return lines;
 }
 
-export function renderHelp(command: AnyCommand, path?: string[]): string {
+export function renderHelp(command: CommandNode, path?: string[]): string {
 	const resolvedPath = path ?? [command.meta.name];
 	const lines: string[] = [];
 	lines.push(
@@ -117,7 +105,7 @@ export function renderHelp(command: AnyCommand, path?: string[]): string {
 		lines.push(...argsSection);
 	}
 
-	const optionsSection = formatFlagsSection(command.flags);
+	const optionsSection = formatFlagsSection(command.effectiveFlags);
 	if (optionsSection.length > 0) {
 		lines.push("");
 		lines.push(...optionsSection);
@@ -128,20 +116,18 @@ export function renderHelp(command: AnyCommand, path?: string[]): string {
 
 const helpFlagDef: FlagDef = {
 	type: "boolean",
-	alias: "h",
+	short: "h",
 	description: "Show help",
 };
 
 function injectHelpFlags(
-	command: AnyCommand,
-	addFlag: (command: AnyCommand, name: string, def: FlagDef) => void,
+	command: CommandNode,
+	addFlag: (command: CommandNode, name: string, def: FlagDef) => void,
 ): void {
 	addFlag(command, "help", helpFlagDef);
 
-	if (command.subCommands) {
-		for (const sub of Object.values(command.subCommands)) {
-			injectHelpFlags(sub, addFlag);
-		}
+	for (const sub of Object.values(command.subCommands)) {
+		injectHelpFlags(sub, addFlag);
 	}
 }
 

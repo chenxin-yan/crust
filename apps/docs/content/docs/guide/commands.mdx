@@ -1,118 +1,106 @@
 ---
 title: Commands
-description: Define CLI commands with full type inference using defineCommand.
+description: Define CLI commands with full type inference using the Crust builder.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Commands are the building blocks of every Crust CLI. You define them declaratively as plain objects, and Crust handles parsing, validation, and execution.
+Commands are the building blocks of every Crust CLI. You define them using the chainable `Crust` builder, and Crust handles parsing, validation, and execution.
 
 ## Defining a Command
 
-Use `defineCommand` to create a command:
+Use the `Crust` class to create a command:
 
 ```ts
-import { defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const serve = defineCommand({
-  meta: {
-    name: "serve",
-    description: "Start the development server",
-  },
-  run() {
+const serve = new Crust("serve")
+  .meta({ description: "Start the development server" })
+  .run(() => {
     console.log("Server started!");
-  },
-});
+  });
 ```
 
-Every command requires a `meta` object with at least a `name`. The `description` is optional but recommended — it appears in help output.
+The command name is set via the constructor. Use `.meta()` to set `description` and `usage` — the `description` is optional but recommended as it appears in help output.
 
 ## Command Metadata
 
-The `meta` object describes the command:
+Set metadata with `.meta()`:
 
 ```ts
-defineCommand({
-  meta: {
-    name: "serve",                          // Required: command name
-    description: "Start the dev server",    // Optional: shown in help text
-    usage: "serve [port] [options]",        // Optional: overrides auto-generated usage
-  },
-  // ...
-});
+new Crust("serve")
+  .meta({
+    description: "Start the dev server",    // Shown in help text
+    usage: "serve [port] [options]",        // Overrides auto-generated usage
+  })
 ```
 
-See the [defineCommand() reference](/docs/api/define-command#parameters) for the full list of command properties.
+See the [Crust builder reference](/docs/api/crust#meta) for the full list of metadata fields.
 
-## The `run` Handler
+## The `.run()` Handler
 
-The `run` function is the command's main logic. It receives a `CommandContext` with parsed `args`, `flags`, and `rawArgs`:
+The `.run()` method sets the command's main logic. It receives a `CrustCommandContext` with parsed `args`, `flags`, and `rawArgs`:
 
 ```ts
-defineCommand({
-  meta: { name: "greet" },
-  args: [
+new Crust("greet")
+  .args([
     { name: "name", type: "string", required: true },
-  ],
-  flags: {
-    loud: { type: "boolean", alias: "l" },
-  },
-  run({ args, flags, rawArgs }) {
+  ])
+  .flags({
+    loud: { type: "boolean", short: "l" },
+  })
+  .run(({ args, flags, rawArgs }) => {
     // args.name is typed as `string` (required)
     // flags.loud is typed as `boolean | undefined`
     // rawArgs contains everything after `--`
     console.log(`Hello, ${args.name}!`);
-  },
-});
+  })
 ```
 
-The `run` handler can be `async`:
+The handler can be `async`:
 
 ```ts
-defineCommand({
-  meta: { name: "fetch" },
-  async run() {
+new Crust("fetch")
+  .run(async () => {
     const data = await fetch("https://api.example.com/data");
     console.log(await data.json());
-  },
-});
+  })
 ```
 
 ## Running Commands
 
-### `runMain` — Top-Level Entry Point
-
-`runMain` is the recommended way to run your CLI. It catches all errors and prints them to stderr:
+Call `.execute()` to run the CLI. It parses `process.argv`, resolves subcommands, runs plugins and middleware, and executes the matched handler:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
 
-const main = defineCommand({
-  meta: { name: "my-cli" },
-  run() {
+const main = new Crust("my-cli")
+  .use(helpPlugin())
+  .run(() => {
     console.log("Running!");
-  },
-});
+  });
 
-runMain(main, {
-  plugins: [helpPlugin()],
-});
+await main.execute();
 ```
 
-For programmatic execution where you handle errors yourself, use [`runCommand`](/docs/api/run-command). See [`runMain` vs `runCommand`](/docs/api/run-main#vs-runcommand) for a comparison.
-
-## Immutable Commands
-
-Commands returned by `defineCommand` are frozen with `Object.freeze`. This prevents accidental mutation and ensures commands are safe to share across your application.
+`.execute()` catches all errors, prints them to stderr, and sets `process.exitCode = 1`. It never throws. For testing, pass a custom `argv`:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "test" },
-  run() {},
-});
+await main.execute({ argv: ["--help"] });
+```
 
-cmd.meta.name = "other"; // TypeError: Cannot assign to read only property
+## Immutable Builder
+
+Each method on the `Crust` builder returns a new instance — the original builder is never mutated. This makes commands safe to share and compose:
+
+```ts
+const base = new Crust("test")
+  .flags({ verbose: { type: "boolean" } });
+
+const a = base.run(() => console.log("A"));
+const b = base.run(() => console.log("B"));
+// a and b are independent — base is unchanged
 ```
 
 <Callout>
@@ -124,33 +112,27 @@ cmd.meta.name = "other"; // TypeError: Cannot assign to read only property
 Crust infers the types of your `args` and `flags` from their definitions. No manual type annotations needed:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "example" },
-  args: [
+const cmd = new Crust("example")
+  .args([
     { name: "port", type: "number", default: 3000 },
     { name: "host", type: "string", required: true },
-  ] as const,
-  flags: {
+  ])
+  .flags({
     verbose: { type: "boolean" },
     output: { type: "string", default: "dist" },
     count: { type: "number", required: true },
-  },
-  run({ args, flags }) {
-    args.port;    // number (has default → guaranteed)
-    args.host;    // string (required → guaranteed)
+  })
+  .run(({ args, flags }) => {
+    args.port;    // number (has default -> guaranteed)
+    args.host;    // string (required -> guaranteed)
     flags.verbose; // boolean | undefined
-    flags.output;  // string (has default → guaranteed)
-    flags.count;   // number (required → guaranteed)
-  },
-});
+    flags.output;  // string (has default -> guaranteed)
+    flags.count;   // number (required -> guaranteed)
+  });
 ```
-
-<Callout>
-  Use `as const` on the `args` array for full tuple type inference. Without it, TypeScript may widen the types.
-</Callout>
 
 ## Next Steps
 
 - [Arguments](/docs/guide/arguments) — positional argument definitions
-- [Flags](/docs/guide/flags) — named flag definitions
+- [Flags](/docs/guide/flags) — named flag definitions and flag inheritance
 - [Subcommands](/docs/guide/subcommands) — nested command trees

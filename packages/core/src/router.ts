@@ -1,5 +1,5 @@
 import { CrustError } from "./errors.ts";
-import type { AnyCommand } from "./types.ts";
+import type { CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandRoute — Output of resolveCommand
@@ -13,7 +13,7 @@ import type { AnyCommand } from "./types.ts";
  */
 export interface CommandRoute {
 	/** The routed command (may be a subcommand of the original) */
-	command: AnyCommand;
+	command: CommandNode;
 	/** The argv after subcommand names have been consumed */
 	argv: string[];
 	/** The command path for help text (e.g. ["crust", "generate", "command"]) */
@@ -44,12 +44,12 @@ export interface CommandRoute {
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  */
 export function resolveCommand(
-	command: AnyCommand,
+	command: CommandNode,
 	argv: string[],
 ): CommandRoute {
 	const path = [command.meta.name];
 
-	let current: AnyCommand = command;
+	let current: CommandNode = command;
 	let routedArgv = argv;
 
 	while (routedArgv.length > 0) {
@@ -61,14 +61,14 @@ export function resolveCommand(
 
 		const candidate = routedArgv[0];
 
-		// Skip if the candidate looks like a flag (starts with -) or doesn't exists
+		// Skip if the candidate looks like a flag (starts with -) or doesn't exist
 		if (!candidate || candidate.startsWith("-")) {
 			break;
 		}
 
 		// Check if it matches a known subcommand
-		if (candidate in subCommands) {
-			current = subCommands[candidate] as AnyCommand;
+		if (candidate in subCommands && subCommands[candidate]) {
+			current = subCommands[candidate];
 			path.push(candidate);
 			routedArgv = routedArgv.slice(1);
 			continue;

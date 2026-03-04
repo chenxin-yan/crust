@@ -13,41 +13,56 @@ bun add @crustjs/core
 
 ## Exports
 
+### Classes
+
+| Class | Description |
+| --- | --- |
+| [`Crust`](/docs/api/crust) | Chainable builder for defining CLI commands with full type inference |
+
 ### Functions
 
 | Function | Description |
 | --- | --- |
-| [`defineCommand`](/docs/api/define-command) | Define a CLI command with full type inference |
 | [`parseArgs`](/docs/api/parse-args) | Parse argv against a command's arg/flag definitions |
 | [`resolveCommand`](/docs/api/resolve-command) | Resolve a subcommand from an argv array |
-| [`runCommand`](/docs/api/run-command) | Execute a command with plugins (throws on error) |
-| [`runMain`](/docs/api/run-main) | Top-level CLI entry point (catches errors) |
+| `createCommandNode` | Create a fresh CommandNode (for downstream packages) |
+| `computeEffectiveFlags` | Merge inherited + local flags at runtime |
+
+### Constants
+
+| Constant | Description |
+| --- | --- |
+| `VALIDATION_MODE_ENV` | Environment variable name for build-time validation mode |
 
 ### Types
 
 | Type | Description |
 | --- | --- |
-| `Command<A, F>` | The command object shape |
-| `AnyCommand` | Type-erased command (for collections and routing) |
+| `CommandNode` | Internal command tree node |
+| `CrustCommandContext<A, F>` | Runtime context passed to lifecycle hooks |
 | `CommandMeta` | Command metadata (name, description, usage) |
-| `CommandContext<A, F>` | Runtime context passed to lifecycle hooks |
 | `ArgDef` | Positional argument definition |
 | `ArgsDef` | Tuple of argument definitions |
 | `FlagDef` | Named flag definition |
 | `FlagsDef` | Record of flag definitions |
 | `InferArgs<A>` | Infer resolved arg types from definitions |
 | `InferFlags<F>` | Infer resolved flag types from definitions |
+| `EffectiveFlags<I, L>` | Compute effective flags from inherited + local |
+| `InheritableFlags<F>` | Pick only inheritable flags |
+| `MergeFlags<P, L>` | Merge parent + local flags |
 | `ParseResult<A, F>` | Output of `parseArgs` |
 | `CommandRoute` | Output of `resolveCommand` |
-| `RunOptions` | Options for `runCommand`/`runMain` |
 | `CrustPlugin` | Plugin interface |
 | `SetupContext` | Context passed to plugin setup hooks |
+| `SetupActions` | Actions available during plugin setup |
 | `MiddlewareContext` | Context passed to plugin middleware |
 | `PluginMiddleware` | Middleware function type |
 | `CrustError` | Typed error class |
 | `CrustErrorCode` | Error code union |
-| `ValidationErrorDetails` | Structured details for VALIDATION errors |
-| `CommandNotFoundErrorDetails` | Structured details for COMMAND_NOT_FOUND errors |
+| `ValueType` | Supported type literals (`"string" \| "number" \| "boolean"`) |
+| `ValidateFlagAliases<F>` | Compile-time alias collision check |
+| `ValidateNoPrefixedFlags<F>` | Compile-time no- prefix check |
+| `ValidateVariadicArgs<A>` | Compile-time variadic position check |
 
 ## When to Use
 

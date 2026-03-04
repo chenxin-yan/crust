@@ -3,19 +3,21 @@
  *
  * Tests the root crust command with the build subcommand wired up,
  * verifying help output, version output, subcommand help, and error handling.
+ *
+ * Uses `Crust.execute({ argv })` instead of the removed `runCommand`.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { runCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
 	autoCompletePlugin,
 	helpPlugin,
 	updateNotifierPlugin,
 	versionPlugin,
 } from "@crustjs/plugins";
-import { crustCommand } from "../src/cli.ts";
+import { buildCommand } from "./commands/build.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers — capture console output
@@ -26,6 +28,7 @@ let stderrChunks: string[];
 let originalLog: typeof console.log;
 let originalError: typeof console.error;
 let originalWarn: typeof console.warn;
+let originalExitCode: typeof process.exitCode;
 
 beforeEach(() => {
 	stdoutChunks = [];
@@ -33,6 +36,7 @@ beforeEach(() => {
 	originalLog = console.log;
 	originalError = console.error;
 	originalWarn = console.warn;
+	originalExitCode = process.exitCode;
 
 	console.log = (...args: unknown[]) => {
 		stdoutChunks.push(
@@ -55,6 +59,7 @@ afterEach(() => {
 	console.log = originalLog;
 	console.error = originalError;
 	console.warn = originalWarn;
+	process.exitCode = originalExitCode;
 });
 
 function getStdout(): string {
@@ -71,15 +76,30 @@ function _getStderr(): string {
 
 const pkgPath = resolve(import.meta.dirname, "../package.json");
 const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+	name: string;
+	description: string;
 	version: string;
 };
 const expectedVersion = pkg.version;
-const plugins = [
-	versionPlugin(expectedVersion),
-	updateNotifierPlugin({ currentVersion: expectedVersion, enabled: false }),
-	helpPlugin(),
-	autoCompletePlugin({ mode: "help" }),
-];
+
+/**
+ * Build a fresh Crust app for each test, with configurable plugins.
+ * This mirrors the production `crustApp` in cli.ts but allows test-specific plugins.
+ */
+function makeCrustApp() {
+	return new Crust(pkg.name)
+		.meta({ description: pkg.description })
+		.use(versionPlugin(expectedVersion))
+		.use(
+			updateNotifierPlugin({
+				currentVersion: expectedVersion,
+				enabled: false,
+			}),
+		)
+		.use(autoCompletePlugin({ mode: "help" }))
+		.use(helpPlugin())
+		.command("build", buildCommand);
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -88,30 +108,29 @@ const plugins = [
 describe("crust CLI entry point", () => {
 	describe("root command", () => {
 		it("should have correct meta", () => {
-			expect(crustCommand.meta.name).toBe("@crustjs/crust");
-			expect(crustCommand.meta.description).toBe(
-				"CLI tooling for the Crust framework — build and distribute standalone executables.",
+			const app = makeCrustApp();
+			expect(app._node.meta.name).toBe("@crustjs/crust");
+			expect(app._node.meta.description).toBe(
+				"CLI tooling for the Crust framework",
 			);
 		});
 
-		it("should be a frozen object", () => {
-			expect(Object.isFrozen(crustCommand)).toBe(true);
-		});
-
 		it("should use plugins for root behavior", () => {
-			expect(crustCommand.run).toBeUndefined();
+			const app = makeCrustApp();
+			expect(app._node.run).toBeUndefined();
 		});
 
 		it("should have build as a subcommand", () => {
-			expect(crustCommand.subCommands).toBeDefined();
-			expect(crustCommand.subCommands?.build).toBeDefined();
-			expect(crustCommand.subCommands?.build?.meta.name).toBe("build");
+			const app = makeCrustApp();
+			expect(app._node.subCommands).toBeDefined();
+			expect(app._node.subCommands.build).toBeDefined();
+			expect(app._node.subCommands.build?.meta.name).toBe("build");
 		});
 	});
 
 	describe("crust --help", () => {
 		it("should show help text with build listed", async () => {
-			await runCommand(crustCommand, { argv: ["--help"], plugins });
+			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
 			expect(output).toContain("crust");
@@ -123,7 +142,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show --help and --version in options", async () => {
-			await runCommand(crustCommand, { argv: ["--help"], plugins });
+			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
 			expect(output).toContain("--help");
@@ -133,7 +152,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show help with -h alias", async () => {
-			await runCommand(crustCommand, { argv: ["-h"], plugins });
+			await makeCrustApp().execute({ argv: ["-h"] });
 			const output = getStdout();
 
 			expect(output).toContain("USAGE:");
@@ -143,14 +162,14 @@ describe("crust CLI entry point", () => {
 
 	describe("crust --version", () => {
 		it("should show version from package.json", async () => {
-			await runCommand(crustCommand, { argv: ["--version"], plugins });
+			await makeCrustApp().execute({ argv: ["--version"] });
 			const output = getStdout();
 
 			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
 		});
 
 		it("should show version with -v alias", async () => {
-			await runCommand(crustCommand, { argv: ["-v"], plugins });
+			await makeCrustApp().execute({ argv: ["-v"] });
 			const output = getStdout();
 
 			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
@@ -159,7 +178,7 @@ describe("crust CLI entry point", () => {
 
 	describe("crust (no args)", () => {
 		it("should show help when invoked without a subcommand", async () => {
-			await runCommand(crustCommand, { argv: [], plugins });
+			await makeCrustApp().execute({ argv: [] });
 			const output = getStdout();
 
 			expect(output).toContain("USAGE:");
@@ -170,26 +189,26 @@ describe("crust CLI entry point", () => {
 
 	describe("crust unknown", () => {
 		it("shows root help for unknown input", async () => {
-			await runCommand(crustCommand, { argv: ["unknown"], plugins });
+			await makeCrustApp().execute({ argv: ["unknown"] });
 			const output = getStdout();
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("build");
 		});
 
 		it("shows root help for partial command input", async () => {
-			await runCommand(crustCommand, { argv: ["buil"], plugins });
+			await makeCrustApp().execute({ argv: ["buil"] });
 			const output = getStdout();
 			expect(output).toContain("COMMANDS:");
 		});
 	});
 
 	describe("self-hosting verification", () => {
-		it("should use defineCommand from @crustjs/core (dogfooding)", () => {
-			// The crustCommand is built entirely with @crustjs/core's defineCommand.
-			// If it wasn't, it wouldn't be a frozen Command object with proper structure.
-			expect(Object.isFrozen(crustCommand)).toBe(true);
-			expect(crustCommand.meta).toBeDefined();
-			expect(crustCommand.subCommands).toBeDefined();
+		it("should use Crust builder from @crustjs/core (dogfooding)", () => {
+			const app = makeCrustApp();
+			// The app is built with the Crust builder.
+			// Verify it has the expected shape.
+			expect(app._node.meta).toBeDefined();
+			expect(app._node.subCommands).toBeDefined();
 		});
 
 		it("should have version that matches package.json", () => {
@@ -200,7 +219,7 @@ describe("crust CLI entry point", () => {
 
 	describe("update notifier plugin wiring", () => {
 		it("should include updateNotifierPlugin without affecting help output", async () => {
-			await runCommand(crustCommand, { argv: ["--help"], plugins });
+			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
 			// Help output should still render correctly with updateNotifierPlugin present
@@ -210,7 +229,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should include updateNotifierPlugin without affecting version output", async () => {
-			await runCommand(crustCommand, { argv: ["--version"], plugins });
+			await makeCrustApp().execute({ argv: ["--version"] });
 			const output = getStdout();
 
 			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
@@ -218,7 +237,7 @@ describe("crust CLI entry point", () => {
 
 		it("should coexist with all other plugins during command execution", async () => {
 			// Run without arguments — should show help (no crash)
-			await runCommand(crustCommand, { argv: [], plugins });
+			await makeCrustApp().execute({ argv: [] });
 			const output = getStdout();
 
 			expect(output).toContain("USAGE:");

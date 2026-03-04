@@ -1,6 +1,36 @@
 import { describe, expect, it } from "bun:test";
-import { defineCommand } from "@crustjs/core";
+import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import { createCommandNode } from "@crustjs/core";
 import { buildManifest } from "./manifest.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helper — builds a CommandNode for introspection tests
+// ────────────────────────────────────────────────────────────────────────────
+
+function makeCommand(opts: {
+	meta: { name: string; description?: string; usage?: string };
+	args?: readonly ArgDef[];
+	flags?: Record<string, FlagDef>;
+	run?: () => void;
+	preRun?: () => void;
+	postRun?: () => void;
+	subCommands?: Record<string, CommandNode>;
+}): CommandNode {
+	const node = createCommandNode(opts.meta.name);
+	Object.assign(node.meta, opts.meta);
+	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.flags) {
+		node.localFlags = { ...opts.flags };
+		node.effectiveFlags = { ...opts.flags };
+	}
+	if (opts.run) node.run = opts.run;
+	if (opts.preRun) node.preRun = opts.preRun;
+	if (opts.postRun) node.postRun = opts.postRun;
+	if (opts.subCommands) {
+		node.subCommands = opts.subCommands;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // buildManifest — basic root command behavior
@@ -9,7 +39,7 @@ import { buildManifest } from "./manifest.ts";
 describe("buildManifest", () => {
 	describe("root command basics", () => {
 		it("returns a ManifestNode with name and path from meta", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "my-cli", description: "A test CLI" },
 			});
 
@@ -21,7 +51,7 @@ describe("buildManifest", () => {
 		});
 
 		it("normalizes command name to lowercase and trimmed", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "  My-CLI  " },
 			});
 
@@ -32,7 +62,7 @@ describe("buildManifest", () => {
 		});
 
 		it("sets runnable to true when command has a run handler", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
@@ -43,7 +73,7 @@ describe("buildManifest", () => {
 		});
 
 		it("sets runnable to false when command has no run handler", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
 
@@ -53,7 +83,7 @@ describe("buildManifest", () => {
 		});
 
 		it("includes usage when provided", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "build", usage: "build [options] <entry>" },
 			});
 
@@ -63,7 +93,7 @@ describe("buildManifest", () => {
 		});
 
 		it("omits description and usage when not provided", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
 
@@ -74,7 +104,7 @@ describe("buildManifest", () => {
 		});
 
 		it("returns empty args and flags arrays when none defined", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
 
@@ -92,7 +122,7 @@ describe("buildManifest", () => {
 
 	describe("positional arguments", () => {
 		it("normalizes a required string arg", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "greet" },
 				args: [
 					{
@@ -101,7 +131,7 @@ describe("buildManifest", () => {
 						description: "Name to greet",
 						required: true,
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -119,7 +149,7 @@ describe("buildManifest", () => {
 		});
 
 		it("normalizes an optional arg with default value", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				args: [
 					{
@@ -127,7 +157,7 @@ describe("buildManifest", () => {
 						type: "number",
 						default: 3000,
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -143,7 +173,7 @@ describe("buildManifest", () => {
 		});
 
 		it("normalizes a variadic arg", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "install" },
 				args: [
 					{
@@ -152,7 +182,7 @@ describe("buildManifest", () => {
 						description: "Packages to install",
 						variadic: true,
 					},
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -166,13 +196,13 @@ describe("buildManifest", () => {
 		});
 
 		it("preserves positional order of multiple args", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "copy" },
 				args: [
 					{ name: "source", type: "string", required: true },
 					{ name: "dest", type: "string", required: true },
 					{ name: "extras", type: "string", variadic: true },
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -187,9 +217,11 @@ describe("buildManifest", () => {
 		});
 
 		it("normalizes a boolean arg with default", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "toggle" },
-				args: [{ name: "enabled", type: "boolean", default: false }] as const,
+				args: [
+					{ name: "enabled", type: "boolean", default: false },
+				] as ArgDef[],
 				run() {},
 			});
 
@@ -201,9 +233,9 @@ describe("buildManifest", () => {
 		});
 
 		it("omits description when not provided on arg", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
-				args: [{ name: "file", type: "string" }] as const,
+				args: [{ name: "file", type: "string" }] as ArgDef[],
 				run() {},
 			});
 
@@ -220,7 +252,7 @@ describe("buildManifest", () => {
 
 	describe("named flags", () => {
 		it("normalizes a simple boolean flag", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
 					verbose: {
@@ -245,15 +277,15 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("normalizes a required string flag with alias", () => {
-			const cmd = defineCommand({
+		it("normalizes a required string flag with short alias", () => {
+			const cmd = makeCommand({
 				meta: { name: "deploy" },
 				flags: {
 					target: {
 						type: "string",
 						description: "Deploy target",
 						required: true,
-						alias: "t",
+						short: "t",
 					},
 				},
 				run() {},
@@ -264,16 +296,18 @@ describe("buildManifest", () => {
 
 			expect(flag?.name).toBe("target");
 			expect(flag?.required).toBe(true);
-			expect(flag?.aliases).toEqual(["t"]);
+			expect(flag?.short).toBe("t");
+			expect(flag?.aliases).toEqual([]);
 		});
 
-		it("normalizes a flag with multiple aliases sorted alphabetically", () => {
-			const cmd = defineCommand({
+		it("normalizes a flag with long aliases sorted alphabetically", () => {
+			const cmd = makeCommand({
 				meta: { name: "run" },
 				flags: {
 					output: {
 						type: "string",
-						alias: ["o", "O"],
+						short: "o",
+						aliases: ["out", "dest"],
 					},
 				},
 				run() {},
@@ -282,11 +316,12 @@ describe("buildManifest", () => {
 			const node = buildManifest(cmd);
 			const [flag] = node.flags;
 
-			expect(flag?.aliases).toEqual(["O", "o"]);
+			expect(flag?.short).toBe("o");
+			expect(flag?.aliases).toEqual(["dest", "out"]);
 		});
 
 		it("normalizes a multiple flag", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "lint" },
 				flags: {
 					ignore: {
@@ -306,7 +341,7 @@ describe("buildManifest", () => {
 		});
 
 		it("serializes flag default values as strings", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "serve" },
 				flags: {
 					port: {
@@ -334,7 +369,7 @@ describe("buildManifest", () => {
 		});
 
 		it("serializes multiple flag array defaults as JSON", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
 					entry: {
@@ -353,7 +388,7 @@ describe("buildManifest", () => {
 		});
 
 		it("sorts flags alphabetically by name", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "app" },
 				flags: {
 					zoo: { type: "string" },
@@ -369,7 +404,7 @@ describe("buildManifest", () => {
 		});
 
 		it("omits description and default when not provided on flag", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
 					quiet: { type: "boolean" },
@@ -391,17 +426,17 @@ describe("buildManifest", () => {
 
 	describe("subcommand tree traversal", () => {
 		it("builds children from subCommands", () => {
-			const serve = defineCommand({
+			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
 			});
 
-			const build = defineCommand({
+			const build = makeCommand({
 				meta: { name: "build", description: "Build project" },
 				run() {},
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: { serve, build },
 			});
@@ -416,24 +451,24 @@ describe("buildManifest", () => {
 		});
 
 		it("constructs correct paths for nested subcommands", () => {
-			const add = defineCommand({
+			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
-				args: [{ name: "name", type: "string", required: true }] as const,
+				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
 				run() {},
 			});
 
-			const remove = defineCommand({
+			const remove = makeCommand({
 				meta: { name: "remove", description: "Remove a remote" },
-				args: [{ name: "name", type: "string", required: true }] as const,
+				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
 				run() {},
 			});
 
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				subCommands: { add, remove },
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "git" },
 				subCommands: { remote },
 			});
@@ -449,25 +484,25 @@ describe("buildManifest", () => {
 		});
 
 		it("sorts children alphabetically at every level", () => {
-			const zeta = defineCommand({
+			const zeta = makeCommand({
 				meta: { name: "zeta" },
 				run() {},
 			});
-			const alpha = defineCommand({
+			const alpha = makeCommand({
 				meta: { name: "alpha" },
 				run() {},
 			});
-			const beta = defineCommand({
+			const beta = makeCommand({
 				meta: { name: "beta" },
 				run() {},
 			});
 
-			const group = defineCommand({
+			const group = makeCommand({
 				meta: { name: "group" },
 				subCommands: { zeta, alpha, beta },
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: { group },
 			});
@@ -483,17 +518,17 @@ describe("buildManifest", () => {
 		});
 
 		it("correctly marks runnable vs group commands in deep trees", () => {
-			const leaf = defineCommand({
+			const leaf = makeCommand({
 				meta: { name: "leaf" },
 				run() {},
 			});
 
-			const middle = defineCommand({
+			const middle = makeCommand({
 				meta: { name: "middle" },
 				subCommands: { leaf },
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "root" },
 				subCommands: { middle },
 			});
@@ -508,12 +543,12 @@ describe("buildManifest", () => {
 		});
 
 		it("handles a command that is both runnable and has subcommands", () => {
-			const sub = defineCommand({
+			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
 			});
 
-			const parent = defineCommand({
+			const parent = makeCommand({
 				meta: { name: "parent" },
 				subCommands: { sub },
 				run() {},
@@ -528,7 +563,7 @@ describe("buildManifest", () => {
 		});
 
 		it("handles commands with no subCommands returning empty children", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "solo" },
 				run() {},
 			});
@@ -545,17 +580,17 @@ describe("buildManifest", () => {
 
 	describe("deterministic output", () => {
 		it("produces identical manifests from the same command tree", () => {
-			const leaf = defineCommand({
+			const leaf = makeCommand({
 				meta: { name: "deploy", description: "Deploy the app" },
-				args: [{ name: "env", type: "string", required: true }] as const,
+				args: [{ name: "env", type: "string", required: true }] as ArgDef[],
 				flags: {
-					force: { type: "boolean", alias: "f" },
+					force: { type: "boolean", short: "f" },
 					target: { type: "string", default: "production" },
 				},
 				run() {},
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: { deploy: leaf },
 			});
@@ -574,7 +609,7 @@ describe("buildManifest", () => {
 	describe("complex command tree fixture", () => {
 		it("builds a full manifest from a realistic command tree", () => {
 			// Simulate a git-like CLI
-			const clone = defineCommand({
+			const clone = makeCommand({
 				meta: { name: "clone", description: "Clone a repository" },
 				args: [
 					{
@@ -588,11 +623,11 @@ describe("buildManifest", () => {
 						type: "string",
 						description: "Target directory",
 					},
-				] as const,
+				] as ArgDef[],
 				flags: {
 					branch: {
 						type: "string",
-						alias: "b",
+						short: "b",
 						description: "Branch to clone",
 					},
 					depth: {
@@ -607,31 +642,31 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const remoteAdd = defineCommand({
+			const remoteAdd = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				args: [
 					{ name: "name", type: "string", required: true },
 					{ name: "url", type: "string", required: true },
-				] as const,
+				] as ArgDef[],
 				run() {},
 			});
 
-			const remoteRemove = defineCommand({
+			const remoteRemove = makeCommand({
 				meta: { name: "remove", description: "Remove a remote" },
-				args: [{ name: "name", type: "string", required: true }] as const,
+				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
 				run() {},
 			});
 
-			const remote = defineCommand({
+			const remote = makeCommand({
 				meta: { name: "remote", description: "Manage remotes" },
 				flags: {
-					verbose: { type: "boolean", alias: "v" },
+					verbose: { type: "boolean", short: "v" },
 				},
 				subCommands: { add: remoteAdd, remove: remoteRemove },
 				run() {},
 			});
 
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: {
 					name: "git",
 					description: "A distributed version control system",
@@ -664,7 +699,8 @@ describe("buildManifest", () => {
 				"branch",
 				"depth",
 			]);
-			expect(cloneNode?.flags[1]?.aliases).toEqual(["b"]);
+			expect(cloneNode?.flags[1]?.short).toBe("b");
+			expect(cloneNode?.flags[1]?.aliases).toEqual([]);
 
 			// remote
 			const remoteNode = manifest.children[1];
@@ -690,7 +726,7 @@ describe("buildManifest", () => {
 
 	describe("edge cases", () => {
 		it("handles command with preRun/postRun but no run as not runnable", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "hook-only" },
 				preRun() {},
 				postRun() {},
@@ -703,19 +739,19 @@ describe("buildManifest", () => {
 		});
 
 		it("handles deeply nested commands (4 levels)", () => {
-			const deep = defineCommand({
+			const deep = makeCommand({
 				meta: { name: "deep" },
 				run() {},
 			});
-			const level3 = defineCommand({
+			const level3 = makeCommand({
 				meta: { name: "level3" },
 				subCommands: { deep },
 			});
-			const level2 = defineCommand({
+			const level2 = makeCommand({
 				meta: { name: "level2" },
 				subCommands: { level3 },
 			});
-			const root = defineCommand({
+			const root = makeCommand({
 				meta: { name: "root" },
 				subCommands: { level2 },
 			});
@@ -728,7 +764,7 @@ describe("buildManifest", () => {
 		});
 
 		it("handles empty flags record", () => {
-			const cmd = defineCommand({
+			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {},
 				run() {},

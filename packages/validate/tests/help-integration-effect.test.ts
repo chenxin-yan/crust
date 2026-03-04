@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { defineCommand, runCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import * as Schema from "effect/Schema";
 import { arg, commandValidator, flag } from "../src/effect/index.ts";
@@ -24,27 +24,24 @@ function getStdout(): string {
 	return stdoutChunks.join("\n");
 }
 
-describe("help plugin integration with defineCommand + commandValidator", () => {
+describe("help plugin integration with Crust builder + commandValidator", () => {
 	it("renders help for a flags-only schema-first command", async () => {
-		const cmd = defineCommand({
-			meta: { name: "serve", description: "Start dev server" },
-			flags: {
+		const app = new Crust("serve")
+			.meta({ description: "Start dev server" })
+			.flags({
 				verbose: flag(
 					Schema.UndefinedOr(
 						Schema.Boolean.annotations({
 							description: "Enable verbose logging",
 						}),
 					),
-					{ alias: "v" },
+					{ short: "v" },
 				),
-			},
-			run: commandValidator(() => {}),
-		});
+			})
+			.run(commandValidator(() => {}))
+			.use(helpPlugin());
 
-		await runCommand(cmd, {
-			argv: ["--help"],
-			plugins: [helpPlugin()],
-		});
+		await app.execute({ argv: ["--help"] });
 
 		const output = getStdout();
 		expect(output).toContain("serve - Start dev server");
@@ -57,9 +54,8 @@ describe("help plugin integration with defineCommand + commandValidator", () => 
 	});
 
 	it("renders args and options sections from generated definitions", () => {
-		const cmd = defineCommand({
-			meta: { name: "build" },
-			args: [
+		const app = new Crust("build")
+			.args([
 				arg("entry", Schema.String.annotations({ description: "Entry file" })),
 				arg(
 					"target",
@@ -67,16 +63,15 @@ describe("help plugin integration with defineCommand + commandValidator", () => 
 						Schema.String.annotations({ description: "Build target" }),
 					),
 				),
-			],
-			flags: {
+			])
+			.flags({
 				outDir: flag(
 					Schema.String.annotations({ description: "Output directory" }),
-					{ alias: "o" },
+					{ short: "o" },
 				),
-			},
-		});
+			});
 
-		const output = renderHelp(cmd);
+		const output = renderHelp(app._node);
 		expect(output).toContain("build <entry> [target] [options]");
 		expect(output).toContain("ARGS:");
 		expect(output).toContain("<entry>");
@@ -87,12 +82,11 @@ describe("help plugin integration with defineCommand + commandValidator", () => 
 		expect(output).toContain("-o, --outDir");
 	});
 
-	it("runs command with both args and flags through runCommand", async () => {
+	it("runs command with both args and flags through execute", async () => {
 		const received: { args: unknown; flags: unknown }[] = [];
 
-		const cmd = defineCommand({
-			meta: { name: "build" },
-			args: [
+		const app = new Crust("build")
+			.args([
 				arg("entry", Schema.String.annotations({ description: "Entry file" })),
 				arg(
 					"target",
@@ -100,22 +94,21 @@ describe("help plugin integration with defineCommand + commandValidator", () => 
 						Schema.String.annotations({ description: "Build target" }),
 					),
 				),
-			],
-			flags: {
+			])
+			.flags({
 				outDir: flag(
 					Schema.String.annotations({ description: "Output directory" }),
-					{ alias: "o" },
+					{ short: "o" },
 				),
-			},
-			run: commandValidator(({ args, flags }) => {
-				received.push({ args, flags });
-			}),
-		});
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					received.push({ args, flags });
+				}),
+			)
+			.use(helpPlugin());
 
-		await runCommand(cmd, {
-			argv: ["index.ts", "es2022", "-o", "dist"],
-			plugins: [helpPlugin()],
-		});
+		await app.execute({ argv: ["index.ts", "es2022", "-o", "dist"] });
 
 		expect(received).toHaveLength(1);
 		expect(received[0]?.args).toEqual({
@@ -126,32 +119,26 @@ describe("help plugin integration with defineCommand + commandValidator", () => 
 	});
 
 	it("extracts description from schema annotations", () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			flags: {
-				port: flag(
-					Schema.Number.annotations({ description: "Schema description" }),
-				),
-			},
+		const app = new Crust("app").flags({
+			port: flag(
+				Schema.Number.annotations({ description: "Schema description" }),
+			),
 		});
 
-		const output = renderHelp(cmd);
+		const output = renderHelp(app._node);
 		expect(output).toContain("Schema description");
 	});
 
 	it("resolves description through wrappers like UndefinedOr", () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			flags: {
-				port: flag(
-					Schema.UndefinedOr(
-						Schema.Number.annotations({ description: "Port number" }),
-					),
+		const app = new Crust("app").flags({
+			port: flag(
+				Schema.UndefinedOr(
+					Schema.Number.annotations({ description: "Port number" }),
 				),
-			},
+			),
 		});
 
-		const output = renderHelp(cmd);
+		const output = renderHelp(app._node);
 		expect(output).toContain("Port number");
 	});
 });

@@ -12,10 +12,10 @@ Crust uses a custom `CrustError` class with typed error codes for all framework-
 Every error thrown by Crust is an instance of `CrustError`:
 
 ```ts
-import { CrustError } from "@crustjs/core";
+import { CrustError, parseArgs } from "@crustjs/core";
 
 try {
-  await runCommand(cmd, { argv: ["--unknown"] });
+  parseArgs(cmd._node, ["--unknown"]);
 } catch (error) {
   if (error instanceof CrustError) {
     console.log(error.code);    // "PARSE"
@@ -55,7 +55,7 @@ interface CommandNotFoundErrorDetails {
   input: string;              // What the user typed
   available: string[];         // Valid subcommand names
   commandPath: string[];       // Path to the parent command
-  parentCommand: AnyCommand;   // The parent command object
+  parentCommand: CommandNode;  // The parent command node
 }
 ```
 
@@ -75,13 +75,26 @@ try {
 
 Access the original via `error.cause`.
 
-## runMain vs runCommand
+## How `.execute()` Handles Errors
 
-`runMain` catches all errors, prints them to stderr, and sets `process.exitCode = 1`. `runCommand` throws errors to the caller for programmatic handling. See the [comparison table](/docs/api/run-main#vs-runcommand) for details.
+`.execute()` catches all errors, prints them to stderr as `Error: <message>`, and sets `process.exitCode = 1`. It never throws. This handles:
+
+- Validation errors (missing args/flags)
+- Parse errors (unknown flags, bad types)
+- Command not found errors
+- Runtime errors (exceptions in command handlers)
+- Non-CrustError exceptions are wrapped in `CrustError("EXECUTION", ...)` with the original error set as the cause
 
 ## Error Wrapping
 
-When a non-`CrustError` is thrown inside a command handler, `runCommand` automatically wraps it in a `CrustError("EXECUTION", ...)` with the original error set as the cause. This ensures all errors from `runCommand` are `CrustError` instances. See [runCommand() error handling](/docs/api/run-command#error-handling) for details.
+When a non-`CrustError` is thrown inside a command handler, `.execute()` automatically wraps it:
+
+```ts
+// Original: throw new Error("oops")
+// Becomes: CrustError("EXECUTION", "oops") with cause set to original error
+```
+
+This ensures consistent error formatting for all errors.
 
 ## Throwing Errors in Commands
 
@@ -90,59 +103,64 @@ For framework-level errors, throw `CrustError`:
 ```ts
 import { CrustError } from "@crustjs/core";
 
-run({ flags }) {
+.run(({ flags }) => {
   if (!isValidConfig(flags.config)) {
     throw new CrustError("VALIDATION", `Invalid config file: ${flags.config}`);
   }
-}
+})
 ```
 
 For application-level errors, throw plain `Error`:
 
 ```ts
-run({ flags }) {
+.run(({ flags }) => {
   const result = await deploy(flags.env);
   if (!result.ok) {
     throw new Error(`Deployment failed: ${result.message}`);
   }
-}
+})
 ```
 
 Both are handled correctly — plain errors get wrapped in `CrustError("EXECUTION", ...)` automatically.
 
 ## Validation Layers
 
-Crust catches command definition mistakes through three complementary layers. Each layer guards against the same class of issues, so errors are caught as early as possible — at compile time if types are narrowed, at definition time if `defineCommand` is called, and at build time before a binary is shipped.
+Crust catches command definition mistakes through three complementary layers. Each layer guards against the same class of issues, so errors are caught as early as possible — at compile time if types are narrowed, at definition time if the builder is called, and at build time before a binary is shipped.
 
 ### 1. Compile-Time (TypeScript Types)
 
-When you use `defineCommand` with literal types (e.g. `as const` on args), TypeScript catches structural issues **before your code runs**. The error appears as a red squiggle on the exact offending arg or flag.
+When you use `.flags()` and `.args()` with literal types, TypeScript catches structural issues **before your code runs**. The error appears as a red squiggle on the exact offending arg or flag.
 
 | Check | Type Utility | Branded Error Property | Example |
 | --- | --- | --- | --- |
 | Only last arg can be variadic | `ValidateVariadicArgs` | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
-| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `alias: "v"` |
+| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `short: "v"` |
 | No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX` | Flag named `no-cache` or alias `no-store` |
 
 These checks are **bypassed** when types are widened (e.g. `as any`, dynamic construction, or non-const generics). The runtime layers below serve as defense-in-depth.
 
-### 2. Runtime (defineCommand + parseArgs)
+### 2. Runtime (Builder Methods + parseArgs)
 
 Even without TypeScript or when types are erased, Crust validates definitions at runtime:
 
-**`defineCommand` throws `CrustError("DEFINITION")`:**
+**`.flags()` throws `CrustError("DEFINITION")`:**
 
 | Check | Error Message |
 | --- | --- |
-| Empty `meta.name` | `meta.name must be a non-empty string` |
 | Flag name starts with `no-` | `Flag "--no-cache" must not use "no-" prefix; define "cache" and negate with "--no-cache"` |
 | Alias starts with `no-` | `Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)` |
+
+**Constructor throws `CrustError("DEFINITION")`:**
+
+| Check | Error Message |
+| --- | --- |
+| Empty name | `meta.name must be a non-empty string` |
 
 **`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
 
 | Check | Code | Error Message |
 | --- | --- | --- |
-| Alias collision (alias→name or alias→alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
+| Alias collision (alias->name or alias->alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
 | `no-` prefixed flag name (defense-in-depth) | `DEFINITION` | `Flag "--no-cache" must not use "no-" prefix...` |
 | `no-` prefixed alias (defense-in-depth) | `DEFINITION` | `Alias "--no-store" on "--cache" must not use "no-" prefix...` |
 | Unknown flag (strict mode) | `PARSE` | `Unknown flag "--unknown"` |

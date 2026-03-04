@@ -97,7 +97,7 @@ const FEATURES = [
   { id: "zero-deps", title: "Zero Deps", desc: "No runtime dependencies." },
   { id: "composable", title: "Composable", desc: "Modular packages." },
   { id: "plugins", title: "Plugins", desc: "Middleware-based hooks." },
-  { id: "declarative", title: "Declarative", desc: "Commands as objects." },
+  { id: "chainable", title: "Chainable", desc: "Fluent builder API." },
   { id: "bun-native", title: "Bun Native", desc: "Built for Bun runtime." },
 ];
 
@@ -213,20 +213,21 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
   return Object.fromEntries(entries) as Record<string, string | null>;
 });
 
-const CODE_EXAMPLE = `import { defineCommand, runMain } from "@crustjs/core";
+const CODE_EXAMPLE = `import { Crust } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
 
-const cli = defineCommand({
-  meta: { name: "greet" },
-  args: [{ name: "name", type: "string" }],
-  flags: { shout: { type: "boolean", alias: "s" } },
-  run({ args, flags }) {
-    let msg = \`Hello, \${args.name}!\`;
-    if (flags.shout) msg = msg.toUpperCase();
-    console.log(msg);
-  },
-});
+const cli = new Crust("greet")
+  .use(helpPlugin())
+  .args([{ name: "name", type: "string" }])
+  .flags({
+    shout: { type: "boolean", alias: "s" },
+  })
+  .run(({ args, flags }) => {
+    const msg = \`Hello, \${args.name}!\`;
+    console.log(flags.shout ? msg.toUpperCase() : msg);
+  });
 
-runMain(cli);`;
+await cli.execute();`;
 
 const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 

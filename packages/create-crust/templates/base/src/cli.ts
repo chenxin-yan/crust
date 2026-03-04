@@ -1,33 +1,29 @@
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
-const main = defineCommand({
-	meta: {
-		name: "{{name}}",
-		description: "A CLI built with Crust",
-	},
-	args: [
+const cli = new Crust("{{name}}")
+	.meta({ description: "A CLI built with Crust" })
+	.use(versionPlugin(pkg.version))
+	.use(helpPlugin())
+	.args([
 		{
 			name: "name",
 			type: "string",
 			description: "Your name",
 			default: "world",
 		},
-	],
-	flags: {
+	])
+	.flags({
 		greet: {
 			type: "string",
 			description: "Greeting to use",
 			default: "Hello",
-			alias: "g",
+			short: "g",
 		},
-	},
-	run({ args, flags }) {
+	})
+	.run(({ args, flags }) => {
 		console.log(`${flags.greet}, ${args.name}!`);
-	},
-});
+	});
 
-runMain(main, {
-	plugins: [versionPlugin(pkg.version), helpPlugin()],
-});
+await cli.execute();

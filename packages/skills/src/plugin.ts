@@ -2,8 +2,8 @@
 // Plugin layer — skillPlugin with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnyCommand, CrustPlugin } from "@crustjs/core";
-import { defineCommand, VALIDATION_MODE_ENV } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core";
+import { createCommandNode, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { confirm, multiselect, spinner } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
 import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
@@ -29,7 +29,7 @@ const DEFAULT_SKILL_SCOPE = "global";
  * The returned `name` is the raw CLI name (e.g. `"my-cli"`). The `use-`
  * prefix is applied downstream by `generateSkill()` and friends.
  */
-function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
+function deriveSkillMeta(command: CommandNode, version: string): SkillMeta {
 	return {
 		name: command.meta.name,
 		description: command.meta.description ?? "",
@@ -46,7 +46,7 @@ function deriveSkillMeta(command: AnyCommand, version: string): SkillMeta {
  * should be done via the interactive command or programmatically by the user.
  */
 async function autoUpdateSkills(
-	rootCmd: AnyCommand,
+	rootCmd: CommandNode,
 	options: SkillPluginOptions,
 ): Promise<void> {
 	const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
@@ -147,25 +147,21 @@ async function autoUpdateSkills(
  *
  * @example
  * ```ts
- * import { defineCommand, runMain } from "@crustjs/core";
+ * import { Crust } from "@crustjs/core";
  * import { skillPlugin } from "@crustjs/skills";
  *
- * const app = defineCommand({
- *   meta: { name: "my-cli", description: "My CLI" },
- * });
+ * const app = new Crust("my-cli").meta({ description: "My CLI" })
+ *   .use(skillPlugin({
+ *     version: "1.0.0",
+ *     command: true, // registers "my-cli skill" subcommand
+ *   }))
+ *   .run(() => { /* ... *​/ });
  *
- * runMain(app, {
- *   plugins: [
- *     skillPlugin({
- *       version: "1.0.0",
- *       command: true, // registers "my-cli skill" subcommand
- *     }),
- *   ],
- * });
+ * await app.execute();
  * ```
  */
 export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
-	let rootCmd: AnyCommand;
+	let rootCmd: CommandNode;
 
 	return {
 		name: "skills",
@@ -219,162 +215,159 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
  * (defaulting to `"global"`) — no interactive scope selection.
  */
 function buildSkillCommand(
-	rootCmd: AnyCommand,
+	rootCmd: CommandNode,
 	options: SkillPluginOptions,
-): AnyCommand {
-	return defineCommand({
-		meta: {
-			name: DEFAULT_SKILL_COMMAND_NAME,
-			description: "Manage agent skill installations",
-		},
-		async run() {
-			const meta = deriveSkillMeta(rootCmd, options.version);
-			const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
+): CommandNode {
+	const node = createCommandNode(DEFAULT_SKILL_COMMAND_NAME);
+	node.meta.description = "Manage agent skill installations";
+	node.run = async () => {
+		const meta = deriveSkillMeta(rootCmd, options.version);
+		const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
 
-			// Detect installed agents
-			const detectedAgents = await detectInstalledAgents({
-				scope,
-			});
-			if (detectedAgents.length === 0) {
-				console.log(
-					yellow(
-						"No supported agents detected. Install Claude Code or OpenCode first.",
-					),
-				);
-				return;
+		// Detect installed agents
+		const detectedAgents = await detectInstalledAgents({
+			scope,
+		});
+		if (detectedAgents.length === 0) {
+			console.log(
+				yellow(
+					"No supported agents detected. Install Claude Code or OpenCode first.",
+				),
+			);
+			return;
+		}
+
+		// Check current skill status for each agent
+		const status = await skillStatus({
+			name: meta.name,
+			agents: detectedAgents,
+			scope,
+		});
+
+		// Build multiselect choices with status hints and pre-selection
+		const installedAgents: AgentTarget[] = [];
+		const choices = status.agents.map((entry) => {
+			const hint = entry.installed
+				? `v${entry.version} installed`
+				: "not installed";
+
+			if (entry.installed) {
+				installedAgents.push(entry.agent);
 			}
 
-			// Check current skill status for each agent
-			const status = await skillStatus({
-				name: meta.name,
-				agents: detectedAgents,
-				scope,
-			});
+			return {
+				label: AGENT_LABELS[entry.agent],
+				value: entry.agent,
+				hint,
+			};
+		});
 
-			// Build multiselect choices with status hints and pre-selection
-			const installedAgents: AgentTarget[] = [];
-			const choices = status.agents.map((entry) => {
-				const hint = entry.installed
-					? `v${entry.version} installed`
-					: "not installed";
+		// Single multiselect — pre-check currently installed agents
+		// In non-interactive mode (no TTY), install to all detected agents
+		const isInteractive = process.stdin.isTTY;
+		const selected = await multiselect({
+			message: "Select agents to install skills for",
+			choices,
+			default: installedAgents,
+			initial: !isInteractive ? detectedAgents : undefined,
+			required: false,
+		});
 
-				if (entry.installed) {
-					installedAgents.push(entry.agent);
-				}
+		// Compute diff
+		const toInstall = selected.filter(
+			(agent) => !installedAgents.includes(agent),
+		);
+		const toUpdate = selected.filter((agent) => {
+			const entry = status.agents.find((a) => a.agent === agent);
+			return entry?.installed === true && entry.version !== meta.version;
+		});
+		const toUninstall = installedAgents.filter(
+			(agent) => !selected.includes(agent),
+		);
 
-				return {
-					label: AGENT_LABELS[entry.agent],
-					value: entry.agent,
-					hint,
-				};
-			});
+		const agentsToGenerate = [...toInstall, ...toUpdate];
 
-			// Single multiselect — pre-check currently installed agents
-			// In non-interactive mode (no TTY), install to all detected agents
-			const isInteractive = process.stdin.isTTY;
-			const selected = await multiselect({
-				message: "Select agents to install skills for",
-				choices,
-				default: installedAgents,
-				initial: !isInteractive ? detectedAgents : undefined,
-				required: false,
-			});
-
-			// Compute diff
-			const toInstall = selected.filter(
-				(agent) => !installedAgents.includes(agent),
-			);
-			const toUpdate = selected.filter((agent) => {
-				const entry = status.agents.find((a) => a.agent === agent);
-				return entry?.installed === true && entry.version !== meta.version;
-			});
-			const toUninstall = installedAgents.filter(
-				(agent) => !selected.includes(agent),
-			);
-
-			const agentsToGenerate = [...toInstall, ...toUpdate];
-
-			// Install/update selected agents
-			if (agentsToGenerate.length > 0) {
-				try {
-					const result = await spinner({
-						message: "Installing skills...",
-						task: async () =>
-							generateSkill({
-								command: rootCmd,
-								meta,
-								agents: agentsToGenerate,
-								scope,
-							}),
-					});
-
-					console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
-					for (const r of result.agents) {
-						console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
-					}
-				} catch (err) {
-					if (err instanceof SkillConflictError) {
-						const overwrite = await confirm({
-							message:
-								`"${err.details.outputDir}" already exists but was not ` +
-								`created by Crust. Overwrite?`,
-							default: false,
-							initial: !isInteractive ? false : undefined,
-						});
-
-						if (overwrite) {
-							const result = await spinner({
-								message: "Overwriting skill...",
-								task: async () =>
-									generateSkill({
-										command: rootCmd,
-										meta,
-										agents: [err.details.agent],
-										scope,
-										force: true,
-									}),
-							});
-
-							console.log(
-								`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`,
-							);
-							for (const r of result.agents) {
-								console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
-							}
-						} else {
-							console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}`));
-						}
-					} else {
-						throw err;
-					}
-				}
-			}
-
-			// Uninstall deselected agents
-			if (toUninstall.length > 0) {
+		// Install/update selected agents
+		if (agentsToGenerate.length > 0) {
+			try {
 				const result = await spinner({
-					message: "Removing skills...",
+					message: "Installing skills...",
 					task: async () =>
-						uninstallSkill({
-							name: meta.name,
-							agents: toUninstall,
+						generateSkill({
+							command: rootCmd,
+							meta,
+							agents: agentsToGenerate,
 							scope,
 						}),
 				});
 
-				const removed = result.agents
-					.filter((a) => a.status === "removed")
-					.map((a) => AGENT_LABELS[a.agent]);
+				console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
+				for (const r of result.agents) {
+					console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
+				}
+			} catch (err) {
+				if (err instanceof SkillConflictError) {
+					const overwrite = await confirm({
+						message:
+							`"${err.details.outputDir}" already exists but was not ` +
+							`created by Crust. Overwrite?`,
+						default: false,
+						initial: !isInteractive ? false : undefined,
+					});
 
-				if (removed.length > 0) {
-					console.log(`\n${bold(`Removed from ${removed.join(", ")}`)}`);
+					if (overwrite) {
+						const result = await spinner({
+							message: "Overwriting skill...",
+							task: async () =>
+								generateSkill({
+									command: rootCmd,
+									meta,
+									agents: [err.details.agent],
+									scope,
+									force: true,
+								}),
+						});
+
+						console.log(
+							`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`,
+						);
+						for (const r of result.agents) {
+							console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
+						}
+					} else {
+						console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}`));
+					}
+				} else {
+					throw err;
 				}
 			}
+		}
 
-			// No changes
-			if (agentsToGenerate.length === 0 && toUninstall.length === 0) {
-				console.log(dim("No changes."));
+		// Uninstall deselected agents
+		if (toUninstall.length > 0) {
+			const result = await spinner({
+				message: "Removing skills...",
+				task: async () =>
+					uninstallSkill({
+						name: meta.name,
+						agents: toUninstall,
+						scope,
+					}),
+			});
+
+			const removed = result.agents
+				.filter((a) => a.status === "removed")
+				.map((a) => AGENT_LABELS[a.agent]);
+
+			if (removed.length > 0) {
+				console.log(`\n${bold(`Removed from ${removed.join(", ")}`)}`);
 			}
-		},
-	});
+		}
+
+		// No changes
+		if (agentsToGenerate.length === 0 && toUninstall.length === 0) {
+			console.log(dim("No changes."));
+		}
+	};
+	return node;
 }

@@ -10,12 +10,14 @@ The version plugin adds `--version` / `-v` to the root command, printing the CLI
 ## Usage
 
 ```ts
-import { runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { versionPlugin } from "@crustjs/plugins";
 
-runMain(main, {
-  plugins: [versionPlugin("1.0.0")],
-});
+const main = new Crust("my-cli")
+  .use(versionPlugin("1.0.0"))
+  .run(() => { /* ... */ });
+
+await main.execute();
 ```
 
 ```sh

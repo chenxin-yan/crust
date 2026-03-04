@@ -46,23 +46,19 @@ import {
   autoCompletePlugin,
   updateNotifierPlugin,
 } from "@crustjs/plugins";
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI" },
-  run() {
+const main = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(versionPlugin("1.0.0"))
+  .use(autoCompletePlugin({ mode: "help" }))
+  .use(helpPlugin())
+  .use(updateNotifierPlugin({ currentVersion: "1.0.0" }))
+  .run(() => {
     console.log("Hello!");
-  },
-});
+  });
 
-runMain(main, {
-  plugins: [
-    versionPlugin("1.0.0"),
-    autoCompletePlugin({ mode: "help" }),
-    helpPlugin(),
-    updateNotifierPlugin({ currentVersion: "1.0.0" }),
-  ],
-});
+await main.execute();
 ```
 
 ## When to Use Directly

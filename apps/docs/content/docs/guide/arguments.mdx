@@ -5,7 +5,7 @@ description: Define positional arguments with types, defaults, and validation.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Arguments are positional values passed to your CLI without a flag name. They're defined as an ordered array, and Crust maps them to named, typed values.
+Arguments are positional values passed to your CLI without a flag name. They're defined as an ordered array via `.args()`, and Crust maps them to named, typed values.
 
 ```sh
 my-cli serve 3000 localhost
@@ -15,24 +15,18 @@ my-cli serve 3000 localhost
 
 ## Defining Arguments
 
-Arguments are defined in the `args` array. Order matters — the first argument definition maps to the first positional value:
+Arguments are defined with the `.args()` method. Order matters — the first argument definition maps to the first positional value:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "serve" },
-  args: [
+const cmd = new Crust("serve")
+  .args([
     { name: "port", type: "number", default: 3000 },
     { name: "host", type: "string", default: "localhost" },
-  ] as const,
-  run({ args }) {
+  ])
+  .run(({ args }) => {
     console.log(`Listening on ${args.host}:${args.port}`);
-  },
-});
+  });
 ```
-
-<Callout>
-  Use `as const` on the `args` array to get full type inference. Without it, TypeScript can't infer the literal types of argument names.
-</Callout>
 
 ## Argument Properties
 
@@ -43,25 +37,25 @@ Each argument is an `ArgDef` object with properties like `name`, `type`, `descri
 Crust supports three argument type literals:
 
 ```ts
-args: [
+.args([
   { name: "port", type: "number" },    // Coerced to number
   { name: "host", type: "string" },    // Kept as string
   { name: "verbose", type: "boolean" }, // Coerced to boolean
-] as const,
+])
 ```
 
 - **`"string"`** — The value is kept as-is
 - **`"number"`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
-- **`"boolean"`** — The value is coerced to a boolean (`"true"` / `"1"` → `true`)
+- **`"boolean"`** — The value is coerced to a boolean (`"true"` / `"1"` -> `true`)
 
 ## Required Arguments
 
 Mark an argument as `required` to error when it's missing:
 
 ```ts
-args: [
+.args([
   { name: "name", type: "string", required: true },
-] as const,
+])
 ```
 
 ```sh
@@ -76,9 +70,9 @@ When required is `true`, the inferred type is guaranteed (no `| undefined`).
 Provide a `default` for optional arguments:
 
 ```ts
-args: [
+.args([
   { name: "port", type: "number", default: 3000 },
-] as const,
+])
 ```
 
 When a default is set, the argument is always present in `args` — the inferred type is guaranteed (no `| undefined`).
@@ -88,12 +82,13 @@ When a default is set, the argument is always present in `args` — the inferred
 Arguments without `required` or `default` are optional. Their type includes `| undefined`:
 
 ```ts
-args: [
-  { name: "name", type: "string" },
-] as const,
-run({ args }) {
-  args.name; // string | undefined
-}
+new Crust("example")
+  .args([
+    { name: "name", type: "string" },
+  ])
+  .run(({ args }) => {
+    args.name; // string | undefined
+  })
 ```
 
 ## Variadic Arguments
@@ -101,20 +96,18 @@ run({ args }) {
 The last argument can be `variadic`, collecting all remaining positional values into an array:
 
 ```ts
-const cmd = defineCommand({
-  meta: { name: "copy" },
-  args: [
+const cmd = new Crust("copy")
+  .args([
     { name: "destination", type: "string", required: true },
     { name: "files", type: "string", variadic: true },
-  ] as const,
-  run({ args }) {
+  ])
+  .run(({ args }) => {
     args.destination; // string
     args.files;       // string[]
     for (const file of args.files) {
       console.log(`Copying ${file} to ${args.destination}`);
     }
-  },
-});
+  });
 ```
 
 ```sh
@@ -132,10 +125,10 @@ Variadic arguments with `required: true` error when no values are provided. With
 Arguments after `--` are collected into `rawArgs` and **not** processed as positional arguments or flags:
 
 ```ts
-run({ args, rawArgs }) {
+.run(({ args, rawArgs }) => {
   // rawArgs contains everything after --
   console.log("Raw args:", rawArgs);
-}
+})
 ```
 
 ```sh

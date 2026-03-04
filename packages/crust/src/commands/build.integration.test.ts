@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { runCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { buildCommand } from "../../src/commands/build.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -47,8 +47,10 @@ console.log("hello from crust build test");
 		};
 
 		try {
-			await runCommand(buildCommand, {
+			const app = new Crust("test").command("build", buildCommand);
+			await app.execute({
 				argv: [
+					"build",
 					"--entry",
 					"src/cli.ts",
 					"--outfile",
@@ -106,8 +108,10 @@ console.log("hello from crust build test");
 		const outPath = join(tmpDir, "dist", "test-cli-no-minify");
 
 		try {
-			await runCommand(buildCommand, {
+			const app = new Crust("test").command("build", buildCommand);
+			await app.execute({
 				argv: [
+					"build",
 					"--entry",
 					"src/cli.ts",
 					"--outfile",
@@ -136,8 +140,9 @@ console.log("hello from crust build test");
 		};
 
 		try {
-			await runCommand(buildCommand, {
-				argv: ["--entry", "src/cli.ts", "--target", "darwin-arm64"],
+			const app = new Crust("test").command("build", buildCommand);
+			await app.execute({
+				argv: ["build", "--entry", "src/cli.ts", "--target", "darwin-arm64"],
 			});
 		} finally {
 			console.log = originalLog;

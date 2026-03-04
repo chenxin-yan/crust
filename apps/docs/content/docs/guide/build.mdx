@@ -140,7 +140,7 @@ crust build --no-minify
 
 Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
-The validation works by spawning `bun <entry>` as a subprocess with `CRUST_INTERNAL_VALIDATE_ONLY=1`. When [`runMain`](/docs/api/run-main) detects this environment variable, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers.
+The validation works by spawning `bun <entry>` as a subprocess with `CRUST_INTERNAL_VALIDATE_ONLY=1`. When [`.execute()`](/docs/api/crust#executeoptions) detects this environment variable, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers.
 
 ### What it catches
 

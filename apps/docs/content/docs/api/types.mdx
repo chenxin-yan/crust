@@ -7,48 +7,39 @@ Complete reference of all types exported from `@crustjs/core`.
 
 ## Command Types
 
-### `CommandDef<A, F>`
+### `CommandNode`
 
-The command definition input shape accepted by `defineCommand`.
+Internal representation of a single node in the command tree. Built by the `Crust` builder class; exported for downstream packages.
 
 ```ts
-interface CommandDef<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
+interface CommandNode {
   meta: CommandMeta;
-  args?: A;
-  flags?: F;
-  subCommands?: Record<string, AnyCommand>;
-  preRun?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
-  run?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
-  postRun?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
+  localFlags: FlagsDef;
+  effectiveFlags: FlagsDef;
+  args: ArgsDef | undefined;
+  subCommands: Record<string, CommandNode>;
+  plugins: CrustPlugin[];
+  preRun?: (ctx: unknown) => void | Promise<void>;
+  run?: (ctx: unknown) => void | Promise<void>;
+  postRun?: (ctx: unknown) => void | Promise<void>;
 }
 ```
 
-`NoInfer` ensures `A`/`F` are inferred from `args`/`flags` definitions (data properties), not from callback parameter annotations.
+- `localFlags` — Flags defined directly on this command via `.flags()`
+- `effectiveFlags` — Inherited flags merged with local flags (used by the parser and help plugin)
+- `plugins` — Plugins registered via `.use()`
 
-### `Command<A, F>`
+### `CrustCommandContext<A, F>`
 
-The frozen command shape returned by `defineCommand` and used at runtime.
+Runtime context passed to `preRun`, `run`, and `postRun` hooks on the `Crust` builder:
 
 ```ts
-interface Command<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
-  readonly meta: CommandMeta;
-  readonly args?: A;
-  readonly flags?: F;
-  readonly subCommands: Record<string, AnyCommand>;
-  preRun?(context: CommandContext<A, F>): void | Promise<void>;
-  run?(context: CommandContext<A, F>): void | Promise<void>;
-  postRun?(context: CommandContext<A, F>): void | Promise<void>;
+interface CrustCommandContext<A extends ArgsDef, F extends FlagsDef> {
+  args: InferArgs<A>;       // Resolved positional arguments
+  flags: InferFlags<F>;     // Resolved flags
+  rawArgs: string[];         // Arguments after `--`
+  command: CommandNode;      // The resolved command node
 }
-```
-
-`subCommands` is always initialized (defaults to `{}`), even when omitted in `CommandDef`. This allows plugins to inject subcommands via `addSubCommand` during setup.
-
-### `AnyCommand`
-
-Type-erased command for collections and routing. Uses `any` for type parameters to enable bivariant checking:
-
-```ts
-type AnyCommand = Command<any, any>;
 ```
 
 ### `CommandMeta`
@@ -60,17 +51,6 @@ interface CommandMeta {
   name: string;          // Command name (required)
   description?: string;  // Help text description
   usage?: string;        // Custom usage string
-}
-```
-
-### `CommandContext<A, F>`
-
-Runtime context passed to `preRun`, `run`, and `postRun` hooks:
-
-```ts
-interface CommandContext<A extends ArgsDef, F extends FlagsDef>
-  extends ParseResult<A, F> {
-  command: AnyCommand;  // The resolved command being executed
 }
 ```
 
@@ -127,8 +107,10 @@ interface StringFlagDef {
   description?: string;        // Help text
   default?: string;            // Default value (type-safe)
   required?: true;             // Error if missing
-  alias?: string | string[];   // Short alias(es)
+  short?: string;              // Single-character short form (-x)
+  aliases?: string[];          // Additional aliases (single-char or long)
   multiple?: never;            // Absent for single-value flags
+  inherit?: true;              // Inherited by subcommands
 }
 
 // Multi-value string flag
@@ -137,13 +119,15 @@ interface StringMultiFlagDef {
   description?: string;        // Help text
   default?: string[];          // Default array value (type-safe)
   required?: true;             // Error if missing
-  alias?: string | string[];   // Short alias(es)
+  short?: string;              // Single-character short form (-x)
+  aliases?: string[];          // Additional aliases (single-char or long)
   multiple: true;              // Collect repeated values into array
+  inherit?: true;              // Inherited by subcommands
 }
 // Number and boolean variants follow the same pattern
 ```
 
-Boolean toggle fields (`required`, `multiple`) only accept `true` — passing `false` is a type error.
+Boolean toggle fields (`required`, `multiple`, `inherit`) only accept `true` — passing `false` is a type error.
 
 ### `FlagsDef`
 
@@ -152,6 +136,38 @@ Record mapping flag names to definitions:
 ```ts
 type FlagsDef = Record<string, FlagDef>;
 ```
+
+## Flag Inheritance Types
+
+### `InheritableFlags<F>`
+
+Picks only the flags from `F` that have `inherit: true`:
+
+```ts
+type InheritableFlags<F extends FlagsDef> = {
+  [K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
+};
+```
+
+### `MergeFlags<Parent, Local>`
+
+Merges parent flags with local flags, where local keys override parent keys:
+
+```ts
+type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> =
+  Omit<Parent, keyof Local> & Local;
+```
+
+### `EffectiveFlags<Inherited, Local>`
+
+Computes the effective flags for a command by filtering inherited flags (only those with `inherit: true`) and merging with local flags:
+
+```ts
+type EffectiveFlags<Inherited extends FlagsDef, Local extends FlagsDef> =
+  MergeFlags<InheritableFlags<Inherited>, Local>;
+```
+
+This is the type-level counterpart of the runtime `computeEffectiveFlags()` function.
 
 ## Inference Types
 
@@ -215,7 +231,7 @@ Output of `resolveCommand`:
 
 ```ts
 interface CommandRoute {
-  command: AnyCommand;     // The resolved command
+  command: CommandNode;    // The resolved command
   argv: string[];           // Remaining argv
   commandPath: string[];    // Full command path
 }
@@ -242,7 +258,7 @@ Context available during plugin setup:
 ```ts
 interface SetupContext {
   readonly argv: readonly string[];
-  readonly rootCommand: AnyCommand;
+  readonly rootCommand: CommandNode;
   readonly state: PluginState;
 }
 ```
@@ -253,12 +269,12 @@ Actions available during plugin setup:
 
 ```ts
 interface SetupActions {
-  addFlag(command: AnyCommand, name: string, def: FlagDef): void;
-  addSubCommand(parent: AnyCommand, name: string, command: AnyCommand): void;
+  addFlag(command: CommandNode, name: string, def: FlagDef): void;
+  addSubCommand(parent: CommandNode, name: string, command: CommandNode): void;
 }
 ```
 
-- `addFlag` — inject a flag into a command's flags object. If the command already has a flag with the same name, the plugin's flag overrides it. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
+- `addFlag` — inject a flag into a command's `effectiveFlags` object (`localFlags` is unchanged). If the command already has a flag with the same name, the plugin's flag overrides it. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
 - `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is skipped — user definitions always take priority. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
 
 ### `MiddlewareContext`
@@ -268,7 +284,7 @@ Context available during middleware execution:
 ```ts
 interface MiddlewareContext {
   readonly argv: readonly string[];
-  readonly rootCommand: AnyCommand;
+  readonly rootCommand: CommandNode;
   readonly state: PluginState;
   route: Readonly<CommandRoute> | null;
   input: ParseResult | null;
@@ -286,47 +302,44 @@ type PluginMiddleware = (
 ) => void | Promise<void>;
 ```
 
-## Run Types
+## Other Types
 
-### `RunOptions`
+### `ValueType`
 
-Options for `runCommand` and `runMain`:
+Supported type literals for args and flags:
 
 ```ts
-interface RunOptions {
-  argv?: string[];
-  plugins?: CrustPlugin[];
-}
+type ValueType = "string" | "number" | "boolean";
 ```
 
 ## Compile-Time Validation Types
 
 ### `ValidateVariadicArgs<A>`
 
-Per-arg validation used by `defineCommand`. Enforces that only the last positional argument can use `variadic: true`.
+Per-arg validation used by `.args()`. Enforces that only the last positional argument can use `variadic: true`.
 
 ```ts
-type ValidateVariadicArgs<A extends ArgsDef> = /* ... */;
+type ValidateVariadicArgs<A extends readonly object[]> = /* ... */;
 // On error, the offending arg gets a branded property:
 // { readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }
 ```
 
 ### `ValidateFlagAliases<F>`
 
-Per-flag validation used by `defineCommand`. Enforces that aliases do not collide with other flag names or aliases.
+Per-flag validation used by `.flags()`. Enforces that aliases do not collide with other flag names or aliases.
 
 ```ts
-type ValidateFlagAliases<F extends FlagsDef> = /* ... */;
+type ValidateFlagAliases<F extends Record<string, unknown>> = /* ... */;
 // On error, the offending flag gets a branded property:
 // { readonly FIX_ALIAS_COLLISION: `Alias "${...}" collides with another flag name or alias` }
 ```
 
 ### `ValidateNoPrefixedFlags<F>`
 
-Per-flag validation used by `defineCommand`. Reserves the `no-` prefix for boolean negation by rejecting flag names and aliases that start with `no-`.
+Per-flag validation used by `.flags()`. Reserves the `no-` prefix for boolean negation by rejecting flag names and aliases that start with `no-`.
 
 ```ts
-type ValidateNoPrefixedFlags<F extends FlagsDef> = /* ... */;
+type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = /* ... */;
 // On error, the offending flag gets a branded property:
 // { readonly FIX_NO_PREFIX: `Flag name "${...}" must not start with "no-"; ...` }
 // or

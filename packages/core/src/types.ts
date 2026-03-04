@@ -85,10 +85,14 @@ export type ArgsDef = readonly ArgDef[];
 interface FlagDefBase {
 	/** Human-readable description for help text */
 	description?: string;
-	/** Short alias or array of aliases (e.g. `"v"` or `["v", "V"]`) */
-	alias?: string | string[];
+	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`) */
+	aliases?: string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
+	/** When `true`, the flag is inherited by subcommands */
+	inherit?: true;
 }
 
 // ── Single-value flags ────────────────────────────────────────────────────
@@ -158,7 +162,7 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
  * @example
  * ```ts
  * const flags = {
- *   verbose: { type: "boolean", description: "Enable verbose logging", alias: "v" },
+ *   verbose: { type: "boolean", description: "Enable verbose logging", short: "v" },
  *   port: { type: "number", description: "Port number", default: 3000 },
  *   files: { type: "string", multiple: true, default: ["index.ts"] },
  * } satisfies FlagsDef;
@@ -180,26 +184,42 @@ export type FlagsDef = Record<string, FlagDef>;
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Extract alias string literals from any value that has an `alias` field.
+ * Extract the `short` alias literal from a flag definition.
+ * Resolves to `never` when no `short` field exists or when the type
+ * is the broad `string` (not a narrowed literal).
+ */
+type ExtractShort<F> = F extends { short: infer S }
+	? S extends string
+		? string extends S
+			? never
+			: S
+		: never
+	: never;
+
+/**
+ * Extract alias string literals from the `aliases` array of a flag definition.
+ * Resolves to `never` when no `aliases` field exists or when the element type
+ * is the broad `string` (not narrowed literals).
+ */
+type ExtractLongAliases<F> = F extends { aliases: infer A }
+	? A extends readonly string[]
+		? string extends A[number]
+			? never
+			: A[number]
+		: never
+	: never;
+
+/**
+ * Extract all alias identifiers (short + long) from a flag definition.
  *
  * Generalized to work with any shape (`FlagDef`, `FlagSpec`, etc.) —
- * values without an `alias` field resolve to `never`.
+ * values without `short`/`aliases` fields resolve to `never`.
  *
- * Includes a `string extends A` guard so non-narrowed aliases (e.g. the
+ * Includes `string extends ...` guards so non-narrowed types (e.g. the
  * broad `string` type from a default generic) resolve to `never` instead
  * of causing false-positive collisions.
  */
-type ExtractAliases<F> = F extends { alias: infer A }
-	? A extends string
-		? string extends A
-			? never
-			: A
-		: A extends readonly string[]
-			? string extends A[number]
-				? never
-				: A[number]
-			: never
-	: never;
+type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
 
 /**
  * Collects aliases from every flag *except* flag K.
@@ -209,7 +229,7 @@ type AliasesExcluding<
 	F extends Record<string, unknown>,
 	K extends keyof F & string,
 > = {
-	[J in Exclude<keyof F & string, K>]: ExtractAliases<F[J]>;
+	[J in Exclude<keyof F & string, K>]: ExtractAllAliases<F[J]>;
 }[Exclude<keyof F & string, K>];
 
 /**
@@ -221,8 +241,8 @@ type CollidingAliases<
 	F extends Record<string, unknown>,
 	K extends keyof F & string,
 > =
-	| (ExtractAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
-	| (ExtractAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
+	| (ExtractAllAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
+	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
 /**
  * Per-flag validation mapped type. Resolves to `F` when no collisions exist.
@@ -233,9 +253,9 @@ type CollidingAliases<
  * it with `FlagsDef`, the validate package uses it with `FlagShape`, etc.
  *
  * ```
- * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; alias: "minify" }'
+ * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; short: "m" }'
  *   but required in type
- *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"minify\" collides with another flag name or alias" }'.
+ *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"m\" collides with another flag name or alias" }'.
  * ```
  */
 export type ValidateFlagAliases<F extends Record<string, unknown>> = {
@@ -245,6 +265,70 @@ export type ValidateFlagAliases<F extends Record<string, unknown>> = {
 				readonly FIX_ALIAS_COLLISION: `Alias "${CollidingAliases<F, K>}" collides with another flag name or alias`;
 			};
 };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Inherited flag cross-collision detection (compile-time, per-flag granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Collects aliases from inherited flags, excluding those whose keys the
+ * child overrides (intentional override — child redefines a flag by name).
+ */
+type InheritedAliasesExcluding<
+	I extends Record<string, unknown>,
+	OverrideKeys extends string,
+> = {
+	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAllAliases<I[K]>;
+}[Exclude<keyof I & string, OverrideKeys>];
+
+/**
+ * Per-flag cross-collision detection between a child flag K (from local
+ * flags F) and the inherited flag set I. Resolves to the colliding
+ * identifier, or `never` when no collision exists.
+ *
+ * Detects three collision classes:
+ * 1. Child alias → inherited flag name
+ * 2. Child alias → inherited flag alias
+ * 3. Child flag name → inherited flag alias
+ *
+ * Intentional name overrides (child defines a flag with the same key as
+ * an inherited flag) are excluded — those are handled by `MergeFlags`.
+ */
+type CrossCollision<
+	I extends Record<string, unknown>,
+	F extends Record<string, unknown>,
+	K extends keyof F & string,
+> =
+	| (ExtractAllAliases<F[K]> & Exclude<keyof I & string, keyof F & string>) // child alias → inherited name (excluding overrides)
+	| (ExtractAllAliases<F[K]> & InheritedAliasesExcluding<I, keyof F & string>) // child alias → inherited alias
+	| (K & InheritedAliasesExcluding<I, keyof F & string>); // child name → inherited alias
+
+/**
+ * Per-flag validation mapped type for cross-collisions between inherited
+ * and local flags. Resolves to `F` when no collisions exist.
+ *
+ * When `Inherited` is the wide `FlagsDef` type (root commands with no
+ * parent), the validation is skipped to avoid false positives since
+ * `keyof FlagsDef` is `string`.
+ *
+ * ```
+ * Property 'FIX_INHERITED_COLLISION' is missing in type '{ type: "string"; aliases: ["verbose"] }'
+ *   but required in type
+ *     '{ readonly FIX_INHERITED_COLLISION: "\"verbose\" collides with inherited flag" }'.
+ * ```
+ */
+export type ValidateCrossCollisions<
+	I extends Record<string, unknown>,
+	F extends Record<string, unknown>,
+> = string extends keyof I
+	? F // Wide type (root command) — skip validation
+	: {
+			[K in keyof F & string]: CrossCollision<I, F, K> extends never
+				? F[K]
+				: F[K] & {
+						readonly FIX_INHERITED_COLLISION: `"${CrossCollision<I, F, K> & string}" collides with inherited flag`;
+					};
+		};
 
 // ────────────────────────────────────────────────────────────────────────────
 // "no-" prefix validation (compile-time, per-flag granularity)
@@ -258,24 +342,16 @@ type NoPrefixedAlias<A> = A extends `no-${string}` ? A : never;
 
 /**
  * Collects all `"no-"`-prefixed alias literals from a flag definition.
- * Works with both `alias: "no-foo"` (string) and `alias: ["no-foo", "f"]` (array).
+ * Checks both `short` and `aliases` fields.
  * Non-narrowed `string` types resolve to `never` to avoid false positives.
  */
-type NoPrefixedAliases<F> = F extends { alias: infer A }
-	? A extends string
-		? string extends A
-			? never
-			: NoPrefixedAlias<A>
-		: A extends readonly string[]
-			? string extends A[number]
-				? never
-				: NoPrefixedAlias<A[number]>
-			: never
-	: never;
+type NoPrefixedAliases<F> =
+	| NoPrefixedAlias<ExtractShort<F>>
+	| NoPrefixedAlias<ExtractLongAliases<F>>;
 
 /**
  * Per-flag validation mapped type. Resolves to `F` when no `"no-"` prefixes
- * exist on flag names or aliases. For flags with offending names or aliases,
+ * exist on flag names, short aliases, or long aliases. For flags with offending values,
  * adds a branded error property causing a compile-time type error.
  *
  * The `"no-"` prefix is reserved for boolean flag negation (`--no-flag`).
@@ -332,6 +408,67 @@ export type ValidateVariadicArgs<A extends readonly object[]> =
 				: readonly [Head, ...ValidateVariadicArgs<Tail>]
 			: readonly [Head]
 		: A;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flag inheritance utility types
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Picks only the flags from `F` that have `inherit: true`.
+ *
+ * Flags without `inherit` (or with `inherit` omitted) are excluded.
+ *
+ * @example
+ * ```ts
+ * type Flags = {
+ *   verbose: { type: "boolean"; inherit: true };
+ *   port: { type: "number" };
+ * };
+ * type Result = InheritableFlags<Flags>;
+ * // Result = { verbose: { type: "boolean"; inherit: true } }
+ * ```
+ */
+export type InheritableFlags<F extends FlagsDef> = {
+	[K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
+};
+
+/**
+ * Merges parent flags with local flags, where local keys override parent keys.
+ *
+ * @example
+ * ```ts
+ * type Parent = { verbose: { type: "boolean" }; port: { type: "number" } };
+ * type Local = { port: { type: "string" } };
+ * type Result = MergeFlags<Parent, Local>;
+ * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
+ * ```
+ */
+export type MergeFlags<
+	Parent extends FlagsDef,
+	Local extends FlagsDef,
+> = Simplify<Omit<Parent, keyof Local> & Local>;
+
+/**
+ * Computes the effective flags for a command by filtering the inherited flags
+ * (only those with `inherit: true`) and merging them with local flags.
+ *
+ * Local flags override inherited flags with the same key.
+ *
+ * @example
+ * ```ts
+ * type Inherited = {
+ *   verbose: { type: "boolean"; inherit: true };
+ *   port: { type: "number" };
+ * };
+ * type Local = { output: { type: "string" } };
+ * type Result = EffectiveFlags<Inherited, Local>;
+ * // Result = { verbose: { type: "boolean"; inherit: true }; output: { type: "string" } }
+ * ```
+ */
+export type EffectiveFlags<
+	Inherited extends FlagsDef,
+	Local extends FlagsDef,
+> = MergeFlags<InheritableFlags<Inherited>, Local>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
@@ -459,87 +596,3 @@ export interface ParseResult<
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// CommandContext — Runtime context passed to lifecycle hooks
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * The runtime context object passed to `preRun()`, `run()`, and `postRun()` hooks.
- *
- * Extends {@link ParseResult} with a back-reference to the resolved command.
- */
-export interface CommandContext<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-> extends ParseResult<A, F> {
-	/** The resolved command that is being executed */
-	command: AnyCommand;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// CommandDef — Input shape for defineCommand
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Configuration object accepted by `defineCommand()`.
- *
- * Identical shape to {@link Command} but uses `NoInfer` on lifecycle-hook
- * parameters so TypeScript infers `A` and `F` solely from the `args` / `flags`
- * data properties — not from callbacks. This ensures full contextual typing
- * (e.g. `description` is `string`, not `any`) when writing command definitions.
- *
- * Compile-time validation for variadic args and flag alias collisions is
- * enforced via parameter-level intersection in `defineCommand()`.
- */
-export interface CommandDef<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-> {
-	/** Command metadata (name, description, usage) */
-	meta: CommandMeta;
-	/** Positional argument definitions */
-	args?: A;
-	/** Flag definitions */
-	flags?: F;
-	/** Named subcommands */
-	subCommands?: Record<string, AnyCommand>;
-	/** Called before `run()` — useful for initialization */
-	preRun?(
-		context: CommandContext<NoInfer<A>, NoInfer<F>>,
-	): void | Promise<void>;
-	/** The main command handler */
-	run?(context: CommandContext<NoInfer<A>, NoInfer<F>>): void | Promise<void>;
-	/** Called after `run()` (even if it throws) — useful for teardown */
-	postRun?(
-		context: CommandContext<NoInfer<A>, NoInfer<F>>,
-	): void | Promise<void>;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Command — Unified command shape
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Frozen command object returned by `defineCommand()` and used at runtime. */
-export interface Command<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-> {
-	/** Command metadata (name, description, usage) */
-	readonly meta: CommandMeta;
-	/** Positional argument definitions */
-	readonly args?: A;
-	/** Flag definitions */
-	readonly flags?: F;
-	/** Named subcommands (always initialized, may be empty) */
-	readonly subCommands: Record<string, AnyCommand>;
-	/** Called before `run()` — useful for initialization */
-	preRun?(context: CommandContext<A, F>): void | Promise<void>;
-	/** The main command handler */
-	run?(context: CommandContext<A, F>): void | Promise<void>;
-	/** Called after `run()` (even if it throws) — useful for teardown */
-	postRun?(context: CommandContext<A, F>): void | Promise<void>;
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased command boundaries
-export type AnyCommand = Command<any, any>;

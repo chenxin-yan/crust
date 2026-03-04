@@ -12,7 +12,7 @@ Most CLI tools in the JavaScript ecosystem are either **minimal arg parsers** th
 
 Crust sits in the sweet spot: more structured than a bare parser, lighter than a full framework, and designed so you only pull in what you actually use.
 
-- **Functional, declarative API** — plain objects and functions instead of class hierarchies
+- **Chainable builder API** — Immutable, type-safe builder pattern with full TypeScript inference
 - **TypeScript-first** — Args and flags are fully inferred from your definitions. No manual type annotations, just autocomplete that works.
 - **Composable, not monolithic** — Every capability ships as its own module. Install only what you need — `@crustjs/core` for the framework, `@crustjs/plugins` for official plugins, `@crustjs/crust` for build tooling.
 - **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
@@ -23,38 +23,35 @@ Crust sits in the sweet spot: more structured than a bare parser, lighter than a
 - **Zero runtime dependencies** — Core modules have no external dependencies
 - **Subcommand routing** — Nested command trees with automatic resolution
 - **Plugin system** — Middleware-based architecture with lifecycle hooks
+- **Flag inheritance** — Share flags across subcommands with `inherit: true`
 
 ## Quick Example
 
 ```ts title="src/cli.ts"
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 
-const main = defineCommand({
-  meta: {
-    name: "greet",
-    description: "A friendly greeter CLI",
-  },
-  args: [
+const main = new Crust("greet")
+  .meta({ description: "A friendly greeter CLI" })
+  .use(versionPlugin("1.0.0"))
+  .use(helpPlugin())
+  .args([
     {
       name: "name",
       type: "string",
       description: "Who to greet",
       default: "world",
     },
-  ],
-  flags: {
-    shout: { type: "boolean", description: "SHOUT the greeting", alias: "s" },
-  },
-  run({ args, flags }) {
+  ])
+  .flags({
+    shout: { type: "boolean", description: "SHOUT the greeting", short: "s" },
+  })
+  .run(({ args, flags }) => {
     const message = `Hello, ${args.name}!`;
     console.log(flags.shout ? message.toUpperCase() : message);
-  },
-});
+  });
 
-runMain(main, {
-  plugins: [versionPlugin("1.0.0"), helpPlugin()],
-});
+await main.execute();
 ```
 
 ```sh

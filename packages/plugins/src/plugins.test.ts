@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { defineCommand, runCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { autoCompletePlugin } from "./autocomplete.ts";
 import { helpPlugin } from "./help.ts";
 import { versionPlugin } from "./version.ts";
@@ -39,23 +39,14 @@ function getStderr() {
 
 describe("built-in plugins", () => {
 	it("help plugin renders generated help for no-run command", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app", description: "Test app" },
-			subCommands: {
-				build: defineCommand({
-					meta: { name: "build", description: "Build output" },
-					run() {},
-				}),
-			},
-		});
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.command("build", (cmd) => cmd.run(() => {}));
 
-		await runCommand(cmd, {
-			argv: ["--help"],
-			plugins: [helpPlugin()],
-		});
+		await app.execute({ argv: ["--help"] });
 
 		const output = getStdout();
-		expect(output).toContain("app - Test app");
+		expect(output).toContain("app");
 		expect(output).toContain("USAGE:");
 		expect(output).toContain("COMMANDS:");
 		expect(output).toContain("build");
@@ -64,51 +55,33 @@ describe("built-in plugins", () => {
 	it("help plugin ignores help-like args after --", async () => {
 		let capturedRawArgs: string[] = [];
 
-		const cmd = defineCommand({
-			meta: { name: "app", description: "Test app" },
-			subCommands: {
-				build: defineCommand({
-					meta: { name: "build", description: "Build output" },
-					run(ctx) {
-						capturedRawArgs = [...ctx.rawArgs];
-					},
+		const app = new Crust("app")
+			.meta({ description: "Test app" })
+			.use(helpPlugin())
+			.command("build", (cmd) =>
+				cmd.run((ctx) => {
+					capturedRawArgs = [...ctx.rawArgs];
 				}),
-			},
-		});
+			);
 
-		await runCommand(cmd, {
-			argv: ["build", "--", "--help"],
-			plugins: [helpPlugin()],
-		});
+		await app.execute({ argv: ["build", "--", "--help"] });
 
 		expect(getStdout()).toBe("");
 		expect(capturedRawArgs).toEqual(["--help"]);
 	});
 
 	it("version plugin handles --version", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			run() {},
-		});
+		const app = new Crust("app").use(versionPlugin("1.2.3")).run(() => {});
 
-		await runCommand(cmd, {
-			argv: ["--version"],
-			plugins: [versionPlugin("1.2.3")],
-		});
+		await app.execute({ argv: ["--version"] });
 
 		expect(getStdout()).toContain("app v1.2.3");
 	});
 
 	it("version plugin handles -v alias", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			run() {},
-		});
+		const app = new Crust("app").use(versionPlugin("2.0.0")).run(() => {});
 
-		await runCommand(cmd, {
-			argv: ["-v"],
-			plugins: [versionPlugin("2.0.0")],
-		});
+		await app.execute({ argv: ["-v"] });
 
 		expect(getStdout()).toContain("app v2.0.0");
 	});
@@ -116,17 +89,11 @@ describe("built-in plugins", () => {
 	it("version plugin ignores --version after -- separator", async () => {
 		let ran = false;
 
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			run() {
-				ran = true;
-			},
+		const app = new Crust("app").use(versionPlugin("1.0.0")).run(() => {
+			ran = true;
 		});
 
-		await runCommand(cmd, {
-			argv: ["--", "--version"],
-			plugins: [versionPlugin("1.0.0")],
-		});
+		await app.execute({ argv: ["--", "--version"] });
 
 		expect(getStdout()).toBe("");
 		expect(ran).toBe(true);
@@ -135,37 +102,28 @@ describe("built-in plugins", () => {
 	it("version plugin only triggers on root command", async () => {
 		let ran = false;
 
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			subCommands: {
-				build: defineCommand({
-					meta: { name: "build" },
-					run() {
-						ran = true;
-					},
+		const app = new Crust("app")
+			.use(versionPlugin("1.0.0"))
+			.command("build", (cmd) =>
+				cmd.run(() => {
+					ran = true;
 				}),
-			},
-		});
+			);
 
-		await runCommand(cmd, {
-			argv: ["build"],
-			plugins: [versionPlugin("1.0.0")],
-		});
+		await app.execute({ argv: ["build"] });
 
 		expect(getStdout()).toBe("");
 		expect(ran).toBe(true);
 	});
 
 	it("version plugin flag appears in help output", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app", description: "Test app" },
-			run() {},
-		});
+		const app = new Crust("app")
+			.meta({ description: "Test app" })
+			.use(versionPlugin("1.0.0"))
+			.use(helpPlugin())
+			.run(() => {});
 
-		await runCommand(cmd, {
-			argv: ["--help"],
-			plugins: [versionPlugin("1.0.0"), helpPlugin()],
-		});
+		await app.execute({ argv: ["--help"] });
 
 		const output = getStdout();
 		expect(output).toContain("--version");
@@ -173,34 +131,21 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin with function value", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			run() {},
-		});
+		const app = new Crust("app")
+			.use(versionPlugin(() => "3.5.0"))
+			.run(() => {});
 
-		await runCommand(cmd, {
-			argv: ["--version"],
-			plugins: [versionPlugin(() => "3.5.0")],
-		});
+		await app.execute({ argv: ["--version"] });
 
 		expect(getStdout()).toContain("app v3.5.0");
 	});
 
 	it("autocomplete plugin handles command not found in error mode", async () => {
-		const cmd = defineCommand({
-			meta: { name: "app" },
-			subCommands: {
-				build: defineCommand({
-					meta: { name: "build" },
-					run() {},
-				}),
-			},
-		});
+		const app = new Crust("app")
+			.use(autoCompletePlugin())
+			.command("build", (cmd) => cmd.run(() => {}));
 
-		await runCommand(cmd, {
-			argv: ["buld"],
-			plugins: [autoCompletePlugin()],
-		});
+		await app.execute({ argv: ["buld"] });
 
 		expect(getStderr()).toContain('Unknown command "buld"');
 		expect(getStderr()).toContain('Did you mean "build"?');

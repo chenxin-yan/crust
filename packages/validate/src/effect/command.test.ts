@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { CrustError, defineCommand, runCommand } from "@crustjs/core";
+import { Crust, CrustError, parseArgs } from "@crustjs/core";
 import * as Schema from "effect/Schema";
 import { commandValidator } from "./command.ts";
 import { arg, flag } from "./schema.ts";
@@ -76,9 +76,9 @@ describe("flag() produces core-compatible FlagDef", () => {
 		expect(f.required).toBeUndefined();
 	});
 
-	it("passes through alias", () => {
-		const f = flag(Schema.UndefinedOr(Schema.Boolean), { alias: "v" });
-		expect(f.alias).toBe("v");
+	it("passes through short", () => {
+		const f = flag(Schema.UndefinedOr(Schema.Boolean), { short: "v" });
+		expect(f.short).toBe("v");
 	});
 
 	it("extracts description from schema annotations", () => {
@@ -95,25 +95,25 @@ describe("flag() produces core-compatible FlagDef", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// defineCommand + commandValidator composability
+// Crust builder + commandValidator composability
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("defineCommand + commandValidator", () => {
+describe("Crust builder + commandValidator", () => {
 	it("validates and transforms args and flags", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
-		const cmd = defineCommand({
-			meta: { name: "serve" },
-			args: [arg("port", Schema.Number), arg("host", Schema.String)],
-			flags: {
-				verbose: flag(Schema.Boolean, { alias: "v" }),
-			},
-			run: commandValidator(({ args, flags }) => {
-				received.set({ args, flags });
-			}),
-		});
+		const app = new Crust("serve")
+			.args([arg("port", Schema.Number), arg("host", Schema.String)])
+			.flags({
+				verbose: flag(Schema.Boolean, { short: "v" }),
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["8080", "0.0.0.0", "-v"] });
+		await app.execute({ argv: ["8080", "0.0.0.0", "-v"] });
 
 		expect(received.value).toBeDefined();
 		expect(received.value?.args).toEqual({
@@ -126,18 +126,18 @@ describe("defineCommand + commandValidator", () => {
 	it("applies schema defaults via UndefinedOr", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
 
-		const cmd = defineCommand({
-			meta: { name: "greet" },
-			args: [arg("name", Schema.String)],
-			flags: {
+		const app = new Crust("greet")
+			.args([arg("name", Schema.String)])
+			.flags({
 				format: flag(Schema.UndefinedOr(Schema.String)),
-			},
-			run: commandValidator(({ args, flags }) => {
-				received.set({ args, flags });
-			}),
-		});
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["alice"] });
+		await app.execute({ argv: ["alice"] });
 
 		expect(received.value?.args).toEqual({ name: "alice" });
 		expect(received.value?.flags).toEqual({ format: undefined });
@@ -152,10 +152,9 @@ describe("defineCommand + commandValidator", () => {
 			encode: (s) => s,
 		});
 
-		const cmd = defineCommand({
-			meta: { name: "greet" },
-			args: [arg("name", UpperString)],
-			flags: {
+		const app = new Crust("greet")
+			.args([arg("name", UpperString)])
+			.flags({
 				format: flag(
 					Schema.UndefinedOr(
 						Schema.transform(Schema.String, Schema.String, {
@@ -165,13 +164,14 @@ describe("defineCommand + commandValidator", () => {
 						}),
 					),
 				),
-			},
-			run: commandValidator(({ args, flags }) => {
-				received.set({ args, flags });
-			}),
-		});
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["alice", "--format", "text"] });
+		await app.execute({ argv: ["alice", "--format", "text"] });
 
 		expect(received.value?.args).toEqual({ name: "ALICE" });
 		expect(received.value?.flags).toEqual({ format: "TEXT" });
@@ -180,18 +180,18 @@ describe("defineCommand + commandValidator", () => {
 	it("preserves original parser output on context.input", async () => {
 		const received = capture<unknown>();
 
-		const cmd = defineCommand({
-			meta: { name: "demo" },
-			args: [arg("name", Schema.String)],
-			flags: {
+		const app = new Crust("demo")
+			.args([arg("name", Schema.String)])
+			.flags({
 				count: flag(Schema.UndefinedOr(Schema.Number)),
-			},
-			run: commandValidator(({ input, args, flags }) => {
-				received.set({ input, args, flags });
-			}),
-		});
+			})
+			.run(
+				commandValidator(({ input, args, flags }) => {
+					received.set({ input, args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["world"] });
+		await app.execute({ argv: ["world"] });
 
 		expect(received.value).toEqual({
 			input: {
@@ -210,13 +210,12 @@ describe("defineCommand + commandValidator", () => {
 			count: unknown;
 		}> = [];
 
-		const cmd = defineCommand({
-			meta: { name: "hooks" },
-			args: [arg("port", Schema.Number)],
-			flags: {
+		const app = new Crust("hooks")
+			.args([arg("port", Schema.Number)])
+			.flags({
 				count: flag(Schema.UndefinedOr(Schema.Number)),
-			},
-			preRun({ args, flags }) {
+			})
+			.preRun(({ args, flags }) => {
 				const rawArgs = args as Record<string, unknown>;
 				const rawFlags = flags as Record<string, unknown>;
 				phases.push({
@@ -224,11 +223,13 @@ describe("defineCommand + commandValidator", () => {
 					port: rawArgs.port,
 					count: rawFlags.count,
 				});
-			},
-			run: commandValidator(({ args, flags }) => {
-				phases.push({ phase: "run", port: args.port, count: flags.count });
-			}),
-			postRun({ args, flags }) {
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					phases.push({ phase: "run", port: args.port, count: flags.count });
+				}),
+			)
+			.postRun(({ args, flags }) => {
 				const rawArgs = args as Record<string, unknown>;
 				const rawFlags = flags as Record<string, unknown>;
 				phases.push({
@@ -236,10 +237,9 @@ describe("defineCommand + commandValidator", () => {
 					port: rawArgs.port,
 					count: rawFlags.count,
 				});
-			},
-		});
+			});
 
-		await runCommand(cmd, { argv: ["8080"] });
+		await app.execute({ argv: ["8080"] });
 
 		expect(phases).toEqual([
 			{ phase: "pre", port: 8080, count: undefined },
@@ -251,18 +251,18 @@ describe("defineCommand + commandValidator", () => {
 	it("supports variadic args", async () => {
 		const received = capture<unknown>();
 
-		const cmd = defineCommand({
-			meta: { name: "lint" },
-			args: [
+		const app = new Crust("lint")
+			.args([
 				arg("mode", Schema.String),
 				arg("files", Schema.String, { variadic: true }),
-			],
-			run: commandValidator(({ args }) => {
-				received.set(args);
-			}),
-		});
+			])
+			.run(
+				commandValidator(({ args }) => {
+					received.set(args);
+				}),
+			);
 
-		await runCommand(cmd, {
+		await app.execute({
 			argv: ["strict", "src/a.ts", "src/b.ts"],
 		});
 
@@ -273,19 +273,30 @@ describe("defineCommand + commandValidator", () => {
 	});
 
 	it("maps schema failures to CrustError(VALIDATION) with dot-paths", async () => {
-		const cmd = defineCommand({
-			meta: { name: "check" },
-			args: [arg("env", Schema.Literal("prod"))],
-			flags: {
+		const app = new Crust("check")
+			.args([arg("env", Schema.Literal("prod"))])
+			.flags({
 				mode: flag(Schema.Literal("strict")),
-			},
-			run: commandValidator(() => {
-				expect.unreachable("handler should not run");
-			}),
-		});
+			})
+			.run(
+				commandValidator(() => {
+					expect.unreachable("handler should not run");
+				}),
+			);
+
+		const node = app._node;
+		const parsed = parseArgs(node, ["dev", "--mode", "loose"]);
+		const context = {
+			args: parsed.args,
+			flags: parsed.flags,
+			rawArgs: parsed.rawArgs,
+			command: node,
+		};
+		const run = node.run;
+		expect(run).toBeDefined();
 
 		try {
-			await runCommand(cmd, { argv: ["dev", "--mode", "loose"] });
+			await run?.(context);
 			expect.unreachable("should have thrown");
 		} catch (error) {
 			expect(error).toBeInstanceOf(CrustError);
@@ -303,9 +314,9 @@ describe("defineCommand + commandValidator", () => {
 	});
 
 	it("generates help-compatible definitions", () => {
-		const cmd = defineCommand({
-			meta: { name: "serve", description: "Start server" },
-			args: [
+		const app = new Crust("serve")
+			.meta({ description: "Start server" })
+			.args([
 				arg("port", Schema.Number.annotations({ description: "Port number" })),
 				arg(
 					"host",
@@ -313,16 +324,15 @@ describe("defineCommand + commandValidator", () => {
 						Schema.String.annotations({ description: "Host" }),
 					),
 				),
-			],
-			flags: {
+			])
+			.flags({
 				verbose: flag(
 					Schema.Boolean.annotations({ description: "Verbose mode" }),
-					{ alias: "v" },
+					{ short: "v" },
 				),
-			},
-		});
+			});
 
-		expect(cmd.args).toEqual(
+		expect(app._node.args).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
 					name: "port",
@@ -337,11 +347,11 @@ describe("defineCommand + commandValidator", () => {
 				}),
 			]),
 		);
-		expect(cmd.flags).toEqual(
+		expect(app._node.effectiveFlags).toEqual(
 			expect.objectContaining({
 				verbose: expect.objectContaining({
 					type: "boolean",
-					alias: "v",
+					short: "v",
 					description: "Verbose mode",
 				}),
 			}),
@@ -349,17 +359,16 @@ describe("defineCommand + commandValidator", () => {
 	});
 
 	it("resolves description through Effect wrappers", () => {
-		const cmd = defineCommand({
-			meta: { name: "unwrap" },
-			args: [
+		const app = new Crust("unwrap")
+			.args([
 				arg(
 					"name",
 					Schema.UndefinedOr(
 						Schema.String.annotations({ description: "Inner desc" }),
 					),
 				),
-			],
-			flags: {
+			])
+			.flags({
 				mode: flag(
 					Schema.transform(
 						Schema.String.annotations({ description: "Mode desc" }),
@@ -367,32 +376,28 @@ describe("defineCommand + commandValidator", () => {
 						{ strict: false, decode: (v) => v, encode: (v) => v },
 					),
 				),
-			},
-		});
+			});
 
-		expect(cmd.args?.[0]?.description).toBe("Inner desc");
-		expect(cmd.flags?.mode?.description).toBe("Mode desc");
+		expect(app._node.args?.[0]?.description).toBe("Inner desc");
+		expect(app._node.effectiveFlags?.mode?.description).toBe("Mode desc");
 	});
 
 	it("works with subcommands", async () => {
 		const received = capture<unknown>();
 
-		const deploy = defineCommand({
-			meta: { name: "deploy", description: "Deploy app" },
-			flags: {
-				env: flag(Schema.UndefinedOr(Schema.String), { alias: "e" }),
-			},
-			run: commandValidator(({ flags }) => {
-				received.set(flags);
-			}),
-		});
+		const app = new Crust("app").command("deploy", (cmd) =>
+			cmd
+				.flags({
+					env: flag(Schema.UndefinedOr(Schema.String), { short: "e" }),
+				})
+				.run(
+					commandValidator(({ flags }) => {
+						received.set(flags);
+					}),
+				),
+		);
 
-		const root = defineCommand({
-			meta: { name: "app" },
-			subCommands: { deploy },
-		});
-
-		await runCommand(root, { argv: ["deploy", "-e", "production"] });
+		await app.execute({ argv: ["deploy", "-e", "production"] });
 
 		expect(received.value).toEqual({ env: "production" });
 	});
@@ -402,83 +407,65 @@ describe("defineCommand + commandValidator", () => {
 // Compile-time validation — ValidateVariadicArgs / ValidateFlagAliases
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("ValidateVariadicArgs (compile-time, via defineCommand)", () => {
+describe("ValidateVariadicArgs (compile-time, via Crust builder)", () => {
 	it("accepts variadic as the last arg", () => {
-		const cmd = defineCommand({
-			meta: { name: "ok" },
-			args: [
-				arg("mode", Schema.String),
-				arg("files", Schema.String, { variadic: true }),
-			],
-		});
-		expect(cmd.meta.name).toBe("ok");
+		const app = new Crust("ok").args([
+			arg("mode", Schema.String),
+			arg("files", Schema.String, { variadic: true }),
+		]);
+		expect(app._node.meta.name).toBe("ok");
 	});
 
 	it("accepts no variadic args", () => {
-		const cmd = defineCommand({
-			meta: { name: "ok2" },
-			args: [arg("port", Schema.Number), arg("host", Schema.String)],
-		});
-		expect(cmd.meta.name).toBe("ok2");
+		const app = new Crust("ok2").args([
+			arg("port", Schema.Number),
+			arg("host", Schema.String),
+		]);
+		expect(app._node.meta.name).toBe("ok2");
 	});
 
 	it("rejects variadic in non-last position (compile-time)", () => {
-		defineCommand({
-			meta: { name: "bad-order" },
-			args: [
-				// @ts-expect-error — variadic is not last, caught at compile time
-				arg("files", Schema.String, { variadic: true }),
-				arg("mode", Schema.String),
-			],
-		});
+		new Crust("bad-order").args([
+			// @ts-expect-error — variadic is not last, caught at compile time
+			arg("files", Schema.String, { variadic: true }),
+			arg("mode", Schema.String),
+		]);
 		expect(true).toBe(true);
 	});
 });
 
-describe("ValidateFlagAliases (compile-time, via defineCommand)", () => {
+describe("ValidateFlagAliases (compile-time, via Crust builder)", () => {
 	it("accepts non-colliding aliases", () => {
-		const cmd = defineCommand({
-			meta: { name: "ok" },
-			flags: {
-				verbose: flag(Schema.Boolean, { alias: "v" }),
-				port: flag(Schema.Number, { alias: "p" }),
-			},
+		const app = new Crust("ok").flags({
+			verbose: flag(Schema.Boolean, { short: "v" }),
+			port: flag(Schema.Number, { short: "p" }),
 		});
-		expect(cmd.meta.name).toBe("ok");
+		expect(app._node.meta.name).toBe("ok");
 	});
 
 	it("accepts flags without aliases", () => {
-		const cmd = defineCommand({
-			meta: { name: "ok2" },
-			flags: {
-				verbose: flag(Schema.Boolean),
-				port: flag(Schema.Number),
-			},
+		const app = new Crust("ok2").flags({
+			verbose: flag(Schema.Boolean),
+			port: flag(Schema.Number),
 		});
-		expect(cmd.meta.name).toBe("ok2");
+		expect(app._node.meta.name).toBe("ok2");
 	});
 
 	it("rejects alias that collides with a flag name (compile-time)", () => {
-		defineCommand({
-			meta: { name: "bad-alias" },
-			flags: {
-				out: flag(Schema.UndefinedOr(Schema.String)),
-				// @ts-expect-error — alias "out" collides with flag name "--out"
-				output: flag(Schema.UndefinedOr(Schema.String), { alias: "out" }),
-			},
+		new Crust("bad-alias").flags({
+			out: flag(Schema.UndefinedOr(Schema.String)),
+			// @ts-expect-error — alias "out" collides with flag name "--out"
+			output: flag(Schema.UndefinedOr(Schema.String), { aliases: ["out"] }),
 		});
 		expect(true).toBe(true);
 	});
 
 	it("rejects duplicate aliases across flags (compile-time)", () => {
-		defineCommand({
-			meta: { name: "bad-alias-dup" },
-			flags: {
-				// @ts-expect-error — alias "v" collides with alias on other flag
-				verbose: flag(Schema.Boolean, { alias: "v" }),
-				// @ts-expect-error — alias "v" collides with alias on other flag
-				version: flag(Schema.Boolean, { alias: "v" }),
-			},
+		new Crust("bad-alias-dup").flags({
+			// @ts-expect-error — alias "v" collides with alias on other flag
+			verbose: flag(Schema.Boolean, { short: "v" }),
+			// @ts-expect-error — alias "v" collides with alias on other flag
+			version: flag(Schema.Boolean, { short: "v" }),
 		});
 		expect(true).toBe(true);
 	});
@@ -507,22 +494,28 @@ describe("arg() / flag() generic type narrowing", () => {
 		expect(plainArg.variadic).toBeUndefined();
 	});
 
-	it("narrows alias to literal string on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: "v" });
-		type _check = Expect<Equal<typeof f.alias, "v">>;
-		expect(f.alias).toBe("v");
+	it("narrows short to literal string on flag() return type", () => {
+		const f = flag(Schema.Boolean, { short: "v" });
+		type _check = Expect<Equal<typeof f.short, "v">>;
+		expect(f.short).toBe("v");
 	});
 
-	it("narrows alias to literal tuple on flag() return type", () => {
-		const f = flag(Schema.Boolean, { alias: ["v", "V"] });
-		type _check = Expect<Equal<typeof f.alias, readonly ["v", "V"]>>;
-		expect(f.alias).toEqual(["v", "V"]);
+	it("narrows aliases to literal tuple on flag() return type", () => {
+		const f = flag(Schema.Boolean, { aliases: ["verbose", "verb"] });
+		type _check = Expect<Equal<typeof f.aliases, readonly ["verbose", "verb"]>>;
+		expect(f.aliases).toEqual(["verbose", "verb"]);
 	});
 
-	it("narrows alias to undefined when not specified", () => {
+	it("narrows short to undefined when not specified", () => {
 		const f = flag(Schema.Boolean);
-		type _check = Expect<Equal<typeof f.alias, undefined>>;
-		expect(f.alias).toBeUndefined();
+		type _check = Expect<Equal<typeof f.short, undefined>>;
+		expect(f.short).toBeUndefined();
+	});
+
+	it("narrows aliases to undefined when not specified", () => {
+		const f = flag(Schema.Boolean);
+		type _check = Expect<Equal<typeof f.aliases, undefined>>;
+		expect(f.aliases).toBeUndefined();
 	});
 });
 
@@ -649,14 +642,14 @@ describe("flag() explicit metadata overrides", () => {
 		expect(f.required).toBeUndefined();
 	});
 
-	it("can combine explicit metadata with alias", () => {
+	it("can combine explicit metadata with short alias", () => {
 		const f = flag(Schema.Number, {
 			type: "number",
-			alias: "p",
+			short: "p",
 			description: "Port number",
 		});
 		expect(f.type).toBe("number");
-		expect(f.alias).toBe("p");
+		expect(f.short).toBe("p");
 		expect(f.description).toBe("Port number");
 	});
 

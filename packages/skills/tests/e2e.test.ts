@@ -1,7 +1,7 @@
 /**
  * End-to-end tests for skill generation.
  *
- * These tests exercise the full pipeline (defineCommand → generateSkill → disk)
+ * These tests exercise the full pipeline (command tree → generateSkill → disk)
  * and validate:
  * - Complete output tree structure
  * - SKILL.md frontmatter and content
@@ -14,10 +14,36 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { defineCommand } from "@crustjs/core";
+import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import { createCommandNode } from "@crustjs/core";
 import { generateSkill } from "../src/generate.ts";
 import type { AgentResult } from "../src/types.ts";
 import { CRUST_MANIFEST } from "../src/version.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helper — builds a CommandNode for introspection tests
+// ────────────────────────────────────────────────────────────────────────────
+
+function makeCommand(opts: {
+	meta: { name: string; description?: string; usage?: string };
+	args?: readonly ArgDef[];
+	flags?: Record<string, FlagDef>;
+	run?: () => void;
+	subCommands?: Record<string, CommandNode>;
+}): CommandNode {
+	const node = createCommandNode(opts.meta.name);
+	Object.assign(node.meta, opts.meta);
+	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.flags) {
+		node.localFlags = { ...opts.flags };
+		node.effectiveFlags = { ...opts.flags };
+	}
+	if (opts.run) node.run = opts.run;
+	if (opts.subCommands) {
+		node.subCommands = opts.subCommands;
+	}
+	return node;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -107,7 +133,7 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
  */
 async function generateForTest(
 	tmpDir: string,
-	command: ReturnType<typeof defineCommand>,
+	command: CommandNode,
 	meta: { name: string; description: string; version: string },
 ) {
 	const result = await withCwd(tmpDir, () =>
@@ -139,8 +165,8 @@ async function generateForTest(
  *   │   └── set (leaf, runnable)
  *   └── status (leaf, runnable)
  */
-function buildFixtureCommand() {
-	return defineCommand({
+function buildFixtureCommand(): CommandNode {
+	return makeCommand({
 		meta: {
 			name: "deploy",
 			description: "A cloud deployment CLI for managing applications",
@@ -148,32 +174,32 @@ function buildFixtureCommand() {
 		args: [
 			{
 				name: "environment",
-				type: "string" as const,
+				type: "string",
 				description: "Target environment",
 			},
-		],
+		] as ArgDef[],
 		flags: {
 			verbose: {
-				type: "boolean" as const,
+				type: "boolean",
 				description: "Enable verbose output",
-				alias: "v",
+				short: "v",
 			},
 			region: {
-				type: "string" as const,
+				type: "string",
 				description: "Cloud region to target",
-				alias: "r",
+				short: "r",
 				default: "us-east-1",
 			},
 		},
 		run() {},
 		subCommands: {
-			app: defineCommand({
+			app: makeCommand({
 				meta: {
 					name: "app",
 					description: "Manage applications",
 				},
 				subCommands: {
-					create: defineCommand({
+					create: makeCommand({
 						meta: {
 							name: "create",
 							description: "Create a new application",
@@ -181,26 +207,26 @@ function buildFixtureCommand() {
 						args: [
 							{
 								name: "name",
-								type: "string" as const,
+								type: "string",
 								description: "Application name",
 								required: true,
 							},
-						],
+						] as ArgDef[],
 						flags: {
 							template: {
-								type: "string" as const,
+								type: "string",
 								description: "Application template",
-								alias: "t",
+								short: "t",
 								default: "default",
 							},
 							"dry-run": {
-								type: "boolean" as const,
+								type: "boolean",
 								description: "Preview without creating",
 							},
 						},
 						run() {},
 					}),
-					delete: defineCommand({
+					delete: makeCommand({
 						meta: {
 							name: "delete",
 							description: "Delete an application",
@@ -208,33 +234,33 @@ function buildFixtureCommand() {
 						args: [
 							{
 								name: "name",
-								type: "string" as const,
+								type: "string",
 								description: "Application name",
 								required: true,
 							},
-						],
+						] as ArgDef[],
 						flags: {
 							force: {
-								type: "boolean" as const,
+								type: "boolean",
 								description: "Skip confirmation",
-								alias: "f",
+								short: "f",
 							},
 						},
 						run() {},
 					}),
-					list: defineCommand({
+					list: makeCommand({
 						meta: {
 							name: "list",
 							description: "List all applications",
 						},
 						flags: {
 							format: {
-								type: "string" as const,
+								type: "string",
 								description: "Output format",
 								default: "table",
 							},
 							limit: {
-								type: "number" as const,
+								type: "number",
 								description: "Maximum number of results",
 							},
 						},
@@ -242,21 +268,21 @@ function buildFixtureCommand() {
 					}),
 				},
 			}),
-			config: defineCommand({
+			config: makeCommand({
 				meta: {
 					name: "config",
 					description: "View and manage configuration",
 				},
 				flags: {
 					global: {
-						type: "boolean" as const,
+						type: "boolean",
 						description: "Use global configuration",
-						alias: "g",
+						short: "g",
 					},
 				},
 				run() {},
 				subCommands: {
-					get: defineCommand({
+					get: makeCommand({
 						meta: {
 							name: "get",
 							description: "Get a configuration value",
@@ -264,14 +290,14 @@ function buildFixtureCommand() {
 						args: [
 							{
 								name: "key",
-								type: "string" as const,
+								type: "string",
 								description: "Configuration key",
 								required: true,
 							},
-						],
+						] as ArgDef[],
 						run() {},
 					}),
-					set: defineCommand({
+					set: makeCommand({
 						meta: {
 							name: "set",
 							description: "Set a configuration value",
@@ -279,31 +305,31 @@ function buildFixtureCommand() {
 						args: [
 							{
 								name: "key",
-								type: "string" as const,
+								type: "string",
 								description: "Configuration key",
 								required: true,
 							},
 							{
 								name: "value",
-								type: "string" as const,
+								type: "string",
 								description: "Value to set",
 								required: true,
 							},
-						],
+						] as ArgDef[],
 						run() {},
 					}),
 				},
 			}),
-			status: defineCommand({
+			status: makeCommand({
 				meta: {
 					name: "status",
 					description: "Show deployment status",
 				},
 				flags: {
 					watch: {
-						type: "boolean" as const,
+						type: "boolean",
 						description: "Watch for changes",
-						alias: "w",
+						short: "w",
 					},
 				},
 				run() {},

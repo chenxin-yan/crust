@@ -16,7 +16,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CrustError, defineCommand, runCommand } from "@crustjs/core";
+import { Crust, CrustError, parseArgs } from "@crustjs/core";
 import { CrustStoreError, createStore } from "@crustjs/store";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
@@ -95,18 +95,18 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 
 	it("command: validates valid args and flags", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
-		const cmd = defineCommand({
-			meta: { name: "config" },
-			args: [zodArg("theme", z.enum(["light", "dark"]))],
-			flags: {
-				verbose: zodFlag(z.boolean().default(false), { alias: "v" }),
-			},
-			run: zodCommandValidator(({ args, flags }) => {
-				received.set({ args, flags });
-			}),
-		});
+		const app = new Crust("config")
+			.args([zodArg("theme", z.enum(["light", "dark"]))])
+			.flags({
+				verbose: zodFlag(z.boolean().default(false), { short: "v" }),
+			})
+			.run(
+				zodCommandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["dark", "-v"] });
+		await app.execute({ argv: ["dark", "-v"] });
 		expect(received.value).toEqual({
 			args: { theme: "dark" },
 			flags: { verbose: true },
@@ -114,17 +114,24 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 	});
 
 	it("command: rejects invalid input with VALIDATION error and path-formatted issues", async () => {
-		const cmd = defineCommand({
-			meta: { name: "config" },
-			args: [zodArg("theme", z.enum(["light", "dark"]))],
-			flags: {
+		const app = new Crust("config")
+			.args([zodArg("theme", z.enum(["light", "dark"]))])
+			.flags({
 				verbose: zodFlag(z.boolean().default(false)),
-			},
-			run: zodCommandValidator(() => {}),
-		});
+			})
+			.run(zodCommandValidator(() => {}));
+
+		const node = app._node;
+		const parsed = parseArgs(node, ["invalid-theme"]);
+		const ctx = {
+			args: parsed.args,
+			flags: parsed.flags,
+			rawArgs: parsed.rawArgs,
+			command: node,
+		};
 
 		try {
-			await runCommand(cmd, { argv: ["invalid-theme"] });
+			await node.run?.(ctx);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -273,35 +280,42 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 
 	it("command: validates valid args and flags", async () => {
 		const received = capture<{ args: unknown; flags: unknown }>();
-		const cmd = defineCommand({
-			meta: { name: "config" },
-			args: [effectArg("theme", Schema.Literal("light", "dark"))],
-			flags: {
+		const app = new Crust("config")
+			.args([effectArg("theme", Schema.Literal("light", "dark"))])
+			.flags({
 				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
-			},
-			run: effectCommandValidator(({ args, flags }) => {
-				received.set({ args, flags });
-			}),
-		});
+			})
+			.run(
+				effectCommandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
 
-		await runCommand(cmd, { argv: ["dark", "--verbose"] });
+		await app.execute({ argv: ["dark", "--verbose"] });
 		expect(received.value).toBeDefined();
 		expect(received.value?.args).toEqual({ theme: "dark" });
 		expect(received.value?.flags).toEqual({ verbose: true });
 	});
 
 	it("command: rejects invalid input with VALIDATION error and path-formatted issues", async () => {
-		const cmd = defineCommand({
-			meta: { name: "config" },
-			args: [effectArg("theme", Schema.Literal("light", "dark"))],
-			flags: {
+		const app = new Crust("config")
+			.args([effectArg("theme", Schema.Literal("light", "dark"))])
+			.flags({
 				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
-			},
-			run: effectCommandValidator(() => {}),
-		});
+			})
+			.run(effectCommandValidator(() => {}));
+
+		const node = app._node;
+		const parsed = parseArgs(node, ["invalid-theme"]);
+		const ctx = {
+			args: parsed.args,
+			flags: parsed.flags,
+			rawArgs: parsed.rawArgs,
+			command: node,
+		};
 
 		try {
-			await runCommand(cmd, { argv: ["invalid-theme"] });
+			await node.run?.(ctx);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -564,19 +578,26 @@ describe("consistent issue path formatting across targets", () => {
 
 	describe("command variadic args use bracket notation (Zod)", () => {
 		it("variadic arg issues include array indices in path", async () => {
-			const cmd = defineCommand({
-				meta: { name: "process" },
-				args: [
+			const app = new Crust("process")
+				.args([
 					zodArg("files", z.string().min(1, "file path required"), {
 						variadic: true,
 					}),
-				],
-				run: zodCommandValidator(() => {}),
-			});
+				])
+				.run(zodCommandValidator(() => {}));
+
+			const node = app._node;
+			const parsed = parseArgs(node, ["good.ts", "", "also-good.ts", ""]);
+			const ctx = {
+				args: parsed.args,
+				flags: parsed.flags,
+				rawArgs: parsed.rawArgs,
+				command: node,
+			};
 
 			try {
 				// Empty strings should fail the min(1) validation
-				await runCommand(cmd, { argv: ["good.ts", "", "also-good.ts", ""] });
+				await node.run?.(ctx);
 				expect.unreachable("Should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(CrustError);
@@ -669,15 +690,15 @@ describe("transformed output consistency across targets", () => {
 
 		it("command: receives transformed output values", async () => {
 			const received = capture<{ args: unknown }>();
-			const cmd = defineCommand({
-				meta: { name: "theme" },
-				args: [zodArg("theme", normalizedTheme, { type: "string" })],
-				run: zodCommandValidator(({ args }) => {
-					received.set({ args });
-				}),
-			});
+			const app = new Crust("theme")
+				.args([zodArg("theme", normalizedTheme, { type: "string" })])
+				.run(
+					zodCommandValidator(({ args }) => {
+						received.set({ args });
+					}),
+				);
 
-			await runCommand(cmd, { argv: ["  DARK  "] });
+			await app.execute({ argv: ["  DARK  "] });
 			expect(received.value?.args).toEqual({ theme: "dark" });
 		});
 
@@ -729,15 +750,15 @@ describe("transformed output consistency across targets", () => {
 				encode: (s) => s,
 			});
 
-			const cmd = defineCommand({
-				meta: { name: "theme" },
-				args: [effectArg("theme", TrimmedString, { type: "string" })],
-				run: effectCommandValidator(({ args }) => {
-					received.set({ args });
-				}),
-			});
+			const app = new Crust("theme")
+				.args([effectArg("theme", TrimmedString, { type: "string" })])
+				.run(
+					effectCommandValidator(({ args }) => {
+						received.set({ args });
+					}),
+				);
 
-			await runCommand(cmd, { argv: ["  DARK  "] });
+			await app.execute({ argv: ["  DARK  "] });
 			expect(received.value?.args).toEqual({ theme: "dark" });
 		});
 
@@ -886,15 +907,22 @@ describe("error shape consistency across targets", () => {
 		const stringSchema = z.string().min(3, "too short");
 
 		// Command target
-		const cmd = defineCommand({
-			meta: { name: "test" },
-			args: [zodArg("input", stringSchema)],
-			run: zodCommandValidator(() => {}),
-		});
+		const app = new Crust("test")
+			.args([zodArg("input", stringSchema)])
+			.run(zodCommandValidator(() => {}));
+
+		const node = app._node;
+		const parsed = parseArgs(node, ["ab"]);
+		const ctx = {
+			args: parsed.args,
+			flags: parsed.flags,
+			rawArgs: parsed.rawArgs,
+			command: node,
+		};
 
 		let commandErrorCode: string | undefined;
 		try {
-			await runCommand(cmd, { argv: ["ab"] });
+			await node.run?.(ctx);
 		} catch (err) {
 			commandErrorCode = (err as CrustError).code;
 		}
@@ -1101,14 +1129,12 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 
 		// 1. Command validation: theme arrives as a CLI arg
 		const received = capture<{ args: unknown }>();
-		const cmd = defineCommand({
-			meta: { name: "init" },
-			args: [zodArg("theme", themeSchema)],
-			run: zodCommandValidator(({ args }) => {
+		const app = new Crust("init").args([zodArg("theme", themeSchema)]).run(
+			zodCommandValidator(({ args }) => {
 				received.set({ args });
 			}),
-		});
-		await runCommand(cmd, { argv: ["dark"] });
+		);
+		await app.execute({ argv: ["dark"] });
 		const commandTheme = (received.value?.args as { theme: string }).theme;
 		expect(commandTheme).toBe("dark");
 
@@ -1146,13 +1172,20 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 		const themeSchema = z.enum(["light", "dark"]);
 
 		// 1. Command rejects invalid theme
-		const cmd = defineCommand({
-			meta: { name: "init" },
-			args: [zodArg("theme", themeSchema)],
-			run: zodCommandValidator(() => {}),
-		});
+		const app = new Crust("init")
+			.args([zodArg("theme", themeSchema)])
+			.run(zodCommandValidator(() => {}));
+
+		const node = app._node;
+		const parsed = parseArgs(node, ["blue"]);
+		const ctx = {
+			args: parsed.args,
+			flags: parsed.flags,
+			rawArgs: parsed.rawArgs,
+			command: node,
+		};
 		try {
-			await runCommand(cmd, { argv: ["blue"] });
+			await node.run?.(ctx);
 			expect.unreachable("Command should have thrown");
 		} catch (err) {
 			expect((err as CrustError).code).toBe("VALIDATION");

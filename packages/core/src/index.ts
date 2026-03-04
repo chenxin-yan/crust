@@ -1,9 +1,12 @@
-// Command definition
-export { defineCommand } from "./command.ts";
-
+// Crust builder API
+export type { CrustCommandContext } from "./crust.ts";
+export { Crust, VALIDATION_MODE_ENV } from "./crust.ts";
 // Errors
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
+// Internal command node (exported for downstream packages)
+export type { CommandNode } from "./node.ts";
+export { computeEffectiveFlags, createCommandNode } from "./node.ts";
 
 // Argument & flag parsing
 export { parseArgs } from "./parser.ts";
@@ -21,24 +24,20 @@ export type {
 export type { CommandRoute } from "./router.ts";
 export { resolveCommand } from "./router.ts";
 
-// Command execution
-export type { RunOptions } from "./run.ts";
-export { runCommand, runMain, VALIDATION_MODE_ENV } from "./run.ts";
-
 // Core types
 export type {
-	AnyCommand,
 	ArgDef,
 	ArgsDef,
-	Command,
-	CommandContext,
-	CommandDef,
 	CommandMeta,
+	EffectiveFlags,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	InheritableFlags,
+	MergeFlags,
 	ParseResult,
+	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,

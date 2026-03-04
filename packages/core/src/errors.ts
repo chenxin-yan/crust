@@ -1,4 +1,4 @@
-import type { AnyCommand } from "./types.ts";
+import type { CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustErrorCode — Discriminated error codes
@@ -8,7 +8,7 @@ export interface CommandNotFoundErrorDetails {
 	input: string;
 	available: string[];
 	commandPath: string[];
-	parentCommand: AnyCommand;
+	parentCommand: CommandNode;
 }
 
 export interface ValidationErrorDetails {

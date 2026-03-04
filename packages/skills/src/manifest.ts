@@ -1,8 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Command-tree introspection — builds canonical manifest from defineCommand
+// Command-tree introspection — builds canonical manifest from CommandNode
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { AnyCommand, ArgDef, FlagDef } from "@crustjs/core";
+import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -21,19 +21,15 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
  *
  * @example
  * ```ts
- * import { defineCommand } from "@crustjs/core";
+ * import type { CommandNode } from "@crustjs/core";
  * import { buildManifest } from "@crustjs/skills";
  *
- * const root = defineCommand({
- *   meta: { name: "my-cli", description: "My CLI tool" },
- *   subCommands: { serve, build },
- * });
- *
- * const manifest = buildManifest(root);
- * // manifest.children contains normalized nodes for "serve" and "build"
+ * // Typically called from a plugin setup hook:
+ * const manifest = buildManifest(context.rootCommand);
+ * // manifest.children contains normalized nodes for subcommands
  * ```
  */
-export function buildManifest(command: AnyCommand): ManifestNode {
+export function buildManifest(command: CommandNode): ManifestNode {
 	return buildNode(command, []);
 }
 
@@ -47,12 +43,12 @@ export function buildManifest(command: AnyCommand): ManifestNode {
  * @param command - Current command node to process
  * @param parentPath - Path segments from root to (but not including) this node
  */
-function buildNode(command: AnyCommand, parentPath: string[]): ManifestNode {
+function buildNode(command: CommandNode, parentPath: string[]): ManifestNode {
 	const name = normalizeName(command.meta.name);
 	const path = [...parentPath, name];
 
 	const args = normalizeArgs(command.args);
-	const flags = normalizeFlags(command.flags);
+	const flags = normalizeFlags(command.effectiveFlags);
 	const children = normalizeChildren(command.subCommands, path);
 
 	return {
@@ -139,7 +135,8 @@ function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 		type: flag.type,
 		required: flag.required === true,
 		multiple: flag.multiple === true,
-		aliases: normalizeAliases(flag.alias),
+		short: flag.short,
+		aliases: flag.aliases ? [...flag.aliases].sort() : [],
 	};
 
 	if (flag.description !== undefined) {
@@ -154,18 +151,6 @@ function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 }
 
 /**
- * Normalizes flag aliases into a sorted string array.
- *
- * Handles `undefined`, single string, and string[] inputs.
- * Result is sorted alphabetically for deterministic output.
- */
-function normalizeAliases(alias: string | string[] | undefined): string[] {
-	if (alias === undefined) return [];
-	if (typeof alias === "string") return [alias];
-	return [...alias].sort();
-}
-
-/**
  * Recursively builds child {@link ManifestNode} entries from a
  * `subCommands` record. Children are sorted alphabetically by
  * command name for deterministic output.
@@ -174,7 +159,7 @@ function normalizeAliases(alias: string | string[] | undefined): string[] {
  * @param parentPath - Full path of the parent node
  */
 function normalizeChildren(
-	subCommands: Record<string, AnyCommand>,
+	subCommands: Record<string, CommandNode>,
 	parentPath: string[],
 ): ManifestNode[] {
 	const keys = Object.keys(subCommands).sort();
