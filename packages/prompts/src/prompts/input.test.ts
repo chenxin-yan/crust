@@ -595,4 +595,47 @@ describe("input — non-TTY", () => {
 
 		expect(result).toBe("Bob");
 	});
+
+	it("returns default value in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await input({
+			message: "Name?",
+			default: "untitled",
+		});
+
+		expect(result).toBe("untitled");
+	});
+
+	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(input({ message: "Name?" })).rejects.toThrow(
+			"interactive terminal",
+		);
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await input({
+			message: "Name?",
+			initial: "from-flag",
+			default: "fallback",
+		});
+
+		expect(result).toBe("from-flag");
+	});
 });

@@ -35,6 +35,7 @@ export type {
 export {
 	assertTTY,
 	CancelledError,
+	isTTY,
 	NonInteractiveError,
 	runPrompt,
 	submit,

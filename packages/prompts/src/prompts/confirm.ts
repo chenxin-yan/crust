@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { runPrompt, submit } from "../core/renderer.ts";
+import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
@@ -155,9 +155,12 @@ function renderSubmitted(
  * If `initial` is provided, the prompt is skipped and the value is returned
  * immediately — useful for prefilling from CLI flags.
  *
+ * In non-interactive environments (no TTY), the `default` value is returned
+ * automatically if explicitly provided.
+ *
  * @param options - Confirm prompt configuration
  * @returns The user's boolean selection
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
+ * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or explicit `default` is provided
  *
  * @example
  * ```ts
@@ -190,6 +193,12 @@ export async function confirm(options: ConfirmOptions): Promise<boolean> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
+	}
+
+	// Non-interactive fallback: return default value when stdin is not a TTY
+	// Only triggers when user explicitly passed `default` (not the internal default of `true`)
+	if (!isTTY() && options.default !== undefined) {
+		return options.default;
 	}
 
 	const theme = resolveTheme(options.theme);

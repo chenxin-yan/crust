@@ -5,7 +5,7 @@
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { runPrompt, submit } from "../core/renderer.ts";
+import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
@@ -58,6 +58,8 @@ export interface FilterOptions<T> {
 	readonly choices: readonly Choice<T>[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: T;
+	/** Default value — sets the initial cursor position to the matching choice. In non-interactive environments, this value is returned automatically */
+	readonly default?: T;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
 	/** Maximum number of visible filtered results before scrolling (defaults to 10) */
@@ -322,9 +324,12 @@ function renderSubmitted<T>(
  * If `initial` is provided, the prompt is skipped and the value is returned
  * immediately — useful for prefilling from CLI flags.
  *
+ * In non-interactive environments (no TTY), the `default` value is returned
+ * automatically if provided.
+ *
  * @param options - Filter prompt configuration
  * @returns The value of the selected choice
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
+ * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -362,6 +367,11 @@ export async function filter<T>(options: FilterOptions<T>): Promise<T> {
 		return options.initial;
 	}
 
+	// Non-interactive fallback: return default value when stdin is not a TTY
+	if (!isTTY() && options.default !== undefined) {
+		return options.default;
+	}
+
 	const theme = resolveTheme(options.theme);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
 	const choices = normalizeChoices(options.choices);
@@ -369,13 +379,32 @@ export async function filter<T>(options: FilterOptions<T>): Promise<T> {
 	// Initial results: all items (empty query matches everything)
 	const initialResults = fuzzyFilter("", choices);
 
+	// Find initial cursor position from default value
+	let initialListCursor = 0;
+	if (options.default !== undefined) {
+		const idx = initialResults.findIndex(
+			(r) => r.item.value === options.default,
+		);
+		if (idx !== -1) {
+			initialListCursor = idx;
+		}
+	}
+
+	// Calculate initial scroll offset to keep cursor visible
+	const initialScrollOffset = calculateScrollOffset(
+		initialListCursor,
+		0,
+		initialResults.length,
+		maxVisible,
+	);
+
 	const initialState: FilterState<T> = {
 		query: "",
 		cursorPos: 0,
 		choices,
 		results: initialResults,
-		listCursor: 0,
-		scrollOffset: 0,
+		listCursor: initialListCursor,
+		scrollOffset: initialScrollOffset,
 	};
 
 	return runPrompt<FilterState<T>, T>({

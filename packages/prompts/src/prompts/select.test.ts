@@ -607,4 +607,52 @@ describe("select — non-TTY", () => {
 
 		expect(result).toBe("b");
 	});
+
+	it("returns default value in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await select({
+			message: "Pick",
+			choices: ["a", "b", "c"],
+			default: "b",
+		});
+
+		expect(result).toBe("b");
+	});
+
+	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(
+			select({
+				message: "Pick",
+				choices: ["a", "b", "c"],
+			}),
+		).rejects.toThrow("interactive terminal");
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await select({
+			message: "Pick",
+			choices: ["a", "b", "c"],
+			initial: "a",
+			default: "c",
+		});
+
+		expect(result).toBe("a");
+	});
 });

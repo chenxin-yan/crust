@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	assertTTY,
+	isTTY,
 	NonInteractiveError,
 	type PromptConfig,
 	runPrompt,
@@ -11,6 +12,48 @@ import { defaultTheme } from "./theme.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // TTY detection
 // ────────────────────────────────────────────────────────────────────────────
+
+describe("isTTY", () => {
+	const originalIsTTY = process.stdin.isTTY;
+
+	afterEach(() => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: originalIsTTY,
+			writable: true,
+			configurable: true,
+		});
+	});
+
+	it("returns true when stdin is a TTY", () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: true,
+			writable: true,
+			configurable: true,
+		});
+
+		expect(isTTY()).toBe(true);
+	});
+
+	it("returns false when stdin is not a TTY", () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		expect(isTTY()).toBe(false);
+	});
+
+	it("returns false when stdin.isTTY is undefined", () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: undefined,
+			writable: true,
+			configurable: true,
+		});
+
+		expect(isTTY()).toBe(false);
+	});
+});
 
 describe("assertTTY", () => {
 	const originalIsTTY = process.stdin.isTTY;

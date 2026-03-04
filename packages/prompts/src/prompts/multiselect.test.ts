@@ -808,4 +808,52 @@ describe("multiselect — non-TTY", () => {
 
 		expect(result).toEqual(["b"]);
 	});
+
+	it("returns default values in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await multiselect({
+			message: "Select",
+			choices: ["a", "b", "c"],
+			default: ["a", "c"],
+		});
+
+		expect(result).toEqual(["a", "c"]);
+	});
+
+	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(
+			multiselect({
+				message: "Select",
+				choices: ["a", "b", "c"],
+			}),
+		).rejects.toThrow("interactive terminal");
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await multiselect({
+			message: "Select",
+			choices: ["a", "b", "c"],
+			initial: ["a"],
+			default: ["b", "c"],
+		});
+
+		expect(result).toEqual(["a"]);
+	});
 });

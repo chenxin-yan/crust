@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { runPrompt, submit } from "../core/renderer.ts";
+import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
@@ -208,9 +208,12 @@ function renderSubmitted<T>(
  * If `initial` is provided, the prompt is skipped and the value is returned
  * immediately -- useful for prefilling from CLI flags.
  *
+ * In non-interactive environments (no TTY), the `default` value is returned
+ * automatically if provided.
+ *
  * @param options - Select prompt configuration
  * @returns The value of the selected choice
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
+ * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
  *
  * @example
  * ```ts
@@ -246,6 +249,11 @@ export async function select<T>(options: SelectOptions<T>): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
+	}
+
+	// Non-interactive fallback: return default value when stdin is not a TTY
+	if (!isTTY() && options.default !== undefined) {
+		return options.default;
 	}
 
 	const theme = resolveTheme(options.theme);

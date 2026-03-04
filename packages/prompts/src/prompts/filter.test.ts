@@ -114,6 +114,57 @@ describe("filter — initial value", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Default value cursor positioning
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("filter — default value", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("sets initial cursor to matching default value", async () => {
+		const promise = filter({
+			message: "Search",
+			choices: ["TypeScript", "JavaScript", "Rust"],
+			default: "Rust",
+		});
+
+		await tick();
+		// Submit immediately — should select "Rust" (cursor at matching index)
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("Rust");
+	});
+
+	it("defaults cursor to first item when no default is provided", async () => {
+		const promise = filter({
+			message: "Search",
+			choices: ["TypeScript", "JavaScript", "Rust"],
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("TypeScript");
+	});
+
+	it("defaults cursor to first item when default value is not found", async () => {
+		const promise = filter({
+			message: "Search",
+			choices: ["TypeScript", "JavaScript", "Rust"],
+			default: "Python",
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("TypeScript");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Filtering behavior
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -660,5 +711,53 @@ describe("filter — non-TTY", () => {
 		});
 
 		expect(result).toBe("b");
+	});
+
+	it("returns default value in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await filter({
+			message: "Search",
+			choices: ["a", "b", "c"],
+			default: "b",
+		});
+
+		expect(result).toBe("b");
+	});
+
+	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(
+			filter({
+				message: "Search",
+				choices: ["a", "b", "c"],
+			}),
+		).rejects.toThrow("interactive terminal");
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await filter({
+			message: "Search",
+			choices: ["a", "b", "c"],
+			initial: "a",
+			default: "c",
+		});
+
+		expect(result).toBe("a");
 	});
 });

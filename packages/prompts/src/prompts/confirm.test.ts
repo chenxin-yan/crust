@@ -469,4 +469,62 @@ describe("confirm — non-TTY", () => {
 
 		expect(result).toBe(false);
 	});
+
+	it("returns explicit default value in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await confirm({
+			message: "Continue?",
+			default: false,
+		});
+
+		expect(result).toBe(false);
+	});
+
+	it("returns explicit default true in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await confirm({
+			message: "Continue?",
+			default: true,
+		});
+
+		expect(result).toBe(true);
+	});
+
+	it("throws NonInteractiveError when no explicit default in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(confirm({ message: "Continue?" })).rejects.toThrow(
+			"interactive terminal",
+		);
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await confirm({
+			message: "Continue?",
+			initial: true,
+			default: false,
+		});
+
+		expect(result).toBe(true);
+	});
 });

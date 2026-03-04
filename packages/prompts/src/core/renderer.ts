@@ -138,10 +138,7 @@ function physicalLineCount(content: string, columns: number): number {
  */
 export class NonInteractiveError extends Error {
 	constructor(message?: string) {
-		super(
-			message ??
-				"Prompts require an interactive terminal (TTY). Provide an `initial` value for non-interactive environments.",
-		);
+		super(message ?? "Prompts require an interactive terminal (TTY).");
 		this.name = "NonInteractiveError";
 	}
 }
@@ -157,11 +154,19 @@ export class CancelledError extends Error {
 }
 
 /**
+ * Check whether stdin is an interactive TTY.
+ * @returns `true` if stdin is a TTY, `false` otherwise
+ */
+export function isTTY(): boolean {
+	return !!process.stdin.isTTY;
+}
+
+/**
  * Check that stdin is an interactive TTY.
  * @throws {NonInteractiveError} when stdin is not a TTY
  */
 export function assertTTY(): void {
-	if (!process.stdin.isTTY) {
+	if (!isTTY()) {
 		throw new NonInteractiveError();
 	}
 }
