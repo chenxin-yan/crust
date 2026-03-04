@@ -20,7 +20,6 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
-	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
@@ -352,14 +351,16 @@ export class Crust<
 	 * Returns a new builder with updated local flag types. The original
 	 * builder is not mutated.
 	 *
+	 * NOTE: Compile-time inherited/local cross-collision checks are intentionally
+	 * omitted here to reduce TypeScript type-check cost in large projects.
+	 * Runtime collision checks still run during parsing and command-tree validation.
+	 *
 	 * @param defs - Flag definitions record
 	 * @returns A new `Crust` instance with the given flags
 	 * @throws {CrustError} `DEFINITION` if flag names/aliases violate constraints
 	 */
 	flags<const F extends FlagsDef>(
-		defs: F &
-			ValidateNoPrefixedFlags<ValidateFlagAliases<F>> &
-			ValidateCrossCollisions<Inherited, F>,
+		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
 	): Crust<Inherited, F, A> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
