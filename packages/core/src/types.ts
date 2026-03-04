@@ -468,7 +468,9 @@ export type MergeFlags<
 export type EffectiveFlags<
 	Inherited extends FlagsDef,
 	Local extends FlagsDef,
-> = MergeFlags<InheritableFlags<Inherited>, Local>;
+> = string extends keyof Inherited
+	? Local
+	: MergeFlags<InheritableFlags<Inherited>, Local>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

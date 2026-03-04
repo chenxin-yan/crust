@@ -1116,6 +1116,16 @@ describe("EffectiveFlags type inference", () => {
 
 		expect(true).toBe(true);
 	});
+
+	it("short-circuits to local when inherited is wide FlagsDef", () => {
+		type Local = {
+			output: { type: "string" };
+		};
+		type Result = EffectiveFlags<FlagsDef, Local>;
+		type _check = Expect<Equal<Result, Local>>;
+
+		expect(true).toBe(true);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

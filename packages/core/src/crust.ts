@@ -240,6 +240,7 @@ function freezeTree(node: CommandNode): void {
  * - `Inherited` — flags inherited from a parent command (populated by `.command()`)
  * - `Local` — flags defined on this command via `.flags()`
  * - `A` — positional argument definitions
+ * - `Eff` — effective flags (merged inherited + local flags, computed internally)
  *
  * @example
  * ```ts
@@ -257,12 +258,14 @@ export class Crust<
 	Inherited extends FlagsDef = FlagsDef,
 	Local extends FlagsDef = FlagsDef,
 	A extends ArgsDef = ArgsDef,
+	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
 		inherited: Inherited;
 		local: Local;
 		args: A;
+		effective: Eff;
 	};
 
 	/** @internal */
@@ -296,9 +299,9 @@ export class Crust<
 		name: string,
 		inheritedFlags: FlagsDef,
 		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
-	): Crust<I, {}, []> {
+	): Crust<I, {}, [], EffectiveFlags<I, {}>> {
 		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
-		const instance = new Crust<I, {}, []>(name);
+		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>>(name);
 		// Override the inherited flags set by constructor (which defaults to {})
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags =
 			inheritedFlags;
@@ -339,10 +342,10 @@ export class Crust<
 	 * @param meta - Metadata fields to set (description, usage)
 	 * @returns A new `Crust` instance with updated metadata
 	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A> {
+	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
@@ -361,7 +364,7 @@ export class Crust<
 	 */
 	flags<const F extends FlagsDef>(
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-	): Crust<Inherited, F, A> {
+	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
 
@@ -374,7 +377,7 @@ export class Crust<
 		return this._clone({
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
-		}) as unknown as Crust<Inherited, F, A>;
+		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>>;
 	}
 
 	/**
@@ -388,13 +391,13 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
-	): Crust<Inherited, Local, NewA> {
+	): Crust<Inherited, Local, NewA, Eff> {
 		// Deep copy arg defs to decouple from caller
 		const copiedArgs = defs.map((def) => ({ ...def })) as unknown as ArgsDef;
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Inherited, Local, NewA>;
+		}) as unknown as Crust<Inherited, Local, NewA, Eff>;
 	}
 
 	/**
@@ -412,12 +415,12 @@ export class Crust<
 	 */
 	run(
 		handler: (
-			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+			ctx: NoInfer<CrustCommandContext<A, Eff>>,
 		) => void | Promise<void>,
-	): Crust<Inherited, Local, A> {
+	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
@@ -431,12 +434,12 @@ export class Crust<
 	 */
 	preRun(
 		handler: (
-			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+			ctx: NoInfer<CrustCommandContext<A, Eff>>,
 		) => void | Promise<void>,
-	): Crust<Inherited, Local, A> {
+	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			preRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
@@ -450,12 +453,12 @@ export class Crust<
 	 */
 	postRun(
 		handler: (
-			ctx: NoInfer<CrustCommandContext<A, EffectiveFlags<Inherited, Local>>>,
+			ctx: NoInfer<CrustCommandContext<A, Eff>>,
 		) => void | Promise<void>,
-	): Crust<Inherited, Local, A> {
+	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			postRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
@@ -471,10 +474,10 @@ export class Crust<
 	 * @param plugin - The plugin to register
 	 * @returns A new `Crust` instance with the plugin registered
 	 */
-	use(plugin: CrustPlugin): Crust<Inherited, Local, A> {
+	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			plugins: [...this._node.plugins, plugin],
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
@@ -512,7 +515,7 @@ export class Crust<
 	sub<N extends string>(
 		name: N,
 		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
-	): Crust<EffectiveFlags<Inherited, Local>, {}, []> {
+	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>> {
 		if (!name.trim()) {
 			throw new CrustError(
 				"DEFINITION",
@@ -525,10 +528,7 @@ export class Crust<
 			this._node.localFlags,
 		);
 
-		return Crust._createChild<EffectiveFlags<Inherited, Local>>(
-			name,
-			parentEffective,
-		);
+		return Crust._createChild<Eff>(name, parentEffective);
 	}
 
 	/**
@@ -547,7 +547,7 @@ export class Crust<
 		name: N,
 		cb: (
 			// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
-			cmd: Crust<EffectiveFlags<Inherited, Local>, {}, []>,
+			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>>,
 		) => Crust<
 			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
 			any,
@@ -556,7 +556,7 @@ export class Crust<
 			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
 			any
 		>,
-	): Crust<Inherited, Local, A>;
+	): Crust<Inherited, Local, A, Eff>;
 
 	/**
 	 * Register a pre-built subcommand builder (from `.sub()`).
@@ -572,7 +572,7 @@ export class Crust<
 	command(
 		// biome-ignore lint/suspicious/noExplicitAny: accepts any Crust builder instance
 		builder: Crust<any, any, any>,
-	): Crust<Inherited, Local, A>;
+	): Crust<Inherited, Local, A, Eff>;
 
 	// Implementation
 	command(
@@ -580,7 +580,7 @@ export class Crust<
 		nameOrBuilder: string | Crust<any, any, any>,
 		// biome-ignore lint/suspicious/noExplicitAny: callback parameter from first overload
 		cb?: (cmd: Crust<any, any, any>) => Crust<any, any, any>,
-	): Crust<Inherited, Local, A> {
+	): Crust<Inherited, Local, A, Eff> {
 		if (typeof nameOrBuilder === "string") {
 			// ── Inline callback path ──────────────────────────────────────────
 			const name = nameOrBuilder;
@@ -615,10 +615,7 @@ export class Crust<
 			);
 
 			// Create a child builder pre-typed with the parent's effective flags
-			const childBuilder = Crust._createChild<EffectiveFlags<Inherited, Local>>(
-				name,
-				parentEffective,
-			);
+			const childBuilder = Crust._createChild<Eff>(name, parentEffective);
 
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
@@ -638,7 +635,7 @@ export class Crust<
 					...this._node.subCommands,
 					[name]: childNode,
 				},
-			}) as unknown as Crust<Inherited, Local, A>;
+			}) as unknown as Crust<Inherited, Local, A, Eff>;
 		}
 
 		// ── Pre-built builder path ──────────────────────────────────────────
@@ -673,7 +670,7 @@ export class Crust<
 				...this._node.subCommands,
 				[name]: childNode,
 			},
-		}) as unknown as Crust<Inherited, Local, A>;
+		}) as unknown as Crust<Inherited, Local, A, Eff>;
 	}
 
 	/**
