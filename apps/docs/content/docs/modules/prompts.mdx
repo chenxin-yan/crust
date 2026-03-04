@@ -232,7 +232,7 @@ All prompts share a theming system with 11 style slots. Each slot is a `StyleFn`
 | `message`     | `bold`    | Prompt message text                     |
 | `placeholder` | `dim`     | Placeholder text in empty inputs        |
 | `cursor`      | `cyan`    | Cursor indicator in inputs and lists    |
-| `selected`    | `yellow`  | Active / selected item                  |
+| `selected`    | `cyan`    | Active / selected item                  |
 | `unselected`  | `dim`     | Inactive / unselected items             |
 | `error`       | `red`     | Validation error messages               |
 | `success`     | `green`   | Confirmed / submitted values            |
@@ -295,7 +295,7 @@ The low-level `runPrompt` API lets you build custom interactive prompts with ful
 ```ts
 import { runPrompt, submit } from "@crustjs/prompts";
 import type { KeypressEvent } from "@crustjs/prompts";
-import { resolveTheme } from "@crustjs/prompts";
+import { getTheme } from "@crustjs/prompts";
 
 interface CounterState {
   count: number;
@@ -303,7 +303,7 @@ interface CounterState {
 
 const result = await runPrompt<CounterState, number>({
   initialState: { count: 0 },
-  theme: resolveTheme(),
+  theme: getTheme(),
   render: (state, theme) => `${theme.prefix("○")} Count: ${state.count}`,
   handleKey: (key, state) => {
     if (key.name === "return") return submit(state.count);
@@ -378,6 +378,8 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `fuzzyMatch`           | Score a query against a single candidate string        |
 | `fuzzyFilter`          | Filter and rank a list of choices by fuzzy query       |
 | `normalizeChoices`     | Normalize string/object choices to `{ label, value }`  |
+| `formatPromptLine`     | Format prompt header with inline content               |
+| `formatSubmitted`      | Format submitted line for a prompt                     |
 | `calculateScrollOffset`| Calculate viewport scroll offset for lists             |
 
 ### Types
