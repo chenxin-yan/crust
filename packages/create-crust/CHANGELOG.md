@@ -1,5 +1,14 @@
 # create-crust
 
+## 0.0.17
+
+### Patch Changes
+
+- fda33c2: Add a new modular starter template that demonstrates the file-splitting subcommand pattern with `.sub()` and `.command(builder)`, and let users choose between Minimal and Modular template styles during scaffolding.
+- 96ca6b2: Adopt the new builder-style command API across core and official packages, including inherited flags, lifecycle hooks, plugin usage, and command metadata improvements. Update related tooling, templates, and documentation to align with the new command authoring flow.
+- Updated dependencies [96ca6b2]
+  - @crustjs/core@0.0.10
+
 ## 0.0.16
 
 ### Patch Changes
