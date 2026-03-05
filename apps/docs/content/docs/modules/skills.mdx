@@ -3,7 +3,7 @@ title: "Skills"
 description: Agent skill generation for AI coding assistants.
 ---
 
-The `@crustjs/skills` package generates and installs agent skills from your CLI's command definitions. Skills provide structured documentation that AI coding assistants (Claude Code, OpenCode) use to understand your CLI.
+The `@crustjs/skills` package generates and installs agent skills from your CLI's command definitions. Skills provide structured documentation that AI coding assistants use to understand your CLI.
 
 ## Install
 
@@ -31,9 +31,9 @@ await app.execute();
 
 This gives you:
 
-- **Auto-detection**: the plugin detects which supported agents are installed by checking for their global configuration directories.
+- **Auto-detection**: additional (non-universal) agents are detected by probing their CLI commands (for example `<agent> --version`).
 - **Auto-update**: when a user runs any command, the plugin silently updates installed skills if the version has changed.
-- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling agent installations on or off.
+- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents.
 
 ## Plugin Options
 
@@ -43,8 +43,6 @@ interface SkillPluginOptions {
   version: string;
   /** Installation scope. @default "global" */
   scope?: "global" | "project";
-  /** Auto-install skills when not yet present. @default false */
-  autoInstall?: boolean;
   /** Auto-update skills when version is outdated. @default true */
   autoUpdate?: boolean;
   /** Register interactive skill subcommand. true = "skill", string = custom name. @default true */
@@ -54,27 +52,45 @@ interface SkillPluginOptions {
 
 ### Agent Auto-Detection
 
-The plugin automatically detects which agents are installed by checking for their global configuration directories — no manual configuration needed. Only detected agents are managed by the middleware and shown in the interactive command.
+`detectInstalledAgents()` probes CLI binaries for additional agents (for example `claude --version`, `windsurf --version`).
 
-| Agent         | Detection Path        |
-| ------------- | --------------------- |
-| `claude-code` | `~/.claude/`          |
-| `opencode`    | `~/.config/opencode/` |
+- Universal agents are not gated by detection and are always available through the **Universal** option.
+- Additional agents are detected by command availability.
+- In the interactive command, an additional agent is also shown if the skill is already installed at that agent path, even when command detection fails.
 
-Detection always checks global paths regardless of the installation scope.
+Detection is used for additional-agent discovery only.
 
 ### Supported Agents
 
-| Agent         | Global Path                         | Project Path               |
-| ------------- | ----------------------------------- | -------------------------- |
-| `claude-code` | `~/.claude/skills/<name>/`          | `.claude/skills/<name>/`   |
-| `opencode`    | `~/.config/opencode/skills/<name>/` | `.opencode/skills/<name>/` |
+`@crustjs/skills` supports the same broad ecosystem as Vercel Skills.
+
+Universal group (single prompt option, shared path):
+
+- `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
+
+Additional agents:
+
+- `adal`, `antigravity`, `augment`, `claude-code`, `codebuddy`, `command-code`, `continue`, `cortex`, `crush`, `droid`, `goose`, `iflow-cli`, `junie`, `kilo`, `kiro-cli`, `kode`, `mcpjam`, `mistral-vibe`, `mux`, `neovate`, `openclaw`, `openhands`, `pi`, `pochi`, `qoder`, `qwen-code`, `roo`, `trae`, `trae-cn`, `windsurf`, `zencoder`
+
+Path model:
+
+| Group        | Global Path                             | Project Path             |
+| ------------ | --------------------------------------- | ------------------------ |
+| Universal    | `~/.config/agents/skills/<name>/`       | `.agents/skills/<name>/` |
+| Additional   | Agent-specific convention per CLI       | Agent-specific path      |
 
 ## Interactive Command
 
 By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt. Set `command: false` to disable it.
 
-Detected agents are listed with their current installation status. Already-installed agents are pre-selected. The user toggles agents on or off and the system reconciles the desired state:
+The prompt behavior is:
+
+- A single **Universal** option is shown (for all universal agents).
+- Additional agents are shown when detected, or when the skill is already installed for that agent.
+- Choice subtext shows the target installation directory.
+- Already-installed targets are pre-selected.
+
+The user toggles options on or off and the system reconciles the desired state:
 
 - **Newly selected** agents are installed
 - **Deselected** agents are uninstalled
@@ -166,13 +182,25 @@ isValidSkillName("my-cli"); // true
 
 // Detect which agents are installed
 const agents = await detectInstalledAgents();
-// ["claude-code", "opencode"] — only agents with config dirs present
+// Additional detected agents only (universal is handled separately)
+
+const universalAgents = [
+  "amp",
+  "cline",
+  "codex",
+  "cursor",
+  "gemini-cli",
+  "github-copilot",
+  "kimi-cli",
+  "opencode",
+  "replit",
+] as const;
 
 // Install skills
 const result = await generateSkill({
   command: rootCommand,
   meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
-  agents,
+  agents: [...universalAgents, ...agents],
   scope: "global",
 });
 
