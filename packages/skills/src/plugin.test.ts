@@ -64,7 +64,7 @@ describe("skillPlugin auto-update", () => {
 
 		const manifestPath = join(
 			tmpDir,
-			".opencode",
+			".agents",
 			"skills",
 			"use-no-auto-install",
 			"crust.json",
@@ -95,7 +95,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".opencode", "skills", "use-update-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "use-update-test");
 
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 
@@ -128,7 +128,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".opencode", "skills", "use-order-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "use-order-test");
 
 		// Run plugin with v2.0.0 behind a short-circuit — should still update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -164,7 +164,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".opencode", "skills", "use-validation-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "use-validation-test");
 
 		try {
 			await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -203,11 +203,53 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".opencode", "skills", "use-no-update-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "use-no-update-test");
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		// Should still be v1.0.0 — autoUpdate disabled
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+	});
+
+	it("prints no changes when universal skills are already installed", async () => {
+		const app = new Crust("no-change-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					scope: "project",
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "no-change-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const logs: string[] = [];
+		const originalLog = console.log;
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
+		} finally {
+			console.log = originalLog;
+		}
+
+		expect(logs.some((line) => line.includes("No changes."))).toBe(true);
+		expect(
+			logs.some((line) => line.includes('Installed "no-change-test"')),
+		).toBe(false);
 	});
 });

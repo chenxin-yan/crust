@@ -848,7 +848,7 @@ describe("E2E: skill generation", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("distribution metadata", () => {
-		it("crust.json contains all commands", async () => {
+		it("crust.json contains core metadata", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -861,23 +861,8 @@ describe("E2E: skill generation", () => {
 			expect(manifest.name).toBe("use-deploy-cli");
 			expect(manifest.description).toBe("Agent skill for the deploy CLI tool");
 			expect(manifest.version).toBe("1.2.0");
-			expect(manifest.entrypoint).toBe("SKILL.md");
-
-			const expectedCommands = [
-				"deploy",
-				"deploy app",
-				"deploy app create",
-				"deploy app delete",
-				"deploy app list",
-				"deploy config",
-				"deploy config get",
-				"deploy config set",
-				"deploy status",
-			];
-			for (const cmd of expectedCommands) {
-				expect(manifest.commands).toContain(cmd);
-			}
-			expect(manifest.commands.length).toBe(expectedCommands.length);
+			expect(manifest.entrypoint).toBeUndefined();
+			expect(manifest.commands).toBeUndefined();
 		});
 	});
 
@@ -977,24 +962,16 @@ describe("E2E: skill generation", () => {
 			expect(() => JSON.parse(content)).not.toThrow();
 		});
 
-		it("command file paths in crust.json match actual files", async () => {
+		it("SKILL.md references generated command files", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
 				SKILL_META,
 			);
 
-			const manifestContent = await readText(
-				join(agent.outputDir, CRUST_MANIFEST),
-			);
-			const manifest = JSON.parse(manifestContent);
 			const diskFiles = new Set(await listFiles(agent.outputDir));
 
 			const indexContent = await readText(join(agent.outputDir, "SKILL.md"));
-
-			for (const cmd of manifest.commands) {
-				expect(indexContent).toContain(`\`${cmd}\``);
-			}
 
 			const commandFiles = [...diskFiles].filter((f) =>
 				f.startsWith("commands/"),

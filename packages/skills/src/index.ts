@@ -3,7 +3,12 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 // Agent detection
-export { detectInstalledAgents } from "./agents.ts";
+export {
+	detectInstalledAgents,
+	getAdditionalAgents,
+	getUniversalAgents,
+	isUniversalAgent,
+} from "./agents.ts";
 export type { SkillConflictDetails } from "./errors.ts";
 // Errors
 export { SkillConflictError } from "./errors.ts";
@@ -22,6 +27,7 @@ export { skillPlugin } from "./plugin.ts";
 
 // Types
 export type {
+	AgentClass,
 	AgentResult,
 	AgentTarget,
 	GenerateOptions,
