@@ -108,8 +108,8 @@ If auto-update does not appear to work:
 
 - Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
 - Ensure at least one supported agent is detected for your scope:
-  - `scope: "global"` -> `~/.claude` or `~/.config/opencode`
-  - `scope: "project"` -> `<cwd>/.claude` or `<cwd>/.opencode` (falls back to global roots)
+  - `scope: "global"` -> checks supported global agent config roots (for example `~/.claude`, `~/.config/opencode`, `~/.codex`)
+  - `scope: "project"` -> checks project roots first (for example `<cwd>/.claude`, `<cwd>/.opencode`) then falls back to global roots
 - Check for existing conflicting skill directories without `crust.json`.
 
 ## Recommended Export Pattern
@@ -322,10 +322,16 @@ try {
 
 After generating a skill bundle, consumers can install it by copying the skill directory.
 
-### OpenCode
+### Universal agents (OpenCode, Codex, Cursor, and others)
 
 ```sh
-cp -r skills/use-my-cli/ .opencode/skills/use-my-cli/
+cp -r skills/use-my-cli/ .agents/skills/use-my-cli/
+```
+
+Global install for universal agents:
+
+```sh
+cp -r skills/use-my-cli/ ~/.config/agents/skills/use-my-cli/
 ```
 
 ### Claude Code
