@@ -139,7 +139,7 @@
     },
     "packages/skills": {
       "name": "@crustjs/skills",
-      "version": "0.0.12",
+      "version": "0.0.13",
       "dependencies": {
         "@crustjs/prompts": "workspace:*",
         "@crustjs/style": "workspace:*",
