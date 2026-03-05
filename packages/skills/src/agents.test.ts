@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { describe, expect, it } from "bun:test";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	AGENT_LABELS,
@@ -41,6 +40,8 @@ describe("agent registry", () => {
 		expect(ALL_AGENTS).toContain("claude-code");
 		expect(ALL_AGENTS).toContain("opencode");
 		expect(ALL_AGENTS).toContain("codex");
+		expect(ALL_AGENTS).toContain("windsurf");
+		expect(ALL_AGENTS).toContain("openclaw");
 	});
 
 	it("has a label for every agent", () => {
@@ -55,7 +56,9 @@ describe("agent registry", () => {
 		const additional = getAdditionalAgents();
 
 		expect(universal).toContain("opencode");
+		expect(universal).toContain("codex");
 		expect(additional).toContain("claude-code");
+		expect(additional).toContain("windsurf");
 		expect(isUniversalAgent("opencode")).toBe(true);
 		expect(isUniversalAgent("claude-code")).toBe(false);
 
@@ -65,75 +68,31 @@ describe("agent registry", () => {
 });
 
 describe("detectInstalledAgents", () => {
-	let tmpDir: string;
-
-	beforeEach(async () => {
-		tmpDir = join(
-			tmpdir(),
-			`crust-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-		);
-		await mkdir(tmpDir, { recursive: true });
-	});
-
-	afterEach(async () => {
-		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("returns empty array when no config dirs exist", async () => {
-		const result = await detectInstalledAgents({ home: tmpDir });
+	it("returns empty array when no commands are available", async () => {
+		const result = await detectInstalledAgents({
+			commandChecker: async () => false,
+		});
 		expect(result).toEqual([]);
 	});
 
-	it("detects claude-code from ~/.claude", async () => {
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-		const result = await detectInstalledAgents({ home: tmpDir });
-		expect(result).toContain("claude-code");
-	});
-
-	it("detects opencode from ~/.config/opencode", async () => {
-		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-		const result = await detectInstalledAgents({ home: tmpDir });
-		expect(result).toContain("opencode");
-	});
-
-	it("detects opencode in project scope from <cwd>/.opencode", async () => {
-		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
+	it("detects additional agents by command availability", async () => {
 		const result = await detectInstalledAgents({
-			scope: "project",
-			home: tmpDir,
-			cwd: tmpDir,
+			commandChecker: async (command) =>
+				command === "claude" || command === "windsurf",
 		});
-		expect(result).toContain("opencode");
-	});
-
-	it("does not return duplicates", async () => {
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-		const result = await detectInstalledAgents({ home: tmpDir });
-		expect(new Set(result).size).toBe(result.length);
-	});
-
-	it("accepts legacy string parameter as home override", async () => {
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-		const result = await detectInstalledAgents(tmpDir);
 		expect(result).toContain("claude-code");
+		expect(result).toContain("windsurf");
 	});
 
-	it("uses home override even when XDG_CONFIG_HOME is set", async () => {
-		const previousXdg = process.env.XDG_CONFIG_HOME;
-		const xdgConfigHome = join(tmpDir, "xdg-config");
-		await mkdir(join(xdgConfigHome, "opencode"), { recursive: true });
-		process.env.XDG_CONFIG_HOME = xdgConfigHome;
+	it("does not include universal agents in detection output", async () => {
+		const result = await detectInstalledAgents({
+			commandChecker: async (command) => command === "opencode",
+		});
+		expect(result).not.toContain("opencode");
+	});
 
-		try {
-			const result = await detectInstalledAgents({ home: tmpDir });
-			expect(result).not.toContain("opencode");
-		} finally {
-			if (previousXdg === undefined) {
-				delete process.env.XDG_CONFIG_HOME;
-			} else {
-				process.env.XDG_CONFIG_HOME = previousXdg;
-			}
-		}
+	it("accepts legacy string parameter", async () => {
+		const result = await detectInstalledAgents("/tmp");
+		expect(Array.isArray(result)).toBe(true);
 	});
 });

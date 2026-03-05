@@ -6,7 +6,12 @@ import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { createCommandNode, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { confirm, multiselect, spinner } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
-import { AGENT_LABELS, detectInstalledAgents } from "./agents.ts";
+import {
+	AGENT_LABELS,
+	detectInstalledAgents,
+	getAdditionalAgents,
+	getUniversalAgents,
+} from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	generateSkill,
@@ -18,6 +23,7 @@ import type { AgentTarget, SkillMeta, SkillPluginOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const DEFAULT_SKILL_SCOPE = "global";
+const UNIVERSAL_GROUP = "__universal__";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -50,7 +56,10 @@ async function autoUpdateSkills(
 	options: SkillPluginOptions,
 ): Promise<void> {
 	const scope = options.scope ?? DEFAULT_SKILL_SCOPE;
-	const agents = await detectInstalledAgents({ scope });
+	const agents = [
+		...getUniversalAgents(),
+		...(await detectInstalledAgents({ scope })),
+	];
 	if (agents.length === 0) {
 		return;
 	}
@@ -228,61 +237,122 @@ function buildSkillCommand(
 		const detectedAgents = await detectInstalledAgents({
 			scope,
 		});
-		if (detectedAgents.length === 0) {
-			console.log(
-				yellow(
-					"No supported agents detected. Install Claude Code or OpenCode first.",
-				),
-			);
-			return;
-		}
+
+		const universalAgents = getUniversalAgents();
+		const allAdditionalAgents = getAdditionalAgents();
 
 		// Check current skill status for each agent
 		const status = await skillStatus({
 			name: meta.name,
-			agents: detectedAgents,
+			agents: [...universalAgents, ...allAdditionalAgents],
 			scope,
 		});
 
 		// Build multiselect choices with status hints and pre-selection
-		const installedAgents: AgentTarget[] = [];
-		const choices = status.agents.map((entry) => {
-			const hint = entry.installed
-				? `v${entry.version} installed`
-				: "not installed";
-
-			if (entry.installed) {
-				installedAgents.push(entry.agent);
+		const installedAgentSet = new Set<AgentTarget>(
+			status.agents
+				.filter((entry) => entry.installed)
+				.map((entry) => entry.agent),
+		);
+		const detectedAdditionalSet = new Set(detectedAgents);
+		const statusMap = new Map(
+			status.agents.map((entry) => [entry.agent, entry]),
+		);
+		const additionalAgents = allAdditionalAgents.filter((agent) => {
+			if (detectedAdditionalSet.has(agent)) {
+				return true;
 			}
-
-			return {
-				label: AGENT_LABELS[entry.agent],
-				value: entry.agent,
-				hint,
-			};
+			const entry = statusMap.get(agent);
+			return entry?.installed === true;
 		});
+		const installedAgents = additionalAgents.filter((agent) =>
+			installedAgentSet.has(agent),
+		);
+
+		const choices: Array<{
+			label: string;
+			value: AgentTarget | typeof UNIVERSAL_GROUP;
+			hint: string;
+		}> = [];
+
+		if (universalAgents.length > 0) {
+			const firstUniversalAgent = universalAgents[0];
+			if (!firstUniversalAgent) {
+				throw new Error("Expected at least one universal agent");
+			}
+			const firstUniversal = statusMap.get(firstUniversalAgent);
+			const universalDir = firstUniversal?.outputDir ?? "path unavailable";
+			choices.push({
+				label: "Universal",
+				value: UNIVERSAL_GROUP,
+				hint: universalDir,
+			});
+
+			console.log(
+				dim(
+					`Universal includes: ${universalAgents.map((agent) => AGENT_LABELS[agent]).join(", ")}`,
+				),
+			);
+		}
+
+		for (const agent of additionalAgents) {
+			const entry = statusMap.get(agent);
+			const hint = entry?.outputDir ?? "path unavailable";
+			choices.push({
+				label: AGENT_LABELS[agent],
+				value: agent,
+				hint,
+			});
+		}
+
+		const universalInstalled =
+			universalAgents.length > 0 &&
+			universalAgents.every((agent) => installedAgentSet.has(agent));
+		const defaultSelections: Array<AgentTarget | typeof UNIVERSAL_GROUP> = [
+			...installedAgents.filter((agent) => !universalAgents.includes(agent)),
+		];
+		if (universalInstalled) {
+			defaultSelections.unshift(UNIVERSAL_GROUP);
+		}
 
 		// Single multiselect — pre-check currently installed agents
 		// In non-interactive mode (no TTY), install to all detected agents
 		const isInteractive = process.stdin.isTTY;
-		const selected = await multiselect({
-			message: "Select agents to install skills for",
-			choices,
-			default: installedAgents,
-			initial: !isInteractive ? detectedAgents : undefined,
-			required: false,
-		});
+		const selectedValues =
+			choices.length === 0
+				? ([] as Array<AgentTarget | typeof UNIVERSAL_GROUP>)
+				: await multiselect({
+						message: "Select agents to install skills for",
+						choices,
+						default: defaultSelections,
+						initial: !isInteractive
+							? choices.map((choice) => choice.value)
+							: undefined,
+						required: false,
+					});
+
+		const selected = new Set<AgentTarget>(
+			selectedValues.filter(
+				(value): value is AgentTarget => value !== UNIVERSAL_GROUP,
+			),
+		);
+		if (selectedValues.includes(UNIVERSAL_GROUP)) {
+			for (const agent of universalAgents) {
+				selected.add(agent);
+			}
+		}
+		const selectedAgents = [...selected];
 
 		// Compute diff
-		const toInstall = selected.filter(
-			(agent) => !installedAgents.includes(agent),
+		const toInstall = selectedAgents.filter(
+			(agent) => !installedAgentSet.has(agent),
 		);
-		const toUpdate = selected.filter((agent) => {
+		const toUpdate = selectedAgents.filter((agent) => {
 			const entry = status.agents.find((a) => a.agent === agent);
 			return entry?.installed === true && entry.version !== meta.version;
 		});
-		const toUninstall = installedAgents.filter(
-			(agent) => !selected.includes(agent),
+		const toUninstall = [...installedAgentSet].filter(
+			(agent) => !selectedAgents.includes(agent),
 		);
 
 		const agentsToGenerate = [...toInstall, ...toUpdate];

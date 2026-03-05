@@ -13,7 +13,6 @@ import type {
 	GenerateOptions,
 	GenerateResult,
 	InstallStatus,
-	ManifestNode,
 	RenderedFile,
 	SkillMeta,
 	StatusOptions,
@@ -134,7 +133,7 @@ export async function generateSkill(
 	// Build manifest and render files once (shared across all agents)
 	const manifest = buildManifest(command);
 	const renderedFiles = renderSkill(manifest, resolvedMeta);
-	const metadataFiles = renderDistributionMetadata(manifest, resolvedMeta);
+	const metadataFiles = renderDistributionMetadata(resolvedMeta);
 
 	// Combine and sort for deterministic output
 	const allFiles = [...renderedFiles, ...metadataFiles].sort((a, b) =>
@@ -142,9 +141,22 @@ export async function generateSkill(
 	);
 
 	const results: AgentResult[] = [];
-
+	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, resolvedMeta.name);
+		const existing = groups.get(outputDir);
+		if (existing) {
+			existing.push(agent);
+		} else {
+			groups.set(outputDir, [agent]);
+		}
+	}
+
+	for (const [outputDir, groupedAgents] of groups) {
+		const primaryAgent = groupedAgents[0];
+		if (!primaryAgent) {
+			continue;
+		}
 
 		// ── Conflict check ────────────────────────────────────────────
 		// If the directory exists but has no crust.json, it was not
@@ -156,7 +168,7 @@ export async function generateSkill(
 				.catch(() => false);
 
 			if (dirExists && !force) {
-				throw new SkillConflictError({ agent, outputDir });
+				throw new SkillConflictError({ agent: primaryAgent, outputDir });
 			}
 		}
 
@@ -169,12 +181,14 @@ export async function generateSkill(
 					: "updated";
 
 		if (status === "up-to-date") {
-			results.push({
-				agent,
-				outputDir,
-				files: [],
-				status: "up-to-date",
-			});
+			for (const agent of groupedAgents) {
+				results.push({
+					agent,
+					outputDir,
+					files: [],
+					status: "up-to-date",
+				});
+			}
 			continue;
 		}
 
@@ -187,13 +201,15 @@ export async function generateSkill(
 
 		await writeFiles(outputDir, allFiles);
 
-		results.push({
-			agent,
-			outputDir,
-			files: allFiles.map((f) => f.path),
-			status,
-			previousVersion,
-		});
+		for (const agent of groupedAgents) {
+			results.push({
+				agent,
+				outputDir,
+				files: allFiles.map((f) => f.path),
+				status,
+				previousVersion,
+			});
+		}
 	}
 
 	return { agents: results };
@@ -215,19 +231,31 @@ export async function uninstallSkill(
 	const { name, agents, scope = "global" } = options;
 	const resolvedName = resolveSkillName(name);
 	const results: UninstallResult["agents"] = [];
-
+	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, resolvedName);
+		const existing = groups.get(outputDir);
+		if (existing) {
+			existing.push(agent);
+		} else {
+			groups.set(outputDir, [agent]);
+		}
+	}
 
+	for (const [outputDir, groupedAgents] of groups) {
 		const exists = await access(outputDir)
 			.then(() => true)
 			.catch(() => false);
 
 		if (exists) {
 			await rm(outputDir, { recursive: true, force: true });
-			results.push({ agent, outputDir, status: "removed" });
+			for (const agent of groupedAgents) {
+				results.push({ agent, outputDir, status: "removed" });
+			}
 		} else {
-			results.push({ agent, outputDir, status: "not-found" });
+			for (const agent of groupedAgents) {
+				results.push({ agent, outputDir, status: "not-found" });
+			}
 		}
 	}
 
@@ -250,17 +278,27 @@ export async function skillStatus(
 	const { name, agents, scope = "global" } = options;
 	const resolvedName = resolveSkillName(name);
 	const results: StatusResult["agents"] = [];
-
+	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, resolvedName);
-		const version = await readInstalledVersion(outputDir);
+		const existing = groups.get(outputDir);
+		if (existing) {
+			existing.push(agent);
+		} else {
+			groups.set(outputDir, [agent]);
+		}
+	}
 
-		results.push({
-			agent,
-			outputDir,
-			installed: version !== null,
-			version: version ?? undefined,
-		});
+	for (const [outputDir, groupedAgents] of groups) {
+		const version = await readInstalledVersion(outputDir);
+		for (const agent of groupedAgents) {
+			results.push({
+				agent,
+				outputDir,
+				installed: version !== null,
+				version: version ?? undefined,
+			});
+		}
 	}
 
 	return { agents: results };
@@ -279,14 +317,11 @@ export async function skillStatus(
  * @param meta - Skill metadata
  * @returns Array containing the crust.json rendered file
  */
-function renderDistributionMetadata(
-	manifest: ManifestNode,
-	meta: SkillMeta,
-): RenderedFile[] {
+function renderDistributionMetadata(meta: SkillMeta): RenderedFile[] {
 	return [
 		{
 			path: CRUST_MANIFEST,
-			content: renderCrustJson(manifest, meta),
+			content: renderCrustJson(meta),
 		},
 	];
 }
@@ -295,33 +330,16 @@ function renderDistributionMetadata(
  * Renders `crust.json` — a machine-readable Crust metadata file
  * describing the skill bundle contents.
  *
- * The file is sorted deterministically: top-level keys in a stable
- * order, and the `commands` array sorted alphabetically.
+ * The file is intentionally minimal and deterministic.
  */
-function renderCrustJson(manifest: ManifestNode, meta: SkillMeta): string {
-	const commands = collectCommandPaths(manifest);
-
+function renderCrustJson(meta: SkillMeta): string {
 	const obj: Record<string, unknown> = {
 		name: meta.name,
 		description: meta.description,
 		version: meta.version,
-		entrypoint: "SKILL.md",
-		commands,
 	};
 
 	return `${JSON.stringify(obj, null, "\t")}\n`;
-}
-
-/**
- * Collects all command invocation paths from the manifest tree.
- * Used in `crust.json` to list available commands.
- */
-function collectCommandPaths(node: ManifestNode): string[] {
-	const paths: string[] = [node.path.join(" ")];
-	for (const child of node.children) {
-		paths.push(...collectCommandPaths(child));
-	}
-	return paths;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

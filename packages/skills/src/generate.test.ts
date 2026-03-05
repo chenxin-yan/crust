@@ -663,10 +663,10 @@ describe("generateSkill", () => {
 			expect(manifest.name).toBe("use-my-cli");
 			expect(manifest.description).toBe("Simple CLI");
 			expect(manifest.version).toBe("2.0.0");
-			expect(manifest.entrypoint).toBe("SKILL.md");
+			expect(manifest.entrypoint).toBeUndefined();
 		});
 
-		it("lists all command paths", async () => {
+		it("does not include entrypoint or commands fields", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
 					command: nestedCommand(),
@@ -685,11 +685,8 @@ describe("generateSkill", () => {
 			);
 			const manifest = JSON.parse(content);
 
-			expect(manifest.commands).toContain("git");
-			expect(manifest.commands).toContain("git commit");
-			expect(manifest.commands).toContain("git remote");
-			expect(manifest.commands).toContain("git remote add");
-			expect(manifest.commands).toContain("git remote remove");
+			expect(manifest.entrypoint).toBeUndefined();
+			expect(manifest.commands).toBeUndefined();
 		});
 
 		it("always includes version field", async () => {

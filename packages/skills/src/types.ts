@@ -83,7 +83,50 @@ export interface SkillMeta {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Supported agent targets for skill installation. */
-export type AgentTarget = "claude-code" | "opencode";
+export type AgentTarget =
+	| "amp"
+	| "adal"
+	| "antigravity"
+	| "augment"
+	| "claude-code"
+	| "cline"
+	| "codebuddy"
+	| "codex"
+	| "command-code"
+	| "continue"
+	| "cortex"
+	| "crush"
+	| "cursor"
+	| "droid"
+	| "gemini-cli"
+	| "github-copilot"
+	| "goose"
+	| "iflow-cli"
+	| "junie"
+	| "kilo"
+	| "kimi-cli"
+	| "kiro-cli"
+	| "kode"
+	| "mcpjam"
+	| "mistral-vibe"
+	| "mux"
+	| "neovate"
+	| "opencode"
+	| "openclaw"
+	| "openhands"
+	| "pi"
+	| "pochi"
+	| "qoder"
+	| "qwen-code"
+	| "replit"
+	| "roo"
+	| "trae"
+	| "trae-cn"
+	| "windsurf"
+	| "zencoder";
+
+/** Agent install class used by interactive skill management UX. */
+export type AgentClass = "universal" | "additional";
 
 /** Installation scope — global (home directory) or project (cwd). */
 export type Scope = "global" | "project";
