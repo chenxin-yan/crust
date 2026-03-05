@@ -12,15 +12,14 @@
 	"scripts": {
 		"dev": "bun run src/cli.ts",
 		"build": "crust build",
+		"prepack": "bun run build",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit"
 	},
-	"dependencies": {
-		"@crustjs/core": "latest",
-		"@crustjs/plugins": "latest"
-	},
 	"devDependencies": {
+		"@crustjs/core": "latest",
 		"@crustjs/crust": "latest",
+		"@crustjs/plugins": "latest",
 		"@types/bun": "latest",
 		"typescript": "^5"
 	}

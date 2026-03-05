@@ -17,6 +17,8 @@ import { confirm, input, select, spinner } from "@crustjs/prompts";
 
 const INVALID_NAME_CHARS = /[<>:"|?*\\]/;
 
+type DistributionMode = "binary" | "runtime";
+
 function validateProjectName(name: string): true | string {
 	if (!name) {
 		return "Project name cannot be empty";
@@ -85,8 +87,30 @@ const app = new Crust("create-crust")
 			default: "minimal",
 		});
 
-		const templatePath =
-			template === "minimal" ? "templates/base" : "templates/modular";
+		const styleTemplatePath =
+			template === "minimal" ? "templates/minimal" : "templates/modular";
+
+		const distributionMode = await select<DistributionMode>({
+			message: "Distribution mode",
+			choices: [
+				{
+					label: "Standalone binaries (recommended)",
+					value: "binary",
+					hint: "compile with crust build, publish self-contained executables",
+				},
+				{
+					label: "Bun runtime package",
+					value: "runtime",
+					hint: "ship JS build that runs with Bun",
+				},
+			],
+			default: "binary",
+		});
+
+		const distributionTemplatePath =
+			distributionMode === "binary"
+				? "templates/distribution/binary"
+				: "templates/distribution/runtime";
 
 		const installDeps = await confirm({
 			message: "Install dependencies?",
@@ -112,9 +136,23 @@ const app = new Crust("create-crust")
 		// Infer package name from directory
 		const name = dirName;
 
-		// Scaffold the project using @crustjs/create
+		// Scaffold in layers: base -> style variant -> distribution variant
 		await scaffold({
-			template: templatePath,
+			template: "templates/base",
+			dest: resolvedDir,
+			context: { name },
+			conflict: "overwrite",
+		});
+
+		await scaffold({
+			template: styleTemplatePath,
+			dest: resolvedDir,
+			context: { name },
+			conflict: "overwrite",
+		});
+
+		await scaffold({
+			template: distributionTemplatePath,
 			dest: resolvedDir,
 			context: { name },
 			conflict: "overwrite",

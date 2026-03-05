@@ -5,7 +5,6 @@ icon: Rocket
 ---
 
 import { Steps, Step } from "fumadocs-ui/components/steps";
-import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 ## Scaffold a New Project
@@ -16,7 +15,7 @@ The fastest way to start is with `create-crust`:
 bun create crust my-cli
 ```
 
-This runs an interactive setup that prompts for your project directory, then scaffolds a ready-to-run project.
+This runs an interactive setup that prompts for your project directory, template style, and distribution mode, then scaffolds a ready-to-run project.
 
 <Steps>
 <Step>
@@ -26,7 +25,7 @@ This runs an interactive setup that prompts for your project directory, then sca
 bun create crust my-cli
 ```
 
-Answer the prompts (or press Enter to accept defaults). The scaffolder creates your project, installs dependencies, and optionally initializes a git repository.
+Answer the prompts (or press Enter to accept defaults) for template style and distribution mode.
 
 </Step>
 <Step>
@@ -61,15 +60,39 @@ bun run src/cli.ts --help
 </Step>
 </Steps>
 
-## Building for Production
+## Distribution
 
-When you're ready to distribute your CLI:
+How you ship depends on the distribution mode you selected during scaffolding:
+
+<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
+<Tab value="Standalone binaries (recommended)">
+
+Recommended for most CLIs: distribute your tool as prebuilt binaries.
+
+When you're ready:
 
 ```sh
 bun run build
 ```
 
-This runs `crust build`, which compiles your CLI to standalone executables for all platforms using `bun build --compile`. See the [Building & Distribution](/docs/guide/build) guide for details.
+This runs `crust build`, which compiles your CLI to standalone executables for all platforms using `bun build --compile`.
+
+</Tab>
+<Tab value="Bun runtime package">
+
+If you selected Bun runtime package mode, build and run the JS distribution entry:
+
+```sh
+bun run build
+bun run dist/cli.js --help
+```
+
+In this mode, `@crustjs/core` and `@crustjs/plugins` stay in `dependencies` and your published entrypoint is `dist/cli.js`.
+
+</Tab>
+</Tabs>
+
+See [Building & Distribution](/docs/guide/build) and [Installation](/docs/installation) for full packaging details.
 
 ## Next Steps
 

@@ -4,8 +4,15 @@ description: Compile your CLI to standalone executables with crust build.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 The `crust build` command compiles your CLI entry file into standalone Bun executables using the `Bun.build()` API. It supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
+
+<Callout type="info">
+  Standalone binaries are the recommended distribution strategy for most CLIs.
+  If you intentionally ship a Bun runtime package instead, use a JS build output
+  like `dist/cli.js` and point `bin` to that file.
+</Callout>
 
 ## Basic Usage
 
@@ -170,7 +177,8 @@ This can be useful if the validation subprocess cannot resolve your project's de
 
 ## package.json Setup
 
-For a distributable CLI package:
+<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
+<Tab value="Standalone binaries (recommended)">
 
 ```json title="package.json"
 {
@@ -182,9 +190,34 @@ For a distributable CLI package:
     "my-cli": "dist/cli"
   },
   "scripts": {
-    "build": "crust build"
+    "build": "crust build",
+    "prepack": "bun run build"
   }
 }
 ```
 
-The `bin` field points to the shell resolver, which handles platform detection and binary execution.
+The `bin` field points to the resolver script, which handles platform detection and runs the correct compiled binary.
+
+</Tab>
+<Tab value="Bun runtime package">
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "my-cli": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
+    "prepack": "bun run build"
+  }
+}
+```
+
+This mode still requires Bun on the end user's machine.
+
+</Tab>
+</Tabs>

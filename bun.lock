@@ -94,13 +94,11 @@
       "bin": {
         "crust": "dist/cli",
       },
-      "dependencies": {
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/plugins": "workspace:*",
         "@crustjs/style": "workspace:*",
-      },
-      "devDependencies": {
-        "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {

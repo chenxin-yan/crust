@@ -14,32 +14,55 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 ## Install
 
-Install the core framework and official plugins as runtime dependencies, plus the CLI tooling as a dev dependency:
+Choose the dependency layout that matches your distribution strategy:
+
+<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
+  <Tab value="Standalone binaries (recommended)">
 
 ```sh
-# Core framework (commands, parsing, routing, errors)
-bun add @crustjs/core
+# Core framework and plugins are build-time inputs
+bun add -d @crustjs/core @crustjs/plugins
 
-# Official plugins (help, version, autocomplete)
-bun add @crustjs/plugins
-
-# CLI tooling (crust build) — only needed at build time
-bun add -d @crustjs/crust
+# CLI tooling (crust build)
+bun add -d @crustjs/crust @types/bun typescript
 ```
+
+  </Tab>
+  <Tab value="Bun runtime package">
+
+```sh
+# Core framework and plugins are runtime dependencies
+bun add @crustjs/core @crustjs/plugins
+
+# CLI tooling + types are dev dependencies
+bun add -d @crustjs/crust @types/bun typescript
+```
+
+  </Tab>
+</Tabs>
 
 ```ts title="src/cli.ts"
 import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 ```
 
-<Callout>
-  `@crustjs/crust` is a **dev dependency** — it provides the `crust` CLI binary
-  (e.g., `crust build`) and is only needed at build time, not at runtime.
+<Callout type="info">
+  Standalone binaries are recommended for most CLIs because users can run them
+  without Bun or project dependencies installed.
+
+  If you distribute standalone binaries (`crust build` + `dist/`), keeping all
+  Crust packages in `devDependencies` is valid. If you distribute as a runtime
+  package, keep `@crustjs/core` and `@crustjs/plugins` in `dependencies`.
 </Callout>
 
-## Minimal Setup
+## CLI Patterns
 
-Here's the minimal code to create a working CLI:
+You can structure your CLI as either a single file (minimal) or a modular file-split app using `.sub()`.
+
+<Tabs items={["Minimal", "Modular (.sub())"]}>
+  <Tab value="Minimal">
+
+Use this when your CLI is small and you want everything in one place.
 
 ```ts title="src/cli.ts"
 #!/usr/bin/env bun
@@ -55,15 +78,78 @@ const main = new Crust("my-cli")
 await main.execute();
 ```
 
-Run it:
-
 ```sh
 bun run src/cli.ts
 ```
 
+  </Tab>
+  <Tab value="Modular (.sub())">
+
+Use this when your CLI grows and you want commands in separate files.
+
+```ts title="src/app.ts"
+import { Crust } from "@crustjs/core";
+
+export const app = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .flags({
+    greet: {
+      type: "string",
+      description: "Greeting to use",
+      default: "Hello",
+      short: "g",
+      inherit: true,
+    },
+  });
+```
+
+```ts title="src/commands/greet.ts"
+import { app } from "../app.ts";
+
+export const greetCmd = app
+  .sub("greet")
+  .meta({ description: "Greet someone" })
+  .args([
+    {
+      name: "name",
+      type: "string",
+      description: "Your name",
+      default: "world",
+    },
+  ])
+  .run(({ args, flags }) => {
+    console.log(`${flags.greet}, ${args.name}!`);
+  });
+```
+
+```ts title="src/cli.ts"
+#!/usr/bin/env bun
+
+import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+import pkg from "../package.json";
+import { app } from "./app.ts";
+import { greetCmd } from "./commands/greet.ts";
+
+await app
+  .use(versionPlugin(pkg.version))
+  .use(helpPlugin())
+  .command(greetCmd)
+  .execute();
+```
+
+```sh
+bun run src/cli.ts greet world
+```
+
+  </Tab>
+</Tabs>
+
 ## Adding to package.json
 
-For a distributable CLI, configure your `package.json`:
+For a distributable CLI, configure your `package.json` based on the selected mode:
+
+<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
+  <Tab value="Standalone binaries (recommended)">
 
 ```json title="package.json"
 {
@@ -77,7 +163,36 @@ For a distributable CLI, configure your `package.json`:
   "scripts": {
     "dev": "bun run src/cli.ts",
     "build": "crust build",
+    "prepack": "bun run build",
     "start": "./dist/cli"
+  },
+  "devDependencies": {
+    "@crustjs/core": "latest",
+    "@crustjs/plugins": "latest",
+    "@crustjs/crust": "latest",
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
+```
+
+  </Tab>
+  <Tab value="Bun runtime package">
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["dist"],
+  "bin": {
+    "my-cli": "dist/cli.js"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
+    "prepack": "bun run build",
+    "start": "bun run dist/cli.js"
   },
   "dependencies": {
     "@crustjs/core": "latest",
@@ -85,10 +200,25 @@ For a distributable CLI, configure your `package.json`:
   },
   "devDependencies": {
     "@crustjs/crust": "latest",
+    "@types/bun": "latest",
     "typescript": "^5"
   }
 }
 ```
+
+  </Tab>
+</Tabs>
+
+<Callout type="tip">
+  If your `bin` points to files in `dist/`, include `"prepack": "bun run build"`
+  to ensure `dist/` is rebuilt before each publish.
+</Callout>
+
+<Callout type="warning">
+  Bun runtime package distribution still requires Bun to be installed on the end
+  user's machine. The package publishes a JS build (`dist/cli.js`) that runs on
+  the Bun runtime.
+</Callout>
 
 ## Requirements
 

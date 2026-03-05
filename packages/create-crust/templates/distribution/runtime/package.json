@@ -7,12 +7,13 @@
 		"dist"
 	],
 	"bin": {
-		"{{name}}": "dist/cli"
+		"{{name}}": "dist/cli.js"
 	},
 	"scripts": {
 		"dev": "bun run src/cli.ts",
-		"build": "crust build",
-		"start": "./dist/cli",
+		"build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
+		"prepack": "bun run build",
+		"start": "bun run dist/cli.js",
 		"check:types": "tsc --noEmit"
 	},
 	"dependencies": {

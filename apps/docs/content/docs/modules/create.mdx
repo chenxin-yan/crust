@@ -109,7 +109,7 @@ Copy a template directory to a destination, applying variable interpolation and 
 
 | Field      | Type                     | Required | Description                                                                                                           |
 | ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| `template` | `string \| URL`          | Yes      | Template directory. `string` resolves relative to `process.cwd()`. `URL` must be a `file:` URL (for module-relative). |
+| `template` | `string \| URL`          | Yes      | Template directory. Absolute `string` paths are used as-is; relative `string` paths resolve from the nearest package root of `process.argv[1]`. `URL` must be a `file:` URL. |
 | `dest`     | `string`                 | Yes      | Absolute or relative path to the destination directory                                                                |
 | `context`  | `Record<string, string>` | Yes      | Variables to interpolate into `{{key}}` placeholders                                                                  |
 | `conflict` | `"abort" \| "overwrite"` | No       | How to handle an existing non-empty destination. Default: `"abort"`                                                   |

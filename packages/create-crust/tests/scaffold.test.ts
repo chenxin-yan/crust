@@ -5,18 +5,58 @@ import { scaffold } from "@crustjs/create";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
 
+type TemplateStyle = "minimal" | "modular";
+type DistributionMode = "binary" | "runtime";
+
 /**
- * Helper to scaffold the base template with the given context variables.
+ * Helper to scaffold a project by layering base + style + distribution templates.
  */
+async function scaffoldProject(
+	dest: string,
+	context: { name: string },
+	options?: {
+		style?: TemplateStyle;
+		distribution?: DistributionMode;
+		conflict?: "abort" | "overwrite";
+	},
+): Promise<void> {
+	const style = options?.style ?? "minimal";
+	const distribution = options?.distribution ?? "binary";
+	const conflict = options?.conflict ?? "overwrite";
+
+	await scaffold({
+		template: "templates/base",
+		dest,
+		context,
+		conflict,
+	});
+
+	await scaffold({
+		template: style === "minimal" ? "templates/minimal" : "templates/modular",
+		dest,
+		context,
+		conflict: "overwrite",
+	});
+
+	await scaffold({
+		template:
+			distribution === "binary"
+				? "templates/distribution/binary"
+				: "templates/distribution/runtime",
+		dest,
+		context,
+		conflict: "overwrite",
+	});
+}
+
 async function scaffoldBase(
 	dest: string,
 	context: { name: string },
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
-	await scaffold({
-		template: "templates/base",
-		dest,
-		context,
+	await scaffoldProject(dest, context, {
+		style: "minimal",
+		distribution: "binary",
 		conflict,
 	});
 }
@@ -26,10 +66,9 @@ async function scaffoldModular(
 	context: { name: string },
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
-	await scaffold({
-		template: "templates/modular",
-		dest,
-		context,
+	await scaffoldProject(dest, context, {
+		style: "modular",
+		distribution: "binary",
 		conflict,
 	});
 }
@@ -69,6 +108,36 @@ describe("scaffold", () => {
 		expect(pkg.version).toBe("0.0.0");
 		expect(pkg.type).toBe("module");
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli" });
+		expect(pkg.dependencies).toBeUndefined();
+		expect(pkg.devDependencies).toEqual({
+			"@crustjs/core": "latest",
+			"@crustjs/crust": "latest",
+			"@crustjs/plugins": "latest",
+			"@types/bun": "latest",
+			typescript: "^5",
+		});
+		expect(pkg.scripts).toEqual({
+			dev: "bun run src/cli.ts",
+			build: "crust build",
+			prepack: "bun run build",
+			start: "./dist/cli",
+			"check:types": "tsc --noEmit",
+		});
+	});
+
+	it("generates runtime distribution package.json when selected", async () => {
+		await scaffoldProject(
+			TEST_DIR,
+			{ name: "runtime-cli" },
+			{ distribution: "runtime" },
+		);
+
+		const pkg = JSON.parse(
+			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
+		);
+
+		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
+		expect(pkg.files).toEqual(["dist"]);
 		expect(pkg.dependencies).toEqual({
 			"@crustjs/core": "latest",
 			"@crustjs/plugins": "latest",
@@ -80,8 +149,9 @@ describe("scaffold", () => {
 		});
 		expect(pkg.scripts).toEqual({
 			dev: "bun run src/cli.ts",
-			build: "crust build",
-			start: "./dist/cli",
+			build: "bun build src/cli.ts --target bun --outfile dist/cli.js",
+			prepack: "bun run build",
+			start: "bun run dist/cli.js",
 			"check:types": "tsc --noEmit",
 		});
 	});
@@ -192,6 +262,31 @@ describe("scaffold", () => {
 		expect(greetContent).toContain("flags.greet");
 		expect(cliContent).toContain(".command(greetCmd)");
 		expect(cliContent).toContain(".execute()");
+	});
+
+	it("supports modular template with runtime distribution", async () => {
+		await scaffoldProject(
+			TEST_DIR,
+			{ name: "modular-runtime-cli" },
+			{
+				style: "modular",
+				distribution: "runtime",
+			},
+		);
+
+		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
+		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(
+			true,
+		);
+
+		const pkg = JSON.parse(
+			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
+		);
+		expect(pkg.bin["modular-runtime-cli"]).toBe("dist/cli.js");
+		expect(pkg.dependencies).toEqual({
+			"@crustjs/core": "latest",
+			"@crustjs/plugins": "latest",
+		});
 	});
 
 	it("creates project in nested directory (creates parent dirs)", async () => {

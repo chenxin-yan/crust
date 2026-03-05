@@ -1,8 +1,6 @@
 # {{name}}
 
-A modular CLI built with [Crust](https://crustjs.com).
-
-This template demonstrates the file-splitting pattern with `.sub()` and `.command(builder)`.
+A CLI built with [Crust](https://crustjs.com).
 
 ## Development
 
@@ -30,10 +28,7 @@ This template supports two distribution modes:
 ## Usage
 
 ```sh
-# Run the greet subcommand
-{{name}} greet world
-{{name}} greet --greet Hey world
-
-# Show help
-{{name}} --help
+# Run the CLI
+{{name}} world
+{{name}} --greet Hey world
 ```
