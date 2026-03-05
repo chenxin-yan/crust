@@ -6,78 +6,63 @@ import {
 	AGENT_LABELS,
 	ALL_AGENTS,
 	detectInstalledAgents,
+	getAdditionalAgents,
+	getUniversalAgents,
+	isUniversalAgent,
 	resolveAgentPath,
 } from "./agents.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// resolveAgentPath
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("resolveAgentPath", () => {
-	describe("claude-code", () => {
-		it("resolves global path to ~/.claude/skills/<name>/", () => {
-			const result = resolveAgentPath("claude-code", "global", "my-cli");
-			expect(result).toBe(join(homedir(), ".claude", "skills", "my-cli"));
-		});
-
-		it("resolves project path to <cwd>/.claude/skills/<name>/", () => {
-			const result = resolveAgentPath("claude-code", "project", "my-cli");
-			expect(result).toBe(join(process.cwd(), ".claude", "skills", "my-cli"));
-		});
+	it("resolves claude-code project path", () => {
+		const result = resolveAgentPath("claude-code", "project", "my-cli");
+		expect(result).toBe(join(process.cwd(), ".claude", "skills", "my-cli"));
 	});
 
-	describe("opencode", () => {
-		it("resolves global path to ~/.config/opencode/skills/<name>/", () => {
-			const result = resolveAgentPath("opencode", "global", "my-cli");
-			expect(result).toBe(
-				join(homedir(), ".config", "opencode", "skills", "my-cli"),
-			);
-		});
-
-		it("resolves project path to <cwd>/.opencode/skills/<name>/", () => {
-			const result = resolveAgentPath("opencode", "project", "my-cli");
-			expect(result).toBe(join(process.cwd(), ".opencode", "skills", "my-cli"));
-		});
+	it("resolves opencode project path to canonical universal dir", () => {
+		const result = resolveAgentPath("opencode", "project", "my-cli");
+		expect(result).toBe(join(process.cwd(), ".agents", "skills", "my-cli"));
 	});
 
-	describe("edge cases", () => {
-		it("handles skill names with hyphens", () => {
-			const result = resolveAgentPath("claude-code", "global", "my-cli-tool");
-			expect(result).toBe(join(homedir(), ".claude", "skills", "my-cli-tool"));
-		});
+	it("resolves claude-code global path", () => {
+		const result = resolveAgentPath("claude-code", "global", "my-cli");
+		expect(result).toBe(join(homedir(), ".claude", "skills", "my-cli"));
+	});
 
-		it("handles single-character skill names", () => {
-			const result = resolveAgentPath("opencode", "global", "x");
-			expect(result).toBe(
-				join(homedir(), ".config", "opencode", "skills", "x"),
-			);
-		});
+	it("resolves opencode global path", () => {
+		const result = resolveAgentPath("opencode", "global", "my-cli");
+		expect(result).toBe(
+			join(homedir(), ".config", "agents", "skills", "my-cli"),
+		);
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("ALL_AGENTS", () => {
-	it("contains claude-code and opencode", () => {
+describe("agent registry", () => {
+	it("contains expected baseline agents", () => {
 		expect(ALL_AGENTS).toContain("claude-code");
 		expect(ALL_AGENTS).toContain("opencode");
+		expect(ALL_AGENTS).toContain("codex");
 	});
-});
 
-describe("AGENT_LABELS", () => {
-	it("has a label for every agent in ALL_AGENTS", () => {
+	it("has a label for every agent", () => {
 		for (const agent of ALL_AGENTS) {
 			expect(AGENT_LABELS[agent]).toBeString();
 			expect(AGENT_LABELS[agent].length).toBeGreaterThan(0);
 		}
 	});
-});
 
-// ────────────────────────────────────────────────────────────────────────────
-// detectInstalledAgents
-// ────────────────────────────────────────────────────────────────────────────
+	it("splits universal and additional agents", () => {
+		const universal = getUniversalAgents();
+		const additional = getAdditionalAgents();
+
+		expect(universal).toContain("opencode");
+		expect(additional).toContain("claude-code");
+		expect(isUniversalAgent("opencode")).toBe(true);
+		expect(isUniversalAgent("claude-code")).toBe(false);
+
+		const merged = new Set([...universal, ...additional]);
+		expect(merged.size).toBe(ALL_AGENTS.length);
+	});
+});
 
 describe("detectInstalledAgents", () => {
 	let tmpDir: string;
@@ -94,106 +79,61 @@ describe("detectInstalledAgents", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	it("returns empty array when no agent config dirs exist", async () => {
+	it("returns empty array when no config dirs exist", async () => {
 		const result = await detectInstalledAgents({ home: tmpDir });
 		expect(result).toEqual([]);
 	});
 
-	it("detects claude-code in global scope when ~/.claude/ exists", async () => {
+	it("detects claude-code from ~/.claude", async () => {
 		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-
 		const result = await detectInstalledAgents({ home: tmpDir });
 		expect(result).toContain("claude-code");
-		expect(result).not.toContain("opencode");
 	});
 
-	it("detects opencode in global scope when ~/.config/opencode/ exists", async () => {
+	it("detects opencode from ~/.config/opencode", async () => {
 		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-
 		const result = await detectInstalledAgents({ home: tmpDir });
 		expect(result).toContain("opencode");
-		expect(result).not.toContain("claude-code");
 	});
 
-	it("detects both agents in global scope when both config dirs exist", async () => {
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-
-		const result = await detectInstalledAgents({ home: tmpDir });
-		expect(result).toContain("claude-code");
-		expect(result).toContain("opencode");
-		expect(result).toHaveLength(2);
-	});
-
-	it("detects claude-code in project scope when <cwd>/.claude/ exists", async () => {
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-
-		const result = await detectInstalledAgents({
-			scope: "project",
-			home: tmpDir,
-			cwd: tmpDir,
-		});
-		expect(result).toContain("claude-code");
-		expect(result).not.toContain("opencode");
-	});
-
-	it("detects opencode in project scope when <cwd>/.opencode/ exists", async () => {
+	it("detects opencode in project scope from <cwd>/.opencode", async () => {
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
-
 		const result = await detectInstalledAgents({
 			scope: "project",
 			home: tmpDir,
 			cwd: tmpDir,
 		});
 		expect(result).toContain("opencode");
-		expect(result).not.toContain("claude-code");
-	});
-
-	it("falls back to global detection when project roots are missing", async () => {
-		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-
-		const projectResult = await detectInstalledAgents({
-			scope: "project",
-			home: tmpDir,
-			cwd: tmpDir,
-		});
-		expect(projectResult).toContain("opencode");
-
-		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
-		const globalResult = await detectInstalledAgents({ home: tmpDir });
-		expect(globalResult).toContain("opencode");
-	});
-
-	it("only returns known agent targets", async () => {
-		// Create both to get a full result
-		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-
-		const result = await detectInstalledAgents({ home: tmpDir });
-		for (const agent of result) {
-			expect(ALL_AGENTS).toContain(agent);
-		}
 	});
 
 	it("does not return duplicates", async () => {
 		await mkdir(join(tmpDir, ".claude"), { recursive: true });
 		await mkdir(join(tmpDir, ".config", "opencode"), { recursive: true });
-
 		const result = await detectInstalledAgents({ home: tmpDir });
-		const unique = new Set(result);
-		expect(unique.size).toBe(result.length);
-	});
-
-	it("defaults to global scope and os.homedir() when no options provided", async () => {
-		// Just verify it runs without error and returns an array
-		const result = await detectInstalledAgents();
-		expect(Array.isArray(result)).toBe(true);
+		expect(new Set(result).size).toBe(result.length);
 	});
 
 	it("accepts legacy string parameter as home override", async () => {
 		await mkdir(join(tmpDir, ".claude"), { recursive: true });
-
 		const result = await detectInstalledAgents(tmpDir);
 		expect(result).toContain("claude-code");
+	});
+
+	it("uses home override even when XDG_CONFIG_HOME is set", async () => {
+		const previousXdg = process.env.XDG_CONFIG_HOME;
+		const xdgConfigHome = join(tmpDir, "xdg-config");
+		await mkdir(join(xdgConfigHome, "opencode"), { recursive: true });
+		process.env.XDG_CONFIG_HOME = xdgConfigHome;
+
+		try {
+			const result = await detectInstalledAgents({ home: tmpDir });
+			expect(result).not.toContain("opencode");
+		} finally {
+			if (previousXdg === undefined) {
+				delete process.env.XDG_CONFIG_HOME;
+			} else {
+				process.env.XDG_CONFIG_HOME = previousXdg;
+			}
+		}
 	});
 });

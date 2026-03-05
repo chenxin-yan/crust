@@ -449,7 +449,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".opencode", "skills", "use-my-cli");
+			const expected = join(tmpDir, ".agents", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 	});
@@ -1128,7 +1128,7 @@ describe("generateSkill", () => {
 		});
 
 		it("throws when directory has only non-Crust files", async () => {
-			const skillDir = join(tmpDir, ".opencode", "skills", "use-my-cli");
+			const skillDir = join(tmpDir, ".agents", "skills", "use-my-cli");
 			await mkdir(skillDir, { recursive: true });
 			await writeFile(
 				join(skillDir, "manifest.json"),
