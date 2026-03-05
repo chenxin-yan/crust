@@ -27,7 +27,7 @@ function configHome(home: string): string {
 }
 
 function universalGlobalSkillsDir(home: string): string {
-	return join(configHome(home), "agents", "skills");
+	return join(home, ".agents", "skills");
 }
 
 const AGENTS: Record<AgentTarget, AgentConfig> = {

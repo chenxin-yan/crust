@@ -29,9 +29,7 @@ describe("resolveAgentPath", () => {
 
 	it("resolves opencode global path", () => {
 		const result = resolveAgentPath("opencode", "global", "my-cli");
-		expect(result).toBe(
-			join(homedir(), ".config", "agents", "skills", "my-cli"),
-		);
+		expect(result).toBe(join(homedir(), ".agents", "skills", "my-cli"));
 	});
 });
 
