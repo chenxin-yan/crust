@@ -60,13 +60,14 @@ runMain(app, {
     skillPlugin({
       version: "1.0.0",
       // autoUpdate: true (default) — silently updates installed skills
-      // command: true (default) — registers "my-cli skill" subcommand
+      // command: "skill" (default) — registers "my-cli skill" subcommand
+      // defaultScope: "global" | "project" — skip scope prompt when set
     }),
   ],
 });
 ```
 
-The plugin automatically updates already-installed skills when the version changes. First-time installation is done via the interactive `skill` subcommand, or programmatically using the exported primitives.
+The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
 
 ### Programmatic Auto-Install
 
@@ -81,7 +82,7 @@ const app = defineCommand({
   meta: { name: "my-cli", description: "My CLI" },
   async run() {
     // Detect agents and install skills if not yet present
-    const agents = await detectInstalledAgents({ scope: "global" });
+    const agents = await detectInstalledAgents();
     const status = await skillStatus({ name: "my-cli", agents, scope: "global" });
 
     const notInstalled = status.agents
@@ -107,9 +108,7 @@ runMain(app);
 If auto-update does not appear to work:
 
 - Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
-- Ensure at least one supported agent is detected for your scope:
-  - `scope: "global"` -> checks supported global agent config roots (for example `~/.claude`, `~/.config/opencode`, `~/.codex`)
-  - `scope: "project"` -> checks project roots first (for example `<cwd>/.claude`, `<cwd>/.opencode`) then falls back to global roots
+- Ensure at least one supported agent is detected. Auto-update checks both project and global install paths.
 - Check for existing conflicting skill directories without `crust.json`.
 
 ## Recommended Export Pattern

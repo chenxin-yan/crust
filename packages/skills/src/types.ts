@@ -387,11 +387,7 @@ export interface StatusResult {
  * The plugin reads `name` and `description` from the root command's `meta`
  * at setup time, so only `version` is required here.
  *
- * Installed agents are detected automatically based on the configured scope.
- *
- * - `scope: "global"` checks `~/.claude/` and `~/.config/opencode/`
- * - `scope: "project"` checks `<cwd>/.claude/` / `<cwd>/.opencode/`, then
- *   falls back to global roots when local roots are missing
+ * Installed agents are detected automatically.
  *
  * Only detected agents are managed.
  *
@@ -402,18 +398,27 @@ export interface StatusResult {
  * build custom auto-install logic with the exported primitives
  * (`detectInstalledAgents`, `skillStatus`, `generateSkill`).
  *
- * **Interactive command** (default): registers a `skill` subcommand that
+ * **Interactive command** (default): registers a `skill` subcommand (or the
+ * custom `command` name) that
  * presents a single multiselect prompt for toggling agent installations.
- * Set `command: false` to disable the command.
+ *
+ * Scope resolution for interactive commands:
+ * - If `defaultScope` is set, that scope is used and no scope prompt is shown.
+ * - If `defaultScope` is not set and the terminal is interactive, users are
+ *   prompted to choose `project` or `global`.
+ * - If `defaultScope` is not set and the terminal is non-interactive, scope
+ *   falls back to `"global"`.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed crust.json */
 	version: string;
 	/**
-	 * Installation scope.
-	 * @default "global"
+	 * Default installation scope for interactive commands.
+	 *
+	 * When omitted, interactive commands prompt for scope in TTY mode.
+	 * Non-interactive mode falls back to "global".
 	 */
-	scope?: Scope;
+	defaultScope?: Scope;
 	/**
 	 * Automatically update skills when the installed version is outdated.
 	 * @default true
@@ -428,9 +433,7 @@ export interface SkillPluginOptions {
 	 * newly selected agents are installed, deselected agents are uninstalled,
 	 * and already-correct agents are skipped.
 	 *
-	 * - `true`: register with default name `"skill"`
-	 * - `string`: register with a custom command name
-	 * @default true
+	 * @default "skill"
 	 */
-	command?: boolean | string;
+	command?: string;
 }

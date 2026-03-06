@@ -4,9 +4,8 @@ export { Crust, VALIDATION_MODE_ENV } from "./crust.ts";
 // Errors
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
-// Internal command node (exported for downstream packages)
+// Internal command node type (exported for downstream packages)
 export type { CommandNode } from "./node.ts";
-export { computeEffectiveFlags, createCommandNode } from "./node.ts";
 
 // Argument & flag parsing
 export { parseArgs } from "./parser.ts";

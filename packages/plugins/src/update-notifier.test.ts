@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { Crust, createCommandNode } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
 	fetchLatestVersion,
 	isNewerVersion,
@@ -411,7 +411,7 @@ describe("updateNotifierPlugin middleware", () => {
 
 	/** Create a basic command node for testing. */
 	function makeCommand(name = "test-cli") {
-		const node = createCommandNode(name);
+		const node = new Crust(name)._node;
 		node.run = () => {};
 		return node;
 	}

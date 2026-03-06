@@ -55,8 +55,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "1.0.0",
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -80,8 +79,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "2.0.0",
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -112,8 +110,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "2.0.0",
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -156,8 +153,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "2.0.0",
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -188,8 +184,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "2.0.0",
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -227,8 +222,7 @@ describe("skillPlugin auto-update", () => {
 				skillPlugin({
 					version: "2.0.0",
 					autoUpdate: false,
-					scope: "project",
-					command: false,
+					defaultScope: "project",
 				}),
 			);
 
@@ -261,7 +255,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "1.0.0",
-					scope: "project",
+					defaultScope: "project",
 				}),
 			);
 
@@ -314,7 +308,7 @@ describe("skillPlugin auto-update", () => {
 			.use(
 				skillPlugin({
 					version: "1.0.0",
-					scope: "project",
+					defaultScope: "project",
 				}),
 			);
 
@@ -343,5 +337,101 @@ describe("skillPlugin auto-update", () => {
 
 		expect(logs.some((line) => line.includes("Universal →"))).toBe(true);
 		expect(logs.some((line) => line.includes("OpenCode →"))).toBe(false);
+	});
+
+	it("runs manual skill update command", async () => {
+		const app = new Crust("manual-update-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "manual-update-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const skillDir = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-manual-update-test",
+		);
+		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+
+		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
+
+		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+	});
+
+	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {
+		const app = new Crust("fallback-scope-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "fallback-scope-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const projectSkillDir = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-fallback-scope-test",
+		);
+		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
+
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
+		} finally {
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
+		}
+
+		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+
+		await withCwd(tmpDir, () =>
+			app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+		);
+
+		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
 	});
 });

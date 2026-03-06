@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import { createCommandNode } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
@@ -16,7 +16,7 @@ function makeCommand(opts: {
 	run?: () => void;
 	subCommands?: Record<string, CommandNode>;
 }): CommandNode {
-	const node = createCommandNode(opts.meta.name);
+	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
 	if (opts.args) node.args = opts.args as ArgDef[];
 	if (opts.flags) {

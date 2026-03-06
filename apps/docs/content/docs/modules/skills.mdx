@@ -22,7 +22,7 @@ import { skillPlugin } from "@crustjs/skills";
 const app = new Crust("my-cli").meta({ description: "My CLI tool" }).use(
   skillPlugin({
     version: "1.0.0",
-    // command defaults to true and registers "my-cli skill"
+    // command defaults to "skill" and registers "my-cli skill"
   }),
 );
 
@@ -33,7 +33,7 @@ This gives you:
 
 - **Auto-detection**: additional (non-universal) agents are detected by probing their CLI commands (for example `<agent> --version`).
 - **Auto-update**: when a user runs any command, the plugin silently updates installed skills if the version has changed.
-- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents.
+- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents. A `skill update` subcommand is also available for update-only flows.
 
 ## Plugin Options
 
@@ -41,14 +41,20 @@ This gives you:
 interface SkillPluginOptions {
   /** Skill version — compared against the installed crust.json */
   version: string;
-  /** Installation scope. @default "global" */
-  scope?: "global" | "project";
+  /** Default installation scope for interactive commands. When omitted, prompts for scope. */
+  defaultScope?: "global" | "project";
   /** Auto-update skills when version is outdated. @default true */
   autoUpdate?: boolean;
-  /** Register interactive skill subcommand. true = "skill", string = custom name. @default true */
-  command?: boolean | string;
+  /** Register interactive skill subcommand with a custom name. @default "skill" */
+  command?: string;
 }
 ```
+
+Scope resolution for the interactive command and `skill update`:
+
+1. If `--scope` flag is passed, that scope is used.
+2. If `defaultScope` is set, that scope is used (no prompt).
+3. Otherwise, an interactive prompt asks the user to choose `project` or `global`.
 
 ### Agent Auto-Detection
 
@@ -81,7 +87,7 @@ Path model:
 
 ## Interactive Command
 
-By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt. Set `command: false` to disable it.
+By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt. A `skill update` subcommand is also registered for update-only flows (updates installed skills without prompting for agent selection).
 
 The prompt behavior is:
 
@@ -106,11 +112,12 @@ Each generated skill directory contains a `crust.json` file that serves as an ow
 
 ### Behavior by context
 
-| Context                         | Conflict behavior                                             |
-| ------------------------------- | ------------------------------------------------------------- |
-| **Auto-update middleware**      | Logs a warning and skips — the CLI continues running normally |
-| **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
-| **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite  |
+| Context                         | Conflict behavior                                              |
+| ------------------------------- | -------------------------------------------------------------- |
+| **Auto-update middleware**      | Logs a warning and skips — the CLI continues running normally  |
+| **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill  |
+| **`skill update` command**      | Logs a warning and skips the conflicting agent                 |
+| **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite   |
 
 ### Handling conflicts programmatically
 
@@ -201,7 +208,7 @@ const result = await generateSkill({
   command: rootCommand,
   meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
   agents: [...universalAgents, ...agents],
-  scope: "global",
+  scope: "global", // or "project"
 });
 
 // Check status

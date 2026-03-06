@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import { createCommandNode } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
 import { SkillConflictError } from "./errors.ts";
 import {
@@ -26,7 +26,7 @@ function makeCommand(opts: {
 	run?: () => void;
 	subCommands?: Record<string, CommandNode>;
 }): CommandNode {
-	const node = createCommandNode(opts.meta.name);
+	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
 	if (opts.args) node.args = opts.args as ArgDef[];
 	if (opts.flags) {
