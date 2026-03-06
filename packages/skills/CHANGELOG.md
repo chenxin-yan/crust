@@ -1,5 +1,38 @@
 # @crustjs/skills
 
+## 0.0.14
+
+### Patch Changes
+
+- b8ebfa4: Refine skill plugin ergonomics and tighten core public API boundaries.
+
+  - `@crustjs/skills`:
+
+    - `skillPlugin` now uses `command?: string` (default: `"skill"`) instead of `boolean | string`.
+    - `skillPlugin` option `scope` was replaced with `defaultScope`.
+    - Interactive scope selection now prompts for `project`/`global` only when `defaultScope` is not provided; non-interactive fallback is `global`.
+    - Auto-update now checks both `project` and `global` install paths for the current cwd and reports scope in update messaging.
+    - Added `skill update` subcommand for manual update-only runs.
+
+  - `@crustjs/core`:
+    - Removed `createCommandNode` and `computeEffectiveFlags` from the root `@crustjs/core` export surface.
+    - High-level `Crust` builder usage is now the recommended path for command construction.
+
+- 0944e0e: Normalize universal agent messaging in `skill` command output.
+
+  - Auto-update messages now report universal targets as `Universal` instead of enumerating each supported universal agent.
+  - Install and overwrite success output now prints a single `Universal -> <path>` entry for universal installs.
+  - Remove output now reports `Removed from Universal` (and combines with additional agents when applicable).
+
+- cd33d3f: Strengthen generated skill guidance to reduce CLI command hallucinations.
+
+  - `SKILL.md` now explicitly requires reading the mapped command doc before giving command-specific answers.
+  - Generated command docs now include an authority section stating that only documented flags/options/aliases/defaults are supported.
+  - Rendering and e2e tests were updated to enforce the stricter verification contract.
+
+- Updated dependencies [b8ebfa4]
+  - @crustjs/core@0.0.12
+
 ## 0.0.13
 
 ### Patch Changes
