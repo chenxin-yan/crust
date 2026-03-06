@@ -1,5 +1,12 @@
 # @crustjs/plugins
 
+## 0.0.15
+
+### Patch Changes
+
+- Updated dependencies [b8ebfa4]
+  - @crustjs/core@0.0.12
+
 ## 0.0.14
 
 ### Patch Changes

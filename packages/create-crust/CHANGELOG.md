@@ -1,5 +1,24 @@
 # create-crust
 
+## 0.0.20
+
+### Patch Changes
+
+- 9a216fd: Add distribution mode choice for scaffolded templates
+
+  `create-crust` now asks whether you plan to distribute as standalone binaries or as a Bun runtime package, then scaffolds layered templates for the selected combination.
+
+  Changes:
+
+  - Added a new `Distribution mode` prompt during scaffolding
+  - Refactored templates into composable layers: `base` + style variant (`minimal` / `modular`) + distribution variant (`binary` / `runtime`)
+  - `Standalone binaries` mode keeps Crust packages in `devDependencies` and enables `prepack`
+  - `Bun runtime package` mode moves `@crustjs/core` and `@crustjs/plugins` to `dependencies`, updates `build` to output `dist/cli.js`, and points `bin` to `dist/cli.js`
+  - Updated template and installation docs to describe both distribution strategies
+
+- Updated dependencies [b8ebfa4]
+  - @crustjs/core@0.0.12
+
 ## 0.0.19
 
 ### Patch Changes
