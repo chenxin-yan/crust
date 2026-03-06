@@ -134,6 +134,7 @@ describe("resolveTarget", () => {
 		expect(resolveTarget("darwin-x64")).toBe("bun-darwin-x64");
 		expect(resolveTarget("darwin-arm64")).toBe("bun-darwin-arm64");
 		expect(resolveTarget("windows-x64")).toBe("bun-windows-x64-baseline");
+		expect(resolveTarget("windows-arm64")).toBe("bun-windows-arm64");
 	});
 
 	it("accepts full Bun target names directly", () => {
@@ -344,6 +345,9 @@ describe("resolveTargetOutfile", () => {
 		expect(
 			resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd, "dist"),
 		).toBe(resolve(cwd, "dist", "my-cli-bun-windows-x64-baseline.exe"));
+		expect(
+			resolveTargetOutfile("my-cli", "bun-windows-arm64", cwd, "dist"),
+		).toBe(resolve(cwd, "dist", "my-cli-bun-windows-arm64.exe"));
 	});
 
 	it("works with scoped-stripped names", () => {
@@ -376,6 +380,9 @@ describe("getBinaryFilename", () => {
 	it("appends .exe for Windows targets", () => {
 		expect(getBinaryFilename("my-cli", "bun-windows-x64-baseline")).toBe(
 			"my-cli-bun-windows-x64-baseline.exe",
+		);
+		expect(getBinaryFilename("my-cli", "bun-windows-arm64")).toBe(
+			"my-cli-bun-windows-arm64.exe",
 		);
 	});
 });
@@ -475,6 +482,13 @@ describe("generateCmdResolver", () => {
 	it("references the correct Windows binary filename", () => {
 		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
 		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
+		expect(content).toContain("my-cli-bun-windows-arm64.exe");
+	});
+
+	it("detects Windows architecture using PROCESSOR_ARCHITECTURE", () => {
+		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		expect(content).toContain("PROCESSOR_ARCHITECTURE");
+		expect(content).toContain("PROCESSOR_ARCHITEW6432");
 	});
 
 	it("passes all arguments to the binary", () => {
@@ -524,6 +538,7 @@ describe("TARGET_UNAME_MAP", () => {
 		expect(TARGET_UNAME_MAP["bun-darwin-x64"]).toBe("Darwin-x86_64");
 		expect(TARGET_UNAME_MAP["bun-darwin-arm64"]).toBe("Darwin-arm64");
 		expect(TARGET_UNAME_MAP["bun-windows-x64-baseline"]).toBe("Windows-x64");
+		expect(TARGET_UNAME_MAP["bun-windows-arm64"]).toBe("Windows-arm64");
 	});
 });
 
@@ -607,8 +622,8 @@ describe("buildCommand error handling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("SUPPORTED_TARGETS", () => {
-	it("contains 5 targets", () => {
-		expect(SUPPORTED_TARGETS).toHaveLength(5);
+	it("contains 6 targets", () => {
+		expect(SUPPORTED_TARGETS).toHaveLength(6);
 	});
 
 	it("includes linux, darwin, and windows", () => {
@@ -640,5 +655,6 @@ describe("TARGET_PLATFORM_MAP", () => {
 		expect(TARGET_PLATFORM_MAP["bun-darwin-x64"]).toBe("darwin-x64");
 		expect(TARGET_PLATFORM_MAP["bun-darwin-arm64"]).toBe("darwin-arm64");
 		expect(TARGET_PLATFORM_MAP["bun-windows-x64-baseline"]).toBe("win32-x64");
+		expect(TARGET_PLATFORM_MAP["bun-windows-arm64"]).toBe("win32-arm64");
 	});
 });

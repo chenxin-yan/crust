@@ -49,6 +49,7 @@ crust build --target darwin-arm64
 | `darwin-x64` | `bun-darwin-x64` | macOS Intel |
 | `darwin-arm64` | `bun-darwin-arm64` | macOS Apple Silicon |
 | `windows-x64` | `bun-windows-x64-baseline` | Windows x86_64 |
+| `windows-arm64` | `bun-windows-arm64` | Windows ARM64 |
 
 You can use either the short alias (e.g., `linux-x64`) or the full Bun target name (e.g., `bun-linux-x64-baseline`).
 
@@ -73,7 +74,8 @@ dist/
 ├── my-cli-bun-linux-arm64               # Linux ARM64 binary
 ├── my-cli-bun-darwin-x64                # macOS Intel binary
 ├── my-cli-bun-darwin-arm64              # macOS Apple Silicon binary
-└── my-cli-bun-windows-x64-baseline.exe  # Windows x64 binary
+├── my-cli-bun-windows-x64-baseline.exe  # Windows x64 binary
+└── my-cli-bun-windows-arm64.exe         # Windows ARM64 binary
 ```
 
 ### The Resolver Script

@@ -23,7 +23,9 @@
 		"typescript"
 	],
 	"files": [
-		"dist"
+		"dist/cli",
+		"dist/cli.cmd",
+		"dist/crust-bun-*"
 	],
 	"publishConfig": {
 		"access": "public"

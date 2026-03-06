@@ -22,7 +22,7 @@ The `crust` binary provides build tooling for your Crust-powered CLI:
 
 Compiles your CLI entry file to standalone Bun executables using the `Bun.build()` API.
 
-**By default, builds for all 5 supported platforms** and generates a shell resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere — no runtime (Node.js or Bun) required.
+**By default, builds for all 6 supported platforms** and generates a shell resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere — no runtime (Node.js or Bun) required.
 
 ```sh
 crust build                          # All platforms + shell resolver (default)
@@ -41,13 +41,14 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 
 #### Supported Targets
 
-| Alias          | Bun Target                 | Platform            |
-| -------------- | -------------------------- | ------------------- |
-| `linux-x64`    | `bun-linux-x64-baseline`   | Linux x86_64        |
-| `linux-arm64`  | `bun-linux-arm64`          | Linux ARM64         |
-| `darwin-x64`   | `bun-darwin-x64`           | macOS Intel         |
+| Alias           | Bun Target                 | Platform            |
+| --------------- | -------------------------- | ------------------- |
+| `linux-x64`     | `bun-linux-x64-baseline`   | Linux x86_64        |
+| `linux-arm64`   | `bun-linux-arm64`          | Linux ARM64         |
+| `darwin-x64`    | `bun-darwin-x64`           | macOS Intel         |
 | `darwin-arm64`  | `bun-darwin-arm64`         | macOS Apple Silicon |
-| `windows-x64`  | `bun-windows-x64-baseline` | Windows x86_64      |
+| `windows-x64`   | `bun-windows-x64-baseline` | Windows x86_64      |
+| `windows-arm64` | `bun-windows-arm64`        | Windows ARM64       |
 
 #### Flags
 
@@ -75,6 +76,7 @@ dist/
   my-cli-bun-darwin-x64             # macOS Intel binary
   my-cli-bun-darwin-arm64           # macOS Apple Silicon binary
   my-cli-bun-windows-x64-baseline.exe  # Windows x64 binary
+  my-cli-bun-windows-arm64.exe      # Windows ARM64 binary
 ```
 
 **Single-target build** (`--target <alias>`):
