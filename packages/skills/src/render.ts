@@ -235,6 +235,15 @@ function renderSkillMd(
 	lines.push(
 		"3. Read only the specific file from the `commands/` directory that you need",
 	);
+	lines.push(
+		"4. For any command-specific answer, read that command's documentation file before responding",
+	);
+	lines.push(
+		"5. Treat the command documentation file as the source of truth for usage, flags, options, aliases, and defaults",
+	);
+	lines.push(
+		"6. Do not invent or assume undocumented flags/options; if something is missing from the file, say it is not documented",
+	);
 	lines.push("");
 	lines.push(...renderCommandReferenceTable(allNodes));
 	lines.push("");
@@ -340,6 +349,14 @@ function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
 		lines.push("");
 	}
 
+	lines.push("## Command Documentation Authority");
+	lines.push("");
+	lines.push(
+		"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
+	);
+	lines.push("Do not infer or invent additional command-line options.");
+	lines.push("");
+
 	// Parent navigation
 	lines.push(...renderNavigation(node, root));
 
@@ -395,6 +412,14 @@ function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
 			lines.push(...renderFlagsTable(node.flags));
 			lines.push("");
 		}
+
+		lines.push("## Command Documentation Authority");
+		lines.push("");
+		lines.push(
+			"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
+		);
+		lines.push("Do not infer or invent additional command-line options.");
+		lines.push("");
 	}
 
 	// Subcommands list

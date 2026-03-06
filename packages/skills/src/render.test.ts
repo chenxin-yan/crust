@@ -261,6 +261,15 @@ describe("renderSkill", () => {
 				"commands labeled `runnable` (including `runnable, group`) are executable",
 			);
 			expect(skill?.content).toContain("while `group` commands are not");
+			expect(skill?.content).toContain(
+				"For any command-specific answer, read that command's documentation file before responding",
+			);
+			expect(skill?.content).toContain(
+				"Treat the command documentation file as the source of truth",
+			);
+			expect(skill?.content).toContain(
+				"Do not invent or assume undocumented flags/options",
+			);
 		});
 
 		it("includes when-to-use guidance", () => {
@@ -736,6 +745,30 @@ describe("renderSkill", () => {
 			expect(serve?.content).toContain("SKILL.md");
 		});
 
+		it("includes command authority instructions in leaf command files", () => {
+			const cmd = makeCommand({
+				meta: { name: "serve" },
+				run() {},
+			});
+
+			const manifest = buildManifest(cmd);
+			const meta: SkillMeta = {
+				name: "serve",
+				description: "Serve",
+				version: "1.0.0",
+			};
+			const files = renderSkill(manifest, meta);
+			const serve = findFile(files, "commands/serve.md");
+
+			expect(serve?.content).toContain("## Command Documentation Authority");
+			expect(serve?.content).toContain(
+				"Only arguments, flags, options, aliases, and defaults documented in this file are supported",
+			);
+			expect(serve?.content).toContain(
+				"Do not infer or invent additional command-line options",
+			);
+		});
+
 		it("renders navigation with link to parent command", () => {
 			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
@@ -907,6 +940,9 @@ describe("renderSkill", () => {
 
 			expect(parentFile?.content).toContain("## Usage");
 			expect(parentFile?.content).toContain("## Flags");
+			expect(parentFile?.content).toContain(
+				"## Command Documentation Authority",
+			);
 			expect(parentFile?.content).toContain("## Subcommands");
 		});
 

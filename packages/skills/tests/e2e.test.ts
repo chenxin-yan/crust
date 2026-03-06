@@ -488,6 +488,15 @@ describe("E2E: skill generation", () => {
 				"commands labeled `runnable` (including `runnable, group`) are executable",
 			);
 			expect(content).toContain("while `group` commands are not");
+			expect(content).toContain(
+				"For any command-specific answer, read that command's documentation file before responding",
+			);
+			expect(content).toContain(
+				"Treat the command documentation file as the source of truth",
+			);
+			expect(content).toContain(
+				"Do not invent or assume undocumented flags/options",
+			);
 		});
 
 		it("includes when-to-use guidance referencing the CLI name", async () => {
@@ -635,6 +644,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("`--template`");
 			expect(content).toContain("`-t`");
 			expect(content).toContain("`--dry-run`");
+			expect(content).toContain("## Command Documentation Authority");
 		});
 
 		it("deploy status has a watch flag", async () => {
@@ -728,6 +738,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("## Usage");
 			expect(content).toContain("`--global`");
 			expect(content).toContain("`-g`");
+			expect(content).toContain("## Command Documentation Authority");
 			expect(content).toContain("## Subcommands");
 			expect(content).toContain("`get`");
 			expect(content).toContain("`set`");
