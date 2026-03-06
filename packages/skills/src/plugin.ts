@@ -25,6 +25,54 @@ const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const DEFAULT_SKILL_SCOPE = "global";
 const UNIVERSAL_GROUP = "__universal__";
 
+function formatAgentLabels(agents: AgentTarget[]): string[] {
+	const universalSet = new Set(getUniversalAgents());
+	const labels: string[] = [];
+
+	if (agents.some((agent) => universalSet.has(agent))) {
+		labels.push("Universal");
+	}
+
+	for (const agent of agents) {
+		if (universalSet.has(agent)) {
+			continue;
+		}
+		labels.push(AGENT_LABELS[agent]);
+	}
+
+	return labels;
+}
+
+function formatInstallOutput(
+	results: Array<{ agent: AgentTarget; outputDir: string }>,
+): Array<{ label: string; outputDir: string }> {
+	const universalSet = new Set(getUniversalAgents());
+	const output: Array<{ label: string; outputDir: string }> = [];
+
+	const firstUniversalResult = results.find((result) =>
+		universalSet.has(result.agent),
+	);
+	if (firstUniversalResult) {
+		output.push({
+			label: "Universal",
+			outputDir: firstUniversalResult.outputDir,
+		});
+	}
+
+	for (const result of results) {
+		if (universalSet.has(result.agent)) {
+			continue;
+		}
+
+		output.push({
+			label: AGENT_LABELS[result.agent],
+			outputDir: result.outputDir,
+		});
+	}
+
+	return output;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -93,11 +141,12 @@ async function autoUpdateSkills(
 
 				const updatedAgents = res.agents
 					.filter((a) => a.status === "updated")
-					.map((a) => AGENT_LABELS[a.agent]);
+					.map((a) => a.agent);
+				const updatedLabels = formatAgentLabels(updatedAgents);
 
-				if (updatedAgents.length > 0) {
+				if (updatedLabels.length > 0) {
 					updateMessage(
-						`Updated skill "${resolveSkillName(meta.name)}" to v${meta.version} for ${updatedAgents.join(", ")}`,
+						`Updated skill "${resolveSkillName(meta.name)}" to v${meta.version} for ${updatedLabels.join(", ")}`,
 					);
 				}
 
@@ -289,9 +338,7 @@ function buildSkillCommand(
 			});
 
 			console.log(
-				dim(
-					`Universal includes: ${universalAgents.map((agent) => AGENT_LABELS[agent]).join(", ")}`,
-				),
+				dim("Universal installs to the shared .agents/skills directory."),
 			);
 		}
 
@@ -372,8 +419,8 @@ function buildSkillCommand(
 				});
 
 				console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
-				for (const r of result.agents) {
-					console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
+				for (const line of formatInstallOutput(result.agents)) {
+					console.log(dim(`  ${line.label} → ${line.outputDir}`));
 				}
 			} catch (err) {
 				if (err instanceof SkillConflictError) {
@@ -401,8 +448,8 @@ function buildSkillCommand(
 						console.log(
 							`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`,
 						);
-						for (const r of result.agents) {
-							console.log(dim(`  ${AGENT_LABELS[r.agent]} → ${r.outputDir}`));
+						for (const line of formatInstallOutput(result.agents)) {
+							console.log(dim(`  ${line.label} → ${line.outputDir}`));
 						}
 					} else {
 						console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}`));
@@ -425,9 +472,10 @@ function buildSkillCommand(
 					}),
 			});
 
-			const removed = result.agents
+			const removedAgents = result.agents
 				.filter((a) => a.status === "removed")
-				.map((a) => AGENT_LABELS[a.agent]);
+				.map((a) => a.agent);
+			const removed = formatAgentLabels(removedAgents);
 
 			if (removed.length > 0) {
 				console.log(`\n${bold(`Removed from ${removed.join(", ")}`)}`);

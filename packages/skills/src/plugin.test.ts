@@ -105,6 +105,49 @@ describe("skillPlugin auto-update", () => {
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 	});
 
+	it("prints auto-update message with Universal label", async () => {
+		const app = new Crust("update-message-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					scope: "project",
+					command: false,
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "update-message-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		const stderrChunks: string[] = [];
+		const originalWrite = process.stderr.write;
+		process.stderr.write = ((chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		}) as typeof process.stderr.write;
+
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: [] }));
+		} finally {
+			process.stderr.write = originalWrite;
+		}
+
+		const stderrOutput = stderrChunks.join("");
+		expect(stderrOutput.includes("for Universal")).toBe(true);
+		expect(stderrOutput.includes("for OpenCode")).toBe(false);
+	});
+
 	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
@@ -237,19 +280,68 @@ describe("skillPlugin auto-update", () => {
 
 		const logs: string[] = [];
 		const originalLog = console.log;
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
 
 		try {
 			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
 		} finally {
 			console.log = originalLog;
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
 		}
 
 		expect(logs.some((line) => line.includes("No changes."))).toBe(true);
 		expect(
 			logs.some((line) => line.includes('Installed "no-change-test"')),
 		).toBe(false);
+	});
+
+	it("prints install output with Universal label", async () => {
+		const app = new Crust("install-message-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					scope: "project",
+				}),
+			);
+
+		const logs: string[] = [];
+		const originalLog = console.log;
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
+
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
+		} finally {
+			console.log = originalLog;
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
+		}
+
+		expect(logs.some((line) => line.includes("Universal →"))).toBe(true);
+		expect(logs.some((line) => line.includes("OpenCode →"))).toBe(false);
 	});
 });
