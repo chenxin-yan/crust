@@ -62,12 +62,15 @@ runMain(app, {
       // autoUpdate: true (default) — silently updates installed skills
       // command: "skill" (default) — registers "my-cli skill" subcommand
       // defaultScope: "global" | "project" — skip scope prompt when set
+      // installMode: "auto" | "symlink" | "copy" (default: "auto")
     }),
   ],
 });
 ```
 
 The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
+
+Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
 ### Programmatic Auto-Install
 
@@ -191,6 +194,7 @@ const result = await generateSkill({
   meta: { name: "my-cli", description: "My CLI tool", version: "1.0.0" },
   agents: ["opencode"],
   scope: "project", // default: "global"
+  installMode: "auto", // default: "auto" — symlink first, fallback to copy
   clean: true, // default: true — removes existing skill dir first
   force: false, // default: false — throws SkillConflictError if dir exists without crust.json
 });
@@ -223,6 +227,20 @@ for (const file of files) {
   console.log(file.path); // e.g. "SKILL.md", "commands/serve.md"
   console.log(file.content); // markdown content
 }
+```
+
+### `resolveCanonicalSkillPath(scope, name)`
+
+Resolves the canonical store path where Crust writes the single source-of-truth skill bundle. Agent install paths are symlinked (or copied) from this location.
+
+```ts
+import { resolveCanonicalSkillPath } from "@crustjs/skills";
+
+resolveCanonicalSkillPath("project", "use-my-cli");
+// → "<cwd>/.crust/skills/use-my-cli"
+
+resolveCanonicalSkillPath("global", "use-my-cli");
+// → "~/.crust/skills/use-my-cli"
 ```
 
 ### `isValidSkillName(name)`
@@ -302,6 +320,10 @@ skills/use-my-cli/
 
 Each skill directory contains a `crust.json` file that acts as an ownership marker. If `generateSkill()` encounters an existing directory without `crust.json`, it throws a `SkillConflictError` to prevent overwriting skills created manually or by other tools.
 
+### Uninstall Cleanup
+
+When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
+
 Pass `force: true` to overwrite, or handle the error:
 
 ```ts
@@ -330,7 +352,7 @@ cp -r skills/use-my-cli/ .agents/skills/use-my-cli/
 Global install for universal agents:
 
 ```sh
-cp -r skills/use-my-cli/ ~/.config/agents/skills/use-my-cli/
+cp -r skills/use-my-cli/ ~/.agents/skills/use-my-cli/
 ```
 
 ### Claude Code

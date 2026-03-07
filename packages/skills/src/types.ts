@@ -131,6 +131,9 @@ export type AgentClass = "universal" | "additional";
 /** Installation scope — global (home directory) or project (cwd). */
 export type Scope = "global" | "project";
 
+/** Installation strategy for agent skill output paths. */
+export type SkillInstallMode = "auto" | "symlink" | "copy";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
 // ────────────────────────────────────────────────────────────────────────────
@@ -270,6 +273,19 @@ export interface GenerateOptions {
 	meta: SkillMeta;
 	/** Agent targets to install skills for */
 	agents: AgentTarget[];
+	/**
+	 * Installation strategy for agent output paths.
+	 *
+	 * - `"auto"` (default): create a symlink to the canonical `.crust/skills`
+	 *   bundle, falling back to a hard copy when symlinks are unavailable.
+	 * - `"symlink"`: require symlinks; fail if a symlink cannot be created.
+	 * - `"copy"`: write full copies directly into each agent path.
+	 *
+	 * Canonical bundles are always generated once under `.crust/skills` (project)
+	 * or `~/.crust/skills` (global).
+	 * @default "auto"
+	 */
+	installMode?: SkillInstallMode;
 	/**
 	 * Installation scope — global (home directory) or project (cwd).
 	 * @default "global"
@@ -419,6 +435,11 @@ export interface SkillPluginOptions {
 	 * Non-interactive mode falls back to "global".
 	 */
 	defaultScope?: Scope;
+	/**
+	 * Installation strategy used when the plugin calls `generateSkill()`.
+	 * @default "auto"
+	 */
+	installMode?: SkillInstallMode;
 	/**
 	 * Automatically update skills when the installed version is outdated.
 	 * @default true

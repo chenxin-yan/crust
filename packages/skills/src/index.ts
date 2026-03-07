@@ -8,6 +8,7 @@ export {
 	getAdditionalAgents,
 	getUniversalAgents,
 	isUniversalAgent,
+	resolveCanonicalSkillPath,
 } from "./agents.ts";
 export type { SkillConflictDetails } from "./errors.ts";
 // Errors
@@ -34,6 +35,7 @@ export type {
 	GenerateResult,
 	InstallStatus,
 	Scope,
+	SkillInstallMode,
 	SkillMeta,
 	SkillPluginOptions,
 	StatusOptions,

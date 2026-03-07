@@ -16,6 +16,7 @@ import {
 	getUniversalAgents,
 	isUniversalAgent,
 	resolveAgentPath,
+	resolveCanonicalSkillPath,
 } from "./agents.ts";
 
 describe("resolveAgentPath", () => {
@@ -37,6 +38,18 @@ describe("resolveAgentPath", () => {
 	it("resolves opencode global path", () => {
 		const result = resolveAgentPath("opencode", "global", "my-cli");
 		expect(result).toBe(join(homedir(), ".agents", "skills", "my-cli"));
+	});
+});
+
+describe("resolveCanonicalSkillPath", () => {
+	it("resolves project canonical path", () => {
+		const result = resolveCanonicalSkillPath("project", "my-cli");
+		expect(result).toBe(join(process.cwd(), ".crust", "skills", "my-cli"));
+	});
+
+	it("resolves global canonical path", () => {
+		const result = resolveCanonicalSkillPath("global", "my-cli");
+		expect(result).toBe(join(homedir(), ".crust", "skills", "my-cli"));
 	});
 });
 
