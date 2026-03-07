@@ -229,6 +229,20 @@ for (const file of files) {
 }
 ```
 
+### `resolveCanonicalSkillPath(scope, name)`
+
+Resolves the canonical store path where Crust writes the single source-of-truth skill bundle. Agent install paths are symlinked (or copied) from this location.
+
+```ts
+import { resolveCanonicalSkillPath } from "@crustjs/skills";
+
+resolveCanonicalSkillPath("project", "use-my-cli");
+// → "<cwd>/.crust/skills/use-my-cli"
+
+resolveCanonicalSkillPath("global", "use-my-cli");
+// → "~/.crust/skills/use-my-cli"
+```
+
 ### `isValidSkillName(name)`
 
 Validates a skill name against the [Agent Skills spec](https://agentskills.io/specification) pattern: 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.
@@ -306,6 +320,10 @@ skills/use-my-cli/
 
 Each skill directory contains a `crust.json` file that acts as an ownership marker. If `generateSkill()` encounters an existing directory without `crust.json`, it throws a `SkillConflictError` to prevent overwriting skills created manually or by other tools.
 
+### Uninstall Cleanup
+
+When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
+
 Pass `force: true` to overwrite, or handle the error:
 
 ```ts
@@ -334,7 +352,7 @@ cp -r skills/use-my-cli/ .agents/skills/use-my-cli/
 Global install for universal agents:
 
 ```sh
-cp -r skills/use-my-cli/ ~/.config/agents/skills/use-my-cli/
+cp -r skills/use-my-cli/ ~/.agents/skills/use-my-cli/
 ```
 
 ### Claude Code

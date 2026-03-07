@@ -8,6 +8,7 @@ export {
 	getAdditionalAgents,
 	getUniversalAgents,
 	isUniversalAgent,
+	resolveCanonicalSkillPath,
 } from "./agents.ts";
 export type { SkillConflictDetails } from "./errors.ts";
 // Errors

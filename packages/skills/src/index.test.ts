@@ -53,6 +53,7 @@ describe("@crustjs/skills exports", () => {
 				"getUniversalAgents",
 				"isValidSkillName",
 				"isUniversalAgent",
+				"resolveCanonicalSkillPath",
 				"resolveSkillName",
 				"skillPlugin",
 				"skillStatus",
