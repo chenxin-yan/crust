@@ -1,5 +1,23 @@
 # @crustjs/skills
 
+## 0.0.15
+
+### Patch Changes
+
+- 3a13f2b: Add canonical `.crust/skills` store with configurable symlink/copy install strategy.
+
+  - Skill bundles are now rendered once to a canonical store (`.crust/skills/` for project scope, `~/.crust/skills/` for global scope) and then installed into agent-specific paths via symlink or copy.
+  - Add `installMode` option (`"auto"` | `"symlink"` | `"copy"`) to `GenerateOptions` and `SkillPluginOptions`. Default `"auto"` creates symlinks with fallback to copy; `"symlink"` requires symlinks or fails; `"copy"` writes full copies.
+  - Add `resolveCanonicalSkillPath()` export for resolving the canonical store path.
+  - Uninstall now cleans up the canonical store when no agent install paths remain.
+  - Export new `SkillInstallMode` type from package root.
+
+- 42b05c7: Replace spawn-based agent detection with non-executing PATH lookup to prevent unrelated IDE CLIs from launching during normal CLI startup.
+
+  - Replace `checkCommandAvailable`/`runCommand` (which spawned `<cmd> --version`, `<cmd> -v`, `<cmd> version`) with `isCommandOnPath()` — a pure filesystem PATH scan using `fs.accessSync` with `X_OK`. This eliminates the bare `version` positional arg that caused Electron-based IDEs (Antigravity, Kiro) to open on macOS.
+  - Remove `detectInstalledAgents()` from `autoUpdateSkills` and `buildSkillUpdateCommand`. Auto-update and `skill update` now check all known agents via `skillStatus()` (filesystem-only), avoiding any PATH probing during normal CLI startup.
+  - Keep `detectInstalledAgents()` only for the interactive `skill` command UX, now backed by the safe PATH lookup.
+
 ## 0.0.14
 
 ### Patch Changes
