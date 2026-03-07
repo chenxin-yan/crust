@@ -2,9 +2,9 @@
 // Agent path resolution and detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { spawn } from "node:child_process";
+import { accessSync, constants } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { AgentClass, AgentTarget, Scope } from "./types.ts";
 
 interface AgentConfig {
@@ -355,7 +355,8 @@ export async function detectInstalledAgents(
 		typeof options === "string" ? { home: options } : (options ?? {});
 	const cwd = resolvedOptions.cwd ?? process.cwd();
 	const commandChecker =
-		resolvedOptions.commandChecker ?? checkCommandAvailable;
+		resolvedOptions.commandChecker ??
+		((command: string) => Promise.resolve(isCommandOnPath(command)));
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {
@@ -392,53 +393,51 @@ export function resolveAgentPath(
 	return join(cfg.globalSkillsDir(homedir()), name);
 }
 
-async function checkCommandAvailable(
-	command: string,
-	cwd: string,
-): Promise<boolean> {
-	for (const args of [["--version"], ["-v"], ["version"]]) {
-		const isAvailable = await runCommand(command, args, cwd);
-		if (isAvailable) {
+/**
+ * Non-executing PATH lookup. Walks `process.env.PATH` and checks whether a
+ * matching executable exists using `fs.accessSync` with `X_OK`.
+ *
+ * On Windows, also probes `PATHEXT` extensions (`.exe`, `.cmd`, `.bat`, `.com`).
+ *
+ * This intentionally never spawns the target binary — some CLI tools
+ * (Electron-based IDEs, etc.) interpret arguments like `version` as workspace
+ * paths, causing unwanted side effects.
+ */
+function isCommandOnPath(command: string): boolean {
+	const pathEnv = process.env.PATH ?? "";
+	const dirs = pathEnv.split(delimiter).filter((d) => d.length > 0);
+
+	const isWindows = process.platform === "win32";
+	const pathExts = isWindows
+		? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+				.split(";")
+				.filter((e) => e.length > 0)
+		: [];
+
+	for (const dir of dirs) {
+		// Direct match (unix executables, or Windows commands with extension in name)
+		if (isExecutable(join(dir, command))) {
 			return true;
 		}
+
+		// On Windows, also try appending each PATHEXT extension
+		if (isWindows) {
+			for (const ext of pathExts) {
+				if (isExecutable(join(dir, command + ext))) {
+					return true;
+				}
+			}
+		}
 	}
+
 	return false;
 }
 
-async function runCommand(
-	command: string,
-	args: string[],
-	cwd: string,
-): Promise<boolean> {
-	return new Promise((resolve) => {
-		const child = spawn(command, args, {
-			cwd,
-			stdio: "ignore",
-			shell: false,
-		});
-
-		let settled = false;
-		const done = (result: boolean) => {
-			if (settled) {
-				return;
-			}
-			settled = true;
-			resolve(result);
-		};
-
-		const timer = setTimeout(() => {
-			child.kill("SIGTERM");
-			done(false);
-		}, 1000);
-
-		child.once("error", () => {
-			clearTimeout(timer);
-			done(false);
-		});
-
-		child.once("exit", (code) => {
-			clearTimeout(timer);
-			done(code === 0);
-		});
-	});
+function isExecutable(filePath: string): boolean {
+	try {
+		accessSync(filePath, constants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
 }

@@ -139,8 +139,10 @@ async function autoUpdateSkills(
 	rootCmd: CommandNode,
 	options: SkillPluginOptions,
 ): Promise<void> {
-	const additionalAgents = await detectInstalledAgents();
-	const agents = [...getUniversalAgents(), ...additionalAgents];
+	// Use all known agents and let skillStatus (filesystem-only) determine
+	// which ones are actually installed. This avoids any PATH probing or
+	// process spawning during normal CLI startup.
+	const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
 	if (agents.length === 0) {
 		return;
 	}
@@ -536,12 +538,9 @@ function buildSkillUpdateCommand(
 		})
 		.run(async (ctx) => {
 			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
-			const additionalAgents = await detectInstalledAgents();
-			const agents = [...getUniversalAgents(), ...additionalAgents];
-			if (agents.length === 0) {
-				console.log(dim("No supported agents detected."));
-				return;
-			}
+			// Use all known agents and let skillStatus determine which are installed.
+			// This avoids spawning external CLIs during `skill update`.
+			const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
 
 			const meta = deriveSkillMeta(rootCmd, options.version);
 			const status = await skillStatus({
