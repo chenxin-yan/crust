@@ -306,10 +306,7 @@ export async function uninstallSkill(
 		scope,
 	);
 	if (!hasRemainingInstalls) {
-		const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
-		if (canonicalVersion !== null) {
-			await rm(canonicalOutputDir, { recursive: true, force: true });
-		}
+		await rm(canonicalOutputDir, { recursive: true, force: true });
 	}
 
 	return { agents: results };
@@ -562,6 +559,9 @@ async function inspectInstallPath(
 		outputRealPath === canonicalRealPath;
 	// Also check the raw link target so dangling symlinks created by Crust
 	// are still recognised as Crust-managed.
+	// NOTE: For project scope, canonicalOutputDir is rooted at process.cwd().
+	// If the project is re-run from a different working directory, this
+	// comparison will fail and the symlink won't be recognised as Crust-managed.
 	const rawTargetMatch = linkTarget === canonicalOutputDir;
 
 	return {
@@ -649,28 +649,18 @@ async function hasAnyInstalledAgentPath(
  * @returns Array containing the crust.json rendered file
  */
 function renderDistributionMetadata(meta: SkillMeta): RenderedFile[] {
-	return [
-		{
-			path: CRUST_MANIFEST,
-			content: renderCrustJson(meta),
-		},
-	];
-}
-
-/**
- * Renders `crust.json` — a machine-readable Crust metadata file
- * describing the skill bundle contents.
- *
- * The file is intentionally minimal and deterministic.
- */
-function renderCrustJson(meta: SkillMeta): string {
 	const obj: Record<string, unknown> = {
 		name: meta.name,
 		description: meta.description,
 		version: meta.version,
 	};
 
-	return `${JSON.stringify(obj, null, "\t")}\n`;
+	return [
+		{
+			path: CRUST_MANIFEST,
+			content: `${JSON.stringify(obj, null, "\t")}\n`,
+		},
+	];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
