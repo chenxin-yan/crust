@@ -175,6 +175,7 @@ async function autoUpdateSkills(
 						meta,
 						agents: needsUpdate.map((a) => a.agent),
 						scope,
+						installMode: options.installMode,
 					});
 
 					const updatedAgents = res.agents
@@ -450,6 +451,7 @@ function buildSkillCommand(
 								meta,
 								agents: agentsToGenerate,
 								scope,
+								installMode: options.installMode,
 							}),
 					});
 
@@ -476,6 +478,7 @@ function buildSkillCommand(
 										agents: [err.details.agent],
 										scope,
 										force: true,
+										installMode: options.installMode,
 									}),
 							});
 
@@ -566,6 +569,7 @@ function buildSkillUpdateCommand(
 							meta,
 							agents: needsUpdate.map((agent) => agent.agent),
 							scope,
+							installMode: options.installMode,
 						}),
 				});
 

@@ -34,6 +34,7 @@ export type {
 	GenerateResult,
 	InstallStatus,
 	Scope,
+	SkillInstallMode,
 	SkillMeta,
 	SkillPluginOptions,
 	StatusOptions,

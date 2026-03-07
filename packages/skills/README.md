@@ -62,12 +62,15 @@ runMain(app, {
       // autoUpdate: true (default) — silently updates installed skills
       // command: "skill" (default) — registers "my-cli skill" subcommand
       // defaultScope: "global" | "project" — skip scope prompt when set
+      // installMode: "auto" | "symlink" | "copy" (default: "auto")
     }),
   ],
 });
 ```
 
 The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
+
+Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
 ### Programmatic Auto-Install
 
@@ -191,6 +194,7 @@ const result = await generateSkill({
   meta: { name: "my-cli", description: "My CLI tool", version: "1.0.0" },
   agents: ["opencode"],
   scope: "project", // default: "global"
+  installMode: "auto", // default: "auto" — symlink first, fallback to copy
   clean: true, // default: true — removes existing skill dir first
   force: false, // default: false — throws SkillConflictError if dir exists without crust.json
 });

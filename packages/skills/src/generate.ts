@@ -2,9 +2,21 @@
 // Orchestration — install, uninstall, and status operations for agent skills
 // ────────────────────────────────────────────────────────────────────────────
 
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+	lstat,
+	mkdir,
+	readlink,
+	realpath,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { resolveAgentPath } from "./agents.ts";
+import {
+	ALL_AGENTS,
+	resolveAgentPath,
+	resolveCanonicalSkillPath,
+} from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -14,6 +26,8 @@ import type {
 	GenerateResult,
 	InstallStatus,
 	RenderedFile,
+	Scope,
+	SkillInstallMode,
 	SkillMeta,
 	StatusOptions,
 	StatusResult,
@@ -21,6 +35,8 @@ import type {
 	UninstallResult,
 } from "./types.ts";
 import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
+
+const DEFAULT_INSTALL_MODE: SkillInstallMode = "auto";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Naming — resolveSkillName and validation
@@ -68,14 +84,10 @@ export function resolveSkillName(name: string): string {
 /**
  * Generates and installs agent skill bundles from a Crust command tree.
  *
- * For each target agent:
- * 1. Resolves the output directory via {@link resolveAgentPath}
- * 2. Checks for conflicts — if the directory exists but has no `crust.json`,
- *    it was not created by Crust and a {@link SkillConflictError} is thrown
- * 3. Checks the installed version — skips if up-to-date
- * 4. Builds a canonical manifest from the command tree
- * 5. Renders markdown files + `crust.json`
- * 6. Writes files to the agent's skill directory
+ * The generator renders the bundle once into a canonical Crust store
+ * (`.crust/skills` project scope, `~/.crust/skills` global scope), then
+ * installs into agent-specific output paths using the configured install mode
+ * (`auto`, `symlink`, `copy`).
  *
  * @param options - Generation options including command, metadata, agents, and scope
  * @returns Per-agent installation results
@@ -111,6 +123,7 @@ export async function generateSkill(
 		scope = "global",
 		clean = true,
 		force = false,
+		installMode = DEFAULT_INSTALL_MODE,
 	} = options;
 
 	// Apply `use-` prefix — do not mutate the caller's meta object
@@ -123,6 +136,11 @@ export async function generateSkill(
 				`alphanumeric characters and hyphens, no leading/trailing/consecutive ` +
 				`hyphens. Pattern: ${SKILL_NAME_PATTERN.source}`,
 		);
+	}
+
+	const primaryAgent = agents[0];
+	if (!primaryAgent) {
+		return { agents: [] };
 	}
 
 	const resolvedMeta: SkillMeta = {
@@ -139,8 +157,7 @@ export async function generateSkill(
 	const allFiles = [...renderedFiles, ...metadataFiles].sort((a, b) =>
 		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
 	);
-
-	const results: AgentResult[] = [];
+	const allFilePaths = allFiles.map((file) => file.path);
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
 		const outputDir = resolveAgentPath(agent, scope, resolvedMeta.name);
@@ -152,62 +169,88 @@ export async function generateSkill(
 		}
 	}
 
-	for (const [outputDir, groupedAgents] of groups) {
-		const primaryAgent = groupedAgents[0];
-		if (!primaryAgent) {
-			continue;
+	const preInstallVersions = new Map<string, string | null>();
+	for (const outputDir of groups.keys()) {
+		preInstallVersions.set(outputDir, await readInstalledVersion(outputDir));
+	}
+
+	const canonicalOutputDir = resolveCanonicalSkillPath(
+		scope,
+		resolvedMeta.name,
+	);
+	const canonicalInstalledVersion =
+		await readInstalledVersion(canonicalOutputDir);
+	if (canonicalInstalledVersion === null) {
+		const canonicalExists = await pathExists(canonicalOutputDir);
+		if (canonicalExists && !force) {
+			throw new SkillConflictError({
+				agent: primaryAgent,
+				outputDir: resolveAgentPath(primaryAgent, scope, resolvedMeta.name),
+			});
 		}
+	}
 
-		// ── Conflict check ────────────────────────────────────────────
-		// If the directory exists but has no crust.json, it was not
-		// created by Crust — refuse to overwrite unless force is set.
-		const installedVersion = await readInstalledVersion(outputDir);
-		if (installedVersion === null) {
-			const dirExists = await access(outputDir)
-				.then(() => true)
-				.catch(() => false);
-
-			if (dirExists && !force) {
-				throw new SkillConflictError({ agent: primaryAgent, outputDir });
-			}
-		}
-
-		// ── Version check ─────────────────────────────────────────────
-		const status: InstallStatus =
-			installedVersion === null
-				? "installed"
-				: installedVersion === resolvedMeta.version
-					? "up-to-date"
-					: "updated";
-
-		if (status === "up-to-date") {
-			for (const agent of groupedAgents) {
-				results.push({
-					agent,
-					outputDir,
-					files: [],
-					status: "up-to-date",
-				});
-			}
-			continue;
-		}
-
-		const previousVersion =
-			status === "updated" ? (installedVersion ?? undefined) : undefined;
-
+	// Compared against the pre-write snapshot. When true, all agents in the
+	// loop below report "updated" (even symlinks with `pathChanged = false`)
+	// because the canonical content they point to has changed.
+	const canonicalChanged = canonicalInstalledVersion !== resolvedMeta.version;
+	if (canonicalChanged) {
 		if (clean) {
-			await cleanDirectory(outputDir);
+			await cleanDirectory(canonicalOutputDir);
 		}
 
-		await writeFiles(outputDir, allFiles);
+		await writeFiles(canonicalOutputDir, allFiles);
+	}
+
+	const results: AgentResult[] = [];
+
+	for (const [outputDir, groupedAgents] of groups) {
+		const groupedPrimaryAgent = groupedAgents[0];
+		if (!groupedPrimaryAgent) {
+			continue;
+		}
+
+		const installedVersion = preInstallVersions.get(outputDir) ?? null;
+		const inspection = await inspectInstallPath(outputDir, canonicalOutputDir);
+
+		const isCrustManaged =
+			installedVersion !== null ||
+			(inspection.exists &&
+				inspection.isSymlink &&
+				inspection.pointsToCanonical);
+		if (inspection.exists && !isCrustManaged && !force) {
+			throw new SkillConflictError({
+				agent: groupedPrimaryAgent,
+				outputDir,
+			});
+		}
+
+		const pathChanged = await ensureAgentInstallPath({
+			outputDir,
+			canonicalOutputDir,
+			allFiles,
+			clean,
+			installMode,
+			inspection,
+			installedVersion,
+			currentVersion: resolvedMeta.version,
+		});
+
+		const status = computeInstallStatus({
+			installedVersion,
+			currentVersion: resolvedMeta.version,
+			canonicalChanged,
+			pathChanged,
+		});
 
 		for (const agent of groupedAgents) {
 			results.push({
 				agent,
 				outputDir,
-				files: allFiles.map((f) => f.path),
+				files: status === "up-to-date" ? [] : allFilePaths,
 				status,
-				previousVersion,
+				previousVersion:
+					status === "updated" ? (installedVersion ?? undefined) : undefined,
 			});
 		}
 	}
@@ -230,6 +273,7 @@ export async function uninstallSkill(
 ): Promise<UninstallResult> {
 	const { name, agents, scope = "global" } = options;
 	const resolvedName = resolveSkillName(name);
+	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
 	const results: UninstallResult["agents"] = [];
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
@@ -243,9 +287,7 @@ export async function uninstallSkill(
 	}
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const exists = await access(outputDir)
-			.then(() => true)
-			.catch(() => false);
+		const exists = await pathExists(outputDir);
 
 		if (exists) {
 			await rm(outputDir, { recursive: true, force: true });
@@ -256,6 +298,17 @@ export async function uninstallSkill(
 			for (const agent of groupedAgents) {
 				results.push({ agent, outputDir, status: "not-found" });
 			}
+		}
+	}
+
+	const hasRemainingInstalls = await hasAnyInstalledAgentPath(
+		resolvedName,
+		scope,
+	);
+	if (!hasRemainingInstalls) {
+		const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
+		if (canonicalVersion !== null) {
+			await rm(canonicalOutputDir, { recursive: true, force: true });
 		}
 	}
 
@@ -302,6 +355,284 @@ export async function skillStatus(
 	}
 
 	return { agents: results };
+}
+
+interface InstallPathInspection {
+	readonly exists: boolean;
+	readonly isSymlink: boolean;
+	readonly pointsToCanonical: boolean;
+}
+
+interface EnsureAgentInstallPathOptions {
+	readonly outputDir: string;
+	readonly canonicalOutputDir: string;
+	readonly allFiles: RenderedFile[];
+	readonly clean: boolean;
+	readonly installMode: SkillInstallMode;
+	readonly inspection: InstallPathInspection;
+	readonly installedVersion: string | null;
+	readonly currentVersion: string;
+}
+
+interface ComputeInstallStatusOptions {
+	readonly installedVersion: string | null;
+	readonly currentVersion: string;
+	readonly canonicalChanged: boolean;
+	readonly pathChanged: boolean;
+}
+
+function computeInstallStatus(
+	options: ComputeInstallStatusOptions,
+): InstallStatus {
+	const { installedVersion, currentVersion, canonicalChanged, pathChanged } =
+		options;
+
+	if (installedVersion === null) {
+		return "installed";
+	}
+
+	if (
+		installedVersion === currentVersion &&
+		!canonicalChanged &&
+		!pathChanged
+	) {
+		return "up-to-date";
+	}
+
+	return "updated";
+}
+
+async function ensureAgentInstallPath(
+	options: EnsureAgentInstallPathOptions,
+): Promise<boolean> {
+	const {
+		outputDir,
+		canonicalOutputDir,
+		allFiles,
+		clean,
+		installMode,
+		inspection,
+		installedVersion,
+		currentVersion,
+	} = options;
+
+	if (installMode === "copy") {
+		return ensureCopyInstallPath({
+			outputDir,
+			allFiles,
+			clean,
+			inspection,
+			installedVersion,
+			currentVersion,
+		});
+	}
+
+	try {
+		return await ensureSymlinkInstallPath({
+			outputDir,
+			canonicalOutputDir,
+			inspection,
+		});
+	} catch (err) {
+		if (installMode === "symlink") {
+			throw new Error(
+				`Failed to create symlink at "${outputDir}" (installMode: symlink).`,
+				{ cause: err },
+			);
+		}
+
+		const fallbackInspection = await inspectInstallPath(
+			outputDir,
+			canonicalOutputDir,
+		);
+
+		return ensureCopyInstallPath({
+			outputDir,
+			allFiles,
+			clean,
+			inspection: fallbackInspection,
+			installedVersion,
+			currentVersion,
+		});
+	}
+}
+
+interface EnsureCopyInstallPathOptions {
+	readonly outputDir: string;
+	readonly allFiles: RenderedFile[];
+	readonly clean: boolean;
+	readonly inspection: InstallPathInspection;
+	readonly installedVersion: string | null;
+	readonly currentVersion: string;
+}
+
+async function ensureCopyInstallPath(
+	options: EnsureCopyInstallPathOptions,
+): Promise<boolean> {
+	const {
+		outputDir,
+		allFiles,
+		clean,
+		inspection,
+		installedVersion,
+		currentVersion,
+	} = options;
+
+	const needsWrite =
+		!inspection.exists ||
+		inspection.isSymlink ||
+		installedVersion !== currentVersion;
+	if (!needsWrite) {
+		return false;
+	}
+
+	if (inspection.isSymlink || clean) {
+		await cleanDirectory(outputDir);
+	}
+
+	await writeFiles(outputDir, allFiles);
+	return true;
+}
+
+interface EnsureSymlinkInstallPathOptions {
+	readonly outputDir: string;
+	readonly canonicalOutputDir: string;
+	readonly inspection: InstallPathInspection;
+}
+
+async function ensureSymlinkInstallPath(
+	options: EnsureSymlinkInstallPathOptions,
+): Promise<boolean> {
+	const { outputDir, canonicalOutputDir, inspection } = options;
+
+	if (
+		inspection.exists &&
+		inspection.isSymlink &&
+		inspection.pointsToCanonical
+	) {
+		return false;
+	}
+
+	if (inspection.exists) {
+		await cleanDirectory(outputDir);
+	}
+
+	await createDirectorySymlink(canonicalOutputDir, outputDir);
+	return true;
+}
+
+async function inspectInstallPath(
+	outputDir: string,
+	canonicalOutputDir: string,
+): Promise<InstallPathInspection> {
+	let stats: Awaited<ReturnType<typeof lstat>> | undefined;
+	try {
+		stats = await lstat(outputDir);
+	} catch {
+		return {
+			exists: false,
+			isSymlink: false,
+			pointsToCanonical: false,
+		};
+	}
+
+	// Detect Windows junctions: lstat reports isDirectory() but readlink succeeds
+	const isJunction =
+		process.platform === "win32" &&
+		stats.isDirectory() &&
+		(await safeReadlink(outputDir)) !== null;
+	const isSymlink = stats.isSymbolicLink() || isJunction;
+	if (!isSymlink) {
+		return {
+			exists: true,
+			isSymlink: false,
+			pointsToCanonical: false,
+		};
+	}
+
+	const [outputRealPath, canonicalRealPath, linkTarget] = await Promise.all([
+		safeRealpath(outputDir),
+		safeRealpath(canonicalOutputDir),
+		safeReadlink(outputDir),
+	]);
+
+	const resolvedMatch =
+		outputRealPath !== null &&
+		canonicalRealPath !== null &&
+		outputRealPath === canonicalRealPath;
+	// Also check the raw link target so dangling symlinks created by Crust
+	// are still recognised as Crust-managed.
+	const rawTargetMatch = linkTarget === canonicalOutputDir;
+
+	return {
+		exists: true,
+		isSymlink: true,
+		pointsToCanonical: resolvedMatch || rawTargetMatch,
+	};
+}
+
+async function safeRealpath(path: string): Promise<string | null> {
+	try {
+		return await realpath(path);
+	} catch {
+		return null;
+	}
+}
+
+async function safeReadlink(path: string): Promise<string | null> {
+	try {
+		return await readlink(path);
+	} catch {
+		return null;
+	}
+}
+
+async function createDirectorySymlink(
+	targetDir: string,
+	symlinkPath: string,
+): Promise<void> {
+	await mkdir(dirname(symlinkPath), { recursive: true });
+	const linkType = process.platform === "win32" ? "junction" : "dir";
+	await symlink(targetDir, symlinkPath, linkType);
+}
+
+async function pathExists(path: string): Promise<boolean> {
+	try {
+		await lstat(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Checks whether any agent path still has an installed skill bundle.
+ *
+ * Probes every possible output directory across **all** known agents (not just
+ * the subset passed to `uninstallSkill`), so the canonical store is only
+ * removed when truly nothing remains. Paths are deduplicated because universal
+ * agents share a single directory — probing it once is sufficient.
+ *
+ * Works for both symlink and copy installs: symlink removal makes
+ * `readInstalledVersion` return `null` (target unreachable), and copy removal
+ * deletes the `crust.json` directly.
+ */
+async function hasAnyInstalledAgentPath(
+	name: string,
+	scope: Scope,
+): Promise<boolean> {
+	const uniquePaths = new Set<string>();
+	for (const agent of ALL_AGENTS) {
+		uniquePaths.add(resolveAgentPath(agent, scope, name));
+	}
+
+	for (const outputDir of uniquePaths) {
+		if ((await readInstalledVersion(outputDir)) !== null) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

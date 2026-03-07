@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+	lstat,
+	mkdir,
+	readdir,
+	readFile,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
@@ -451,6 +458,70 @@ describe("generateSkill", () => {
 
 			const expected = join(tmpDir, ".agents", "skills", "use-my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
+		});
+
+		it("writes canonical bundle once and exposes files in agent path", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const canonical = join(tmpDir, ".crust", "skills", "use-my-cli");
+			const linkedPath = (result.agents[0] as AgentResult).outputDir;
+
+			expect((await stat(canonical)).isDirectory()).toBe(true);
+			expect((await stat(join(linkedPath, "SKILL.md"))).isFile()).toBe(true);
+		});
+
+		it("supports strict symlink install mode", async () => {
+			if (process.platform === "win32") {
+				return;
+			}
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "symlink",
+				}),
+			);
+
+			const outputDir = (result.agents[0] as AgentResult).outputDir;
+			expect((await lstat(outputDir)).isSymbolicLink()).toBe(true);
+		});
+
+		it("supports copy install mode", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "copy",
+				}),
+			);
+
+			const outputDir = (result.agents[0] as AgentResult).outputDir;
+			expect((await lstat(outputDir)).isSymbolicLink()).toBe(false);
+			expect((await stat(join(outputDir, "SKILL.md"))).isFile()).toBe(true);
 		});
 	});
 

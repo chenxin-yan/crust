@@ -16,6 +16,7 @@ interface AgentConfig {
 }
 
 const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
+const PROJECT_CANONICAL_SKILLS_DIR = join(".crust", "skills");
 
 function configHome(home: string): string {
 	if (home !== homedir()) {
@@ -28,6 +29,10 @@ function configHome(home: string): string {
 
 function universalGlobalSkillsDir(home: string): string {
 	return join(home, ".agents", "skills");
+}
+
+function canonicalGlobalSkillsDir(home: string): string {
+	return join(home, ".crust", "skills");
 }
 
 const AGENTS: Record<AgentTarget, AgentConfig> = {
@@ -336,14 +341,14 @@ export interface DetectInstalledAgentsOptions {
 	scope?: Scope;
 	/** Kept for backwards compatibility with previous API. */
 	home?: string;
-	/** Working directory for command checks. */
+	/** Working directory for PATH lookups. */
 	cwd?: string;
 	/** Test-only hook to override command detection. */
 	commandChecker?: (command: string, cwd: string) => Promise<boolean>;
 }
 
 /**
- * Detects installed additional agents by probing their CLI binaries.
+ * Detects installed additional agents by checking PATH for their CLI binaries.
  *
  * Universal agents are intentionally not detected here so callers can always
  * present them as a single optional "Universal" install target.
@@ -394,6 +399,17 @@ export function resolveAgentPath(
 }
 
 /**
+ * Resolves the canonical skill bundle path used by Crust.
+ */
+export function resolveCanonicalSkillPath(scope: Scope, name: string): string {
+	if (scope === "project") {
+		return join(process.cwd(), PROJECT_CANONICAL_SKILLS_DIR, name);
+	}
+
+	return join(canonicalGlobalSkillsDir(homedir()), name);
+}
+
+/**
  * Non-executing PATH lookup. Walks `process.env.PATH` and checks whether a
  * matching executable exists using `fs.accessSync` with `X_OK`.
  *
@@ -415,12 +431,13 @@ function isCommandOnPath(command: string): boolean {
 		: [];
 
 	for (const dir of dirs) {
-		// Direct match (unix executables, or Windows commands with extension in name)
-		if (isExecutable(join(dir, command))) {
+		// On POSIX, check for an executable file matching the command name directly.
+		// Skip this on Windows where X_OK ≡ R_OK and would false-positive on any
+		// readable file; rely solely on the PATHEXT loop instead.
+		if (!isWindows && isExecutable(join(dir, command))) {
 			return true;
 		}
 
-		// On Windows, also try appending each PATHEXT extension
 		if (isWindows) {
 			for (const ext of pathExts) {
 				if (isExecutable(join(dir, command + ext))) {

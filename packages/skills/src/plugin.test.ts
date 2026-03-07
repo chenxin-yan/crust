@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, lstat, mkdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
@@ -433,5 +433,41 @@ describe("skillPlugin auto-update", () => {
 		);
 
 		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
+	});
+
+	it("respects installMode during interactive installs", async () => {
+		const app = new Crust("copy-mode-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+					installMode: "copy",
+				}),
+			);
+
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
+
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
+		} finally {
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
+		}
+
+		const outputDir = join(tmpDir, ".agents", "skills", "use-copy-mode-test");
+		const canonicalDir = join(tmpDir, ".crust", "skills", "use-copy-mode-test");
+
+		expect((await lstat(outputDir)).isSymbolicLink()).toBe(false);
+		expect((await stat(canonicalDir)).isDirectory()).toBe(true);
 	});
 });
