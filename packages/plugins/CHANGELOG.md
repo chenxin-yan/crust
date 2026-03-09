@@ -1,5 +1,15 @@
 # @crustjs/plugins
 
+## 0.0.16
+
+### Patch Changes
+
+- d7bb1aa: Refactor `updateNotifierPlugin` options: make `packageName` required, remove `enabled` option, and move `intervalMs` into a new `cache` config object (`{ adapter, intervalMs? }`) to better co-locate cache-related settings.
+- Updated dependencies [944f852]
+- Updated dependencies [6dea64c]
+  - @crustjs/style@0.0.5
+  - @crustjs/core@0.0.13
+
 ## 0.0.15
 
 ### Patch Changes

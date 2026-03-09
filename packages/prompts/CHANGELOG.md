@@ -1,5 +1,14 @@
 # @crustjs/prompts
 
+## 0.0.9
+
+### Patch Changes
+
+- 6dea64c: Handle Ctrl+C prompt cancellations more gracefully. Prompt rendering now moves to a fresh line on cancel, and `Crust.execute()` treats `CancelledError` as a silent user abort with exit code `130` instead of printing `Error: Prompt was cancelled.`.
+- 819bad7: Support non-interactive environments in `spinner`. When stderr is not a TTY (CI, piped output), the spinner skips all animation and ANSI escape codes — only the final success (`✓`) or error (`✗`) line is printed. `updateMessage()` calls silently update the message used in the final line.
+- Updated dependencies [944f852]
+  - @crustjs/style@0.0.5
+
 ## 0.0.8
 
 ### Patch Changes

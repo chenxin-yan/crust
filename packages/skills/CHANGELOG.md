@@ -1,5 +1,17 @@
 # @crustjs/skills
 
+## 0.0.16
+
+### Patch Changes
+
+- 32449a1: Show supported agents in Universal skill option. When selecting agents for skill installation, the Universal option now displays which agents support the universal skill format (e.g., "Agents supporting universal skills: Amp, Cline, Codex, Cursor, Gemini CLI, GitHub Copilot, Kimi Code CLI, OpenCode, Replit").
+- Updated dependencies [944f852]
+- Updated dependencies [6dea64c]
+- Updated dependencies [819bad7]
+  - @crustjs/style@0.0.5
+  - @crustjs/core@0.0.13
+  - @crustjs/prompts@0.0.9
+
 ## 0.0.15
 
 ### Patch Changes
