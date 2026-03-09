@@ -185,6 +185,8 @@ const lang = await filter({
 
 Display a spinner animation while an async task runs. Non-interactive — output-only. Shows a success or error indicator when the task completes.
 
+In non-interactive environments (when stderr is not a TTY), the spinner skips all animation and ANSI escape codes — only the final success (`✓`) or error (`✗`) line is printed.
+
 ```ts
 const data = await spinner({
   message: "Fetching data...",
@@ -269,6 +271,8 @@ Theme resolution order (later wins):
 ## Non-Interactive Environments
 
 All prompts (except `spinner`) require an interactive TTY. When stdin is not a TTY, prompts throw `NonInteractiveError` — unless `initial` is provided, in which case the value is returned immediately without rendering.
+
+The `spinner` works in both interactive and non-interactive environments. In non-TTY mode, it skips animation and only prints the final success/error line to stderr.
 
 ```ts
 import { input, NonInteractiveError, CancelledError } from "@crustjs/prompts";

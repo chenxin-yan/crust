@@ -166,6 +166,16 @@ function renderError(message: string, theme: PromptTheme): string {
 	return `${ERASE_LINE}${CURSOR_TO_START}${theme.error(ERROR_SYMBOL)} ${theme.message(message)}\n`;
 }
 
+// ── Non-interactive render helpers (no ANSI escape codes) ──────────────
+
+function renderStaticSuccess(message: string, theme: PromptTheme): string {
+	return `${theme.success(SUCCESS_SYMBOL)} ${theme.message(message)}\n`;
+}
+
+function renderStaticError(message: string, theme: PromptTheme): string {
+	return `${theme.error(ERROR_SYMBOL)} ${theme.message(message)}\n`;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
@@ -176,6 +186,11 @@ function renderError(message: string, theme: PromptTheme): string {
  * The spinner renders to stderr so it doesn't interfere with piped stdout.
  * On task completion, the spinner is replaced with a success (✓) or error (✗)
  * indicator. If the task throws, the error is re-thrown after cleanup.
+ *
+ * In non-interactive environments (when stderr is not a TTY), the spinner
+ * skips all animation and ANSI escape codes. Only the final success (✓)
+ * or error (✗) line is printed. `updateMessage` calls silently update the
+ * message used in that final line.
  *
  * Unlike other prompts, the spinner does **not** use raw mode or keypress
  * handling — it is output-only and non-interactive.
@@ -231,8 +246,36 @@ function renderError(message: string, theme: PromptTheme): string {
  */
 export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 	const theme = resolveTheme(options.theme);
-	const { frames, interval } = resolveSpinner(options.spinner);
+	const isInteractive = !!process.stderr.isTTY;
 
+	// ── Non-interactive path (CI, piped stderr) ─────────────────────
+	// Only print the final success/error line — no animation or progress lines.
+	if (!isInteractive) {
+		let currentMessage = options.message;
+		let finished = false;
+
+		const controller: SpinnerController = {
+			updateMessage(message: string) {
+				if (finished) return;
+				currentMessage = message;
+			},
+		};
+
+		try {
+			const result = await options.task(controller);
+			finished = true;
+			process.stderr.write(renderStaticSuccess(currentMessage, theme));
+			return result;
+		} catch (error) {
+			finished = true;
+			process.stderr.write(renderStaticError(currentMessage, theme));
+			throw error;
+		}
+	}
+
+	// ── Interactive path (TTY) ──────────────────────────────────────
+
+	const { frames, interval } = resolveSpinner(options.spinner);
 	let frameIndex = 0;
 	let currentMessage = options.message;
 	let finished = false;

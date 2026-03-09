@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { spinner } from "./spinner.ts";
+import { type SpinnerController, spinner } from "./spinner.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
 const originalStderrWrite = process.stderr.write;
+const originalStderrIsTTY = process.stderr.isTTY;
 
 let stderrOutput: string;
 
@@ -18,10 +19,22 @@ function setupMocks(): void {
 		}
 		return true;
 	}) as typeof process.stderr.write;
+
+	// Default to interactive (TTY) for existing tests
+	Object.defineProperty(process.stderr, "isTTY", {
+		value: true,
+		writable: true,
+		configurable: true,
+	});
 }
 
 function restoreMocks(): void {
 	process.stderr.write = originalStderrWrite;
+	Object.defineProperty(process.stderr, "isTTY", {
+		value: originalStderrIsTTY,
+		writable: true,
+		configurable: true,
+	});
 }
 
 /**
@@ -467,5 +480,172 @@ describe("spinner — cleanup", () => {
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		expect(beforeCursor.endsWith("\n")).toBe(true);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Non-interactive (non-TTY) mode
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("spinner — non-interactive", () => {
+	beforeEach(() => {
+		setupMocks();
+		Object.defineProperty(process.stderr, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+	});
+	afterEach(restoreMocks);
+
+	it("returns the task result on success", async () => {
+		const result = await spinner({
+			message: "Loading...",
+			task: async () => 42,
+		});
+
+		expect(result).toBe(42);
+	});
+
+	it("re-throws errors from the task", async () => {
+		await expect(
+			spinner({
+				message: "Failing...",
+				task: async () => {
+					throw new Error("task failed");
+				},
+			}),
+		).rejects.toThrow("task failed");
+	});
+
+	it("does not emit ANSI escape codes", async () => {
+		await spinner({
+			message: "Working...",
+			task: async () => "ok",
+		});
+
+		// No cursor hide/show sequences
+		expect(stderrOutput).not.toContain("\x1B[?25l");
+		expect(stderrOutput).not.toContain("\x1B[?25h");
+		// No erase line or cursor-to-start sequences
+		expect(stderrOutput).not.toContain("\x1B[2K");
+		expect(stderrOutput).not.toContain("\r");
+	});
+
+	it("only outputs the final success line", async () => {
+		await spinner({
+			message: "Building...",
+			task: async () => "ok",
+		});
+
+		expect(stderrOutput).toContain("✓");
+		expect(stderrOutput).toContain("Building...");
+		// Only one line of output (the success line)
+		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
+		expect(lines.length).toBe(1);
+	});
+
+	it("only outputs the final error line", async () => {
+		try {
+			await spinner({
+				message: "Deploying...",
+				task: async () => {
+					throw new Error("deploy failed");
+				},
+			});
+		} catch {
+			// Expected
+		}
+
+		expect(stderrOutput).toContain("✗");
+		expect(stderrOutput).toContain("Deploying...");
+		// Only one line of output (the error line)
+		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
+		expect(lines.length).toBe(1);
+	});
+
+	it("does not output spinner frames", async () => {
+		await spinner({
+			message: "Working...",
+			task: async () => {
+				await tick(200);
+				return "ok";
+			},
+		});
+
+		// No spinner frames should appear
+		expect(stderrOutput).not.toContain("⠋");
+		expect(stderrOutput).not.toContain("⠙");
+	});
+
+	it("updateMessage silently updates the message", async () => {
+		await spinner({
+			message: "Step 1...",
+			task: async ({ updateMessage }) => {
+				updateMessage("Step 2...");
+				updateMessage("Step 3...");
+				return "ok";
+			},
+		});
+
+		// Only the final success line with the latest message
+		expect(stderrOutput).not.toContain("Step 1...");
+		expect(stderrOutput).not.toContain("Step 2...");
+		expect(stderrOutput).toContain("Step 3...");
+		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
+		expect(lines.length).toBe(1);
+	});
+
+	it("success line uses the latest message", async () => {
+		await spinner({
+			message: "Initial...",
+			task: async ({ updateMessage }) => {
+				updateMessage("Final...");
+				return "ok";
+			},
+		});
+
+		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
+		expect(lines.length).toBe(1);
+		expect(lines[0]).toContain("✓");
+		expect(lines[0]).toContain("Final...");
+	});
+
+	it("error line uses the latest message", async () => {
+		try {
+			await spinner({
+				message: "Starting...",
+				task: async ({ updateMessage }) => {
+					updateMessage("Failed step...");
+					throw new Error("boom");
+				},
+			});
+		} catch {
+			// Expected
+		}
+
+		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
+		expect(lines.length).toBe(1);
+		expect(lines[0]).toContain("✗");
+		expect(lines[0]).toContain("Failed step...");
+	});
+
+	it("ignores updateMessage calls after task completes", async () => {
+		let savedController: SpinnerController | undefined;
+
+		await spinner({
+			message: "Running...",
+			task: async (controller) => {
+				savedController = controller;
+				return "ok";
+			},
+		});
+
+		const outputAfterComplete = stderrOutput;
+
+		savedController?.updateMessage("Late update...");
+
+		expect(stderrOutput).toBe(outputAfterComplete);
+		expect(stderrOutput).not.toContain("Late update...");
 	});
 });
