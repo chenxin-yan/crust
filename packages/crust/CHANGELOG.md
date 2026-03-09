@@ -1,5 +1,11 @@
 # @crustjs/crust
 
+## 0.0.19
+
+### Patch Changes
+
+- 38cdb75: Fix Windows ARM64 binary never selected in .cmd resolver due to CMD parse-time variable expansion
+
 ## 0.0.18
 
 ### Patch Changes

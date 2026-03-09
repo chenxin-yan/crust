@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/style",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "Terminal styling foundation for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",

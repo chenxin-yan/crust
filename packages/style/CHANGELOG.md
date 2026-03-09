@@ -1,5 +1,11 @@
 # @crustjs/style
 
+## 0.0.5
+
+### Patch Changes
+
+- 944f852: Remove `stripAnsi` export from `@crustjs/style`. Users should use Bun's built-in `Bun.stripANSI()` function instead for stripping ANSI escape sequences from strings.
+
 ## 0.0.4
 
 ### Patch Changes
