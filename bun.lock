@@ -135,6 +135,24 @@
         "typescript": "catalog:",
       },
     },
+    "packages/render": {
+      "name": "@crustjs/render",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crustjs/style": "workspace:*",
+        "mdast-util-from-markdown": "^2.0.3",
+        "mdast-util-gfm": "^3.1.0",
+        "micromark-extension-gfm": "^3.0.0",
+      },
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@types/mdast": "^4.0.4",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
     "packages/skills": {
       "name": "@crustjs/skills",
       "version": "0.0.16",
@@ -335,6 +353,8 @@
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 
     "@crustjs/prompts": ["@crustjs/prompts@workspace:packages/prompts"],
+
+    "@crustjs/render": ["@crustjs/render@workspace:packages/render"],
 
     "@crustjs/skills": ["@crustjs/skills@workspace:packages/skills"],
 
