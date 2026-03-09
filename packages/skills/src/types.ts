@@ -76,6 +76,13 @@ export interface SkillMeta {
 	 * @example "Bash(my-cli *) Read Grep"
 	 */
 	allowedTools?: string;
+	/**
+	 * Additional top-level instructions rendered into `SKILL.md`.
+	 *
+	 * Use this for plugin- or product-specific guidance that should be visible
+	 * before agents inspect individual command documentation files.
+	 */
+	instructions?: string | string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -212,6 +219,8 @@ export interface ManifestNode {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/** Agent-facing instructions rendered into the command's markdown file */
+	instructions?: string[];
 	/** Whether this command has a `run` handler (leaf vs group) */
 	runnable: boolean;
 	/** Positional argument definitions */
@@ -445,6 +454,10 @@ export interface SkillPluginOptions {
 	 * @default true
 	 */
 	autoUpdate?: boolean;
+	/**
+	 * Additional top-level instructions rendered into the generated `SKILL.md`.
+	 */
+	instructions?: string | string[];
 	/**
 	 * Register an interactive skill management subcommand on the root command.
 	 *

@@ -29,6 +29,12 @@ describe("@crustjs/skills exports", () => {
 		expect(typeof mod.skillPlugin).toBe("function");
 	});
 
+	it("exports annotate function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.annotate).toBeDefined();
+		expect(typeof mod.annotate).toBe("function");
+	});
+
 	it("exports detectInstalledAgents function", async () => {
 		const mod = await import("./index.ts");
 		expect(mod.detectInstalledAgents).toBeDefined();
@@ -47,6 +53,7 @@ describe("@crustjs/skills exports", () => {
 		expect(exportedKeys).toEqual(
 			[
 				"SkillConflictError",
+				"annotate",
 				"detectInstalledAgents",
 				"generateSkill",
 				"getAdditionalAgents",
