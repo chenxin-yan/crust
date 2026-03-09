@@ -434,7 +434,6 @@ describe("updateNotifierPlugin middleware", () => {
 			currentVersion: string;
 			packageName: string;
 			intervalMs?: number;
-			enabled?: boolean;
 			timeoutMs?: number;
 			registryUrl?: string;
 			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
@@ -447,9 +446,16 @@ describe("updateNotifierPlugin middleware", () => {
 			disableDefaultCache?: boolean;
 		},
 	) {
-		const pluginOptions = overrides?.disableDefaultCache
-			? options
-			: { ...options, cache: options.cache ?? memoryCache };
+		const { intervalMs, cache: cacheAdapter, ...rest } = options;
+		const resolvedAdapter = overrides?.disableDefaultCache
+			? cacheAdapter
+			: (cacheAdapter ?? memoryCache);
+		const pluginOptions = {
+			...rest,
+			...(resolvedAdapter
+				? { cache: { adapter: resolvedAdapter, intervalMs } }
+				: {}),
+		};
 		const plugin = updateNotifierPlugin(pluginOptions);
 
 		if (!plugin.middleware) {
@@ -853,37 +859,6 @@ describe("updateNotifierPlugin middleware", () => {
 	// ── Option behavior ───────────────────────────────────────────────────
 
 	describe("option behavior", () => {
-		it("returns no-op plugin when enabled is false", () => {
-			const plugin = updateNotifierPlugin({
-				currentVersion: "1.0.0",
-				enabled: false,
-			});
-
-			expect(plugin.name).toBe("update-notifier");
-			expect(plugin.middleware).toBeUndefined();
-			expect(plugin.setup).toBeUndefined();
-		});
-
-		it("does not emit notice or invoke middleware when enabled is false", () => {
-			const fetchFn = mock(() =>
-				Promise.resolve(
-					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
-						status: 200,
-					}),
-				),
-			);
-			mockFetch(fetchFn);
-
-			const plugin = updateNotifierPlugin({
-				currentVersion: "1.0.0",
-				enabled: false,
-			});
-
-			// Plugin has no middleware, so nothing to run
-			expect(plugin.middleware).toBeUndefined();
-			expect(getStdout()).toBe("");
-		});
-
 		it("does not persist cache by default when adapter is omitted", async () => {
 			const pkgName = uniquePackageName("no-default-cache");
 			let fetchCalls = 0;
@@ -940,42 +915,6 @@ describe("updateNotifierPlugin middleware", () => {
 			// Should use the explicit packageName in the fetch URL
 			expect(capturedUrl).toContain(encodeURIComponent(pkgName));
 			expect(capturedUrl).not.toContain("different-cmd-name");
-		});
-
-		it("falls back to rootCommand.meta.name when packageName is omitted", async () => {
-			const cmdName = uniquePackageName("fallback-name");
-			let capturedUrl = "";
-			mockFetch((input) => {
-				capturedUrl = typeof input === "string" ? input : input.toString();
-				return Promise.resolve(
-					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
-						status: 200,
-					}),
-				);
-			});
-
-			// Don't pass packageName — plugin should use rootCommand.meta.name
-			const plugin = updateNotifierPlugin({
-				currentVersion: "1.0.0",
-			});
-
-			const rootCommand = makeCommand(cmdName);
-			const stateMap = new Map<string, unknown>();
-
-			const context = {
-				argv: [] as readonly string[],
-				rootCommand,
-				state: makePluginState(stateMap),
-				route: null,
-				input: null,
-			};
-
-			await plugin.middleware?.(
-				context as Parameters<NonNullable<typeof plugin.middleware>>[0],
-				async () => {},
-			);
-
-			expect(capturedUrl).toContain(encodeURIComponent(cmdName));
 		});
 
 		it("uses custom registryUrl for fetch", async () => {

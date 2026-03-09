@@ -16,7 +16,7 @@ import pkg from "../package.json";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI tool" })
-  .use(updateNotifierPlugin({ currentVersion: pkg.version }))
+  .use(updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version }))
   .run(() => {
     console.log("Hello!");
   });
@@ -24,21 +24,12 @@ const main = new Crust("my-cli")
 await main.execute();
 ```
 
-You are responsible for passing `currentVersion` — typically sourced from your `package.json`.
-
-To override the package name used for registry lookups (for example, when it differs from the command name):
-
-```ts
-updateNotifierPlugin({
-  currentVersion: pkg.version,
-  packageName: "@my-org/my-cli",
-});
-```
+You are responsible for passing `packageName` and `currentVersion` — typically sourced from your `package.json`.
 
 ## Behavior
 
 - **No persistence by default** — Out of the box, the plugin does not persist notifier state across runs.
-- **Optional cache adapter** — If you provide `cache`, checks are reused up to `intervalMs` (default 24h) and notifications are deduped across runs.
+- **Optional cache adapter** — If you provide `cache`, checks are reused up to `cache.intervalMs` (default 24h) and notifications are deduped across runs.
 - **Non-blocking** — The update check runs after your command handler completes. It never delays command execution.
 - **Soft failure** — All internal errors (network timeouts, registry failures, cache errors, malformed responses) are silently swallowed. The plugin never affects exit codes or command output.
 - **Stdout output** — The update notice is written to stdout as an informational message.
@@ -51,14 +42,21 @@ updateNotifierPlugin({
 | Option           | Type                                                  | Default                        | Description                                                             |
 | ---------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |
 | `currentVersion` | `string`                                              | _(required)_                   | The current version of your CLI package.                                |
-| `packageName`    | `string`                                              | Root command `meta.name`       | The npm package name to check.                                          |
-| `intervalMs`     | `number`                                              | `86_400_000` (24h)             | Minimum interval in milliseconds between network checks.                |
-| `enabled`        | `boolean`                                             | `true`                         | Set to `false` to disable all check and notification behavior.          |
+| `packageName`    | `string`                                              | _(required)_                   | The npm package name to check for updates.                              |
 | `timeoutMs`      | `number`                                              | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.   |
 | `registryUrl`    | `string`                                              | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                |
 | `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`        | `"auto"`                       | Package manager used when building the default update command.          |
 | `updateCommand`  | `string \| ((packageName, packageManager) => string)` | inferred                       | Override the command shown in the update notice (for example Homebrew). |
-| `cache`          | `{ read, write }`                                     | none                           | Optional persistence adapter for cross-run cache/dedupe behavior.       |
+| `cache`          | `UpdateNotifierCacheConfig`                           | none                           | Optional cache configuration for cross-run persistence and dedupe.      |
+
+### Cache Configuration
+
+When providing `cache`, it accepts an object with the following properties:
+
+| Property     | Type                         | Default            | Description                                                  |
+| ------------ | ---------------------------- | ------------------ | ------------------------------------------------------------ |
+| `adapter`    | `UpdateNotifierCacheAdapter` | _(required)_       | Persistence adapter with `read` and `write` methods.         |
+| `intervalMs` | `number`                     | `86_400_000` (24h) | Minimum interval in milliseconds between network checks.     |
 
 ## Optional Persistence with `@crustjs/store`
 
@@ -79,7 +77,7 @@ const store = createStore({
   },
 });
 
-const cache: UpdateNotifierCacheAdapter = {
+const cacheAdapter: UpdateNotifierCacheAdapter = {
   read: async () => {
     const state = await store.read();
     return {
@@ -98,8 +96,9 @@ const cache: UpdateNotifierCacheAdapter = {
 };
 
 updateNotifierPlugin({
+  packageName: "my-cli",
   currentVersion: "1.0.0",
-  cache,
+  cache: { adapter: cacheAdapter },
 });
 ```
 
@@ -116,9 +115,7 @@ updateNotifierPlugin({
 ```ts
 interface UpdateNotifierPluginOptions {
   currentVersion: string;
-  packageName?: string;
-  intervalMs?: number;
-  enabled?: boolean;
+  packageName: string;
   timeoutMs?: number;
   registryUrl?: string;
   packageManager?: UpdateNotifierPackageManager | "auto";
@@ -128,7 +125,12 @@ interface UpdateNotifierPluginOptions {
         packageName: string,
         packageManager: UpdateNotifierPackageManager,
       ) => string);
-  cache?: UpdateNotifierCacheAdapter;
+  cache?: UpdateNotifierCacheConfig;
+}
+
+interface UpdateNotifierCacheConfig {
+  adapter: UpdateNotifierCacheAdapter;
+  intervalMs?: number;
 }
 
 interface UpdateNotifierCacheAdapter {

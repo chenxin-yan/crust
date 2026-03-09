@@ -18,6 +18,27 @@ export interface UpdateNotifierCacheAdapter {
 	write(state: UpdateNotifierState): Promise<void>;
 }
 
+/**
+ * Cache configuration for the update notifier plugin.
+ *
+ * Wraps a {@link UpdateNotifierCacheAdapter} with cache-specific settings.
+ */
+export interface UpdateNotifierCacheConfig {
+	/**
+	 * Persistence adapter for reading and writing notifier state.
+	 */
+	adapter: UpdateNotifierCacheAdapter;
+
+	/**
+	 * Minimum interval in milliseconds between network update checks.
+	 *
+	 * Cached results are reused until this interval elapses.
+	 *
+	 * @default 86_400_000 (24 hours)
+	 */
+	intervalMs?: number;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Options
 // ────────────────────────────────────────────────────────────────────────────
@@ -30,8 +51,8 @@ export interface UpdateNotifierCacheAdapter {
  * import { updateNotifierPlugin } from "@crustjs/plugins";
  *
  * updateNotifierPlugin({
- *   currentVersion: "1.2.3",
  *   packageName: "my-cli",
+ *   currentVersion: "1.2.3",
  * });
  * ```
  */
@@ -42,38 +63,15 @@ export interface UpdateNotifierPluginOptions {
 	 * Typically sourced from `package.json`:
 	 * ```ts
 	 * import pkg from "../package.json";
-	 * updateNotifierPlugin({ currentVersion: pkg.version });
+	 * updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version });
 	 * ```
 	 */
 	currentVersion: string;
 
 	/**
 	 * The npm package name to check for updates.
-	 *
-	 * When omitted, defaults to the root command's `meta.name` at runtime.
 	 */
-	packageName?: string;
-
-	/**
-	 * Minimum interval in milliseconds between network update checks.
-	 *
-	 * When `cache` is provided, cached results are reused until this interval
-	 * elapses.
-	 *
-	 * Without a cache adapter, checks occur once per process execution.
-	 *
-	 * @default 86_400_000 (24 hours)
-	 */
-	intervalMs?: number;
-
-	/**
-	 * Whether the update notifier is enabled.
-	 *
-	 * Set to `false` to silently disable all check and notification behavior.
-	 *
-	 * @default true
-	 */
-	enabled?: boolean;
+	packageName: string;
 
 	/**
 	 * Network request timeout in milliseconds for the registry check.
@@ -113,28 +111,29 @@ export interface UpdateNotifierPluginOptions {
 		  ) => string);
 
 	/**
-	 * Optional persistence adapter for notifier state.
+	 * Optional cache configuration for cross-run persistence.
 	 *
-	 * By default, no cross-run persistence is used.
+	 * By default, no cross-run persistence is used and checks occur once
+	 * per process execution.
 	 *
-	 * Provide this when you want to integrate custom persistence (including
-	 * `@crustjs/store`) without making it a hard dependency of this package.
-	 *
-	 * `write` receives a single `state` argument:
+	 * @example
 	 * ```ts
 	 * cache: {
-	 *   read: async () => ({ lastCheckedAt: 0 }),
-	 *   write: async (state) => {
-	 *     await store.write({
-	 *       lastCheckedAt: state.lastCheckedAt,
-	 *       latestVersion: state.latestVersion,
-	 *       lastNotifiedVersion: state.lastNotifiedVersion,
-	 *     });
+	 *   adapter: {
+	 *     read: async () => ({ lastCheckedAt: 0 }),
+	 *     write: async (state) => {
+	 *       await store.write({
+	 *         lastCheckedAt: state.lastCheckedAt,
+	 *         latestVersion: state.latestVersion,
+	 *         lastNotifiedVersion: state.lastNotifiedVersion,
+	 *       });
+	 *     },
 	 *   },
+	 *   intervalMs: 86_400_000, // 24 hours
 	 * }
 	 * ```
 	 */
-	cache?: UpdateNotifierCacheAdapter;
+	cache?: UpdateNotifierCacheConfig;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -367,14 +366,14 @@ function resolveUpdateCommand(
  * version is available.
  *
  * **Behavior:**
- * - With `cache`, checks are reused up to `intervalMs` (default 24h).
+ * - With `cache`, checks are reused up to `cache.intervalMs` (default 24h).
  * - Without `cache`, checks run once per process execution.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
  * - The update notice is emitted *after* the command handler completes.
  * - Duplicate notifications for the same version are suppressed.
  *
- * @param options - Plugin configuration. Only `currentVersion` is required.
+ * @param options - Plugin configuration. `currentVersion` and `packageName` are required.
  * @returns A {@link CrustPlugin} instance.
  *
  * @example
@@ -384,7 +383,7 @@ function resolveUpdateCommand(
  * import pkg from "../package.json";
  *
  * const app = new Crust("my-cli").meta({ description: "My awesome CLI" })
- *   .use(updateNotifierPlugin({ currentVersion: pkg.version }))
+ *   .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: pkg.version }))
  *   .run(() => {
  *     console.log("Hello!");
  *   });
@@ -397,9 +396,7 @@ export function updateNotifierPlugin(
 ): CrustPlugin {
 	const {
 		currentVersion,
-		packageName: explicitPackageName,
-		intervalMs = DEFAULT_INTERVAL_MS,
-		enabled = true,
+		packageName,
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
 		packageManager = "auto",
@@ -407,12 +404,8 @@ export function updateNotifierPlugin(
 		cache,
 	} = options;
 	const hasCache = cache !== undefined;
-	const cacheAdapter = cache ?? NO_CACHE_ADAPTER;
-
-	// Early bail: disabled plugin returns a no-op
-	if (!enabled) {
-		return { name: "update-notifier" };
-	}
+	const intervalMs = cache?.intervalMs ?? DEFAULT_INTERVAL_MS;
+	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
 
 	return {
 		name: "update-notifier",
@@ -431,11 +424,9 @@ export function updateNotifierPlugin(
 				context.state.set(DEDUPE_STATE_KEY, true);
 
 				// ── Resolve package name ─────────────────────────────────
-				const resolvedPackageName =
-					explicitPackageName ?? context.rootCommand.meta.name;
 				const state = normalizeNotifierState(await cacheAdapter.read());
 				const resolvedUpdateCommand = resolveUpdateCommand(
-					resolvedPackageName,
+					packageName,
 					packageManager,
 					updateCommand,
 				);
@@ -466,7 +457,7 @@ export function updateNotifierPlugin(
 
 				// ── Network check: fetch latest version ──────────────────
 				const latestVersion = await fetchLatestVersion(
-					resolvedPackageName,
+					packageName,
 					registryUrl,
 					timeoutMs,
 				);

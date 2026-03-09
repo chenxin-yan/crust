@@ -3,6 +3,7 @@ export { autoCompletePlugin } from "./autocomplete.ts";
 export { helpPlugin, renderHelp } from "./help.ts";
 export type {
 	UpdateNotifierCacheAdapter,
+	UpdateNotifierCacheConfig,
 	UpdateNotifierPluginOptions,
 } from "./update-notifier.ts";
 export { updateNotifierPlugin } from "./update-notifier.ts";

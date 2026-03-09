@@ -35,6 +35,7 @@ bun add @crustjs/plugins
 | `VersionValue`                | `string \| (() => string)` — version plugin input |
 | `AutoCompletePluginOptions`   | Options for the autocomplete plugin               |
 | `UpdateNotifierPluginOptions` | Options for the update notifier plugin            |
+| `UpdateNotifierCacheConfig`   | Cache configuration for update notifier           |
 | `UpdateNotifierCacheAdapter`  | Cache adapter interface for update notifier       |
 
 ## Usage
@@ -53,7 +54,7 @@ const main = new Crust("my-cli")
   .use(versionPlugin("1.0.0"))
   .use(autoCompletePlugin({ mode: "help" }))
   .use(helpPlugin())
-  .use(updateNotifierPlugin({ currentVersion: "1.0.0" }))
+  .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: "1.0.0" }))
   .run(() => {
     console.log("Hello!");
   });

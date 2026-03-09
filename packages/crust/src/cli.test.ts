@@ -93,7 +93,7 @@ function makeCrustApp() {
 		.use(
 			updateNotifierPlugin({
 				currentVersion: expectedVersion,
-				enabled: false,
+				packageName: pkg.name,
 			}),
 		)
 		.use(autoCompletePlugin({ mode: "help" }))

@@ -22,7 +22,12 @@ import { buildCommand } from "./commands/build.ts";
 export const crustApp = new Crust(pkg.name)
 	.meta({ description: pkg.description })
 	.use(versionPlugin(pkg.version))
-	.use(updateNotifierPlugin({ currentVersion: pkg.version }))
+	.use(
+		updateNotifierPlugin({
+			currentVersion: pkg.version,
+			packageName: pkg.name,
+		}),
+	)
 	.use(autoCompletePlugin({ mode: "help" }))
 	.use(helpPlugin())
 	.command("build", buildCommand);
