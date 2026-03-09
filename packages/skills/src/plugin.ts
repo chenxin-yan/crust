@@ -250,7 +250,7 @@ async function autoUpdateSkills(
  *     version: "1.0.0",
  *     command: "skill", // registers "my-cli skill" subcommand
  *   }))
- *   .run(() => { /* ... *​/ });
+ *   .run(() => { /* ... *�/ });
  *
  * await app.execute();
  * ```
@@ -377,9 +377,10 @@ function buildSkillCommand(
 					hint: universalDir,
 				});
 
-				console.log(
-					dim("Universal installs to the shared .agents/skills directory."),
-				);
+				const agentLabels = universalAgents
+					.map((agent) => AGENT_LABELS[agent])
+					.join(", ");
+				console.log(dim(`Agents supporting universal skills: ${agentLabels}`));
 			}
 
 			for (const agent of additionalAgents) {
