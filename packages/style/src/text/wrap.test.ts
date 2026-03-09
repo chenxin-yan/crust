@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { red } from "../colors.ts";
 import { bold } from "../modifiers.ts";
-import { stripAnsi } from "./stripAnsi.ts";
 import { wrapText } from "./wrap.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -82,8 +81,8 @@ describe("wrapText — styled text", () => {
 		const lines = result.split("\n");
 
 		// Each line should have the same plain-text content
-		expect(stripAnsi(lines[0] ?? "")).toBe("hello");
-		expect(stripAnsi(lines[1] ?? "")).toBe("world");
+		expect(Bun.stripANSI(lines[0] ?? "")).toBe("hello");
+		expect(Bun.stripANSI(lines[1] ?? "")).toBe("world");
 
 		// First line should start with bold open
 		expect(lines[0]?.startsWith("\x1b[1m")).toBe(true);
@@ -98,8 +97,8 @@ describe("wrapText — styled text", () => {
 		const result = wrapText(styled, 7);
 		const lines = result.split("\n");
 
-		expect(stripAnsi(lines[0] ?? "")).toBe("hello");
-		expect(stripAnsi(lines[1] ?? "")).toBe("world");
+		expect(Bun.stripANSI(lines[0] ?? "")).toBe("hello");
+		expect(Bun.stripANSI(lines[1] ?? "")).toBe("world");
 	});
 
 	it("handles style starting mid-line", () => {
@@ -107,8 +106,8 @@ describe("wrapText — styled text", () => {
 		const result = wrapText(text, 10);
 		const lines = result.split("\n");
 
-		expect(stripAnsi(lines[0] ?? "")).toBe("hi there");
-		expect(stripAnsi(lines[1] ?? "")).toBe("buddy");
+		expect(Bun.stripANSI(lines[0] ?? "")).toBe("hi there");
+		expect(Bun.stripANSI(lines[1] ?? "")).toBe("buddy");
 	});
 
 	it("handles styled text that fits without wrapping", () => {
@@ -120,7 +119,7 @@ describe("wrapText — styled text", () => {
 	it("handles mixed styled and unstyled segments", () => {
 		const text = `${red("red")} plain ${bold("bold")}`;
 		const result = wrapText(text, 20);
-		expect(stripAnsi(result)).toBe("red plain bold");
+		expect(Bun.stripANSI(result)).toBe("red plain bold");
 	});
 });
 

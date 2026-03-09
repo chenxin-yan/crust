@@ -124,7 +124,6 @@ export {
 export { applyStyle, composeStyles } from "./styleEngine.ts";
 export { center, padEnd, padStart } from "./text/pad.ts";
 // Text utilities
-export { stripAnsi } from "./text/stripAnsi.ts";
 export { visibleWidth } from "./text/width.ts";
 export type { WrapOptions } from "./text/wrap.ts";
 export { wrapText } from "./text/wrap.ts";

@@ -79,12 +79,15 @@ ANSI pair factories for composition:
 
 | Export | Description |
 | --- | --- |
-| `stripAnsi(text)` | Remove ANSI escape sequences from a string |
 | `visibleWidth(text)` | Compute visible width (ANSI-aware, CJK-aware) |
 | `wrapText(text, width, options?)` | Wrap text by visible width with style continuity |
 | `padStart(text, width, char?)` | Left-pad to visible width |
 | `padEnd(text, width, char?)` | Right-pad to visible width |
 | `center(text, width, char?)` | Center-align to visible width |
+
+<Callout type="info">
+To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(text)` function.
+</Callout>
 
 ### Block Helpers
 

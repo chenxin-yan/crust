@@ -2,8 +2,6 @@
 // Width — Visible width calculation (ANSI-aware)
 // ────────────────────────────────────────────────────────────────────────────
 
-import { stripAnsi } from "./stripAnsi.ts";
-
 /**
  * Test whether a code point is a full-width character (occupies 2 columns).
  *
@@ -73,7 +71,7 @@ function isFullWidth(codePoint: number): boolean {
  * ```
  */
 export function visibleWidth(text: string): number {
-	const plain = stripAnsi(text);
+	const plain = Bun.stripANSI(text);
 	let width = 0;
 
 	for (const char of plain) {

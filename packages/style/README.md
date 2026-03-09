@@ -163,7 +163,6 @@ ANSI-aware text measurement and layout:
 
 ```ts
 import {
-  stripAnsi,
   visibleWidth,
   wrapText,
   padStart,
@@ -171,8 +170,8 @@ import {
   center,
 } from "@crustjs/style";
 
-// Strip ANSI escape sequences
-stripAnsi("\x1b[1mhello\x1b[22m"); // "hello"
+// Strip ANSI escape sequences (Bun built-in)
+Bun.stripANSI("\x1b[1mhello\x1b[22m"); // "hello"
 
 // Measure visible width (ignores ANSI codes, counts CJK as 2)
 visibleWidth("\x1b[31mhello\x1b[39m"); // 5
