@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	assertTTY,
+	CancelledError,
 	isTTY,
 	NonInteractiveError,
 	type PromptConfig,
@@ -118,6 +119,13 @@ describe("NonInteractiveError", () => {
 	it("is an instance of Error", () => {
 		const error = new NonInteractiveError();
 		expect(error).toBeInstanceOf(Error);
+	});
+});
+
+describe("CancelledError", () => {
+	it("has the correct name", () => {
+		const error = new CancelledError();
+		expect(error.name).toBe("CancelledError");
 	});
 });
 
@@ -340,6 +348,25 @@ describe("runPrompt", () => {
 		process.stdin.emit("keypress", "a", { name: "a" });
 
 		await expect(promise).rejects.toThrow("handler error");
+	});
+
+	it("rejects with CancelledError on Ctrl+C", async () => {
+		const config: PromptConfig<{ value: string }, string> = {
+			render: (state) => state.value,
+			handleKey: (_key, state) => state,
+			initialState: { value: "" },
+			theme: defaultTheme,
+		};
+
+		const promise = runPrompt(config);
+
+		await new Promise((r) => setTimeout(r, 10));
+		process.stdin.emit("keypress", undefined, { name: "c", ctrl: true });
+
+		await expect(promise).rejects.toBeInstanceOf(CancelledError);
+		await expect(promise).rejects.toMatchObject({
+			name: "CancelledError",
+		});
 	});
 
 	it("renders initial state immediately", async () => {

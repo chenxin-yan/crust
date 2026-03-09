@@ -1746,6 +1746,19 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("custom crust error");
 	});
 
+	it("treats prompt cancellation as a silent user abort", async () => {
+		const app = new Crust("test").run(() => {
+			const error = new Error("Prompt was cancelled.");
+			error.name = "CancelledError";
+			throw error;
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(130);
+		expect(stderrChunks).toEqual([]);
+	});
+
 	it("handles unknown flag error", async () => {
 		const app = new Crust("test")
 			.flags({ verbose: { type: "boolean" } })
@@ -1966,6 +1979,24 @@ describe("Crust .execute()", () => {
 
 		expect(process.exitCode).toBe(1);
 		expect(stderrChunks.join("\n")).toContain("setup failed");
+	});
+
+	it("treats setup-time prompt cancellation as a silent user abort", async () => {
+		const plugin: CrustPlugin = {
+			name: "cancel-plugin",
+			setup: () => {
+				const error = new Error("Prompt was cancelled.");
+				error.name = "CancelledError";
+				throw error;
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(130);
+		expect(stderrChunks).toEqual([]);
 	});
 
 	it("async run handler works", async () => {

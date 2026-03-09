@@ -99,6 +99,7 @@ function validateNoPrefixFlags(flags: FlagsDef): void {
  * it runs validation, surfaces errors via stderr/exitCode, then force-exits.
  */
 export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
+const EXIT_CODE_CANCELLED = 130;
 
 /** Key for storing validation result on globalThis (for in-process tests) */
 const VALIDATION_RESULT_GLOBAL_KEY = "__CRUST_VALIDATE_RESULT__";
@@ -120,6 +121,14 @@ function createPluginState(): PluginState {
 			return map.delete(key);
 		},
 	};
+}
+
+function isPromptCancelledError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+
+	return error.name === "CancelledError";
 }
 
 /** Create SetupActions that work with CommandNode targets. */
@@ -702,6 +711,10 @@ export class Crust<
 		try {
 			await runSetupHooks(allPlugins, setupContext, actions);
 		} catch (error) {
+			if (isPromptCancelledError(error)) {
+				process.exitCode = EXIT_CODE_CANCELLED;
+				return;
+			}
 			if (error instanceof CrustError) {
 				console.error(`Error: ${error.message}`);
 				process.exitCode = 1;
@@ -827,6 +840,10 @@ export class Crust<
 			});
 		} catch (error) {
 			// Step 9: Error handling — wrap and surface
+			if (isPromptCancelledError(error)) {
+				process.exitCode = EXIT_CODE_CANCELLED;
+				return;
+			}
 			if (error instanceof CrustError) {
 				console.error(`Error: ${error.message}`);
 				process.exitCode = 1;

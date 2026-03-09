@@ -330,6 +330,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 			// Ctrl+C → reject with CancelledError (handle immediately)
 			if (key?.ctrl && key.name === "c") {
 				flushRender();
+				output.write("\n");
 				cleanup();
 				reject(new CancelledError());
 				return;
