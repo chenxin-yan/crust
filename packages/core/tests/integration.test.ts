@@ -845,8 +845,8 @@ describe("integration: standalone builder → .command(builder) pattern", () => 
 		const app = new Crust("cli").flags({
 			verbose: { type: "boolean", inherit: true },
 		});
-		const deploy = new Crust("deploy").run((ctx) => {
-			console.log(`verbose=${ctx.flags.verbose}`);
+		const deploy = new Crust("deploy").run(() => {
+			console.log("deploy ran");
 		});
 
 		const result = await executeCrust(app.command(deploy), [
