@@ -39,6 +39,8 @@ crust build --target darwin-arm64
 | `--outdir` | `-d` | `"string"` | `dist` | Output directory for compiled binaries |
 | `--resolver` | `-r` | `"string"` | `cli` | Resolver script filename (multi-target only, no extension) |
 | `--validate` | — | `"boolean"` | `true` | Pre-compile validation of command definitions |
+| `--distribute` | — | `"boolean"` | `false` | Stage npm distribution packages instead of raw binaries |
+| `--stage-dir` | — | `"string"` | `dist/npm` | Directory to stage npm packages when using `--distribute` |
 
 ## Supported Targets
 
@@ -177,9 +179,98 @@ crust build --no-validate
 
 This can be useful if the validation subprocess cannot resolve your project's dependencies in a particular environment (e.g., non-standard module resolution setups).
 
+## Per-OS Distribution with `--distribute`
+
+For distributing your CLI via npm with platform-specific packages, use the `--distribute` flag. This creates a root package with optional dependencies on per-platform packages, enabling npm to install only the binary for the user's platform.
+
+```sh
+# Build and stage npm distribution packages
+crust build --distribute
+
+# Build for specific platforms only
+crust build --distribute --target linux-x64 --target darwin-arm64
+
+# Use a custom staging directory
+crust build --distribute --stage-dir ./npm-packages
+```
+
+### What `--distribute` Creates
+
+When using `--distribute`, instead of raw binaries, Crust creates:
+
+1. **A root package** — Contains the shell resolver and declares optional dependencies on platform packages
+2. **Per-platform packages** — One package per target containing only the binary for that platform
+3. **A manifest file** — `manifest.json` listing all staged packages and publish order
+
+```
+dist/npm/
+├── manifest.json              # Distribution manifest with publish order
+├── my-cli/                    # Root package (resolver + metadata)
+│   ├── package.json
+│   └── bin/
+│       └── my-cli             # Shell resolver
+├── my-cli-linux-x64/          # Linux x64 package
+│   ├── package.json
+│   └── bin/
+│       └── my-cli
+├── my-cli-linux-arm64/        # Linux ARM64 package
+│   ├── package.json
+│   └── bin/
+│       └── my-cli
+├── my-cli-darwin-x64/         # macOS Intel package
+│   ├── package.json
+│   └── bin/
+│       └── my-cli
+├── my-cli-darwin-arm64/       # macOS Apple Silicon package
+│   ├── package.json
+│   └── bin/
+│       └── my-cli
+├── my-cli-windows-x64/        # Windows x64 package
+│   ├── package.json
+│   └── bin/
+│       └── my-cli.exe
+└── my-cli-windows-arm64/      # Windows ARM64 package
+    ├── package.json
+    └── bin/
+        └── my-cli.exe
+```
+
+### Publishing with `crust publish`
+
+After staging with `--distribute`, use `crust publish` to publish all packages in the correct order:
+
+```sh
+# Publish all staged packages
+crust publish
+
+# Dry run to see what would be published
+crust publish --dry-run
+
+# Publish with a specific tag
+crust publish --tag next
+
+# Publish from a custom staging directory
+crust publish --stage-dir ./npm-packages
+```
+
+The publish command reads the `manifest.json` and publishes packages in dependency order (platform packages first, then root package).
+
+### Distribution Package Names
+
+Per-platform packages are named by appending the platform alias to your package name:
+
+| Root Package | Platform Package |
+| --- | --- |
+| `my-cli` | `my-cli-linux-x64`, `my-cli-darwin-arm64`, etc. |
+| `@scope/my-cli` | `@scope/my-cli-linux-x64`, `@scope/my-cli-darwin-arm64`, etc. |
+
+<Callout type="info">
+  Platform packages use npm's `os` and `cpu` fields so npm only installs the binary matching the user's platform. The root package uses `optionalDependencies`, so missing platform packages don't break installation.
+</Callout>
+
 ## package.json Setup
 
-<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
+<Tabs items={["Standalone binaries (recommended)", "Per-OS npm distribution", "Bun runtime package"]}>
 <Tab value="Standalone binaries (recommended)">
 
 ```json title="package.json"
@@ -199,6 +290,36 @@ This can be useful if the validation subprocess cannot resolve your project's de
 ```
 
 The `bin` field points to the resolver script, which handles platform detection and runs the correct compiled binary.
+
+</Tab>
+<Tab value="Per-OS npm distribution">
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "my-cli": "dist/cli"
+  },
+  "scripts": {
+    "build": "crust build --distribute",
+    "prepack": "bun run build"
+  }
+}
+```
+
+After building, publish all platform packages:
+
+```sh
+# First time: publish all packages
+crust publish
+
+# Subsequent publishes: same command publishes in correct order
+```
+
+Users install your CLI normally with `bun add -g my-cli` or `npm install -g my-cli`, and npm automatically installs only the binary for their platform.
 
 </Tab>
 <Tab value="Bun runtime package">

@@ -9,7 +9,7 @@ import type {
 } from "@crustjs/core";
 import { Crust, parseArgs, resolveCommand } from "@crustjs/core";
 
-describe("crust package integration", () => {
+describe("crust integration", () => {
 	it("re-exports all core runtime APIs used by crust", () => {
 		expect(typeof Crust).toBe("function");
 		expect(typeof parseArgs).toBe("function");

@@ -69,13 +69,29 @@ How you ship depends on the distribution mode you selected during scaffolding:
 
 Recommended for most CLIs: distribute your tool as prebuilt binaries.
 
-When you're ready:
+**Raw binaries** (default):
 
 ```sh
 bun run build
 ```
 
 This runs `crust build`, which compiles your CLI to standalone executables for all platforms using `bun build --compile`.
+
+**Per-OS npm packages** (optional):
+
+To publish via npm with automatic platform detection:
+
+```sh
+# Stage npm packages (creates dist/npm/ with per-platform packages)
+bun run distribute
+
+# Publish all packages in manifest order
+bun run publish
+```
+
+This creates a root package with optional dependencies on platform-specific packages. Users install normally with `bun add -g my-cli` and npm automatically installs only the binary for their platform.
+
+See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with-distribute) for details.
 
 </Tab>
 <Tab value="Bun runtime package">

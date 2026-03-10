@@ -1,8 +1,8 @@
 # @crustjs/crust
 
-CLI tooling for the [Crust](https://crustjs.com) framework — build and distribute standalone executables.
+CLI tooling for the [Crust](https://crustjs.com) framework.
 
-> For the framework API (`defineCommand`, `runMain`, plugins, etc.), install [`@crustjs/core`](https://www.npmjs.com/package/@crustjs/core) and [`@crustjs/plugins`](https://www.npmjs.com/package/@crustjs/plugins).
+> For the framework API, install [`@crustjs/core`](https://www.npmjs.com/package/@crustjs/core).
 
 ## Install
 
@@ -12,11 +12,13 @@ bun add -d @crustjs/crust
 
 ## CLI Commands
 
-The `crust` binary provides build tooling for your Crust-powered CLI:
+The `crust` binary provides three distinct workflows:
 
-| Command       | Description                                      |
-| ------------- | ------------------------------------------------ |
-| `crust build` | Compile your CLI to standalone Bun executable(s) |
+| Command                    | Description                                    |
+| -------------------------- | ---------------------------------------------- |
+| `crust build`              | Compile raw standalone Bun executable(s)       |
+| `crust build --distribute` | Stage per-platform npm packages in `dist/npm`  |
+| `crust publish`            | Publish an existing staged `dist/npm` manifest |
 
 ### `crust build`
 
@@ -52,16 +54,18 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 
 #### Flags
 
-| Flag        | Alias | Type      | Default             | Description                                  |
-| ----------- | ----- | --------- | ------------------- | -------------------------------------------- |
-| `--entry`   | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                              |
-| `--outfile` | `-o`  | `"string"`  | —                   | Output file path (single-target builds only) |
-| `--name`    | `-n`  | `"string"`  | package.json `name` | Base binary name                             |
-| `--minify`  | —     | `"boolean"` | `true`              | Minify the output                            |
-| `--target`  | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable               |
-| `--outdir`  | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries       |
-| `--resolver` | `-r` | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
-| `--validate` | —    | `"boolean"` | `true`              | Pre-compile validation of command definitions |
+| Flag         | Alias | Type        | Default             | Description                                                |
+| ------------ | ----- | ----------- | ------------------- | ---------------------------------------------------------- |
+| `--entry`    | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                                            |
+| `--outfile`  | `-o`  | `"string"`  | —                   | Output file path (single-target builds only)               |
+| `--name`     | `-n`  | `"string"`  | package.json `name` | Base binary name                                           |
+| `--minify`   | —     | `"boolean"` | `true`              | Minify the output                                          |
+| `--target`   | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable                             |
+| `--outdir`   | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
+| `--resolver` | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
+| `--validate` | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
+| `--distribute` | —   | `"boolean"` | `false`             | Stage npm distribution packages instead of raw binaries    |
+| `--stage-dir` | —    | `"string"`  | `dist/npm`          | Staging directory used with `--distribute`                 |
 
 #### Output
 
@@ -86,21 +90,91 @@ dist/
   my-cli                            # Single binary (no resolver)
 ```
 
-#### Distributing via npm
+`crust build` is the raw binary workflow by default. Add `--distribute` when you want staged npm packages instead of raw `dist/` binaries.
 
-After building for all platforms, configure your `package.json` to use the shell resolver as the bin entry:
+### `crust build --distribute`
 
-```json
-{
-  "name": "my-cli",
-  "bin": {
-    "my-cli": "dist/cli"
-  },
-  "files": ["dist"]
-}
+Stages a root npm package plus one npm package per supported target for optionalDependency-based distribution.
+
+```sh
+crust build --distribute
+crust build --distribute --target linux-x64
+crust build --distribute --stage-dir .crust/npm
 ```
 
-The resolver is a `#!/usr/bin/env bash` script (with a companion `.cmd` for Windows) that requires no runtime — it detects the platform and directly executes the correct prebuilt binary.
+#### Output
+
+```text
+dist/npm/
+  manifest.json
+  root/
+    package.json
+    bin/my-cli
+    bin/my-cli.cmd
+  linux-x64/
+    package.json
+    bin/my-cli-bun-linux-x64-baseline
+  linux-arm64/
+    package.json
+    bin/my-cli-bun-linux-arm64
+  darwin-x64/
+    package.json
+    bin/my-cli-bun-darwin-x64
+  darwin-arm64/
+    package.json
+    bin/my-cli-bun-darwin-arm64
+  windows-x64/
+    package.json
+    bin/my-cli-bun-windows-x64-baseline.exe
+  windows-arm64/
+    package.json
+    bin/my-cli-bun-windows-arm64.exe
+```
+
+The generated root package contains shell and `.cmd` launchers plus `optionalDependencies` on the platform packages. Each platform package is tagged with npm `os` / `cpu` metadata and contains only its native binary.
+
+`crust build --distribute` is the npm-packaging workflow. The staged interface is:
+
+- `dist/npm/root`
+- `dist/npm/<target>`
+- `dist/npm/manifest.json`
+
+`manifest.json` records the root package, staged platform packages, and publish order.
+
+### `crust publish`
+
+Publishes the already-staged directories from `crust build --distribute`.
+
+```sh
+crust publish
+crust publish --dry-run
+crust publish --stage-dir .crust/npm --tag next
+```
+
+#### Flags
+
+| Flag          | Type        | Default    | Description                                          |
+| ------------- | ----------- | ---------- | ---------------------------------------------------- |
+| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`      |
+| `--tag`       | `"string"`  | —          | npm dist-tag passed to `bun publish`                 |
+| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`             |
+| `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing   |
+| `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publish |
+| `--registry`  | `"string"`  | —          | Override the npm registry URL                        |
+
+`crust publish` does not rebuild or restage anything. It reads `manifest.json`, verifies the staged package metadata, publishes platform packages first, and publishes `root/` last.
+
+## Recommended Flow
+
+1. `crust build` — compile raw binaries
+2. `crust build --distribute` — stage per-platform npm packages
+3. `crust publish` — publish staged packages to the registry
+
+The three steps are intentionally separate:
+
+- `build` produces raw binary artifacts.
+- `build --distribute` creates npm-ready staged packages.
+- `publish` uploads the staged packages to the registry.
 
 ## Documentation
 

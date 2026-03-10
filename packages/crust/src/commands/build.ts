@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { type Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -25,6 +25,70 @@ export const SUPPORTED_TARGETS = [
 export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
 
 /**
+ * Consolidated metadata for every supported Bun compile target.
+ *
+ * Single source of truth — all other target maps (`TARGET_ALIASES`,
+ * `TARGET_PLATFORM_MAP`, `TARGET_UNAME_MAP`) are derived from this.
+ */
+export type TargetInfo = {
+	/** Human-friendly alias (e.g. "linux-x64", "darwin-arm64") */
+	alias: string;
+	/** `process.platform`-`process.arch` key (e.g. "linux-x64", "win32-arm64") */
+	platformKey: string;
+	/** `uname -s`-`uname -m` key used by shell resolvers (e.g. "Linux-x86_64") */
+	unameKey: string;
+	/** npm `os` field value */
+	os: "linux" | "darwin" | "win32";
+	/** npm `cpu` field value */
+	cpu: "x64" | "arm64";
+};
+
+export const TARGET_INFO = {
+	"bun-linux-x64-baseline": {
+		alias: "linux-x64",
+		platformKey: "linux-x64",
+		unameKey: "Linux-x86_64",
+		os: "linux",
+		cpu: "x64",
+	},
+	"bun-linux-arm64": {
+		alias: "linux-arm64",
+		platformKey: "linux-arm64",
+		unameKey: "Linux-aarch64",
+		os: "linux",
+		cpu: "arm64",
+	},
+	"bun-darwin-x64": {
+		alias: "darwin-x64",
+		platformKey: "darwin-x64",
+		unameKey: "Darwin-x86_64",
+		os: "darwin",
+		cpu: "x64",
+	},
+	"bun-darwin-arm64": {
+		alias: "darwin-arm64",
+		platformKey: "darwin-arm64",
+		unameKey: "Darwin-arm64",
+		os: "darwin",
+		cpu: "arm64",
+	},
+	"bun-windows-x64-baseline": {
+		alias: "windows-x64",
+		platformKey: "win32-x64",
+		unameKey: "Windows-x64",
+		os: "win32",
+		cpu: "x64",
+	},
+	"bun-windows-arm64": {
+		alias: "windows-arm64",
+		platformKey: "win32-arm64",
+		unameKey: "Windows-arm64",
+		os: "win32",
+		cpu: "arm64",
+	},
+} as const satisfies Record<BunTarget, TargetInfo>;
+
+/**
  * Human-friendly target aliases that map to Bun compile targets.
  *
  * Users can pass either the full Bun target string or these short aliases.
@@ -35,27 +99,18 @@ export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
  * crust build --target darwin-arm64 # same as --target bun-darwin-arm64
  * ```
  */
-export const TARGET_ALIASES: Record<string, BunTarget> = {
-	"linux-x64": "bun-linux-x64-baseline",
-	"linux-arm64": "bun-linux-arm64",
-	"darwin-x64": "bun-darwin-x64",
-	"darwin-arm64": "bun-darwin-arm64",
-	"windows-x64": "bun-windows-x64-baseline",
-	"windows-arm64": "bun-windows-arm64",
-};
+export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
+	SUPPORTED_TARGETS.map((t) => [TARGET_INFO[t].alias, t]),
+) as Record<string, BunTarget>;
 
 /**
  * Maps each Bun compile target to its `process.platform-process.arch` key
  * used by the JS resolver at runtime.
  */
-export const TARGET_PLATFORM_MAP: Record<BunTarget, string> = {
-	"bun-linux-x64-baseline": "linux-x64",
-	"bun-linux-arm64": "linux-arm64",
-	"bun-darwin-x64": "darwin-x64",
-	"bun-darwin-arm64": "darwin-arm64",
-	"bun-windows-x64-baseline": "win32-x64",
-	"bun-windows-arm64": "win32-arm64",
-};
+export const TARGET_PLATFORM_MAP: Record<BunTarget, string> =
+	Object.fromEntries(
+		SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].platformKey]),
+	) as Record<BunTarget, string>;
 
 /**
  * Resolve a user-provided target string to a valid Bun compile target.
@@ -189,14 +244,9 @@ export function resolveTargetOutfile(
  * Note: Linux ARM64 reports as `aarch64` via `uname -m`,
  * while macOS ARM64 reports as `arm64`.
  */
-export const TARGET_UNAME_MAP: Record<BunTarget, string> = {
-	"bun-linux-x64-baseline": "Linux-x86_64",
-	"bun-linux-arm64": "Linux-aarch64",
-	"bun-darwin-x64": "Darwin-x86_64",
-	"bun-darwin-arm64": "Darwin-arm64",
-	"bun-windows-x64-baseline": "Windows-x64",
-	"bun-windows-arm64": "Windows-arm64",
-};
+export const TARGET_UNAME_MAP: Record<BunTarget, string> = Object.fromEntries(
+	SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].unameKey]),
+) as Record<BunTarget, string>;
 
 /**
  * Get the binary filename (basename only) for a given target.
@@ -400,7 +450,7 @@ export function writeResolver(
  * @param target - Optional Bun compile target for cross-compilation
  * @throws {Error} If the build fails
  */
-async function execBuild(
+export async function execBuild(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -438,7 +488,7 @@ async function execBuild(
  */
 const VALIDATE_TIMEOUT_MS = 30_000;
 
-async function validateEntrypoint(entryPath: string): Promise<void> {
+export async function validateEntrypoint(entryPath: string): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
 	const proc = Bun.spawn([process.execPath, absoluteEntry], {
 		env: {
@@ -518,140 +568,169 @@ async function validateEntrypoint(entryPath: string): Promise<void> {
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: callback signature uses any for parent generics
-export function buildCommand(cmd: Crust<any, any, any>) {
-	return cmd
-		.meta({ description: "Compile your CLI to a standalone executable" })
-		.flags({
-			entry: {
-				type: "string",
-				description: "Entry file path",
-				default: "src/cli.ts",
-				short: "e",
-			},
-			outfile: {
-				type: "string",
-				description: "Output file path (single-target builds only)",
-				short: "o",
-			},
-			name: {
-				type: "string",
-				description:
-					"Binary name (defaults to package.json name or entry filename)",
-				short: "n",
-			},
-			minify: {
-				type: "boolean",
-				description: "Minify the output",
-				default: true,
-			},
-			target: {
-				type: "string",
-				multiple: true,
-				description:
-					"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
-				short: "t",
-			},
-			outdir: {
-				type: "string",
-				description: "Output directory for compiled binaries",
-				default: "dist",
-				short: "d",
-			},
-			resolver: {
-				type: "string",
-				description:
-					"Filename for the resolver script (multi-target builds, no extension)",
-				default: "cli",
-				short: "r",
-			},
-			validate: {
-				type: "boolean",
-				description:
-					"Validate command runtime rules before compiling (disable with --no-validate)",
-				default: true,
-			},
-		} as const)
-		.run(async ({ flags }) => {
-			const cwd = process.cwd();
+export const buildCommand = new Crust("build")
+	.meta({ description: "Compile your CLI to a standalone executable" })
+	.flags({
+		entry: {
+			type: "string",
+			description: "Entry file path",
+			default: "src/cli.ts",
+			short: "e",
+		},
+		outfile: {
+			type: "string",
+			description: "Output file path (single-target builds only)",
+			short: "o",
+		},
+		name: {
+			type: "string",
+			description:
+				"Binary name (defaults to package.json name or entry filename)",
+			short: "n",
+		},
+		minify: {
+			type: "boolean",
+			description: "Minify the output",
+			default: true,
+		},
+		target: {
+			type: "string",
+			multiple: true,
+			description:
+				"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
+			short: "t",
+		},
+		outdir: {
+			type: "string",
+			description: "Output directory for compiled binaries",
+			default: "dist",
+			short: "d",
+		},
+		resolver: {
+			type: "string",
+			description:
+				"Filename for the resolver script (multi-target builds, no extension)",
+			default: "cli",
+			short: "r",
+		},
+		validate: {
+			type: "boolean",
+			description:
+				"Validate command runtime rules before compiling (disable with --no-validate)",
+			default: true,
+		},
+		distribute: {
+			type: "boolean",
+			description:
+				"Stage npm distribution packages in dist/npm instead of raw binaries",
+			default: false,
+		},
+		"stage-dir": {
+			type: "string",
+			description:
+				"Directory to stage npm distribution packages into when using --distribute",
+			default: "dist/npm",
+		},
+	} as const)
+	.run(async ({ flags }) => {
+		const cwd = process.cwd();
 
-			// Resolve entry file path relative to cwd
-			const entryPath = resolve(cwd, flags.entry);
+		// Resolve entry file path relative to cwd
+		const entryPath = resolve(cwd, flags.entry);
 
-			// Verify entry file exists
-			if (!existsSync(entryPath)) {
+		// Verify entry file exists
+		if (!existsSync(entryPath)) {
+			throw new Error(
+				`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
+			);
+		}
+
+		if (flags.validate) {
+			await validateEntrypoint(entryPath);
+		}
+
+		if (flags.distribute) {
+			if (flags.outfile) {
 				throw new Error(
-					`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
+					"--outfile cannot be used with --distribute.\n  Use --stage-dir to control the staged npm output directory.",
 				);
 			}
 
-			if (flags.validate) {
-				await validateEntrypoint(entryPath);
-			}
+			const { runDistributeBuild } = await import("./distribute.ts");
+			await runDistributeBuild({
+				cwd,
+				entry: flags.entry,
+				name: flags.name,
+				minify: flags.minify,
+				target: flags.target,
+				stageDir: flags["stage-dir"],
+				validate: false,
+			});
+			return;
+		}
 
-			// Resolve targets: default is all platforms, --target narrows to specific ones
-			const targets = resolveTargets(flags.target);
+		// Resolve targets: default is all platforms, --target narrows to specific ones
+		const targets = resolveTargets(flags.target);
 
-			// --outfile is only allowed with exactly one target
-			if (flags.outfile && targets.length > 1) {
-				throw new Error(
-					"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
-				);
-			}
+		// --outfile is only allowed with exactly one target
+		if (flags.outfile && targets.length > 1) {
+			throw new Error(
+				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+			);
+		}
 
-			if (targets.length === 1) {
-				// Single-target build: one binary, no resolver
-				const outfilePath = resolveOutfile(
-					flags.outfile,
-					flags.name,
-					entryPath,
+		if (targets.length === 1) {
+			// Single-target build: one binary, no resolver
+			const outfilePath = resolveOutfile(
+				flags.outfile,
+				flags.name,
+				entryPath,
+				cwd,
+				flags.outdir,
+			);
+
+			console.log(
+				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
+			);
+			await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
+			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
+		} else {
+			// Multi-target build: multiple binaries + JS resolver
+			const baseName = resolveBaseName(flags.name, entryPath, cwd);
+
+			console.log(
+				`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
+			);
+
+			const results: string[] = [];
+			for (const target of targets) {
+				const targetOutfile = resolveTargetOutfile(
+					baseName,
+					target,
 					cwd,
 					flags.outdir,
 				);
 
-				console.log(
-					`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
-				);
-				await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
-				console.log(`${green("✓")} Built successfully: ${outfilePath}`);
-			} else {
-				// Multi-target build: multiple binaries + JS resolver
-				const baseName = resolveBaseName(flags.name, entryPath, cwd);
-
-				console.log(
-					`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
-				);
-
-				const results: string[] = [];
-				for (const target of targets) {
-					const targetOutfile = resolveTargetOutfile(
-						baseName,
-						target,
-						cwd,
-						flags.outdir,
-					);
-
-					console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-					await execBuild(entryPath, targetOutfile, flags.minify, target);
-					results.push(targetOutfile);
-				}
-
-				// Generate resolver scripts
-				const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
-				writeResolver(resolverPath, baseName, targets);
-
-				console.log(
-					`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
-				);
-				for (const r of results) {
-					console.log(`  ${r}`);
-				}
-				console.log(
-					`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
-				);
+				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
+				await execBuild(entryPath, targetOutfile, flags.minify, target);
+				results.push(targetOutfile);
 			}
-		});
-}
+
+			// Generate resolver scripts
+			const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
+			writeResolver(resolverPath, baseName, targets);
+
+			console.log(
+				`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
+			);
+			for (const r of results) {
+				console.log(`  ${r}`);
+			}
+			console.log(
+				`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
+			);
+		}
+	});
 
 /**
  * Resolve the list of Bun targets from flags.
@@ -662,7 +741,7 @@ export function buildCommand(cmd: Crust<any, any, any>) {
  * @param targetFlags - Values from repeatable --target flag
  * @returns Array of resolved BunTarget values
  */
-function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
+export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
 	// No --target flags: build all platforms (default)
 	if (!targetFlags || targetFlags.length === 0) {
 		return [...SUPPORTED_TARGETS];
