@@ -11,7 +11,7 @@
 		"test": "turbo run test",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",
-		"packages:publish": "bun run ./scripts/publish-packages.ts && changeset tag"
+		"packages:publish": "turbo run publish --env-mode=loose --filter='./packages/*' --filter='!./packages/config' && changeset tag"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.30.0",

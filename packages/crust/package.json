@@ -34,9 +34,8 @@
 		"crust": "dist/cli"
 	},
 	"scripts": {
-		"build": "bunup && bun dist/cli.js build --entry src/cli.ts --name crust",
-		"package": "bunup && bun dist/cli.js package --entry src/cli.ts --name crust",
-		"publish:staged": "bun run package && bun run ./scripts/publish-staged.ts",
+		"build": "bunup && bun dist/cli.js build --distribute --entry src/cli.ts --name crust",
+		"publish": "bun dist/cli.js publish --stage-dir dist/npm",
 		"dev": "bun ./src/cli.ts",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit",
