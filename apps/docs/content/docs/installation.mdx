@@ -50,9 +50,10 @@ import { helpPlugin, versionPlugin } from "@crustjs/plugins";
   Standalone binaries are recommended for most CLIs because users can run them
   without Bun or project dependencies installed.
 
-  If you distribute standalone binaries (`crust build` + `dist/`), keeping all
-  Crust packages in `devDependencies` is valid. If you distribute as a runtime
-  package, keep `@crustjs/core` and `@crustjs/plugins` in `dependencies`.
+If you distribute standalone binaries (`crust build` + `dist/`), keeping all
+Crust packages in `devDependencies` is valid. If you distribute as a runtime
+package, keep `@crustjs/core` and `@crustjs/plugins` in `dependencies`.
+
 </Callout>
 
 ## CLI Patterns
@@ -151,6 +152,8 @@ For a distributable CLI, configure your `package.json` based on the selected mod
 <Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
   <Tab value="Standalone binaries (recommended)">
 
+**Raw binaries** (default):
+
 ```json title="package.json"
 {
   "name": "my-cli",
@@ -175,6 +178,39 @@ For a distributable CLI, configure your `package.json` based on the selected mod
   }
 }
 ```
+
+**Per-OS npm packages** (optional):
+
+To publish via npm with automatic platform detection, add the `distribute` and `publish` scripts:
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["dist"],
+  "bin": {
+    "my-cli": "dist/cli"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "crust build",
+    "distribute": "crust build --distribute",
+    "publish": "crust publish --stage-dir dist/npm",
+    "prepack": "bun run build",
+    "start": "./dist/cli"
+  },
+  "devDependencies": {
+    "@crustjs/core": "latest",
+    "@crustjs/plugins": "latest",
+    "@crustjs/crust": "latest",
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
+```
+
+The `distribute` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with-distribute) for details.
 
   </Tab>
   <Tab value="Bun runtime package">
@@ -208,17 +244,6 @@ For a distributable CLI, configure your `package.json` based on the selected mod
 
   </Tab>
 </Tabs>
-
-<Callout type="tip">
-  If your `bin` points to files in `dist/`, include `"prepack": "bun run build"`
-  to ensure `dist/` is rebuilt before each publish.
-</Callout>
-
-<Callout type="warning">
-  Bun runtime package distribution still requires Bun to be installed on the end
-  user's machine. The package publishes a JS build (`dist/cli.js`) that runs on
-  the Bun runtime.
-</Callout>
 
 ## Requirements
 
