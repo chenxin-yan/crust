@@ -14,10 +14,11 @@ bun add -d @crustjs/crust
 
 The `crust` binary provides three distinct workflows:
 
-| Command         | Description                                    |
-| --------------- | ---------------------------------------------- |
-| `crust build`   | Compile raw standalone Bun executable(s)       |
-| `crust publish` | Publish an existing staged `dist/npm` manifest |
+| Command                    | Description                                    |
+| -------------------------- | ---------------------------------------------- |
+| `crust build`              | Compile raw standalone Bun executable(s)       |
+| `crust build --distribute` | Stage per-platform npm packages in `dist/npm`  |
+| `crust publish`            | Publish an existing staged `dist/npm` manifest |
 
 ### `crust build`
 
@@ -150,19 +151,30 @@ crust publish --dry-run
 crust publish --stage-dir .crust/npm --tag next
 ```
 
-`crust publish` does not rebuild or restage anything. It reads `dist/npm/manifest.json`, verifies the staged package metadata, publishes platform packages first, and publishes `root/` last.
+#### Flags
+
+| Flag          | Type        | Default    | Description                                          |
+| ------------- | ----------- | ---------- | ---------------------------------------------------- |
+| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`      |
+| `--tag`       | `"string"`  | —          | npm dist-tag passed to `bun publish`                 |
+| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`             |
+| `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing   |
+| `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publish |
+| `--registry`  | `"string"`  | —          | Override the npm registry URL                        |
+
+`crust publish` does not rebuild or restage anything. It reads `manifest.json`, verifies the staged package metadata, publishes platform packages first, and publishes `root/` last.
 
 ## Recommended Flow
 
-1. `bun run build`
-2. `bun run distribute`
-3. `crust publish`
+1. `crust build` — compile raw binaries
+2. `crust build --distribute` — stage per-platform npm packages
+3. `crust publish` — publish staged packages to the registry
 
-Keep `build` and `distribute` separate:
+The three steps are intentionally separate:
 
-- `build` is for raw binary artifacts.
-- `distribute` is for npm-ready staged packages.
-- `publish` is for registry upload.
+- `build` produces raw binary artifacts.
+- `build --distribute` creates npm-ready staged packages.
+- `publish` uploads the staged packages to the registry.
 
 ## Documentation
 
