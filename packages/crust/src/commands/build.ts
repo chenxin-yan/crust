@@ -400,7 +400,7 @@ export function writeResolver(
  * @param target - Optional Bun compile target for cross-compilation
  * @throws {Error} If the build fails
  */
-async function execBuild(
+export async function execBuild(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -438,7 +438,7 @@ async function execBuild(
  */
 const VALIDATE_TIMEOUT_MS = 30_000;
 
-async function validateEntrypoint(entryPath: string): Promise<void> {
+export async function validateEntrypoint(entryPath: string): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
 	const proc = Bun.spawn([process.execPath, absoluteEntry], {
 		env: {
@@ -662,7 +662,7 @@ export function buildCommand(cmd: Crust<any, any, any>) {
  * @param targetFlags - Values from repeatable --target flag
  * @returns Array of resolved BunTarget values
  */
-function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
+export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
 	// No --target flags: build all platforms (default)
 	if (!targetFlags || targetFlags.length === 0) {
 		return [...SUPPORTED_TARGETS];

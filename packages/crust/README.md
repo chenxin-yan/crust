@@ -17,6 +17,7 @@ The `crust` binary provides build tooling for your Crust-powered CLI:
 | Command       | Description                                      |
 | ------------- | ------------------------------------------------ |
 | `crust build` | Compile your CLI to standalone Bun executable(s) |
+| `crust package` | Stage npm packages for platform-specific binary publishing |
 
 ### `crust build`
 
@@ -86,21 +87,55 @@ dist/
   my-cli                            # Single binary (no resolver)
 ```
 
-#### Distributing via npm
+`crust build` is the raw binary-output command. It is still useful for local artifacts, direct binary distribution, and non-npm packaging.
 
-After building for all platforms, configure your `package.json` to use the shell resolver as the bin entry:
+### `crust package`
 
-```json
-{
-  "name": "my-cli",
-  "bin": {
-    "my-cli": "dist/cli"
-  },
-  "files": ["dist"]
-}
+Stages a root npm package plus one npm package per supported target for optionalDependency-based distribution.
+
+```sh
+crust package                          # Stage all targets into dist/npm
+crust package --target linux-x64       # Stage a subset of platforms
+crust package --stage-dir .crust/npm   # Custom staging directory
 ```
 
-The resolver is a `#!/usr/bin/env bash` script (with a companion `.cmd` for Windows) that requires no runtime — it detects the platform and directly executes the correct prebuilt binary.
+#### Output
+
+```text
+dist/npm/
+  manifest.json
+  root/
+    package.json
+    bin/my-cli.js
+  linux-x64/
+    package.json
+    bin/my-cli-bun-linux-x64-baseline
+  linux-arm64/
+    package.json
+    bin/my-cli-bun-linux-arm64
+  darwin-x64/
+    package.json
+    bin/my-cli-bun-darwin-x64
+  darwin-arm64/
+    package.json
+    bin/my-cli-bun-darwin-arm64
+  windows-x64/
+    package.json
+    bin/my-cli-bun-windows-x64-baseline.exe
+  windows-arm64/
+    package.json
+    bin/my-cli-bun-windows-arm64.exe
+```
+
+The generated root package contains a small JS launcher and `optionalDependencies` on the platform packages. Each platform package is tagged with npm `os` / `cpu` metadata and contains only its native binary.
+
+#### Publishing the staged packages
+
+1. Run `crust package`.
+2. Publish each platform package directory in `dist/npm/` first.
+3. Publish `dist/npm/root` last.
+
+`dist/npm/manifest.json` records the staged directories and publish order.
 
 ## Documentation
 

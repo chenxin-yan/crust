@@ -11,7 +11,7 @@
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",
 		"packages:release": "bun run packages:publish && changeset tag",
-		"packages:publish": "for dir in packages/*; do (cd \"$dir\" && bun publish --access public --no-git-checks || true); done"
+		"packages:publish": "for dir in packages/*; do if [ \"$dir\" = \"packages/crust\" ]; then (cd \"$dir\" && bun run publish:staged || true); else (cd \"$dir\" && bun publish --access public --no-git-checks || true); fi; done"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.30.0",

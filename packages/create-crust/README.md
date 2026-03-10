@@ -23,7 +23,7 @@ Every generated project includes:
 - `README.md` — getting started instructions
 - `.gitignore` — sensible defaults for Node/Bun projects
 
-Generated templates can be configured for either standalone binary distribution (`bin` -> `dist/cli`, `files: ["dist"]`) or Bun runtime package distribution (`bin` -> `dist/cli.js`, runtime deps) during scaffolding. Standalone binaries are the recommended default.
+Generated templates can be configured for either standalone binary distribution (`crust package` stages `dist/npm/root` plus platform packages) or Bun runtime package distribution (`bin` -> `dist/cli.js`, runtime deps) during scaffolding. Standalone binaries are the recommended default.
 
 ## Documentation
 

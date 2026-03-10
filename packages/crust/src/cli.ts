@@ -9,6 +9,7 @@ import {
 } from "@crustjs/plugins";
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";
+import { packageCommand } from "./commands/package.ts";
 
 /**
  * The root `crust` CLI command.
@@ -18,6 +19,7 @@ import { buildCommand } from "./commands/build.ts";
  *
  * Subcommands:
  * - `crust build` - Compile your CLI to a standalone Bun executable
+ * - `crust package` - Stage npm packages for platform-specific binary publishing
  */
 export const crustApp = new Crust(pkg.name)
 	.meta({ description: pkg.description })
@@ -30,6 +32,7 @@ export const crustApp = new Crust(pkg.name)
 	)
 	.use(autoCompletePlugin({ mode: "help" }))
 	.use(helpPlugin())
-	.command("build", buildCommand);
+	.command("build", buildCommand)
+	.command("package", packageCommand);
 
 crustApp.execute();

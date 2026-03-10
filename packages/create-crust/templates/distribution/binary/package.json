@@ -12,7 +12,7 @@
 	"scripts": {
 		"dev": "bun run src/cli.ts",
 		"build": "crust build",
-		"prepack": "bun run build",
+		"package": "crust package",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit"
 	},

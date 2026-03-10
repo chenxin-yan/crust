@@ -119,7 +119,7 @@ describe("scaffold", () => {
 		expect(pkg.scripts).toEqual({
 			dev: "bun run src/cli.ts",
 			build: "crust build",
-			prepack: "bun run build",
+			package: "crust package",
 			start: "./dist/cli",
 			"check:types": "tsc --noEmit",
 		});
@@ -338,5 +338,6 @@ describe("scaffold", () => {
 		expect(readme).toContain("Crust");
 		expect(readme).toContain("bun run dev");
 		expect(readme).toContain("bun run build");
+		expect(readme).toContain("bun run package");
 	});
 });

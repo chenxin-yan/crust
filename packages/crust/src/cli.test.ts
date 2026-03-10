@@ -18,6 +18,7 @@ import {
 	versionPlugin,
 } from "@crustjs/plugins";
 import { buildCommand } from "./commands/build.ts";
+import { packageCommand } from "./commands/package.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers — capture console output
@@ -98,7 +99,8 @@ function makeCrustApp() {
 		)
 		.use(autoCompletePlugin({ mode: "help" }))
 		.use(helpPlugin())
-		.command("build", buildCommand);
+		.command("build", buildCommand)
+		.command("package", packageCommand);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -120,16 +122,18 @@ describe("crust CLI entry point", () => {
 			expect(app._node.run).toBeUndefined();
 		});
 
-		it("should have build as a subcommand", () => {
+		it("should have build and package as subcommands", () => {
 			const app = makeCrustApp();
 			expect(app._node.subCommands).toBeDefined();
 			expect(app._node.subCommands.build).toBeDefined();
+			expect(app._node.subCommands.package).toBeDefined();
 			expect(app._node.subCommands.build?.meta.name).toBe("build");
+			expect(app._node.subCommands.package?.meta.name).toBe("package");
 		});
 	});
 
 	describe("crust --help", () => {
-		it("should show help text with build listed", async () => {
+		it("should show help text with build and package listed", async () => {
 			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
@@ -138,7 +142,11 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
+			expect(output).toContain("package");
 			expect(output).toContain("Compile your CLI to a standalone executable");
+			expect(output).toContain(
+				"Stage platform-specific npm packages for optionalDependency distribution",
+			);
 		});
 
 		it("should show --help and --version in options", async () => {
@@ -184,6 +192,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
+			expect(output).toContain("package");
 		});
 	});
 
@@ -193,6 +202,7 @@ describe("crust CLI entry point", () => {
 			const output = getStdout();
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("build");
+			expect(output).toContain("package");
 		});
 
 		it("shows root help for partial command input", async () => {
