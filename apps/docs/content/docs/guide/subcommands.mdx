@@ -7,9 +7,19 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 Subcommands let you organize your CLI into a tree of nested commands, like `git commit` or `docker compose up`.
 
-## Defining Subcommands
+## Pick a Pattern
 
-Add subcommands using the `.command()` method:
+Use the pattern that matches how the subcommand is defined:
+
+| Pattern | Use when | Notes |
+| --- | --- | --- |
+| `.command(name, cb)` | The subcommand is defined inline | Best default for small or nested command trees |
+| `.sub(name)` + `.command(builder)` | The subcommand lives in another file or should inherit parent flags | Best default for modular CLIs |
+| `new Crust(name)` + `.command(builder)` | The subcommand is intentionally standalone | Does not inherit parent flags |
+
+## Inline Subcommands
+
+Use `.command(name, cb)` when the subcommand is defined in place:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -121,7 +131,7 @@ my-cli readme.md    # Runs parent command with file="readme.md"
 
 ## File-Splitting Pattern
 
-For large CLIs, you can define subcommands in separate files using `.sub()`:
+Use `.sub()` when the subcommand lives in another file or should inherit parent `inherit: true` flags:
 
 ```ts title="shared.ts"
 import { Crust } from "@crustjs/core";
@@ -153,7 +163,33 @@ await app
   .execute();
 ```
 
-The `.sub()` method creates a child builder pre-typed with the parent's inheritable flags. This enables full TypeScript inference in the subcommand file without needing `Crust<any, any, any>`. See the [`.sub()` reference](/docs/api/crust#subname) for details.
+`.sub()` creates a child builder pre-typed with the parent's inheritable flags. See the [`.sub()` reference](/docs/api/crust#subname) for details.
+
+## Standalone Builders
+
+`.command(builder)` also accepts a standalone builder created with `new Crust(name)`:
+
+```ts
+const app = new Crust("my-cli").flags({
+  verbose: { type: "boolean", inherit: true },
+});
+
+const standalone = new Crust("doctor").run(() => {
+  console.log("doctor");
+});
+
+await app.command(standalone).execute();
+```
+
+This works, but `standalone` is isolated from `app`, so it does **not** inherit `app`'s `inherit: true` flags. If you want inherited flags or parent-aware typing, use `.sub(name)` instead:
+
+```ts
+const deploy = app.sub("deploy").run(({ flags }) => {
+  flags.verbose; // boolean | undefined
+});
+
+await app.command(deploy).execute();
+```
 
 ## Unknown Subcommands
 
