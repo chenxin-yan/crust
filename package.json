@@ -11,13 +11,13 @@
 		"test": "turbo run test",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",
-		"packages:publish": "turbo run publish --env-mode=loose --filter='./packages/*' --filter='!./packages/config' && changeset tag"
+		"packages:publish": "bun ./scripts/publish-packages.mjs"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.30.0",
 		"@biomejs/biome": "2.4.4",
 		"@types/bun": "^1.3.10",
-		"turbo": "^2.8.14",
+		"turbo": "^2.8.15",
 		"typescript": "5.9.3"
 	},
 	"catalog": {

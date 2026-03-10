@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/crust",
-	"version": "0.0.19",
+	"version": "0.0.20",
 	"description": "CLI tooling for the Crust framework",
 	"type": "module",
 	"license": "MIT",
@@ -35,7 +35,7 @@
 	},
 	"scripts": {
 		"build": "bunup && bun dist/cli.js build --distribute --entry src/cli.ts --name crust",
-		"publish": "bun dist/cli.js publish --stage-dir dist/npm",
+		"publish": "bun dist/cli.js publish --stage-dir dist/npm || true",
 		"dev": "bun ./src/cli.ts",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit",

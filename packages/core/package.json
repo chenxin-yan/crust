@@ -39,7 +39,7 @@
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
-		"publish": "bun publish --no-git-checks"
+		"publish": "bun publish --no-git-checks || true"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
