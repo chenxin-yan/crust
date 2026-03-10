@@ -75,6 +75,7 @@ export function validatePublishManifest(
 ): void {
 	const listedDirs = manifest.packages.map((pkg) => pkg.dir);
 	assertUniqueDirs([...listedDirs, manifest.root.dir]);
+	assertUniqueDirs(manifest.publishOrder);
 
 	if (manifest.publishOrder.at(-1) !== manifest.root.dir) {
 		throw new Error("manifest.json must publish the root package last.");

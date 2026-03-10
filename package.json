@@ -2,7 +2,7 @@
 	"name": "crust",
 	"private": true,
 	"scripts": {
-		"build": "turbo run build --filter='./packages/*'",
+		"build": "turbo run build",
 		"build:docs": "turbo run build --filter='./apps/docs'",
 		"build:packages": "turbo run build --filter='./packages/*'",
 		"dev:docs": "turbo run dev --filter='./apps/docs'",
