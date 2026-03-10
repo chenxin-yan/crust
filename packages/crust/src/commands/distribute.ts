@@ -34,6 +34,7 @@ const METADATA_KEYS = [
 
 type NpmOs = TargetInfo["os"];
 type NpmCpu = TargetInfo["cpu"];
+type PlatformKey = (typeof TARGET_INFO)[BunTarget]["platformKey"];
 
 type PublishPackageJson = {
 	name: string;
@@ -69,7 +70,7 @@ type DistributionMetadata = {
 
 type DistributionTarget = {
 	target: BunTarget;
-	platformKey: string;
+	platformKey: PlatformKey;
 	targetAlias: string;
 	packageName: string;
 	packagePathSegment: string;
@@ -294,18 +295,14 @@ export function generateDistributionResolver(
 					: "x86_64"
 			})
 \t\tplatform_pkg=${JSON.stringify(target.packagePathSegment)}
-\t\tfallback_pkg=${JSON.stringify(target.packageName.replaceAll("/", "/"))}
+\t\t		fallback_pkg=${JSON.stringify(target.packageName)}
 \t\tbinary=${JSON.stringify(target.binaryFilename)}
 \t\t;;`,
 		)
 		.join("\n");
 	const supportedPlatforms = targets
 		.filter((target) => target.os !== "win32")
-		.map((target) =>
-			target.os === "darwin"
-				? `${target.os}-${target.cpu}`
-				: `${target.os}-${target.cpu}`,
-		)
+		.map((target) => `${target.os}-${target.cpu}`)
 		.join(", ");
 
 	return `#!/usr/bin/env bash
@@ -534,11 +531,11 @@ export async function runDistributeBuild(options: {
 		),
 	);
 
-	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets);
-
 	console.log(
 		`Staging ${bold(`${targets.length}`)} distribution target(s) in ${dim(stageDir)}...`,
 	);
+
+	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets);
 
 	for (const targetPackage of distributionTargets) {
 		const outfilePath = join(

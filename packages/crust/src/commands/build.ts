@@ -43,7 +43,7 @@ export type TargetInfo = {
 	cpu: "x64" | "arm64";
 };
 
-export const TARGET_INFO: Record<BunTarget, TargetInfo> = {
+export const TARGET_INFO = {
 	"bun-linux-x64-baseline": {
 		alias: "linux-x64",
 		platformKey: "linux-x64",
@@ -86,7 +86,7 @@ export const TARGET_INFO: Record<BunTarget, TargetInfo> = {
 		os: "win32",
 		cpu: "arm64",
 	},
-};
+} as const satisfies Record<BunTarget, TargetInfo>;
 
 /**
  * Human-friendly target aliases that map to Bun compile targets.

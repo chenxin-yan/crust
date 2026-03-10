@@ -4,7 +4,9 @@
 	"type": "module",
 	"description": "A CLI built with Crust",
 	"files": [
-		"dist"
+		"dist/cli",
+		"dist/cli.cmd",
+		"dist/*-bun-*"
 	],
 	"bin": {
 		"{{name}}": "dist/cli"

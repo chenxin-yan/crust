@@ -21,7 +21,7 @@ import { publishCommand } from "./commands/publish.ts";
  * - `crust build` - Compile your CLI to a standalone Bun executable
  * - `crust publish` - Publish staged npm packages in manifest order
  */
-export const crustApp = new Crust(pkg.name)
+export const crustApp = new Crust("crust")
 	.meta({ description: pkg.description })
 	.use(versionPlugin(pkg.version))
 	.use(
