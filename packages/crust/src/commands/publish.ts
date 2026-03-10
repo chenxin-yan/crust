@@ -37,7 +37,7 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 	const manifestPath = join(stageDir, "manifest.json");
 	if (!existsSync(manifestPath)) {
 		throw new Error(
-			`Staged manifest not found at ${manifestPath}\n  Run \`crust build --distribute\` before \`crust publish\`.`,
+			`Staged manifest not found at ${manifestPath}\n  Run \`crust build --package\` before \`crust publish\`.`,
 		);
 	}
 
@@ -264,8 +264,7 @@ export async function publishStagedPackages(
 
 export const publishCommand = new Crust("publish")
 	.meta({
-		description:
-			"Publish staged npm packages created by crust build --distribute",
+		description: "Publish staged npm packages created by crust build --package",
 	})
 	.flags({
 		"stage-dir": {

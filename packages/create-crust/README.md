@@ -28,13 +28,13 @@ Generated templates can be configured for either standalone binary distribution 
 For standalone binary projects, the intended workflow is:
 
 1. `bun run build` — raw binaries (`crust build`)
-2. `bun run distribute` — npm-ready staged packages in `dist/npm` (`crust build --distribute`)
+2. `bun run package` — npm-ready staged packages in `dist/npm` (`crust build --package`)
 3. `bun run publish` — publish the staged packages (`crust publish`)
 
-The binary templates intentionally keep `build` and `distribute` as separate scripts because they do different jobs:
+The binary templates intentionally keep `build` and `package` as separate scripts because they do different jobs:
 
 - `build` is for raw binary artifacts.
-- `distribute` is for npm packaging (alias for `crust build --distribute`).
+- `package` is for npm packaging (alias for `crust build --package`).
 - `publish` is for registry upload.
 
 > **Note:** The template's top-level `package.json` has `"files": ["dist"]` and `"bin"` pointing to `dist/cli` for local development. When publishing via `crust publish`, the staged packages in `dist/npm/` each have their own `package.json` with the correct `files` and `bin` entries — the top-level fields are not used for npm distribution.

@@ -51,7 +51,7 @@ describe("buildCommand definition", () => {
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.validate).toBe(true);
-		expect(result.flags.distribute).toBe(false);
+		expect(result.flags.package).toBe(false);
 		expect(result.flags["stage-dir"]).toBe("dist/npm");
 		expect(result.flags.resolver).toBe("cli");
 		expect(result.flags.outdir).toBe("dist");
@@ -102,11 +102,18 @@ describe("buildCommand definition", () => {
 		expect(result.flags.validate).toBe(false);
 	});
 
-	it("supports --distribute with --stage-dir", () => {
+	it("supports --package with --stage-dir", () => {
 		const node = makeBuildNode();
-		const result = parseArgs(node, ["--distribute", "--stage-dir", ".stage"]);
-		expect(result.flags.distribute).toBe(true);
+		const result = parseArgs(node, ["--package", "--stage-dir", ".stage"]);
+		expect(result.flags.package).toBe(true);
 		expect(result.flags["stage-dir"]).toBe(".stage");
+	});
+
+	it("rejects removed --distribute flag", () => {
+		const node = makeBuildNode();
+		expect(() => parseArgs(node, ["--distribute"])).toThrow(
+			'Unknown flag "--distribute"',
+		);
 	});
 
 	it("defines --target/-t as repeatable string flag", () => {

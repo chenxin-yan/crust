@@ -51,10 +51,10 @@ afterAll(() => {
 	rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe("crust build --distribute integration", () => {
+describe("crust build --package integration", () => {
 	it("stages root and platform packages with shell resolvers", async () => {
 		await runBuild([
-			"--distribute",
+			"--package",
 			"--target",
 			"linux-x64",
 			"--target",
@@ -102,7 +102,7 @@ describe("crust build --distribute integration", () => {
 
 	it("stages only the selected target directories", async () => {
 		await runBuild([
-			"--distribute",
+			"--package",
 			"--target",
 			"linux-x64",
 			"--stage-dir",

@@ -103,7 +103,7 @@ console.log(args.join(" ") || "resolver-ok");
 		await app.execute({
 			argv: [
 				"build",
-				"--distribute",
+				"--package",
 				"--target",
 				resolveHostTarget(),
 				"--stage-dir",
