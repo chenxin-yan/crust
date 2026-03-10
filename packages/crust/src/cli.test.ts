@@ -18,7 +18,7 @@ import {
 	versionPlugin,
 } from "@crustjs/plugins";
 import { buildCommand } from "./commands/build.ts";
-import { packageCommand } from "./commands/package.ts";
+import { publishCommand } from "./commands/publish.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers — capture console output
@@ -99,8 +99,8 @@ function makeCrustApp() {
 		)
 		.use(autoCompletePlugin({ mode: "help" }))
 		.use(helpPlugin())
-		.command("build", buildCommand)
-		.command("package", packageCommand);
+		.command(buildCommand)
+		.command(publishCommand);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -122,18 +122,18 @@ describe("crust CLI entry point", () => {
 			expect(app._node.run).toBeUndefined();
 		});
 
-		it("should have build and package as subcommands", () => {
+		it("should have build and publish as subcommands", () => {
 			const app = makeCrustApp();
 			expect(app._node.subCommands).toBeDefined();
 			expect(app._node.subCommands.build).toBeDefined();
-			expect(app._node.subCommands.package).toBeDefined();
+			expect(app._node.subCommands.publish).toBeDefined();
 			expect(app._node.subCommands.build?.meta.name).toBe("build");
-			expect(app._node.subCommands.package?.meta.name).toBe("package");
+			expect(app._node.subCommands.publish?.meta.name).toBe("publish");
 		});
 	});
 
 	describe("crust --help", () => {
-		it("should show help text with build and package listed", async () => {
+		it("should show help text with build and publish listed", async () => {
 			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
@@ -142,10 +142,10 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
-			expect(output).toContain("package");
+			expect(output).toContain("publish");
 			expect(output).toContain("Compile your CLI to a standalone executable");
 			expect(output).toContain(
-				"Stage platform-specific npm packages for optionalDependency distribution",
+				"Publish staged npm packages created by crust build --distribute",
 			);
 		});
 
@@ -192,7 +192,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
-			expect(output).toContain("package");
+			expect(output).toContain("publish");
 		});
 	});
 
@@ -202,7 +202,7 @@ describe("crust CLI entry point", () => {
 			const output = getStdout();
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("build");
-			expect(output).toContain("package");
+			expect(output).toContain("publish");
 		});
 
 		it("shows root help for partial command input", async () => {

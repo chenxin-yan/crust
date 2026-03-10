@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Crust, parseArgs, resolveCommand } from "@crustjs/core";
 
-describe("crust package smoke test", () => {
+describe("crust smoke test", () => {
 	it("should re-export Crust from @crustjs/core", () => {
 		expect(typeof Crust).toBe("function");
 	});

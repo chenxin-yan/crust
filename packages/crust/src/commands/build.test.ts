@@ -23,7 +23,7 @@ import {
  * and extract its internal node for parseArgs testing.
  */
 function makeBuildNode() {
-	const app = new Crust("test").command("build", buildCommand);
+	const app = new Crust("test").command(buildCommand);
 	const node = (
 		app as unknown as { _node: import("@crustjs/core").CommandNode }
 	)._node;
@@ -51,6 +51,8 @@ describe("buildCommand definition", () => {
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.validate).toBe(true);
+		expect(result.flags.distribute).toBe(false);
+		expect(result.flags["stage-dir"]).toBe("dist/npm");
 		expect(result.flags.resolver).toBe("cli");
 		expect(result.flags.outdir).toBe("dist");
 		expect(result.flags.outfile).toBeUndefined();
@@ -98,6 +100,13 @@ describe("buildCommand definition", () => {
 		const node = makeBuildNode();
 		const result = parseArgs(node, ["--no-validate"]);
 		expect(result.flags.validate).toBe(false);
+	});
+
+	it("supports --distribute with --stage-dir", () => {
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["--distribute", "--stage-dir", ".stage"]);
+		expect(result.flags.distribute).toBe(true);
+		expect(result.flags["stage-dir"]).toBe(".stage");
 	});
 
 	it("defines --target/-t as repeatable string flag", () => {
@@ -564,7 +573,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").command("build", buildCommand);
+			const app = new Crust("test").command(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--entry", "nonexistent.ts", "--target", "linux-x64"],
@@ -599,7 +608,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").command("build", buildCommand);
+			const app = new Crust("test").command(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--outfile", "./out"],

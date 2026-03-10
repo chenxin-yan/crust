@@ -1,63 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Crust, parseArgs } from "@crustjs/core";
 import {
-	buildPlatformPackageJson,
-	buildRootPackageJson,
+	buildDistributionPlatformPackageJson,
+	buildDistributionRootPackageJson,
 	derivePlatformPackageName,
-	generatePackageLauncher,
+	generateDistributionCmdResolver,
+	generateDistributionResolver,
+	getPackagePathSegment,
 	inferCommandName,
-	packageCommand,
-} from "../../src/commands/package.ts";
-
-function makePackageNode() {
-	const app = new Crust("test").command("package", packageCommand);
-	const node = (
-		app as unknown as { _node: import("@crustjs/core").CommandNode }
-	)._node;
-	const packageNode = node.subCommands.package;
-	if (!packageNode) throw new Error("package subcommand not found");
-	return packageNode;
-}
-
-describe("packageCommand definition", () => {
-	it("has correct meta", () => {
-		const node = makePackageNode();
-		expect(node.meta.name).toBe("package");
-		expect(node.meta.description).toBe(
-			"Stage platform-specific npm packages for optionalDependency distribution",
-		);
-	});
-
-	it("has correct default flag values", () => {
-		const node = makePackageNode();
-		const result = parseArgs(node, []);
-		expect(result.flags.entry).toBe("src/cli.ts");
-		expect(result.flags.minify).toBe(true);
-		expect(result.flags.validate).toBe(true);
-		expect(result.flags["stage-dir"]).toBe("dist/npm");
-		expect(result.flags.name).toBeUndefined();
-		expect(result.flags.target).toBeUndefined();
-	});
-
-	it("supports --stage-dir", () => {
-		const node = makePackageNode();
-		const result = parseArgs(node, ["--stage-dir", ".crust/npm"]);
-		expect(result.flags["stage-dir"]).toBe(".crust/npm");
-	});
-
-	it("supports repeatable --target", () => {
-		const node = makePackageNode();
-		const result = parseArgs(node, [
-			"--target",
-			"linux-x64",
-			"--target",
-			"darwin-arm64",
-		]);
-		expect(result.flags.target).toEqual(["linux-x64", "darwin-arm64"]);
-	});
-});
+	runDistributeBuild,
+} from "../../src/commands/distribute.ts";
 
 describe("derivePlatformPackageName", () => {
 	it("suffixes unscoped package names", () => {
@@ -101,7 +54,7 @@ describe("inferCommandName", () => {
 	});
 });
 
-describe("package manifest JSON builders", () => {
+describe("distribution manifest JSON builders", () => {
 	it("builds the root package optionalDependencies", () => {
 		const metadata = {
 			commandName: "crust",
@@ -120,6 +73,7 @@ describe("package manifest JSON builders", () => {
 				platformKey: "darwin-arm64" as const,
 				targetAlias: "darwin-arm64",
 				packageName: "@crustjs/crust-darwin-arm64",
+				packagePathSegment: "crust-darwin-arm64",
 				packageDir: "/tmp/darwin-arm64",
 				binaryRelativePath: "bin/crust-bun-darwin-arm64",
 				binaryFilename: "crust-bun-darwin-arm64",
@@ -128,13 +82,13 @@ describe("package manifest JSON builders", () => {
 			},
 		];
 
-		expect(buildRootPackageJson(metadata, targets)).toEqual({
+		expect(buildDistributionRootPackageJson(metadata, targets)).toEqual({
 			name: "@crustjs/crust",
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
 			files: ["bin"],
-			bin: { crust: "bin/crust.js" },
+			bin: { crust: "bin/crust" },
 			optionalDependencies: {
 				"@crustjs/crust-darwin-arm64": "1.2.3",
 			},
@@ -158,6 +112,7 @@ describe("package manifest JSON builders", () => {
 			platformKey: "win32-arm64" as const,
 			targetAlias: "windows-arm64",
 			packageName: "@crustjs/crust-windows-arm64",
+			packagePathSegment: "crust-windows-arm64",
 			packageDir: "/tmp/windows-arm64",
 			binaryRelativePath: "bin/crust-bun-windows-arm64.exe",
 			binaryFilename: "crust-bun-windows-arm64.exe",
@@ -165,7 +120,7 @@ describe("package manifest JSON builders", () => {
 			cpu: "arm64" as const,
 		};
 
-		expect(buildPlatformPackageJson(metadata, target)).toEqual({
+		expect(buildDistributionPlatformPackageJson(metadata, target)).toEqual({
 			name: "@crustjs/crust-windows-arm64",
 			version: "1.2.3",
 			description: "CLI tooling",
@@ -177,14 +132,23 @@ describe("package manifest JSON builders", () => {
 	});
 });
 
-describe("generatePackageLauncher", () => {
-	it("references platform packages via package.json resolution", () => {
-		const launcher = generatePackageLauncher("crust", [
+describe("getPackagePathSegment", () => {
+	it("returns the unscoped name for scoped packages", () => {
+		expect(getPackagePathSegment("@crustjs/crust-linux-x64")).toBe(
+			"crust-linux-x64",
+		);
+	});
+});
+
+describe("generateDistributionResolver", () => {
+	it("generates a shell resolver with fixed candidate probing", () => {
+		const launcher = generateDistributionResolver("crust", [
 			{
 				target: "bun-linux-x64-baseline",
 				platformKey: "linux-x64",
 				targetAlias: "linux-x64",
 				packageName: "@crustjs/crust-linux-x64",
+				packagePathSegment: "crust-linux-x64",
 				packageDir: "/tmp/linux-x64",
 				binaryRelativePath: "bin/crust-bun-linux-x64-baseline",
 				binaryFilename: "crust-bun-linux-x64-baseline",
@@ -193,17 +157,64 @@ describe("generatePackageLauncher", () => {
 			},
 		]);
 
-		expect(launcher).toContain("#!/usr/bin/env node");
-		expect(launcher).toContain('"linux-x64"');
-		expect(launcher).toContain("@crustjs/crust-linux-x64");
-		expect(launcher).toContain("require.resolve(");
-		expect(launcher).toContain("/package.json");
+		expect(launcher).toContain("#!/usr/bin/env bash");
+		expect(launcher).toContain('platform="$(uname -s)-$(uname -m)"');
+		expect(launcher).toContain(
+			'candidate_one="$dir/../../$platform_pkg/bin/$binary"',
+		);
+		expect(launcher).toContain(
+			'candidate_two="$dir/../node_modules/$fallback_pkg/bin/$binary"',
+		);
+		expect(launcher).toContain('platform_pkg="crust-linux-x64"');
+		expect(launcher).toContain('fallback_pkg="@crustjs/crust-linux-x64"');
+		expect(launcher).toContain("Missing platform package");
 		expect(launcher).toContain("optional dependencies are enabled");
 	});
 });
 
-describe("packageCommand validation", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-package-validation");
+describe("generateDistributionCmdResolver", () => {
+	it("generates a Windows resolver with architecture dispatch", () => {
+		const launcher = generateDistributionCmdResolver("crust", [
+			{
+				target: "bun-windows-x64-baseline",
+				platformKey: "win32-x64",
+				targetAlias: "windows-x64",
+				packageName: "@crustjs/crust-windows-x64",
+				packagePathSegment: "crust-windows-x64",
+				packageDir: "/tmp/windows-x64",
+				binaryRelativePath: "bin/crust-bun-windows-x64-baseline.exe",
+				binaryFilename: "crust-bun-windows-x64-baseline.exe",
+				os: "win32",
+				cpu: "x64",
+			},
+			{
+				target: "bun-windows-arm64",
+				platformKey: "win32-arm64",
+				targetAlias: "windows-arm64",
+				packageName: "@crustjs/crust-windows-arm64",
+				packagePathSegment: "crust-windows-arm64",
+				packageDir: "/tmp/windows-arm64",
+				binaryRelativePath: "bin/crust-bun-windows-arm64.exe",
+				binaryFilename: "crust-bun-windows-arm64.exe",
+				os: "win32",
+				cpu: "arm64",
+			},
+		]);
+
+		expect(launcher).toContain('if /I "%host_arch%"=="AMD64"');
+		expect(launcher).toContain('if /I "%host_arch%"=="ARM64"');
+		expect(launcher).toContain(
+			'set "candidate_one=%dir%..\\..\\%pkg_segment%\\bin\\%binary%"',
+		);
+		expect(launcher).toContain(
+			'set "candidate_two=%dir%..\\node_modules\\%fallback_pkg%\\bin\\%binary%"',
+		);
+		expect(launcher).toContain("crust-windows-arm64");
+	});
+});
+
+describe("runDistributeBuild", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-distribute-validation");
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {
@@ -230,16 +241,12 @@ describe("packageCommand validation", () => {
 		);
 		process.cwd = () => tmpDir;
 
-		const app = new Crust("test").command("package", packageCommand);
-		await app.execute({
-			argv: [
-				"package",
-				"--target",
-				"darwin-arm64",
-				"--stage-dir",
-				".stage",
-				"--no-validate",
-			],
+		await runDistributeBuild({
+			entry: "src/cli.ts",
+			minify: true,
+			target: ["darwin-arm64"],
+			stageDir: ".stage",
+			validate: false,
 		});
 
 		const manifest = JSON.parse(

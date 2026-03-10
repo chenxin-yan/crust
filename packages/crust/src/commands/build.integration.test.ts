@@ -47,7 +47,7 @@ console.log("hello from crust build test");
 		};
 
 		try {
-			const app = new Crust("test").command("build", buildCommand);
+			const app = new Crust("test").command(buildCommand);
 			await app.execute({
 				argv: [
 					"build",
@@ -108,7 +108,7 @@ console.log("hello from crust build test");
 		const outPath = join(tmpDir, "dist", "test-cli-no-minify");
 
 		try {
-			const app = new Crust("test").command("build", buildCommand);
+			const app = new Crust("test").command(buildCommand);
 			await app.execute({
 				argv: [
 					"build",
@@ -140,7 +140,7 @@ console.log("hello from crust build test");
 		};
 
 		try {
-			const app = new Crust("test").command("build", buildCommand);
+			const app = new Crust("test").command(buildCommand);
 			await app.execute({
 				argv: ["build", "--entry", "src/cli.ts", "--target", "darwin-arm64"],
 			});
