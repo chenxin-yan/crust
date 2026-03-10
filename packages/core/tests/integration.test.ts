@@ -817,6 +817,47 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 	});
 });
 
+describe("integration: standalone builder → .command(builder) pattern", () => {
+	beforeEach(() => {
+		process.exitCode = 0;
+	});
+
+	it("registers a standalone `new Crust(name)` builder end-to-end", async () => {
+		const app = new Crust("cli");
+		const deploy = new Crust("deploy")
+			.flags({
+				env: { type: "string", required: true },
+			})
+			.run((ctx) => {
+				console.log(`deploy env=${ctx.flags.env}`);
+			});
+
+		const result = await executeCrust(app.command(deploy), [
+			"deploy",
+			"--env",
+			"production",
+		]);
+		expect(result.stdout).toContain("deploy env=production");
+		expect(result.exitCode).toBe(0);
+	});
+
+	it("does not inherit parent flags when the builder was created with `new Crust(name)`", async () => {
+		const app = new Crust("cli").flags({
+			verbose: { type: "boolean", inherit: true },
+		});
+		const deploy = new Crust("deploy").run((ctx) => {
+			console.log(`verbose=${ctx.flags.verbose}`);
+		});
+
+		const result = await executeCrust(app.command(deploy), [
+			"deploy",
+			"--verbose",
+		]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("Unknown flag");
+	});
+});
+
 describe("integration: inherited boolean flag negation", () => {
 	beforeEach(() => {
 		process.exitCode = 0;

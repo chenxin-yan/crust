@@ -342,8 +342,9 @@ export class Crust<
 	/**
 	 * Set metadata (description, usage) for this command.
 	 *
-	 * The command name is already set via the constructor or `.command()`,
-	 * so only `description` and `usage` can be provided here.
+	 * The command name is already set by the builder source (constructor,
+	 * `.sub()`, or the child builder passed into `.command(name, cb)`), so
+	 * only `description` and `usage` can be provided here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
 	 * is not mutated.
@@ -568,11 +569,13 @@ export class Crust<
 	): Crust<Inherited, Local, A, Eff>;
 
 	/**
-	 * Register a pre-built subcommand builder (from `.sub()`).
+	 * Register a pre-built subcommand builder.
 	 *
 	 * The builder's name (from its constructor or `.sub()`) is used as the
-	 * subcommand name. This is the complement to `.sub()` for the
-	 * file-splitting pattern.
+	 * subcommand name. Builders created with `.sub()` inherit the parent's
+	 * `inherit: true` flags; standalone `new Crust(name)` builders remain
+	 * isolated. This is the complement to `.sub()` for the file-splitting
+	 * pattern.
 	 *
 	 * @param builder - A pre-configured `Crust` builder instance
 	 * @returns A new `Crust` instance with the subcommand registered
