@@ -23,7 +23,19 @@ Every generated project includes:
 - `README.md` — getting started instructions
 - `.gitignore` — sensible defaults for Node/Bun projects
 
-Generated templates can be configured for either standalone binary distribution (`crust package` stages `dist/npm/root` plus platform packages) or Bun runtime package distribution (`bin` -> `dist/cli.js`, runtime deps) during scaffolding. Standalone binaries are the recommended default.
+Generated templates can be configured for either standalone binary distribution or Bun runtime package distribution during scaffolding.
+
+For standalone binary projects, the intended workflow is:
+
+1. `bun run build` for raw binaries
+2. `bun run distribute` for npm-ready staged packages in `dist/npm`
+3. `bun run publish` to publish the staged packages
+
+The binary templates intentionally keep `build` and `distribute` because they do different jobs:
+
+- `build` is for raw binary artifacts.
+- `distribute` is for npm packaging.
+- `publish` is for registry upload.
 
 ## Documentation
 

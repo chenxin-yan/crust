@@ -12,7 +12,8 @@
 	"scripts": {
 		"dev": "bun run src/cli.ts",
 		"build": "crust build",
-		"package": "crust package",
+		"distribute": "crust build --distribute",
+		"publish": "crust publish --stage-dir dist/npm",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit"
 	},

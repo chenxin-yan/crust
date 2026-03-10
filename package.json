@@ -4,14 +4,14 @@
 	"scripts": {
 		"build": "turbo run build --filter='./packages/*'",
 		"build:docs": "turbo run build --filter='./apps/docs'",
+		"build:packages": "turbo run build --filter='./packages/*'",
 		"dev:docs": "turbo run dev --filter='./apps/docs'",
 		"check": "biome check",
 		"check:types": "turbo run check:types",
 		"test": "turbo run test",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",
-		"packages:release": "bun run packages:publish && changeset tag",
-		"packages:publish": "for dir in packages/*; do if [ \"$dir\" = \"packages/crust\" ]; then (cd \"$dir\" && bun run publish:staged || true); else (cd \"$dir\" && bun publish --access public --no-git-checks || true); fi; done"
+		"packages:publish": "bun run ./scripts/publish-packages.ts && changeset tag"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.30.0",
