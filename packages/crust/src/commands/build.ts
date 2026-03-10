@@ -25,6 +25,70 @@ export const SUPPORTED_TARGETS = [
 export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
 
 /**
+ * Consolidated metadata for every supported Bun compile target.
+ *
+ * Single source of truth — all other target maps (`TARGET_ALIASES`,
+ * `TARGET_PLATFORM_MAP`, `TARGET_UNAME_MAP`) are derived from this.
+ */
+export type TargetInfo = {
+	/** Human-friendly alias (e.g. "linux-x64", "darwin-arm64") */
+	alias: string;
+	/** `process.platform`-`process.arch` key (e.g. "linux-x64", "win32-arm64") */
+	platformKey: string;
+	/** `uname -s`-`uname -m` key used by shell resolvers (e.g. "Linux-x86_64") */
+	unameKey: string;
+	/** npm `os` field value */
+	os: "linux" | "darwin" | "win32";
+	/** npm `cpu` field value */
+	cpu: "x64" | "arm64";
+};
+
+export const TARGET_INFO: Record<BunTarget, TargetInfo> = {
+	"bun-linux-x64-baseline": {
+		alias: "linux-x64",
+		platformKey: "linux-x64",
+		unameKey: "Linux-x86_64",
+		os: "linux",
+		cpu: "x64",
+	},
+	"bun-linux-arm64": {
+		alias: "linux-arm64",
+		platformKey: "linux-arm64",
+		unameKey: "Linux-aarch64",
+		os: "linux",
+		cpu: "arm64",
+	},
+	"bun-darwin-x64": {
+		alias: "darwin-x64",
+		platformKey: "darwin-x64",
+		unameKey: "Darwin-x86_64",
+		os: "darwin",
+		cpu: "x64",
+	},
+	"bun-darwin-arm64": {
+		alias: "darwin-arm64",
+		platformKey: "darwin-arm64",
+		unameKey: "Darwin-arm64",
+		os: "darwin",
+		cpu: "arm64",
+	},
+	"bun-windows-x64-baseline": {
+		alias: "windows-x64",
+		platformKey: "win32-x64",
+		unameKey: "Windows-x64",
+		os: "win32",
+		cpu: "x64",
+	},
+	"bun-windows-arm64": {
+		alias: "windows-arm64",
+		platformKey: "win32-arm64",
+		unameKey: "Windows-arm64",
+		os: "win32",
+		cpu: "arm64",
+	},
+};
+
+/**
  * Human-friendly target aliases that map to Bun compile targets.
  *
  * Users can pass either the full Bun target string or these short aliases.
@@ -35,27 +99,18 @@ export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
  * crust build --target darwin-arm64 # same as --target bun-darwin-arm64
  * ```
  */
-export const TARGET_ALIASES: Record<string, BunTarget> = {
-	"linux-x64": "bun-linux-x64-baseline",
-	"linux-arm64": "bun-linux-arm64",
-	"darwin-x64": "bun-darwin-x64",
-	"darwin-arm64": "bun-darwin-arm64",
-	"windows-x64": "bun-windows-x64-baseline",
-	"windows-arm64": "bun-windows-arm64",
-};
+export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
+	SUPPORTED_TARGETS.map((t) => [TARGET_INFO[t].alias, t]),
+) as Record<string, BunTarget>;
 
 /**
  * Maps each Bun compile target to its `process.platform-process.arch` key
  * used by the JS resolver at runtime.
  */
-export const TARGET_PLATFORM_MAP: Record<BunTarget, string> = {
-	"bun-linux-x64-baseline": "linux-x64",
-	"bun-linux-arm64": "linux-arm64",
-	"bun-darwin-x64": "darwin-x64",
-	"bun-darwin-arm64": "darwin-arm64",
-	"bun-windows-x64-baseline": "win32-x64",
-	"bun-windows-arm64": "win32-arm64",
-};
+export const TARGET_PLATFORM_MAP: Record<BunTarget, string> =
+	Object.fromEntries(
+		SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].platformKey]),
+	) as Record<BunTarget, string>;
 
 /**
  * Resolve a user-provided target string to a valid Bun compile target.
@@ -189,14 +244,9 @@ export function resolveTargetOutfile(
  * Note: Linux ARM64 reports as `aarch64` via `uname -m`,
  * while macOS ARM64 reports as `arm64`.
  */
-export const TARGET_UNAME_MAP: Record<BunTarget, string> = {
-	"bun-linux-x64-baseline": "Linux-x86_64",
-	"bun-linux-arm64": "Linux-aarch64",
-	"bun-darwin-x64": "Darwin-x86_64",
-	"bun-darwin-arm64": "Darwin-arm64",
-	"bun-windows-x64-baseline": "Windows-x64",
-	"bun-windows-arm64": "Windows-arm64",
-};
+export const TARGET_UNAME_MAP: Record<BunTarget, string> = Object.fromEntries(
+	SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].unameKey]),
+) as Record<BunTarget, string>;
 
 /**
  * Get the binary filename (basename only) for a given target.
