@@ -18,7 +18,7 @@ The package includes the `crust` CLI, which provides:
 | Command | Description |
 | --- | --- |
 | [`crust build`](/docs/guide/build) | Compile your CLI to standalone executables |
-| [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --distribute` |
+| [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --package` |
 
 The `crust` CLI is itself built with Crust (self-hosted), demonstrating the framework in action.
 
@@ -35,7 +35,7 @@ For the framework API (`Crust` builder, plugins, etc.), use [`@crustjs/core`](/d
 - Docker images with pre-installed binaries
 - Internal tools distributed via custom channels
 
-**Per-OS npm distribution** (`crust build --distribute`) — Create platform-specific npm packages. Best for:
+**Per-OS npm distribution** (`crust build --package`) — Create platform-specific npm packages. Best for:
 - Publishing to npm with automatic platform detection
 - Large CLIs where users only need one binary
 - Projects already using npm/bun as distribution channel

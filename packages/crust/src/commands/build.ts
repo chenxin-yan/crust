@@ -619,16 +619,14 @@ export const buildCommand = new Crust("build")
 				"Validate command runtime rules before compiling (disable with --no-validate)",
 			default: true,
 		},
-		distribute: {
+		package: {
 			type: "boolean",
-			description:
-				"Stage npm distribution packages in dist/npm instead of raw binaries",
+			description: "Stage npm packages in dist/npm instead of raw binaries",
 			default: false,
 		},
 		"stage-dir": {
 			type: "string",
-			description:
-				"Directory to stage npm distribution packages into when using --distribute",
+			description: "Directory to stage npm packages into when using --package",
 			default: "dist/npm",
 		},
 	} as const)
@@ -649,10 +647,10 @@ export const buildCommand = new Crust("build")
 			await validateEntrypoint(entryPath);
 		}
 
-		if (flags.distribute) {
+		if (flags.package) {
 			if (flags.outfile) {
 				throw new Error(
-					"--outfile cannot be used with --distribute.\n  Use --stage-dir to control the staged npm output directory.",
+					"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
 				);
 			}
 

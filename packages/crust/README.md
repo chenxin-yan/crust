@@ -17,7 +17,7 @@ The `crust` binary provides three distinct workflows:
 | Command                    | Description                                    |
 | -------------------------- | ---------------------------------------------- |
 | `crust build`              | Compile raw standalone Bun executable(s)       |
-| `crust build --distribute` | Stage per-platform npm packages in `dist/npm`  |
+| `crust build --package`    | Stage per-platform npm packages in `dist/npm`  |
 | `crust publish`            | Publish an existing staged `dist/npm` manifest |
 
 ### `crust build`
@@ -64,8 +64,8 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--outdir`   | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
 | `--resolver` | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
 | `--validate` | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
-| `--distribute` | —   | `"boolean"` | `false`             | Stage npm distribution packages instead of raw binaries    |
-| `--stage-dir` | —    | `"string"`  | `dist/npm`          | Staging directory used with `--distribute`                 |
+| `--package` | —   | `"boolean"` | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
+| `--stage-dir` | —    | `"string"`  | `dist/npm`          | Staging directory used with `--package`                    |
 
 #### Output
 
@@ -90,16 +90,16 @@ dist/
   my-cli                            # Single binary (no resolver)
 ```
 
-`crust build` is the raw binary workflow by default. Add `--distribute` when you want staged npm packages instead of raw `dist/` binaries.
+`crust build` is the raw binary workflow by default. Add `--package` when you want staged npm packages instead of raw `dist/` binaries.
 
-### `crust build --distribute`
+### `crust build --package`
 
 Stages a root npm package plus one npm package per supported target for optionalDependency-based distribution.
 
 ```sh
-crust build --distribute
-crust build --distribute --target linux-x64
-crust build --distribute --stage-dir .crust/npm
+crust build --package
+crust build --package --target linux-x64
+crust build --package --stage-dir .crust/npm
 ```
 
 #### Output
@@ -133,7 +133,7 @@ dist/npm/
 
 The generated root package contains shell and `.cmd` launchers plus `optionalDependencies` on the platform packages. Each platform package is tagged with npm `os` / `cpu` metadata and contains only its native binary.
 
-`crust build --distribute` is the npm-packaging workflow. The staged interface is:
+`crust build --package` is the npm-packaging workflow. The staged interface is:
 
 - `dist/npm/root`
 - `dist/npm/<target>`
@@ -143,7 +143,7 @@ The generated root package contains shell and `.cmd` launchers plus `optionalDep
 
 ### `crust publish`
 
-Publishes the already-staged directories from `crust build --distribute`.
+Publishes the already-staged directories from `crust build --package`.
 
 ```sh
 crust publish
@@ -167,13 +167,13 @@ crust publish --stage-dir .crust/npm --tag next
 ## Recommended Flow
 
 1. `crust build` — compile raw binaries
-2. `crust build --distribute` — stage per-platform npm packages
+2. `crust build --package` — stage per-platform npm packages
 3. `crust publish` — publish staged packages to the registry
 
 The three steps are intentionally separate:
 
 - `build` produces raw binary artifacts.
-- `build --distribute` creates npm-ready staged packages.
+- `build --package` creates npm-ready staged packages.
 - `publish` uploads the staged packages to the registry.
 
 ## Documentation

@@ -181,7 +181,7 @@ For a distributable CLI, configure your `package.json` based on the selected mod
 
 **Per-OS npm packages** (optional):
 
-To publish via npm with automatic platform detection, add the `distribute` and `publish` scripts:
+To publish via npm with automatic platform detection, add the `package` and `publish` scripts:
 
 ```json title="package.json"
 {
@@ -195,7 +195,7 @@ To publish via npm with automatic platform detection, add the `distribute` and `
   "scripts": {
     "dev": "bun run src/cli.ts",
     "build": "crust build",
-    "distribute": "crust build --distribute",
+    "package": "crust build --package",
     "publish": "crust publish --stage-dir dist/npm",
     "prepack": "bun run build",
     "start": "./dist/cli"
@@ -210,7 +210,7 @@ To publish via npm with automatic platform detection, add the `distribute` and `
 }
 ```
 
-The `distribute` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with-distribute) for details.
+The `package` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with-package) for details.
 
   </Tab>
   <Tab value="Bun runtime package">
