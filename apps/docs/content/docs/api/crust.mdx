@@ -43,7 +43,7 @@ Set description and usage metadata.
 meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A>
 ```
 
-The command name is already set via the constructor or `.sub()`, so only `description` and `usage` can be provided here.
+The command name is already set by the builder source (`new Crust(name)`, `.sub(name)`, or the child builder passed into `.command(name, cb)`), so only `description` and `usage` can be provided here.
 
 ```ts
 new Crust("deploy")
@@ -170,7 +170,7 @@ command<N extends string>(
 ): Crust<Inherited, Local, A>
 ```
 
-The callback receives a fresh builder pre-typed with the parent's inheritable flags:
+Use this for inline subcommands. The callback receives a fresh builder pre-typed with the parent's inheritable flags:
 
 ```ts
 new Crust("my-cli")
@@ -189,15 +189,41 @@ new Crust("my-cli")
 
 ### `.command(builder)`
 
-Register a pre-built subcommand from `.sub()`.
+Register a pre-built subcommand builder.
 
 ```ts
 command(builder: Crust<any, any, any>): Crust<Inherited, Local, A>
 ```
 
-See [`.sub()`](#subname) for the file-splitting pattern.
+Use this when the subcommand is built elsewhere. It accepts any `Crust` builder:
+
+- `app.sub("deploy")` when the subcommand should inherit the parent's `inherit: true` flags
+- `new Crust("deploy")` when the subcommand is fully standalone
+
+Use [`.sub()`](#subname) for split files and parent-aware flag inheritance.
 
 **Throws:** `CrustError("DEFINITION")` if the builder's name is empty or already registered.
+
+```ts
+const app = new Crust("my-cli").flags({
+  verbose: { type: "boolean", inherit: true },
+});
+
+const standalone = new Crust("doctor").run(() => {
+  console.log("doctor");
+});
+
+const inherited = app
+  .sub("deploy")
+  .run(({ flags }) => {
+    flags.verbose; // boolean | undefined
+  });
+
+await app
+  .command(standalone)
+  .command(inherited)
+  .execute();
+```
 
 ### `.sub(name)`
 
@@ -207,7 +233,7 @@ Create a subcommand builder pre-typed with this command's inheritable flags.
 sub<N extends string>(name: N): Crust<EffectiveFlags<Inherited, Local>, {}, []>
 ```
 
-This is the factory method for the **file-splitting pattern** — it enables full type inference in separate files without needing `Crust<any, any, any>`.
+Use this when a subcommand lives in another file or should inherit parent flags. It is the factory method for the **file-splitting pattern**.
 
 ```ts
 // shared.ts — root command with shared flags
