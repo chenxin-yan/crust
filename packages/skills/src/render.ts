@@ -2,6 +2,11 @@
 // Markdown renderers — produce distributable skill files from manifest
 // ────────────────────────────────────────────────────────────────────────────
 
+import {
+	hasNormalizedInstructions,
+	normalizeInstructionList,
+	normalizeMarkdownBlock,
+} from "./instructions.ts";
 import type {
 	ManifestArg,
 	ManifestFlag,
@@ -216,34 +221,44 @@ function renderSkillMd(
 
 	// When-to-use guidance for agents
 	lines.push(
-		`Use this skill when working with \`${cliName}\` commands, or when you need help with \`${cliName}\` syntax, flags, or subcommands.`,
+		`Use this skill when you need accurate help with \`${cliName}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
 	);
 	lines.push("");
 
-	// Lazy-load instructions for agents
+	const topLevelInstructions = renderTopLevelInstructions(meta.instructions);
+
+	// Agent workflow for navigating command documentation
+	lines.push("## How to Use This Skill");
+	lines.push("");
+	lines.push(
+		"1. Find the command that best matches the user's task from the Command Reference below",
+	);
+	lines.push(
+		"2. Check the `Type` column before suggesting execution: `runnable` and `runnable, group` commands can be executed, while `group` commands are organizational only",
+	);
+	lines.push("3. Read only the linked file or files you need from `commands/`");
+	lines.push(
+		"4. Before answering a command-specific question or suggesting a command, read that command's file",
+	);
+	lines.push(
+		"5. Treat the command file as the source of truth for usage, arguments, flags, aliases, and defaults",
+	);
+	lines.push(
+		"6. If a flag, argument, alias, or default is not documented there, say it is not documented instead of guessing",
+	);
+	lines.push("");
+
+	if (hasNormalizedInstructions(topLevelInstructions)) {
+		lines.push("## General Guidance");
+		lines.push("");
+		lines.push(...topLevelInstructions);
+		lines.push("");
+	}
+
+	// Lazy-load table for command docs
 	lines.push("## Command Reference");
 	lines.push("");
-	lines.push(
-		"This table lists all commands and their documentation paths. " +
-			"**Do not read all command files at once.** Instead:",
-	);
-	lines.push("");
-	lines.push("1. Use the table below to find the relevant command");
-	lines.push(
-		"2. Use the `Type` column to choose what to execute: commands labeled `runnable` (including `runnable, group`) are executable, while `group` commands are not",
-	);
-	lines.push(
-		"3. Read only the specific file from the `commands/` directory that you need",
-	);
-	lines.push(
-		"4. For any command-specific answer, read that command's documentation file before responding",
-	);
-	lines.push(
-		"5. Treat the command documentation file as the source of truth for usage, flags, options, aliases, and defaults",
-	);
-	lines.push(
-		"6. Do not invent or assume undocumented flags/options; if something is missing from the file, say it is not documented",
-	);
+	lines.push("Use this table to locate the command file you need.");
 	lines.push("");
 	lines.push(...renderCommandReferenceTable(allNodes));
 	lines.push("");
@@ -309,53 +324,9 @@ function commandType(node: ManifestNode): string {
  */
 function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
-	const invocation = commandInvocation(node);
-
-	lines.push(`# \`${invocation}\``);
-	lines.push("");
-
-	if (node.description) {
-		lines.push(node.description);
-		lines.push("");
-	}
-
-	// Usage line
-	lines.push("## Usage");
-	lines.push("");
-	if (node.usage) {
-		lines.push("```");
-		lines.push(node.usage);
-		lines.push("```");
-	} else {
-		lines.push("```");
-		lines.push(buildUsageLine(node));
-		lines.push("```");
-	}
-	lines.push("");
-
-	// Arguments
-	if (node.args.length > 0) {
-		lines.push("## Arguments");
-		lines.push("");
-		lines.push(...renderArgsTable(node.args));
-		lines.push("");
-	}
-
-	// Flags
-	if (node.flags.length > 0) {
-		lines.push("## Flags");
-		lines.push("");
-		lines.push(...renderFlagsTable(node.flags));
-		lines.push("");
-	}
-
-	lines.push("## Command Documentation Authority");
-	lines.push("");
-	lines.push(
-		"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
-	);
-	lines.push("Do not infer or invent additional command-line options.");
-	lines.push("");
+	lines.push(...renderCommandHeading(node));
+	lines.push(...renderAgentInstructions(node));
+	lines.push(...renderRunnableCommandSections(node));
 
 	// Parent navigation
 	lines.push(...renderNavigation(node, root));
@@ -373,65 +344,17 @@ function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
  */
 function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
-	const invocation = commandInvocation(node);
 	const filePath = commandFilePath(node);
-
-	lines.push(`# \`${invocation}\``);
-	lines.push("");
-
-	if (node.description) {
-		lines.push(node.description);
-		lines.push("");
-	}
+	lines.push(...renderCommandHeading(node));
+	lines.push(...renderAgentInstructions(node));
 
 	// If the group is also runnable, show its own usage
 	if (node.runnable) {
-		lines.push("## Usage");
-		lines.push("");
-		if (node.usage) {
-			lines.push("```");
-			lines.push(node.usage);
-			lines.push("```");
-		} else {
-			lines.push("```");
-			lines.push(buildUsageLine(node));
-			lines.push("```");
-		}
-		lines.push("");
-
-		if (node.args.length > 0) {
-			lines.push("## Arguments");
-			lines.push("");
-			lines.push(...renderArgsTable(node.args));
-			lines.push("");
-		}
-
-		if (node.flags.length > 0) {
-			lines.push("## Flags");
-			lines.push("");
-			lines.push(...renderFlagsTable(node.flags));
-			lines.push("");
-		}
-
-		lines.push("## Command Documentation Authority");
-		lines.push("");
-		lines.push(
-			"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
-		);
-		lines.push("Do not infer or invent additional command-line options.");
-		lines.push("");
+		lines.push(...renderRunnableCommandSections(node));
 	}
 
 	// Subcommands list
-	lines.push("## Subcommands");
-	lines.push("");
-	for (const child of node.children) {
-		const childPath = commandFilePath(child);
-		const childRelative = relativePath(filePath, childPath);
-		const desc = child.description ? ` - ${child.description}` : "";
-		lines.push(`- [\`${child.name}\`](${childRelative})${desc}`);
-	}
-	lines.push("");
+	lines.push(...renderSubcommandLinks(node, filePath));
 
 	// Parent navigation
 	lines.push(...renderNavigation(node, root));
@@ -464,6 +387,74 @@ function buildUsageLine(node: ManifestNode): string {
 	}
 
 	return parts.join(" ");
+}
+
+function renderCommandHeading(node: ManifestNode): string[] {
+	const lines = [`# \`${commandInvocation(node)}\``, ""];
+
+	if (node.description) {
+		lines.push(node.description, "");
+	}
+
+	return lines;
+}
+
+function renderAgentInstructions(node: ManifestNode): string[] {
+	const instructions = node.instructions ?? [];
+
+	if (!hasNormalizedInstructions(instructions)) {
+		return [];
+	}
+
+	return [
+		"## Command Instructions",
+		"",
+		...renderInstructionList(instructions),
+		"",
+	];
+}
+
+function renderRunnableCommandSections(node: ManifestNode): string[] {
+	const lines = [
+		"## Usage",
+		"",
+		"```",
+		node.usage ?? buildUsageLine(node),
+		"```",
+		"",
+	];
+
+	if (node.args.length > 0) {
+		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
+	}
+
+	if (node.flags.length > 0) {
+		lines.push("## Flags", "", ...renderFlagsTable(node.flags), "");
+	}
+
+	lines.push(
+		"## Command Documentation Authority",
+		"",
+		"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
+		"Do not infer or invent additional command-line options.",
+		"",
+	);
+
+	return lines;
+}
+
+function renderSubcommandLinks(node: ManifestNode, filePath: string): string[] {
+	const lines = ["## Subcommands", ""];
+
+	for (const child of node.children) {
+		const childPath = commandFilePath(child);
+		const childRelative = relativePath(filePath, childPath);
+		const desc = child.description ? ` - ${child.description}` : "";
+		lines.push(`- [\`${child.name}\`](${childRelative})${desc}`);
+	}
+
+	lines.push("");
+	return lines;
 }
 
 /**
@@ -550,6 +541,23 @@ function formatFlagDescription(flag: ManifestFlag): string {
 		parts.push(`Default: \`${flag.default}\``);
 	}
 	return parts.join(". ") || "-";
+}
+
+/**
+ * Renders a compact bullet list of instruction lines.
+ */
+function renderInstructionList(instructions: string[]): string[] {
+	return instructions.map((instruction) => `- ${instruction}`);
+}
+
+function renderTopLevelInstructions(
+	instructions: string | string[] | undefined,
+): string[] {
+	if (typeof instructions === "string") {
+		return normalizeMarkdownBlock(instructions);
+	}
+
+	return renderInstructionList(normalizeInstructionList(instructions));
 }
 
 /**

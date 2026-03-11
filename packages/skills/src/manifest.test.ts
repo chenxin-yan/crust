@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -113,6 +114,26 @@ describe("buildManifest", () => {
 			expect(node.args).toEqual([]);
 			expect(node.flags).toEqual([]);
 			expect(node.children).toEqual([]);
+		});
+
+		it("includes skill-specific instructions when annotated", () => {
+			const cmd = annotate(
+				makeCommand({
+					meta: { name: "deploy" },
+					run() {},
+				}),
+				[
+					"Confirm destructive operations before execution.",
+					"Prefer dry-run flags when available.",
+				],
+			);
+
+			const node = buildManifest(cmd);
+
+			expect(node.instructions).toEqual([
+				"Confirm destructive operations before execution.",
+				"Prefer dry-run flags when available.",
+			]);
 		});
 	});
 
@@ -571,6 +592,43 @@ describe("buildManifest", () => {
 			const node = buildManifest(cmd);
 
 			expect(node.children).toEqual([]);
+		});
+
+		it("preserves annotated instructions on nested commands", () => {
+			const deploy = annotate(
+				makeCommand({
+					meta: { name: "deploy" },
+					run() {},
+				}),
+				"Ask for explicit confirmation before production deploys.",
+			);
+
+			const root = makeCommand({
+				meta: { name: "app" },
+				subCommands: { deploy },
+			});
+
+			const node = buildManifest(root);
+			const child = node.children[0];
+
+			expect(child?.instructions).toEqual([
+				"Ask for explicit confirmation before production deploys.",
+			]);
+		});
+
+		it("preserves instructions across Crust builder cloning", () => {
+			const deploy = annotate(
+				new Crust("deploy").meta({ description: "Deploy command" }),
+				"Read the environment carefully before execution.",
+			).run(() => {});
+			const root = new Crust("app").command(deploy);
+
+			const node = buildManifest(root._node);
+			const child = node.children[0];
+
+			expect(child?.instructions).toEqual([
+				"Read the environment carefully before execution.",
+			]);
 		});
 	});
 

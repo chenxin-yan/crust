@@ -10,6 +10,8 @@ export {
 	isUniversalAgent,
 	resolveCanonicalSkillPath,
 } from "./agents.ts";
+export type { SkillCommandAnnotations } from "./annotations.ts";
+export { annotate } from "./annotations.ts";
 export type { SkillConflictDetails } from "./errors.ts";
 // Errors
 export { SkillConflictError } from "./errors.ts";

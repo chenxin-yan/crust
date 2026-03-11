@@ -16,6 +16,7 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { annotate } from "../src/annotations.ts";
 import { generateSkill } from "../src/generate.ts";
 import type { AgentResult } from "../src/types.ts";
 import { CRUST_MANIFEST } from "../src/version.ts";
@@ -134,7 +135,12 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 async function generateForTest(
 	tmpDir: string,
 	command: CommandNode,
-	meta: { name: string; description: string; version: string },
+	meta: {
+		name: string;
+		description: string;
+		version: string;
+		instructions?: string | string[];
+	},
 ) {
 	const result = await withCwd(tmpDir, () =>
 		generateSkill({
@@ -338,6 +344,30 @@ function buildFixtureCommand(): CommandNode {
 	});
 }
 
+function buildInstructionFixtureCommand(): CommandNode {
+	const deploy = annotate(
+		makeCommand({
+			meta: {
+				name: "deploy",
+				description: "Deploy the application",
+			},
+			run() {},
+		}),
+		[
+			"Prefer preview commands before applying changes.",
+			"Call out risky production operations explicitly.",
+		],
+	);
+
+	return makeCommand({
+		meta: {
+			name: "ops",
+			description: "Operations CLI",
+		},
+		subCommands: { deploy },
+	});
+}
+
 const SKILL_META = {
 	name: "deploy-cli",
 	description: "Agent skill for the deploy CLI tool",
@@ -472,7 +502,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("| `deploy status` | runnable |");
 		});
 
-		it("includes lazy-load instructions with directive phrasing", async () => {
+		it("includes command-reference workflow instructions", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -480,23 +510,22 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
+			expect(content).toContain("## How to Use This Skill");
+			expect(content).toContain("## Command Reference");
 			expect(content).toContain(
-				"Use the table below to find the relevant command",
+				"Use this table to locate the command file you need.",
 			);
-			expect(content).toContain("**Do not read all command files at once.**");
+			expect(content).toContain("Find the command that best matches");
 			expect(content).toContain(
-				"commands labeled `runnable` (including `runnable, group`) are executable",
-			);
-			expect(content).toContain("while `group` commands are not");
-			expect(content).toContain(
-				"For any command-specific answer, read that command's documentation file before responding",
+				"Check the `Type` column before suggesting execution",
 			);
 			expect(content).toContain(
-				"Treat the command documentation file as the source of truth",
+				"Before answering a command-specific question or suggesting a command, read that command's file",
 			);
 			expect(content).toContain(
-				"Do not invent or assume undocumented flags/options",
+				"Treat the command file as the source of truth",
 			);
+			expect(content).toContain("say it is not documented instead of guessing");
 		});
 
 		it("includes when-to-use guidance referencing the CLI name", async () => {
@@ -508,7 +537,7 @@ describe("E2E: skill generation", () => {
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain(
-				"Use this skill when working with `deploy-cli` commands",
+				"Use this skill when you need accurate help with `deploy-cli` commands",
 			);
 		});
 
@@ -522,6 +551,42 @@ describe("E2E: skill generation", () => {
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain("## Usage");
 			expect(content).toContain("commands/deploy.md");
+		});
+
+		it("renders top-level instructions and annotated command instructions on disk", async () => {
+			const agent = await generateForTest(
+				tmpDir,
+				buildInstructionFixtureCommand(),
+				{
+					name: "ops-cli",
+					description: "Operations skill",
+					version: "1.0.0",
+					instructions: [
+						"Prefer readonly commands before mutating state.",
+						"Ask for confirmation before destructive actions.",
+					],
+				},
+			);
+
+			const skillContent = await readText(join(agent.outputDir, "SKILL.md"));
+			const commandContent = await readText(
+				join(agent.outputDir, "commands", "deploy.md"),
+			);
+
+			expect(skillContent).toContain("## General Guidance");
+			expect(skillContent).toContain(
+				"- Prefer readonly commands before mutating state.",
+			);
+			expect(skillContent).toContain(
+				"- Ask for confirmation before destructive actions.",
+			);
+			expect(commandContent).toContain("## Command Instructions");
+			expect(commandContent).toContain(
+				"- Prefer preview commands before applying changes.",
+			);
+			expect(commandContent).toContain(
+				"- Call out risky production operations explicitly.",
+			);
 		});
 
 		it("all links in SKILL.md resolve to real files", async () => {

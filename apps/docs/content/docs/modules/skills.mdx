@@ -22,6 +22,13 @@ import { skillPlugin } from "@crustjs/skills";
 const app = new Crust("my-cli").meta({ description: "My CLI tool" }).use(
   skillPlugin({
     version: "1.0.0",
+    instructions: `
+Read command docs before suggesting exact flags.
+
+## Answer Style
+
+- Prefer exact syntax copied from the relevant command file.
+`,
     // command defaults to "skill" and registers "my-cli skill"
   }),
 );
@@ -47,6 +54,8 @@ interface SkillPluginOptions {
   autoUpdate?: boolean;
   /** Register interactive skill subcommand with a custom name. @default "skill" */
   command?: string;
+  /** Additional top-level instructions rendered into SKILL.md. */
+  instructions?: string | string[];
 }
 ```
 
@@ -157,6 +166,33 @@ const meta: SkillMeta = {
 | `license`                | `license`                  | License name or file reference                                               |
 | `compatibility`          | `compatibility`            | Environment requirements or compatibility notes                              |
 | `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill                     |
+
+## Command-Level Prompt Guidance
+
+Use `annotate()` to attach agent-facing instructions to a specific
+command without extending the public `@crustjs/core` builder API.
+
+- `instructions: string` renders as a raw markdown block in `SKILL.md`.
+- `instructions: string[]` renders as bullet list items in `SKILL.md`.
+- Empty or whitespace-only instruction input is ignored.
+- `annotate()` renders command guidance as bullets in the command doc.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { annotate } from "@crustjs/skills";
+
+const deploy = annotate(
+  new Crust("deploy")
+    .meta({ description: "Deploy the application" })
+    .run(() => {
+      // ...
+    }),
+  [
+    "Prefer preview modes before running destructive operations.",
+    "Ask for confirmation before production changes.",
+  ],
+);
+```
 
 ## Name Validation
 

@@ -59,6 +59,13 @@ runMain(app, {
   plugins: [
     skillPlugin({
       version: "1.0.0",
+      instructions: `
+Prefer readonly commands before mutating project state.
+
+## Response Policy
+
+- Read the relevant command doc before suggesting flags.
+`,
       // autoUpdate: true (default) — silently updates installed skills
       // command: "skill" (default) — registers "my-cli skill" subcommand
       // defaultScope: "global" | "project" — skip scope prompt when set
@@ -135,6 +142,53 @@ if (import.meta.main) {
 }
 ```
 
+### Custom Instructions
+
+Use plugin-level `instructions` to add top-level guidance to the generated
+`SKILL.md`, and `annotate()` to add prompt guidance to specific
+command docs under `commands/`.
+
+- `instructions: string` renders as a raw markdown block.
+- `instructions: string[]` renders as bullet list items.
+- Empty or whitespace-only instruction input is ignored.
+- `annotate()` always renders command guidance as bullets.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { annotate, skillPlugin } from "@crustjs/skills";
+
+const deploy = annotate(
+  new Crust("deploy")
+    .meta({ description: "Deploy the application" })
+    .flags({
+      "dry-run": { type: "boolean", description: "Preview changes only" },
+    })
+    .run(() => {
+      // ...
+    }),
+  [
+    "Prefer `--dry-run` before executing deployment changes.",
+    "Ask for confirmation before production deployments.",
+  ],
+);
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
+    skillPlugin({
+      version: "1.0.0",
+      instructions: `
+Read command docs before suggesting exact flags.
+
+## Answer Style
+
+- Prefer exact syntax copied from the relevant command file.
+`,
+    }),
+  )
+  .command(deploy);
+```
+
 This pattern lets `crust skills generate` import the command definition without triggering `runMain`.
 
 ## CLI Usage
@@ -191,7 +245,12 @@ import { generateSkill } from "@crustjs/skills";
 
 const result = await generateSkill({
   command: rootCommand,
-  meta: { name: "my-cli", description: "My CLI tool", version: "1.0.0" },
+  meta: {
+    name: "my-cli",
+    description: "My CLI tool",
+    version: "1.0.0",
+    instructions: ["Prefer readonly commands before making changes."],
+  },
   agents: ["opencode"],
   scope: "project", // default: "global"
   installMode: "auto", // default: "auto" — symlink first, fallback to copy

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
@@ -245,30 +246,34 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("includes lazy-load instructions", () => {
+		it("includes command-reference workflow instructions", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("Command Reference");
+			expect(skill?.content).toContain("## How to Use This Skill");
+			expect(skill?.content).toContain("## Command Reference");
 			expect(skill?.content).toContain(
-				"**Do not read all command files at once.**",
+				"Use this table to locate the command file you need.",
+			);
+			expect(skill?.content).not.toContain(
+				"This table maps each command to its documentation file.",
+			);
+			expect(skill?.content).not.toContain(
+				"Read only the files you need for the current task",
+			);
+			expect(skill?.content).toContain("Find the command that best matches");
+			expect(skill?.content).toContain(
+				"Check the `Type` column before suggesting execution",
 			);
 			expect(skill?.content).toContain(
-				"Use the table below to find the relevant command",
+				"Before answering a command-specific question or suggesting a command, read that command's file",
 			);
 			expect(skill?.content).toContain(
-				"commands labeled `runnable` (including `runnable, group`) are executable",
-			);
-			expect(skill?.content).toContain("while `group` commands are not");
-			expect(skill?.content).toContain(
-				"For any command-specific answer, read that command's documentation file before responding",
+				"Treat the command file as the source of truth",
 			);
 			expect(skill?.content).toContain(
-				"Treat the command documentation file as the source of truth",
-			);
-			expect(skill?.content).toContain(
-				"Do not invent or assume undocumented flags/options",
+				"say it is not documented instead of guessing",
 			);
 		});
 
@@ -278,8 +283,84 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
-				"Use this skill when working with `test-cli` commands",
+				"Use this skill when you need accurate help with `test-cli` commands",
 			);
+		});
+
+		it("renders additional top-level instructions when provided", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, {
+				...baseMeta,
+				instructions: [
+					"Prefer readonly commands before making changes.",
+					"Ask for confirmation before destructive actions.",
+				],
+			});
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain("## General Guidance");
+			expect(skill?.content).toContain(
+				"- Prefer readonly commands before making changes.",
+			);
+			expect(skill?.content).toContain(
+				"- Ask for confirmation before destructive actions.",
+			);
+		});
+
+		it("renders top-level instructions from a markdown string", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, {
+				...baseMeta,
+				instructions: `Read the command docs before answering.
+
+## Response Policy
+
+- Prefer exact documented flags.`,
+			});
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain("## General Guidance");
+			expect(skill?.content).toContain(
+				"Read the command docs before answering.",
+			);
+			expect(skill?.content).toContain("## Response Policy");
+			expect(skill?.content).toContain("- Prefer exact documented flags.");
+		});
+
+		it("omits additional instructions for a whitespace-only markdown string", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, {
+				...baseMeta,
+				instructions: "   ",
+			});
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).not.toContain("## General Guidance");
+		});
+
+		it("omits additional instructions for a whitespace-only array", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, {
+				...baseMeta,
+				instructions: ["", "  "],
+			});
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).not.toContain("## General Guidance");
+		});
+
+		it("trims and filters top-level instruction list items", () => {
+			const manifest = buildSimpleManifest();
+			const files = renderSkill(manifest, {
+				...baseMeta,
+				instructions: ["  first  ", "", "second"],
+			});
+			const skill = findFile(files, "SKILL.md");
+
+			expect(skill?.content).toContain("## General Guidance");
+			expect(skill?.content).toContain("- first");
+			expect(skill?.content).toContain("- second");
+			expect(skill?.content).not.toContain("- ");
 		});
 
 		it("strips use- prefix from CLI name in when-to-use text", () => {
@@ -292,7 +373,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
-				"Use this skill when working with `my-tool` commands",
+				"Use this skill when you need accurate help with `my-tool` commands",
 			);
 		});
 
@@ -745,6 +826,35 @@ describe("renderSkill", () => {
 			expect(serve?.content).toContain("SKILL.md");
 		});
 
+		it("renders agent instructions for annotated leaf commands", () => {
+			const cmd = annotate(
+				makeCommand({
+					meta: { name: "deploy" },
+					run() {},
+				}),
+				[
+					"Prefer preview flags before executing changes.",
+					"Call out risky production operations explicitly.",
+				],
+			);
+
+			const manifest = buildManifest(cmd);
+			const files = renderSkill(manifest, {
+				name: "deploy",
+				description: "Deploy",
+				version: "1.0.0",
+			});
+			const deploy = findFile(files, "commands/deploy.md");
+
+			expect(deploy?.content).toContain("## Instructions");
+			expect(deploy?.content).toContain(
+				"- Prefer preview flags before executing changes.",
+			);
+			expect(deploy?.content).toContain(
+				"- Call out risky production operations explicitly.",
+			);
+		});
+
 		it("includes command authority instructions in leaf command files", () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
@@ -969,6 +1079,33 @@ describe("renderSkill", () => {
 			expect(parentFile?.content).not.toContain("## Arguments");
 			expect(parentFile?.content).not.toContain("## Flags");
 			expect(parentFile?.content).toContain("## Subcommands");
+		});
+
+		it("renders agent instructions for annotated group commands", () => {
+			const sub = makeCommand({
+				meta: { name: "sub" },
+				run() {},
+			});
+			const parent = annotate(
+				makeCommand({
+					meta: { name: "parent", description: "Parent command" },
+					subCommands: { sub },
+				}),
+				"Read a child command doc before recommending execution details.",
+			);
+
+			const manifest = buildManifest(parent);
+			const files = renderSkill(manifest, {
+				name: "parent",
+				description: "Parent",
+				version: "1.0.0",
+			});
+			const parentFile = findFile(files, "commands/parent.md");
+
+			expect(parentFile?.content).toContain("## Instructions");
+			expect(parentFile?.content).toContain(
+				"- Read a child command doc before recommending execution details.",
+			);
 		});
 
 		it("uses relative links to child command files", () => {

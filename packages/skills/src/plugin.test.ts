@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { access, lstat, mkdir, rm, stat } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
@@ -70,6 +70,101 @@ describe("skillPlugin auto-update", () => {
 		);
 
 		expect(await exists(manifestPath)).toBe(false);
+	});
+
+	it("renders plugin-provided top-level instructions into SKILL.md", async () => {
+		const app = new Crust("instruction-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+					instructions: [
+						"Prefer readonly commands before mutating state.",
+						"Ask for confirmation before destructive actions.",
+					],
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "instruction-test",
+					description: "test",
+					version: "0.9.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		const skillPath = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-instruction-test",
+			"SKILL.md",
+		);
+		const content = await readFile(skillPath, "utf-8");
+
+		expect(content).toContain("## General Guidance");
+		expect(content).toContain(
+			"- Prefer readonly commands before mutating state.",
+		);
+		expect(content).toContain(
+			"- Ask for confirmation before destructive actions.",
+		);
+	});
+
+	it("renders plugin-provided markdown instructions into SKILL.md", async () => {
+		const app = new Crust("markdown-instruction-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+					instructions: `Read the command docs before answering.
+
+## Response Policy
+
+- Prefer exact documented flags.
+- Quote defaults only when they appear in the command file.`,
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "markdown-instruction-test",
+					description: "test",
+					version: "0.9.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		const skillPath = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-markdown-instruction-test",
+			"SKILL.md",
+		);
+		const content = await readFile(skillPath, "utf-8");
+
+		expect(content).toContain("## General Guidance");
+		expect(content).toContain("Read the command docs before answering.");
+		expect(content).toContain("## Response Policy");
+		expect(content).toContain("- Prefer exact documented flags.");
 	});
 
 	it("auto-updates already-installed skills when version changes", async () => {
@@ -375,6 +470,57 @@ describe("skillPlugin auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
 
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+	});
+
+	it("renders top-level instructions when running manual skill update", async () => {
+		const app = new Crust("manual-update-instructions-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					instructions: [
+						"Prefer readonly commands before mutating state.",
+						"Ask for confirmation before destructive actions.",
+					],
+				}),
+			);
+
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: app._node,
+				meta: {
+					name: "manual-update-instructions-test",
+					description: "test",
+					version: "1.0.0",
+				},
+				agents: ["opencode"],
+				scope: "project",
+			}),
+		);
+
+		await withCwd(tmpDir, () =>
+			app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+		);
+
+		const skillPath = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-manual-update-instructions-test",
+			"SKILL.md",
+		);
+		const content = await readFile(skillPath, "utf-8");
+
+		expect(content).toContain("## General Guidance");
+		expect(content).toContain(
+			"- Prefer readonly commands before mutating state.",
+		);
+		expect(content).toContain(
+			"- Ask for confirmation before destructive actions.",
+		);
 	});
 
 	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {

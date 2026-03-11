@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import { getSkillCommandAnnotations } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -50,12 +51,14 @@ function buildNode(command: CommandNode, parentPath: string[]): ManifestNode {
 	const args = normalizeArgs(command.args);
 	const flags = normalizeFlags(command.effectiveFlags);
 	const children = normalizeChildren(command.subCommands, path);
+	const annotations = getSkillCommandAnnotations(command);
 
 	return {
 		name,
 		path,
 		description: command.meta.description,
 		usage: command.meta.usage,
+		instructions: annotations?.instructions,
 		runnable: typeof command.run === "function",
 		args,
 		flags,

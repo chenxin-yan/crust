@@ -114,16 +114,24 @@ function formatInstallOutput(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Derives a {@link SkillMeta} from a command's `meta` and a version string.
+ * Derives a {@link SkillMeta} from a command's `meta` and plugin options.
  *
  * The returned `name` is the raw CLI name (e.g. `"my-cli"`). The `use-`
  * prefix is applied downstream by `generateSkill()` and friends.
  */
-function deriveSkillMeta(command: CommandNode, version: string): SkillMeta {
+function deriveSkillMeta(
+	command: CommandNode,
+	options: SkillPluginOptions,
+): SkillMeta {
 	return {
 		name: command.meta.name,
 		description: command.meta.description ?? "",
-		version,
+		version: options.version,
+		instructions: options.instructions,
+		license: options.license,
+		allowedTools: options.allowedTools,
+		compatibility: options.compatibility,
+		disableModelInvocation: options.disableModelInvocation,
 	};
 }
 
@@ -147,7 +155,7 @@ async function autoUpdateSkills(
 		return;
 	}
 
-	const meta = deriveSkillMeta(rootCmd, options.version);
+	const meta = deriveSkillMeta(rootCmd, options);
 
 	const scopesToCheck: Scope[] = ["project", "global"];
 
@@ -321,7 +329,7 @@ function buildSkillCommand(
 			},
 		})
 		.run(async (ctx) => {
-			const meta = deriveSkillMeta(rootCmd, options.version);
+			const meta = deriveSkillMeta(rootCmd, options);
 			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
 
 			// Detect installed agents
@@ -546,7 +554,7 @@ function buildSkillUpdateCommand(
 			// This avoids spawning external CLIs during `skill update`.
 			const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
 
-			const meta = deriveSkillMeta(rootCmd, options.version);
+			const meta = deriveSkillMeta(rootCmd, options);
 			const status = await skillStatus({
 				name: meta.name,
 				agents,
