@@ -139,17 +139,20 @@ ROOT_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 
 cd ../darwin-arm64
 PLATFORM_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
+
+echo "Root:     $ROOT_TGZ"
+echo "Platform: $PLATFORM_TGZ"
 ```
 
-Install both tarballs into a throwaway project:
+Install both tarballs into a throwaway project. Replace the `file:` paths below with the values printed above:
 
 ```json title="package.json"
 {
   "name": "my-cli-smoke",
   "private": true,
   "dependencies": {
-    "<root-package-name>": "file:/absolute/path/to/root.tgz",
-    "<platform-package-name>": "file:/absolute/path/to/platform.tgz"
+    "<root-package-name>": "file:<ROOT_TGZ>",
+    "<platform-package-name>": "file:<PLATFORM_TGZ>"
   }
 }
 ```
