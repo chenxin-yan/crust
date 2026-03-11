@@ -34,7 +34,7 @@ Bun can load `.env` files at runtime, and compiled executables continue to use B
 ```sh
 crust build --env-file .env.production
 crust build --env-file .env --env-file .env.local
-crust build --distribute --env-file .env.production
+crust build --package --env-file .env.production
 ```
 
 - when `--env-file` is omitted, Bun's auto-loaded cwd env can still provide build-time constants
