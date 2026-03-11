@@ -29,7 +29,7 @@ Bun can load `.env` files at runtime, and compiled executables continue to use B
 
 ## Build-Time Constants
 
-`crust build` uses Bun's native prefix env inlining with `PUBLIC_*`. It can source build-time constants from Bun's auto-loaded cwd env, and it also supports explicit env files through `--env-file`.
+`crust build` follows Bun's `PUBLIC_*` env-prefix model for build-time constants. It can source build-time constants from Bun's auto-loaded cwd env, and it also supports explicit env files through `--env-file`.
 
 ```sh
 crust build --env-file .env.production
@@ -41,7 +41,7 @@ crust build --package --env-file .env.production
 - the flag is **repeatable**
 - later env files override earlier env files
 - shell env still wins over env file values
-- only `PUBLIC_*` keys are eligible for build-time constant injection through Bun's native prefix env support
+- only `PUBLIC_*` keys are eligible for build-time constant injection
 
 Whether values come from Bun's auto-loaded cwd env or from `--env-file`, only `PUBLIC_*` values are eligible to be embedded into the compiled output.
 

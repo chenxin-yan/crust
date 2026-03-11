@@ -158,7 +158,7 @@ crust build --no-minify
 - compiled executables continue to use Bun's runtime env behavior
 - Bun's auto-loaded cwd env can provide build-time constants by default
 - `--env-file` lets you override that with explicit env files
-- only `PUBLIC_*` values are eligible to be embedded as build-time constants via Bun's native prefix env support
+- only `PUBLIC_*` values are eligible to be embedded as build-time constants
 
 ```sh
 crust build --env-file .env.production
@@ -176,7 +176,7 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
-The validation works by spawning `bun <entry>` as a subprocess with `CRUST_INTERNAL_VALIDATE_ONLY=1`. When [`.execute()`](/docs/api/crust#executeoptions) detects this environment variable, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers.
+The validation works by spawning the current executable in Bun mode with `CRUST_INTERNAL_VALIDATE_ONLY=1`. When [`.execute()`](/docs/api/crust#executeoptions) detects this environment variable, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers.
 
 If you pass `--env-file`, the validation subprocess receives the same explicit env-file inputs as the build step. That keeps plugin setup and command-tree validation aligned with the final compilation.
 

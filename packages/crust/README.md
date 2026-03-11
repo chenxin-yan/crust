@@ -97,7 +97,7 @@ dist/
 
 #### Environment Variables
 
-Compiled executables still use Bun's **runtime env** behavior. Build-time constants use Bun's native prefix env inlining for `PUBLIC_*`, sourcing values from Bun's auto-loaded cwd env by default or from explicit `--env-file` inputs.
+Compiled executables still use Bun's **runtime env** behavior. Build-time constants follow Bun's `PUBLIC_*` env-prefix model, sourcing values from Bun's auto-loaded cwd env by default or from explicit `--env-file` inputs.
 
 `PUBLIC_*` values are embedded in the binary and are therefore public.
 
