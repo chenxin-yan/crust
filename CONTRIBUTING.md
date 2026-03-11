@@ -170,6 +170,4 @@ Helpful reports include:
 - Bun, Node.js, and OS versions
 - a minimal example or failing command
 
-## Security
-
-If you believe you found a security issue, do not file a public issue with exploit details. Contact the maintainer privately first.
+If you believe you found a security issue, do not file a public issue with exploit details. Please report it via [GitHub Security Advisories](https://github.com/chenxin-yan/crust/security/advisories/new) or contact the maintainer directly before any public disclosure.
