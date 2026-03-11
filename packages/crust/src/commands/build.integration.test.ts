@@ -309,7 +309,7 @@ console.log(JSON.stringify({
 				},
 			);
 
-			const [exitCode, stderr] = await Promise.all([
+			const [exitCode, _stderr] = await Promise.all([
 				proc.exited,
 				new Response(proc.stderr).text(),
 			]);

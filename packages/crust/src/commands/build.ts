@@ -514,6 +514,7 @@ export async function execBuild(
 		"build",
 		"--compile",
 		...toBunEnvFileArgs(envFiles),
+		`--env=${PUBLIC_ENV_PATTERN}`,
 		"--outfile",
 		outfilePath,
 		...(minify ? ["--minify"] : []),
