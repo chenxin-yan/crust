@@ -137,8 +137,7 @@ crust build --package
 cd dist/npm/root
 ROOT_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 
-cd ../darwin-arm64
-PLATFORM_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
+cd ../darwin-arm64  # replace with your platform from dist/npm/manifest.json
 
 echo "Root:     $ROOT_TGZ"
 echo "Platform: $PLATFORM_TGZ"
