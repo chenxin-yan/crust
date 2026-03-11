@@ -497,6 +497,16 @@ export async function loadMergedBuildEnv(
 	return JSON.parse(stdout) as Record<string, string>;
 }
 
+function buildPublicEnvDefine(
+	env: Record<string, string>,
+): Record<string, string> {
+	return Object.fromEntries(
+		Object.entries(env)
+			.filter(([key]) => key.startsWith(PUBLIC_ENV_PREFIX))
+			.map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)]),
+	);
+}
+
 async function withTemporaryProcessEnv<T>(
 	env: Record<string, string>,
 	fn: () => Promise<T>,
@@ -544,8 +554,8 @@ export async function execBuild(
 	target?: BunTarget,
 	envFiles: readonly string[] = [],
 ): Promise<void> {
-	const build = () =>
-		Bun.build({
+	if (envFiles.length === 0) {
+		const result = await Bun.build({
 			entrypoints: [entryPath],
 			compile: {
 				target,
@@ -555,13 +565,34 @@ export async function execBuild(
 			minify,
 		});
 
-	const result =
-		envFiles.length === 0
-			? await build()
-			: await withTemporaryProcessEnv(
-					await loadMergedBuildEnv(envFiles),
-					build,
-				);
+		if (!result.success) {
+			const messages = result.logs
+				.filter((log) => log.level === "error")
+				.map((log) => log.message ?? String(log))
+				.join("\n");
+			throw new Error(
+				`Build failed for ${outfilePath}${messages ? `:\n${messages}` : ""}`,
+			);
+		}
+
+		return;
+	}
+
+	const mergedEnv = await loadMergedBuildEnv(envFiles);
+	const define = buildPublicEnvDefine(mergedEnv);
+
+	const result = await withTemporaryProcessEnv(mergedEnv, () =>
+		Bun.build({
+			entrypoints: [entryPath],
+			compile: {
+				target,
+				outfile: outfilePath,
+			},
+			define,
+			env: "disable",
+			minify,
+		}),
+	);
 
 	if (!result.success) {
 		const messages = result.logs
@@ -717,23 +748,23 @@ export const buildCommand = new Crust("build")
 			default: "cli",
 			short: "r",
 		},
-			validate: {
-				type: "boolean",
-				description:
-					"Validate command runtime rules before compiling (disable with --no-validate)",
-				default: true,
-			},
-			"env-file": {
-				type: "string",
-				multiple: true,
-				description:
-					"Explicit env file(s) used for build-time constants; repeatable",
-			},
-			package: {
-				type: "boolean",
-				description: "Stage npm packages in dist/npm instead of raw binaries",
-				default: false,
-			},
+		validate: {
+			type: "boolean",
+			description:
+				"Validate command runtime rules before compiling (disable with --no-validate)",
+			default: true,
+		},
+		"env-file": {
+			type: "string",
+			multiple: true,
+			description:
+				"Explicit env file(s) used for build-time constants; repeatable",
+		},
+		package: {
+			type: "boolean",
+			description: "Stage npm packages in dist/npm instead of raw binaries",
+			default: false,
+		},
 		"stage-dir": {
 			type: "string",
 			description: "Directory to stage npm packages into when using --package",
