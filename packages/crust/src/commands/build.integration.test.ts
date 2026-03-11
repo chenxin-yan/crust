@@ -261,8 +261,11 @@ console.log(JSON.stringify({
 			const hostTarget = getHostTarget();
 			if (!hostTarget) return;
 
+			const autoloadDir = join(tmpDir, "autoload-workspace");
+			mkdirSync(join(autoloadDir, "src"), { recursive: true });
+
 			writeFileSync(
-				join(tmpDir, "src", "autoload-cli.ts"),
+				join(autoloadDir, "src", "autoload-cli.ts"),
 				`#!/usr/bin/env bun
 if (
   process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
@@ -277,7 +280,7 @@ console.log(JSON.stringify({
 `,
 			);
 			writeFileSync(
-				join(tmpDir, ".env"),
+				join(autoloadDir, ".env"),
 				[
 					"REQUIRED_BUILD_VAR=1",
 					"PUBLIC_MESSAGE=hello-from-autoload",
@@ -285,7 +288,7 @@ console.log(JSON.stringify({
 				].join("\n"),
 			);
 
-			const outPath = join(tmpDir, "dist", "autoload-cli");
+			const outPath = join(autoloadDir, "dist", "autoload-cli");
 			const proc = Bun.spawn(
 				[
 					process.execPath,
@@ -299,7 +302,7 @@ console.log(JSON.stringify({
 					hostTarget,
 				],
 				{
-					cwd: tmpDir,
+					cwd: autoloadDir,
 					env: {
 						...process.env,
 						BUN_BE_BUN: "1",
@@ -316,7 +319,7 @@ console.log(JSON.stringify({
 			expect(exitCode).toBe(0);
 			expect(existsSync(outPath)).toBe(true);
 
-			const runtimeDir = join(tmpDir, "runtime-no-env");
+			const runtimeDir = join(autoloadDir, "runtime-no-env");
 			mkdirSync(runtimeDir, { recursive: true });
 
 			const built = Bun.spawn([outPath], {
