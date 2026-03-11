@@ -1,0 +1,162 @@
+---
+title: Development
+description: Build your CLI with fast Bun loops, linked installs, and install-like smoke tests.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+Use three loops while building a Crust CLI:
+
+1. run the source entry for fast iteration
+2. use `bun link` to test the installed command name
+3. pack and install the publish artifact to mimic a real install
+
+## Fast Local Loop
+
+For day-to-day work, run the source entry directly:
+
+```sh
+bun run src/cli.ts --help
+bun run src/cli.ts greet world
+bun run check:types
+```
+
+If you used `create-crust`, `bun run dev` already points at `src/cli.ts`.
+
+<Tabs items={["Standalone binaries", "Bun runtime package"]}>
+  <Tab value="Standalone binaries">
+
+Also test the built resolver:
+
+```sh
+bun run build
+./dist/cli --help
+```
+
+  </Tab>
+  <Tab value="Bun runtime package">
+
+Also test the built entry:
+
+```sh
+bun run build
+bun run dist/cli.js --help
+```
+
+  </Tab>
+</Tabs>
+
+## Use `bun link`
+
+Register your CLI once from the project root:
+
+```sh
+bun link
+```
+
+Then link it into a separate scratch project:
+
+```sh
+mkdir -p ../my-cli-smoke
+cd ../my-cli-smoke
+bun init -y
+bun link my-cli
+my-cli --help
+my-cli greet world
+```
+
+To mimic a global command install while still pointing at your local package, use Bun's global link mode:
+
+```sh
+bun link -g my-cli
+my-cli --help
+```
+
+`bun link -g` makes the command available from Bun's global bin directory, which you can inspect with `bun pm bin -g`.
+
+<Callout type="info">
+  Keep the scratch project outside your CLI repo. That helps catch accidental
+  reliance on workspace paths or source-tree-only files.
+</Callout>
+
+`bun link` is for command ergonomics, not release validation:
+
+- It uses a symlink to your source tree, not the packed files users will install.
+- It can hide missing `files`, `bin`, or build output problems.
+- It does not validate staged `dist/npm/` packages.
+
+## Mimic a Real Install
+
+Use `bun pm pack` to test the artifact you actually plan to publish.
+
+<Tabs items={["Bun runtime package", "Standalone binaries", "crust build --package"]}>
+  <Tab value="Bun runtime package">
+
+Pack the root package and install it into a throwaway project:
+
+```sh
+bun run build
+TARBALL="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
+
+mkdir -p ../my-cli-install
+cd ../my-cli-install
+bun init -y
+bun add "$TARBALL"
+
+./node_modules/.bin/my-cli --help
+```
+
+To mimic a global install instead:
+
+```sh
+bun add -g "$TARBALL"
+my-cli --help
+```
+
+  </Tab>
+  <Tab value="Standalone binaries">
+
+If you distribute raw binaries directly, test the built resolver:
+
+```sh
+bun run build
+./dist/cli --help
+./dist/cli greet world
+```
+
+If you also publish the root package to npm, pack and install it the same way as the Bun runtime package example.
+
+  </Tab>
+  <Tab value="crust build --package">
+
+If your publish flow is `crust build --package`, the publish artifact is `dist/npm/`, not the repo root:
+
+```sh
+crust build --package
+cd dist/npm/root
+ROOT_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
+
+cd ../darwin-arm64  # replace with your platform from dist/npm/manifest.json
+
+echo "Root:     $ROOT_TGZ"
+echo "Platform: $PLATFORM_TGZ"
+```
+
+Install both tarballs into a throwaway project. Replace the `file:` paths below with the values printed above:
+
+```sh
+mkdir -p ../my-cli-smoke
+cd ../my-cli-smoke
+
+Use the platform directory that matches your host, as listed in `dist/npm/manifest.json`.
+
+  </Tab>
+</Tabs>
+
+## Recommended Workflow
+
+1. Write and iterate with `bun run src/cli.ts ...`
+2. Run `bun run check:types`
+3. Test the command name with `bun link` or `bun link -g`
+4. Smoke test the publish artifact with `bun pm pack` or staged `dist/npm/` packages
