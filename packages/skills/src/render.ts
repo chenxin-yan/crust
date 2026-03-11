@@ -400,7 +400,7 @@ function renderCommandHeading(node: ManifestNode): string[] {
 }
 
 function renderAgentInstructions(node: ManifestNode): string[] {
-	const instructions = normalizeInstructionList(node.instructions);
+	const instructions = node.instructions ?? [];
 
 	if (!hasNormalizedInstructions(instructions)) {
 		return [];

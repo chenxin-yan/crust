@@ -1,4 +1,5 @@
 import type { CommandNode } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { normalizeInstructionList } from "./instructions.ts";
 
 /**
@@ -9,7 +10,8 @@ export interface SkillCommandAnnotations {
 	instructions?: string[];
 }
 
-type SkillCommandTarget = CommandNode | { _node: CommandNode };
+// biome-ignore lint/suspicious/noExplicitAny: Crust is generic; we only need the _node accessor
+type SkillCommandTarget = CommandNode | Crust<any, any, any>;
 
 const SKILL_COMMAND_ANNOTATIONS = Symbol("crust.skill.commandAnnotations");
 
@@ -18,7 +20,7 @@ type AnnotatedCommandNode = CommandNode & {
 };
 
 function resolveCommandNode(target: SkillCommandTarget): CommandNode {
-	return "_node" in target ? target._node : target;
+	return target instanceof Crust ? target._node : target;
 }
 
 /**
@@ -27,6 +29,9 @@ function resolveCommandNode(target: SkillCommandTarget): CommandNode {
  *
  * The instructions are stored on the internal command node using an enumerable
  * symbol so they survive Crust's immutable clone/spread builder operations.
+ *
+ * Duplicate instructions are silently deduplicated — calling `annotate()` again
+ * with the same text is a safe no-op.
  */
 export function annotate<T extends SkillCommandTarget>(
 	target: T,
@@ -50,7 +55,6 @@ export function annotate<T extends SkillCommandTarget>(
 		value: { instructions: merged },
 		enumerable: true,
 		configurable: true,
-		writable: true,
 	});
 
 	return target;

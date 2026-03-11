@@ -81,6 +81,11 @@ export interface SkillMeta {
 	 *
 	 * Use this for plugin- or product-specific guidance that should be visible
 	 * before agents inspect individual command documentation files.
+	 *
+	 * **Note:** When a `string` value contains markdown headings (e.g. `## Foo`),
+	 * they are rendered at the same level as `## General Guidance`, not nested
+	 * under it. Use a `string[]` of plain instructions to avoid unintended
+	 * heading hierarchy.
 	 */
 	instructions?: string | string[];
 }
@@ -456,8 +461,28 @@ export interface SkillPluginOptions {
 	autoUpdate?: boolean;
 	/**
 	 * Additional top-level instructions rendered into the generated `SKILL.md`.
+	 *
+	 * **Note:** When a `string` value contains markdown headings (e.g. `## Foo`),
+	 * they are rendered at the same level as `## General Guidance`, not nested
+	 * under it. Use a `string[]` of plain instructions to avoid unintended
+	 * heading hierarchy.
 	 */
 	instructions?: string | string[];
+	/** License name or reference emitted in SKILL.md frontmatter. */
+	license?: string;
+	/**
+	 * Space-delimited list of pre-approved tools the skill may use.
+	 *
+	 * @example "Bash(my-cli *) Read Grep"
+	 */
+	allowedTools?: string;
+	/** Environment requirements or compatibility notes (max 500 chars). */
+	compatibility?: string;
+	/**
+	 * When `true`, prevents agents from automatically loading this skill.
+	 * @default false
+	 */
+	disableModelInvocation?: boolean;
 	/**
 	 * Register an interactive skill management subcommand on the root command.
 	 *

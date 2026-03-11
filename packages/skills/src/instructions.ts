@@ -1,7 +1,8 @@
 /**
  * Normalizes instruction list input by trimming items and dropping empties.
  *
- * Arrays preserve caller order. Strings are treated as single list items.
+ * Each element (or the single string) is split on newlines, so a value like
+ * `"Line1\nLine2"` produces two separate items. Arrays preserve caller order.
  */
 export function normalizeInstructionList(
 	input: string | string[] | undefined,
@@ -13,6 +14,7 @@ export function normalizeInstructionList(
 	const values = Array.isArray(input) ? input : [input];
 
 	return values
+		.flatMap((value) => value.split(/\r?\n/))
 		.map((value) => value.trim())
 		.filter((value) => value.length > 0);
 }

@@ -128,6 +128,10 @@ function deriveSkillMeta(
 		description: command.meta.description ?? "",
 		version: options.version,
 		instructions: options.instructions,
+		license: options.license,
+		allowedTools: options.allowedTools,
+		compatibility: options.compatibility,
+		disableModelInvocation: options.disableModelInvocation,
 	};
 }
 
