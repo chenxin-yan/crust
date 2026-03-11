@@ -463,63 +463,19 @@ export function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
 }
 
-export async function loadMergedBuildEnv(
-	envFiles: readonly string[],
-): Promise<Record<string, string>> {
-	const proc = Bun.spawn(
-		[
-			process.execPath,
-			...toBunEnvFileArgs(envFiles),
-			"--print",
-			"JSON.stringify(process.env)",
-		],
-		{
-			env: {
-				...process.env,
-				BUN_BE_BUN: "1",
-			},
-			cwd: process.cwd(),
-			stdout: "pipe",
-			stderr: "pipe",
-		},
-	);
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	if (exitCode !== 0) {
-		throw new Error(stderr.trim() || "Failed to load build env");
-	}
-
-	const env = JSON.parse(stdout) as Record<string, string>;
-	delete env.BUN_BE_BUN;
-	return env;
-}
-
-function buildPublicEnvDefine(
-	env: Record<string, string>,
-): Record<string, string> {
-	return Object.fromEntries(
-		Object.entries(env)
-			.filter(([key]) => key.startsWith(PUBLIC_ENV_PREFIX))
-			.map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)]),
-	);
-}
-
 /**
- * Compile a single entry file to a standalone executable using the Bun.build() API.
+ * Compile a single entry file to a standalone executable.
  *
- * Uses the programmatic `Bun.build({ compile: ... })` API instead of spawning
- * a child process. This means a self-compiled crust binary embeds the Bun runtime
- * and can compile user CLIs without requiring a separate Bun installation.
+ * Without env files, uses the programmatic `Bun.build()` API directly.
+ * With env files, spawns `bun build --compile` as a subprocess via
+ * `process.execPath` + `BUN_BE_BUN=1` so that Bun handles `--env-file`
+ * natively — no separate Bun installation required.
  *
  * @param entryPath - Absolute path to the entry file
  * @param outfilePath - Absolute path to the output binary
  * @param minify - Whether to enable minification
  * @param target - Optional Bun compile target for cross-compilation
+ * @param envFiles - Optional env files to load during build
  * @throws {Error} If the build fails
  */
 export async function execBuild(
@@ -553,27 +509,36 @@ export async function execBuild(
 		return;
 	}
 
-	const mergedEnv = await loadMergedBuildEnv(envFiles);
-	const define = buildPublicEnvDefine(mergedEnv);
+	const args = [
+		process.execPath,
+		"build",
+		"--compile",
+		...toBunEnvFileArgs(envFiles),
+		"--outfile",
+		outfilePath,
+		...(minify ? ["--minify"] : []),
+		...(target ? ["--target", target] : []),
+		entryPath,
+	];
 
-	const result = await Bun.build({
-		entrypoints: [entryPath],
-		compile: {
-			target,
-			outfile: outfilePath,
+	const proc = Bun.spawn(args, {
+		env: {
+			...process.env,
+			BUN_BE_BUN: "1",
 		},
-		define,
-		env: "disable",
-		minify,
+		cwd: process.cwd(),
+		stdout: "pipe",
+		stderr: "pipe",
 	});
 
-	if (!result.success) {
-		const messages = result.logs
-			.filter((log) => log.level === "error")
-			.map((log) => log.message ?? String(log))
-			.join("\n");
+	const [stderr, exitCode] = await Promise.all([
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+
+	if (exitCode !== 0) {
 		throw new Error(
-			`Build failed for ${outfilePath}${messages ? `:\n${messages}` : ""}`,
+			`Build failed for ${outfilePath}${stderr.trim() ? `:\n${stderr.trim()}` : ""}`,
 		);
 	}
 }
@@ -660,7 +625,7 @@ export async function validateEntrypoint(
 /**
  * The `crust build` command.
  *
- * Compiles a CLI entry file to standalone Bun executable(s) using `Bun.build({ compile: ... })`.
+ * Compiles a CLI entry file to standalone Bun executable(s).
  * By default, builds for all supported platforms and generates a JS resolver script.
  * Use `--target` to build for specific platform(s) only.
  *

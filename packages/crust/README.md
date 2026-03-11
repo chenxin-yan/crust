@@ -22,7 +22,7 @@ The `crust` binary provides three distinct workflows:
 
 ### `crust build`
 
-Compiles your CLI entry file to standalone Bun executables using the `Bun.build()` API.
+Compiles your CLI entry file to standalone Bun executables.
 
 **By default, builds for all 6 supported platforms** and generates a shell resolver script that detects the host platform at runtime and runs the correct binary. This makes it easy to distribute your CLI as a single npm package that works everywhere — no runtime (Node.js or Bun) required.
 
