@@ -146,21 +146,9 @@ echo "Platform: $PLATFORM_TGZ"
 
 Install both tarballs into a throwaway project. Replace the `file:` paths below with the values printed above:
 
-```json title="package.json"
-{
-  "name": "my-cli-smoke",
-  "private": true,
-  "dependencies": {
-    "<root-package-name>": "file:<ROOT_TGZ>",
-    "<platform-package-name>": "file:<PLATFORM_TGZ>"
-  }
-}
-```
-
 ```sh
-bun install
-./node_modules/.bin/my-cli --help
-```
+mkdir -p ../my-cli-smoke
+cd ../my-cli-smoke
 
 Use the platform directory that matches your host, as listed in `dist/npm/manifest.json`.
 
