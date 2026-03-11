@@ -3,6 +3,9 @@ import { basename, join, resolve } from "node:path";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
+const PUBLIC_ENV_PREFIX = "PUBLIC_";
+const PUBLIC_ENV_PATTERN = `${PUBLIC_ENV_PREFIX}*` as const;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
 // ────────────────────────────────────────────────────────────────────────────
@@ -437,6 +440,90 @@ export function writeResolver(
 // Build helpers
 // ────────────────────────────────────────────────────────────────────────────
 
+export function resolveEnvFilePaths(
+	cwd: string,
+	envFiles: string[] | undefined,
+): string[] {
+	if (!envFiles || envFiles.length === 0) {
+		return [];
+	}
+
+	return envFiles.map((envFile) => {
+		const envPath = resolve(cwd, envFile);
+		if (!existsSync(envPath)) {
+			throw new Error(
+				`Env file not found: ${envPath}\n  Specify a valid env file with --env-file <path>`,
+			);
+		}
+		return envPath;
+	});
+}
+
+export function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
+	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
+}
+
+export async function loadMergedBuildEnv(
+	envFiles: readonly string[],
+): Promise<Record<string, string>> {
+	const proc = Bun.spawn(
+		[
+			process.execPath,
+			...toBunEnvFileArgs(envFiles),
+			"--print",
+			"JSON.stringify(process.env)",
+		],
+		{
+			env: {
+				...process.env,
+				BUN_BE_BUN: "1",
+			},
+			cwd: process.cwd(),
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+
+	if (exitCode !== 0) {
+		throw new Error(stderr.trim() || "Failed to load build env");
+	}
+
+	return JSON.parse(stdout) as Record<string, string>;
+}
+
+async function withTemporaryProcessEnv<T>(
+	env: Record<string, string>,
+	fn: () => Promise<T>,
+): Promise<T> {
+	const originalEnv = { ...process.env };
+
+	for (const key of Object.keys(process.env)) {
+		if (!(key in env)) {
+			delete process.env[key];
+		}
+	}
+
+	Object.assign(process.env, env);
+
+	try {
+		return await fn();
+	} finally {
+		for (const key of Object.keys(process.env)) {
+			if (!(key in originalEnv)) {
+				delete process.env[key];
+			}
+		}
+
+		Object.assign(process.env, originalEnv);
+	}
+}
+
 /**
  * Compile a single entry file to a standalone executable using the Bun.build() API.
  *
@@ -455,15 +542,26 @@ export async function execBuild(
 	outfilePath: string,
 	minify: boolean,
 	target?: BunTarget,
+	envFiles: readonly string[] = [],
 ): Promise<void> {
-	const result = await Bun.build({
-		entrypoints: [entryPath],
-		compile: {
-			target,
-			outfile: outfilePath,
-		},
-		minify,
-	});
+	const build = () =>
+		Bun.build({
+			entrypoints: [entryPath],
+			compile: {
+				target,
+				outfile: outfilePath,
+			},
+			env: PUBLIC_ENV_PATTERN,
+			minify,
+		});
+
+	const result =
+		envFiles.length === 0
+			? await build()
+			: await withTemporaryProcessEnv(
+					await loadMergedBuildEnv(envFiles),
+					build,
+				);
 
 	if (!result.success) {
 		const messages = result.logs
@@ -488,18 +586,24 @@ export async function execBuild(
  */
 const VALIDATE_TIMEOUT_MS = 30_000;
 
-export async function validateEntrypoint(entryPath: string): Promise<void> {
+export async function validateEntrypoint(
+	entryPath: string,
+	envFiles: readonly string[] = [],
+): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
-	const proc = Bun.spawn([process.execPath, absoluteEntry], {
-		env: {
-			...process.env,
-			[VALIDATION_MODE_ENV]: "1",
-			BUN_BE_BUN: "1",
+	const proc = Bun.spawn(
+		[process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry],
+		{
+			env: {
+				...process.env,
+				[VALIDATION_MODE_ENV]: "1",
+				BUN_BE_BUN: "1",
+			},
+			cwd: process.cwd(),
+			stdout: "ignore",
+			stderr: "pipe",
 		},
-		cwd: process.cwd(),
-		stdout: "ignore",
-		stderr: "pipe",
-	});
+	);
 
 	const stderrPromise = new Response(proc.stderr).text();
 
@@ -613,17 +717,23 @@ export const buildCommand = new Crust("build")
 			default: "cli",
 			short: "r",
 		},
-		validate: {
-			type: "boolean",
-			description:
-				"Validate command runtime rules before compiling (disable with --no-validate)",
-			default: true,
-		},
-		package: {
-			type: "boolean",
-			description: "Stage npm packages in dist/npm instead of raw binaries",
-			default: false,
-		},
+			validate: {
+				type: "boolean",
+				description:
+					"Validate command runtime rules before compiling (disable with --no-validate)",
+				default: true,
+			},
+			"env-file": {
+				type: "string",
+				multiple: true,
+				description:
+					"Explicit env file(s) used for build-time constants; repeatable",
+			},
+			package: {
+				type: "boolean",
+				description: "Stage npm packages in dist/npm instead of raw binaries",
+				default: false,
+			},
 		"stage-dir": {
 			type: "string",
 			description: "Directory to stage npm packages into when using --package",
@@ -635,6 +745,7 @@ export const buildCommand = new Crust("build")
 
 		// Resolve entry file path relative to cwd
 		const entryPath = resolve(cwd, flags.entry);
+		const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 
 		// Verify entry file exists
 		if (!existsSync(entryPath)) {
@@ -644,7 +755,7 @@ export const buildCommand = new Crust("build")
 		}
 
 		if (flags.validate) {
-			await validateEntrypoint(entryPath);
+			await validateEntrypoint(entryPath, envFiles);
 		}
 
 		if (flags.package) {
@@ -662,6 +773,7 @@ export const buildCommand = new Crust("build")
 				minify: flags.minify,
 				target: flags.target,
 				stageDir: flags["stage-dir"],
+				envFiles,
 				validate: false,
 			});
 			return;
@@ -690,7 +802,13 @@ export const buildCommand = new Crust("build")
 			console.log(
 				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
 			);
-			await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
+			await execBuild(
+				entryPath,
+				outfilePath,
+				flags.minify,
+				targets[0],
+				envFiles,
+			);
 			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		} else {
 			// Multi-target build: multiple binaries + JS resolver
@@ -710,7 +828,13 @@ export const buildCommand = new Crust("build")
 				);
 
 				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-				await execBuild(entryPath, targetOutfile, flags.minify, target);
+				await execBuild(
+					entryPath,
+					targetOutfile,
+					flags.minify,
+					target,
+					envFiles,
+				);
 				results.push(targetOutfile);
 			}
 

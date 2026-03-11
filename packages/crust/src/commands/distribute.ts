@@ -505,6 +505,7 @@ export async function runDistributeBuild(options: {
 	minify: boolean;
 	target?: string[];
 	stageDir: string;
+	envFiles?: readonly string[];
 	validate: boolean;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
@@ -517,7 +518,7 @@ export async function runDistributeBuild(options: {
 	}
 
 	if (options.validate) {
-		await validateEntrypoint(entryPath);
+		await validateEntrypoint(entryPath, options.envFiles);
 	}
 
 	const stageDir = resolve(cwd, options.stageDir);
@@ -551,6 +552,7 @@ export async function runDistributeBuild(options: {
 			outfilePath,
 			options.minify,
 			targetPackage.target,
+			options.envFiles,
 		);
 	}
 
