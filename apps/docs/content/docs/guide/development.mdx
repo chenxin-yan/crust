@@ -97,7 +97,7 @@ Pack the root package and install it into a throwaway project:
 
 ```sh
 bun run build
-TARBALL="$(pwd)/$(bun pm pack --quiet)"
+TARBALL="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 
 mkdir -p ../my-cli-install
 cd ../my-cli-install
@@ -135,10 +135,10 @@ If your publish flow is `crust build --package`, the publish artifact is `dist/n
 ```sh
 bun run package
 cd dist/npm/root
-ROOT_TGZ="$(pwd)/$(bun pm pack --quiet)"
+ROOT_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 
 cd ../darwin-arm64
-PLATFORM_TGZ="$(pwd)/$(bun pm pack --quiet)"
+PLATFORM_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 ```
 
 Install both tarballs into a throwaway project:
