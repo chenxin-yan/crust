@@ -111,7 +111,7 @@ describe("skillPlugin auto-update", () => {
 		);
 		const content = await readFile(skillPath, "utf-8");
 
-		expect(content).toContain("## Additional Instructions");
+		expect(content).toContain("## General Guidance");
 		expect(content).toContain(
 			"- Prefer readonly commands before mutating state.",
 		);
@@ -161,7 +161,7 @@ describe("skillPlugin auto-update", () => {
 		);
 		const content = await readFile(skillPath, "utf-8");
 
-		expect(content).toContain("## Additional Instructions");
+		expect(content).toContain("## General Guidance");
 		expect(content).toContain("Read the command docs before answering.");
 		expect(content).toContain("## Response Policy");
 		expect(content).toContain("- Prefer exact documented flags.");
@@ -514,7 +514,7 @@ describe("skillPlugin auto-update", () => {
 		);
 		const content = await readFile(skillPath, "utf-8");
 
-		expect(content).toContain("## Additional Instructions");
+		expect(content).toContain("## General Guidance");
 		expect(content).toContain(
 			"- Prefer readonly commands before mutating state.",
 		);

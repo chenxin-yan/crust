@@ -246,30 +246,34 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("includes lazy-load instructions", () => {
+		it("includes command-reference workflow instructions", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("Command Reference");
+			expect(skill?.content).toContain("## How to Use This Skill");
+			expect(skill?.content).toContain("## Command Reference");
 			expect(skill?.content).toContain(
-				"**Do not read all command files at once.**",
+				"Use this table to locate the command file you need.",
+			);
+			expect(skill?.content).not.toContain(
+				"This table maps each command to its documentation file.",
+			);
+			expect(skill?.content).not.toContain(
+				"Read only the files you need for the current task",
+			);
+			expect(skill?.content).toContain("Find the command that best matches");
+			expect(skill?.content).toContain(
+				"Check the `Type` column before suggesting execution",
 			);
 			expect(skill?.content).toContain(
-				"Use the table below to find the relevant command",
+				"Before answering a command-specific question or suggesting a command, read that command's file",
 			);
 			expect(skill?.content).toContain(
-				"commands labeled `runnable` (including `runnable, group`) are executable",
-			);
-			expect(skill?.content).toContain("while `group` commands are not");
-			expect(skill?.content).toContain(
-				"For any command-specific answer, read that command's documentation file before responding",
+				"Treat the command file as the source of truth",
 			);
 			expect(skill?.content).toContain(
-				"Treat the command documentation file as the source of truth",
-			);
-			expect(skill?.content).toContain(
-				"Do not invent or assume undocumented flags/options",
+				"say it is not documented instead of guessing",
 			);
 		});
 
@@ -279,7 +283,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
-				"Use this skill when working with `test-cli` commands",
+				"Use this skill when you need accurate help with `test-cli` commands",
 			);
 		});
 
@@ -294,7 +298,7 @@ describe("renderSkill", () => {
 			});
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("## Additional Instructions");
+			expect(skill?.content).toContain("## General Guidance");
 			expect(skill?.content).toContain(
 				"- Prefer readonly commands before making changes.",
 			);
@@ -315,7 +319,7 @@ describe("renderSkill", () => {
 			});
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("## Additional Instructions");
+			expect(skill?.content).toContain("## General Guidance");
 			expect(skill?.content).toContain(
 				"Read the command docs before answering.",
 			);
@@ -331,7 +335,7 @@ describe("renderSkill", () => {
 			});
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).not.toContain("## Additional Instructions");
+			expect(skill?.content).not.toContain("## General Guidance");
 		});
 
 		it("omits additional instructions for a whitespace-only array", () => {
@@ -342,7 +346,7 @@ describe("renderSkill", () => {
 			});
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).not.toContain("## Additional Instructions");
+			expect(skill?.content).not.toContain("## General Guidance");
 		});
 
 		it("trims and filters top-level instruction list items", () => {
@@ -353,7 +357,7 @@ describe("renderSkill", () => {
 			});
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("## Additional Instructions");
+			expect(skill?.content).toContain("## General Guidance");
 			expect(skill?.content).toContain("- first");
 			expect(skill?.content).toContain("- second");
 			expect(skill?.content).not.toContain("- ");
@@ -369,7 +373,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
-				"Use this skill when working with `my-tool` commands",
+				"Use this skill when you need accurate help with `my-tool` commands",
 			);
 		});
 
@@ -842,7 +846,7 @@ describe("renderSkill", () => {
 			});
 			const deploy = findFile(files, "commands/deploy.md");
 
-			expect(deploy?.content).toContain("## Agent Instructions");
+			expect(deploy?.content).toContain("## Instructions");
 			expect(deploy?.content).toContain(
 				"- Prefer preview flags before executing changes.",
 			);
@@ -1098,7 +1102,7 @@ describe("renderSkill", () => {
 			});
 			const parentFile = findFile(files, "commands/parent.md");
 
-			expect(parentFile?.content).toContain("## Agent Instructions");
+			expect(parentFile?.content).toContain("## Instructions");
 			expect(parentFile?.content).toContain(
 				"- Read a child command doc before recommending execution details.",
 			);

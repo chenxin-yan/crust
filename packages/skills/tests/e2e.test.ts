@@ -502,7 +502,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("| `deploy status` | runnable |");
 		});
 
-		it("includes lazy-load instructions with directive phrasing", async () => {
+		it("includes command-reference workflow instructions", async () => {
 			const agent = await generateForTest(
 				tmpDir,
 				buildFixtureCommand(),
@@ -510,23 +510,22 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
+			expect(content).toContain("## How to Use This Skill");
+			expect(content).toContain("## Command Reference");
 			expect(content).toContain(
-				"Use the table below to find the relevant command",
+				"Use this table to locate the command file you need.",
 			);
-			expect(content).toContain("**Do not read all command files at once.**");
+			expect(content).toContain("Find the command that best matches");
 			expect(content).toContain(
-				"commands labeled `runnable` (including `runnable, group`) are executable",
-			);
-			expect(content).toContain("while `group` commands are not");
-			expect(content).toContain(
-				"For any command-specific answer, read that command's documentation file before responding",
+				"Check the `Type` column before suggesting execution",
 			);
 			expect(content).toContain(
-				"Treat the command documentation file as the source of truth",
+				"Before answering a command-specific question or suggesting a command, read that command's file",
 			);
 			expect(content).toContain(
-				"Do not invent or assume undocumented flags/options",
+				"Treat the command file as the source of truth",
 			);
+			expect(content).toContain("say it is not documented instead of guessing");
 		});
 
 		it("includes when-to-use guidance referencing the CLI name", async () => {
@@ -538,7 +537,7 @@ describe("E2E: skill generation", () => {
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain(
-				"Use this skill when working with `deploy-cli` commands",
+				"Use this skill when you need accurate help with `deploy-cli` commands",
 			);
 		});
 
@@ -574,14 +573,14 @@ describe("E2E: skill generation", () => {
 				join(agent.outputDir, "commands", "deploy.md"),
 			);
 
-			expect(skillContent).toContain("## Additional Instructions");
+			expect(skillContent).toContain("## General Guidance");
 			expect(skillContent).toContain(
 				"- Prefer readonly commands before mutating state.",
 			);
 			expect(skillContent).toContain(
 				"- Ask for confirmation before destructive actions.",
 			);
-			expect(commandContent).toContain("## Agent Instructions");
+			expect(commandContent).toContain("## Command Instructions");
 			expect(commandContent).toContain(
 				"- Prefer preview commands before applying changes.",
 			);

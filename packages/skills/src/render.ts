@@ -221,43 +221,44 @@ function renderSkillMd(
 
 	// When-to-use guidance for agents
 	lines.push(
-		`Use this skill when working with \`${cliName}\` commands, or when you need help with \`${cliName}\` syntax, flags, or subcommands.`,
+		`Use this skill when you need accurate help with \`${cliName}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
 	);
 	lines.push("");
 
 	const topLevelInstructions = renderTopLevelInstructions(meta.instructions);
 
+	// Agent workflow for navigating command documentation
+	lines.push("## How to Use This Skill");
+	lines.push("");
+	lines.push(
+		"1. Find the command that best matches the user's task from the Command Reference below",
+	);
+	lines.push(
+		"2. Check the `Type` column before suggesting execution: `runnable` and `runnable, group` commands can be executed, while `group` commands are organizational only",
+	);
+	lines.push("3. Read only the linked file or files you need from `commands/`");
+	lines.push(
+		"4. Before answering a command-specific question or suggesting a command, read that command's file",
+	);
+	lines.push(
+		"5. Treat the command file as the source of truth for usage, arguments, flags, aliases, and defaults",
+	);
+	lines.push(
+		"6. If a flag, argument, alias, or default is not documented there, say it is not documented instead of guessing",
+	);
+	lines.push("");
+
 	if (hasNormalizedInstructions(topLevelInstructions)) {
-		lines.push("## Additional Instructions");
+		lines.push("## General Guidance");
 		lines.push("");
 		lines.push(...topLevelInstructions);
 		lines.push("");
 	}
 
-	// Lazy-load instructions for agents
+	// Lazy-load table for command docs
 	lines.push("## Command Reference");
 	lines.push("");
-	lines.push(
-		"This table lists all commands and their documentation paths. " +
-			"**Do not read all command files at once.** Instead:",
-	);
-	lines.push("");
-	lines.push("1. Use the table below to find the relevant command");
-	lines.push(
-		"2. Use the `Type` column to choose what to execute: commands labeled `runnable` (including `runnable, group`) are executable, while `group` commands are not",
-	);
-	lines.push(
-		"3. Read only the specific file from the `commands/` directory that you need",
-	);
-	lines.push(
-		"4. For any command-specific answer, read that command's documentation file before responding",
-	);
-	lines.push(
-		"5. Treat the command documentation file as the source of truth for usage, flags, options, aliases, and defaults",
-	);
-	lines.push(
-		"6. Do not invent or assume undocumented flags/options; if something is missing from the file, say it is not documented",
-	);
+	lines.push("Use this table to locate the command file you need.");
 	lines.push("");
 	lines.push(...renderCommandReferenceTable(allNodes));
 	lines.push("");
@@ -406,7 +407,7 @@ function renderAgentInstructions(node: ManifestNode): string[] {
 	}
 
 	return [
-		"## Agent Instructions",
+		"## Command Instructions",
 		"",
 		...renderInstructionList(instructions),
 		"",
