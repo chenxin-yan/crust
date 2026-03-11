@@ -22,6 +22,8 @@ The package includes the `crust` CLI, which provides:
 
 The `crust` CLI is itself built with Crust (self-hosted), demonstrating the framework in action.
 
+`crust build` can embed `PUBLIC_*` build-time constants from Bun's cwd env or from explicit `--env-file` inputs. Runtime env, Bun `.env` loading, and `PUBLIC_*` guidance are documented in [Environment Variables](/docs/guide/environment).
+
 ## When to Use
 
 Install `@crustjs/crust` as a dev dependency when your project needs the `crust build` command for compiling to standalone executables. It is only needed at build time, not at runtime.

@@ -37,6 +37,8 @@ The binary templates intentionally keep `build` and `package` as separate script
 - `package` is for npm packaging (alias for `crust build --package`).
 - `publish` is for registry upload.
 
+If you need public build-time constants, `crust build` can use Bun's cwd env by default or explicit `--env-file` inputs.
+
 > **Note:** The template's top-level `package.json` has `"files": ["dist"]` and `"bin"` pointing to `dist/cli` for local development. When publishing via `crust publish`, the staged packages in `dist/npm/` each have their own `package.json` with the correct `files` and `bin` entries — the top-level fields are not used for npm distribution.
 
 ## Documentation

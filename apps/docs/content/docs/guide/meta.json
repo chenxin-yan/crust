@@ -8,6 +8,7 @@
     "subcommands",
     "plugins",
     "lifecycle",
+    "environment",
     "error-handling",
     "build",
     "development"

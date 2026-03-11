@@ -3,6 +3,9 @@ import { basename, join, resolve } from "node:path";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
+const PUBLIC_ENV_PREFIX = "PUBLIC_";
+const PUBLIC_ENV_PATTERN = `${PUBLIC_ENV_PREFIX}*` as const;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
 // ────────────────────────────────────────────────────────────────────────────
@@ -437,17 +440,42 @@ export function writeResolver(
 // Build helpers
 // ────────────────────────────────────────────────────────────────────────────
 
+export function resolveEnvFilePaths(
+	cwd: string,
+	envFiles: string[] | undefined,
+): string[] {
+	if (!envFiles || envFiles.length === 0) {
+		return [];
+	}
+
+	return envFiles.map((envFile) => {
+		const envPath = resolve(cwd, envFile);
+		if (!existsSync(envPath)) {
+			throw new Error(
+				`Env file not found: ${envPath}\n  Specify a valid env file with --env-file <path>`,
+			);
+		}
+		return envPath;
+	});
+}
+
+export function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
+	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
+}
+
 /**
- * Compile a single entry file to a standalone executable using the Bun.build() API.
+ * Compile a single entry file to a standalone executable.
  *
- * Uses the programmatic `Bun.build({ compile: ... })` API instead of spawning
- * a child process. This means a self-compiled crust binary embeds the Bun runtime
- * and can compile user CLIs without requiring a separate Bun installation.
+ * Without env files, uses the programmatic `Bun.build()` API directly.
+ * With env files, spawns `bun build --compile` as a subprocess via
+ * `process.execPath` + `BUN_BE_BUN=1` so that Bun handles `--env-file`
+ * natively — no separate Bun installation required.
  *
  * @param entryPath - Absolute path to the entry file
  * @param outfilePath - Absolute path to the output binary
  * @param minify - Whether to enable minification
  * @param target - Optional Bun compile target for cross-compilation
+ * @param envFiles - Optional env files to load during build
  * @throws {Error} If the build fails
  */
 export async function execBuild(
@@ -455,23 +483,63 @@ export async function execBuild(
 	outfilePath: string,
 	minify: boolean,
 	target?: BunTarget,
+	envFiles: readonly string[] = [],
 ): Promise<void> {
-	const result = await Bun.build({
-		entrypoints: [entryPath],
-		compile: {
-			target,
-			outfile: outfilePath,
+	if (envFiles.length === 0) {
+		const result = await Bun.build({
+			entrypoints: [entryPath],
+			compile: {
+				target,
+				outfile: outfilePath,
+			},
+			env: PUBLIC_ENV_PATTERN,
+			minify,
+		});
+
+		if (!result.success) {
+			const messages = result.logs
+				.filter((log) => log.level === "error")
+				.map((log) => log.message ?? String(log))
+				.join("\n");
+			throw new Error(
+				`Build failed for ${outfilePath}${messages ? `:\n${messages}` : ""}`,
+			);
+		}
+
+		return;
+	}
+
+	const args = [
+		process.execPath,
+		"build",
+		"--compile",
+		...toBunEnvFileArgs(envFiles),
+		`--env=${PUBLIC_ENV_PATTERN}`,
+		"--outfile",
+		outfilePath,
+		...(minify ? ["--minify"] : []),
+		...(target ? ["--target", target] : []),
+		entryPath,
+	];
+
+	const proc = Bun.spawn(args, {
+		env: {
+			...process.env,
+			BUN_BE_BUN: "1",
 		},
-		minify,
+		cwd: process.cwd(),
+		stdout: "pipe",
+		stderr: "pipe",
 	});
 
-	if (!result.success) {
-		const messages = result.logs
-			.filter((log) => log.level === "error")
-			.map((log) => log.message ?? String(log))
-			.join("\n");
+	const [stderr, exitCode] = await Promise.all([
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+
+	if (exitCode !== 0) {
 		throw new Error(
-			`Build failed for ${outfilePath}${messages ? `:\n${messages}` : ""}`,
+			`Build failed for ${outfilePath}${stderr.trim() ? `:\n${stderr.trim()}` : ""}`,
 		);
 	}
 }
@@ -488,18 +556,24 @@ export async function execBuild(
  */
 const VALIDATE_TIMEOUT_MS = 30_000;
 
-export async function validateEntrypoint(entryPath: string): Promise<void> {
+export async function validateEntrypoint(
+	entryPath: string,
+	envFiles: readonly string[] = [],
+): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
-	const proc = Bun.spawn([process.execPath, absoluteEntry], {
-		env: {
-			...process.env,
-			[VALIDATION_MODE_ENV]: "1",
-			BUN_BE_BUN: "1",
+	const proc = Bun.spawn(
+		[process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry],
+		{
+			env: {
+				...process.env,
+				[VALIDATION_MODE_ENV]: "1",
+				BUN_BE_BUN: "1",
+			},
+			cwd: process.cwd(),
+			stdout: "ignore",
+			stderr: "pipe",
 		},
-		cwd: process.cwd(),
-		stdout: "ignore",
-		stderr: "pipe",
-	});
+	);
 
 	const stderrPromise = new Response(proc.stderr).text();
 
@@ -552,7 +626,7 @@ export async function validateEntrypoint(entryPath: string): Promise<void> {
 /**
  * The `crust build` command.
  *
- * Compiles a CLI entry file to standalone Bun executable(s) using `Bun.build({ compile: ... })`.
+ * Compiles a CLI entry file to standalone Bun executable(s).
  * By default, builds for all supported platforms and generates a JS resolver script.
  * Use `--target` to build for specific platform(s) only.
  *
@@ -619,6 +693,12 @@ export const buildCommand = new Crust("build")
 				"Validate command runtime rules before compiling (disable with --no-validate)",
 			default: true,
 		},
+		"env-file": {
+			type: "string",
+			multiple: true,
+			description:
+				"Explicit env file(s) used for build-time constants; repeatable",
+		},
 		package: {
 			type: "boolean",
 			description: "Stage npm packages in dist/npm instead of raw binaries",
@@ -635,6 +715,7 @@ export const buildCommand = new Crust("build")
 
 		// Resolve entry file path relative to cwd
 		const entryPath = resolve(cwd, flags.entry);
+		const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 
 		// Verify entry file exists
 		if (!existsSync(entryPath)) {
@@ -644,7 +725,7 @@ export const buildCommand = new Crust("build")
 		}
 
 		if (flags.validate) {
-			await validateEntrypoint(entryPath);
+			await validateEntrypoint(entryPath, envFiles);
 		}
 
 		if (flags.package) {
@@ -662,6 +743,7 @@ export const buildCommand = new Crust("build")
 				minify: flags.minify,
 				target: flags.target,
 				stageDir: flags["stage-dir"],
+				envFiles,
 				validate: false,
 			});
 			return;
@@ -690,7 +772,13 @@ export const buildCommand = new Crust("build")
 			console.log(
 				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
 			);
-			await execBuild(entryPath, outfilePath, flags.minify, targets[0]);
+			await execBuild(
+				entryPath,
+				outfilePath,
+				flags.minify,
+				targets[0],
+				envFiles,
+			);
 			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		} else {
 			// Multi-target build: multiple binaries + JS resolver
@@ -710,7 +798,13 @@ export const buildCommand = new Crust("build")
 				);
 
 				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-				await execBuild(entryPath, targetOutfile, flags.minify, target);
+				await execBuild(
+					entryPath,
+					targetOutfile,
+					flags.minify,
+					target,
+					envFiles,
+				);
 				results.push(targetOutfile);
 			}
 
