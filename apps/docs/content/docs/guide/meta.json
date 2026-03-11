@@ -9,6 +9,7 @@
     "plugins",
     "lifecycle",
     "error-handling",
+    "development",
     "build"
   ]
 }
