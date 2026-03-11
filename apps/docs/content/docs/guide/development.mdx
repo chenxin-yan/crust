@@ -133,7 +133,7 @@ If you also publish the root package to npm, pack and install it the same way as
 If your publish flow is `crust build --package`, the publish artifact is `dist/npm/`, not the repo root:
 
 ```sh
-bun run package
+crust build --package
 cd dist/npm/root
 ROOT_TGZ="$(pwd)/$(bun pm pack 2>/dev/null | tail -1)"
 
