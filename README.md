@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://crustjs.com">Documentation</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="./CONTRIBUTING.md">Contributing</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://github.com/chenxin-yan/crust/issues">Issues</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://discord.gg/sQF8hdN6Ht">Discord</a>
