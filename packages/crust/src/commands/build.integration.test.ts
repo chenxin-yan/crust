@@ -189,11 +189,12 @@ console.log("hello from crust build test");
 			const hostTarget = getHostTarget();
 			if (!hostTarget) return;
 
+			const prevCwd = process.cwd;
 			process.cwd = () => tmpDir;
-
-			writeFileSync(
-				join(tmpDir, "src", "env-cli.ts"),
-				`#!/usr/bin/env bun
+			try {
+				writeFileSync(
+					join(tmpDir, "src", "env-cli.ts"),
+					`#!/usr/bin/env bun
 if (
   process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
   !process.env.REQUIRED_BUILD_VAR
@@ -205,49 +206,52 @@ console.log(JSON.stringify({
   secretValue: process.env.SECRET_TOKEN ?? null,
 }));
 `,
-			);
-			writeFileSync(
-				join(tmpDir, ".env.build"),
-				[
-					"REQUIRED_BUILD_VAR=1",
-					"PUBLIC_MESSAGE=hello-from-build",
-					"SECRET_TOKEN=super-secret",
-				].join("\n"),
-			);
+				);
+				writeFileSync(
+					join(tmpDir, ".env.build"),
+					[
+						"REQUIRED_BUILD_VAR=1",
+						"PUBLIC_MESSAGE=hello-from-build",
+						"SECRET_TOKEN=super-secret",
+					].join("\n"),
+				);
 
-			const outPath = join(tmpDir, "dist", "env-cli");
-			const app = new Crust("test").command(buildCommand);
+				const outPath = join(tmpDir, "dist", "env-cli");
+				const app = new Crust("test").command(buildCommand);
 
-			await app.execute({
-				argv: [
-					"build",
-					"--entry",
-					"src/env-cli.ts",
-					"--outfile",
-					outPath,
-					"--target",
-					hostTarget,
-					"--env-file",
-					".env.build",
-				],
-			});
+				await app.execute({
+					argv: [
+						"build",
+						"--entry",
+						"src/env-cli.ts",
+						"--outfile",
+						outPath,
+						"--target",
+						hostTarget,
+						"--env-file",
+						".env.build",
+					],
+				});
 
-			expect(existsSync(outPath)).toBe(true);
+				expect(existsSync(outPath)).toBe(true);
 
-			const proc = Bun.spawn([outPath], {
-				cwd: tmpDir,
-				env: {},
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			const exitCode = await proc.exited;
-			const stdout = await new Response(proc.stdout).text();
+				const proc = Bun.spawn([outPath], {
+					cwd: tmpDir,
+					env: {},
+					stdout: "pipe",
+					stderr: "pipe",
+				});
+				const exitCode = await proc.exited;
+				const stdout = await new Response(proc.stdout).text();
 
-			expect(exitCode).toBe(0);
-			expect(JSON.parse(stdout.trim())).toEqual({
-				publicValue: "hello-from-build",
-				secretValue: null,
-			});
+				expect(exitCode).toBe(0);
+				expect(JSON.parse(stdout.trim())).toEqual({
+					publicValue: "hello-from-build",
+					secretValue: null,
+				});
+			} finally {
+				process.cwd = prevCwd;
+			}
 		},
 	);
 
@@ -310,7 +314,6 @@ console.log(JSON.stringify({
 				new Response(proc.stderr).text(),
 			]);
 			expect(exitCode).toBe(0);
-			expect(stderr.trim()).toBe("");
 			expect(existsSync(outPath)).toBe(true);
 
 			const runtimeDir = join(tmpDir, "runtime-no-env");

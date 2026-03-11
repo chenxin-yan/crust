@@ -494,7 +494,9 @@ export async function loadMergedBuildEnv(
 		throw new Error(stderr.trim() || "Failed to load build env");
 	}
 
-	return JSON.parse(stdout) as Record<string, string>;
+	const env = JSON.parse(stdout) as Record<string, string>;
+	delete env.BUN_BE_BUN;
+	return env;
 }
 
 function buildPublicEnvDefine(
@@ -505,33 +507,6 @@ function buildPublicEnvDefine(
 			.filter(([key]) => key.startsWith(PUBLIC_ENV_PREFIX))
 			.map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)]),
 	);
-}
-
-async function withTemporaryProcessEnv<T>(
-	env: Record<string, string>,
-	fn: () => Promise<T>,
-): Promise<T> {
-	const originalEnv = { ...process.env };
-
-	for (const key of Object.keys(process.env)) {
-		if (!(key in env)) {
-			delete process.env[key];
-		}
-	}
-
-	Object.assign(process.env, env);
-
-	try {
-		return await fn();
-	} finally {
-		for (const key of Object.keys(process.env)) {
-			if (!(key in originalEnv)) {
-				delete process.env[key];
-			}
-		}
-
-		Object.assign(process.env, originalEnv);
-	}
 }
 
 /**
@@ -581,18 +556,16 @@ export async function execBuild(
 	const mergedEnv = await loadMergedBuildEnv(envFiles);
 	const define = buildPublicEnvDefine(mergedEnv);
 
-	const result = await withTemporaryProcessEnv(mergedEnv, () =>
-		Bun.build({
-			entrypoints: [entryPath],
-			compile: {
-				target,
-				outfile: outfilePath,
-			},
-			define,
-			env: "disable",
-			minify,
-		}),
-	);
+	const result = await Bun.build({
+		entrypoints: [entryPath],
+		compile: {
+			target,
+			outfile: outfilePath,
+		},
+		define,
+		env: "disable",
+		minify,
+	});
 
 	if (!result.success) {
 		const messages = result.logs
