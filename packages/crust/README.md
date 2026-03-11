@@ -31,6 +31,7 @@ crust build                          # All platforms + shell resolver (default)
 crust build --entry src/main.ts      # Custom entry point
 crust build --name my-tool           # Set base binary name
 crust build --no-minify              # Disable minification
+crust build --env-file .env.production  # Explicit build-time env file
 ```
 
 To build for specific platform(s) only, use `--target`:
@@ -39,6 +40,7 @@ To build for specific platform(s) only, use `--target`:
 crust build --target linux-x64                          # Single platform
 crust build --target linux-x64 --target darwin-arm64    # Multiple platforms
 crust build --target linux-x64 --outfile ./my-cli       # Custom output (single target only)
+crust build --env-file .env --env-file .env.local       # Repeatable env files
 ```
 
 #### Supported Targets
@@ -63,6 +65,7 @@ crust build --target linux-x64 --outfile ./my-cli       # Custom output (single 
 | `--target`   | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable                             |
 | `--outdir`   | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
 | `--resolver` | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
+| `--env-file` | —     | `"string"`  | —                   | Explicit env file(s) used for build-time constants         |
 | `--validate` | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
 | `--package` | —   | `"boolean"` | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
 | `--stage-dir` | —    | `"string"`  | `dist/npm`          | Staging directory used with `--package`                    |
@@ -92,6 +95,14 @@ dist/
 
 `crust build` is the raw binary workflow by default. Add `--package` when you want staged npm packages instead of raw `dist/` binaries.
 
+#### Environment Variables
+
+Compiled executables still use Bun's **runtime env** behavior. Build-time constants use Bun's native prefix env inlining for `PUBLIC_*`, sourcing values from Bun's auto-loaded cwd env by default or from explicit `--env-file` inputs.
+
+`PUBLIC_*` values are embedded in the binary and are therefore public.
+
+See the full guide: [Environment Variables](https://crustjs.com/docs/guide/environment)
+
 ### `crust build --package`
 
 Stages a root npm package plus one npm package per supported target for optionalDependency-based distribution.
@@ -100,6 +111,7 @@ Stages a root npm package plus one npm package per supported target for optional
 crust build --package
 crust build --package --target linux-x64
 crust build --package --stage-dir .crust/npm
+crust build --package --env-file .env.production
 ```
 
 #### Output

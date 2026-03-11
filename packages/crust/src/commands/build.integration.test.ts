@@ -4,12 +4,41 @@ import { join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { buildCommand } from "../../src/commands/build.ts";
 
+function getHostTarget(): string | null {
+	if (process.platform === "darwin" && process.arch === "arm64") {
+		return "darwin-arm64";
+	}
+
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return "darwin-x64";
+	}
+
+	if (process.platform === "linux" && process.arch === "arm64") {
+		return "linux-arm64";
+	}
+
+	if (process.platform === "linux" && process.arch === "x64") {
+		return "linux-x64";
+	}
+
+	if (process.platform === "win32" && process.arch === "arm64") {
+		return "windows-arm64";
+	}
+
+	if (process.platform === "win32" && process.arch === "x64") {
+		return "windows-x64";
+	}
+
+	return null;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Integration test: single-target build (--target flag)
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("crust build integration — single target", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-build-integration");
+	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {
@@ -153,4 +182,156 @@ console.log("hello from crust build test");
 		expect(existsSync(expectedOut)).toBe(true);
 		expect(logs.some((l) => l.includes(expectedOut))).toBe(true);
 	});
+
+	it.skipIf(getHostTarget() === null)(
+		"applies --env-file to validation and embeds PUBLIC_ constants only",
+		async () => {
+			const hostTarget = getHostTarget();
+			if (!hostTarget) return;
+
+			process.cwd = () => tmpDir;
+
+			writeFileSync(
+				join(tmpDir, "src", "env-cli.ts"),
+				`#!/usr/bin/env bun
+if (
+  process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
+  !process.env.REQUIRED_BUILD_VAR
+) {
+  throw new Error("Missing REQUIRED_BUILD_VAR");
+}
+console.log(JSON.stringify({
+  publicValue: process.env.PUBLIC_MESSAGE,
+  secretValue: process.env.SECRET_TOKEN ?? null,
+}));
+`,
+			);
+			writeFileSync(
+				join(tmpDir, ".env.build"),
+				[
+					"REQUIRED_BUILD_VAR=1",
+					"PUBLIC_MESSAGE=hello-from-build",
+					"SECRET_TOKEN=super-secret",
+				].join("\n"),
+			);
+
+			const outPath = join(tmpDir, "dist", "env-cli");
+			const app = new Crust("test").command(buildCommand);
+
+			await app.execute({
+				argv: [
+					"build",
+					"--entry",
+					"src/env-cli.ts",
+					"--outfile",
+					outPath,
+					"--target",
+					hostTarget,
+					"--env-file",
+					".env.build",
+				],
+			});
+
+			expect(existsSync(outPath)).toBe(true);
+
+			const proc = Bun.spawn([outPath], {
+				cwd: tmpDir,
+				env: {},
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const exitCode = await proc.exited;
+			const stdout = await new Response(proc.stdout).text();
+
+			expect(exitCode).toBe(0);
+			expect(JSON.parse(stdout.trim())).toEqual({
+				publicValue: "hello-from-build",
+				secretValue: null,
+			});
+		},
+	);
+
+	it.skipIf(getHostTarget() === null)(
+		"uses Bun auto-loaded cwd env to embed PUBLIC_ constants when --env-file is omitted",
+		async () => {
+			const hostTarget = getHostTarget();
+			if (!hostTarget) return;
+
+			writeFileSync(
+				join(tmpDir, "src", "autoload-cli.ts"),
+				`#!/usr/bin/env bun
+if (
+  process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
+  !process.env.REQUIRED_BUILD_VAR
+) {
+  throw new Error("Missing REQUIRED_BUILD_VAR");
+}
+console.log(JSON.stringify({
+  publicValue: process.env.PUBLIC_MESSAGE,
+  secretValue: process.env.SECRET_TOKEN ?? null,
+}));
+`,
+			);
+			writeFileSync(
+				join(tmpDir, ".env"),
+				[
+					"REQUIRED_BUILD_VAR=1",
+					"PUBLIC_MESSAGE=hello-from-autoload",
+					"SECRET_TOKEN=autoload-secret",
+				].join("\n"),
+			);
+
+			const outPath = join(tmpDir, "dist", "autoload-cli");
+			const proc = Bun.spawn(
+				[
+					process.execPath,
+					crustCliPath,
+					"build",
+					"--entry",
+					"src/autoload-cli.ts",
+					"--outfile",
+					outPath,
+					"--target",
+					hostTarget,
+				],
+				{
+					cwd: tmpDir,
+					env: {
+						...process.env,
+						BUN_BE_BUN: "1",
+					},
+					stdout: "pipe",
+					stderr: "pipe",
+				},
+			);
+
+			const [exitCode, stderr] = await Promise.all([
+				proc.exited,
+				new Response(proc.stderr).text(),
+			]);
+			expect(exitCode).toBe(0);
+			expect(stderr.trim()).toBe("");
+			expect(existsSync(outPath)).toBe(true);
+
+			const runtimeDir = join(tmpDir, "runtime-no-env");
+			mkdirSync(runtimeDir, { recursive: true });
+
+			const built = Bun.spawn([outPath], {
+				cwd: runtimeDir,
+				env: {},
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const [builtExitCode, stdout] = await Promise.all([
+				built.exited,
+				new Response(built.stdout).text(),
+			]);
+
+			expect(builtExitCode).toBe(0);
+			expect(JSON.parse(stdout.trim())).toEqual({
+				publicValue: "hello-from-autoload",
+				secretValue: null,
+			});
+		},
+	);
 });

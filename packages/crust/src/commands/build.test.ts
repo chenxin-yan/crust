@@ -9,6 +9,7 @@ import {
 	generateResolver,
 	getBinaryFilename,
 	resolveBaseName,
+	resolveEnvFilePaths,
 	resolveOutfile,
 	resolveTarget,
 	resolveTargetOutfile,
@@ -58,6 +59,7 @@ describe("buildCommand definition", () => {
 		expect(result.flags.outfile).toBeUndefined();
 		expect(result.flags.name).toBeUndefined();
 		expect(result.flags.target).toBeUndefined();
+		expect(result.flags["env-file"]).toBeUndefined();
 	});
 
 	it("defines --entry/-e flag as string", () => {
@@ -102,6 +104,17 @@ describe("buildCommand definition", () => {
 		expect(result.flags.validate).toBe(false);
 	});
 
+	it("defines --env-file as a repeatable string flag", () => {
+		const node = makeBuildNode();
+		const result = parseArgs(node, [
+			"--env-file",
+			".env",
+			"--env-file",
+			".env.local",
+		]);
+		expect(result.flags["env-file"]).toEqual([".env", ".env.local"]);
+	});
+
 	it("supports --package with --stage-dir", () => {
 		const node = makeBuildNode();
 		const result = parseArgs(node, ["--package", "--stage-dir", ".stage"]);
@@ -136,6 +149,34 @@ describe("buildCommand definition", () => {
 	it("has a run function", () => {
 		const node = makeBuildNode();
 		expect(typeof node.run).toBe("function");
+	});
+});
+
+describe("env file helpers", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-env-files");
+
+	beforeAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(tmpDir, { recursive: true });
+		writeFileSync(join(tmpDir, ".env"), "PUBLIC_FOO=bar\n");
+		writeFileSync(join(tmpDir, ".env.local"), "PUBLIC_BAR=baz\n");
+	});
+
+	afterAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("resolves env-file paths relative to cwd", () => {
+		expect(resolveEnvFilePaths(tmpDir, [".env", ".env.local"])).toEqual([
+			join(tmpDir, ".env"),
+			join(tmpDir, ".env.local"),
+		]);
+	});
+
+	it("throws when an env-file is missing", () => {
+		expect(() => resolveEnvFilePaths(tmpDir, [".env.missing"])).toThrow(
+			/Env file not found/,
+		);
 	});
 });
 

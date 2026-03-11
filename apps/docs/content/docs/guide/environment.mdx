@@ -1,0 +1,93 @@
+---
+title: Environment Variables
+description: Handle runtime env, Bun .env loading, and build-time constants safely with Crust.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Crust does not introduce its own env system. Your CLI reads env from `process.env`, while Bun provides runtime `.env` loading and compiled executable behavior.
+
+Use **runtime env** for secrets and deployment-specific configuration. Use **build-time constants** only for values that are safe to embed into the compiled output.
+
+## Runtime Env
+
+```ts title="src/commands/deploy.ts"
+import { Crust } from "@crustjs/core";
+
+export const deployCommand = new Crust("deploy").run(() => {
+  const token = process.env.API_TOKEN;
+
+  if (!token) {
+    throw new Error("Missing API_TOKEN");
+  }
+
+  console.log("Deploying with runtime credentials...");
+});
+```
+
+Bun can load `.env` files at runtime, and compiled executables continue to use Bun's runtime env behavior. `crust build` does not disable that runtime loading.
+
+## Build-Time Constants
+
+`crust build` uses Bun's native prefix env inlining with `PUBLIC_*`. It can source build-time constants from Bun's auto-loaded cwd env, and it also supports explicit env files through `--env-file`.
+
+```sh
+crust build --env-file .env.production
+crust build --env-file .env --env-file .env.local
+crust build --distribute --env-file .env.production
+```
+
+- when `--env-file` is omitted, Bun's auto-loaded cwd env can still provide build-time constants
+- the flag is **repeatable**
+- later env files override earlier env files
+- shell env still wins over env file values
+- only `PUBLIC_*` keys are eligible for build-time constant injection through Bun's native prefix env support
+
+Whether values come from Bun's auto-loaded cwd env or from `--env-file`, only `PUBLIC_*` values are eligible to be embedded into the compiled output.
+
+```bash title=".env.production"
+PUBLIC_API_ORIGIN=https://api.example.com
+API_TOKEN=super-secret
+```
+
+<Callout type="warn">
+  `PUBLIC_*` values are embedded in the binary and are therefore public. Never
+  put secrets behind a `PUBLIC_*` prefix.
+</Callout>
+
+## Public vs Secret Values
+
+| Type of value | Where it should live |
+| --- | --- |
+| Secret API keys, tokens, credentials | Runtime env |
+| Deployment-specific private config | Runtime env |
+| Public API origin, public feature switches, public build labels | Build-time constants via `PUBLIC_*` |
+
+## Recommended App Pattern
+
+For larger CLIs, centralize env handling in one config module.
+
+```ts title="src/config.ts"
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env: ${name}`);
+  return value;
+}
+
+export const config = {
+  nodeEnv: process.env.NODE_ENV ?? "development",
+  apiToken: required("API_TOKEN"),
+  publicApiOrigin: process.env.PUBLIC_API_ORIGIN,
+};
+```
+
+## Scenarios
+
+| Scenario | Recommended approach |
+| --- | --- |
+| CLI needs a secret API token at runtime | Read `process.env.API_TOKEN` at runtime |
+| Binary needs a public API origin baked in | Use `PUBLIC_API_ORIGIN` in Bun's cwd env or with `crust build --env-file ...` |
+| Build should differ by environment | Pass one or more explicit `--env-file` values |
+| Plugin setup depends on env during validation/build | Pass the same `--env-file` values to `crust build` so the validation subprocess sees them |
+
+For Bun's full runtime `.env` rules, see [Bun environment variables](https://bun.com/docs/runtime/env) and [Bun single-file executables](https://bun.com/docs/bundler/executables). For Crust-specific build behavior, see [Building & Distribution](/docs/guide/build).

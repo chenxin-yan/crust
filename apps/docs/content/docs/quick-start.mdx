@@ -77,6 +77,8 @@ bun run build
 
 This runs `crust build`, which compiles your CLI to standalone executables for all platforms using `bun build --compile`.
 
+If you need environment-specific public build constants, pass `--env-file` to `crust build`. See [Environment Variables](/docs/guide/environment) for the full env model.
+
 **Per-OS npm packages** (optional):
 
 To publish via npm with automatic platform detection:
