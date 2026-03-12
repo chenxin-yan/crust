@@ -1,5 +1,13 @@
 # create-crust
 
+## 0.0.23
+
+### Patch Changes
+
+- 86e09aa: Rename `--distribute` build flag to `--package` across CLI, templates, and docs
+- Updated dependencies [f78b327]
+  - @crustjs/core@0.0.14
+
 ## 0.0.22
 
 ### Patch Changes

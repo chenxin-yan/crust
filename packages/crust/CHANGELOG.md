@@ -1,5 +1,12 @@
 # @crustjs/crust
 
+## 0.0.21
+
+### Patch Changes
+
+- 1433928: Add `--env-file` flag to `crust build` for loading environment files at build time. Public env vars (PUBLIC\_\*) are automatically inlined as build-time constants.
+- 86e09aa: Rename `--distribute` build flag to `--package` across CLI, templates, and docs
+
 ## 0.0.20
 
 ### Patch Changes

@@ -255,7 +255,7 @@ async function main() {
 			continue;
 		}
 
-		console.log(`Creating tag ${tag}`);
+		console.log(`New tag: ${tag}`);
 		await createTag(tag);
 	}
 }
