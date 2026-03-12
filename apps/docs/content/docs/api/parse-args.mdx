@@ -3,7 +3,9 @@ title: parseArgs()
 description: Parse argv against a command's arg and flag definitions.
 ---
 
-Parses an argv array against a command's definitions, performing type coercion, alias expansion, default value resolution, and required validation.
+Parses an argv array against a command's definitions, performing type coercion, alias expansion, and default value resolution.
+
+This is a pure parse+coerce function — it never throws for missing required values. Use [`validateParsed()`](/docs/api/validate-parsed) to enforce required constraints separately.
 
 ## Signature
 
@@ -37,7 +39,6 @@ interface ParseResult<A, F> {
 ## Throws
 
 - **`CrustError("PARSE")`** — Unknown flag, number coercion failure
-- **`CrustError("VALIDATION")`** — Missing required argument or flag
 - **`CrustError("DEFINITION")`** — Invalid flag definition at runtime (alias collision, or flag name/short/alias starting with `"no-"`)
 
 ## Behavior

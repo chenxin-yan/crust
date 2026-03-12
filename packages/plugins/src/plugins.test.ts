@@ -52,6 +52,40 @@ describe("built-in plugins", () => {
 		expect(output).toContain("build");
 	});
 
+	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.command("create", (cmd) =>
+				cmd
+					.args([{ name: "name", type: "string", required: true }] as const)
+					.run(() => {}),
+			);
+
+		await app.execute({ argv: ["create", "--help"] });
+
+		const output = getStdout();
+		expect(output).toContain("create");
+		expect(output).toContain("USAGE:");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
+	});
+
+	it("help plugin shows help instead of error when --help is used with missing required flag", async () => {
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.command("deploy", (cmd) =>
+				cmd.flags({ target: { type: "string", required: true } }).run(() => {}),
+			);
+
+		await app.execute({ argv: ["deploy", "--help"] });
+
+		const output = getStdout();
+		expect(output).toContain("deploy");
+		expect(output).toContain("USAGE:");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
+	});
+
 	it("help plugin ignores help-like args after --", async () => {
 		let capturedRawArgs: string[] = [];
 

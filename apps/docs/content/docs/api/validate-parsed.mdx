@@ -1,0 +1,53 @@
+---
+title: validateParsed()
+description: Validate a parse result against required-value constraints.
+---
+
+Validates a previously-parsed result against its command's required-value constraints. Separated from [`parseArgs()`](/docs/api/parse-args) so that middleware (e.g. `--help`) can inspect the parse result before validation errors are surfaced.
+
+## Signature
+
+```ts
+function validateParsed(
+  command: CommandNode,
+  parsed: ParseResult,
+): void;
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `command` | `CommandNode` | The command node whose definitions drive validation |
+| `parsed` | `ParseResult` | The parse result from [`parseArgs()`](/docs/api/parse-args) |
+
+## Returns
+
+`void` — throws on validation failure.
+
+## Throws
+
+- **`CrustError("VALIDATION")`** — Missing required argument or flag
+
+## When It's Called
+
+In the standard `.execute()` pipeline, `validateParsed` is called **after** middleware has run. This means plugins like `helpPlugin` can check `flags.help` and short-circuit before required-value errors are thrown.
+
+```
+parseArgs()  ->  middleware (e.g. --help)  ->  validateParsed()  ->  preRun -> run -> postRun
+```
+
+## Example
+
+```ts
+import { parseArgs, validateParsed } from "@crustjs/core";
+
+// Parse without validation
+const parsed = parseArgs(cmd._node, ["--help"]);
+
+// Middleware can inspect parsed.flags.help here...
+
+// Then validate when ready
+validateParsed(cmd._node, parsed);
+// Throws CrustError("VALIDATION") if required args/flags are missing
+```

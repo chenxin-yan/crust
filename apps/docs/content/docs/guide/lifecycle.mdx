@@ -80,7 +80,7 @@ Plugins are collected from the command tree (root-first, depth-first) and each `
 
 ### 2. Routing & Parsing
 
-`resolveCommand()` walks `argv` against the subcommand tree, then `parseArgs()` validates args and flags for the matched command. If either step fails, the error still passes through the middleware chain — allowing plugins like `helpPlugin` to intercept it.
+`resolveCommand()` walks `argv` against the subcommand tree, then `parseArgs()` parses and coerces args and flags for the matched command. Parsing errors (unknown flags, bad types) still pass through the middleware chain. Required-value validation is deferred to after middleware — this allows plugins like `helpPlugin` to intercept `--help` before missing-arg errors are surfaced.
 
 ### 3. Middleware & Hooks
 

@@ -1,6 +1,6 @@
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
-import { parseArgs } from "./parser.ts";
+import { parseArgs, validateParsed } from "./parser.ts";
 import type { ArgDef, FlagDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -90,7 +90,8 @@ export function validateCommandTree(root: CommandNode): void {
 		visited.add(command);
 
 		try {
-			parseArgs(command, createValidationArgv(command));
+			const parsed = parseArgs(command, createValidationArgv(command));
+			validateParsed(command, parsed);
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Unknown validation error";

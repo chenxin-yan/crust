@@ -148,21 +148,6 @@ function coerceValue(value: string, type: ValueType, label: string) {
 }
 
 /**
- * Apply default value or throw if a required definition has no value.
- * Shared fallback logic for both flags and positional args.
- */
-function applyDefaultOrThrow(
-	def: { default?: unknown; required?: true },
-	label: string,
-) {
-	if (def.default !== undefined) return def.default;
-	if (def.required === true) {
-		throw new CrustError("VALIDATION", `Missing required ${label}`);
-	}
-	return undefined;
-}
-
-/**
  * Coerce a single flag's parsed value to its target type.
  */
 function coerceFlagValue(
@@ -236,7 +221,7 @@ function resolveAliases(
 
 /**
  * Resolve all flag definitions against the canonical parsed values.
- * Handles coercion, defaults, and required validation.
+ * Handles coercion and default values.
  */
 function resolveFlags(
 	flagsDef: FlagsDef | undefined,
@@ -282,7 +267,10 @@ function validateRequiredFlags(
 
 /**
  * Resolve positional argument definitions against the parsed positional tokens.
- * Handles variadic args, coercion, defaults, and required validation.
+ * Handles variadic args, coercion, and default values.
+ *
+ * This is a pure parse+coerce function — it never throws for missing required
+ * values. Use {@link validateParsed} to enforce required constraints.
  */
 function resolveArgs(
 	argsDef: ArgsDef | undefined,
@@ -295,13 +283,9 @@ function resolveArgs(
 
 	for (const def of argsDef) {
 		const { name } = def as ArgDef;
-		const label = `argument "<${name}>"`;
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			if (def.required === true && remaining.length === 0) {
-				throw new CrustError("VALIDATION", `Missing required ${label}`);
-			}
 			resolved[name] =
 				def.type === "string"
 					? remaining
@@ -315,7 +299,7 @@ function resolveArgs(
 			);
 			index++;
 		} else {
-			resolved[name] = applyDefaultOrThrow(def, label);
+			resolved[name] = def.default ?? undefined;
 		}
 	}
 
@@ -371,12 +355,16 @@ function validateCanonicalNegationUsage(
  *
  * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
  * positional arg mapping, type coercion, alias expansion, default values,
- * required validation, variadic args, and strict mode.
+ * variadic args, and strict mode.
+ *
+ * This is a pure parse+coerce function — it never throws for missing required
+ * values. Use {@link validateParsed} to enforce required constraints after
+ * middleware has had a chance to intercept (e.g. `--help`).
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @returns Parsed args, flags, and rawArgs (everything after `--`)
- * @throws {CrustError} On unknown flags, missing required args/flags, type coercion failure, or alias collisions
+ * @throws {CrustError} On unknown flags, type coercion failure, or alias collisions
  */
 export function parseArgs<
 	A extends ArgsDef = ArgsDef,
@@ -440,8 +428,6 @@ export function parseArgs<
 	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
-	validateRequiredFlags(flagsDef, resolvedFlags);
-
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and
 	// InferFlags<F>, but TypeScript can't verify this statically since values
 	// are assembled dynamically from definitions. The assertion is safe here.
@@ -450,4 +436,46 @@ export function parseArgs<
 		flags: resolvedFlags,
 		rawArgs,
 	} as ParseResult<A, F>;
+}
+
+/**
+ * Validate a parse result against its command's required-value constraints.
+ *
+ * Separated from {@link parseArgs} so that middleware (e.g. `--help`) can
+ * inspect the parse result before validation errors are surfaced.
+ *
+ * @param command - The command whose definitions drive the validation
+ * @param parsed - The parse result from {@link parseArgs}
+ * @throws {CrustError} On missing required args or flags
+ */
+export function validateParsed(
+	command: CommandNode,
+	parsed: ParseResult,
+): void {
+	const argsDef = command.args as ArgsDef | undefined;
+	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
+
+	const args = parsed.args as Record<string, unknown>;
+	const flags = parsed.flags as Record<string, unknown>;
+
+	// Re-validate args: check for required args that are undefined
+	if (argsDef) {
+		for (const def of argsDef) {
+			const { name } = def as ArgDef;
+			const label = `argument "<${name}>"`;
+			const value = args[name];
+
+			if (def.required === true && def.default === undefined) {
+				if (def.variadic) {
+					if (!Array.isArray(value) || value.length === 0) {
+						throw new CrustError("VALIDATION", `Missing required ${label}`);
+					}
+				} else if (value === undefined) {
+					throw new CrustError("VALIDATION", `Missing required ${label}`);
+				}
+			}
+		}
+	}
+
+	validateRequiredFlags(flagsDef, flags);
 }

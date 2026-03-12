@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
-import { parseArgs } from "./parser.ts";
+import { parseArgs, validateParsed } from "./parser.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
 
 /**
@@ -349,14 +349,15 @@ describe("parseArgs — multiple flags", () => {
 		expect(result.flags.file).toEqual(["default.ts"]);
 	});
 
-	it("throws when required multiple flag is not provided", () => {
+	it("returns undefined for missing required multiple flag (no validation)", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			flags: {
 				file: { type: "string", multiple: true, required: true },
 			},
 		});
-		expect(() => parseArgs(cmd, [])).toThrow('Missing required flag "--file"');
+		const result = parseArgs(cmd, []);
+		expect(result.flags.file).toBeUndefined();
 	});
 
 	it("works with short alias on multiple flag", () => {
@@ -490,17 +491,9 @@ describe("parseArgs — required args", () => {
 		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
 	});
 
-	it("throws CrustError with VALIDATION code when required arg is missing", () => {
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required argument "<file>"',
-			);
-		}
+	it("returns undefined for missing required arg (no validation)", () => {
+		const result = parseArgs(cmd, []);
+		expect((result.args as Record<string, unknown>).file).toBeUndefined();
 	});
 
 	it("required arg with a default does not throw when missing", () => {
@@ -534,17 +527,9 @@ describe("parseArgs — required flags", () => {
 		expect(result.flags.name).toBe("hello");
 	});
 
-	it("throws CrustError with VALIDATION code when required flag is missing", () => {
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required flag "--name"',
-			);
-		}
+	it("returns undefined for missing required flag (no validation)", () => {
+		const result = parseArgs(cmd, []);
+		expect(result.flags.name).toBeUndefined();
 	});
 });
 
@@ -617,21 +602,13 @@ describe("parseArgs — variadic args", () => {
 		}
 	});
 
-	it("throws CrustError with VALIDATION code when required variadic arg receives no values", () => {
+	it("returns empty array for missing required variadic arg (no validation)", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required argument "<files>"',
-			);
-		}
+		const result = parseArgs(cmd, []);
+		expect((result.args as Record<string, unknown>).files).toEqual([]);
 	});
 
 	it("required variadic succeeds when at least one value is provided", () => {
@@ -1084,7 +1061,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		expect(result.flags.level).toBe(5);
 	});
 
-	it("inherited required flag is enforced", () => {
+	it("inherited required flag is enforced by validateParsed", () => {
 		const parentFlags = {
 			config: {
 				type: "string" as const,
@@ -1098,8 +1075,13 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
 
+		// parseArgs does not throw — validation is separate
+		const parsed = parseArgs(node, []);
+		expect(parsed.flags.config).toBeUndefined();
+
+		// validateParsed enforces required constraints
 		try {
-			parseArgs(node, []);
+			validateParsed(node, parsed);
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -1231,5 +1213,86 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const result = parseArgs(node, ["--include", "src", "--include", "lib"]);
 		expect(result.flags.include).toEqual(["src", "lib"]);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// validateParsed
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("validateParsed", () => {
+	it("throws for missing required arg", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "file", type: "string", required: true }],
+		});
+		const parsed = parseArgs(cmd, []);
+		try {
+			validateParsed(cmd, parsed);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("VALIDATION");
+			expect((err as CrustError).message).toBe(
+				'Missing required argument "<file>"',
+			);
+		}
+	});
+
+	it("throws for missing required flag", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			flags: { name: { type: "string", required: true } },
+		});
+		const parsed = parseArgs(cmd, []);
+		try {
+			validateParsed(cmd, parsed);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("VALIDATION");
+			expect((err as CrustError).message).toBe(
+				'Missing required flag "--name"',
+			);
+		}
+	});
+
+	it("throws for missing required variadic arg", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "files", type: "string", variadic: true, required: true }],
+		});
+		const parsed = parseArgs(cmd, []);
+		try {
+			validateParsed(cmd, parsed);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("VALIDATION");
+			expect((err as CrustError).message).toBe(
+				'Missing required argument "<files>"',
+			);
+		}
+	});
+
+	it("does not throw when all required values are provided", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "file", type: "string", required: true }],
+			flags: { name: { type: "string", required: true } },
+		});
+		const parsed = parseArgs(cmd, ["--name", "hello", "input.ts"]);
+		expect(() => validateParsed(cmd, parsed)).not.toThrow();
+	});
+
+	it("does not throw for required arg with default when missing", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [
+				{ name: "file", type: "string", required: true, default: "index.ts" },
+			],
+		});
+		const parsed = parseArgs(cmd, []);
+		expect(() => validateParsed(cmd, parsed)).not.toThrow();
 	});
 });

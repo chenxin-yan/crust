@@ -4,7 +4,7 @@ import {
 	computeEffectiveFlags,
 	createCommandNode,
 } from "./node.ts";
-import { parseArgs } from "./parser.ts";
+import { parseArgs, validateParsed } from "./parser.ts";
 import type {
 	CrustPlugin,
 	MiddlewareContext,
@@ -798,6 +798,8 @@ export class Crust<
 
 			// Step 7: Run middleware chain → Step 8: lifecycle hooks
 			await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+				validateParsed(resolvedNode, parsed);
+
 				if (!resolvedNode.run) return;
 
 				const context: CrustCommandContext = {

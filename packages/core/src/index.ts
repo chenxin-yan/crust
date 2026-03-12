@@ -8,7 +8,7 @@ export { CrustError } from "./errors.ts";
 export type { CommandNode } from "./node.ts";
 
 // Argument & flag parsing
-export { parseArgs } from "./parser.ts";
+export { parseArgs, validateParsed } from "./parser.ts";
 
 // Plugin runtime contracts
 export type {

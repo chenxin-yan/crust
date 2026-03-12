@@ -168,12 +168,14 @@ Even without TypeScript or when types are erased, Crust validates definitions at
 | Boolean value assignment (`--flag=true`) | `PARSE` | `Failed to parse command arguments` |
 | Negating an alias (`--no-loud`) | `PARSE` | `Cannot negate alias "--no-loud"; use "--no-verbose" instead` |
 
-**`parseArgs` throws `CrustError("VALIDATION")`:**
+**`validateParsed` throws `CrustError("VALIDATION")`:**
 
 | Check | Error Message |
 | --- | --- |
 | Missing required argument | `Missing required argument "<name>"` |
 | Missing required flag | `Missing required flag "--config"` |
+
+`validateParsed` is called after middleware, so plugins like `helpPlugin` can intercept `--help` before these errors are surfaced.
 
 ### 3. Pre-Compile (crust build)
 
