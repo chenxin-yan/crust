@@ -358,6 +358,11 @@ describe("fetchLatestVersion", () => {
 
 describe("updateNotifierPlugin middleware", () => {
 	const originalFetch = globalThis.fetch;
+	const originalProcessArgv = [...process.argv];
+	const originalUserAgent = process.env.npm_config_user_agent;
+	const originalNpmExecpath = process.env.npm_execpath;
+	const originalNpmConfigGlobal = process.env.npm_config_global;
+	const originalBunInstall = process.env.BUN_INSTALL;
 	let originalLog: typeof console.log;
 	let stdoutChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
@@ -380,6 +385,11 @@ describe("updateNotifierPlugin middleware", () => {
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		console.log = originalLog;
+		process.argv = [...originalProcessArgv];
+		process.env.npm_config_user_agent = originalUserAgent;
+		process.env.npm_execpath = originalNpmExecpath;
+		process.env.npm_config_global = originalNpmConfigGlobal;
+		process.env.BUN_INSTALL = originalBunInstall;
 		process.exitCode = 0;
 	});
 
@@ -437,7 +447,14 @@ describe("updateNotifierPlugin middleware", () => {
 			timeoutMs?: number;
 			registryUrl?: string;
 			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
-			updateCommand?: string;
+			installScope?: "local" | "global" | "auto";
+			updateCommand?:
+				| string
+				| ((
+						packageName: string,
+						packageManager: "npm" | "pnpm" | "yarn" | "bun",
+						installScope: "local" | "global",
+				  ) => string);
 			cache?: UpdateNotifierCacheAdapter;
 		},
 		overrides?: {
@@ -859,6 +876,118 @@ describe("updateNotifierPlugin middleware", () => {
 	// ── Option behavior ───────────────────────────────────────────────────
 
 	describe("option behavior", () => {
+		it("uses global commands when installScope is explicitly global", async () => {
+			const pkgName = uniquePackageName("explicit-global");
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "bun",
+				installScope: "global",
+			});
+
+			expect(getStdout()).toContain(`bun add -g ${pkgName}@latest`);
+		});
+
+		it("uses local commands when installScope is explicitly local", async () => {
+			const pkgName = uniquePackageName("explicit-local");
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "npm",
+				installScope: "local",
+			});
+
+			expect(getStdout()).toContain(`npm install ${pkgName}@latest`);
+		});
+
+		it("infers global npm installs from npm_config_global", async () => {
+			const pkgName = uniquePackageName("npm-global-env");
+			delete process.env.npm_config_user_agent;
+			process.env.npm_execpath = "/usr/local/bin/npm";
+			process.env.npm_config_global = "true";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getStdout()).toContain(`npm install -g ${pkgName}@latest`);
+		});
+
+		it("infers bun from npm_execpath when user agent is missing", async () => {
+			const pkgName = uniquePackageName("npm-execpath-bun");
+			delete process.env.npm_config_user_agent;
+			process.env.npm_execpath = "/opt/homebrew/bin/bun";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getStdout()).toContain(`bun add ${pkgName}@latest`);
+		});
+
+		it("infers global bun installs from BUN_INSTALL-owned paths when user agent is missing", async () => {
+			const pkgName = uniquePackageName("bun-install-global");
+			delete process.env.npm_config_user_agent;
+			delete process.env.npm_execpath;
+			process.env.BUN_INSTALL = "/tmp/.bun";
+			process.argv = [
+				"/tmp/.bun/bin/test-cli",
+				"/tmp/.bun/install/global/node_modules/test-cli/bin.js",
+			];
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getStdout()).toContain(`bun add -g ${pkgName}@latest`);
+		});
+
+		it("infers local installs from node_modules paths", async () => {
+			const pkgName = uniquePackageName("local-node-modules");
+			delete process.env.npm_config_user_agent;
+			delete process.env.npm_execpath;
+			delete process.env.BUN_INSTALL;
+			process.argv = [
+				"/Users/test/project/node_modules/.bin/test-cli",
+				"/Users/test/project/node_modules/test-cli/dist/index.js",
+			];
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "bun",
+			});
+
+			expect(getStdout()).toContain(`bun add ${pkgName}@latest`);
+		});
+
+		it("passes inferred installScope to updateCommand callback", async () => {
+			const pkgName = uniquePackageName("update-command-callback");
+			process.env.npm_config_global = "true";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "npm",
+				updateCommand: (_name, packageManager, installScope) =>
+					`${packageManager}:${installScope}`,
+			});
+
+			expect(getStdout()).toContain("npm:global");
+		});
+
 		it("does not persist cache by default when adapter is omitted", async () => {
 			const pkgName = uniquePackageName("no-default-cache");
 			let fetchCalls = 0;

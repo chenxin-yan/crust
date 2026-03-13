@@ -2,10 +2,12 @@
 // @crustjs/plugins — Update notifier plugin
 // ────────────────────────────────────────────────────────────────────────────
 
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
 import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+export type UpdateNotifierInstallScope = "local" | "global";
 
 export interface UpdateNotifierState {
 	lastCheckedAt: number;
@@ -93,21 +95,30 @@ export interface UpdateNotifierPluginOptions {
 	/**
 	 * Package manager used to generate the suggested upgrade command.
 	 *
-	 * Set to "auto" (default) to infer from `npm_config_user_agent`.
+	 * Set to "auto" (default) to infer from the runtime environment.
 	 */
 	packageManager?: UpdateNotifierPackageManager | "auto";
 
 	/**
+	 * Install scope used to generate the suggested upgrade command.
+	 *
+	 * Set to "auto" (default) to infer whether the CLI is running from a
+	 * global install or a project-local dependency.
+	 */
+	installScope?: UpdateNotifierInstallScope | "auto";
+
+	/**
 	 * Override the upgrade command shown in the notice.
 	 *
-	 * Useful when users install the CLI through channels other than npm-style
-	 * package managers (e.g. Homebrew, custom installers).
+	 * Useful when users install the CLI globally or through channels other than
+	 * npm-style package managers (e.g. Homebrew, custom installers).
 	 */
 	updateCommand?:
 		| string
 		| ((
 				packageName: string,
 				packageManager: UpdateNotifierPackageManager,
+				installScope: UpdateNotifierInstallScope,
 		  ) => string);
 
 	/**
@@ -322,38 +333,166 @@ function detectPackageManagerFromUserAgent(): UpdateNotifierPackageManager {
 		if (userAgent.startsWith("yarn")) return "yarn";
 		if (userAgent.startsWith("npm")) return "npm";
 	}
+
+	const detectedFromExecPath = detectPackageManagerFromExecPath(
+		process.env.npm_execpath,
+	);
+	if (detectedFromExecPath) return detectedFromExecPath;
+
+	const detectedFromRuntime = detectPackageManagerFromExecPath(
+		process.execPath,
+	);
+	if (detectedFromRuntime) return detectedFromRuntime;
+
+	const bunInstallDir = process.env.BUN_INSTALL;
+	if (
+		bunInstallDir &&
+		[
+			process.execPath,
+			process.argv[0],
+			process.argv[1],
+			process.env.npm_execpath,
+		].some((pathValue) => isPathWithin(bunInstallDir, pathValue))
+	) {
+		return "bun";
+	}
+
 	return "npm";
+}
+
+function detectInstallScopeFromEnvironment(
+	packageManager: UpdateNotifierPackageManager,
+): UpdateNotifierInstallScope {
+	const explicitGlobal = process.env.npm_config_global;
+	if (explicitGlobal === "true") return "global";
+	if (explicitGlobal === "false") return "local";
+
+	const candidatePaths = [
+		process.execPath,
+		process.argv[0],
+		process.argv[1],
+		process.env.npm_execpath,
+	];
+
+	const globalRoots = [
+		process.env.BUN_INSTALL,
+		process.env.npm_config_prefix,
+		process.env.PREFIX,
+		process.env.PNPM_HOME,
+	];
+
+	if (
+		globalRoots.some(
+			(rootPath) =>
+				rootPath &&
+				candidatePaths.some((pathValue) => isPathWithin(rootPath, pathValue)),
+		)
+	) {
+		return "global";
+	}
+
+	if (candidatePaths.some((pathValue) => isLikelyLocalInstallPath(pathValue))) {
+		return "local";
+	}
+
+	if (packageManager === "bun" && process.env.BUN_INSTALL) {
+		return "global";
+	}
+
+	return "local";
+}
+
+function detectPackageManagerFromExecPath(
+	execPath: string | undefined,
+): UpdateNotifierPackageManager | null {
+	if (!execPath) return null;
+
+	const executable = basename(execPath).toLowerCase();
+	if (executable === "bun" || executable.startsWith("bun-")) return "bun";
+	if (executable === "pnpm" || executable.startsWith("pnpm-")) return "pnpm";
+	if (executable === "yarn" || executable.startsWith("yarn-")) return "yarn";
+	if (executable === "npm" || executable.startsWith("npm-")) return "npm";
+	return null;
+}
+
+function isPathWithin(
+	parentPath: string,
+	childPath: string | undefined,
+): boolean {
+	if (!childPath) return false;
+
+	const resolvedParent = resolve(parentPath);
+	const resolvedChild = resolve(childPath);
+	const rel = relative(resolvedParent, resolvedChild);
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function isLikelyLocalInstallPath(pathValue: string | undefined): boolean {
+	if (!pathValue) return false;
+
+	const normalizedPath = pathValue.replaceAll("\\", "/").toLowerCase();
+	return (
+		normalizedPath.includes("/node_modules/.bin/") ||
+		normalizedPath.includes("/node_modules/")
+	);
 }
 
 function defaultUpdateCommand(
 	packageName: string,
 	packageManager: UpdateNotifierPackageManager,
+	installScope: UpdateNotifierInstallScope,
 ): string {
-	if (packageManager === "pnpm") return `pnpm add ${packageName}@latest`;
-	if (packageManager === "yarn") return `yarn add ${packageName}@latest`;
-	if (packageManager === "bun") return `bun add ${packageName}@latest`;
-	return `npm install ${packageName}@latest`;
+	if (packageManager === "pnpm") {
+		return installScope === "global"
+			? `pnpm add -g ${packageName}@latest`
+			: `pnpm add ${packageName}@latest`;
+	}
+	if (packageManager === "yarn") {
+		return installScope === "global"
+			? `yarn global add ${packageName}@latest`
+			: `yarn add ${packageName}@latest`;
+	}
+	if (packageManager === "bun") {
+		return installScope === "global"
+			? `bun add -g ${packageName}@latest`
+			: `bun add ${packageName}@latest`;
+	}
+	return installScope === "global"
+		? `npm install -g ${packageName}@latest`
+		: `npm install ${packageName}@latest`;
 }
 
 function resolveUpdateCommand(
 	packageName: string,
 	packageManagerOption: UpdateNotifierPackageManager | "auto" | undefined,
+	installScopeOption: UpdateNotifierInstallScope | "auto" | undefined,
 	override:
 		| string
 		| ((
 				packageName: string,
 				packageManager: UpdateNotifierPackageManager,
+				installScope: UpdateNotifierInstallScope,
 		  ) => string)
 		| undefined,
 ): string {
-	const detected =
+	const detectedPackageManager =
 		packageManagerOption && packageManagerOption !== "auto"
 			? packageManagerOption
 			: detectPackageManagerFromUserAgent();
+	const detectedInstallScope =
+		installScopeOption && installScopeOption !== "auto"
+			? installScopeOption
+			: detectInstallScopeFromEnvironment(detectedPackageManager);
 
 	if (typeof override === "string") return override;
-	if (typeof override === "function") return override(packageName, detected);
-	return defaultUpdateCommand(packageName, detected);
+	if (typeof override === "function") {
+		return override(packageName, detectedPackageManager, detectedInstallScope);
+	}
+	return defaultUpdateCommand(
+		packageName,
+		detectedPackageManager,
+		detectedInstallScope,
+	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -400,6 +539,7 @@ export function updateNotifierPlugin(
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
 		packageManager = "auto",
+		installScope = "auto",
 		updateCommand,
 		cache,
 	} = options;
@@ -428,6 +568,7 @@ export function updateNotifierPlugin(
 				const resolvedUpdateCommand = resolveUpdateCommand(
 					packageName,
 					packageManager,
+					installScope,
 					updateCommand,
 				);
 
