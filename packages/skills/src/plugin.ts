@@ -327,10 +327,18 @@ function buildSkillCommand(
 				type: "string",
 				description: "Install scope (project or global)",
 			},
+			all: {
+				type: "boolean",
+				description:
+					"Install for all detected agents non-interactively (universal + detected)",
+			},
 		})
 		.run(async (ctx) => {
 			const meta = deriveSkillMeta(rootCmd, options);
-			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
+			const installAll = ctx.flags.all === true;
+			const scope = installAll
+				? (options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+				: await resolveScopeForCommand(ctx.flags.scope, options);
 
 			// Detect installed agents
 			const detectedAgents = await detectInstalledAgents();
@@ -411,29 +419,35 @@ function buildSkillCommand(
 				defaultSelections.unshift(UNIVERSAL_GROUP);
 			}
 
-			// Single multiselect — pre-check currently installed agents
-			// In non-interactive mode (no TTY), install to all detected agents
-			const selectedValues =
-				choices.length === 0
-					? ([] as Array<AgentTarget | typeof UNIVERSAL_GROUP>)
-					: await multiselect({
-							message: "Select agents to install skills for",
-							choices,
-							default: defaultSelections,
-							required: false,
-						});
+			// When --all is set, select all universal + detected additional agents
+			// without prompting. Otherwise, show the interactive multiselect.
+			let selectedAgents: AgentTarget[];
 
-			const selected = new Set<AgentTarget>(
-				selectedValues.filter(
-					(value): value is AgentTarget => value !== UNIVERSAL_GROUP,
-				),
-			);
-			if (selectedValues.includes(UNIVERSAL_GROUP)) {
-				for (const agent of universalAgents) {
-					selected.add(agent);
+			if (installAll) {
+				selectedAgents = [...universalAgents, ...additionalAgents];
+			} else {
+				const selectedValues =
+					choices.length === 0
+						? ([] as Array<AgentTarget | typeof UNIVERSAL_GROUP>)
+						: await multiselect({
+								message: "Select agents to install skills for",
+								choices,
+								default: defaultSelections,
+								required: false,
+							});
+
+				const selected = new Set<AgentTarget>(
+					selectedValues.filter(
+						(value): value is AgentTarget => value !== UNIVERSAL_GROUP,
+					),
+				);
+				if (selectedValues.includes(UNIVERSAL_GROUP)) {
+					for (const agent of universalAgents) {
+						selected.add(agent);
+					}
 				}
+				selectedAgents = [...selected];
 			}
-			const selectedAgents = [...selected];
 
 			// Compute diff
 			const toInstall = selectedAgents.filter(
@@ -470,12 +484,14 @@ function buildSkillCommand(
 					}
 				} catch (err) {
 					if (err instanceof SkillConflictError) {
-						const overwrite = await confirm({
-							message:
-								`"${err.details.outputDir}" already exists but was not ` +
-								`created by Crust. Overwrite?`,
-							default: false,
-						});
+						const overwrite = installAll
+							? true
+							: await confirm({
+									message:
+										`"${err.details.outputDir}" already exists but was not ` +
+										`created by Crust. Overwrite?`,
+									default: false,
+								});
 
 						if (overwrite) {
 							const result = await spinner({
