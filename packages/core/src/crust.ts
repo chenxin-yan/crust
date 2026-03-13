@@ -340,16 +340,16 @@ export class Crust<
 	}
 
 	/**
-	 * Set metadata (description, usage) for this command.
+	 * Set metadata (description, usage, visibility) for this command.
 	 *
 	 * The command name is already set by the builder source (constructor,
 	 * `.sub()`, or the child builder passed into `.command(name, cb)`), so
-	 * only `description` and `usage` can be provided here.
+	 * only `description`, `usage`, and `hidden` can be provided here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
 	 * is not mutated.
 	 *
-	 * @param meta - Metadata fields to set (description, usage)
+	 * @param meta - Metadata fields to set (description, usage, hidden)
 	 * @returns A new `Crust` instance with updated metadata
 	 */
 	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {

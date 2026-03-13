@@ -104,6 +104,21 @@ describe("built-in plugins", () => {
 		expect(capturedRawArgs).toEqual(["--help"]);
 	});
 
+	it("help plugin hides hidden subcommands from commands and usage", async () => {
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.command("internal", (cmd) =>
+				cmd.meta({ description: "Internal", hidden: true }).run(() => {}),
+			);
+
+		await app.execute({ argv: ["--help"] });
+
+		const output = getStdout();
+		expect(output).not.toContain("COMMANDS:");
+		expect(output).not.toContain("internal");
+		expect(output).not.toContain("<command>");
+	});
+
 	it("version plugin handles --version", async () => {
 		const app = new Crust("app").use(versionPlugin("1.2.3")).run(() => {});
 

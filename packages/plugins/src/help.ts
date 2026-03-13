@@ -20,8 +20,11 @@ function formatUsage(
 	if (meta.usage) return meta.usage;
 
 	const usageParts: string[] = [path.join(" ")];
+	const visibleSubCommands = Object.values(command.subCommands).filter(
+		(subCommand) => subCommand.meta.hidden !== true,
+	);
 
-	if (Object.keys(command.subCommands).length > 0 && !command.run) {
+	if (visibleSubCommands.length > 0 && !command.run) {
 		usageParts.push("<command>");
 	}
 
@@ -68,12 +71,16 @@ function formatArgsSection(command: CommandNode): string[] {
 }
 
 function formatCommandsSection(command: CommandNode): string[] {
-	if (Object.keys(command.subCommands).length === 0) {
+	const visibleSubCommands = Object.entries(command.subCommands).filter(
+		([, subCommand]) => subCommand.meta.hidden !== true,
+	);
+
+	if (visibleSubCommands.length === 0) {
 		return [];
 	}
 
 	const lines = ["COMMANDS:"];
-	for (const [name, subCommand] of Object.entries(command.subCommands)) {
+	for (const [name, subCommand] of visibleSubCommands) {
 		const rendered = name.padEnd(10, " ");
 		lines.push(`  ${rendered}${subCommand.meta.description ?? ""}`.trimEnd());
 	}

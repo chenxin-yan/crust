@@ -14,14 +14,20 @@ bun add @crustjs/plugins
 | --- | --- |
 | `helpPlugin()` | Adds `--help` / `-h` flag and auto-generates help text |
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
-| `autoCompletePlugin(options?)` | Shell autocompletion support |
+| `autoCompletePlugin(options?)` | Suggests similar command names when users mistype a command |
+| `completionPlugin(options?)` | Adds `completion <shell>` commands for Bash, Zsh, and Fish |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
 
 ## Usage
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
+import {
+  autoCompletePlugin,
+  completionPlugin,
+  helpPlugin,
+  versionPlugin,
+} from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },
@@ -31,8 +37,59 @@ const main = defineCommand({
 });
 
 runMain(main, {
-  plugins: [versionPlugin("1.0.0"), autoCompletePlugin(), helpPlugin()],
+  plugins: [
+    versionPlugin("1.0.0"),
+    autoCompletePlugin(),
+    completionPlugin(),
+    helpPlugin(),
+  ],
 });
+```
+
+### Shell Completion
+
+The `completionPlugin` injects a visible `completion` command that prints shell scripts for `bash`, `zsh`, and `fish`.
+
+Register it before `helpPlugin()` if you want the injected `completion` command tree to inherit `--help`.
+
+```ts
+import { Crust } from "@crustjs/core";
+import {
+  completeArg,
+  completeFlag,
+  completionPlugin,
+  helpPlugin,
+} from "@crustjs/plugins";
+
+const app = new Crust("my-cli")
+  .flags({
+    format: completeFlag(
+      { type: "string", description: "Output format" },
+      ["json", "yaml"],
+    ),
+  })
+  .command("deploy", (cmd) =>
+    cmd
+      .args([
+        completeArg(
+          { name: "env", type: "string", description: "Target environment" },
+          ["dev", "staging", "prod"],
+        ),
+      ] as const)
+      .run(() => {}),
+  )
+  .use(completionPlugin())
+  .use(helpPlugin());
+
+await app.execute();
+```
+
+Examples:
+
+```sh
+my-cli completion bash
+my-cli completion zsh
+my-cli completion fish
 ```
 
 ### Update Notifier

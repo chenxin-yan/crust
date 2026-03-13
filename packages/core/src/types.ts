@@ -575,6 +575,8 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/** When `true`, omit this command from user-facing help output */
+	hidden?: true;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

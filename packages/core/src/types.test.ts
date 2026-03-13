@@ -480,9 +480,11 @@ describe("CommandMeta interface", () => {
 			name: "serve",
 			description: "Start dev server",
 			usage: "serve [options]",
+			hidden: true,
 		};
 
 		expect(meta.name).toBe("serve");
+		expect(meta.hidden).toBe(true);
 	});
 
 	it("only requires name", () => {
