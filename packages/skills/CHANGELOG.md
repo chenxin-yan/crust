@@ -1,5 +1,12 @@
 # @crustjs/skills
 
+## 0.0.18
+
+### Patch Changes
+
+- 5cc32c7: Add `--all` flag to skill command for non-interactive installation to all detected agents
+- bff135a: Use raw CLI name as the canonical skill directory name instead of prepending `use-`, and add legacy `use-*` install migration compatibility
+
 ## 0.0.17
 
 ### Patch Changes
