@@ -11,14 +11,10 @@ import {
 	detectInstalledAgents,
 	getAdditionalAgents,
 	getUniversalAgents,
+	resolveAgentPath,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	generateSkill,
-	resolveSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
 	Scope,
@@ -116,8 +112,7 @@ function formatInstallOutput(
 /**
  * Derives a {@link SkillMeta} from a command's `meta` and plugin options.
  *
- * The returned `name` is the raw CLI name (e.g. `"my-cli"`). The `use-`
- * prefix is applied downstream by `generateSkill()` and friends.
+ * The returned `name` is the canonical raw CLI name (e.g. `"my-cli"`).
  */
 function deriveSkillMeta(
 	command: CommandNode,
@@ -135,9 +130,27 @@ function deriveSkillMeta(
 	};
 }
 
+function needsSkillReconciliation(
+	agent: AgentTarget,
+	scope: Scope,
+	meta: SkillMeta,
+	entry: { installed: boolean; version?: string; outputDir: string },
+): boolean {
+	// TODO(v0.1.0): Remove legacy outputDir reconciliation once `use-<cli>` ->
+	// `<cli>` migration support is dropped in @crustjs/skills.
+	if (!entry.installed) {
+		return false;
+	}
+
+	const expectedOutputDir = resolveAgentPath(agent, scope, meta.name);
+	return (
+		entry.version !== meta.version || entry.outputDir !== expectedOutputDir
+	);
+}
+
 /**
  * Performs automatic updates for already-installed skills when the version
- * has changed.
+ * has changed or a legacy install path needs migration.
  *
  * Runs during plugin setup so behavior is independent of middleware ordering.
  * Only updates skills that are already installed — first-time installation
@@ -166,8 +179,8 @@ async function autoUpdateSkills(
 			scope,
 		});
 
-		const needsUpdate = status.agents.filter(
-			(a) => a.installed && a.version !== meta.version,
+		const needsUpdate = status.agents.filter((entry) =>
+			needsSkillReconciliation(entry.agent, scope, meta, entry),
 		);
 
 		if (needsUpdate.length === 0) {
@@ -193,7 +206,7 @@ async function autoUpdateSkills(
 
 					if (updatedLabels.length > 0) {
 						updateMessage(
-							`Updated skill "${resolveSkillName(meta.name)}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
+							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
 						);
 					}
 
@@ -454,8 +467,11 @@ function buildSkillCommand(
 				(agent) => !installedAgentSet.has(agent),
 			);
 			const toUpdate = selectedAgents.filter((agent) => {
-				const entry = status.agents.find((a) => a.agent === agent);
-				return entry?.installed === true && entry.version !== meta.version;
+				const entry = statusMap.get(agent);
+				return (
+					entry !== undefined &&
+					needsSkillReconciliation(agent, scope, meta, entry)
+				);
 			});
 			const toUninstall = [...installedAgentSet].filter(
 				(agent) => !selectedAgents.includes(agent),
@@ -576,8 +592,8 @@ function buildSkillUpdateCommand(
 				agents,
 				scope,
 			});
-			const needsUpdate = status.agents.filter(
-				(agent) => agent.installed && agent.version !== meta.version,
+			const needsUpdate = status.agents.filter((entry) =>
+				needsSkillReconciliation(entry.agent, scope, meta, entry),
 			);
 
 			if (needsUpdate.length === 0) {

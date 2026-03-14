@@ -216,12 +216,9 @@ function renderSkillMd(
 		lines.push("");
 	}
 
-	// Extract the raw CLI name (strip `use-` prefix for natural language)
-	const cliName = meta.name.startsWith("use-") ? meta.name.slice(4) : meta.name;
-
 	// When-to-use guidance for agents
 	lines.push(
-		`Use this skill when you need accurate help with \`${cliName}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
+		`Use this skill when you need accurate help with \`${meta.name}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
 	);
 	lines.push("");
 

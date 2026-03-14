@@ -20,7 +20,7 @@ import {
 	uninstallSkill,
 } from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
-import { CRUST_MANIFEST } from "./version.ts";
+import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper — builds a CommandNode for introspection tests
@@ -164,25 +164,22 @@ function nestedCommand(): CommandNode {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveSkillName", () => {
-	it("adds use- prefix to a plain name", () => {
-		expect(resolveSkillName("my-cli")).toBe("use-my-cli");
+	it("returns a plain name unchanged", () => {
+		expect(resolveSkillName("my-cli")).toBe("my-cli");
 	});
 
-	it("does not double-prefix a name already starting with use-", () => {
+	it("preserves a name already starting with use-", () => {
 		expect(resolveSkillName("use-my-cli")).toBe("use-my-cli");
 	});
 
 	it("handles empty string", () => {
-		expect(resolveSkillName("")).toBe("use-");
+		expect(resolveSkillName("")).toBe("");
 	});
 
-	it("handles names with special characters", () => {
-		expect(resolveSkillName("@scope/my-cli")).toBe("use-@scope/my-cli");
-	});
-
-	it("handles name that is exactly 'use-'", () => {
-		expect(resolveSkillName("use-")).toBe("use-");
-	});
+	// NOTE: resolveSkillName is an identity function — it passes through any
+	// string, but only names satisfying isValidSkillName are accepted by
+	// generateSkill. Invalid names (e.g. "@scope/my-cli") are intentionally
+	// not tested here to avoid implying they are supported.
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -191,39 +188,40 @@ describe("resolveSkillName", () => {
 
 describe("isValidSkillName", () => {
 	it("accepts valid names", () => {
-		expect(isValidSkillName("use-my-cli")).toBe(true);
-		expect(isValidSkillName("use-deploy")).toBe(true);
-		expect(isValidSkillName("use-git")).toBe(true);
+		expect(isValidSkillName("my-cli")).toBe(true);
+		expect(isValidSkillName("deploy")).toBe(true);
+		expect(isValidSkillName("git")).toBe(true);
+		expect(isValidSkillName("use-cases")).toBe(true);
 		expect(isValidSkillName("a")).toBe(true);
 		expect(isValidSkillName("abc123")).toBe(true);
 	});
 
 	it("rejects names with uppercase characters", () => {
-		expect(isValidSkillName("use-My-CLI")).toBe(false);
+		expect(isValidSkillName("My-CLI")).toBe(false);
 	});
 
 	it("rejects names with underscores", () => {
-		expect(isValidSkillName("use-my_cli")).toBe(false);
+		expect(isValidSkillName("my_cli")).toBe(false);
 	});
 
 	it("rejects names with dots", () => {
-		expect(isValidSkillName("use-my.cli")).toBe(false);
+		expect(isValidSkillName("my.cli")).toBe(false);
 	});
 
 	it("rejects names with @ or /", () => {
-		expect(isValidSkillName("use-@scope/cli")).toBe(false);
+		expect(isValidSkillName("@scope/cli")).toBe(false);
 	});
 
 	it("rejects names starting with hyphen", () => {
-		expect(isValidSkillName("-use-cli")).toBe(false);
+		expect(isValidSkillName("-cli")).toBe(false);
 	});
 
 	it("rejects names ending with hyphen", () => {
-		expect(isValidSkillName("use-cli-")).toBe(false);
+		expect(isValidSkillName("cli-")).toBe(false);
 	});
 
 	it("rejects names with consecutive hyphens", () => {
-		expect(isValidSkillName("use--cli")).toBe(false);
+		expect(isValidSkillName("my--cli")).toBe(false);
 	});
 
 	it("rejects empty string", () => {
@@ -231,14 +229,13 @@ describe("isValidSkillName", () => {
 	});
 
 	it("rejects names longer than 64 characters", () => {
-		const longName = `use-${"a".repeat(62)}`;
+		const longName = "a".repeat(65);
 		expect(longName.length).toBeGreaterThan(64);
 		expect(isValidSkillName(longName)).toBe(false);
 	});
 
 	it("accepts names exactly 64 characters", () => {
-		// "use-" is 4 chars, need 60 more chars that form valid segments
-		const name = `use-${"a".repeat(60)}`;
+		const name = "a".repeat(64);
 		expect(name.length).toBe(64);
 		expect(isValidSkillName(name)).toBe(true);
 	});
@@ -438,7 +435,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".claude", "skills", "use-my-cli");
+			const expected = join(tmpDir, ".claude", "skills", "my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 
@@ -456,7 +453,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const expected = join(tmpDir, ".agents", "skills", "use-my-cli");
+			const expected = join(tmpDir, ".agents", "skills", "my-cli");
 			expect((result.agents[0] as AgentResult).outputDir).toBe(expected);
 		});
 
@@ -474,7 +471,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const canonical = join(tmpDir, ".crust", "skills", "use-my-cli");
+			const canonical = join(tmpDir, ".crust", "skills", "my-cli");
 			const linkedPath = (result.agents[0] as AgentResult).outputDir;
 
 			expect((await stat(canonical)).isDirectory()).toBe(true);
@@ -731,7 +728,7 @@ describe("generateSkill", () => {
 			);
 			const manifest = JSON.parse(content);
 
-			expect(manifest.name).toBe("use-my-cli");
+			expect(manifest.name).toBe("my-cli");
 			expect(manifest.description).toBe("Simple CLI");
 			expect(manifest.version).toBe("2.0.0");
 			expect(manifest.entrypoint).toBeUndefined();
@@ -878,7 +875,7 @@ describe("generateSkill", () => {
 				join((result.agents[0] as AgentResult).outputDir, "SKILL.md"),
 			);
 			expect(content).toContain("---");
-			expect(content).toContain("name: use-my-cli");
+			expect(content).toContain("name: my-cli");
 			expect(content).toContain("description: A simple CLI tool");
 			expect(content).toContain('version: "1.0.0"');
 		});
@@ -1099,7 +1096,7 @@ describe("generateSkill", () => {
 	describe("conflict detection", () => {
 		it("throws SkillConflictError when directory exists without crust.json", async () => {
 			// Pre-create the skill directory without crust.json (simulating a non-Crust skill)
-			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			const skillDir = join(tmpDir, ".claude", "skills", "my-cli");
 			await mkdir(skillDir, { recursive: true });
 			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
 
@@ -1120,7 +1117,7 @@ describe("generateSkill", () => {
 		});
 
 		it("includes agent and outputDir in conflict error details", async () => {
-			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			const skillDir = join(tmpDir, ".claude", "skills", "my-cli");
 			await mkdir(skillDir, { recursive: true });
 			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
 
@@ -1143,6 +1140,32 @@ describe("generateSkill", () => {
 				const conflict = err as SkillConflictError;
 				expect(conflict.details.agent).toBe("claude-code");
 				expect(conflict.details.outputDir).toBe(skillDir);
+			}
+		});
+
+		it("throws SkillConflictError when the canonical store exists without crust.json", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(join(canonicalDir, "SKILL.md"), "# Manual canonical");
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.outputDir).toBe(canonicalDir);
 			}
 		});
 
@@ -1196,11 +1219,11 @@ describe("generateSkill", () => {
 		});
 
 		it("throws when directory has only non-Crust files", async () => {
-			const skillDir = join(tmpDir, ".agents", "skills", "use-my-cli");
+			const skillDir = join(tmpDir, ".agents", "skills", "my-cli");
 			await mkdir(skillDir, { recursive: true });
 			await writeFile(
 				join(skillDir, "manifest.json"),
-				JSON.stringify({ name: "use-my-cli", version: "1.0.0" }),
+				JSON.stringify({ name: "my-cli", version: "1.0.0" }),
 			);
 
 			await expect(
@@ -1220,7 +1243,7 @@ describe("generateSkill", () => {
 		});
 
 		it("succeeds with force when directory exists without crust.json", async () => {
-			const skillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			const skillDir = join(tmpDir, ".claude", "skills", "my-cli");
 			await mkdir(skillDir, { recursive: true });
 			await writeFile(join(skillDir, "SKILL.md"), "# Manual skill");
 
@@ -1240,6 +1263,85 @@ describe("generateSkill", () => {
 
 			expect((result.agents[0] as AgentResult).status).toBe("installed");
 			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
+		});
+
+		it("ignores a legacy manual directory and installs to the new path", async () => {
+			const legacySkillDir = join(tmpDir, ".agents", "skills", "use-my-cli");
+			await mkdir(legacySkillDir, { recursive: true });
+			await writeFile(
+				join(legacySkillDir, "SKILL.md"),
+				"# Manual legacy skill",
+			);
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["opencode"],
+					scope: "project",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).outputDir).toBe(
+				join(tmpDir, ".agents", "skills", "my-cli"),
+			);
+			expect(await readText(join(legacySkillDir, "SKILL.md"))).toBe(
+				"# Manual legacy skill",
+			);
+		});
+
+		it("migrates a legacy Crust install to the new path", async () => {
+			const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
+			const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+			await mkdir(legacyCanonicalDir, { recursive: true });
+			await mkdir(legacySkillDir, { recursive: true });
+			await writeFile(
+				join(legacyCanonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify(
+					{ name: "use-my-cli", description: "Test", version: "1.0.0" },
+					null,
+					"\t",
+				)}\n`,
+			);
+			await writeFile(
+				join(legacyCanonicalDir, "SKILL.md"),
+				'---\nname: use-my-cli\ndescription: Test\nmetadata:\n  version: "1.0.0"\n---\n',
+			);
+			await writeFile(
+				join(legacySkillDir, CRUST_MANIFEST),
+				`${JSON.stringify(
+					{ name: "use-my-cli", description: "Test", version: "1.0.0" },
+					null,
+					"\t",
+				)}\n`,
+			);
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "copy",
+				}),
+			);
+
+			const newSkillDir = join(tmpDir, ".claude", "skills", "my-cli");
+			const newCanonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+
+			expect((result.agents[0] as AgentResult).status).toBe("updated");
+			expect(await readInstalledVersion(newSkillDir)).toBe("1.0.0");
+			expect(await readInstalledVersion(newCanonicalDir)).toBe("1.0.0");
+			await expect(stat(legacySkillDir)).rejects.toThrow();
+			await expect(stat(legacyCanonicalDir)).rejects.toThrow();
 		});
 	});
 });
@@ -1292,6 +1394,35 @@ describe("uninstallSkill", () => {
 
 		const agentResult = result.agents[0] as UninstallResult["agents"][number];
 		expect(agentResult.status).toBe("not-found");
+	});
+
+	it("removes a legacy Crust-managed install", async () => {
+		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
+		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+		await mkdir(legacyCanonicalDir, { recursive: true });
+		await mkdir(legacySkillDir, { recursive: true });
+		await writeFile(
+			join(legacyCanonicalDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
+				"\n",
+		);
+		await writeFile(
+			join(legacySkillDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
+				"\n",
+		);
+
+		const result = await withCwd(tmpDir, () =>
+			uninstallSkill({
+				name: "my-cli",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		expect(result.agents[0]?.status).toBe("removed");
+		await expect(stat(legacySkillDir)).rejects.toThrow();
+		await expect(stat(legacyCanonicalDir)).rejects.toThrow();
 	});
 });
 
@@ -1359,5 +1490,53 @@ describe("skillStatus", () => {
 		const opencode = status.agents.find((a) => a.agent === "opencode");
 		expect(claude?.installed).toBe(true);
 		expect(opencode?.installed).toBe(false);
+	});
+
+	it("reports a legacy Crust install using the legacy output path", async () => {
+		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
+		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+		await mkdir(legacyCanonicalDir, { recursive: true });
+		await mkdir(legacySkillDir, { recursive: true });
+		await writeFile(
+			join(legacyCanonicalDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
+				"\n",
+		);
+		await writeFile(
+			join(legacySkillDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
+				"\n",
+		);
+
+		const status = await withCwd(tmpDir, () =>
+			skillStatus({
+				name: "my-cli",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		expect(status.agents[0]?.installed).toBe(true);
+		expect(status.agents[0]?.version).toBe("1.0.0");
+		expect(status.agents[0]?.outputDir).toBe(legacySkillDir);
+	});
+
+	it("does not treat a legacy manual directory as installed", async () => {
+		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
+		await mkdir(legacySkillDir, { recursive: true });
+		await writeFile(join(legacySkillDir, "SKILL.md"), "# Manual legacy skill");
+
+		const status = await withCwd(tmpDir, () =>
+			skillStatus({
+				name: "my-cli",
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+
+		expect(status.agents[0]?.installed).toBe(false);
+		expect(status.agents[0]?.outputDir).toBe(
+			join(tmpDir, ".claude", "skills", "my-cli"),
+		);
 	});
 });
