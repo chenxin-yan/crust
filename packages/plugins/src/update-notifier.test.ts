@@ -363,6 +363,9 @@ describe("updateNotifierPlugin middleware", () => {
 	const originalNpmExecpath = process.env.npm_execpath;
 	const originalNpmConfigGlobal = process.env.npm_config_global;
 	const originalBunInstall = process.env.BUN_INSTALL;
+	const originalPrefix = process.env.PREFIX;
+	const originalNpmConfigPrefix = process.env.npm_config_prefix;
+	const originalPnpmHome = process.env.PNPM_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
@@ -396,6 +399,9 @@ describe("updateNotifierPlugin middleware", () => {
 		restoreEnv("npm_execpath", originalNpmExecpath);
 		restoreEnv("npm_config_global", originalNpmConfigGlobal);
 		restoreEnv("BUN_INSTALL", originalBunInstall);
+		restoreEnv("PREFIX", originalPrefix);
+		restoreEnv("npm_config_prefix", originalNpmConfigPrefix);
+		restoreEnv("PNPM_HOME", originalPnpmHome);
 		process.exitCode = 0;
 	});
 
@@ -536,6 +542,7 @@ describe("updateNotifierPlugin middleware", () => {
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
+				installScope: "local",
 			});
 
 			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
@@ -929,6 +936,10 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("npm-execpath-bun");
 			delete process.env.npm_config_user_agent;
 			delete process.env.BUN_INSTALL;
+			delete process.env.PREFIX;
+			delete process.env.npm_config_prefix;
+			delete process.env.PNPM_HOME;
+			delete process.env.npm_config_global;
 			process.env.npm_execpath = "/opt/homebrew/bin/bun";
 			mockRegistryResponse("2.0.0");
 
@@ -937,7 +948,8 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getOutput()).toContain(`bun add ${pkgName}@latest`);
+			// With no scope env vars set, default is "global"
+			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
 		});
 
 		it("infers global bun installs from BUN_INSTALL-owned paths when user agent is missing", async () => {
@@ -964,6 +976,10 @@ describe("updateNotifierPlugin middleware", () => {
 			delete process.env.npm_config_user_agent;
 			delete process.env.npm_execpath;
 			delete process.env.BUN_INSTALL;
+			delete process.env.PREFIX;
+			delete process.env.npm_config_prefix;
+			delete process.env.npm_config_global;
+			delete process.env.PNPM_HOME;
 			const cwd = process.cwd();
 			process.argv = [
 				`${cwd}/node_modules/.bin/test-cli`,

@@ -325,7 +325,7 @@ const NO_CACHE_ADAPTER: UpdateNotifierCacheAdapter = {
 	write: async () => {},
 };
 
-function detectPackageManagerFromUserAgent(): UpdateNotifierPackageManager {
+function detectPackageManager(): UpdateNotifierPackageManager {
 	const userAgent = process.env.npm_config_user_agent;
 	if (userAgent) {
 		if (userAgent.startsWith("bun")) return "bun";
@@ -343,19 +343,6 @@ function detectPackageManagerFromUserAgent(): UpdateNotifierPackageManager {
 		process.execPath,
 	);
 	if (detectedFromRuntime) return detectedFromRuntime;
-
-	const bunInstallDir = process.env.BUN_INSTALL;
-	if (
-		bunInstallDir &&
-		[
-			process.execPath,
-			process.argv[0],
-			process.argv[1],
-			process.env.npm_execpath,
-		].some((pathValue) => isPathWithin(bunInstallDir, pathValue))
-	) {
-		return "bun";
-	}
 
 	return "npm";
 }
@@ -393,7 +380,9 @@ function detectInstallScopeFromEnvironment(): UpdateNotifierInstallScope {
 		return "local";
 	}
 
-	return "local";
+	// Default to "global" — a CLI running outside node_modules without any
+	// package-manager env vars is far more likely to be a global install.
+	return "global";
 }
 
 function detectPackageManagerFromExecPath(
@@ -493,7 +482,7 @@ function resolveUpdateCommand(
 	const detectedPackageManager =
 		packageManagerOption && packageManagerOption !== "auto"
 			? packageManagerOption
-			: detectPackageManagerFromUserAgent();
+			: detectPackageManager();
 	const detectedInstallScope =
 		installScopeOption && installScopeOption !== "auto"
 			? installScopeOption

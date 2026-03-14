@@ -2,4 +2,4 @@
 "@crustjs/plugins": patch
 ---
 
-Update the `updateNotifierPlugin` docs for `installScope`, scope-aware command inference, stderr output, and the expanded `updateCommand` callback signature. Also export `UpdateNotifierPackageManager` and `UpdateNotifierInstallScope` from the package entrypoint.
+Add install-scope inference (`installScope` option, `UpdateNotifierInstallScope` type) and scope-aware upgrade commands to `updateNotifierPlugin`. Export `UpdateNotifierPackageManager` and `UpdateNotifierInstallScope` from the package entrypoint. The `updateCommand` callback now receives a third `installScope` argument (breaking for existing callbacks). Update notice output moved from stdout (`console.log`) to stderr (`process.stderr.write`).
