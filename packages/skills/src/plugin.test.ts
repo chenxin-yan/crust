@@ -250,6 +250,7 @@ describe("skillPlugin auto-update", () => {
 		);
 		expect(await readInstalledVersion(currentSkillDir)).toBe("1.0.0");
 		expect(await exists(legacySkillDir)).toBe(false);
+		expect(await exists(legacyCanonicalDir)).toBe(false);
 	});
 
 	it("prints auto-update message with Universal label", async () => {

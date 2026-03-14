@@ -77,7 +77,7 @@ export function resolveSkillName(name: string): string {
 	return name;
 }
 
-// TODO(v0.1.0): Remove legacy `use-*` skill name compatibility after the
+// TODO:(v0.1.0) Remove legacy `use-*` skill name compatibility after the
 // migration window for `use-<cli>` -> `<cli>` installs ends.
 function resolveLegacySkillName(name: string): string {
 	return name.startsWith("use-") ? name : `use-${name}`;
@@ -205,15 +205,11 @@ export async function generateSkill(
 			}),
 		);
 	}
-	const canonicalState = await inspectManagedPath(
-		canonicalOutputDir,
-		canonicalOutputDir,
-	);
-	if (
-		canonicalState.inspection.exists &&
-		!canonicalState.isCrustManaged &&
-		!force
-	) {
+	const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
+	const canonicalExists = (
+		await inspectInstallPath(canonicalOutputDir, canonicalOutputDir)
+	).exists;
+	if (canonicalExists && canonicalVersion === null && !force) {
 		throw new SkillConflictError({
 			agent: primaryAgent,
 			outputDir: canonicalOutputDir,
@@ -223,7 +219,7 @@ export async function generateSkill(
 	// Compared against the pre-write snapshot. When true, all agents in the
 	// loop below report "updated" (even symlinks with `pathChanged = false`)
 	// because the canonical content they point to has changed.
-	const canonicalChanged = canonicalState.version !== resolvedMeta.version;
+	const canonicalChanged = canonicalVersion !== resolvedMeta.version;
 	if (canonicalChanged) {
 		if (clean) {
 			await cleanDirectory(canonicalOutputDir);
@@ -291,13 +287,12 @@ export async function generateSkill(
 	}
 
 	{
-		const legacyCanonicalState = await inspectManagedPath(
-			legacyCanonicalOutputDir,
+		const legacyCanonicalVersion = await readInstalledVersion(
 			legacyCanonicalOutputDir,
 		);
 		if (
 			legacyCanonicalOutputDir !== canonicalOutputDir &&
-			legacyCanonicalState.isCrustManaged &&
+			legacyCanonicalVersion !== null &&
 			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
 		) {
 			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
@@ -358,7 +353,10 @@ export async function uninstallSkill(
 		});
 
 		const currentRemoved = await removeManagedPath(state.current);
-		const legacyRemoved = await removeManagedPath(state.legacy);
+		const legacyRemoved =
+			state.legacy.outputDir !== state.current.outputDir
+				? await removeManagedPath(state.legacy)
+				: false;
 		const removed = currentRemoved || legacyRemoved;
 		const removedOutputDir = currentRemoved
 			? outputDir
@@ -376,25 +374,21 @@ export async function uninstallSkill(
 	}
 
 	{
-		const canonicalState = await inspectManagedPath(
-			canonicalOutputDir,
-			canonicalOutputDir,
-		);
+		const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
 		if (
-			canonicalState.isCrustManaged &&
+			canonicalVersion !== null &&
 			!(await hasAnyInstalledAgentPath(resolvedName, scope))
 		) {
 			await rm(canonicalOutputDir, { recursive: true, force: true });
 		}
 	}
 	{
-		const legacyCanonicalState = await inspectManagedPath(
-			legacyCanonicalOutputDir,
+		const legacyCanonicalVersion = await readInstalledVersion(
 			legacyCanonicalOutputDir,
 		);
 		if (
 			legacyCanonicalOutputDir !== canonicalOutputDir &&
-			legacyCanonicalState.isCrustManaged &&
+			legacyCanonicalVersion !== null &&
 			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
 		) {
 			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
