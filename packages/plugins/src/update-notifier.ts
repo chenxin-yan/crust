@@ -431,10 +431,25 @@ function isLikelyLocalInstallPath(pathValue: string | undefined): boolean {
 	if (!pathValue) return false;
 
 	const normalizedPath = pathValue.replaceAll("\\", "/").toLowerCase();
+	const cwd = process.cwd().replaceAll("\\", "/").toLowerCase();
 	return (
-		normalizedPath.includes("/node_modules/.bin/") ||
-		normalizedPath.includes("/node_modules/")
+		(normalizedPath.includes("/node_modules/.bin/") ||
+			normalizedPath.includes("/node_modules/")) &&
+		normalizedPath.startsWith(cwd)
 	);
+}
+
+/**
+ * Detect the Yarn major version from the `npm_config_user_agent` env var.
+ * Returns `null` when the version cannot be determined.
+ *
+ * The user-agent format is: `yarn/<version> npm/? node/<version> <os> <arch>`
+ */
+function getYarnMajorVersion(): number | null {
+	const ua = process.env.npm_config_user_agent;
+	if (!ua) return null;
+	const match = ua.match(/^yarn\/(\d+)/);
+	return match ? Number(match[1]) : null;
 }
 
 function defaultUpdateCommand(
@@ -448,9 +463,15 @@ function defaultUpdateCommand(
 			: `pnpm add ${packageName}@latest`;
 	}
 	if (packageManager === "yarn") {
-		return installScope === "global"
-			? `yarn global add ${packageName}@latest`
-			: `yarn add ${packageName}@latest`;
+		if (installScope === "global") {
+			const major = getYarnMajorVersion();
+			// `yarn global add` was removed in Yarn v2+ (Berry).
+			// When version is unknown, fall back to npm as the safer default.
+			return major !== null && major < 2
+				? `yarn global add ${packageName}@latest`
+				: `npm install -g ${packageName}@latest`;
+		}
+		return `yarn add ${packageName}@latest`;
 	}
 	if (packageManager === "bun") {
 		return installScope === "global"

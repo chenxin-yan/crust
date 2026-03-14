@@ -382,14 +382,19 @@ describe("updateNotifierPlugin middleware", () => {
 		};
 	});
 
+	function restoreEnv(key: string, original: string | undefined) {
+		if (original === undefined) delete process.env[key];
+		else process.env[key] = original;
+	}
+
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		console.log = originalLog;
 		process.argv = [...originalProcessArgv];
-		process.env.npm_config_user_agent = originalUserAgent;
-		process.env.npm_execpath = originalNpmExecpath;
-		process.env.npm_config_global = originalNpmConfigGlobal;
-		process.env.BUN_INSTALL = originalBunInstall;
+		restoreEnv("npm_config_user_agent", originalUserAgent);
+		restoreEnv("npm_execpath", originalNpmExecpath);
+		restoreEnv("npm_config_global", originalNpmConfigGlobal);
+		restoreEnv("BUN_INSTALL", originalBunInstall);
 		process.exitCode = 0;
 	});
 
@@ -957,9 +962,10 @@ describe("updateNotifierPlugin middleware", () => {
 			delete process.env.npm_config_user_agent;
 			delete process.env.npm_execpath;
 			delete process.env.BUN_INSTALL;
+			const cwd = process.cwd();
 			process.argv = [
-				"/Users/test/project/node_modules/.bin/test-cli",
-				"/Users/test/project/node_modules/test-cli/dist/index.js",
+				`${cwd}/node_modules/.bin/test-cli`,
+				`${cwd}/node_modules/test-cli/dist/index.js`,
 			];
 			mockRegistryResponse("2.0.0");
 
