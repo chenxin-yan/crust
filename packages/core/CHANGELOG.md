@@ -1,5 +1,11 @@
 # @crustjs/core
 
+## 0.0.15
+
+### Patch Changes
+
+- 5e0afa4: Fix inherited flags not being applied to subcommand trees injected by plugins. The help flag (`-h`) now correctly inherits into plugin-added subcommands.
+
 ## 0.0.14
 
 ### Patch Changes
