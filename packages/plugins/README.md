@@ -108,7 +108,7 @@ updateNotifierPlugin({
 });
 ```
 
-For a globally installed Bun CLI, you can now set the scope directly:
+For a globally installed Bun CLI, you can set the scope directly:
 
 ```ts
 updateNotifierPlugin({

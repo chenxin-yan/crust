@@ -360,9 +360,7 @@ function detectPackageManagerFromUserAgent(): UpdateNotifierPackageManager {
 	return "npm";
 }
 
-function detectInstallScopeFromEnvironment(
-	packageManager: UpdateNotifierPackageManager,
-): UpdateNotifierInstallScope {
+function detectInstallScopeFromEnvironment(): UpdateNotifierInstallScope {
 	const explicitGlobal = process.env.npm_config_global;
 	if (explicitGlobal === "true") return "global";
 	if (explicitGlobal === "false") return "local";
@@ -393,10 +391,6 @@ function detectInstallScopeFromEnvironment(
 
 	if (candidatePaths.some((pathValue) => isLikelyLocalInstallPath(pathValue))) {
 		return "local";
-	}
-
-	if (packageManager === "bun" && process.env.BUN_INSTALL) {
-		return "global";
 	}
 
 	return "local";
@@ -503,7 +497,7 @@ function resolveUpdateCommand(
 	const detectedInstallScope =
 		installScopeOption && installScopeOption !== "auto"
 			? installScopeOption
-			: detectInstallScopeFromEnvironment(detectedPackageManager);
+			: detectInstallScopeFromEnvironment();
 
 	if (typeof override === "string") return override;
 	if (typeof override === "function") {
@@ -685,10 +679,9 @@ function padLine(text: string, width: number): string {
 }
 
 /**
- * Emits a styled, boxed update notice to stdout via `console.log`.
+ * Emits a styled, boxed update notice to stderr.
  *
- * Uses stdout (not stderr) because an update notice is informational,
- * not an error.
+ * Uses stderr so the notice does not interfere with piped stdout.
  *
  * The notice uses rounded-corner box-drawing characters and ANSI colors:
  * - Yellow box border
@@ -729,5 +722,5 @@ function emitUpdateNotice(
 		"",
 	];
 
-	console.log(lines.join("\n"));
+	process.stderr.write(`${lines.join("\n")}\n`);
 }
