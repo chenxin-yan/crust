@@ -1821,16 +1821,21 @@ describe("Crust .execute()", () => {
 		expect(receivedFlags.version).toBe(true);
 	});
 
-	it("plugin-added subcommand trees inherit existing inheritable flags", async () => {
+	it("plugin-added subcommand trees inherit flags from prior plugins", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const plugin: CrustPlugin = {
-			name: "inject-subcommand",
+		const helpLikePlugin: CrustPlugin = {
+			name: "help-like",
 			setup: (ctx, actions) => {
 				actions.addFlag(ctx.rootCommand, "help", {
 					type: "boolean",
 					inherit: true,
 				});
+			},
+		};
+		const subCommandPlugin: CrustPlugin = {
+			name: "inject-subcommand",
+			setup: (ctx, actions) => {
 				actions.addSubCommand(
 					ctx.rootCommand,
 					"skill",
@@ -1843,7 +1848,10 @@ describe("Crust .execute()", () => {
 			},
 		};
 
-		const app = new Crust("test").use(plugin).run(() => {});
+		const app = new Crust("test")
+			.use(helpLikePlugin)
+			.use(subCommandPlugin)
+			.run(() => {});
 
 		await app.execute({ argv: ["skill", "update", "--help"] });
 

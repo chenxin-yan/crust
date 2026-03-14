@@ -150,6 +150,20 @@ describe("built-in plugins", () => {
 		expect(process.exitCode).toBeFalsy();
 	});
 
+	it("help plugin supports subcommands injected before its setup", async () => {
+		const app = new Crust("app")
+			.use(lateSkillPlugin())
+			.use(helpPlugin())
+			.run(() => {});
+
+		await app.execute({ argv: ["skill", "--help"] });
+
+		expect(getStdout()).toContain("Manage agent skills");
+		expect(getStdout()).toContain("--help");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
+	});
+
 	it("version plugin handles --version", async () => {
 		const app = new Crust("app").use(versionPlugin("1.2.3")).run(() => {});
 
