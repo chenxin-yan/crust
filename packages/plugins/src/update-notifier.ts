@@ -353,18 +353,12 @@ function detectInstallScopeFromEnvironment(): UpdateNotifierInstallScope {
 	if (explicitGlobal === "false") return "local";
 
 	const candidatePaths = [
-		process.execPath,
 		process.argv[0],
 		process.argv[1],
 		process.env.npm_execpath,
 	];
 
-	const globalRoots = [
-		process.env.BUN_INSTALL,
-		process.env.npm_config_prefix,
-		process.env.PREFIX,
-		process.env.PNPM_HOME,
-	];
+	const globalRoots = [process.env.BUN_INSTALL, process.env.PNPM_HOME];
 
 	if (
 		globalRoots.some(
