@@ -136,6 +136,8 @@ function needsSkillReconciliation(
 	meta: SkillMeta,
 	entry: { installed: boolean; version?: string; outputDir: string },
 ): boolean {
+	// TODO(v0.1.0): Remove legacy outputDir reconciliation once `use-<cli>` ->
+	// `<cli>` migration support is dropped in @crustjs/skills.
 	if (!entry.installed) {
 		return false;
 	}

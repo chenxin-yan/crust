@@ -176,9 +176,10 @@ describe("resolveSkillName", () => {
 		expect(resolveSkillName("")).toBe("");
 	});
 
-	it("handles names with special characters", () => {
-		expect(resolveSkillName("@scope/my-cli")).toBe("@scope/my-cli");
-	});
+	// NOTE: resolveSkillName is an identity function — it passes through any
+	// string, but only names satisfying isValidSkillName are accepted by
+	// generateSkill. Invalid names (e.g. "@scope/my-cli") are intentionally
+	// not tested here to avoid implying they are supported.
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1139,6 +1140,32 @@ describe("generateSkill", () => {
 				const conflict = err as SkillConflictError;
 				expect(conflict.details.agent).toBe("claude-code");
 				expect(conflict.details.outputDir).toBe(skillDir);
+			}
+		});
+
+		it("throws SkillConflictError when the canonical store exists without crust.json", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(join(canonicalDir, "SKILL.md"), "# Manual canonical");
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.outputDir).toBe(canonicalDir);
 			}
 		});
 

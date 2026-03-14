@@ -77,6 +77,8 @@ export function resolveSkillName(name: string): string {
 	return name;
 }
 
+// TODO(v0.1.0): Remove legacy `use-*` skill name compatibility after the
+// migration window for `use-<cli>` -> `<cli>` installs ends.
 function resolveLegacySkillName(name: string): string {
 	return name.startsWith("use-") ? name : `use-${name}`;
 }
@@ -214,7 +216,7 @@ export async function generateSkill(
 	) {
 		throw new SkillConflictError({
 			agent: primaryAgent,
-			outputDir: resolveAgentPath(primaryAgent, scope, resolvedMeta.name),
+			outputDir: canonicalOutputDir,
 		});
 	}
 
@@ -288,11 +290,18 @@ export async function generateSkill(
 		}
 	}
 
-	if (
-		legacyCanonicalOutputDir !== canonicalOutputDir &&
-		!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
-	) {
-		await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
+	{
+		const legacyCanonicalState = await inspectManagedPath(
+			legacyCanonicalOutputDir,
+			legacyCanonicalOutputDir,
+		);
+		if (
+			legacyCanonicalOutputDir !== canonicalOutputDir &&
+			legacyCanonicalState.isCrustManaged &&
+			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
+		) {
+			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
+		}
 	}
 
 	return { agents: results };
@@ -366,14 +375,30 @@ export async function uninstallSkill(
 		}
 	}
 
-	if (!(await hasAnyInstalledAgentPath(resolvedName, scope))) {
-		await rm(canonicalOutputDir, { recursive: true, force: true });
+	{
+		const canonicalState = await inspectManagedPath(
+			canonicalOutputDir,
+			canonicalOutputDir,
+		);
+		if (
+			canonicalState.isCrustManaged &&
+			!(await hasAnyInstalledAgentPath(resolvedName, scope))
+		) {
+			await rm(canonicalOutputDir, { recursive: true, force: true });
+		}
 	}
-	if (
-		legacyCanonicalOutputDir !== canonicalOutputDir &&
-		!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
-	) {
-		await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
+	{
+		const legacyCanonicalState = await inspectManagedPath(
+			legacyCanonicalOutputDir,
+			legacyCanonicalOutputDir,
+		);
+		if (
+			legacyCanonicalOutputDir !== canonicalOutputDir &&
+			legacyCanonicalState.isCrustManaged &&
+			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
+		) {
+			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
+		}
 	}
 
 	return { agents: results };
