@@ -117,6 +117,7 @@ export function renderHelp(command: CommandNode, path?: string[]): string {
 const helpFlagDef: FlagDef = {
 	type: "boolean",
 	short: "h",
+	inherit: true,
 	description: "Show help",
 };
 

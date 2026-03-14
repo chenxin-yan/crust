@@ -1821,6 +1821,35 @@ describe("Crust .execute()", () => {
 		expect(receivedFlags.version).toBe(true);
 	});
 
+	it("plugin-added subcommand trees inherit existing inheritable flags", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const plugin: CrustPlugin = {
+			name: "inject-subcommand",
+			setup: (ctx, actions) => {
+				actions.addFlag(ctx.rootCommand, "help", {
+					type: "boolean",
+					inherit: true,
+				});
+				actions.addSubCommand(
+					ctx.rootCommand,
+					"skill",
+					new Crust("skill").command("update", (cmd) =>
+						cmd.run((runCtx) => {
+							receivedFlags = runCtx.flags as Record<string, unknown>;
+						}),
+					)._node,
+				);
+			},
+		};
+
+		const app = new Crust("test").use(plugin).run(() => {});
+
+		await app.execute({ argv: ["skill", "update", "--help"] });
+
+		expect(receivedFlags.help).toBe(true);
+	});
+
 	it("deeply nested subcommand routing works", async () => {
 		let handlerRan = "";
 
