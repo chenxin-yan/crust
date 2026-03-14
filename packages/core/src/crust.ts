@@ -131,6 +131,17 @@ function isPromptCancelledError(error: unknown): boolean {
 	return error.name === "CancelledError";
 }
 
+function applyInheritedFlagsToSubtree(
+	node: CommandNode,
+	inheritedFlags: FlagsDef,
+): void {
+	node.effectiveFlags = computeEffectiveFlags(inheritedFlags, node.localFlags);
+
+	for (const sub of Object.values(node.subCommands)) {
+		applyInheritedFlagsToSubtree(sub, node.effectiveFlags);
+	}
+}
+
 /** Create SetupActions that work with CommandNode targets. */
 function createSetupActions(warnings?: string[]): SetupActions {
 	return {
@@ -155,6 +166,7 @@ function createSetupActions(warnings?: string[]): SetupActions {
 				);
 				return;
 			}
+			applyInheritedFlagsToSubtree(subCommand, parent.effectiveFlags);
 			(parent.subCommands as Record<string, unknown>)[name] = subCommand;
 		},
 	};

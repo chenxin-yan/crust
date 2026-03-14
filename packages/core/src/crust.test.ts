@@ -1821,6 +1821,43 @@ describe("Crust .execute()", () => {
 		expect(receivedFlags.version).toBe(true);
 	});
 
+	it("plugin-added subcommand trees inherit flags from prior plugins", async () => {
+		let receivedFlags: Record<string, unknown> = {};
+
+		const helpLikePlugin: CrustPlugin = {
+			name: "help-like",
+			setup: (ctx, actions) => {
+				actions.addFlag(ctx.rootCommand, "help", {
+					type: "boolean",
+					inherit: true,
+				});
+			},
+		};
+		const subCommandPlugin: CrustPlugin = {
+			name: "inject-subcommand",
+			setup: (ctx, actions) => {
+				actions.addSubCommand(
+					ctx.rootCommand,
+					"skill",
+					new Crust("skill").command("update", (cmd) =>
+						cmd.run((runCtx) => {
+							receivedFlags = runCtx.flags as Record<string, unknown>;
+						}),
+					)._node,
+				);
+			},
+		};
+
+		const app = new Crust("test")
+			.use(helpLikePlugin)
+			.use(subCommandPlugin)
+			.run(() => {});
+
+		await app.execute({ argv: ["skill", "update", "--help"] });
+
+		expect(receivedFlags.help).toBe(true);
+	});
+
 	it("deeply nested subcommand routing works", async () => {
 		let handlerRan = "";
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Crust } from "@crustjs/core";
+import { Crust, type CrustPlugin } from "@crustjs/core";
 import { autoCompletePlugin } from "./autocomplete.ts";
 import { helpPlugin } from "./help.ts";
 import { versionPlugin } from "./version.ts";
@@ -35,6 +35,24 @@ function getStdout() {
 
 function getStderr() {
 	return stderrChunks.join("\n");
+}
+
+function lateSkillPlugin(): CrustPlugin {
+	return {
+		name: "late-skill",
+		setup(ctx, actions) {
+			actions.addSubCommand(
+				ctx.rootCommand,
+				"skill",
+				new Crust("skill")
+					.meta({ description: "Manage agent skills" })
+					.command("update", (cmd) =>
+						cmd.meta({ description: "Update installed skills" }).run(() => {}),
+					)
+					.run(() => {})._node,
+			);
+		},
+	};
 }
 
 describe("built-in plugins", () => {
@@ -102,6 +120,48 @@ describe("built-in plugins", () => {
 
 		expect(getStdout()).toBe("");
 		expect(capturedRawArgs).toEqual(["--help"]);
+	});
+
+	it("help plugin supports subcommands injected after its setup", async () => {
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.use(lateSkillPlugin())
+			.run(() => {});
+
+		await app.execute({ argv: ["skill", "--help"] });
+
+		expect(getStdout()).toContain("Manage agent skills");
+		expect(getStdout()).toContain("--help");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
+	});
+
+	it("help plugin supports nested subcommands injected after its setup", async () => {
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.use(lateSkillPlugin())
+			.run(() => {});
+
+		await app.execute({ argv: ["skill", "update", "--help"] });
+
+		expect(getStdout()).toContain("Update installed skills");
+		expect(getStdout()).toContain("--help");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
+	});
+
+	it("help plugin supports subcommands injected before its setup", async () => {
+		const app = new Crust("app")
+			.use(lateSkillPlugin())
+			.use(helpPlugin())
+			.run(() => {});
+
+		await app.execute({ argv: ["skill", "--help"] });
+
+		expect(getStdout()).toContain("Manage agent skills");
+		expect(getStdout()).toContain("--help");
+		expect(getStderr()).toBe("");
+		expect(process.exitCode).toBeFalsy();
 	});
 
 	it("version plugin handles --version", async () => {
