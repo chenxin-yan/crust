@@ -67,7 +67,8 @@ You are responsible for passing `packageName` and `currentVersion` — typically
 - **Non-blocking** — The update check runs after your command handler completes. It never delays command execution.
 - **Soft failure** — All internal errors (network timeouts, registry failures, cache errors, malformed responses) are silently swallowed. The plugin never affects exit codes or command output.
 - **Stderr output** — The update notice is written to stderr so it does not interfere with piped stdout.
-- **Package-manager-aware command** — The upgrade hint is inferred from `npm_config_user_agent` by default and can be overridden.
+- **Package-manager-aware command** — The upgrade hint is inferred from the runtime environment by default and can be overridden.
+- **Scope-aware command** — The notifier also infers local vs global installs with best-effort heuristics. Use `installScope` or `updateCommand` when you need exact control.
 
 #### Options
 
@@ -78,7 +79,8 @@ You are responsible for passing `packageName` and `currentVersion` — typically
 | `timeoutMs` | `number` | `5_000` (5s) | Network request timeout. Aborted checks are treated as soft failures. |
 | `registryUrl` | `string` | `"https://registry.npmjs.org"` | Custom npm registry URL. |
 | `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"` | `"auto"` | Package manager used when building the default update command. |
-| `updateCommand` | `string \| ((packageName, packageManager) => string)` | inferred | Override the command shown in the update notice (for example Homebrew). |
+| `installScope` | `"auto" \| "local" \| "global"` | `"auto"` | Install scope used when building the default update command. |
+| `updateCommand` | `string \| ((packageName, packageManager, installScope) => string)` | inferred | Override the command shown in the update notice. Recommended for unusual distribution channels or when runtime inference is insufficient. |
 | `cache` | `{ adapter, intervalMs? }` | none | Optional cache configuration for cross-run persistence and dedupe. |
 
 #### Optional persistence with `@crustjs/store`
@@ -103,6 +105,27 @@ updateNotifierPlugin({
   packageName: "my-cli",
   currentVersion: "1.0.0",
   cache: { adapter: store },
+});
+```
+
+For a globally installed Bun CLI, you can set the scope directly:
+
+```ts
+updateNotifierPlugin({
+  packageName: "my-cli",
+  currentVersion: "1.0.0",
+  packageManager: "bun",
+  installScope: "global",
+});
+```
+
+Or provide an explicit command:
+
+```ts
+updateNotifierPlugin({
+  packageName: "my-cli",
+  currentVersion: "1.0.0",
+  updateCommand: "bun add -g my-cli@latest",
 });
 ```
 

@@ -358,8 +358,16 @@ describe("fetchLatestVersion", () => {
 
 describe("updateNotifierPlugin middleware", () => {
 	const originalFetch = globalThis.fetch;
-	let originalLog: typeof console.log;
-	let stdoutChunks: string[];
+	const originalProcessArgv = [...process.argv];
+	const originalUserAgent = process.env.npm_config_user_agent;
+	const originalNpmExecpath = process.env.npm_execpath;
+	const originalNpmConfigGlobal = process.env.npm_config_global;
+	const originalBunInstall = process.env.BUN_INSTALL;
+	const originalPrefix = process.env.PREFIX;
+	const originalNpmConfigPrefix = process.env.npm_config_prefix;
+	const originalPnpmHome = process.env.PNPM_HOME;
+	let originalStderrWrite: typeof process.stderr.write;
+	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
 
 	/** Auto-incrementing counter to generate unique package names per test. */
@@ -369,22 +377,36 @@ describe("updateNotifierPlugin middleware", () => {
 		testCounter++;
 		cachedState = undefined;
 
-		// Capture stdout (console.log) for update notice assertions
-		stdoutChunks = [];
-		originalLog = console.log;
-		console.log = (...args: unknown[]) => {
-			stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
-		};
+		// Capture stderr (process.stderr.write) for update notice assertions
+		stderrChunks = [];
+		originalStderrWrite = process.stderr.write;
+		process.stderr.write = ((chunk: string | Uint8Array) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		}) as typeof process.stderr.write;
 	});
+
+	function restoreEnv(key: string, original: string | undefined) {
+		if (original === undefined) delete process.env[key];
+		else process.env[key] = original;
+	}
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
-		console.log = originalLog;
+		process.stderr.write = originalStderrWrite;
+		process.argv = [...originalProcessArgv];
+		restoreEnv("npm_config_user_agent", originalUserAgent);
+		restoreEnv("npm_execpath", originalNpmExecpath);
+		restoreEnv("npm_config_global", originalNpmConfigGlobal);
+		restoreEnv("BUN_INSTALL", originalBunInstall);
+		restoreEnv("PREFIX", originalPrefix);
+		restoreEnv("npm_config_prefix", originalNpmConfigPrefix);
+		restoreEnv("PNPM_HOME", originalPnpmHome);
 		process.exitCode = 0;
 	});
 
-	function getStdout() {
-		return stdoutChunks.join("\n");
+	function getOutput() {
+		return stderrChunks.join("");
 	}
 
 	/**
@@ -437,7 +459,14 @@ describe("updateNotifierPlugin middleware", () => {
 			timeoutMs?: number;
 			registryUrl?: string;
 			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
-			updateCommand?: string;
+			installScope?: "local" | "global" | "auto";
+			updateCommand?:
+				| string
+				| ((
+						packageName: string,
+						packageManager: "npm" | "pnpm" | "yarn" | "bun",
+						installScope: "local" | "global",
+				  ) => string);
 			cache?: UpdateNotifierCacheAdapter;
 		},
 		overrides?: {
@@ -500,9 +529,9 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStdout()).toContain("Update available");
-			expect(getStdout()).toContain("1.0.0");
-			expect(getStdout()).toContain("2.0.0");
+			expect(getOutput()).toContain("Update available");
+			expect(getOutput()).toContain("1.0.0");
+			expect(getOutput()).toContain("2.0.0");
 		});
 
 		it("includes upgrade instruction in update notice", async () => {
@@ -513,9 +542,10 @@ describe("updateNotifierPlugin middleware", () => {
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
+				installScope: "local",
 			});
 
-			expect(getStdout()).toContain(`npm install ${pkgName}@latest`);
+			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
 		});
 	});
 
@@ -531,7 +561,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 
 		it("does not emit notice when current is newer than registry", async () => {
@@ -543,7 +573,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 	});
 
@@ -576,8 +606,8 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should emit notice from cached version, not from fetch
-			expect(getStdout()).toContain("2.0.0");
-			expect(getStdout()).not.toContain("3.0.0");
+			expect(getOutput()).toContain("2.0.0");
+			expect(getOutput()).not.toContain("3.0.0");
 		});
 
 		it("performs network check when cache is stale (exceeds intervalMs)", async () => {
@@ -597,7 +627,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStdout()).toContain("2.0.0");
+			expect(getOutput()).toContain("2.0.0");
 		});
 
 		it("respects custom intervalMs — cache still fresh", async () => {
@@ -627,8 +657,8 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Notice should come from cached version (2.0.0), not fetch (3.0.0)
-			expect(getStdout()).toContain("2.0.0");
-			expect(getStdout()).not.toContain("3.0.0");
+			expect(getOutput()).toContain("2.0.0");
+			expect(getOutput()).not.toContain("3.0.0");
 		});
 
 		it("refetches when custom intervalMs is exceeded", async () => {
@@ -651,7 +681,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Notice should come from fresh fetch (3.0.0)
-			expect(getStdout()).toContain("3.0.0");
+			expect(getOutput()).toContain("3.0.0");
 		});
 	});
 
@@ -667,7 +697,7 @@ describe("updateNotifierPlugin middleware", () => {
 				packageName: pkgName,
 			});
 
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 
 		it("does not throw or set non-zero exit code on fetch failure", async () => {
@@ -711,7 +741,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			expect(process.exitCode).toBeFalsy();
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 	});
 
@@ -747,7 +777,7 @@ describe("updateNotifierPlugin middleware", () => {
 			// Should complete quickly (timeout + overhead), not hang
 			expect(elapsed).toBeLessThan(5000);
 			// No notice on timeout
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 
 		it("respects custom timeoutMs", async () => {
@@ -796,10 +826,10 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 				{ state: sharedState },
 			);
-			expect(getStdout()).toContain("Update available");
+			expect(getOutput()).toContain("Update available");
 
 			// Clear stderr for second check
-			stdoutChunks = [];
+			stderrChunks = [];
 
 			// Second invocation with same state — should be deduped
 			await runPluginMiddleware(
@@ -809,7 +839,7 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 				{ state: sharedState },
 			);
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 
 		it("does not re-notify for same version already notified (persisted dedupe)", async () => {
@@ -830,7 +860,7 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should NOT notify again since lastNotifiedVersion matches
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 
 		it("notifies again when a newer version appears after previous notification", async () => {
@@ -852,13 +882,136 @@ describe("updateNotifierPlugin middleware", () => {
 			});
 
 			// Should notify about the new 3.0.0 version
-			expect(getStdout()).toContain("3.0.0");
+			expect(getOutput()).toContain("3.0.0");
 		});
 	});
 
 	// ── Option behavior ───────────────────────────────────────────────────
 
 	describe("option behavior", () => {
+		it("uses global commands when installScope is explicitly global", async () => {
+			const pkgName = uniquePackageName("explicit-global");
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "bun",
+				installScope: "global",
+			});
+
+			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
+		});
+
+		it("uses local commands when installScope is explicitly local", async () => {
+			const pkgName = uniquePackageName("explicit-local");
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "npm",
+				installScope: "local",
+			});
+
+			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
+		});
+
+		it("infers global npm installs from npm_config_global", async () => {
+			const pkgName = uniquePackageName("npm-global-env");
+			delete process.env.npm_config_user_agent;
+			process.env.npm_execpath = "/usr/local/bin/npm";
+			process.env.npm_config_global = "true";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getOutput()).toContain(`npm install -g ${pkgName}@latest`);
+		});
+
+		it("infers bun from npm_execpath when user agent is missing", async () => {
+			const pkgName = uniquePackageName("npm-execpath-bun");
+			delete process.env.npm_config_user_agent;
+			delete process.env.BUN_INSTALL;
+			delete process.env.PREFIX;
+			delete process.env.npm_config_prefix;
+			delete process.env.PNPM_HOME;
+			delete process.env.npm_config_global;
+			process.env.npm_execpath = "/opt/homebrew/bin/bun";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			// With no scope env vars set, default is "global"
+			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
+		});
+
+		it("infers global bun installs from BUN_INSTALL-owned paths when user agent is missing", async () => {
+			const pkgName = uniquePackageName("bun-install-global");
+			delete process.env.npm_config_user_agent;
+			delete process.env.npm_execpath;
+			process.env.BUN_INSTALL = "/tmp/.bun";
+			process.argv = [
+				"/tmp/.bun/bin/test-cli",
+				"/tmp/.bun/install/global/node_modules/test-cli/bin.js",
+			];
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
+		});
+
+		it("infers local installs from node_modules paths", async () => {
+			const pkgName = uniquePackageName("local-node-modules");
+			delete process.env.npm_config_user_agent;
+			delete process.env.npm_execpath;
+			delete process.env.BUN_INSTALL;
+			delete process.env.PREFIX;
+			delete process.env.npm_config_prefix;
+			delete process.env.npm_config_global;
+			delete process.env.PNPM_HOME;
+			const cwd = process.cwd();
+			process.argv = [
+				`${cwd}/node_modules/.bin/test-cli`,
+				`${cwd}/node_modules/test-cli/dist/index.js`,
+			];
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "bun",
+			});
+
+			expect(getOutput()).toContain(`bun add ${pkgName}@latest`);
+		});
+
+		it("passes inferred installScope to updateCommand callback", async () => {
+			const pkgName = uniquePackageName("update-command-callback");
+			process.env.npm_config_global = "true";
+			mockRegistryResponse("2.0.0");
+
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				packageManager: "npm",
+				updateCommand: (_name, packageManager, installScope) =>
+					`${packageManager}:${installScope}`,
+			});
+
+			expect(getOutput()).toContain("npm:global");
+		});
+
 		it("does not persist cache by default when adapter is omitted", async () => {
 			const pkgName = uniquePackageName("no-default-cache");
 			let fetchCalls = 0;
@@ -948,7 +1101,7 @@ describe("updateNotifierPlugin middleware", () => {
 				updateCommand: "brew upgrade my-cli",
 			});
 
-			expect(getStdout()).toContain("brew upgrade my-cli");
+			expect(getOutput()).toContain("brew upgrade my-cli");
 		});
 	});
 
@@ -977,12 +1130,13 @@ describe("updateNotifierPlugin middleware", () => {
 				input: null,
 			};
 
-			// Override console.log to track ordering
-			const prevLog = console.log;
-			console.log = (...args: unknown[]) => {
+			// Override process.stderr.write to track ordering
+			const prevStderrWrite = process.stderr.write;
+			process.stderr.write = ((chunk: string | Uint8Array) => {
 				executionOrder.push("notice");
-				stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
-			};
+				stderrChunks.push(String(chunk));
+				return true;
+			}) as typeof process.stderr.write;
 
 			await plugin.middleware?.(
 				context as Parameters<NonNullable<typeof plugin.middleware>>[0],
@@ -991,7 +1145,7 @@ describe("updateNotifierPlugin middleware", () => {
 				},
 			);
 
-			console.log = prevLog;
+			process.stderr.write = prevStderrWrite;
 
 			// Command must run before notice
 			expect(executionOrder).toContain("command");
@@ -1041,8 +1195,8 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStdout()).toContain("Update available");
-			expect(getStdout()).toContain("5.0.0");
+			expect(getOutput()).toContain("Update available");
+			expect(getOutput()).toContain("5.0.0");
 		});
 
 		it("does not interfere with other plugins", async () => {
@@ -1080,7 +1234,7 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStdout()).toContain("Update available");
+			expect(getOutput()).toContain("Update available");
 		});
 
 		it("does not break command execution when registry is down", async () => {
@@ -1103,7 +1257,7 @@ describe("updateNotifierPlugin middleware", () => {
 			await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
-			expect(getStdout()).toBe("");
+			expect(getOutput()).toBe("");
 		});
 	});
 });

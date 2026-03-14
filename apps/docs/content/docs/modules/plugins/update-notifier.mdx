@@ -32,22 +32,24 @@ You are responsible for passing `packageName` and `currentVersion` — typically
 - **Optional cache adapter** — If you provide `cache`, checks are reused up to `cache.intervalMs` (default 24h) and notifications are deduped across runs.
 - **Non-blocking** — The update check runs after your command handler completes. It never delays command execution.
 - **Soft failure** — All internal errors (network timeouts, registry failures, cache errors, malformed responses) are silently swallowed. The plugin never affects exit codes or command output.
-- **Stdout output** — The update notice is written to stdout as an informational message.
-- **Package-manager-aware command** — The upgrade hint is inferred from `npm_config_user_agent` by default and can be overridden.
+- **Stderr output** — The update notice is written to stderr so it does not interfere with piped stdout.
+- **Package-manager-aware command** — The upgrade hint is inferred from the runtime environment by default and can be overridden.
+- **Scope-aware command** — The notifier also infers local vs global installs with best-effort heuristics. Use `installScope` or `updateCommand` when you need exact control.
 
 ## Configuration
 
 ### Options
 
-| Option           | Type                                                  | Default                        | Description                                                             |
-| ---------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |
-| `currentVersion` | `string`                                              | _(required)_                   | The current version of your CLI package.                                |
-| `packageName`    | `string`                                              | _(required)_                   | The npm package name to check for updates.                              |
-| `timeoutMs`      | `number`                                              | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.   |
-| `registryUrl`    | `string`                                              | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                |
-| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`        | `"auto"`                       | Package manager used when building the default update command.          |
-| `updateCommand`  | `string \| ((packageName, packageManager) => string)` | inferred                       | Override the command shown in the update notice (for example Homebrew). |
-| `cache`          | `UpdateNotifierCacheConfig`                           | none                           | Optional cache configuration for cross-run persistence and dedupe.      |
+| Option           | Type                                                                  | Default                        | Description                                                                                 |
+| ---------------- | --------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `currentVersion` | `string`                                                              | _(required)_                   | The current version of your CLI package.                                                    |
+| `packageName`    | `string`                                                              | _(required)_                   | The npm package name to check for updates.                                                  |
+| `timeoutMs`      | `number`                                                              | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.                       |
+| `registryUrl`    | `string`                                                              | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                                    |
+| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`                        | `"auto"`                       | Package manager used when building the default update command.                              |
+| `installScope`   | `"auto" \| "local" \| "global"`                                       | `"auto"`                       | Install scope used when building the default update command.                                |
+| `updateCommand`  | `string \| ((packageName, packageManager, installScope) => string)`   | inferred                       | Override the command shown in the update notice. Recommended when runtime inference is insufficient. |
+| `cache`          | `UpdateNotifierCacheConfig`                                           | none                           | Optional cache configuration for cross-run persistence and dedupe.                          |
 
 ### Cache Configuration
 
@@ -102,6 +104,27 @@ updateNotifierPlugin({
 });
 ```
 
+For a globally installed Bun CLI, you can set the scope directly:
+
+```ts
+updateNotifierPlugin({
+  packageName: "my-cli",
+  currentVersion: "1.0.0",
+  packageManager: "bun",
+  installScope: "global",
+});
+```
+
+Or provide an explicit command:
+
+```ts
+updateNotifierPlugin({
+  packageName: "my-cli",
+  currentVersion: "1.0.0",
+  updateCommand: "bun add -g my-cli@latest",
+});
+```
+
 `write` receives a single argument (`state`). If you pass a function with two parameters, TypeScript will report a signature mismatch.
 
 <Callout type="info">
@@ -119,11 +142,13 @@ interface UpdateNotifierPluginOptions {
   timeoutMs?: number;
   registryUrl?: string;
   packageManager?: UpdateNotifierPackageManager | "auto";
+  installScope?: UpdateNotifierInstallScope | "auto";
   updateCommand?:
     | string
     | ((
         packageName: string,
         packageManager: UpdateNotifierPackageManager,
+        installScope: UpdateNotifierInstallScope,
       ) => string);
   cache?: UpdateNotifierCacheConfig;
 }
@@ -153,6 +178,7 @@ interface UpdateNotifierCacheAdapter {
 }
 
 type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+type UpdateNotifierInstallScope = "local" | "global";
 
 function updateNotifierPlugin(
   options: UpdateNotifierPluginOptions,
