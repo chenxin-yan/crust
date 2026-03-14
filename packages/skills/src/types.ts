@@ -21,21 +21,21 @@ import type { CommandNode } from "@crustjs/core";
  *   description: "CLI tool for managing widgets",
  *   version: "1.0.0",
  * };
- * // generateSkill() will output to `use-my-cli/` with name "use-my-cli"
+ * // generateSkill() will output to `my-cli/` with name "my-cli"
  * ```
  */
 export interface SkillMeta {
 	/**
 	 * Skill name — the user-facing CLI name (e.g. `"my-cli"`).
 	 *
-	 * `generateSkill()`, `uninstallSkill()`, and `skillStatus()` automatically
-	 * prefix `use-` to this name for output directory paths, SKILL.md frontmatter,
-	 * and crust.json metadata. For example, `name: "my-cli"` produces output
-	 * under `use-my-cli/`.
+	 * `generateSkill()`, `uninstallSkill()`, and `skillStatus()` treat this as
+	 * the canonical raw skill name for output directory paths, SKILL.md
+	 * frontmatter, and crust.json metadata. For example, `name: "my-cli"`
+	 * produces output under `my-cli/`.
 	 *
-	 * The resolved name (with `use-` prefix) must conform to the Agent Skills
-	 * spec: 1–64 lowercase alphanumeric characters and hyphens, no leading/
-	 * trailing/consecutive hyphens.
+	 * The resolved name must conform to the Agent Skills spec: 1–64 lowercase
+	 * alphanumeric characters and hyphens, no leading/trailing/consecutive
+	 * hyphens.
 	 */
 	name: string;
 	/** Human-readable description of what the CLI does */
@@ -260,9 +260,9 @@ export interface RenderedFile {
 /**
  * Top-level options for generating a skill bundle from a command tree.
  *
- * The `meta.name` value is automatically prefixed with `use-` for all output
- * paths and metadata. For example, `name: "my-cli"` produces skill directories
- * named `use-my-cli/` and sets the manifest/frontmatter name to `"use-my-cli"`.
+ * The `meta.name` value is used directly for all output paths and metadata.
+ * For example, `name: "my-cli"` produces skill directories named `my-cli/`
+ * and sets the manifest/frontmatter name to `"my-cli"`.
  *
  * @example
  * ```ts
@@ -272,7 +272,7 @@ export interface RenderedFile {
  * await generateSkill({
  *   command: rootCommand,
  *   meta: {
- *     name: "my-cli", // output: use-my-cli/
+ *     name: "my-cli", // output: my-cli/
  *     description: "CLI tool for managing widgets",
  *     version: "1.0.0",
  *   },

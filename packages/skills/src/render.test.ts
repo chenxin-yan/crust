@@ -363,7 +363,7 @@ describe("renderSkill", () => {
 			expect(skill?.content).not.toContain("- ");
 		});
 
-		it("strips use- prefix from CLI name in when-to-use text", () => {
+		it("uses the literal skill name in when-to-use text", () => {
 			const manifest = buildSimpleManifest();
 			const meta: SkillMeta = {
 				...baseMeta,
@@ -373,7 +373,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain(
-				"Use this skill when you need accurate help with `my-tool` commands",
+				"Use this skill when you need accurate help with `use-my-tool` commands",
 			);
 		});
 

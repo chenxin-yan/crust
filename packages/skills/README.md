@@ -295,11 +295,11 @@ Resolves the canonical store path where Crust writes the single source-of-truth 
 ```ts
 import { resolveCanonicalSkillPath } from "@crustjs/skills";
 
-resolveCanonicalSkillPath("project", "use-my-cli");
-// → "<cwd>/.crust/skills/use-my-cli"
+resolveCanonicalSkillPath("project", "my-cli");
+// → "<cwd>/.crust/skills/my-cli"
 
-resolveCanonicalSkillPath("global", "use-my-cli");
-// → "~/.crust/skills/use-my-cli"
+resolveCanonicalSkillPath("global", "my-cli");
+// → "~/.crust/skills/my-cli"
 ```
 
 ### `isValidSkillName(name)`
@@ -315,7 +315,7 @@ isValidSkillName("-leading"); // false — leading hyphen
 isValidSkillName("a".repeat(65)); // false — exceeds 64 characters
 ```
 
-> **Note:** `generateSkill()` automatically validates `meta.name` (after prepending `use-`) and throws a descriptive error if the name is invalid.
+> **Note:** `generateSkill()` automatically validates `meta.name` and throws a descriptive error if the name is invalid.
 
 ## Skill Metadata
 
@@ -353,10 +353,10 @@ No manual escaping is needed — pass raw values and the renderer handles the re
 
 ## Output Structure
 
-Generated output goes to `<outDir>/skills/use-<name>/` (the `use-` prefix is applied automatically):
+Generated output goes to `<outDir>/skills/<name>/`:
 
 ```
-skills/use-my-cli/
+skills/my-cli/
   SKILL.md            # Entrypoint — loaded by the agent
   commands/           # Per-command documentation mirroring the CLI hierarchy
     my-cli.md         # Root command
@@ -405,19 +405,19 @@ After generating a skill bundle, consumers can install it by copying the skill d
 ### Universal agents (OpenCode, Codex, Cursor, and others)
 
 ```sh
-cp -r skills/use-my-cli/ .agents/skills/use-my-cli/
+cp -r skills/my-cli/ .agents/skills/my-cli/
 ```
 
 Global install for universal agents:
 
 ```sh
-cp -r skills/use-my-cli/ ~/.agents/skills/use-my-cli/
+cp -r skills/my-cli/ ~/.agents/skills/my-cli/
 ```
 
 ### Claude Code
 
 ```sh
-cp -r skills/use-my-cli/ .claude/skills/use-my-cli/
+cp -r skills/my-cli/ .claude/skills/my-cli/
 ```
 
 The agent will discover the skill from `SKILL.md` and load command documentation on demand from the `commands/` directory.

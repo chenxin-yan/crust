@@ -465,7 +465,7 @@ describe("E2E: skill generation", () => {
 
 			// Frontmatter block
 			expect(content).toMatch(/^---\n/);
-			expect(content).toContain("name: use-deploy-cli");
+			expect(content).toContain("name: deploy-cli");
 			expect(content).toContain(
 				"description: Agent skill for the deploy CLI tool",
 			);
@@ -481,7 +481,7 @@ describe("E2E: skill generation", () => {
 			);
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
-			expect(content).toContain("# use-deploy-cli");
+			expect(content).toContain("# deploy-cli");
 			expect(content).toContain(
 				"A cloud deployment CLI for managing applications",
 			);
@@ -934,7 +934,7 @@ describe("E2E: skill generation", () => {
 			const content = await readText(join(agent.outputDir, CRUST_MANIFEST));
 			const manifest = JSON.parse(content);
 
-			expect(manifest.name).toBe("use-deploy-cli");
+			expect(manifest.name).toBe("deploy-cli");
 			expect(manifest.description).toBe("Agent skill for the deploy CLI tool");
 			expect(manifest.version).toBe("1.2.0");
 			expect(manifest.entrypoint).toBeUndefined();

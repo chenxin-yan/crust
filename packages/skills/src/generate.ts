@@ -51,7 +51,7 @@ const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /**
  * Validates a resolved skill name against the Agent Skills specification.
  *
- * @param name - The resolved skill name to validate (already has `use-` prefix)
+ * @param name - The resolved skill name to validate
  * @returns `true` if valid, `false` otherwise
  */
 export function isValidSkillName(name: string): boolean {
@@ -59,21 +59,25 @@ export function isValidSkillName(name: string): boolean {
 }
 
 /**
- * Resolves the canonical skill name by applying the `use-` prefix.
+ * Resolves the canonical current skill name.
  *
  * All generated output (directory names, crust.json metadata, SKILL.md content)
- * uses the resolved name. Consumers pass the raw CLI name (e.g. `"my-cli"`),
- * and this function returns the prefixed form (e.g. `"use-my-cli"`).
+ * uses the resolved name directly. Consumers pass the raw CLI name
+ * (e.g. `"my-cli"`), and this function returns that same canonical name.
  *
  * @param name - The raw CLI tool name
- * @returns The prefixed skill name
+ * @returns The canonical skill name
  *
  * @example
  * ```ts
- * resolveSkillName("my-cli"); // "use-my-cli"
+ * resolveSkillName("my-cli"); // "my-cli"
  * ```
  */
 export function resolveSkillName(name: string): string {
+	return name;
+}
+
+function resolveLegacySkillName(name: string): string {
 	return name.startsWith("use-") ? name : `use-${name}`;
 }
 
@@ -126,8 +130,9 @@ export async function generateSkill(
 		installMode = DEFAULT_INSTALL_MODE,
 	} = options;
 
-	// Apply `use-` prefix — do not mutate the caller's meta object
+	// Resolve the canonical current name — do not mutate the caller's meta object
 	const resolvedName = resolveSkillName(meta.name);
+	const legacyResolvedName = resolveLegacySkillName(meta.name);
 
 	// Validate resolved name against Agent Skills spec
 	if (!isValidSkillName(resolvedName)) {
@@ -169,31 +174,54 @@ export async function generateSkill(
 		}
 	}
 
-	const preInstallVersions = new Map<string, string | null>();
-	for (const outputDir of groups.keys()) {
-		preInstallVersions.set(outputDir, await readInstalledVersion(outputDir));
-	}
-
 	const canonicalOutputDir = resolveCanonicalSkillPath(
 		scope,
 		resolvedMeta.name,
 	);
-	const canonicalInstalledVersion =
-		await readInstalledVersion(canonicalOutputDir);
-	if (canonicalInstalledVersion === null) {
-		const canonicalExists = await pathExists(canonicalOutputDir);
-		if (canonicalExists && !force) {
-			throw new SkillConflictError({
-				agent: primaryAgent,
-				outputDir: resolveAgentPath(primaryAgent, scope, resolvedMeta.name),
-			});
+	const legacyCanonicalOutputDir = resolveCanonicalSkillPath(
+		scope,
+		legacyResolvedName,
+	);
+	const installStates = new Map<string, InstallLocationState>();
+	for (const [outputDir, groupedAgents] of groups) {
+		const groupedPrimaryAgent = groupedAgents[0];
+		if (!groupedPrimaryAgent) {
+			continue;
 		}
+
+		installStates.set(
+			outputDir,
+			await inspectInstallLocation({
+				outputDir,
+				legacyOutputDir: resolveAgentPath(
+					groupedPrimaryAgent,
+					scope,
+					legacyResolvedName,
+				),
+				canonicalOutputDir,
+				legacyCanonicalOutputDir,
+			}),
+		);
+	}
+	const canonicalState = await inspectManagedPath(
+		canonicalOutputDir,
+		canonicalOutputDir,
+	);
+	if (
+		canonicalState.inspection.exists &&
+		!canonicalState.isCrustManaged &&
+		!force
+	) {
+		throw new SkillConflictError({
+			agent: primaryAgent,
+			outputDir: resolveAgentPath(primaryAgent, scope, resolvedMeta.name),
+		});
 	}
 
 	// Compared against the pre-write snapshot. When true, all agents in the
 	// loop below report "updated" (even symlinks with `pathChanged = false`)
 	// because the canonical content they point to has changed.
-	const canonicalChanged = canonicalInstalledVersion !== resolvedMeta.version;
+	const canonicalChanged = canonicalState.version !== resolvedMeta.version;
 	if (canonicalChanged) {
 		if (clean) {
 			await cleanDirectory(canonicalOutputDir);
@@ -210,15 +238,16 @@ export async function generateSkill(
 			continue;
 		}
 
-		const installedVersion = preInstallVersions.get(outputDir) ?? null;
-		const inspection = await inspectInstallPath(outputDir, canonicalOutputDir);
+		const state = installStates.get(outputDir);
+		if (!state) {
+			continue;
+		}
 
-		const isCrustManaged =
-			installedVersion !== null ||
-			(inspection.exists &&
-				inspection.isSymlink &&
-				inspection.pointsToCanonical);
-		if (inspection.exists && !isCrustManaged && !force) {
+		if (
+			state.current.inspection.exists &&
+			!state.current.isCrustManaged &&
+			!force
+		) {
 			throw new SkillConflictError({
 				agent: groupedPrimaryAgent,
 				outputDir,
@@ -231,16 +260,18 @@ export async function generateSkill(
 			allFiles,
 			clean,
 			installMode,
-			inspection,
-			installedVersion,
+			inspection: state.current.inspection,
+			installedVersion: state.preferredVersion,
 			currentVersion: resolvedMeta.version,
 		});
+		const legacyRemoved = await removeLegacyManagedPath(state);
 
 		const status = computeInstallStatus({
-			installedVersion,
+			installedVersion: state.preferredVersion,
 			currentVersion: resolvedMeta.version,
 			canonicalChanged,
-			pathChanged,
+			pathChanged:
+				pathChanged || legacyRemoved || state.preferredOutputDir !== outputDir,
 		});
 
 		for (const agent of groupedAgents) {
@@ -250,9 +281,18 @@ export async function generateSkill(
 				files: status === "up-to-date" ? [] : allFilePaths,
 				status,
 				previousVersion:
-					status === "updated" ? (installedVersion ?? undefined) : undefined,
+					status === "updated"
+						? (state.preferredVersion ?? undefined)
+						: undefined,
 			});
 		}
+	}
+
+	if (
+		legacyCanonicalOutputDir !== canonicalOutputDir &&
+		!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
+	) {
+		await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
 	}
 
 	return { agents: results };
@@ -273,7 +313,12 @@ export async function uninstallSkill(
 ): Promise<UninstallResult> {
 	const { name, agents, scope = "global" } = options;
 	const resolvedName = resolveSkillName(name);
+	const legacyResolvedName = resolveLegacySkillName(name);
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
+	const legacyCanonicalOutputDir = resolveCanonicalSkillPath(
+		scope,
+		legacyResolvedName,
+	);
 	const results: UninstallResult["agents"] = [];
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
@@ -287,26 +332,48 @@ export async function uninstallSkill(
 	}
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const exists = await pathExists(outputDir);
+		const groupedPrimaryAgent = groupedAgents[0];
+		if (!groupedPrimaryAgent) {
+			continue;
+		}
+		const legacyOutputDir = resolveAgentPath(
+			groupedPrimaryAgent,
+			scope,
+			legacyResolvedName,
+		);
+		const state = await inspectInstallLocation({
+			outputDir,
+			legacyOutputDir,
+			canonicalOutputDir,
+			legacyCanonicalOutputDir,
+		});
 
-		if (exists) {
-			await rm(outputDir, { recursive: true, force: true });
-			for (const agent of groupedAgents) {
-				results.push({ agent, outputDir, status: "removed" });
-			}
-		} else {
-			for (const agent of groupedAgents) {
-				results.push({ agent, outputDir, status: "not-found" });
-			}
+		const currentRemoved = await removeManagedPath(state.current);
+		const legacyRemoved = await removeManagedPath(state.legacy);
+		const removed = currentRemoved || legacyRemoved;
+		const removedOutputDir = currentRemoved
+			? outputDir
+			: legacyRemoved
+				? legacyOutputDir
+				: outputDir;
+
+		for (const agent of groupedAgents) {
+			results.push({
+				agent,
+				outputDir: removedOutputDir,
+				status: removed ? "removed" : "not-found",
+			});
 		}
 	}
 
-	const hasRemainingInstalls = await hasAnyInstalledAgentPath(
-		resolvedName,
-		scope,
-	);
-	if (!hasRemainingInstalls) {
+	if (!(await hasAnyInstalledAgentPath(resolvedName, scope))) {
 		await rm(canonicalOutputDir, { recursive: true, force: true });
+	}
+	if (
+		legacyCanonicalOutputDir !== canonicalOutputDir &&
+		!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
+	) {
+		await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
 	}
 
 	return { agents: results };
@@ -327,6 +394,7 @@ export async function skillStatus(
 ): Promise<StatusResult> {
 	const { name, agents, scope = "global" } = options;
 	const resolvedName = resolveSkillName(name);
+	const legacyResolvedName = resolveLegacySkillName(name);
 	const results: StatusResult["agents"] = [];
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
@@ -340,11 +408,32 @@ export async function skillStatus(
 	}
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const version = await readInstalledVersion(outputDir);
+		const groupedPrimaryAgent = groupedAgents[0];
+		if (!groupedPrimaryAgent) {
+			continue;
+		}
+		const legacyOutputDir = resolveAgentPath(
+			groupedPrimaryAgent,
+			scope,
+			legacyResolvedName,
+		);
+		const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
+		const legacyCanonicalOutputDir = resolveCanonicalSkillPath(
+			scope,
+			legacyResolvedName,
+		);
+		const state = await inspectInstallLocation({
+			outputDir,
+			legacyOutputDir,
+			canonicalOutputDir,
+			legacyCanonicalOutputDir,
+		});
+		const statusOutputDir = state.preferredOutputDir ?? outputDir;
+		const version = state.preferredVersion;
 		for (const agent of groupedAgents) {
 			results.push({
 				agent,
-				outputDir,
+				outputDir: statusOutputDir,
 				installed: version !== null,
 				version: version ?? undefined,
 			});
@@ -358,6 +447,20 @@ interface InstallPathInspection {
 	readonly exists: boolean;
 	readonly isSymlink: boolean;
 	readonly pointsToCanonical: boolean;
+}
+
+interface ManagedPathState {
+	readonly outputDir: string;
+	readonly version: string | null;
+	readonly inspection: InstallPathInspection;
+	readonly isCrustManaged: boolean;
+}
+
+interface InstallLocationState {
+	readonly current: ManagedPathState;
+	readonly legacy: ManagedPathState;
+	readonly preferredVersion: string | null;
+	readonly preferredOutputDir: string | null;
 }
 
 interface EnsureAgentInstallPathOptions {
@@ -571,6 +674,94 @@ async function inspectInstallPath(
 	};
 }
 
+async function inspectManagedPath(
+	outputDir: string,
+	canonicalOutputDir: string,
+): Promise<ManagedPathState> {
+	const [version, inspection] = await Promise.all([
+		readInstalledVersion(outputDir),
+		inspectInstallPath(outputDir, canonicalOutputDir),
+	]);
+	const isCrustManaged =
+		version !== null ||
+		(inspection.exists && inspection.isSymlink && inspection.pointsToCanonical);
+
+	return {
+		outputDir,
+		version,
+		inspection,
+		isCrustManaged,
+	};
+}
+
+interface InspectInstallLocationOptions {
+	readonly outputDir: string;
+	readonly legacyOutputDir: string;
+	readonly canonicalOutputDir: string;
+	readonly legacyCanonicalOutputDir: string;
+}
+
+async function inspectInstallLocation(
+	options: InspectInstallLocationOptions,
+): Promise<InstallLocationState> {
+	const {
+		outputDir,
+		legacyOutputDir,
+		canonicalOutputDir,
+		legacyCanonicalOutputDir,
+	} = options;
+
+	const current = await inspectManagedPath(outputDir, canonicalOutputDir);
+	const legacy =
+		legacyOutputDir === outputDir
+			? current
+			: await inspectManagedPath(legacyOutputDir, legacyCanonicalOutputDir);
+
+	if (current.isCrustManaged) {
+		return {
+			current,
+			legacy,
+			preferredVersion: current.version,
+			preferredOutputDir: current.outputDir,
+		};
+	}
+
+	if (legacy.isCrustManaged) {
+		return {
+			current,
+			legacy,
+			preferredVersion: legacy.version,
+			preferredOutputDir: legacy.outputDir,
+		};
+	}
+
+	return {
+		current,
+		legacy,
+		preferredVersion: null,
+		preferredOutputDir: null,
+	};
+}
+
+async function removeManagedPath(state: ManagedPathState): Promise<boolean> {
+	if (!state.isCrustManaged || !state.inspection.exists) {
+		return false;
+	}
+
+	await rm(state.outputDir, { recursive: true, force: true });
+	return true;
+}
+
+async function removeLegacyManagedPath(
+	state: InstallLocationState,
+): Promise<boolean> {
+	if (state.legacy.outputDir === state.current.outputDir) {
+		return false;
+	}
+
+	return removeManagedPath(state.legacy);
+}
+
 async function safeRealpath(path: string): Promise<string | null> {
 	try {
 		return await realpath(path);
@@ -594,15 +785,6 @@ async function createDirectorySymlink(
 	await mkdir(dirname(symlinkPath), { recursive: true });
 	const linkType = process.platform === "win32" ? "junction" : "dir";
 	await symlink(targetDir, symlinkPath, linkType);
-}
-
-async function pathExists(path: string): Promise<boolean> {
-	try {
-		await lstat(path);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 /**

@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { access, lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
+import {
+	access,
+	lstat,
+	mkdir,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
@@ -65,7 +73,7 @@ describe("skillPlugin auto-update", () => {
 			tmpDir,
 			".agents",
 			"skills",
-			"use-no-auto-install",
+			"no-auto-install",
 			"crust.json",
 		);
 
@@ -106,7 +114,7 @@ describe("skillPlugin auto-update", () => {
 			tmpDir,
 			".agents",
 			"skills",
-			"use-instruction-test",
+			"instruction-test",
 			"SKILL.md",
 		);
 		const content = await readFile(skillPath, "utf-8");
@@ -156,7 +164,7 @@ describe("skillPlugin auto-update", () => {
 			tmpDir,
 			".agents",
 			"skills",
-			"use-markdown-instruction-test",
+			"markdown-instruction-test",
 			"SKILL.md",
 		);
 		const content = await readFile(skillPath, "utf-8");
@@ -188,7 +196,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".agents", "skills", "use-update-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "update-test");
 
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 
@@ -196,6 +204,52 @@ describe("skillPlugin auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+	});
+
+	it("auto-migrates a legacy install even when the version matches", async () => {
+		const app = new Crust("legacy-migration-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+				}),
+			);
+
+		const legacyCanonicalDir = join(
+			tmpDir,
+			".crust",
+			"skills",
+			"use-legacy-migration-test",
+		);
+		const legacySkillDir = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"use-legacy-migration-test",
+		);
+		await mkdir(legacyCanonicalDir, { recursive: true });
+		await mkdir(legacySkillDir, { recursive: true });
+		await writeFile(
+			join(legacyCanonicalDir, "crust.json"),
+			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
+		);
+		await writeFile(
+			join(legacySkillDir, "crust.json"),
+			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
+		);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		const currentSkillDir = join(
+			tmpDir,
+			".agents",
+			"skills",
+			"legacy-migration-test",
+		);
+		expect(await readInstalledVersion(currentSkillDir)).toBe("1.0.0");
+		expect(await exists(legacySkillDir)).toBe(false);
 	});
 
 	it("prints auto-update message with Universal label", async () => {
@@ -262,7 +316,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".agents", "skills", "use-order-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "order-test");
 
 		// Run plugin with v2.0.0 behind a short-circuit — should still update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -297,7 +351,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".agents", "skills", "use-validation-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "validation-test");
 
 		try {
 			await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -335,7 +389,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(tmpDir, ".agents", "skills", "use-no-update-test");
+		const skillDir = join(tmpDir, ".agents", "skills", "no-update-test");
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
@@ -459,12 +513,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const skillDir = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"use-manual-update-test",
-		);
+		const skillDir = join(tmpDir, ".agents", "skills", "manual-update-test");
 		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
@@ -509,7 +558,7 @@ describe("skillPlugin auto-update", () => {
 			tmpDir,
 			".agents",
 			"skills",
-			"use-manual-update-instructions-test",
+			"manual-update-instructions-test",
 			"SKILL.md",
 		);
 		const content = await readFile(skillPath, "utf-8");
@@ -551,7 +600,7 @@ describe("skillPlugin auto-update", () => {
 			tmpDir,
 			".agents",
 			"skills",
-			"use-fallback-scope-test",
+			"fallback-scope-test",
 		);
 		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
 
@@ -610,8 +659,8 @@ describe("skillPlugin auto-update", () => {
 			}
 		}
 
-		const outputDir = join(tmpDir, ".agents", "skills", "use-copy-mode-test");
-		const canonicalDir = join(tmpDir, ".crust", "skills", "use-copy-mode-test");
+		const outputDir = join(tmpDir, ".agents", "skills", "copy-mode-test");
+		const canonicalDir = join(tmpDir, ".crust", "skills", "copy-mode-test");
 
 		expect((await lstat(outputDir)).isSymbolicLink()).toBe(false);
 		expect((await stat(canonicalDir)).isDirectory()).toBe(true);
