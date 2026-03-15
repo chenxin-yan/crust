@@ -166,9 +166,13 @@ describe("generateDistributionJsResolver", () => {
 		expect(launcher).toContain(
 			'"binaryFilename": "crust-bun-linux-x64-baseline"',
 		);
+		expect(launcher).not.toContain('"targetAlias"');
 		expect(launcher).toContain("Missing platform package");
 		expect(launcher).toContain("optional dependencies are enabled");
 		expect(launcher).toContain("Supported platforms: linux-x64");
+		expect(launcher).toContain("try {");
+		expect(launcher).toContain("process.kill(process.pid, signal)");
+		expect(launcher).toContain("process.exit(1)");
 	});
 });
 

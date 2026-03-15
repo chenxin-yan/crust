@@ -167,6 +167,8 @@ describe("crust build --package integration", () => {
 					".host",
 					"root",
 					"node_modules",
+					// Scoped package names split into @scope/name path segments here,
+					// matching resolver candidateTwo's resolve(..., target.packageName, ...).
 					"@scope",
 					`test-cli-${hostTarget}`,
 				),

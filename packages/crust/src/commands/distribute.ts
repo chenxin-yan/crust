@@ -288,7 +288,6 @@ export function generateDistributionJsResolver(
 		targets.map((target) => [
 			target.platformKey,
 			{
-				targetAlias: target.targetAlias,
 				packagePathSegment: target.packagePathSegment,
 				packageName: target.packageName,
 				binaryFilename: target.binaryFilename,
@@ -371,7 +370,11 @@ child.on("error", (error) => {
 
 child.on("exit", (code, signal) => {
 \tif (signal) {
-\t\tprocess.kill(process.pid, signal);
+\t\ttry {
+\t\t\tprocess.kill(process.pid, signal);
+\t\t} catch {
+\t\t\tprocess.exit(1);
+\t\t}
 \t\treturn;
 \t}
 
