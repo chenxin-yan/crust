@@ -218,7 +218,7 @@ function renderSkillMd(
 
 	// When-to-use guidance for agents
 	lines.push(
-		`Use this skill when you need accurate help with \`${meta.name}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
+		`You should use this skill when you need accurate help with \`${meta.name}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
 	);
 	lines.push("");
 
@@ -228,20 +228,22 @@ function renderSkillMd(
 	lines.push("## How to Use This Skill");
 	lines.push("");
 	lines.push(
-		"1. Find the command that best matches the user's task from the Command Reference below",
+		"1. You must find the command that best matches the user's task from the Command Reference below.",
 	);
 	lines.push(
-		"2. Check the `Type` column before suggesting execution: `runnable` and `runnable, group` commands can be executed, while `group` commands are organizational only",
-	);
-	lines.push("3. Read only the linked file or files you need from `commands/`");
-	lines.push(
-		"4. Before answering a command-specific question or suggesting a command, read that command's file",
+		"2. You must check the `Type` column before suggesting execution: `runnable` and `runnable, group` commands can be executed, while `group` commands are organizational only.",
 	);
 	lines.push(
-		"5. Treat the command file as the source of truth for usage, arguments, flags, aliases, and defaults",
+		"3. You should read only the linked file or files you need from `commands/`.",
 	);
 	lines.push(
-		"6. If a flag, argument, alias, or default is not documented there, say it is not documented instead of guessing",
+		"4. You must read a command's file before answering a command-specific question or suggesting that command.",
+	);
+	lines.push(
+		"5. You must treat the command file as the source of truth for usage, arguments, flags, aliases, and defaults.",
+	);
+	lines.push(
+		"6. If a flag, argument, alias, or default is not documented there, you must say it is not documented instead of guessing.",
 	);
 	lines.push("");
 
@@ -255,7 +257,7 @@ function renderSkillMd(
 	// Lazy-load table for command docs
 	lines.push("## Command Reference");
 	lines.push("");
-	lines.push("Use this table to locate the command file you need.");
+	lines.push("You should use this table to locate the command file you need.");
 	lines.push("");
 	lines.push(...renderCommandReferenceTable(allNodes));
 	lines.push("");
@@ -266,7 +268,7 @@ function renderSkillMd(
 		lines.push("");
 		const rootFile = commandFilePath(manifest);
 		lines.push(
-			`The root command is directly executable. See [${manifest.name}](${rootFile}) for usage details.`,
+			`The root command is directly executable. You should see [${manifest.name}](${rootFile}) for usage details.`,
 		);
 		lines.push("");
 	}
@@ -432,8 +434,8 @@ function renderRunnableCommandSections(node: ManifestNode): string[] {
 	lines.push(
 		"## Command Documentation Authority",
 		"",
-		"Only arguments, flags, options, aliases, and defaults documented in this file are supported for this command.",
-		"Do not infer or invent additional command-line options.",
+		"You must treat only the arguments, flags, options, aliases, and defaults documented in this file as supported for this command.",
+		"You must not infer or invent additional command-line options.",
 		"",
 	);
 
