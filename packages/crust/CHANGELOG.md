@@ -1,5 +1,11 @@
 # @crustjs/crust
 
+## 0.0.22
+
+### Patch Changes
+
+- 662c53c: migrate to use js resolver instead of shell resolver so that it will expose single entry point
+
 ## 0.0.21
 
 ### Patch Changes
