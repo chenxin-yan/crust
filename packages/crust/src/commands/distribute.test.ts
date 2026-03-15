@@ -5,8 +5,7 @@ import {
 	buildDistributionPlatformPackageJson,
 	buildDistributionRootPackageJson,
 	derivePlatformPackageName,
-	generateDistributionCmdResolver,
-	generateDistributionResolver,
+	generateDistributionJsResolver,
 	getPackagePathSegment,
 	inferCommandName,
 	runDistributeBuild,
@@ -88,7 +87,7 @@ describe("distribution manifest JSON builders", () => {
 			type: "module",
 			description: "CLI tooling",
 			files: ["bin"],
-			bin: { crust: "bin/crust" },
+			bin: { crust: "bin/crust.js" },
 			optionalDependencies: {
 				"@crustjs/crust-darwin-arm64": "1.2.3",
 			},
@@ -140,9 +139,9 @@ describe("getPackagePathSegment", () => {
 	});
 });
 
-describe("generateDistributionResolver", () => {
-	it("generates a shell resolver with fixed candidate probing", () => {
-		const launcher = generateDistributionResolver("crust", [
+describe("generateDistributionJsResolver", () => {
+	it("generates a JS resolver with fixed candidate probing", () => {
+		const launcher = generateDistributionJsResolver("crust", [
 			{
 				target: "bun-linux-x64-baseline",
 				platformKey: "linux-x64",
@@ -157,59 +156,19 @@ describe("generateDistributionResolver", () => {
 			},
 		]);
 
-		expect(launcher).toContain("#!/usr/bin/env bash");
-		expect(launcher).toContain('platform="$(uname -s)-$(uname -m)"');
+		expect(launcher).toContain("#!/usr/bin/env node");
+		expect(launcher).toContain("process.platform");
+		expect(launcher).toContain("process.arch");
+		expect(launcher).toContain("const candidateOne = resolve(");
+		expect(launcher).toContain("const candidateTwo = resolve(");
+		expect(launcher).toContain('"packagePathSegment": "crust-linux-x64"');
+		expect(launcher).toContain('"packageName": "@crustjs/crust-linux-x64"');
 		expect(launcher).toContain(
-			'candidate_one="$dir/../../$platform_pkg/bin/$binary"',
+			'"binaryFilename": "crust-bun-linux-x64-baseline"',
 		);
-		expect(launcher).toContain(
-			'candidate_two="$dir/../node_modules/$fallback_pkg/bin/$binary"',
-		);
-		expect(launcher).toContain('platform_pkg="crust-linux-x64"');
-		expect(launcher).toContain('fallback_pkg="@crustjs/crust-linux-x64"');
 		expect(launcher).toContain("Missing platform package");
 		expect(launcher).toContain("optional dependencies are enabled");
-	});
-});
-
-describe("generateDistributionCmdResolver", () => {
-	it("generates a Windows resolver with architecture dispatch", () => {
-		const launcher = generateDistributionCmdResolver("crust", [
-			{
-				target: "bun-windows-x64-baseline",
-				platformKey: "win32-x64",
-				targetAlias: "windows-x64",
-				packageName: "@crustjs/crust-windows-x64",
-				packagePathSegment: "crust-windows-x64",
-				packageDir: "/tmp/windows-x64",
-				binaryRelativePath: "bin/crust-bun-windows-x64-baseline.exe",
-				binaryFilename: "crust-bun-windows-x64-baseline.exe",
-				os: "win32",
-				cpu: "x64",
-			},
-			{
-				target: "bun-windows-arm64",
-				platformKey: "win32-arm64",
-				targetAlias: "windows-arm64",
-				packageName: "@crustjs/crust-windows-arm64",
-				packagePathSegment: "crust-windows-arm64",
-				packageDir: "/tmp/windows-arm64",
-				binaryRelativePath: "bin/crust-bun-windows-arm64.exe",
-				binaryFilename: "crust-bun-windows-arm64.exe",
-				os: "win32",
-				cpu: "arm64",
-			},
-		]);
-
-		expect(launcher).toContain('if /I "%host_arch%"=="AMD64"');
-		expect(launcher).toContain('if /I "%host_arch%"=="ARM64"');
-		expect(launcher).toContain(
-			'set "candidate_one=%dir%..\\..\\%pkg_segment%\\bin\\%binary%"',
-		);
-		expect(launcher).toContain(
-			'set "candidate_two=%dir%..\\node_modules\\%fallback_pkg%\\bin\\%binary%"',
-		);
-		expect(launcher).toContain("crust-windows-arm64");
+		expect(launcher).toContain("Supported platforms: linux-x64");
 	});
 });
 

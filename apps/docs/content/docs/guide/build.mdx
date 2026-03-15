@@ -225,7 +225,7 @@ crust build --package --stage-dir ./npm-packages
 
 When using `--package`, instead of raw binaries, Crust creates:
 
-1. **A root package** — Contains the shell resolver and declares optional dependencies on platform packages
+1. **A root package** — Contains the JS resolver and declares optional dependencies on platform packages
 2. **Per-platform packages** — One package per target containing only the binary for that platform
 3. **A manifest file** — `manifest.json` listing all staged packages and publish order
 
@@ -235,8 +235,7 @@ dist/npm/
 ├── root/                      # Root package (resolver + metadata)
 │   ├── package.json
 │   └── bin/
-│       ├── my-cli             # Shell resolver
-│       └── my-cli.cmd         # Windows companion launcher
+│       └── my-cli.js          # JS resolver
 ├── linux-x64/                 # Linux x64 package
 │   ├── package.json
 │   └── bin/
@@ -262,6 +261,8 @@ dist/npm/
     └── bin/
         └── my-cli-bun-windows-arm64.exe
 ```
+
+The root package exposes `bin/my-cli.js` as its `bin` entry. npm generates platform launchers from that entry during install, so Crust no longer stages its own `.cmd` wrapper for `--package`.
 
 ### Publishing with `crust publish`
 

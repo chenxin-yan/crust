@@ -108,7 +108,7 @@ export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
 
 /**
  * Maps each Bun compile target to its `process.platform-process.arch` key
- * used by the JS resolver at runtime.
+ * used by JS-based package resolvers and related tooling.
  */
 export const TARGET_PLATFORM_MAP: Record<BunTarget, string> =
 	Object.fromEntries(
@@ -627,12 +627,13 @@ export async function validateEntrypoint(
  * The `crust build` command.
  *
  * Compiles a CLI entry file to standalone Bun executable(s).
- * By default, builds for all supported platforms and generates a JS resolver script.
+ * By default, builds for all supported platforms and generates shell/CMD
+ * resolver scripts for runtime-free dispatch.
  * Use `--target` to build for specific platform(s) only.
  *
  * @example
  * ```sh
- * crust build                                 # Build for all platforms + JS resolver
+ * crust build                                 # Build for all platforms + resolver scripts
  * crust build --entry src/main.ts             # Custom entry point
  * crust build --name my-tool                  # Output as dist/my-tool-*
  * crust build --no-minify                     # Disable minification
@@ -781,7 +782,7 @@ export const buildCommand = new Crust("build")
 			);
 			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		} else {
-			// Multi-target build: multiple binaries + JS resolver
+			// Multi-target build: multiple binaries + shell/CMD resolvers
 			const baseName = resolveBaseName(flags.name, entryPath, cwd);
 
 			console.log(

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
+	cpSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -15,6 +16,34 @@ const originalCwd = process.cwd;
 
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, "utf-8")) as T;
+}
+
+function getHostTarget(): string | null {
+	if (process.platform === "darwin" && process.arch === "arm64") {
+		return "darwin-arm64";
+	}
+
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return "darwin-x64";
+	}
+
+	if (process.platform === "linux" && process.arch === "arm64") {
+		return "linux-arm64";
+	}
+
+	if (process.platform === "linux" && process.arch === "x64") {
+		return "linux-x64";
+	}
+
+	if (process.platform === "win32" && process.arch === "arm64") {
+		return "windows-arm64";
+	}
+
+	if (process.platform === "win32" && process.arch === "x64") {
+		return "windows-x64";
+	}
+
+	return null;
 }
 
 async function runBuild(argv: string[]) {
@@ -52,7 +81,7 @@ afterAll(() => {
 });
 
 describe("crust build --package integration", () => {
-	it("stages root and platform packages with shell resolvers", async () => {
+	it("stages root and platform packages with a JS resolver", async () => {
 		await runBuild([
 			"--package",
 			"--target",
@@ -64,14 +93,14 @@ describe("crust build --package integration", () => {
 			"--no-validate",
 		]);
 
+		expect(
+			existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli.js")),
+		).toBe(true);
 		expect(existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli"))).toBe(
-			true,
+			false,
 		);
 		expect(
 			existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli.cmd")),
-		).toBe(true);
-		expect(
-			existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli.js")),
 		).toBe(false);
 		expect(existsSync(join(tmpDir, ".stage", "linux-x64", "bin"))).toBe(true);
 		expect(existsSync(join(tmpDir, ".stage", "darwin-arm64", "bin"))).toBe(
@@ -81,7 +110,7 @@ describe("crust build --package integration", () => {
 		const rootPackageJson = readJson<{ bin: Record<string, string> }>(
 			join(tmpDir, ".stage", "root", "package.json"),
 		);
-		expect(rootPackageJson.bin["test-cli"]).toBe("bin/test-cli");
+		expect(rootPackageJson.bin["test-cli"]).toBe("bin/test-cli.js");
 
 		const manifest = readJson<{
 			version: string;
@@ -114,4 +143,52 @@ describe("crust build --package integration", () => {
 		expect(existsSync(join(tmpDir, ".subset", "linux-x64"))).toBe(true);
 		expect(existsSync(join(tmpDir, ".subset", "darwin-arm64"))).toBe(false);
 	});
+
+	it.skipIf(getHostTarget() === null || !Bun.which("node"))(
+		"executes the staged JS resolver through Node on the host platform",
+		async () => {
+			const hostTarget = getHostTarget();
+			const nodePath = Bun.which("node");
+			if (!hostTarget || !nodePath) return;
+
+			await runBuild([
+				"--package",
+				"--target",
+				hostTarget,
+				"--stage-dir",
+				".host",
+				"--no-validate",
+			]);
+
+			cpSync(
+				join(tmpDir, ".host", hostTarget),
+				join(
+					tmpDir,
+					".host",
+					"root",
+					"node_modules",
+					"@scope",
+					`test-cli-${hostTarget}`,
+				),
+				{ recursive: true },
+			);
+
+			const resolverPath = join(tmpDir, ".host", "root", "bin", "test-cli.js");
+			const proc = Bun.spawn([nodePath, resolverPath], {
+				cwd: tmpDir,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+
+			const [exitCode, stdout, stderr] = await Promise.all([
+				proc.exited,
+				new Response(proc.stdout).text(),
+				new Response(proc.stderr).text(),
+			]);
+
+			expect(exitCode).toBe(0);
+			expect(stderr.trim()).toBe("");
+			expect(stdout.trim()).toBe("hello from packaged test");
+		},
+	);
 });
