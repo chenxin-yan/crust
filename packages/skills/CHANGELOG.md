@@ -1,5 +1,11 @@
 # @crustjs/skills
 
+## 0.0.20
+
+### Patch Changes
+
+- 4634996: Strengthen rendered skill workflow prompts to use stricter dictation tone so agents follow command documentation more consistently.
+
 ## 0.0.19
 
 ### Patch Changes
