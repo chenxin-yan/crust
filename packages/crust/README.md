@@ -121,8 +121,7 @@ dist/npm/
   manifest.json
   root/
     package.json
-    bin/my-cli
-    bin/my-cli.cmd
+    bin/my-cli.js
   linux-x64/
     package.json
     bin/my-cli-bun-linux-x64-baseline
@@ -143,7 +142,7 @@ dist/npm/
     bin/my-cli-bun-windows-arm64.exe
 ```
 
-The generated root package contains shell and `.cmd` launchers plus `optionalDependencies` on the platform packages. Each platform package is tagged with npm `os` / `cpu` metadata and contains only its native binary.
+The generated root package contains a JS resolver plus `optionalDependencies` on the platform packages. Each platform package is tagged with npm `os` / `cpu` metadata and contains only its native binary. npm generates the platform launchers from the root package `bin` entry during install, so Crust does not stage its own `.cmd` file for `--package`.
 
 `crust build --package` is the npm-packaging workflow. The staged interface is:
 
