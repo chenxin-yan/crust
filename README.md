@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://crustjs.com">Documentation</a>
+  <a href="https://crustjs.com">Website & Docs</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="./CONTRIBUTING.md">Contributing</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
@@ -20,8 +20,9 @@
   <a href="https://discord.gg/sQF8hdN6Ht">Discord</a>
 </p>
 
-> [!WARNING]
-> Crust is **beta-quality** until v1.0. Versions before 1.0 do not strictly follow semantic versioning. The core API should be relatively stable after 0.1, but expect breaking changes between minor releases.
+## What is Crust?
+
+Crust is a modern CLI framework built specifically for TypeScript and Bun. It provides a modular architecture for building command-line tools with features like command routing, argument parsing, interactive prompts, validation, and persistence—all with first-class TypeScript support.
 
 ## Packages
 
