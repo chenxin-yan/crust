@@ -47,10 +47,14 @@ export function resolveCapability(
 		return false;
 	}
 
-	// auto mode: check TTY and NO_COLOR
-	const isTTY = overrides?.isTTY ?? process.stdout?.isTTY ?? false;
-	const noColor =
-		overrides?.noColor !== undefined ? overrides.noColor : process.env.NO_COLOR;
+	// auto mode: explicit overrides should win even when set to `undefined`,
+	// so tests can simulate an unset environment variable deterministically.
+	const hasIsTTYOverride = overrides !== undefined && "isTTY" in overrides;
+	const isTTY = hasIsTTYOverride
+		? (overrides.isTTY ?? false)
+		: (process.stdout?.isTTY ?? false);
+	const hasNoColorOverride = overrides !== undefined && "noColor" in overrides;
+	const noColor = hasNoColorOverride ? overrides.noColor : process.env.NO_COLOR;
 
 	// NO_COLOR is set (any value including empty string) → disable color
 	if (noColor !== undefined) {
