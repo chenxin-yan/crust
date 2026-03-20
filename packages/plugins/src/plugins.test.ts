@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust, type CrustPlugin } from "@crustjs/core";
 import { autoCompletePlugin } from "./autocomplete.ts";
-import { helpPlugin } from "./help.ts";
+import { helpPlugin, renderHelp } from "./help.ts";
 import { versionPlugin } from "./version.ts";
 
 let stdoutChunks: string[];
@@ -37,6 +37,10 @@ function getStderr() {
 	return stderrChunks.join("\n");
 }
 
+function stripAnsi(text: string) {
+	return Bun.stripANSI(text);
+}
+
 function lateSkillPlugin(): CrustPlugin {
 	return {
 		name: "late-skill",
@@ -56,6 +60,98 @@ function lateSkillPlugin(): CrustPlugin {
 }
 
 describe("built-in plugins", () => {
+	it("renderHelp styles sections and preserves plain-text structure", () => {
+		const command = new Crust("app")
+			.meta({ description: "Test app" })
+			.flags({
+				verbose: {
+					type: "boolean",
+					short: "v",
+					description: "Enable verbose logging",
+					default: true,
+				},
+				port: {
+					type: "number",
+					description: "Port number",
+					default: 3000,
+				},
+			})
+			.args([
+				{
+					name: "dir",
+					type: "string",
+					description: "Output directory",
+					default: ".",
+				},
+			] as const)
+			.command("build", (cmd) =>
+				cmd.meta({ description: "Build the project" }),
+			)._node;
+
+		const output = renderHelp(command);
+		const plain = stripAnsi(output);
+
+		expect(output).toContain("\x1b[");
+		expect(plain).toContain("USAGE:");
+		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("ARGS:");
+		expect(plain).toContain("OPTIONS:");
+		expect(plain).toContain("-v, --verbose, --no-verbose");
+		expect(plain).toContain("[default: true]");
+		expect(plain).toContain("[default: 3000]");
+		expect(plain).toContain('[default: "."]');
+	});
+
+	it("renderHelp shows canonical boolean negation instead of negated aliases", () => {
+		const command = new Crust("app").flags({
+			verbose: {
+				type: "boolean",
+				aliases: ["loud"],
+			},
+		})._node;
+
+		const output = stripAnsi(renderHelp(command));
+		expect(output).toContain("--verbose, --no-verbose");
+		expect(output).not.toContain("--no-loud");
+	});
+
+	it("renderHelp keeps stripped columns aligned with styled labels", () => {
+		const command = new Crust("app")
+			.flags({
+				verbose: {
+					type: "boolean",
+					short: "v",
+					description: "Enable verbose logging",
+					default: true,
+				},
+				port: {
+					type: "number",
+					short: "p",
+					description: "Port number",
+					default: 3000,
+				},
+			})
+			.args([
+				{
+					name: "dir",
+					type: "string",
+					description: "Output directory",
+					default: ".",
+				},
+			] as const)._node;
+
+		const lines = stripAnsi(renderHelp(command)).split("\n");
+		expect(lines).toContain(
+			"  -v, --verbose, --no-verbose Enable verbose logging [default: true]",
+		);
+		expect(lines).toContain(
+			"  -p, --port                 Port number [default: 3000]",
+		);
+		expect(lines).toContain(
+			'  [dir]              Output directory [default: "."]',
+		);
+	});
+
 	it("help plugin renders generated help for no-run command", async () => {
 		const app = new Crust("app")
 			.use(helpPlugin())
@@ -63,7 +159,7 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["--help"] });
 
-		const output = getStdout();
+		const output = stripAnsi(getStdout());
 		expect(output).toContain("app");
 		expect(output).toContain("USAGE:");
 		expect(output).toContain("COMMANDS:");
@@ -81,7 +177,7 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["create", "--help"] });
 
-		const output = getStdout();
+		const output = stripAnsi(getStdout());
 		expect(output).toContain("create");
 		expect(output).toContain("USAGE:");
 		expect(getStderr()).toBe("");
@@ -97,7 +193,7 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["deploy", "--help"] });
 
-		const output = getStdout();
+		const output = stripAnsi(getStdout());
 		expect(output).toContain("deploy");
 		expect(output).toContain("USAGE:");
 		expect(getStderr()).toBe("");
@@ -130,8 +226,8 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["skill", "--help"] });
 
-		expect(getStdout()).toContain("Manage agent skills");
-		expect(getStdout()).toContain("--help");
+		expect(stripAnsi(getStdout())).toContain("Manage agent skills");
+		expect(stripAnsi(getStdout())).toContain("--help");
 		expect(getStderr()).toBe("");
 		expect(process.exitCode).toBeFalsy();
 	});
@@ -144,8 +240,8 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["skill", "update", "--help"] });
 
-		expect(getStdout()).toContain("Update installed skills");
-		expect(getStdout()).toContain("--help");
+		expect(stripAnsi(getStdout())).toContain("Update installed skills");
+		expect(stripAnsi(getStdout())).toContain("--help");
 		expect(getStderr()).toBe("");
 		expect(process.exitCode).toBeFalsy();
 	});
@@ -158,8 +254,8 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["skill", "--help"] });
 
-		expect(getStdout()).toContain("Manage agent skills");
-		expect(getStdout()).toContain("--help");
+		expect(stripAnsi(getStdout())).toContain("Manage agent skills");
+		expect(stripAnsi(getStdout())).toContain("--help");
 		expect(getStderr()).toBe("");
 		expect(process.exitCode).toBeFalsy();
 	});
@@ -219,7 +315,7 @@ describe("built-in plugins", () => {
 
 		await app.execute({ argv: ["--help"] });
 
-		const output = getStdout();
+		const output = stripAnsi(getStdout());
 		expect(output).toContain("--version");
 		expect(output).toContain("Show version number");
 	});
