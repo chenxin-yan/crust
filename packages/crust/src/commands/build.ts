@@ -463,13 +463,46 @@ export function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
 }
 
+export type BunBuildRunner = {
+	command: string;
+	env: Record<string, string | undefined>;
+};
+
+/**
+ * Resolve the safest executable to run `bun build`.
+ *
+ * Prefer the real Bun binary when it is available on PATH, because invoking
+ * standalone compilation from inside a compiled Crust executable can trigger
+ * Bun runtime bugs on some host/target combinations.
+ *
+ * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
+ * binaries still work in environments without a separate Bun install.
+ */
+export function resolveBunBuildRunner(): BunBuildRunner {
+	const bunPath = Bun.which("bun");
+	if (bunPath) {
+		return {
+			command: bunPath,
+			env: { ...process.env },
+		};
+	}
+
+	return {
+		command: process.execPath,
+		env: {
+			...process.env,
+			BUN_BE_BUN: "1",
+		},
+	};
+}
+
 /**
  * Compile a single entry file to a standalone executable.
  *
- * Without env files, uses the programmatic `Bun.build()` API directly.
- * With env files, spawns `bun build --compile` as a subprocess via
- * `process.execPath` + `BUN_BE_BUN=1` so that Bun handles `--env-file`
- * natively — no separate Bun installation required.
+ * Uses `bun build --compile` as a subprocess so the standalone compiler runs
+ * in Bun's CLI process rather than inside the current Crust runtime.
+ * This avoids in-process compiler issues seen on some host/target
+ * combinations while still supporting env-file loading natively.
  *
  * @param entryPath - Absolute path to the entry file
  * @param outfilePath - Absolute path to the output binary
@@ -485,32 +518,9 @@ export async function execBuild(
 	target?: BunTarget,
 	envFiles: readonly string[] = [],
 ): Promise<void> {
-	if (envFiles.length === 0) {
-		const result = await Bun.build({
-			entrypoints: [entryPath],
-			compile: {
-				target,
-				outfile: outfilePath,
-			},
-			env: PUBLIC_ENV_PATTERN,
-			minify,
-		});
-
-		if (!result.success) {
-			const messages = result.logs
-				.filter((log) => log.level === "error")
-				.map((log) => log.message ?? String(log))
-				.join("\n");
-			throw new Error(
-				`Build failed for ${outfilePath}${messages ? `:\n${messages}` : ""}`,
-			);
-		}
-
-		return;
-	}
-
+	const runner = resolveBunBuildRunner();
 	const args = [
-		process.execPath,
+		runner.command,
 		"build",
 		"--compile",
 		...toBunEnvFileArgs(envFiles),
@@ -523,23 +533,22 @@ export async function execBuild(
 	];
 
 	const proc = Bun.spawn(args, {
-		env: {
-			...process.env,
-			BUN_BE_BUN: "1",
-		},
+		env: runner.env,
 		cwd: process.cwd(),
 		stdout: "pipe",
 		stderr: "pipe",
 	});
 
-	const [stderr, exitCode] = await Promise.all([
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
 		proc.exited,
 	]);
 
 	if (exitCode !== 0) {
+		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
 		throw new Error(
-			`Build failed for ${outfilePath}${stderr.trim() ? `:\n${stderr.trim()}` : ""}`,
+			`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`,
 		);
 	}
 }

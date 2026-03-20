@@ -6,7 +6,7 @@ description: Compile your CLI to standalone executables with crust build.
 import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-The `crust build` command compiles your CLI entry file into standalone Bun executables using the `Bun.build()` API. It supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
+The `crust build` command compiles your CLI entry file into standalone Bun executables by running `bun build --compile` in a subprocess. It prefers the real `bun` binary when available and falls back to the current executable in Bun mode when needed. It also supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
 
 <Callout type="info">
   Standalone binaries are the recommended distribution strategy for most CLIs.
