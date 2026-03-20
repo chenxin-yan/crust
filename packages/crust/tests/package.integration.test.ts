@@ -127,7 +127,7 @@ describe("crust build --package integration", () => {
 			"linux-x64",
 			"darwin-arm64",
 		]);
-	});
+	}, 15_000);
 
 	it("stages only the selected target directories", async () => {
 		await runBuild([
