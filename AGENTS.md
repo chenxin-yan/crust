@@ -17,6 +17,14 @@ bun run test                         # Run all tests across packages
 
 **Always run `bun run check` and `bun run check:types` before submitting changes.**
 
+## Changelog Management
+
+**DO NOT manually edit `CHANGELOG.md` files.** This project uses [Changesets](https://github.com/changesets/changesets) for version management and changelog generation.
+
+- To document a change, run `bunx changeset` and follow the prompts
+- This creates a `.changeset/<name>.md` file describing your changes
+- Changesets are consumed during release to generate changelogs and bump versions
+
 ### Test Framework & Conventions
 
 - Tests use **bun:test**: `import { describe, expect, it, beforeEach, afterEach } from "bun:test"`
