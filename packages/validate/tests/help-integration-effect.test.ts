@@ -24,6 +24,10 @@ function getStdout(): string {
 	return stdoutChunks.join("\n");
 }
 
+function stripAnsi(text: string): string {
+	return Bun.stripANSI(text);
+}
+
 describe("help plugin integration with Crust builder + commandValidator", () => {
 	it("renders help for a flags-only schema-first command", async () => {
 		const app = new Crust("serve")
@@ -43,12 +47,12 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 
 		await app.execute({ argv: ["--help"] });
 
-		const output = getStdout();
+		const output = stripAnsi(getStdout());
 		expect(output).toContain("serve - Start dev server");
 		expect(output).toContain("USAGE:");
 		expect(output).toContain("serve [options]");
 		expect(output).toContain("OPTIONS:");
-		expect(output).toContain("-v, --verbose");
+		expect(output).toContain("-v, --verbose, --no-verbose");
 		expect(output).toContain("Enable verbose logging");
 		expect(output).toContain("-h, --help");
 	});
@@ -71,7 +75,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 				),
 			});
 
-		const output = renderHelp(app._node);
+		const output = stripAnsi(renderHelp(app._node));
 		expect(output).toContain("build <entry> [target] [options]");
 		expect(output).toContain("ARGS:");
 		expect(output).toContain("<entry>");
@@ -125,7 +129,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			),
 		});
 
-		const output = renderHelp(app._node);
+		const output = stripAnsi(renderHelp(app._node));
 		expect(output).toContain("Schema description");
 	});
 
@@ -138,7 +142,7 @@ describe("help plugin integration with Crust builder + commandValidator", () => 
 			),
 		});
 
-		const output = renderHelp(app._node);
+		const output = stripAnsi(renderHelp(app._node));
 		expect(output).toContain("Port number");
 	});
 });

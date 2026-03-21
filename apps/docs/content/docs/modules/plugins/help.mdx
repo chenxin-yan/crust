@@ -6,6 +6,7 @@ description: Auto-generate help text for your CLI commands.
 import { Callout } from "fumadocs-ui/components/callout";
 
 The help plugin adds `--help` / `-h` to all commands and auto-generates formatted help output.
+On terminals with color support, the output is colorized automatically; in docs and non-color environments it falls back to plain text.
 
 ## Usage
 
@@ -45,19 +46,19 @@ The middleware intercepts execution in two cases:
 
 ### Help Output Format
 
-```
+```text
 my-cli - My CLI tool
 
 USAGE:
   my-cli <command> [options]
 
 COMMANDS:
-  build     Build the project
-  dev       Start dev server
+  build      Build the project
+  dev        Start dev server
 
 OPTIONS:
-  -h, --help        Show help
-  -v, --version     Show version number
+  -h, --help, --no-help          Show help
+  -v, --version, --no-version    Show version number
 ```
 
 The help text includes these sections (when applicable):
@@ -69,6 +70,19 @@ The help text includes these sections (when applicable):
 | **COMMANDS** | When the command has subcommands               |
 | **ARGS**     | When the command has positional arguments      |
 | **OPTIONS**  | When the command has flags                     |
+
+Boolean flags are shown with both supported canonical forms:
+
+```text
+--verbose, --no-verbose
+```
+
+Default values are appended inline when the command definition includes them:
+
+```text
+[name]              Who to greet [default: "world"]
+--port              Port number [default: 3000]
+```
 
 ## Usage Line
 
@@ -136,13 +150,13 @@ function renderHelp(command: CommandNode, path?: string[]): string;
 
 The help output includes the full command path:
 
-```
+```text
 my-cli build - Build the project
 
 USAGE:
   my-cli build [options]
 
 OPTIONS:
-  --no-minify       Disable minification
-  -h, --help        Show help
+  --minify, --no-minify         Disable minification
+  -h, --help, --no-help         Show help
 ```

@@ -89,6 +89,8 @@ interface FlagDefBase {
 	short?: string;
 	/** Additional long aliases (e.g. `["out"]` → `--out`) */
 	aliases?: string[];
+	/** When `true`, hide the generated `--no-{name}` help label for boolean flags */
+	noNegate?: true;
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
 	/** When `true`, the flag is inherited by subcommands */

@@ -11,6 +11,7 @@ export function versionPlugin(
 			actions.addFlag(context.rootCommand, "version", {
 				type: "boolean",
 				short: "v",
+				noNegate: true,
 				description: "Show version number",
 			});
 		},
