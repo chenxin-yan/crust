@@ -124,10 +124,25 @@ interface StringMultiFlagDef {
   multiple: true;              // Collect repeated values into array
   inherit?: true;              // Inherited by subcommands
 }
-// Number and boolean variants follow the same pattern
+// Number variants follow the same pattern.
+// Boolean variants additionally support `noNegate`:
+
+interface BooleanFlagDef {
+  type: "boolean";
+  description?: string;
+  default?: boolean;
+  required?: true;
+  short?: string;
+  aliases?: string[];
+  multiple?: never;
+  inherit?: true;
+  noNegate?: true;            // Hide the --no-{name} negation label
+}
 ```
 
-Boolean toggle fields (`required`, `multiple`, `inherit`) only accept `true` — passing `false` is a type error.
+Boolean toggle fields (`required`, `multiple`, `inherit`, `noNegate`) only accept `true` — passing `false` is a type error.
+
+`noNegate` is exclusive to boolean flag types. Setting it on a string or number flag is a compile-time error.
 
 ### `FlagsDef`
 

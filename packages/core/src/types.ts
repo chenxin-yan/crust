@@ -89,8 +89,6 @@ interface FlagDefBase {
 	short?: string;
 	/** Additional long aliases (e.g. `["out"]` → `--out`) */
 	aliases?: string[];
-	/** When `true`, hide the generated `--no-{name}` help label for boolean flags */
-	noNegate?: true;
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
 	/** When `true`, the flag is inherited by subcommands */
@@ -124,6 +122,8 @@ interface BooleanFlagDef extends SingleFlagBase {
 	type: "boolean";
 	/** Default boolean value */
 	default?: boolean;
+	/** When `true`, hide the generated `--no-{name}` help label */
+	noNegate?: true;
 }
 
 // ── Multi-value flags ─────────────────────────────────────────────────────
@@ -153,6 +153,8 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
 	type: "boolean";
 	/** Default boolean array value */
 	default?: boolean[];
+	/** When `true`, hide the generated `--no-{name}` help label */
+	noNegate?: true;
 }
 
 /**
