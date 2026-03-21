@@ -1,5 +1,11 @@
 # create-crust
 
+## 0.0.25
+
+### Patch Changes
+
+- @crustjs/prompts@0.0.10
+
 ## 0.0.24
 
 ### Patch Changes
