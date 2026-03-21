@@ -24,6 +24,10 @@
 
 Crust is a modern CLI framework built specifically for TypeScript and Bun. It provides a modular architecture for building command-line tools with features like command routing, argument parsing, interactive prompts, validation, and persistence—all with first-class TypeScript support.
 
+## Who uses Crust?
+
+- [Nia CLI](https://github.com/nozomio-labs/nia-cli) by [Nozomio Labs](https://www.trynia.ai/)
+
 ## Packages
 
 | Package                                                                | Description                                                                      | Version                                                                                                   | Downloads                                                                                                        |
