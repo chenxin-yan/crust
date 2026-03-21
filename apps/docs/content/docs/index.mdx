@@ -54,7 +54,7 @@ const main = new Crust("greet")
 await main.execute();
 ```
 
-```sh
+```text
 $ bun run src/cli.ts world --shout
 HELLO, WORLD!
 
@@ -65,12 +65,12 @@ USAGE:
   greet [name] [options]
 
 ARGS:
-  [name]            Who to greet
+  [name]              Who to greet [default: "world"]
 
 OPTIONS:
-  -s, --shout       SHOUT the greeting
-  -h, --help        Show help
-  -v, --version     Show version number
+  -s, --shout, --no-shout        SHOUT the greeting
+  -h, --help, --no-help          Show help
+  -v, --version, --no-version    Show version number
 ```
 
 <Cards>
