@@ -171,10 +171,15 @@ async function autoUpdateSkills(
 
 	const meta = deriveSkillMeta(rootCmd, options);
 
-	const scopesToCheck: Scope[] = ["project", "global"];
+	const scopesToCheck: Scope[] = [
+		...new Set(
+			(["project", "global"] as Scope[]).map((scope) =>
+				resolveEffectiveScope(scope),
+			),
+		),
+	];
 
 	for (const scope of scopesToCheck) {
-		const effectiveScope = resolveEffectiveScope(scope);
 		const status = await skillStatus({
 			name: meta.name,
 			agents,
@@ -191,7 +196,7 @@ async function autoUpdateSkills(
 
 		try {
 			await spinner({
-				message: `Updating ${effectiveScope} skills...`,
+				message: `Updating ${scope} skills...`,
 				task: async ({ updateMessage }) => {
 					const res = await generateSkill({
 						command: rootCmd,
@@ -208,7 +213,7 @@ async function autoUpdateSkills(
 
 					if (updatedLabels.length > 0) {
 						updateMessage(
-							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
+							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
 						);
 					}
 
