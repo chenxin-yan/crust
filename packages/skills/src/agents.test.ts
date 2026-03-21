@@ -19,6 +19,16 @@ import {
 	resolveCanonicalSkillPath,
 } from "./agents.ts";
 
+async function withCwd<T>(dir: string, fn: () => Promise<T> | T): Promise<T> {
+	const original = process.cwd;
+	process.cwd = () => dir;
+	try {
+		return await fn();
+	} finally {
+		process.cwd = original;
+	}
+}
+
 describe("resolveAgentPath", () => {
 	it("resolves claude-code project path", () => {
 		const result = resolveAgentPath("claude-code", "project", "my-cli");
@@ -39,6 +49,22 @@ describe("resolveAgentPath", () => {
 		const result = resolveAgentPath("opencode", "global", "my-cli");
 		expect(result).toBe(join(homedir(), ".agents", "skills", "my-cli"));
 	});
+
+	it("treats home-directory project scope as global for universal agents", async () => {
+		await withCwd(homedir(), () => {
+			expect(resolveAgentPath("opencode", "project", "my-cli")).toBe(
+				resolveAgentPath("opencode", "global", "my-cli"),
+			);
+		});
+	});
+
+	it("treats home-directory project scope as global for agent-specific paths", async () => {
+		await withCwd(homedir(), () => {
+			expect(resolveAgentPath("claude-code", "project", "my-cli")).toBe(
+				resolveAgentPath("claude-code", "global", "my-cli"),
+			);
+		});
+	});
 });
 
 describe("resolveCanonicalSkillPath", () => {
@@ -50,6 +76,14 @@ describe("resolveCanonicalSkillPath", () => {
 	it("resolves global canonical path", () => {
 		const result = resolveCanonicalSkillPath("global", "my-cli");
 		expect(result).toBe(join(homedir(), ".crust", "skills", "my-cli"));
+	});
+
+	it("treats home-directory project canonical path as global", async () => {
+		await withCwd(homedir(), () => {
+			expect(resolveCanonicalSkillPath("project", "my-cli")).toBe(
+				resolveCanonicalSkillPath("global", "my-cli"),
+			);
+		});
 	});
 });
 

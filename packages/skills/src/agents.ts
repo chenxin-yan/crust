@@ -35,6 +35,10 @@ function canonicalGlobalSkillsDir(home: string): string {
 	return join(home, ".crust", "skills");
 }
 
+export function resolveEffectiveScope(scope: Scope): Scope {
+	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
+}
+
 const AGENTS: Record<AgentTarget, AgentConfig> = {
 	amp: {
 		label: "Amp",
@@ -391,8 +395,9 @@ export function resolveAgentPath(
 	scope: Scope,
 	name: string,
 ): string {
+	const effectiveScope = resolveEffectiveScope(scope);
 	const cfg = AGENTS[agent];
-	if (scope === "project") {
+	if (effectiveScope === "project") {
 		return join(process.cwd(), cfg.projectSkillsDir, name);
 	}
 	return join(cfg.globalSkillsDir(homedir()), name);
@@ -402,7 +407,7 @@ export function resolveAgentPath(
  * Resolves the canonical skill bundle path used by Crust.
  */
 export function resolveCanonicalSkillPath(scope: Scope, name: string): string {
-	if (scope === "project") {
+	if (resolveEffectiveScope(scope) === "project") {
 		return join(process.cwd(), PROJECT_CANONICAL_SKILLS_DIR, name);
 	}
 

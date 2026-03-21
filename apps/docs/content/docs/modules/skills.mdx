@@ -65,6 +65,8 @@ Scope resolution for the interactive command and `skill update`:
 2. If `defaultScope` is set, that scope is used (no prompt).
 3. Otherwise, an interactive prompt asks the user to choose `project` or `global`.
 
+When the current working directory is the home directory, `project` scope is normalized to `global`. In that case, installs, updates, and status checks all use the global skill locations and update output reports `(global)`.
+
 ### Agent Auto-Detection
 
 `detectInstalledAgents()` probes CLI binaries for additional agents (for example `claude --version`, `windsurf --version`).
@@ -93,6 +95,8 @@ Path model:
 | ---------- | --------------------------------- | ------------------------ |
 | Universal  | `~/.agents/skills/<name>/`        | `.agents/skills/<name>/` |
 | Additional | Agent-specific convention per CLI | Agent-specific path      |
+
+If `process.cwd()` is the home directory, project paths collapse to the same global paths shown above.
 
 ## Interactive Command
 

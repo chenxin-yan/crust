@@ -75,7 +75,7 @@ Prefer readonly commands before mutating project state.
 });
 ```
 
-The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
+The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. If the current working directory is the home directory, `project` scope is normalized to `global` so installs, updates, and status checks use the global skill locations. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
 
 Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
@@ -118,7 +118,7 @@ runMain(app);
 If auto-update does not appear to work:
 
 - Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
-- Ensure at least one supported agent is detected. Auto-update checks both project and global install paths.
+- Ensure at least one supported agent is detected. Auto-update checks both project and global install paths, with home-directory `project` scope treated as `global`.
 - Check for existing conflicting skill directories without `crust.json`.
 
 ## Recommended Export Pattern
@@ -301,6 +301,8 @@ resolveCanonicalSkillPath("project", "my-cli");
 resolveCanonicalSkillPath("global", "my-cli");
 // → "~/.crust/skills/my-cli"
 ```
+
+When `process.cwd()` is the home directory, `resolveCanonicalSkillPath("project", ...)` returns the same global path as `resolveCanonicalSkillPath("global", ...)`.
 
 ### `isValidSkillName(name)`
 

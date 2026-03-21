@@ -12,6 +12,7 @@ import {
 	getAdditionalAgents,
 	getUniversalAgents,
 	resolveAgentPath,
+	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { generateSkill, skillStatus, uninstallSkill } from "./generate.ts";
@@ -173,6 +174,7 @@ async function autoUpdateSkills(
 	const scopesToCheck: Scope[] = ["project", "global"];
 
 	for (const scope of scopesToCheck) {
+		const effectiveScope = resolveEffectiveScope(scope);
 		const status = await skillStatus({
 			name: meta.name,
 			agents,
@@ -189,7 +191,7 @@ async function autoUpdateSkills(
 
 		try {
 			await spinner({
-				message: `Updating ${scope} skills...`,
+				message: `Updating ${effectiveScope} skills...`,
 				task: async ({ updateMessage }) => {
 					const res = await generateSkill({
 						command: rootCmd,
@@ -206,7 +208,7 @@ async function autoUpdateSkills(
 
 					if (updatedLabels.length > 0) {
 						updateMessage(
-							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
+							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
 						);
 					}
 
@@ -582,6 +584,7 @@ function buildSkillUpdateCommand(
 		})
 		.run(async (ctx) => {
 			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
+			const effectiveScope = resolveEffectiveScope(scope);
 			// Use all known agents and let skillStatus determine which are installed.
 			// This avoids spawning external CLIs during `skill update`.
 			const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
@@ -597,13 +600,13 @@ function buildSkillUpdateCommand(
 			);
 
 			if (needsUpdate.length === 0) {
-				console.log(dim(`No updates needed (${scope}).`));
+				console.log(dim(`No updates needed (${effectiveScope}).`));
 				return;
 			}
 
 			try {
 				const res = await spinner({
-					message: `Updating ${scope} skills...`,
+					message: `Updating ${effectiveScope} skills...`,
 					task: async () =>
 						generateSkill({
 							command: rootCmd,
@@ -621,7 +624,7 @@ function buildSkillUpdateCommand(
 				if (updatedLabels.length > 0) {
 					console.log(
 						`\n${bold(
-							`Updated "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
+							`Updated "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
 						)}`,
 					);
 				}
