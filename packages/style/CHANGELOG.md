@@ -1,5 +1,13 @@
 # @crustjs/style
 
+## 0.0.6
+
+### Patch Changes
+
+- 9b57c50: Honor explicit capability overrides even when they are set to `undefined` so
+  auto color detection stays deterministic in tests and other controlled
+  environments.
+
 ## 0.0.5
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @crustjs/skills
 
+## 0.0.21
+
+### Patch Changes
+
+- 687b1b8: Fix scope resolution in skill auto-update to properly deduplicate project and global scopes when they resolve to the same effective scope.
+- Updated dependencies [9b57c50]
+  - @crustjs/style@0.0.6
+  - @crustjs/prompts@0.0.10
+
 ## 0.0.20
 
 ### Patch Changes
