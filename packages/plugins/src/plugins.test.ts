@@ -115,6 +115,20 @@ describe("built-in plugins", () => {
 		expect(output).not.toContain("--no-loud");
 	});
 
+	it("renderHelp hides negation labels when noNegate is set", () => {
+		const command = new Crust("app").flags({
+			help: {
+				type: "boolean",
+				short: "h",
+				noNegate: true,
+			},
+		})._node;
+
+		const output = stripAnsi(renderHelp(command));
+		expect(output).toContain("-h, --help");
+		expect(output).not.toContain("--no-help");
+	});
+
 	it("renderHelp keeps stripped columns aligned with styled labels", () => {
 		const command = new Crust("app")
 			.flags({
@@ -141,15 +155,31 @@ describe("built-in plugins", () => {
 			] as const)._node;
 
 		const lines = stripAnsi(renderHelp(command)).split("\n");
-		expect(lines).toContain(
-			"  -v, --verbose, --no-verbose Enable verbose logging [default: true]",
-		);
-		expect(lines).toContain(
-			"  -p, --port                 Port number [default: 3000]",
+
+		const verboseLine = lines.find((line) => line.includes("--verbose"));
+		const portLine = lines.find((line) => line.includes("--port"));
+
+		expect(verboseLine).toBeDefined();
+		expect(portLine).toBeDefined();
+		expect(verboseLine?.indexOf("Enable verbose logging")).toBe(
+			portLine?.indexOf("Port number"),
 		);
 		expect(lines).toContain(
 			'  [dir]              Output directory [default: "."]',
 		);
+	});
+
+	it("renderHelp preserves non-finite numeric defaults", () => {
+		const command = new Crust("app").flags({
+			timeout: {
+				type: "number",
+				default: Infinity,
+			},
+		})._node;
+
+		const output = stripAnsi(renderHelp(command));
+		expect(output).toContain("[default: Infinity]");
+		expect(output).not.toContain("[default: null]");
 	});
 
 	it("help plugin renders generated help for no-run command", async () => {
@@ -164,6 +194,8 @@ describe("built-in plugins", () => {
 		expect(output).toContain("USAGE:");
 		expect(output).toContain("COMMANDS:");
 		expect(output).toContain("build");
+		expect(output).toContain("-h, --help");
+		expect(output).not.toContain("--no-help");
 	});
 
 	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {

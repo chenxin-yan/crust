@@ -8,7 +8,7 @@ import type {
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
-const FLAG_COLUMN_WIDTH = 26;
+const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
@@ -19,6 +19,11 @@ function formatArgToken(arg: ArgDef): string {
 }
 
 function formatDefaultValue(value: unknown): string {
+	if (typeof value === "number" && !Number.isFinite(value)) {
+		return String(value);
+	}
+	if (Array.isArray(value)) return value.map(String).join(", ");
+
 	return JSON.stringify(value);
 }
 
@@ -47,7 +52,7 @@ function formatUsage(
 	command: CommandNode,
 	path: string[],
 ): string {
-	if (meta.usage) return meta.usage;
+	if (meta.usage) return green(meta.usage);
 
 	const usageParts: string[] = [green(path.join(" "))];
 
@@ -77,7 +82,7 @@ function formatFlagName(name: string, def: FlagDef): string {
 
 	labels.push(`--${name}`);
 
-	if (def.type === "boolean") {
+	if (def.type === "boolean" && !def.noNegate) {
 		labels.push(`--no-${name}`);
 	}
 
@@ -162,6 +167,7 @@ export function renderHelp(command: CommandNode, path?: string[]): string {
 const helpFlagDef: FlagDef = {
 	type: "boolean",
 	short: "h",
+	noNegate: true,
 	inherit: true,
 	description: "Show help",
 };
