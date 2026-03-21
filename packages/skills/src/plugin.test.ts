@@ -8,7 +8,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CrustPlugin } from "@crustjs/core";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
@@ -520,6 +520,121 @@ describe("skillPlugin auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
 
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+	});
+
+	it("reports global scope when updating from the home directory", async () => {
+		const app = new Crust("manual-home-update-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
+			);
+
+		const logs: string[] = [];
+		const originalLog = console.log;
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+
+		try {
+			await withCwd(homedir(), () =>
+				generateSkill({
+					command: app._node,
+					meta: {
+						name: "manual-home-update-test",
+						description: "test",
+						version: "1.0.0",
+					},
+					agents: ["opencode"],
+					scope: "global",
+				}),
+			);
+
+			const skillDir = join(
+				homedir(),
+				".agents",
+				"skills",
+				"manual-home-update-test",
+			);
+			expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+
+			await withCwd(homedir(), () =>
+				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+			);
+
+			expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		} finally {
+			console.log = originalLog;
+			await rm(
+				join(homedir(), ".agents", "skills", "manual-home-update-test"),
+				{
+					recursive: true,
+					force: true,
+				},
+			);
+			await rm(join(homedir(), ".crust", "skills", "manual-home-update-test"), {
+				recursive: true,
+				force: true,
+			});
+		}
+
+		expect(logs.some((line) => line.includes("(global)"))).toBe(true);
+		expect(logs.some((line) => line.includes("(project)"))).toBe(false);
+	});
+
+	it("reports no updates needed with global scope from the home directory", async () => {
+		const app = new Crust("manual-home-noop-test")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
+			);
+
+		const logs: string[] = [];
+		const originalLog = console.log;
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+
+		try {
+			await withCwd(homedir(), () =>
+				generateSkill({
+					command: app._node,
+					meta: {
+						name: "manual-home-noop-test",
+						description: "test",
+						version: "2.0.0",
+					},
+					agents: ["opencode"],
+					scope: "global",
+				}),
+			);
+
+			await withCwd(homedir(), () =>
+				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+			);
+		} finally {
+			console.log = originalLog;
+			await rm(join(homedir(), ".agents", "skills", "manual-home-noop-test"), {
+				recursive: true,
+				force: true,
+			});
+			await rm(join(homedir(), ".crust", "skills", "manual-home-noop-test"), {
+				recursive: true,
+				force: true,
+			});
+		}
+
+		expect(
+			logs.some((line) => line.includes("No updates needed (global).")),
+		).toBe(true);
+		expect(logs.some((line) => line.includes("(project)"))).toBe(false);
 	});
 
 	it("renders top-level instructions when running manual skill update", async () => {

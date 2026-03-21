@@ -140,7 +140,7 @@ export type AgentTarget =
 /** Agent install class used by interactive skill management UX. */
 export type AgentClass = "universal" | "additional";
 
-/** Installation scope — global (home directory) or project (cwd). */
+/** Installation scope — global (home directory) or project (cwd, except home dir which normalizes to global). */
 export type Scope = "global" | "project";
 
 /** Installation strategy for agent skill output paths. */
@@ -296,12 +296,14 @@ export interface GenerateOptions {
 	 * - `"copy"`: write full copies directly into each agent path.
 	 *
 	 * Canonical bundles are always generated once under `.crust/skills` (project)
-	 * or `~/.crust/skills` (global).
+	 * or `~/.crust/skills` (global). When `process.cwd()` is the home directory,
+	 * project scope is normalized to the global location.
 	 * @default "auto"
 	 */
 	installMode?: SkillInstallMode;
 	/**
 	 * Installation scope — global (home directory) or project (cwd).
+	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.
 	 * @default "global"
 	 */
 	scope?: Scope;
@@ -364,6 +366,7 @@ export interface UninstallOptions {
 	agents: AgentTarget[];
 	/**
 	 * Installation scope to uninstall from.
+	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.
 	 * @default "global"
 	 */
 	scope?: Scope;
@@ -391,6 +394,7 @@ export interface StatusOptions {
 	agents: AgentTarget[];
 	/**
 	 * Installation scope to check.
+	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.
 	 * @default "global"
 	 */
 	scope?: Scope;
@@ -438,6 +442,8 @@ export interface StatusResult {
  *   prompted to choose `project` or `global`.
  * - If `defaultScope` is not set and the terminal is non-interactive, scope
  *   falls back to `"global"`.
+ * - When `process.cwd()` is the home directory, `"project"` is normalized to
+ *   `"global"` for path resolution and update/status messaging.
  */
 export interface SkillPluginOptions {
 	/** Skill version string — compared against the installed crust.json */
@@ -447,6 +453,7 @@ export interface SkillPluginOptions {
 	 *
 	 * When omitted, interactive commands prompt for scope in TTY mode.
 	 * Non-interactive mode falls back to "global".
+	 * When `process.cwd()` is the home directory, `"project"` behaves as `"global"`.
 	 */
 	defaultScope?: Scope;
 	/**
