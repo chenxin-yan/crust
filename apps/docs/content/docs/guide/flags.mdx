@@ -9,8 +9,8 @@ Flags are named options passed with `--` (long form) or `-` (short form). They'r
 
 ```sh
 my-cli --port 3000 --verbose -o dist
-#      ^^^^^^^^^^^  ^^^^^^^^^  ^^^^^^
-#      flag         flag       short
+#      ^^^^^^^^^^^  ^^^^^^^^ ^^
+#      flag         flag    short
 ```
 
 ## Defining Flags
@@ -33,7 +33,7 @@ const cmd = new Crust("serve")
     },
   })
   .run(({ flags }) => {
-    console.log(`Port: ${flags.port}`);       // number (has default)
+    console.log(`Port: ${flags.port}`); // number (has default)
     console.log(`Verbose: ${flags.verbose}`); // boolean | undefined
   });
 ```
@@ -92,11 +92,13 @@ Provide a single-character short form with the `short` property, and additional 
 `short` accepts a single character for the `-x` short form. `aliases` accepts an array of additional aliases (single-char or long).
 
 <Callout type="warn">
-  Alias collisions are caught at **compile time** and **runtime**. If an alias conflicts with another flag name or another alias, you'll get an error.
+  Alias collisions are caught at **compile time** and **runtime**. If an alias
+  conflicts with another flag name or another alias, you'll get an error.
 </Callout>
 
 <Callout type="warn">
-  The `no-` prefix is reserved for boolean negation. Do not define flag names, short forms, or aliases that start with `no-`.
+  The `no-` prefix is reserved for boolean negation. Do not define flag names,
+  short forms, or aliases that start with `no-`.
 </Callout>
 
 ## Required Flags
@@ -178,17 +180,16 @@ const app = new Crust("my-cli")
     debug: { type: "boolean" }, // not inherited
   })
   .command("deploy", (cmd) =>
-    cmd
-      .flags({ env: { type: "string", required: true } })
-      .run(({ flags }) => {
-        flags.verbose; // boolean | undefined (inherited from parent)
-        flags.env;     // string (local)
-        // flags.debug — not available (not inherited)
-      })
+    cmd.flags({ env: { type: "string", required: true } }).run(({ flags }) => {
+      flags.verbose; // boolean | undefined (inherited from parent)
+      flags.env; // string (local)
+      // flags.debug — not available (not inherited)
+    }),
   );
 ```
 
 Inherited flags are:
+
 - **Parsed** by the subcommand's parser alongside local flags
 - **Typed** correctly in the subcommand's handler via `EffectiveFlags<Inherited, Local>`
 - **Shown** in the subcommand's help output
