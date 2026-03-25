@@ -1,0 +1,39 @@
+---
+title: "No Color"
+description: Add `--color` and `--no-color` to a Crust CLI.
+---
+
+The `noColorPlugin()` adds a root `color` boolean flag with default `true`, exposing `--color` and `--no-color`.
+
+It is designed to align with [no-color.org](https://no-color.org/):
+
+- `NO_COLOR=1` disables color by default
+- `NO_COLOR=""` does not disable color
+- `--color` overrides `NO_COLOR`
+- `--no-color` disables color for the current run
+- Non-color modifiers such as bold and underline are not disabled
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { helpPlugin, noColorPlugin, versionPlugin } from "@crustjs/plugins";
+
+const app = new Crust("my-cli")
+  .use(noColorPlugin())
+  .use(versionPlugin("1.0.0"))
+  .use(helpPlugin())
+  .run(() => {
+    console.log("Hello!");
+  });
+```
+
+## Behavior
+
+- The plugin injects a root `color` flag with default `true`
+- The flag is inherited by subcommands
+- The override applies to `@crustjs/style` default exports and built-in Crust plugins that use them
+
+## Ordering
+
+Register `noColorPlugin()` before plugins that may render output and return without calling `next()`, such as `helpPlugin()`.

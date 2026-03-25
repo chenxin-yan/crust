@@ -3,7 +3,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
-import { resolveCapability, resolveTrueColor } from "./capability.ts";
+import {
+	resolveCapability,
+	resolveModifierCapability,
+	resolveTrueColor,
+} from "./capability.ts";
 import {
 	bgHex as bgHexDirect,
 	bgRgb as bgRgbDirect,
@@ -14,6 +18,7 @@ import { applyStyle } from "./styleEngine.ts";
 import { styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
+	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
 	StyleMethodName,
@@ -23,9 +28,10 @@ import type {
 function applyChain(
 	text: string,
 	methodNames: readonly StyleMethodName[],
-	enabled: boolean,
+	modifiersEnabled: boolean,
+	colorsEnabled: boolean,
 ): string {
-	if (!enabled || text === "") {
+	if (text === "") {
 		return text;
 	}
 
@@ -35,13 +41,27 @@ function applyChain(
 		if (methodName === undefined) {
 			continue;
 		}
+		const isModifier =
+			methodName === "bold" ||
+			methodName === "dim" ||
+			methodName === "italic" ||
+			methodName === "underline" ||
+			methodName === "inverse" ||
+			methodName === "hidden" ||
+			methodName === "strikethrough";
+		if (isModifier ? !modifiersEnabled : !colorsEnabled) {
+			continue;
+		}
 		result = applyStyle(result, stylePairFor(methodName));
 	}
 
 	return result;
 }
 
-function buildChainableStyleFactory(enabled: boolean) {
+function buildChainableStyleFactory(
+	modifiersEnabled: boolean,
+	colorsEnabled: boolean,
+) {
 	const cache = new Map<string, ChainableStyleFn>();
 
 	function makeKey(methodNames: readonly StyleMethodName[]): string {
@@ -58,7 +78,12 @@ function buildChainableStyleFactory(enabled: boolean) {
 		}
 
 		const styleFn = ((text: string) =>
-			applyChain(text, methodNames, enabled)) as ChainableStyleFn;
+			applyChain(
+				text,
+				methodNames,
+				modifiersEnabled,
+				colorsEnabled,
+			)) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
 
@@ -128,13 +153,19 @@ function buildStyleMethods(
  */
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
-	const enabled = resolveCapability(mode, options?.overrides);
+	const modifiersEnabled = resolveModifierCapability(mode);
+	const colorsEnabled = resolveCapability(mode, options?.overrides);
+	const enabled = modifiersEnabled || colorsEnabled;
 	const trueColorEnabled = resolveTrueColor(mode, options?.overrides);
-	const createChainableStyle = buildChainableStyleFactory(enabled);
+	const createChainableStyle = buildChainableStyleFactory(
+		modifiersEnabled,
+		colorsEnabled,
+	);
 	const methods = buildStyleMethods(createChainableStyle);
 
 	const instance: StyleInstance = {
 		enabled,
+		colorsEnabled,
 		trueColorEnabled,
 
 		// ── Style engine ────────────────────────────────────────────────────
@@ -169,6 +200,78 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	return Object.freeze(instance);
 }
 
+let globalColorMode: ColorMode | undefined;
+
+export function setGlobalColorMode(mode: ColorMode | undefined): void {
+	globalColorMode = mode;
+}
+
+export function getGlobalColorMode(): ColorMode | undefined {
+	return globalColorMode;
+}
+
+const alwaysRuntimeStyle = createStyle({ mode: "always" });
+const noColorRuntimeStyle = createStyle({
+	mode: "auto",
+	overrides: {
+		isTTY: false,
+		noColor: "1",
+	},
+});
+
+export function getRuntimeStyle(): StyleInstance {
+	if (globalColorMode === "always") {
+		return alwaysRuntimeStyle;
+	}
+
+	if (globalColorMode === "never") {
+		return noColorRuntimeStyle;
+	}
+
+	return createStyle({ mode: "auto" });
+}
+
+function createRuntimeStyleFacade(): StyleInstance {
+	const facade: Partial<StyleInstance> = {
+		get enabled() {
+			return getRuntimeStyle().enabled;
+		},
+		get colorsEnabled() {
+			return getRuntimeStyle().colorsEnabled;
+		},
+		get trueColorEnabled() {
+			return getRuntimeStyle().trueColorEnabled;
+		},
+		apply(text: string, pair: AnsiPair) {
+			return getRuntimeStyle().apply(text, pair);
+		},
+		rgb(text: string, r: number, g: number, b: number) {
+			return getRuntimeStyle().rgb(text, r, g, b);
+		},
+		bgRgb(text: string, r: number, g: number, b: number) {
+			return getRuntimeStyle().bgRgb(text, r, g, b);
+		},
+		hex(text: string, hexColor: string) {
+			return getRuntimeStyle().hex(text, hexColor);
+		},
+		bgHex(text: string, hexColor: string) {
+			return getRuntimeStyle().bgHex(text, hexColor);
+		},
+	};
+
+	for (const methodName of styleMethodNames) {
+		Object.defineProperty(facade, methodName, {
+			configurable: false,
+			enumerable: true,
+			get() {
+				return getRuntimeStyle()[methodName];
+			},
+		});
+	}
+
+	return Object.freeze(facade as StyleInstance);
+}
+
 /**
  * Default style instance using `"auto"` mode.
  *
@@ -183,4 +286,4 @@ export function createStyle(options?: StyleOptions): StyleInstance {
  * console.log(style.red("error"));
  * ```
  */
-export const style: StyleInstance = createStyle();
+export const style: StyleInstance = createRuntimeStyleFacade();

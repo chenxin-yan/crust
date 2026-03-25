@@ -60,7 +60,20 @@ export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
 export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export { resolveCapability, resolveTrueColor } from "./capability.ts";
-// Style primitives — Colors
+export {
+	createStyle,
+	getGlobalColorMode,
+	setGlobalColorMode,
+	style,
+} from "./createStyle.ts";
+// Style primitives — Dynamic colors (truecolor)
+export {
+	bgHexCode,
+	bgRgbCode,
+	hexCode,
+	parseHex,
+	rgbCode,
+} from "./dynamicColors.ts";
 export {
 	// Background
 	bgBlack,
@@ -75,13 +88,17 @@ export {
 	bgBrightYellow,
 	bgCyan,
 	bgGreen,
+	bgHex,
 	bgMagenta,
 	bgRed,
+	bgRgb,
 	bgWhite,
 	bgYellow,
 	// Foreground
 	black,
 	blue,
+	// Modifiers
+	bold,
 	brightBlue,
 	brightCyan,
 	brightGreen,
@@ -90,36 +107,21 @@ export {
 	brightWhite,
 	brightYellow,
 	cyan,
+	dim,
 	gray,
 	green,
-	magenta,
-	red,
-	white,
-	yellow,
-} from "./colors.ts";
-export { createStyle, style } from "./createStyle.ts";
-// Style primitives — Dynamic colors (truecolor)
-export {
-	bgHex,
-	bgHexCode,
-	bgRgb,
-	bgRgbCode,
 	hex,
-	hexCode,
-	parseHex,
-	rgb,
-	rgbCode,
-} from "./dynamicColors.ts";
-// Style primitives — Modifiers
-export {
-	bold,
-	dim,
 	hidden,
 	inverse,
 	italic,
+	magenta,
+	red,
+	rgb,
 	strikethrough,
 	underline,
-} from "./modifiers.ts";
+	white,
+	yellow,
+} from "./runtimeExports.ts";
 // Style engine
 export { applyStyle, composeStyles } from "./styleEngine.ts";
 export { center, padEnd, padStart } from "./text/pad.ts";
