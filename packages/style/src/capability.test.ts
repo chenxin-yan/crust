@@ -1,8 +1,43 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as codes from "./ansiCodes.ts";
 import { resolveCapability, resolveTrueColor } from "./capability.ts";
-import { createStyle } from "./createStyle.ts";
+import {
+	createStyle,
+	getGlobalColorMode,
+	setGlobalColorMode,
+	style,
+} from "./createStyle.ts";
+import { bold, red } from "./index.ts";
 import { composeStyles } from "./styleEngine.ts";
+
+const originalNoColor = process.env.NO_COLOR;
+const originalStdoutIsTTY = process.stdout.isTTY;
+
+beforeEach(() => {
+	setGlobalColorMode(undefined);
+	if (originalNoColor === undefined) {
+		delete process.env.NO_COLOR;
+	} else {
+		process.env.NO_COLOR = originalNoColor;
+	}
+	Object.defineProperty(process.stdout, "isTTY", {
+		configurable: true,
+		value: originalStdoutIsTTY,
+	});
+});
+
+afterEach(() => {
+	setGlobalColorMode(undefined);
+	if (originalNoColor === undefined) {
+		delete process.env.NO_COLOR;
+	} else {
+		process.env.NO_COLOR = originalNoColor;
+	}
+	Object.defineProperty(process.stdout, "isTTY", {
+		configurable: true,
+		value: originalStdoutIsTTY,
+	});
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveCapability — mode resolution
@@ -62,9 +97,9 @@ describe("resolveCapability", () => {
 			);
 		});
 
-		it("returns false when NO_COLOR is empty string (per no-color.org)", () => {
+		it("returns true when NO_COLOR is empty string (per no-color.org)", () => {
 			expect(resolveCapability("auto", { isTTY: true, noColor: "" })).toBe(
-				false,
+				true,
 			);
 		});
 
@@ -410,8 +445,10 @@ describe("createStyle — auto mode with overrides", () => {
 			mode: "auto",
 			overrides: { isTTY: false, noColor: undefined },
 		});
-		expect(s.enabled).toBe(false);
-		expect(s.bold("text")).toBe("text");
+		expect(s.enabled).toBe(true);
+		expect(s.colorsEnabled).toBe(false);
+		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(s.red("text")).toBe("text");
 	});
 
 	it("disables color when NO_COLOR is set", () => {
@@ -419,17 +456,20 @@ describe("createStyle — auto mode with overrides", () => {
 			mode: "auto",
 			overrides: { isTTY: true, noColor: "1" },
 		});
-		expect(s.enabled).toBe(false);
-		expect(s.bold("text")).toBe("text");
+		expect(s.enabled).toBe(true);
+		expect(s.colorsEnabled).toBe(false);
+		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(s.red("text")).toBe("text");
 	});
 
-	it("disables color when NO_COLOR is empty string", () => {
+	it("does not disable color when NO_COLOR is empty string", () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: { isTTY: true, noColor: "" },
 		});
-		expect(s.enabled).toBe(false);
-		expect(s.red("text")).toBe("text");
+		expect(s.enabled).toBe(true);
+		expect(s.colorsEnabled).toBe(true);
+		expect(s.red("text")).toBe("\x1b[31mtext\x1b[39m");
 	});
 });
 
@@ -512,6 +552,7 @@ describe("default style instance", () => {
 		expect(typeof style.bold).toBe("function");
 		expect(typeof style.red).toBe("function");
 		expect(typeof style.enabled).toBe("boolean");
+		expect(typeof style.colorsEnabled).toBe("boolean");
 		expect(Object.isFrozen(style)).toBe(true);
 	});
 
@@ -633,9 +674,52 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 				colorTerm: "truecolor",
 			},
 		});
-		expect(s.enabled).toBe(false);
+		expect(s.enabled).toBe(true);
+		expect(s.colorsEnabled).toBe(false);
 		expect(s.trueColorEnabled).toBe(false);
 		expect(s.red("text")).toBe("text");
+		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
 		expect(s.rgb("text", 255, 0, 0)).toBe("text");
+	});
+});
+
+describe("runtime-aware default exports", () => {
+	it("keeps modifiers enabled when NO_COLOR is set", () => {
+		process.env.NO_COLOR = "1";
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+
+		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(red("text")).toBe("text");
+		expect(style.bold.red("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(style.enabled).toBe(true);
+		expect(style.colorsEnabled).toBe(false);
+	});
+
+	it("lets the global color override force colors on", () => {
+		process.env.NO_COLOR = "1";
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: false,
+		});
+		setGlobalColorMode("always");
+
+		expect(getGlobalColorMode()).toBe("always");
+		expect(red("text")).toBe("\x1b[31mtext\x1b[39m");
+		expect(style.colorsEnabled).toBe(true);
+	});
+
+	it("lets the global color override force colors off without disabling modifiers", () => {
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+		setGlobalColorMode("never");
+
+		expect(red("text")).toBe("text");
+		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(style.colorsEnabled).toBe(false);
 	});
 });

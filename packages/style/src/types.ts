@@ -30,7 +30,7 @@ export type ColorMode = "auto" | "always" | "never";
 export interface CapabilityOverrides {
 	/** Override `process.stdout.isTTY`. */
 	readonly isTTY?: boolean;
-	/** Override `process.env.NO_COLOR`. */
+	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
 }
 
@@ -101,8 +101,11 @@ export type StyleMethodName = RegisteredStyleMethodName;
  * In `"auto"` mode, behavior depends on terminal capability detection.
  */
 export interface StyleInstance extends StyleMethodMap {
-	/** Whether ANSI codes will be emitted by this instance. */
+	/** Whether any ANSI styling will be emitted by this instance. */
 	readonly enabled: boolean;
+
+	/** Whether ANSI color codes will be emitted by this instance. */
+	readonly colorsEnabled: boolean;
 
 	/** Whether truecolor (24-bit) sequences will be emitted by this instance. */
 	readonly trueColorEnabled: boolean;
