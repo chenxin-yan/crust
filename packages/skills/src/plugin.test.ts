@@ -447,6 +447,9 @@ describe("skillPlugin auto-update", () => {
 
 		expect(logs.some((line) => line.includes("No changes."))).toBe(true);
 		expect(
+			logs.some((line) => line.includes("Agents supporting universal skills:")),
+		).toBe(false);
+		expect(
 			logs.some((line) => line.includes('Installed "no-change-test"')),
 		).toBe(false);
 	});
@@ -487,6 +490,9 @@ describe("skillPlugin auto-update", () => {
 
 		expect(logs.some((line) => line.includes("Universal →"))).toBe(true);
 		expect(logs.some((line) => line.includes("OpenCode →"))).toBe(false);
+		expect(
+			logs.some((line) => line.includes("Agents supporting universal skills:")),
+		).toBe(false);
 	});
 
 	it("runs manual skill update command", async () => {
