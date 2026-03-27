@@ -356,6 +356,7 @@ function buildSkillCommand(
 		.run(async (ctx) => {
 			const meta = deriveSkillMeta(rootCmd, options);
 			const installAll = ctx.flags.all === true;
+			const isInteractive = !!process.stdin.isTTY;
 			const scope = installAll
 				? (options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 				: await resolveScopeForCommand(ctx.flags.scope, options);
@@ -416,7 +417,11 @@ function buildSkillCommand(
 				const agentLabels = universalAgents
 					.map((agent) => AGENT_LABELS[agent])
 					.join(", ");
-				console.log(dim(`Agents supporting universal skills: ${agentLabels}`));
+				if (isInteractive && !installAll) {
+					console.log(
+						dim(`Agents supporting universal skills: ${agentLabels}`),
+					);
+				}
 			}
 
 			for (const agent of additionalAgents) {
