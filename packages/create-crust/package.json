@@ -43,6 +43,7 @@
 	"dependencies": {
 		"@crustjs/core": "workspace:*",
 		"@crustjs/create": "workspace:*",
+		"@crustjs/progress": "workspace:*",
 		"@crustjs/prompts": "workspace:*"
 	},
 	"devDependencies": {

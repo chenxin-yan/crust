@@ -42,6 +42,7 @@
 		"publish": "bun publish --no-git-checks || true"
 	},
 	"dependencies": {
+		"@crustjs/progress": "workspace:*",
 		"@crustjs/style": "workspace:*"
 	},
 	"devDependencies": {

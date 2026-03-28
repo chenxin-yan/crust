@@ -1,14 +1,14 @@
 {
-	"name": "@crustjs/skills",
-	"version": "0.0.21",
-	"description": "Agent skill generation from Crust command definitions",
+	"name": "@crustjs/progress",
+	"version": "0.0.1",
+	"description": "Progress indicators for the Crust CLI ecosystem",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/skills"
+		"directory": "packages/progress"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
@@ -16,10 +16,9 @@
 	},
 	"keywords": [
 		"cli",
-		"skills",
-		"agent",
-		"generation",
-		"documentation",
+		"progress",
+		"spinner",
+		"terminal",
 		"bun",
 		"typescript"
 	],
@@ -43,17 +42,13 @@
 		"publish": "bun publish --no-git-checks || true"
 	},
 	"dependencies": {
-		"@crustjs/progress": "workspace:*",
-		"@crustjs/prompts": "workspace:*",
 		"@crustjs/style": "workspace:*"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/core": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
 	}
 }

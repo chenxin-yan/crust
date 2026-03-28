@@ -9,7 +9,8 @@ import {
 	runSteps,
 	scaffold,
 } from "@crustjs/create";
-import { confirm, input, select, spinner } from "@crustjs/prompts";
+import { spinner } from "@crustjs/progress";
+import { confirm, input, select } from "@crustjs/prompts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation

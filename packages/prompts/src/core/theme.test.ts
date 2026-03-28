@@ -26,7 +26,6 @@ describe("defaultTheme", () => {
 			"error",
 			"success",
 			"hint",
-			"spinner",
 			"filterMatch",
 		];
 		for (const slot of slotNames) {
@@ -44,7 +43,6 @@ describe("defaultTheme", () => {
 		expect(defaultTheme.error).toBe(red);
 		expect(defaultTheme.success).toBe(green);
 		expect(defaultTheme.hint).toBe(dim);
-		expect(defaultTheme.spinner).toBe(magenta);
 		expect(defaultTheme.filterMatch).toBe(cyan);
 	});
 
@@ -152,7 +150,7 @@ describe("setTheme / getTheme", () => {
 		expect(theme.prefix).toBe(red);
 		expect(theme.error).toBe(yellow);
 		// magenta prefix is gone — replaced, not merged
-		expect(theme.spinner).toBe(magenta); // default
+		expect(theme.filterMatch).toBe(cyan); // default
 	});
 });
 

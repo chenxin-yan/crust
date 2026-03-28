@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { type SpinnerController, spinner } from "./spinner.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
 
@@ -20,7 +16,6 @@ function setupMocks(): void {
 		return true;
 	}) as typeof process.stderr.write;
 
-	// Default to interactive (TTY) for existing tests
 	Object.defineProperty(process.stderr, "isTTY", {
 		value: true,
 		writable: true,
@@ -37,16 +32,9 @@ function restoreMocks(): void {
 	});
 }
 
-/**
- * Wait briefly for async processing.
- */
 function tick(ms = 10): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Task result
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("spinner — task result", () => {
 	beforeEach(setupMocks);
@@ -93,10 +81,6 @@ describe("spinner — task result", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Task error
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("spinner — task error", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
@@ -129,10 +113,6 @@ describe("spinner — task error", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Stderr output
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("spinner — stderr output", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
@@ -164,9 +144,7 @@ describe("spinner — stderr output", () => {
 					throw new Error("deploy failed");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Deploying...");
@@ -178,7 +156,6 @@ describe("spinner — stderr output", () => {
 			task: async () => "ok",
 		});
 
-		// ESC[?25l is the ANSI sequence to hide cursor
 		expect(stderrOutput).toContain("\x1B[?25l");
 	});
 
@@ -188,7 +165,6 @@ describe("spinner — stderr output", () => {
 			task: async () => "ok",
 		});
 
-		// ESC[?25h is the ANSI sequence to show cursor
 		expect(stderrOutput).toContain("\x1B[?25h");
 	});
 
@@ -200,9 +176,7 @@ describe("spinner — stderr output", () => {
 					throw new Error("fail");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		expect(stderrOutput).toContain("\x1B[?25h");
 	});
@@ -213,14 +187,9 @@ describe("spinner — stderr output", () => {
 			task: async () => "ok",
 		});
 
-		// Default dots spinner starts with ⠋
 		expect(stderrOutput).toContain("⠋");
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// Spinner animation frames
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("spinner — animation", () => {
 	beforeEach(setupMocks);
@@ -230,13 +199,11 @@ describe("spinner — animation", () => {
 		await spinner({
 			message: "Working...",
 			task: async () => {
-				// Wait long enough for at least one frame cycle (default dots interval is 80ms)
 				await tick(200);
 				return "ok";
 			},
 		});
 
-		// Should have rendered at least the first two frames of dots spinner
 		expect(stderrOutput).toContain("⠋");
 		expect(stderrOutput).toContain("⠙");
 	});
@@ -251,7 +218,6 @@ describe("spinner — animation", () => {
 			spinner: "line",
 		});
 
-		// Line spinner starts with "-"
 		expect(stderrOutput).toContain("-");
 	});
 
@@ -262,7 +228,6 @@ describe("spinner — animation", () => {
 			spinner: "arc",
 		});
 
-		// Arc spinner starts with ◐
 		expect(stderrOutput).toContain("◐");
 	});
 
@@ -273,7 +238,6 @@ describe("spinner — animation", () => {
 			spinner: "bounce",
 		});
 
-		// Bounce spinner starts with ⠁
 		expect(stderrOutput).toContain("⠁");
 	});
 
@@ -302,10 +266,6 @@ describe("spinner — animation", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Message updates via controller
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("spinner — message updates", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
@@ -332,14 +292,11 @@ describe("spinner — message updates", () => {
 			},
 		});
 
-		// The success line (with ✓) should contain the latest message
 		expect(stderrOutput).toContain("✓");
 		expect(stderrOutput).toContain("Final...");
-		// Extract the success line specifically — it's the last line before cursor restore
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		const lastNewline = beforeCursor.lastIndexOf("\n");
-		// Everything from last erase-line to the newline is the success render
 		expect(beforeCursor.slice(0, lastNewline + 1)).toContain("Final...");
 	});
 
@@ -352,9 +309,7 @@ describe("spinner — message updates", () => {
 					throw new Error("boom");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Failed step...");
@@ -389,11 +344,8 @@ describe("spinner — message updates", () => {
 		});
 
 		const outputAfterComplete = stderrOutput;
-
-		// Call updateMessage after the spinner has finished
 		savedController?.updateMessage("Late update...");
 
-		// Output should not change
 		expect(stderrOutput).toBe(outputAfterComplete);
 		expect(stderrOutput).not.toContain("Late update...");
 	});
@@ -410,10 +362,6 @@ describe("spinner — message updates", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Cleanup
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("spinner — cleanup", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
@@ -425,8 +373,6 @@ describe("spinner — cleanup", () => {
 		});
 
 		const outputAfterComplete = stderrOutput;
-
-		// Wait to ensure no more frames are being written
 		await tick(200);
 
 		expect(stderrOutput).toBe(outputAfterComplete);
@@ -440,13 +386,9 @@ describe("spinner — cleanup", () => {
 					throw new Error("fail");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		const outputAfterError = stderrOutput;
-
-		// Wait to ensure no more frames are being written
 		await tick(200);
 
 		expect(stderrOutput).toBe(outputAfterError);
@@ -458,8 +400,6 @@ describe("spinner — cleanup", () => {
 			task: async () => "ok",
 		});
 
-		// The last write before show-cursor should end with newline
-		// (renderSuccess appends \n)
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		expect(beforeCursor.endsWith("\n")).toBe(true);
@@ -473,19 +413,13 @@ describe("spinner — cleanup", () => {
 					throw new Error("fail");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		expect(beforeCursor.endsWith("\n")).toBe(true);
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// Non-interactive (non-TTY) mode
-// ────────────────────────────────────────────────────────────────────────────
 
 describe("spinner — non-interactive", () => {
 	beforeEach(() => {
@@ -524,10 +458,8 @@ describe("spinner — non-interactive", () => {
 			task: async () => "ok",
 		});
 
-		// No cursor hide/show sequences
 		expect(stderrOutput).not.toContain("\x1B[?25l");
 		expect(stderrOutput).not.toContain("\x1B[?25h");
-		// No erase line or cursor-to-start sequences
 		expect(stderrOutput).not.toContain("\x1B[2K");
 		expect(stderrOutput).not.toContain("\r");
 	});
@@ -540,7 +472,6 @@ describe("spinner — non-interactive", () => {
 
 		expect(stderrOutput).toContain("✓");
 		expect(stderrOutput).toContain("Building...");
-		// Only one line of output (the success line)
 		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
 		expect(lines.length).toBe(1);
 	});
@@ -553,13 +484,10 @@ describe("spinner — non-interactive", () => {
 					throw new Error("deploy failed");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Deploying...");
-		// Only one line of output (the error line)
 		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
 		expect(lines.length).toBe(1);
 	});
@@ -573,7 +501,6 @@ describe("spinner — non-interactive", () => {
 			},
 		});
 
-		// No spinner frames should appear
 		expect(stderrOutput).not.toContain("⠋");
 		expect(stderrOutput).not.toContain("⠙");
 	});
@@ -588,7 +515,6 @@ describe("spinner — non-interactive", () => {
 			},
 		});
 
-		// Only the final success line with the latest message
 		expect(stderrOutput).not.toContain("Step 1...");
 		expect(stderrOutput).not.toContain("Step 2...");
 		expect(stderrOutput).toContain("Step 3...");
@@ -620,9 +546,7 @@ describe("spinner — non-interactive", () => {
 					throw new Error("boom");
 				},
 			});
-		} catch {
-			// Expected
-		}
+		} catch {}
 
 		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
 		expect(lines.length).toBe(1);

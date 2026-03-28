@@ -1,0 +1,121 @@
+---
+title: "Progress"
+description: Non-interactive progress indicators for CLI applications — currently spinner support for async tasks.
+---
+
+`@crustjs/progress` provides non-interactive progress indicators for building polished CLI experiences. It currently includes `spinner()`, a stderr-based async task wrapper with message updates, theming, and non-TTY fallbacks.
+
+## Install
+
+```sh
+bun add @crustjs/progress
+```
+
+## Quick Example
+
+```ts
+import { spinner } from "@crustjs/progress";
+
+const data = await spinner({
+  message: "Fetching data...",
+  task: async () => {
+    const res = await fetch("https://api.example.com/data");
+    return res.json();
+  },
+});
+```
+
+## API
+
+### `spinner(options)`
+
+Display a spinner animation while an async task runs. Non-interactive and output-only. On completion it prints a success (`✓`) or error (`✗`) line to `stderr`.
+
+In non-interactive environments, the spinner skips animation and ANSI escape codes. Only the final success or error line is printed.
+
+```ts
+await spinner({
+  message: "Installing dependencies...",
+  task: async ({ updateMessage }) => {
+    await installDeps();
+    updateMessage("Building project...");
+    await buildProject();
+    updateMessage("Running checks...");
+    await runChecks();
+  },
+  spinner: "arc",
+});
+```
+
+| Option    | Type                                   | Default  | Description                                       |
+| --------- | -------------------------------------- | -------- | ------------------------------------------------- |
+| `message` | `string`                               | —        | Message displayed alongside the spinner           |
+| `task`    | `(controller: SpinnerController) => Promise<T>` | — | Async task to run and wrap with spinner output    |
+| `spinner` | `SpinnerType`                          | `"dots"` | Animation style or custom `{ frames, interval }`  |
+| `theme`   | `PartialProgressTheme`                 | —        | Per-call theme overrides                          |
+
+### `SpinnerController`
+
+Passed into the task callback so you can update the current message while the task runs.
+
+```ts
+await spinner({
+  message: "Preparing...",
+  task: async ({ updateMessage }) => {
+    updateMessage("Uploading...");
+    await upload();
+  },
+});
+```
+
+### `SpinnerType`
+
+Built-in options:
+
+- `"dots"`
+- `"line"`
+- `"arc"`
+- `"bounce"`
+
+Or provide a custom frame set:
+
+```ts
+const custom = { frames: ["⊶", "⊷"], interval: 150 };
+```
+
+## Themes
+
+`@crustjs/progress` has its own theme contract with four slots:
+
+- `spinner`
+- `message`
+- `success`
+- `error`
+
+The default theme preserves the previous spinner colors:
+
+- `spinner`: `magenta`
+- `message`: `bold`
+- `success`: `green`
+- `error`: `red`
+
+```ts
+import { createTheme, setTheme, spinner } from "@crustjs/progress";
+import { cyan, green } from "@crustjs/style";
+
+setTheme(
+  createTheme({
+    spinner: cyan,
+    success: green,
+  }),
+);
+
+await spinner({
+  message: "Working...",
+  task: async () => doWork(),
+});
+```
+
+## Non-interactive behavior
+
+When `stderr` is not a TTY, `spinner()` does not animate and does not emit cursor-control ANSI sequences. `updateMessage()` still works and updates the message used in the final success or error line.

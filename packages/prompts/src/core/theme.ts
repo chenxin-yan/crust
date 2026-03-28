@@ -2,7 +2,7 @@
 // Theme — Default theme, global state, and resolution for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import { bold, cyan, dim, green, magenta, red } from "@crustjs/style";
+import { bold, cyan, dim, green, red } from "@crustjs/style";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -25,7 +25,6 @@ export const defaultTheme: PromptTheme = {
 	error: red,
 	success: green,
 	hint: dim,
-	spinner: magenta,
 	filterMatch: cyan,
 };
 

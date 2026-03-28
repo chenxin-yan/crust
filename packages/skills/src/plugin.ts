@@ -4,7 +4,8 @@
 
 import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
-import { confirm, multiselect, select, spinner } from "@crustjs/prompts";
+import { spinner } from "@crustjs/progress";
+import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
 import {
 	AGENT_LABELS,

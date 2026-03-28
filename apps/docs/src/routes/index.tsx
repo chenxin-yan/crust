@@ -133,6 +133,11 @@ const MODULES: Array<{
     doc: "modules/validate",
   },
   {
+    pkg: "@crustjs/progress",
+    desc: "Progress indicators",
+    doc: "modules/progress",
+  },
+  {
     pkg: "@crustjs/prompts",
     desc: "Interactive prompts",
     doc: "modules/prompts",
