@@ -8,7 +8,9 @@ import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethod
 /**
  * Color emission mode for the style engine.
  *
- * - `"auto"` — Emit ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
+ * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR` is
+ *   not set (or is empty). Non-color modifiers (bold, italic, etc.) are always
+ *   emitted in `"auto"` mode regardless of TTY or `NO_COLOR`.
  * - `"always"` — Always emit ANSI codes regardless of terminal detection.
  * - `"never"` — Never emit ANSI codes; return plain text.
  *
