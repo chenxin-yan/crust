@@ -75,4 +75,10 @@ export type PostScaffoldStep =
 	| { readonly type: "install" }
 	| { readonly type: "git-init"; readonly commit?: string }
 	| { readonly type: "open-editor" }
+	/**
+	 * Bun Shell command string.
+	 *
+	 * Cross-platform shell syntax like redirection and `exit` is supported
+	 * without depending on a system `sh` executable.
+	 */
 	| { readonly type: "command"; readonly cmd: string; readonly cwd?: string };
