@@ -12,17 +12,15 @@ export interface CreateCrustProjectOptions {
 	readonly initGit: boolean;
 }
 
-export async function createCrustProject(
-	options: CreateCrustProjectOptions,
+/**
+ * Scaffold project files only (no install or git-init).
+ *
+ * Safe to run inside a spinner since it produces no console output.
+ */
+export async function scaffoldCrustProject(
+	options: Omit<CreateCrustProjectOptions, "installDeps" | "initGit">,
 ): Promise<void> {
-	const {
-		resolvedDir,
-		name,
-		template,
-		distributionMode,
-		installDeps,
-		initGit,
-	} = options;
+	const { resolvedDir, name, template, distributionMode } = options;
 
 	const styleTemplatePath =
 		template === "minimal" ? "templates/minimal" : "templates/modular";
@@ -51,6 +49,17 @@ export async function createCrustProject(
 		context: { name },
 		conflict: "overwrite",
 	});
+}
+
+/**
+ * Full project creation: scaffold files, optionally install deps and init git.
+ */
+export async function createCrustProject(
+	options: CreateCrustProjectOptions,
+): Promise<void> {
+	const { resolvedDir, installDeps, initGit } = options;
+
+	await scaffoldCrustProject(options);
 
 	if (installDeps) {
 		await runSteps([{ type: "install" }], resolvedDir);

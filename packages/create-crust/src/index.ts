@@ -5,8 +5,9 @@ import { basename, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { isInGitRepo } from "@crustjs/create";
 import { confirm, input, select, spinner } from "@crustjs/prompts";
+import { runSteps } from "@crustjs/create";
 import {
-	createCrustProject,
+	scaffoldCrustProject,
 	type DistributionMode,
 	type TemplateStyle,
 } from "./create-project.ts";
@@ -129,15 +130,28 @@ const app = new Crust("create-crust")
 		await spinner({
 			message: "Scaffolding project...",
 			task: () =>
-				createCrustProject({
+				scaffoldCrustProject({
 					resolvedDir,
 					name,
 					template,
 					distributionMode,
-					installDeps,
-					initGit,
 				}),
 		});
+
+		if (installDeps) {
+			await runSteps([{ type: "install" }], resolvedDir);
+		}
+
+		if (initGit) {
+			await spinner({
+				message: "Initializing git repository...",
+				task: () =>
+					runSteps(
+						[{ type: "git-init", commit: "chore: initial commit" }],
+						resolvedDir,
+					),
+			});
+		}
 
 		// Print success message
 		console.log(`\nCreated ${name}!\n`);
