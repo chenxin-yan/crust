@@ -140,7 +140,6 @@ const app = new Crust("create-crust")
 				],
 				default: "minimal",
 			}));
-
 		const selectedDistributionMode =
 			distributionMode ??
 			(await select<DistributionMode>({
@@ -159,7 +158,6 @@ const app = new Crust("create-crust")
 				],
 				default: "binary",
 			}));
-
 		const installDeps =
 			flags.install ??
 			(await confirm({

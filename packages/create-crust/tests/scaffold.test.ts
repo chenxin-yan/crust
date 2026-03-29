@@ -118,11 +118,9 @@ describe("scaffold", () => {
 		});
 		expect(pkg.scripts).toEqual({
 			dev: "bun run src/cli.ts",
-			build: "node ./node_modules/@crustjs/crust/bin/crust.js build",
-			package:
-				"node ./node_modules/@crustjs/crust/bin/crust.js build --package",
-			publish:
-				"node ./node_modules/@crustjs/crust/bin/crust.js publish --stage-dir dist/npm",
+			build: "crust build",
+			package: "crust build --package",
+			publish: "crust publish --stage-dir dist/npm",
 			start: "./dist/cli",
 			"check:types": "tsc --noEmit",
 		});

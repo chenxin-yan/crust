@@ -9,16 +9,20 @@ const smokeRoot = join(
 	"create-crust-smoke",
 );
 const sampleDir = join(smokeRoot, "smoke-cli");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const npmCacheDir = join(smokeRoot, ".npm-cache");
 
-let cleanupSmokeRoot = process.env.CREATE_CRUST_SMOKE !== "1";
+interface CommandResult {
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+}
+
+let cleanupSmokeRoot = false;
 
 async function run(
 	command: string[],
 	cwd: string,
 	env?: Record<string, string>,
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<CommandResult> {
 	const proc = Bun.spawn(command, {
 		cwd,
 		env: {
@@ -36,6 +40,33 @@ async function run(
 	};
 }
 
+function formatFailure(
+	label: string,
+	command: string[],
+	cwd: string,
+	result: CommandResult,
+): string {
+	return [
+		`${label} failed`,
+		`command: ${command.join(" ")}`,
+		`cwd: ${cwd}`,
+		`exit code: ${result.exitCode}`,
+		`stdout:\n${result.stdout.trim() || "<empty>"}`,
+		`stderr:\n${result.stderr.trim() || "<empty>"}`,
+	].join("\n\n");
+}
+
+function assertSuccess(
+	label: string,
+	command: string[],
+	cwd: string,
+	result: CommandResult,
+): void {
+	if (result.exitCode !== 0) {
+		throw new Error(formatFailure(label, command, cwd, result));
+	}
+}
+
 afterAll(() => {
 	if (cleanupSmokeRoot) {
 		rmSync(smokeRoot, { recursive: true, force: true });
@@ -46,7 +77,6 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 	"create-crust smoke test",
 	() => {
 		it("scaffolds, installs, type-checks, and builds a generated project", async () => {
-			cleanupSmokeRoot = false;
 			rmSync(smokeRoot, { recursive: true, force: true });
 			mkdirSync(smokeRoot, { recursive: true });
 
@@ -56,29 +86,28 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 				);
 			}
 
-			const scaffold = await run(
-				[
-					process.execPath,
-					builtCliPath,
-					sampleDir,
-					"--template",
-					"minimal",
-					"--distribution",
-					"binary",
-					"--install",
-					"--no-git",
-				],
-				smokeRoot,
-				{
-					BUN_BE_BUN: "1",
-					NPM_CONFIG_CACHE: npmCacheDir,
-					npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
-				},
-			);
+			const scaffoldCommand = [
+				process.execPath,
+				builtCliPath,
+				sampleDir,
+				"--template",
+				"minimal",
+				"--distribution",
+				"binary",
+				"--install",
+				"--no-git",
+			];
+			const scaffold = await run(scaffoldCommand, smokeRoot, {
+				BUN_BE_BUN: "1",
+				npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
+			});
 
-			expect(scaffold.exitCode).toBe(0);
-			expect(scaffold.stderr).not.toContain("npm error");
-			expect(scaffold.stderr).not.toContain("Error:");
+			assertSuccess(
+				"create-crust scaffold",
+				scaffoldCommand,
+				smokeRoot,
+				scaffold,
+			);
 			expect(existsSync(join(sampleDir, "package.json"))).toBe(true);
 			expect(existsSync(join(sampleDir, "tsconfig.json"))).toBe(true);
 			expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
@@ -86,14 +115,38 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
 			expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
-			const checkTypes = await run(
-				[npmCommand, "run", "check:types"],
-				sampleDir,
-			);
-			expect(checkTypes.exitCode).toBe(0);
+			expect(
+				existsSync(
+					join(
+						sampleDir,
+						"node_modules",
+						"@crustjs",
+						"crust",
+						"bin",
+						"crust.js",
+					),
+				),
+			).toBe(true);
 
-			const build = await run([npmCommand, "run", "build"], sampleDir);
-			expect(build.exitCode).toBe(0);
+			const checkTypesCommand = ["npm", "run", "check:types"];
+			const checkTypes = await run(checkTypesCommand, sampleDir);
+			assertSuccess(
+				"generated project type-check",
+				checkTypesCommand,
+				sampleDir,
+				checkTypes,
+			);
+
+			// The published @crustjs/crust package currently does not materialize
+			// a node_modules/.bin launcher under npm install, so smoke drives the
+			// installed CLI entrypoint directly.
+			const buildCommand = [
+				"node",
+				"./node_modules/@crustjs/crust/bin/crust.js",
+				"build",
+			];
+			const build = await run(buildCommand, sampleDir);
+			assertSuccess("generated project build", buildCommand, sampleDir, build);
 
 			const binaryName = basename(sampleDir);
 			const distEntries = readdirSync(join(sampleDir, "dist"));

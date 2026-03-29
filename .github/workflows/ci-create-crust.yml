@@ -55,6 +55,12 @@ jobs:
       - name: Build create-crust dependency subset
         run: bun turbo run build --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/create --filter=./packages/create-crust
 
+      - name: Print tool versions
+        run: |
+          node --version
+          npm --version
+          bun --version
+
       - name: Run create-crust smoke test
         run: bun run --cwd packages/create-crust test:smoke
         env:

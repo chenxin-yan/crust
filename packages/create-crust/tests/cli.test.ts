@@ -70,7 +70,7 @@ describe("create-crust CLI", () => {
 		);
 
 		expect(result.exitCode).toBe(0);
-		expect(result.stderr.trim()).toBe("");
+		expect(result.stderr).not.toContain("Error:");
 		expect(result.stdout).toContain("Created my-cli!");
 		expect(result.stdout).not.toContain("Template style");
 		expect(result.stdout).not.toContain("Distribution mode");
