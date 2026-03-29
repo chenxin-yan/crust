@@ -3,7 +3,6 @@ import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 const colorFlagDef: FlagDef = {
 	type: "boolean",
-	default: true,
 	inherit: true,
 	description: "Enable colored output",
 };
