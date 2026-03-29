@@ -90,7 +90,6 @@ describe("createTheme integration", () => {
 			"error",
 			"success",
 			"hint",
-			"spinner",
 			"filterMatch",
 		];
 

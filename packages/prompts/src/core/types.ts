@@ -44,8 +44,6 @@ export interface PromptTheme {
 	readonly success: StyleFn;
 	/** Hint text (e.g., keybinding hints, choice hints) */
 	readonly hint: StyleFn;
-	/** Spinner frame characters */
-	readonly spinner: StyleFn;
 	/** Matched characters in fuzzy filter results */
 	readonly filterMatch: StyleFn;
 }

@@ -4,7 +4,8 @@ import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { isInGitRepo, runSteps } from "@crustjs/create";
-import { confirm, input, select, spinner } from "@crustjs/prompts";
+import { spinner } from "@crustjs/progress";
+import { confirm, input, select } from "@crustjs/prompts";
 import {
 	type DistributionMode,
 	scaffoldCrustProject,

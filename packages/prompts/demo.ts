@@ -3,6 +3,7 @@
 // Run: bun packages/prompts/demo.ts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { spinner } from "../progress/src/index.ts";
 import {
 	confirm,
 	filter,
@@ -10,7 +11,6 @@ import {
 	multiselect,
 	password,
 	select,
-	spinner,
 } from "./src/index.ts";
 
 async function main() {

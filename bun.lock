@@ -78,6 +78,7 @@
       "dependencies": {
         "@crustjs/core": "workspace:*",
         "@crustjs/create": "workspace:*",
+        "@crustjs/progress": "workspace:*",
         "@crustjs/prompts": "workspace:*",
       },
       "devDependencies": {
@@ -121,10 +122,25 @@
         "typescript": "catalog:",
       },
     },
+    "packages/progress": {
+      "name": "@crustjs/progress",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crustjs/style": "workspace:*",
+      },
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
     "packages/prompts": {
       "name": "@crustjs/prompts",
       "version": "0.0.10",
       "dependencies": {
+        "@crustjs/progress": "workspace:*",
         "@crustjs/style": "workspace:*",
       },
       "devDependencies": {
@@ -139,6 +155,7 @@
       "name": "@crustjs/skills",
       "version": "0.0.21",
       "dependencies": {
+        "@crustjs/progress": "workspace:*",
         "@crustjs/prompts": "workspace:*",
         "@crustjs/style": "workspace:*",
       },
@@ -329,6 +346,8 @@
     "@crustjs/docs": ["@crustjs/docs@workspace:apps/docs"],
 
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
+
+    "@crustjs/progress": ["@crustjs/progress@workspace:packages/progress"],
 
     "@crustjs/prompts": ["@crustjs/prompts@workspace:packages/prompts"],
 
