@@ -144,7 +144,9 @@ Execute an array of post-scaffold steps sequentially. If any step fails, the err
 | `install`     | —                             | Detect the package manager and run its install command                              |
 | `git-init`    | `commit?: string`             | Run `git init`, optionally stage all files and create an initial commit             |
 | `open-editor` | —                             | Open the project in `$EDITOR` or VS Code. Does not throw if the editor is not found |
-| `command`     | `cmd: string`, `cwd?: string` | Run an arbitrary shell command. Overrides the default `cwd` if provided             |
+| `command`     | `cmd: string`, `cwd?: string` | Run an arbitrary Bun Shell command string. Cross-platform shell syntax is supported, and `cwd` overrides the default working directory |
+
+Use `install` for dependency installation. Prefer `command` for custom post-scaffold automation rather than manually shelling out to `npm install` / `bun install`.
 
 ### `interpolate(content, context)`
 

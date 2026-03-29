@@ -3,21 +3,19 @@
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
-import {
-	detectPackageManager,
-	isInGitRepo,
-	runSteps,
-	scaffold,
-} from "@crustjs/create";
+import { isInGitRepo } from "@crustjs/create";
 import { confirm, input, select, spinner } from "@crustjs/prompts";
+import {
+	createCrustProject,
+	type DistributionMode,
+	type TemplateStyle,
+} from "./create-project.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
 // ────────────────────────────────────────────────────────────────────────────
 
 const INVALID_NAME_CHARS = /[<>:"|?*\\]/;
-
-type DistributionMode = "binary" | "runtime";
 
 function validateProjectName(name: string): true | string {
 	if (!name) {
@@ -70,7 +68,7 @@ const app = new Crust("create-crust")
 			}
 		}
 
-		const template = await select<"minimal" | "modular">({
+		const template = await select<TemplateStyle>({
 			message: "Template style",
 			choices: [
 				{
@@ -86,9 +84,6 @@ const app = new Crust("create-crust")
 			],
 			default: "minimal",
 		});
-
-		const styleTemplatePath =
-			template === "minimal" ? "templates/minimal" : "templates/modular";
 
 		const distributionMode = await select<DistributionMode>({
 			message: "Distribution mode",
@@ -106,11 +101,6 @@ const app = new Crust("create-crust")
 			],
 			default: "binary",
 		});
-
-		const distributionTemplatePath =
-			distributionMode === "binary"
-				? "templates/distribution/binary"
-				: "templates/distribution/runtime";
 
 		const installDeps = await confirm({
 			message: "Install dependencies?",
@@ -136,46 +126,18 @@ const app = new Crust("create-crust")
 		// Infer package name from directory
 		const name = dirName;
 
-		// Scaffold in layers: base -> style variant -> distribution variant
-		await scaffold({
-			template: "templates/base",
-			dest: resolvedDir,
-			context: { name },
-			conflict: "overwrite",
+		await spinner({
+			message: "Scaffolding project...",
+			task: () =>
+				createCrustProject({
+					resolvedDir,
+					name,
+					template,
+					distributionMode,
+					installDeps,
+					initGit,
+				}),
 		});
-
-		await scaffold({
-			template: styleTemplatePath,
-			dest: resolvedDir,
-			context: { name },
-			conflict: "overwrite",
-		});
-
-		await scaffold({
-			template: distributionTemplatePath,
-			dest: resolvedDir,
-			context: { name },
-			conflict: "overwrite",
-		});
-
-		// Install dependencies using the detected package manager
-		if (installDeps) {
-			const pm = detectPackageManager(resolvedDir);
-			const installCmd = pm === "npm" ? "npm install" : `${pm} install`;
-
-			await runSteps([{ type: "command", cmd: installCmd }], resolvedDir);
-		}
-
-		if (initGit) {
-			await spinner({
-				message: "Initializing git repository...",
-				task: () =>
-					runSteps(
-						[{ type: "git-init", commit: "chore: initial commit" }],
-						resolvedDir,
-					),
-			});
-		}
 
 		// Print success message
 		console.log(`\nCreated ${name}!\n`);

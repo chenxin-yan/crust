@@ -134,6 +134,17 @@ describe("runSteps", () => {
 				runSteps([{ type: "command", cmd: "exit 1" }], tempDir),
 			).rejects.toThrow('Command "exit 1" exited with code 1');
 		});
+
+		it("runs a dynamic Bun Shell command string", async () => {
+			const cmd = "echo dynamic > dynamic.txt";
+
+			await runSteps([{ type: "command", cmd }], tempDir);
+
+			expect(existsSync(join(tempDir, "dynamic.txt"))).toBe(true);
+			expect(readFileSync(join(tempDir, "dynamic.txt"), "utf-8").trim()).toBe(
+				"dynamic",
+			);
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────────
