@@ -3,6 +3,9 @@ import { type SpinnerController, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
+const originalProcessOnce = process.once.bind(process);
+const originalProcessRemoveListener = process.removeListener.bind(process);
+const originalProcessExit = process.exit;
 
 let stderrOutput: string;
 
@@ -30,6 +33,9 @@ function restoreMocks(): void {
 		writable: true,
 		configurable: true,
 	});
+	process.once = originalProcessOnce;
+	process.removeListener = originalProcessRemoveListener;
+	process.exit = originalProcessExit;
 }
 
 function tick(ms = 10): Promise<void> {
@@ -418,6 +424,53 @@ describe("spinner — cleanup", () => {
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		expect(beforeCursor.endsWith("\n")).toBe(true);
+	});
+
+	it("restores cursor on SIGINT", async () => {
+		let registeredSigint: (() => void) | undefined;
+		let removedSigint: (() => void) | undefined;
+
+		process.once = ((
+			event: string | symbol,
+			listener: (...args: [] | [unknown]) => void,
+		) => {
+			if (event === "SIGINT") {
+				registeredSigint = listener as () => void;
+			}
+			return process;
+		}) as typeof process.once;
+
+		process.removeListener = ((
+			event: string | symbol,
+			listener: (...args: [] | [unknown]) => void,
+		) => {
+			if (event === "SIGINT") {
+				removedSigint = listener as () => void;
+			}
+			return process;
+		}) as typeof process.removeListener;
+
+		process.exit = ((code?: number) => {
+			throw new Error(`exit:${code}`);
+		}) as typeof process.exit;
+
+		try {
+			await spinner({
+				message: "Interrupting...",
+				task: async () => {
+					registeredSigint?.();
+					await tick(50);
+					return "ok";
+				},
+			});
+			expect.unreachable();
+		} catch (error) {
+			expect((error as Error).message).toBe("exit:130");
+		}
+
+		expect(registeredSigint).toBeDefined();
+		expect(removedSigint).toBe(registeredSigint);
+		expect(stderrOutput).toContain("\x1B[?25h");
 	});
 });
 

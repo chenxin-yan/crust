@@ -46,9 +46,7 @@ export {
 // ────────────────────────────────────────────────────────────────────────────
 
 // TODO(v0.1.0): remove deprecated spinner re-exports in favor of @crustjs/progress
-/** @deprecated Import `SpinnerController` from `@crustjs/progress` instead. */
-/** @deprecated Import `SpinnerOptions` from `@crustjs/progress` instead. */
-/** @deprecated Import `SpinnerType` from `@crustjs/progress` instead. */
+/** @deprecated Import these types from `@crustjs/progress` instead. */
 export type {
 	SpinnerController,
 	SpinnerOptions,

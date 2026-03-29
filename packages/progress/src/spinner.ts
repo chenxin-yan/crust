@@ -127,6 +127,18 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 	let currentMessage = options.message;
 	let finished = false;
 	let timerId: ReturnType<typeof setInterval> | undefined;
+	let sigintHandler: (() => void) | undefined;
+
+	function cleanupInteractive(): void {
+		if (timerId !== undefined) {
+			clearInterval(timerId);
+			timerId = undefined;
+		}
+		if (sigintHandler) {
+			process.removeListener("SIGINT", sigintHandler);
+			sigintHandler = undefined;
+		}
+	}
 
 	const controller: SpinnerController = {
 		updateMessage(message: string) {
@@ -148,20 +160,23 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 		);
 	}, interval);
 
+	sigintHandler = () => {
+		cleanupInteractive();
+		process.stderr.write(SHOW_CURSOR);
+		process.exit(130);
+	};
+	process.once("SIGINT", sigintHandler);
+
 	try {
 		const result = await options.task(controller);
 		finished = true;
-		clearInterval(timerId);
-		timerId = undefined;
+		cleanupInteractive();
 		process.stderr.write(renderSuccess(currentMessage, theme));
 		process.stderr.write(SHOW_CURSOR);
 		return result;
 	} catch (error) {
 		finished = true;
-		if (timerId !== undefined) {
-			clearInterval(timerId);
-			timerId = undefined;
-		}
+		cleanupInteractive();
 		process.stderr.write(renderError(currentMessage, theme));
 		process.stderr.write(SHOW_CURSOR);
 		throw error;
