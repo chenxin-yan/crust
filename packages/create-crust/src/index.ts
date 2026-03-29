@@ -3,12 +3,11 @@
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
-import { isInGitRepo } from "@crustjs/create";
+import { isInGitRepo, runSteps } from "@crustjs/create";
 import { confirm, input, select, spinner } from "@crustjs/prompts";
-import { runSteps } from "@crustjs/create";
 import {
-	scaffoldCrustProject,
 	type DistributionMode,
+	scaffoldCrustProject,
 	type TemplateStyle,
 } from "./create-project.ts";
 
