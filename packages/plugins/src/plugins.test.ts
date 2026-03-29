@@ -245,6 +245,27 @@ describe("built-in plugins", () => {
 		}
 	});
 
+	it("noColorPlugin respects NO_COLOR without explicit --color flag", async () => {
+		const previousNoColor = process.env.NO_COLOR;
+		process.env.NO_COLOR = "1";
+
+		try {
+			const app = new Crust("app").use(noColorPlugin()).use(helpPlugin());
+
+			await app.execute({ argv: ["--help"] });
+
+			const output = getStdout();
+			expect(output).not.toContain("\x1b[36m");
+			expect(output).not.toContain("\x1b[33m");
+		} finally {
+			if (previousNoColor === undefined) {
+				delete process.env.NO_COLOR;
+			} else {
+				process.env.NO_COLOR = previousNoColor;
+			}
+		}
+	});
+
 	it("noColorPlugin restores the prior global color override", async () => {
 		setGlobalColorMode("always");
 
