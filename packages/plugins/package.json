@@ -20,6 +20,7 @@
 		"help",
 		"version",
 		"autocomplete",
+		"man",
 		"bun",
 		"typescript"
 	],

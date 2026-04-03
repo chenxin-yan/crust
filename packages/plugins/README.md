@@ -13,6 +13,7 @@ bun add @crustjs/plugins
 | Plugin | Description |
 | --- | --- |
 | `helpPlugin()` | Adds `--help` / `-h` flag and auto-generates help text |
+| `manPagePlugin(options?)` | Adds a `man` subcommand that prints or writes troff man (`-man`) source |
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
 | `autoCompletePlugin(options?)` | Shell autocompletion support |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
@@ -21,7 +22,12 @@ bun add @crustjs/plugins
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
+import {
+  helpPlugin,
+  manPagePlugin,
+  versionPlugin,
+  autoCompletePlugin,
+} from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },
@@ -31,9 +37,20 @@ const main = defineCommand({
 });
 
 runMain(main, {
-  plugins: [versionPlugin("1.0.0"), autoCompletePlugin(), helpPlugin()],
+  plugins: [
+    versionPlugin("1.0.0"),
+    autoCompletePlugin(),
+    helpPlugin(),
+    manPagePlugin(),
+  ],
 });
 ```
+
+### Man page
+
+`manPagePlugin()` registers `my-cli man` (name configurable) to emit a man page in **troff `-man`** form. Use `my-cli man > man/my-cli.1` or `my-cli man --output man/my-cli.1`. For build scripts, call `renderManPage(root, options)` from `@crustjs/plugins` instead.
+
+See [Man page](/docs/modules/plugins/man) in the docs for options (`extraSections*`, `commandSections`, `.TH` fields).
 
 ### Update Notifier
 
