@@ -28,9 +28,9 @@ console.log(style.bold.red("Critical failure"));
 
 Direct styling functions respect the default runtime color policy:
 
-- Colors are emitted only when stdout is a TTY and `NO_COLOR` is unset or empty
-- Non-color modifiers such as `bold()` and `underline()` remain available even when `NO_COLOR=1`
-- `NO_COLOR` only disables color, following [no-color.org](https://no-color.org/)
+- All ANSI output (colors and modifiers) requires stdout to be a TTY
+- `NO_COLOR` disables only color, not modifiers like `bold()` and `underline()`, following [no-color.org](https://no-color.org/)
+- Piped / non-interactive output is plain text with no ANSI codes
 
 ```ts
 import { bold, red, italic, bgYellow } from "@crustjs/style";
