@@ -66,9 +66,13 @@ export function resolveCapability(
 /**
  * Resolve whether non-color ANSI modifiers should be emitted.
  *
- * In `"auto"` mode, modifiers remain enabled regardless of TTY/NO_COLOR.
+ * In `"auto"` mode, modifiers are enabled when stdout is a TTY, but are
+ * **not** affected by `NO_COLOR` (which only controls color output).
  */
-export function resolveModifierCapability(mode: ColorMode): boolean {
+export function resolveModifierCapability(
+	mode: ColorMode,
+	overrides?: CapabilityOverrides,
+): boolean {
 	if (mode === "always") {
 		return true;
 	}
@@ -77,7 +81,11 @@ export function resolveModifierCapability(mode: ColorMode): boolean {
 		return false;
 	}
 
-	return true;
+	const hasIsTTYOverride = overrides !== undefined && "isTTY" in overrides;
+	const isTTY = hasIsTTYOverride
+		? (overrides.isTTY ?? false)
+		: (process.stdout?.isTTY ?? false);
+	return isTTY;
 }
 
 /**

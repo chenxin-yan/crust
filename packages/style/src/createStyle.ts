@@ -154,7 +154,7 @@ function buildStyleMethods(
  */
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
-	const modifiersEnabled = resolveModifierCapability(mode);
+	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
 	const colorsEnabled = resolveCapability(mode, options?.overrides);
 	const enabled = modifiersEnabled || colorsEnabled;
 	const trueColorEnabled = resolveTrueColor(mode, options?.overrides);
@@ -215,10 +215,13 @@ const alwaysRuntimeStyle = createStyle({ mode: "always" });
 const noColorRuntimeStyle = createStyle({
 	mode: "auto",
 	overrides: {
-		isTTY: false,
+		isTTY: true,
 		noColor: "1",
 	},
 });
+
+let cachedAutoKey: string | undefined;
+let cachedAutoStyle: StyleInstance | undefined;
 
 export function getRuntimeStyle(): StyleInstance {
 	if (globalColorMode === "always") {
@@ -229,7 +232,15 @@ export function getRuntimeStyle(): StyleInstance {
 		return noColorRuntimeStyle;
 	}
 
-	return createStyle({ mode: "auto" });
+	const isTTY = process.stdout?.isTTY ?? false;
+	const noColor = process.env.NO_COLOR;
+	const key = `${isTTY}|${noColor}`;
+	if (cachedAutoKey === key && cachedAutoStyle) {
+		return cachedAutoStyle;
+	}
+	cachedAutoStyle = createStyle({ mode: "auto" });
+	cachedAutoKey = key;
+	return cachedAutoStyle;
 }
 
 function createRuntimeStyleFacade(): StyleInstance {

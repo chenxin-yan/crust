@@ -440,14 +440,14 @@ describe("createStyle — auto mode with overrides", () => {
 		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
 	});
 
-	it("disables color when not a TTY", () => {
+	it("disables all styling when not a TTY", () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: { isTTY: false, noColor: undefined },
 		});
-		expect(s.enabled).toBe(true);
+		expect(s.enabled).toBe(false);
 		expect(s.colorsEnabled).toBe(false);
-		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(s.bold("text")).toBe("text");
 		expect(s.red("text")).toBe("text");
 	});
 
@@ -674,11 +674,11 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 				colorTerm: "truecolor",
 			},
 		});
-		expect(s.enabled).toBe(true);
+		expect(s.enabled).toBe(false);
 		expect(s.colorsEnabled).toBe(false);
 		expect(s.trueColorEnabled).toBe(false);
 		expect(s.red("text")).toBe("text");
-		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(s.bold("text")).toBe("text");
 		expect(s.rgb("text", 255, 0, 0)).toBe("text");
 	});
 });
