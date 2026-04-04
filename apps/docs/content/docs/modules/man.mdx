@@ -1,0 +1,92 @@
+---
+title: "Man"
+description: Generate mdoc(7) manual pages from your Crust command tree.
+---
+
+[`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) produces **section 1** manual pages in **mdoc(7)** format from the same definitions that drive `--help`. It is an optional dev dependency.
+
+Manual pages are **generated at build or publish time** (or via `crust build --man`). `@crustjs/plugins` does not ship a runtime `man` subcommand for this — use this package instead.
+
+## Install
+
+```sh
+bun add -d @crustjs/man
+```
+
+Peer dependency: `@crustjs/core`.
+
+## API
+
+| Export                       | Description                                                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `writeManPage(options)`      | Run [`prepareCommandTree()`](/docs/api/crust#preparecommandtreeoptions) on your root `Crust`, render mdoc, write `outfile` |
+| `renderManPageMdoc(options)` | Render mdoc from an already-frozen root [`CommandNode`](/docs/modules/core) (for advanced use)                             |
+
+Optional **`date`** on both functions sets the `.Dd` line. If omitted, **`SOURCE_DATE_EPOCH`** (UTC) is used when set for reproducible builds; otherwise the current local date is used.
+
+### `writeManPage`
+
+```ts
+import { writeManPage } from "@crustjs/man";
+import { app } from "./cli.ts";
+
+await writeManPage({
+  app,
+  name: "mycli",
+  outfile: "man/mycli.1",
+  section: 1, // optional, default 1
+});
+```
+
+Plugin-setup warnings are printed with `console.warn` unless you pass `logWarnings: false`.
+
+## Script recipe
+
+Add a generator script (e.g. `scripts/generate-man.ts`) and a package script:
+
+```json
+{
+  "scripts": {
+    "generate:man": "bun run scripts/generate-man.ts"
+  },
+  "files": ["dist", "man"],
+  "man": ["./man/mycli.1"]
+}
+```
+
+The npm [`man`](https://docs.npmjs.com/cli/v10/configuring-npm/package-json#man) field helps some global installs expose `man mycli`; behavior depends on the platform and installer.
+
+## Preview locally
+
+```sh
+bun run generate:man
+man -l man/mycli.1
+```
+
+If `mandoc` is available:
+
+```sh
+mandoc -T utf8 man/mycli.1 | less
+```
+
+## CI lint (optional)
+
+```sh
+mandoc -T lint -W warning man/mycli.1
+```
+
+## `crust build --man`
+
+If you use [`@crustjs/crust`](/docs/modules/crust), you can emit the same man page while building:
+
+```sh
+crust build --man
+```
+
+Writes `<outdir>/man/<name>.1` (default `dist/man/...`). The entry module must export your root `Crust` as **`app`** or as the **default export** (the Crust CLI uses dynamic import).
+
+With `crust build --package --man`, the meta-package under `<stageDir>/root/` gets **`man/<name>.1`**, and the staged root `package.json` includes npm’s **`man`** field and **`files`: `["bin", "man"]`** so the page ships with the tarball. The same file is **mirrored** to `<outdir>/man/` (default `dist/man/`) for local inspection.
+
+## Packaging on disk
+
+End users read man pages via **`man`** and **`MANPATH`**. How the `.1` file is installed depends on your channel (Homebrew `share/man`, Debian `manpages`, etc.). Ship the generated source in your tarball or repository and hook it up in your packager’s docs.

@@ -98,11 +98,26 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
+        "@crustjs/man": "workspace:*",
         "@crustjs/plugins": "workspace:*",
         "@crustjs/style": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
+    "packages/man": {
+      "name": "@crustjs/man",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "@crustjs/plugins": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -344,6 +359,8 @@
     "@crustjs/crust": ["@crustjs/crust@workspace:packages/crust"],
 
     "@crustjs/docs": ["@crustjs/docs@workspace:apps/docs"],
+
+    "@crustjs/man": ["@crustjs/man@workspace:packages/man"],
 
     "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
 

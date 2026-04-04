@@ -43,6 +43,7 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
+		"@crustjs/man": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/plugins": "workspace:*",
 		"@crustjs/style": "workspace:*",

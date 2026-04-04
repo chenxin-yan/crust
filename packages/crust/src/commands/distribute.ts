@@ -8,16 +8,17 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
 	getBinaryFilename,
-	resolveBaseName,
 	resolveTargets,
 	TARGET_INFO,
 	type TargetInfo,
 	validateEntrypoint,
 } from "./build.ts";
+import { generateManPageFromEntry } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const METADATA_KEYS = [
@@ -41,6 +42,8 @@ type PublishPackageJson = {
 	version: string;
 	type?: "module";
 	files?: string[];
+	/** npm man field: paths to section-1 pages, e.g. `./man/mycli.1` */
+	man?: string[];
 	bin?: Record<string, string>;
 	optionalDependencies?: Record<string, string>;
 	os?: [NpmOs];
@@ -166,13 +169,16 @@ export function inferCommandName(
 export function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
+	options?: { includeMan?: boolean },
 ): PublishPackageJson {
+	const includeMan = options?.includeMan === true;
 	const rootPackageJson: PublishPackageJson = {
 		...metadata.rootPackageJson,
 		name: metadata.rootPackageName,
 		version: metadata.version,
 		type: "module",
-		files: ["bin"],
+		files: includeMan ? ["bin", "man"] : ["bin"],
+		...(includeMan ? { man: [`./man/${metadata.baseName}.1`] } : {}),
 		bin: {
 			[metadata.commandName]: `bin/${metadata.commandName}.js`,
 		},
@@ -431,6 +437,7 @@ function stageDistributionPackages(
 	stageDir: string,
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
+	options?: { includeMan?: boolean },
 ): void {
 	rmSync(stageDir, { recursive: true, force: true });
 	mkdirSync(stageDir, { recursive: true });
@@ -438,10 +445,13 @@ function stageDistributionPackages(
 	const rootDir = join(stageDir, "root");
 	const rootBinDir = join(rootDir, "bin");
 	mkdirSync(rootBinDir, { recursive: true });
+	if (options?.includeMan) {
+		mkdirSync(join(rootDir, "man"), { recursive: true });
+	}
 
 	writeJson(
 		join(rootDir, "package.json"),
-		buildDistributionRootPackageJson(metadata, targets),
+		buildDistributionRootPackageJson(metadata, targets, options),
 	);
 	writeFileSync(
 		join(rootBinDir, `${metadata.commandName}.js`),
@@ -470,6 +480,10 @@ export async function runDistributeBuild(options: {
 	stageDir: string;
 	envFiles?: readonly string[];
 	validate: boolean;
+	/** Write `root/man/<name>.1` in the staged meta-package and set npm `man` / `files`; also mirrors to `<outdir>/man/` */
+	man?: boolean;
+	/** Directory prefix for mirrored man output (default `dist`) */
+	outdir?: string;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
 	const entryPath = resolve(cwd, options.entry);
@@ -487,6 +501,7 @@ export async function runDistributeBuild(options: {
 	const stageDir = resolve(cwd, options.stageDir);
 	const targets = resolveTargets(options.target);
 	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name);
+
 	const distributionTargets = targets.map((target) =>
 		resolveDistributionTarget(
 			stageDir,
@@ -500,7 +515,27 @@ export async function runDistributeBuild(options: {
 		`Staging ${bold(`${targets.length}`)} distribution target(s) in ${dim(stageDir)}...`,
 	);
 
-	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets);
+	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
+		includeMan: options.man === true,
+	});
+
+	const rootDir = join(stageDir, "root");
+	if (options.man) {
+		const stagedManPath = join(rootDir, "man", `${metadata.baseName}.1`);
+		console.log(`Writing man page ${dim(stagedManPath)}...`);
+		await generateManPageFromEntry({
+			cwd,
+			entry: options.entry,
+			name: options.name,
+			outfile: stagedManPath,
+		});
+		const mirrorDir = resolve(cwd, options.outdir ?? "dist", "man");
+		mkdirSync(mirrorDir, { recursive: true });
+		const mirrorPath = join(mirrorDir, `${metadata.baseName}.1`);
+		copyFileSync(stagedManPath, mirrorPath);
+		console.log(`${green("✓")} Man page: ${stagedManPath}`);
+		console.log(`${dim("Mirror:")} ${mirrorPath}`);
+	}
 
 	for (const targetPackage of distributionTargets) {
 		const outfilePath = join(

@@ -1,14 +1,14 @@
 {
-	"name": "@crustjs/plugins",
-	"version": "0.0.20",
-	"description": "Official plugins for the Crust CLI framework",
+	"name": "@crustjs/man",
+	"version": "0.0.1",
+	"description": "Generate mdoc(7) manual pages from Crust CLI definitions",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/plugins"
+		"directory": "packages/man"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
@@ -16,13 +16,11 @@
 	},
 	"keywords": [
 		"cli",
-		"plugin",
-		"help",
-		"version",
-		"autocomplete",
+		"crust",
 		"man",
-		"bun",
-		"typescript"
+		"mdoc",
+		"documentation",
+		"bun"
 	],
 	"files": [
 		"dist"
@@ -43,12 +41,10 @@
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks || true"
 	},
-	"dependencies": {
-		"@crustjs/style": "workspace:*"
-	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
+		"@crustjs/plugins": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {

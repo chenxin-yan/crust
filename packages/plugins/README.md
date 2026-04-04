@@ -21,7 +21,11 @@ bun add @crustjs/plugins
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { helpPlugin, versionPlugin, autoCompletePlugin } from "@crustjs/plugins";
+import {
+  helpPlugin,
+  versionPlugin,
+  autoCompletePlugin,
+} from "@crustjs/plugins";
 
 const main = defineCommand({
   meta: { name: "my-cli", description: "My CLI tool" },
@@ -31,9 +35,15 @@ const main = defineCommand({
 });
 
 runMain(main, {
-  plugins: [versionPlugin("1.0.0"), autoCompletePlugin(), helpPlugin()],
+  plugins: [
+    versionPlugin("1.0.0"),
+    autoCompletePlugin(),
+    helpPlugin(),
+  ],
 });
 ```
+
+For **manual pages** (mdoc), use [`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) or `crust build --man` — see [Man](/docs/modules/man).
 
 ### Update Notifier
 
