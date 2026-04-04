@@ -91,11 +91,26 @@ function resolveInstalledCrustCli(projectDir: string): string {
 	);
 }
 
+/** Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts). */
+function hostCrustBuildTargetAlias(): string {
+	const { platform, arch } = process;
+	if (platform === "win32") {
+		return arch === "arm64" ? "windows-arm64" : "windows-x64";
+	}
+	if (platform === "darwin") {
+		return arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+	}
+	if (platform === "linux") {
+		return arch === "arm64" ? "linux-arm64" : "linux-x64";
+	}
+	return "linux-x64";
+}
+
 function crustBuildArgv(crustCli: string): string[] {
 	const normalized = crustCli.replaceAll("\\", "/");
 	const useBun = normalized.endsWith("dist/cli.js");
 	const runner = useBun ? process.execPath : "node";
-	return [runner, crustCli, "build"];
+	return [runner, crustCli, "build", "--target", hostCrustBuildTargetAlias()];
 }
 
 afterAll(() => {
@@ -160,7 +175,25 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			// (staged publish) or dist/cli.js (see packages/crust package.json "files").
 			const crustCli = resolveInstalledCrustCli(sampleDir);
 			const buildCommand = crustBuildArgv(crustCli);
-			const build = await run(buildCommand, sampleDir);
+
+			// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
+			// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
+			const buildTmpDir = join(sampleDir, ".smoke-tmp");
+			const buildBunCache = join(sampleDir, ".smoke-bun-cache");
+			if (process.platform === "win32") {
+				mkdirSync(buildTmpDir, { recursive: true });
+				mkdirSync(buildBunCache, { recursive: true });
+			}
+			const buildExtraEnv: Record<string, string> | undefined =
+				process.platform === "win32"
+					? {
+							TEMP: buildTmpDir,
+							TMP: buildTmpDir,
+							BUN_INSTALL_CACHE_DIR: buildBunCache,
+						}
+					: undefined;
+
+			const build = await run(buildCommand, sampleDir, buildExtraEnv);
 			assertSuccess("generated project build", buildCommand, sampleDir, build);
 
 			const binaryName = basename(sampleDir);
@@ -171,6 +204,8 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 				distEntries.includes("cli") ||
 					distEntries.includes("cli.cmd") ||
 					distEntries.includes("cli.exe") ||
+					distEntries.includes(binaryName) ||
+					distEntries.includes(`${binaryName}.exe`) ||
 					distEntries.some((entry) => entry.startsWith(`${binaryName}-bun-`)),
 			).toBe(true);
 
