@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 import { resolveBaseName } from "./binary-name.ts";
+import { generateManPageFromEntry } from "./generate-man.ts";
 
 export { resolveBaseName } from "./binary-name.ts";
 
@@ -731,7 +732,6 @@ export const buildCommand = new Crust("build")
 		}
 
 		if (flags.man) {
-			const { generateManPageFromEntry } = await import("./generate-man.ts");
 			const baseName = resolveBaseName(flags.name, entryPath, cwd);
 			const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
 			console.log(`Writing man page ${dim(manPath)}...`);

@@ -18,6 +18,7 @@ import {
 	type TargetInfo,
 	validateEntrypoint,
 } from "./build.ts";
+import { generateManPageFromEntry } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const METADATA_KEYS = [
@@ -493,7 +494,6 @@ export async function runDistributeBuild(options: {
 	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name);
 
 	if (options.man) {
-		const { generateManPageFromEntry } = await import("./generate-man.ts");
 		const manDir = resolve(cwd, options.outdir ?? "dist", "man");
 		const manPath = join(manDir, `${metadata.baseName}.1`);
 		console.log(`Writing man page ${dim(manPath)}...`);
