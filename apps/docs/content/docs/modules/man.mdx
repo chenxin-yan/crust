@@ -17,10 +17,10 @@ Peer dependency: `@crustjs/core`.
 
 ## API
 
-| Export | Description |
-| --- | --- |
-| `writeManPage(options)` | Run [`prepareCommandTree()`](/docs/api/crust#preparecommandtreeoptions) on your root `Crust`, render mdoc, write `outfile` |
-| `renderManPageMdoc(options)` | Render mdoc from an already-frozen root [`CommandNode`](/docs/modules/core) (for advanced use) |
+| Export                       | Description                                                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `writeManPage(options)`      | Run [`prepareCommandTree()`](/docs/api/crust#preparecommandtreeoptions) on your root `Crust`, render mdoc, write `outfile` |
+| `renderManPageMdoc(options)` | Render mdoc from an already-frozen root [`CommandNode`](/docs/modules/core) (for advanced use)                             |
 
 Optional **`date`** on both functions sets the `.Dd` line. If omitted, **`SOURCE_DATE_EPOCH`** (UTC) is used when set for reproducible builds; otherwise the current local date is used.
 
@@ -85,13 +85,7 @@ crust build --man
 
 Writes `<outdir>/man/<name>.1` (default `dist/man/...`). The entry module must export your root `Crust` as **`app`** or as the **default export** (the Crust CLI uses dynamic import).
 
-With `crust build --package`, the man page is written under `<outdir>/man/` (default `dist/man/`) so it is **not** removed when the stage directory is wiped.
-
-## v1 scope
-
-The generated page includes **NAME**, **SYNOPSIS**, **DESCRIPTION**, **SUBCOMMANDS** (when present), **OPTIONS**, and root **ARGUMENTS** (when present). Content comes from `.meta()`, flag/arg descriptions, and subcommand descriptions.
-
-**Not in v1:** separate man pages per subcommand, EXAMPLES / SEE ALSO blocks, or extra long-form meta fields.
+With `crust build --package --man`, the meta-package under `<stageDir>/root/` gets **`man/<name>.1`**, and the staged root `package.json` includes npm’s **`man`** field and **`files`: `["bin", "man"]`** so the page ships with the tarball. The same file is **mirrored** to `<outdir>/man/` (default `dist/man/`) for local inspection.
 
 ## Packaging on disk
 

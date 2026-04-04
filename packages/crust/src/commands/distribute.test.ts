@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
 	buildDistributionPlatformPackageJson,
@@ -87,6 +93,21 @@ describe("distribution manifest JSON builders", () => {
 			type: "module",
 			description: "CLI tooling",
 			files: ["bin"],
+			bin: { crust: "bin/crust.js" },
+			optionalDependencies: {
+				"@crustjs/crust-darwin-arm64": "1.2.3",
+			},
+		});
+
+		expect(
+			buildDistributionRootPackageJson(metadata, targets, { includeMan: true }),
+		).toEqual({
+			name: "@crustjs/crust",
+			version: "1.2.3",
+			type: "module",
+			description: "CLI tooling",
+			files: ["bin", "man"],
+			man: ["./man/crust.1"],
 			bin: { crust: "bin/crust.js" },
 			optionalDependencies: {
 				"@crustjs/crust-darwin-arm64": "1.2.3",
@@ -228,5 +249,67 @@ describe("runDistributeBuild", () => {
 			name: "test-package-cli-darwin-arm64",
 		});
 		expect(manifest.publishOrder).toEqual(["darwin-arm64", "root"]);
+	});
+});
+
+describe("runDistributeBuild with --man", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-distribute-man");
+	const originalCwd = process.cwd;
+
+	afterAll(() => {
+		process.cwd = originalCwd;
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("stages man under root/man and mirrors to outdir/man", async () => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "src", "cli.ts"),
+			`import { Crust } from "@crustjs/core";
+export const app = new Crust("x").run(() => {});
+`,
+		);
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({
+				name: "man-stage-cli",
+				version: "0.1.0",
+				bin: {
+					mcli: "dist/cli",
+				},
+			}),
+		);
+		process.cwd = () => tmpDir;
+
+		await runDistributeBuild({
+			entry: "src/cli.ts",
+			minify: true,
+			target: ["darwin-arm64"],
+			stageDir: ".stage-man",
+			validate: false,
+			man: true,
+			outdir: ".dist-man",
+		});
+
+		const rootPkg = JSON.parse(
+			readFileSync(join(tmpDir, ".stage-man", "root", "package.json"), "utf-8"),
+		) as { files: string[]; man: string[] };
+
+		expect(rootPkg.files).toEqual(["bin", "man"]);
+		expect(rootPkg.man).toEqual(["./man/man-stage-cli.1"]);
+
+		const stagedMan = join(
+			tmpDir,
+			".stage-man",
+			"root",
+			"man",
+			"man-stage-cli.1",
+		);
+		expect(existsSync(stagedMan)).toBe(true);
+		expect(readFileSync(stagedMan, "utf-8")).toContain(".Dd");
+
+		const mirrorMan = join(tmpDir, ".dist-man", "man", "man-stage-cli.1");
+		expect(existsSync(mirrorMan)).toBe(true);
 	});
 });
