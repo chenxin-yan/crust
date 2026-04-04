@@ -5,6 +5,8 @@ description: Generate mdoc(7) manual pages from your Crust command tree.
 
 [`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) produces **section 1** manual pages in **mdoc(7)** format from the same definitions that drive `--help`. It is an optional dev dependency.
 
+Manual pages are **generated at build or publish time** (or via `crust build --man`). `@crustjs/plugins` does not ship a runtime `man` subcommand for this — use this package instead.
+
 ## Install
 
 ```sh

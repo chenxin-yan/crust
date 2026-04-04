@@ -18,7 +18,6 @@ bun add @crustjs/plugins
 | Export                                                            | Description                                              |
 | ----------------------------------------------------------------- | -------------------------------------------------------- |
 | [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
-| [`manPagePlugin()`](/docs/modules/plugins/man)                    | Adds `man` subcommand; emits troff man page source       |
 | [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
 | [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands            |
 | [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
@@ -28,7 +27,6 @@ bun add @crustjs/plugins
 | Export                       | Description                         |
 | ---------------------------- | ----------------------------------- |
 | `renderHelp(command, path?)` | Generate help text programmatically |
-| `renderManPage(root, opts?)` | Generate troff man page source      |
 
 ### Types
 
@@ -41,10 +39,8 @@ bun add @crustjs/plugins
 | `UpdateNotifierCacheAdapter`  | Cache adapter interface for update notifier       |
 | `UpdateNotifierPackageManager` | Package manager union for update notifier        |
 | `UpdateNotifierInstallScope`  | Install scope union for update notifier           |
-| `ManPageGeneratorOptions`     | Options for `renderManPage` / `manPagePlugin`     |
-| `ManPagePluginOptions`        | Generator options plus optional `command` name    |
-| `ManPageSectionBlock`         | `{ title, body }` for extra man sections         |
-| `ManPageCommandSection`       | Per-path `{ extra?, rawExtra? }` annotations      |
+
+Manual pages are provided by [`@crustjs/man`](/docs/modules/man) (build-time mdoc), not by this package.
 
 ## Usage
 
