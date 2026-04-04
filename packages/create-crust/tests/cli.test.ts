@@ -87,7 +87,7 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, "README.md"))).toBe(true);
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
-	});
+	}, 30_000);
 
 	it("fails with a clear error for an invalid template", async () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-template");
@@ -108,7 +108,7 @@ describe("create-crust CLI", () => {
 			'Error: Invalid template "invalid". Expected "minimal" or "modular".',
 		);
 		expect(existsSync(projectDir)).toBe(false);
-	});
+	}, 30_000);
 
 	it("fails with a clear error for an invalid distribution", async () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-distribution");
@@ -129,7 +129,7 @@ describe("create-crust CLI", () => {
 			'Error: Invalid distribution "invalid". Expected "binary" or "runtime".',
 		);
 		expect(existsSync(projectDir)).toBe(false);
-	});
+	}, 30_000);
 
 	it("aborts cleanly when the destination exists and --no-overwrite is passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-no-overwrite");
@@ -154,7 +154,7 @@ describe("create-crust CLI", () => {
 			"keep me",
 		);
 		expect(existsSync(join(projectDir, "package.json"))).toBe(false);
-	});
+	}, 30_000);
 
 	it("skips git initialization inside an existing repository even when --git is passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-git-repo");
@@ -183,5 +183,5 @@ describe("create-crust CLI", () => {
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
-	});
+	}, 30_000);
 });

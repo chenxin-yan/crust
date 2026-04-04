@@ -110,6 +110,11 @@ const app = new Crust("create-crust")
 
 		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
 		if (targetDir !== "." && existsSync(resolvedDir)) {
+			if (flags.overwrite === true) {
+				console.log(
+					`Directory "${dirName}" already exists; overwriting (--overwrite).`,
+				);
+			}
 			const overwrite = await confirm({
 				message: `Directory "${dirName}" already exists. Overwrite?`,
 				default: false,

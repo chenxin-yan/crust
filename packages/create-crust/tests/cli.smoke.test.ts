@@ -18,6 +18,8 @@ interface CommandResult {
 
 let cleanupSmokeRoot = false;
 
+const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+
 async function run(
 	command: string[],
 	cwd: string,
@@ -131,7 +133,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
 			expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
-			const checkTypesCommand = ["npm", "run", "check:types"];
+			const checkTypesCommand = [npmBin, "run", "check:types"];
 			const checkTypes = await run(checkTypesCommand, sampleDir);
 			assertSuccess(
 				"generated project type-check",
