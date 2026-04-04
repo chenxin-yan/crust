@@ -67,6 +67,22 @@ function assertSuccess(
 	}
 }
 
+/** Published @crustjs/crust is either the staged root (bin/crust.js) or a dev build (dist/cli.js). */
+function resolveInstalledCrustCli(projectDir: string): string {
+	const pkgRoot = join(projectDir, "node_modules", "@crustjs", "crust");
+	const binJs = join(pkgRoot, "bin", "crust.js");
+	const distJs = join(pkgRoot, "dist", "cli.js");
+	if (existsSync(binJs)) {
+		return binJs;
+	}
+	if (existsSync(distJs)) {
+		return distJs;
+	}
+	throw new Error(
+		`Could not find crust CLI under ${pkgRoot} (expected bin/crust.js or dist/cli.js).`,
+	);
+}
+
 afterAll(() => {
 	if (cleanupSmokeRoot) {
 		rmSync(smokeRoot, { recursive: true, force: true });
@@ -115,19 +131,6 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
 			expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
-			expect(
-				existsSync(
-					join(
-						sampleDir,
-						"node_modules",
-						"@crustjs",
-						"crust",
-						"bin",
-						"crust.js",
-					),
-				),
-			).toBe(true);
-
 			const checkTypesCommand = ["npm", "run", "check:types"];
 			const checkTypes = await run(checkTypesCommand, sampleDir);
 			assertSuccess(
@@ -137,14 +140,11 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 				checkTypes,
 			);
 
-			// The published @crustjs/crust package currently does not materialize
-			// a node_modules/.bin launcher under npm install, so smoke drives the
-			// installed CLI entrypoint directly.
-			const buildCommand = [
-				"node",
-				"./node_modules/@crustjs/crust/bin/crust.js",
-				"build",
-			];
+			// Call the installed entry directly: npm may not link a .bin shim for
+			// the optional-deps meta package, and registry layout may be bin/crust.js
+			// (staged publish) or dist/cli.js (see packages/crust package.json "files").
+			const crustCli = resolveInstalledCrustCli(sampleDir);
+			const buildCommand = [process.execPath, crustCli, "build"];
 			const build = await run(buildCommand, sampleDir);
 			assertSuccess("generated project build", buildCommand, sampleDir, build);
 
