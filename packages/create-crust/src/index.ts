@@ -105,65 +105,63 @@ const app = new Crust("create-crust")
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
-		const template = parseTemplateStyle(flags.template);
-		const distributionMode = parseDistributionMode(flags.distribution);
+		const templateInitial = parseTemplateStyle(flags.template);
+		const distributionInitial = parseDistributionMode(flags.distribution);
 
 		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
 		if (targetDir !== "." && existsSync(resolvedDir)) {
-			const overwrite =
-				flags.overwrite ??
-				(await confirm({
-					message: `Directory "${dirName}" already exists. Overwrite?`,
-					default: false,
-				}));
+			const overwrite = await confirm({
+				message: `Directory "${dirName}" already exists. Overwrite?`,
+				default: false,
+				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
+			});
 			if (!overwrite) {
 				console.log("Aborted.");
 				return;
 			}
 		}
 
-		const selectedTemplate =
-			template ??
-			(await select<TemplateStyle>({
-				message: "Template style",
-				choices: [
-					{
-						label: "Minimal",
-						value: "minimal",
-						hint: "single-file starter",
-					},
-					{
-						label: "Modular",
-						value: "modular",
-						hint: "file split with .sub()",
-					},
-				],
-				default: "minimal",
-			}));
-		const selectedDistributionMode =
-			distributionMode ??
-			(await select<DistributionMode>({
-				message: "Distribution mode",
-				choices: [
-					{
-						label: "Standalone binaries (recommended)",
-						value: "binary",
-						hint: "compile with crust build, publish self-contained executables",
-					},
-					{
-						label: "Bun runtime package",
-						value: "runtime",
-						hint: "ship JS build that runs with Bun",
-					},
-				],
-				default: "binary",
-			}));
-		const installDeps =
-			flags.install ??
-			(await confirm({
-				message: "Install dependencies?",
-				default: true,
-			}));
+		const template = await select<TemplateStyle>({
+			message: "Template style",
+			choices: [
+				{
+					label: "Minimal",
+					value: "minimal",
+					hint: "single-file starter",
+				},
+				{
+					label: "Modular",
+					value: "modular",
+					hint: "file split with .sub()",
+				},
+			],
+			default: "minimal",
+			...(templateInitial !== undefined ? { initial: templateInitial } : {}),
+		});
+		const distributionMode = await select<DistributionMode>({
+			message: "Distribution mode",
+			choices: [
+				{
+					label: "Standalone binaries (recommended)",
+					value: "binary",
+					hint: "compile with crust build, publish self-contained executables",
+				},
+				{
+					label: "Bun runtime package",
+					value: "runtime",
+					hint: "ship JS build that runs with Bun",
+				},
+			],
+			default: "binary",
+			...(distributionInitial !== undefined
+				? { initial: distributionInitial }
+				: {}),
+		});
+		const installDeps = await confirm({
+			message: "Install dependencies?",
+			default: true,
+			...(flags.install !== undefined ? { initial: flags.install } : {}),
+		});
 
 		// Skip git init prompt if already inside a git repository.
 		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
@@ -174,11 +172,11 @@ const app = new Crust("create-crust")
 		const alreadyInRepo = isInGitRepo(gitCheckDir);
 		const initGit = alreadyInRepo
 			? false
-			: (flags.git ??
-				(await confirm({
+			: await confirm({
 					message: "Initialize a git repository?",
 					default: true,
-				})));
+					...(flags.git !== undefined ? { initial: flags.git } : {}),
+				});
 
 		// ── Execute all file operations after prompts are done ──────────
 
@@ -191,8 +189,8 @@ const app = new Crust("create-crust")
 				scaffoldCrustProject({
 					resolvedDir,
 					name,
-					template: selectedTemplate,
-					distributionMode: selectedDistributionMode,
+					template,
+					distributionMode,
 				}),
 		});
 

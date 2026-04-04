@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -9,7 +9,8 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const cliPath = resolve(import.meta.dir, "..", "src", "index.ts");
+const packageRoot = resolve(import.meta.dir, "..");
+const builtCliPath = join(packageRoot, "dist", "index.js");
 const tempRoots: string[] = [];
 
 function makeTempRoot(label: string): string {
@@ -24,11 +25,10 @@ function makeTempRoot(label: string): string {
 
 async function runCreateCrust(
 	args: string[],
-	cwd: string,
 	env?: Record<string, string>,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn([process.execPath, cliPath, ...args], {
-		cwd,
+	const proc = Bun.spawn([process.execPath, builtCliPath, ...args], {
+		cwd: packageRoot,
 		env: {
 			...process.env,
 			...env,
@@ -52,22 +52,27 @@ afterEach(() => {
 });
 
 describe("create-crust CLI", () => {
+	beforeAll(() => {
+		if (!existsSync(builtCliPath)) {
+			throw new Error(
+				`Built CLI not found at ${builtCliPath}. Run the package build before tests (e.g. bun run build in this package or turbo run test).`,
+			);
+		}
+	});
+
 	it("scaffolds a project non-interactively when flags are provided", async () => {
 		const tempRoot = makeTempRoot("create-crust-cli");
 		const projectDir = join(tempRoot, "my-cli");
 
-		const result = await runCreateCrust(
-			[
-				projectDir,
-				"--template",
-				"minimal",
-				"--distribution",
-				"binary",
-				"--no-install",
-				"--no-git",
-			],
-			tempRoot,
-		);
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"minimal",
+			"--distribution",
+			"binary",
+			"--no-install",
+			"--no-git",
+		]);
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
@@ -88,18 +93,15 @@ describe("create-crust CLI", () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-template");
 		const projectDir = join(tempRoot, "bad-template");
 
-		const result = await runCreateCrust(
-			[
-				projectDir,
-				"--template",
-				"invalid",
-				"--distribution",
-				"binary",
-				"--no-install",
-				"--no-git",
-			],
-			tempRoot,
-		);
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"invalid",
+			"--distribution",
+			"binary",
+			"--no-install",
+			"--no-git",
+		]);
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
@@ -112,18 +114,15 @@ describe("create-crust CLI", () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-distribution");
 		const projectDir = join(tempRoot, "bad-distribution");
 
-		const result = await runCreateCrust(
-			[
-				projectDir,
-				"--template",
-				"minimal",
-				"--distribution",
-				"invalid",
-				"--no-install",
-				"--no-git",
-			],
-			tempRoot,
-		);
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"minimal",
+			"--distribution",
+			"invalid",
+			"--no-install",
+			"--no-git",
+		]);
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
@@ -138,19 +137,16 @@ describe("create-crust CLI", () => {
 		mkdirSync(projectDir, { recursive: true });
 		writeFileSync(join(projectDir, "sentinel.txt"), "keep me", "utf-8");
 
-		const result = await runCreateCrust(
-			[
-				projectDir,
-				"--template",
-				"minimal",
-				"--distribution",
-				"binary",
-				"--no-install",
-				"--no-git",
-				"--no-overwrite",
-			],
-			tempRoot,
-		);
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"minimal",
+			"--distribution",
+			"binary",
+			"--no-install",
+			"--no-git",
+			"--no-overwrite",
+		]);
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Aborted.");
@@ -174,18 +170,15 @@ describe("create-crust CLI", () => {
 		});
 		expect(gitInit.exitCode).toBe(0);
 
-		const result = await runCreateCrust(
-			[
-				projectName,
-				"--template",
-				"minimal",
-				"--distribution",
-				"binary",
-				"--no-install",
-				"--git",
-			],
-			repoRoot,
-		);
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"minimal",
+			"--distribution",
+			"binary",
+			"--no-install",
+			"--git",
+		]);
 
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
