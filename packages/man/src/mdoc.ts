@@ -128,6 +128,24 @@ function longestSubcommandWidth(command: CommandNode): string {
 	return `${max}n`;
 }
 
+/**
+ * `.Dd` date line: explicit string, else `SOURCE_DATE_EPOCH` (UTC, reproducible
+ * builds), else local calendar date.
+ */
+function resolveDdLine(explicit?: string): string {
+	if (explicit) return explicit;
+	const epoch = process.env.SOURCE_DATE_EPOCH;
+	if (epoch !== undefined) {
+		const sec = Number.parseInt(epoch, 10);
+		if (!Number.isNaN(sec) && sec >= 0) {
+			const d = new Date(sec * 1000);
+			return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+		}
+	}
+	const now = new Date();
+	return `${MONTH_NAMES[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+}
+
 export interface RenderManPageMdocOptions {
 	/** Frozen root command node (e.g. from `prepareCommandTree()`). */
 	root: CommandNode;
@@ -135,15 +153,19 @@ export interface RenderManPageMdocOptions {
 	name: string;
 	/** Manual section; user commands use `1`. */
 	section?: number;
+	/**
+	 * Override the `.Dd` date (e.g. `"April 1, 2026"`). If omitted, uses
+	 * `SOURCE_DATE_EPOCH` when set, otherwise today.
+	 */
+	date?: string;
 }
 
 /**
  * Render an mdoc(7) manual page (section 1) for the root command tree.
  */
 export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
-	const { root, name, section = 1 } = options;
-	const now = new Date();
-	const dd = `${MONTH_NAMES[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+	const { root, name, section = 1, date } = options;
+	const dd = resolveDdLine(date);
 
 	const path = [root.meta.name];
 	const usage = formatUsagePlain(root.meta, root, path);

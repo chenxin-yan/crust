@@ -22,6 +22,8 @@ Peer dependency: `@crustjs/core`.
 | `writeManPage(options)` | Run [`prepareCommandTree()`](/docs/api/crust#preparecommandtreeoptions) on your root `Crust`, render mdoc, write `outfile` |
 | `renderManPageMdoc(options)` | Render mdoc from an already-frozen root [`CommandNode`](/docs/modules/core) (for advanced use) |
 
+Optional **`date`** on both functions sets the `.Dd` line. If omitted, **`SOURCE_DATE_EPOCH`** (UTC) is used when set for reproducible builds; otherwise the current local date is used.
+
 ### `writeManPage`
 
 ```ts

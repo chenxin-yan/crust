@@ -12,6 +12,8 @@ export interface WriteManPageOptions {
 	outfile: string;
 	/** Manual section; defaults to `1`. */
 	section?: number;
+	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
+	date?: string;
 	/** Synthetic argv passed to plugin `setup()`; defaults to `[]`. */
 	argv?: readonly string[];
 	/**
@@ -28,7 +30,15 @@ export interface WriteManPageOptions {
 export async function writeManPage(
 	options: WriteManPageOptions,
 ): Promise<void> {
-	const { app, name, outfile, section = 1, argv, logWarnings = true } = options;
+	const {
+		app,
+		name,
+		outfile,
+		section = 1,
+		date,
+		argv,
+		logWarnings = true,
+	} = options;
 
 	const { root, warnings } = await app.prepareCommandTree({ argv });
 
@@ -38,7 +48,7 @@ export async function writeManPage(
 		}
 	}
 
-	const mdoc = renderManPageMdoc({ root, name, section });
+	const mdoc = renderManPageMdoc({ root, name, section, date });
 	mkdirSync(dirname(outfile), { recursive: true });
 	writeFileSync(outfile, mdoc, "utf8");
 }
