@@ -18,7 +18,13 @@ interface CommandResult {
 
 let cleanupSmokeRoot = false;
 
-const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+/** Windows: spawn `cmd /c npm …` so npm resolves (`.cmd` shims need a shell). */
+function npmArgv(args: string[]): string[] {
+	if (process.platform === "win32") {
+		return ["cmd", "/c", "npm", ...args];
+	}
+	return ["npm", ...args];
+}
 
 async function run(
 	command: string[],
@@ -85,6 +91,13 @@ function resolveInstalledCrustCli(projectDir: string): string {
 	);
 }
 
+function crustBuildArgv(crustCli: string): string[] {
+	const normalized = crustCli.replaceAll("\\", "/");
+	const useBun = normalized.endsWith("dist/cli.js");
+	const runner = useBun ? process.execPath : "node";
+	return [runner, crustCli, "build"];
+}
+
 afterAll(() => {
 	if (cleanupSmokeRoot) {
 		rmSync(smokeRoot, { recursive: true, force: true });
@@ -133,7 +146,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
 			expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
-			const checkTypesCommand = [npmBin, "run", "check:types"];
+			const checkTypesCommand = npmArgv(["run", "check:types"]);
 			const checkTypes = await run(checkTypesCommand, sampleDir);
 			assertSuccess(
 				"generated project type-check",
@@ -146,7 +159,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			// the optional-deps meta package, and registry layout may be bin/crust.js
 			// (staged publish) or dist/cli.js (see packages/crust package.json "files").
 			const crustCli = resolveInstalledCrustCli(sampleDir);
-			const buildCommand = [process.execPath, crustCli, "build"];
+			const buildCommand = crustBuildArgv(crustCli);
 			const build = await run(buildCommand, sampleDir);
 			assertSuccess("generated project build", buildCommand, sampleDir, build);
 
@@ -157,6 +170,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
 			expect(
 				distEntries.includes("cli") ||
 					distEntries.includes("cli.cmd") ||
+					distEntries.includes("cli.exe") ||
 					distEntries.some((entry) => entry.startsWith(`${binaryName}-bun-`)),
 			).toBe(true);
 
