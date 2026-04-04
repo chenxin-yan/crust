@@ -8,7 +8,6 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { bold, cyan, dim, green } from "@crustjs/style";
-import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
@@ -17,7 +16,8 @@ import {
 	TARGET_INFO,
 	type TargetInfo,
 	validateEntrypoint,
-} from "./build.ts";
+} from "../commands/build.ts";
+import { resolveBaseName } from "./binary-name.ts";
 import { generateManPageFromEntry } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;

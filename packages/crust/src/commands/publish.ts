@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
-import type { DistributionManifest } from "./distribute.ts";
+import type { DistributionManifest } from "../utils/distribute.ts";
 
 type PublishPackageJson = {
 	name?: string;

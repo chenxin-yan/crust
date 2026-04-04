@@ -2,10 +2,10 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
-import { resolveBaseName } from "./binary-name.ts";
-import { generateManPageFromEntry } from "./generate-man.ts";
+import { resolveBaseName } from "../utils/binary-name.ts";
+import { generateManPageFromEntry } from "../utils/generate-man.ts";
 
-export { resolveBaseName } from "./binary-name.ts";
+export { resolveBaseName } from "../utils/binary-name.ts";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const PUBLIC_ENV_PATTERN = `${PUBLIC_ENV_PREFIX}*` as const;
@@ -715,7 +715,7 @@ export const buildCommand = new Crust("build")
 				);
 			}
 
-			const { runDistributeBuild } = await import("./distribute.ts");
+			const { runDistributeBuild } = await import("../utils/distribute.ts");
 			await runDistributeBuild({
 				cwd,
 				entry: flags.entry,

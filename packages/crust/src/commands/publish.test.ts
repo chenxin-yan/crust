@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Crust, parseArgs } from "@crustjs/core";
-import type { DistributionManifest } from "../../src/commands/distribute.ts";
 import {
 	buildPublishCommand,
 	getPublishPlan,
@@ -11,6 +10,7 @@ import {
 	readPublishManifest,
 	validatePublishManifest,
 } from "../../src/commands/publish.ts";
+import type { DistributionManifest } from "../utils/distribute.ts";
 
 function makePublishNode() {
 	const app = new Crust("test").command(publishCommand);
