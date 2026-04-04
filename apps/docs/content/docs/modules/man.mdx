@@ -1,0 +1,94 @@
+---
+title: "Man"
+description: Generate mdoc(7) manual pages from your Crust command tree.
+---
+
+[`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) produces **section 1** manual pages in **mdoc(7)** format from the same definitions that drive `--help`. It is an optional dev dependency.
+
+## Install
+
+```sh
+bun add -d @crustjs/man
+```
+
+Peer dependency: `@crustjs/core`.
+
+## API
+
+| Export | Description |
+| --- | --- |
+| `writeManPage(options)` | Run [`prepareCommandTree()`](/docs/api/crust#preparecommandtreeoptions) on your root `Crust`, render mdoc, write `outfile` |
+| `renderManPageMdoc(options)` | Render mdoc from an already-frozen root [`CommandNode`](/docs/modules/core) (for advanced use) |
+
+### `writeManPage`
+
+```ts
+import { writeManPage } from "@crustjs/man";
+import { app } from "./cli.ts";
+
+await writeManPage({
+  app,
+  name: "mycli",
+  outfile: "man/mycli.1",
+  section: 1, // optional, default 1
+});
+```
+
+Plugin-setup warnings are printed with `console.warn` unless you pass `logWarnings: false`.
+
+## Script recipe
+
+Add a generator script (e.g. `scripts/generate-man.ts`) and a package script:
+
+```json
+{
+  "scripts": {
+    "generate:man": "bun run scripts/generate-man.ts"
+  },
+  "files": ["dist", "man"],
+  "man": ["./man/mycli.1"]
+}
+```
+
+The npm [`man`](https://docs.npmjs.com/cli/v10/configuring-npm/package-json#man) field helps some global installs expose `man mycli`; behavior depends on the platform and installer.
+
+## Preview locally
+
+```sh
+bun run generate:man
+man -l man/mycli.1
+```
+
+If `mandoc` is available:
+
+```sh
+mandoc -T utf8 man/mycli.1 | less
+```
+
+## CI lint (optional)
+
+```sh
+mandoc -T lint -W warning man/mycli.1
+```
+
+## `crust build --man`
+
+If you use [`@crustjs/crust`](/docs/modules/crust), you can emit the same man page while building:
+
+```sh
+crust build --man
+```
+
+Writes `<outdir>/man/<name>.1` (default `dist/man/...`). The entry module must export your root `Crust` as **`app`** or as the **default export** (the Crust CLI uses dynamic import).
+
+With `crust build --package`, the man page is written under `<outdir>/man/` (default `dist/man/`) so it is **not** removed when the stage directory is wiped.
+
+## v1 scope
+
+The generated page includes **NAME**, **SYNOPSIS**, **DESCRIPTION**, **SUBCOMMANDS** (when present), **OPTIONS**, and root **ARGUMENTS** (when present). Content comes from `.meta()`, flag/arg descriptions, and subcommand descriptions.
+
+**Not in v1:** separate man pages per subcommand, EXAMPLES / SEE ALSO blocks, or extra long-form meta fields.
+
+## Packaging on disk
+
+End users read man pages via **`man`** and **`MANPATH`**. How the `.1` file is installed depends on your channel (Homebrew `share/man`, Debian `manpages`, etc.). Ship the generated source in your tarball or repository and hook it up in your packager’s docs.

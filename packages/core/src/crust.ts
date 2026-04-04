@@ -235,6 +235,43 @@ function collectPlugins(node: CommandNode): CrustPlugin[] {
 }
 
 /**
+ * Deep-clone flag definitions (decoupled objects for a tree copy).
+ */
+function deepCloneFlags(flags: FlagsDef): FlagsDef {
+	const out: FlagsDef = {};
+	for (const [key, def] of Object.entries(flags)) {
+		out[key] = {
+			...def,
+			aliases: def.aliases ? [...def.aliases] : undefined,
+		};
+	}
+	return out;
+}
+
+/**
+ * Deep-clone a command subtree so plugin `setup()` can run without mutating
+ * the original builder graph.
+ */
+function deepCloneCommandNode(node: CommandNode): CommandNode {
+	const subCommands: Record<string, CommandNode> = {};
+	for (const [name, sub] of Object.entries(node.subCommands)) {
+		subCommands[name] = deepCloneCommandNode(sub);
+	}
+
+	return {
+		meta: { ...node.meta },
+		localFlags: deepCloneFlags(node.localFlags),
+		effectiveFlags: deepCloneFlags(node.effectiveFlags),
+		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
+		subCommands,
+		plugins: [...node.plugins],
+		preRun: node.preRun,
+		run: node.run,
+		postRun: node.postRun,
+	};
+}
+
+/**
  * Recursively freeze a CommandNode tree (shallow freeze per node).
  */
 function freezeTree(node: CommandNode): void {
@@ -695,6 +732,56 @@ export class Crust<
 				[name]: childNode,
 			},
 		}) as unknown as Crust<Inherited, Local, A, Eff>;
+	}
+
+	/**
+	 * Build a frozen, validated copy of the command tree after running plugin
+	 * `setup()` hooks. Does not mutate this builder or call command handlers.
+	 *
+	 * Use for documentation generators (e.g. man pages) that need the same
+	 * tree shape as runtime, including flags injected by plugins.
+	 *
+	 * @param options - Optional synthetic `argv` passed to `setup()` (defaults to `[]`)
+	 * @returns The cloned root node and any plugin-setup warnings
+	 * @throws {CrustError} When the tree fails validation (same as `execute()`)
+	 */
+	async prepareCommandTree(options?: {
+		argv?: readonly string[];
+	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
+		const argv = options?.argv ?? [];
+		const rootNode = deepCloneCommandNode(this._node);
+
+		const allPlugins = collectPlugins(rootNode);
+		const warnings: string[] = [];
+		const state = createPluginState();
+		const setupContext: SetupContext = {
+			argv: [...argv] as readonly string[],
+			rootCommand: rootNode,
+			state,
+		};
+		const actions = createSetupActions(warnings);
+
+		try {
+			await runSetupHooks(allPlugins, setupContext, actions);
+		} catch (error) {
+			if (isPromptCancelledError(error)) {
+				throw error;
+			}
+			if (error instanceof CrustError) {
+				throw error;
+			}
+			if (error instanceof Error) {
+				throw error;
+			}
+			throw new CrustError("DEFINITION", String(error));
+		}
+
+		freezeTree(rootNode);
+
+		const { validateCommandTree } = await import("./validation.ts");
+		validateCommandTree(rootNode);
+
+		return { root: rootNode, warnings };
 	}
 
 	/**

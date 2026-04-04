@@ -290,6 +290,24 @@ await app.execute();
 await app.execute({ argv: ["deploy", "--env", "production"] });
 ```
 
+### `.prepareCommandTree(options?)`
+
+Builds a **frozen, validated copy** of the command tree after plugin `setup()` hooks, without running middleware or command handlers. The original builder is **not** mutated.
+
+Use this for documentation generators such as [`@crustjs/man`](/docs/modules/man).
+
+```ts
+prepareCommandTree(options?: {
+  argv?: readonly string[];
+}): Promise<{ root: CommandNode; warnings: readonly string[] }>
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `argv` | `readonly string[]` | `[]` | Synthetic argv passed to plugin `setup()` (same as `.execute()`) |
+
+**Throws** on the same validation failures as build-time tree validation (e.g. invalid flag definitions). Unlike `.execute()`, errors are thrown instead of printing to stderr.
+
 ## Compile-Time Checks
 
 The `.flags()` and `.args()` methods perform three compile-time validations with per-item error targeting:

@@ -8,11 +8,11 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
 	getBinaryFilename,
-	resolveBaseName,
 	resolveTargets,
 	TARGET_INFO,
 	type TargetInfo,
@@ -470,6 +470,10 @@ export async function runDistributeBuild(options: {
 	stageDir: string;
 	envFiles?: readonly string[];
 	validate: boolean;
+	/** Write `<outdir>/man/<name>.1` using the same rules as `crust build --man` */
+	man?: boolean;
+	/** Directory prefix for man output (default `dist`); kept outside `stageDir` so staging rm does not delete it */
+	outdir?: string;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
 	const entryPath = resolve(cwd, options.entry);
@@ -487,6 +491,20 @@ export async function runDistributeBuild(options: {
 	const stageDir = resolve(cwd, options.stageDir);
 	const targets = resolveTargets(options.target);
 	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name);
+
+	if (options.man) {
+		const { generateManPageFromEntry } = await import("./generate-man.ts");
+		const manDir = resolve(cwd, options.outdir ?? "dist", "man");
+		const manPath = join(manDir, `${metadata.baseName}.1`);
+		console.log(`Writing man page ${dim(manPath)}...`);
+		await generateManPageFromEntry({
+			cwd,
+			entry: options.entry,
+			name: options.name,
+			outfile: manPath,
+		});
+		console.log(`${green("✓")} Man page: ${manPath}`);
+	}
 	const distributionTargets = targets.map((target) =>
 		resolveDistributionTarget(
 			stageDir,

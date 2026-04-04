@@ -2427,3 +2427,39 @@ describe("Crust .command(builder)", () => {
 		expect(receivedFlags.env).toBe("prod");
 	});
 });
+
+describe("Crust.prepareCommandTree", () => {
+	it("returns a frozen tree and does not mutate the builder", async () => {
+		const plugin: CrustPlugin = {
+			name: "doc-test",
+			setup(ctx, actions) {
+				actions.addFlag(ctx.rootCommand, "extra", {
+					type: "boolean",
+					description: "Injected for docs",
+				});
+			},
+		};
+
+		const app = new Crust("cli").use(plugin).meta({ description: "Test" });
+
+		expect(app._node.localFlags.extra).toBeUndefined();
+
+		const { root, warnings } = await app.prepareCommandTree();
+
+		expect(app._node.localFlags.extra).toBeUndefined();
+		expect(root.effectiveFlags.extra).toMatchObject({
+			type: "boolean",
+			description: "Injected for docs",
+		});
+		expect(Object.isFrozen(root)).toBe(true);
+		expect(warnings).toEqual([]);
+	});
+
+	it("can be called multiple times", async () => {
+		const app = new Crust("cli").run(() => {});
+		const a = await app.prepareCommandTree();
+		const b = await app.prepareCommandTree();
+		expect(a.root.meta.name).toBe("cli");
+		expect(b.root.meta.name).toBe("cli");
+	});
+});

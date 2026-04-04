@@ -1,0 +1,54 @@
+{
+	"name": "@crustjs/man",
+	"version": "0.0.1",
+	"description": "Generate mdoc(7) manual pages from Crust CLI definitions",
+	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/man"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"crust",
+		"man",
+		"mdoc",
+		"documentation",
+		"bun"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test",
+		"publish": "bun publish --no-git-checks || true"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"@crustjs/plugins": "workspace:*",
+		"bunup": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:*",
+		"typescript": "catalog:"
+	}
+}

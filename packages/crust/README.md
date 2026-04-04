@@ -17,6 +17,7 @@ The `crust` binary provides three distinct workflows:
 | Command                    | Description                                    |
 | -------------------------- | ---------------------------------------------- |
 | `crust build`              | Compile raw standalone Bun executable(s)       |
+| `crust build --man`        | Also write `mdoc(7)` to `<outdir>/man/<name>.1` |
 | `crust build --package`    | Stage per-platform npm packages in `dist/npm`  |
 | `crust publish`            | Publish an existing staged `dist/npm` manifest |
 
@@ -32,6 +33,7 @@ crust build --entry src/main.ts      # Custom entry point
 crust build --name my-tool           # Set base binary name
 crust build --no-minify              # Disable minification
 crust build --env-file .env.production  # Explicit build-time env file
+crust build --man                      # Emit man page (export Crust as `app` or default)
 ```
 
 To build for specific platform(s) only, use `--target`:

@@ -1,7 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
+import { resolveBaseName } from "./binary-name.ts";
+
+export { resolveBaseName } from "./binary-name.ts";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const PUBLIC_ENV_PATTERN = `${PUBLIC_ENV_PREFIX}*` as const;
@@ -143,46 +146,6 @@ export function resolveTarget(input: string): BunTarget {
 	throw new Error(
 		`Unknown target "${input}"\n  Valid targets: ${validTargets}`,
 	);
-}
-
-/**
- * Resolve the base binary name (without target suffix).
- *
- * Priority: --name > package.json name > entry filename
- *
- * @param name - Explicit name from --name flag
- * @param entry - Resolved entry file path
- * @param cwd - Current working directory
- * @returns The resolved base binary name
- */
-export function resolveBaseName(
-	name: string | undefined,
-	entry: string,
-	cwd: string,
-): string {
-	// 1. Explicit --name takes highest priority
-	if (name) {
-		return name;
-	}
-
-	// 2. Try reading name from package.json in cwd
-	const pkgPath = join(cwd, "package.json");
-	if (existsSync(pkgPath)) {
-		try {
-			const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
-				name?: string;
-			};
-			if (pkgJson?.name && typeof pkgJson.name === "string") {
-				// Strip scope prefix (e.g. @scope/name → name)
-				return pkgJson.name.replace(/^@[^/]+\//, "");
-			}
-		} catch {
-			// Ignore parse errors, fall through to entry filename
-		}
-	}
-
-	// 3. Derive from entry filename (strip extension)
-	return basename(entry).replace(/\.[^.]+$/, "");
 }
 
 /**
@@ -719,6 +682,12 @@ export const buildCommand = new Crust("build")
 			description: "Directory to stage npm packages into when using --package",
 			default: "dist/npm",
 		},
+		man: {
+			type: "boolean",
+			description:
+				"Write an mdoc(7) page to <outdir>/man/<name>.1 (entry must export a Crust as `app` or default)",
+			default: false,
+		},
 	} as const)
 	.run(async ({ flags }) => {
 		const cwd = process.cwd();
@@ -755,8 +724,24 @@ export const buildCommand = new Crust("build")
 				stageDir: flags["stage-dir"],
 				envFiles,
 				validate: false,
+				man: flags.man,
+				outdir: flags.outdir,
 			});
 			return;
+		}
+
+		if (flags.man) {
+			const { generateManPageFromEntry } = await import("./generate-man.ts");
+			const baseName = resolveBaseName(flags.name, entryPath, cwd);
+			const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
+			console.log(`Writing man page ${dim(manPath)}...`);
+			await generateManPageFromEntry({
+				cwd,
+				entry: flags.entry,
+				name: flags.name,
+				outfile: manPath,
+			});
+			console.log(`${green("✓")} Man page: ${manPath}`);
 		}
 
 		// Resolve targets: default is all platforms, --target narrows to specific ones
