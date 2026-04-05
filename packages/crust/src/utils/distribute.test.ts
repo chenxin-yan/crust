@@ -15,7 +15,7 @@ import {
 	getPackagePathSegment,
 	inferCommandName,
 	runDistributeBuild,
-} from "../commands/distribute.ts
+} from "./distribute.ts";
 
 describe("derivePlatformPackageName", () => {
 	it("suffixes unscoped package names", () => {
