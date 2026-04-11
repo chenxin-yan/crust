@@ -97,6 +97,7 @@ export interface EffectFlagDef<
 	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
+	readonly inherit?: true;
 	/**
 	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
 	 * When `Short` is `undefined`, the runtime value is `undefined` (no short alias).
@@ -165,6 +166,8 @@ export interface FlagOptions extends ParserMeta {
 	readonly short?: string;
 	/** Additional long aliases (e.g. `["out"]` → `--out`). */
 	readonly aliases?: readonly string[];
+	/** When `true`, the flag is inherited by subcommands. */
+	readonly inherit?: true;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

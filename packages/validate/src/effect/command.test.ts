@@ -81,6 +81,11 @@ describe("flag() produces core-compatible FlagDef", () => {
 		expect(f.short).toBe("v");
 	});
 
+	it("passes through inherit", () => {
+		const f = flag(Schema.UndefinedOr(Schema.Boolean), { inherit: true });
+		expect(f.inherit).toBe(true);
+	});
+
 	it("extracts description from schema annotations", () => {
 		const f = flag(Schema.String.annotations({ description: "Output dir" }));
 		expect(f.description).toBe("Output dir");

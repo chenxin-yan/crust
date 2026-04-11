@@ -414,7 +414,7 @@ export function arg<
  * If both are available and conflict, a `DEFINITION` error is thrown.
  *
  * @param schema - Effect schema (source of truth for type/optionality/description)
- * @param options - Optional flag metadata (`short`, `aliases`, `type`, `description`, `required`)
+ * @param options - Optional flag metadata (`short`, `aliases`, `type`, `description`, `required`, `inherit`)
  *
  * @example
  * ```ts
@@ -473,6 +473,7 @@ export function flag<
 		aliases,
 		...(description !== undefined && { description }),
 		...(resolvedRequired && { required: true as const }),
+		...(options?.inherit && { inherit: true as const }),
 		[EFFECT_SCHEMA]: schema,
 	};
 

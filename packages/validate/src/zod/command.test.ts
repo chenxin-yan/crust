@@ -70,6 +70,11 @@ describe("flag() produces core-compatible FlagDef", () => {
 		expect(f.short).toBe("v");
 	});
 
+	it("passes through inherit", () => {
+		const f = flag(z.boolean().default(false), { inherit: true });
+		expect(f.inherit).toBe(true);
+	});
+
 	it("extracts description from schema", () => {
 		const f = flag(z.string().describe("Output dir"));
 		expect(f.description).toBe("Output dir");
