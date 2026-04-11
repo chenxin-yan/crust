@@ -123,12 +123,17 @@ export interface ZodFlagDef<
 	Schema extends ZodSchemaLike = ZodSchemaLike,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
+	Inherit extends true | undefined = true | undefined,
 	Type extends ValueType = ResolveZodValueType<Schema>,
 > {
 	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
-	readonly inherit?: true;
+	/**
+	 * Non-optional so `InheritableFlags` can match `{ inherit: true }`.
+	 * When `Inherit` is `undefined`, the runtime value is `undefined`.
+	 */
+	readonly inherit: Inherit;
 	/**
 	 * Non-optional so `ValidateFlagAliases` can extract narrow alias literals.
 	 * When `Short` is `undefined`, the runtime value is `undefined` (no short alias).

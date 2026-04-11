@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { InheritableFlags } from "@crustjs/core";
 import { Crust, CrustError, parseArgs } from "@crustjs/core";
 import { z } from "zod";
 import { commandValidator } from "./command.ts";
@@ -578,6 +579,15 @@ describe("arg() / flag() generic type narrowing", () => {
 		const f = flag(z.boolean());
 		type _check = Expect<Equal<typeof f.aliases, undefined>>;
 		expect(f.aliases).toBeUndefined();
+	});
+
+	it("narrows inherit to true so core can detect inheritable flags", () => {
+		const inherited = flag(z.boolean(), { inherit: true });
+		type Flags = { verbose: typeof inherited };
+		type Result = InheritableFlags<Flags>;
+		type _checkInherit = Expect<Equal<typeof inherited.inherit, true>>;
+		type _checkResult = Expect<Equal<Result, Flags>>;
+		expect(inherited.inherit).toBe(true);
 	});
 });
 

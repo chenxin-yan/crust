@@ -410,10 +410,15 @@ export function flag<
 	Schema extends ZodSchemaLike,
 	const Short extends string | undefined = undefined,
 	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
 >(
 	schema: Schema,
-	options?: FlagOptions & { short?: Short; aliases?: Aliases },
-): ZodFlagDef<Schema, Short, Aliases> {
+	options?: FlagOptions & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
+): ZodFlagDef<Schema, Short, Aliases, Inherit> {
 	if (!isZodSchema(schema)) {
 		throw new CrustError("DEFINITION", "flag(): schema must be a Zod schema");
 	}
@@ -457,5 +462,5 @@ export function flag<
 		[ZOD_SCHEMA]: schema,
 	};
 
-	return def as ZodFlagDef<Schema, Short, Aliases>;
+	return def as ZodFlagDef<Schema, Short, Aliases, Inherit>;
 }

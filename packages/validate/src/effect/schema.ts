@@ -427,10 +427,15 @@ export function flag<
 	SchemaType extends EffectSchemaLike,
 	const Short extends string | undefined = undefined,
 	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
 >(
 	schema: SchemaType,
-	options?: FlagOptions & { short?: Short; aliases?: Aliases },
-): EffectFlagDef<SchemaType, Short, Aliases> {
+	options?: FlagOptions & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
+): EffectFlagDef<SchemaType, Short, Aliases, Inherit> {
 	if (!isSchema(schema)) {
 		throw new CrustError(
 			"DEFINITION",
@@ -477,5 +482,5 @@ export function flag<
 		[EFFECT_SCHEMA]: schema,
 	};
 
-	return def as EffectFlagDef<SchemaType, Short, Aliases>;
+	return def as EffectFlagDef<SchemaType, Short, Aliases, Inherit>;
 }
