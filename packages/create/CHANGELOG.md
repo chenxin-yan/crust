@@ -1,5 +1,11 @@
 # @crustjs/create
 
+## 0.0.5
+
+### Patch Changes
+
+- 291048b: Fix `create-crust` dependency installation on Windows and run `command` steps through Bun Shell for cross-platform shell execution.
+
 ## 0.0.4
 
 ### Patch Changes

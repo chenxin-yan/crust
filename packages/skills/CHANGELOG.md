@@ -1,5 +1,25 @@
 # @crustjs/skills
 
+## 0.0.22
+
+### Patch Changes
+
+- 2ea1028: Suppress the universal skills agent hint when the skill command runs non-interactively.
+
+  This keeps `skill` output focused on actual changes and avoids showing the universal agent support list during no-op runs that default to the current installed selection.
+
+- 341f3b1: Add a new `@crustjs/progress` package and move the canonical `spinner()` implementation there.
+
+  `@crustjs/prompts` now temporarily re-exports `spinner` and related types as deprecated compatibility exports, with removal planned for `v0.1.0`.
+
+  Update internal consumers and docs to use `@crustjs/progress` as the new home for spinner-based progress UI.
+
+- Updated dependencies [def425e]
+- Updated dependencies [341f3b1]
+  - @crustjs/core@0.0.16
+  - @crustjs/progress@0.0.2
+  - @crustjs/prompts@0.0.11
+
 ## 0.0.21
 
 ### Patch Changes

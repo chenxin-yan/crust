@@ -1,5 +1,24 @@
 # create-crust
 
+## 0.0.26
+
+### Patch Changes
+
+- 341f3b1: Add a new `@crustjs/progress` package and move the canonical `spinner()` implementation there.
+
+  `@crustjs/prompts` now temporarily re-exports `spinner` and related types as deprecated compatibility exports, with removal planned for `v0.1.0`.
+
+  Update internal consumers and docs to use `@crustjs/progress` as the new home for spinner-based progress UI.
+
+- 291048b: Fix `create-crust` dependency installation on Windows and run `command` steps through Bun Shell for cross-platform shell execution.
+- Updated dependencies [def425e]
+- Updated dependencies [341f3b1]
+- Updated dependencies [291048b]
+  - @crustjs/core@0.0.16
+  - @crustjs/progress@0.0.2
+  - @crustjs/prompts@0.0.11
+  - @crustjs/create@0.0.5
+
 ## 0.0.25
 
 ### Patch Changes

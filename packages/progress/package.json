@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/progress",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Progress indicators for the Crust CLI ecosystem",
 	"type": "module",
 	"license": "MIT",
