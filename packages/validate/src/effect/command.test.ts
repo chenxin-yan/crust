@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { InheritableFlags } from "@crustjs/core";
 import { Crust, CrustError, parseArgs } from "@crustjs/core";
 import * as Schema from "effect/Schema";
 import { commandValidator } from "./command.ts";
@@ -79,6 +80,11 @@ describe("flag() produces core-compatible FlagDef", () => {
 	it("passes through short", () => {
 		const f = flag(Schema.UndefinedOr(Schema.Boolean), { short: "v" });
 		expect(f.short).toBe("v");
+	});
+
+	it("passes through inherit", () => {
+		const f = flag(Schema.UndefinedOr(Schema.Boolean), { inherit: true });
+		expect(f.inherit).toBe(true);
 	});
 
 	it("extracts description from schema annotations", () => {
@@ -516,6 +522,15 @@ describe("arg() / flag() generic type narrowing", () => {
 		const f = flag(Schema.Boolean);
 		type _check = Expect<Equal<typeof f.aliases, undefined>>;
 		expect(f.aliases).toBeUndefined();
+	});
+
+	it("narrows inherit to true so core can detect inheritable flags", () => {
+		const inherited = flag(Schema.Boolean, { inherit: true });
+		type Flags = { verbose: typeof inherited };
+		type Result = InheritableFlags<Flags>;
+		type _checkInherit = Expect<Equal<typeof inherited.inherit, true>>;
+		type _checkResult = Expect<Equal<Result, Flags>>;
+		expect(inherited.inherit).toBe(true);
 	});
 });
 
