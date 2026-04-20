@@ -168,6 +168,8 @@ const features = await multiselect({
 
 Fuzzy-search selection. Type to filter, navigate with Up/Down, and confirm with Enter. Matched characters are highlighted in results.
 
+Pass `{ multiple: true }` for checkbox-style multi-selection: **Space** toggles the highlighted row, **Enter** confirms and returns `T[]` in original choice order (same validation options as `multiselect`: `required`, `min`, `max`). Use `multiselect` when you want the full list without a search box; use `filter` with `multiple: true` when the list is long and users need to narrow it first.
+
 ```ts
 const lang = await filter({
   message: "Search for a language",
@@ -176,11 +178,39 @@ const lang = await filter({
 });
 ```
 
+**Single selection (default)** — returns `T`.
+
 | Option        | Type                 | Default | Description                                    |
 | ------------- | -------------------- | ------- | ---------------------------------------------- |
 | `message`     | `string`             | —       | Prompt message                                 |
 | `choices`     | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects   |
 | `initial`     | `T`                  | —       | Skip prompt and return this value immediately  |
+| `default`     | `T`                  | —       | Sets initial highlight; used when not a TTY    |
+| `placeholder` | `string`             | —       | Placeholder text for the query input           |
+| `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling       |
+| `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                     |
+
+**Multiple selection** — set `multiple: true`; returns `T[]`.
+
+```ts
+const langs = await filter({
+  message: "Languages",
+  multiple: true,
+  choices: ["TypeScript", "JavaScript", "Rust"],
+  required: true,
+});
+```
+
+| Option        | Type                 | Default | Description                                    |
+| ------------- | -------------------- | ------- | ---------------------------------------------- |
+| `multiple`    | `true`               | —       | Enable multi-select (fuzzy list + checkboxes)  |
+| `message`     | `string`             | —       | Prompt message                                 |
+| `choices`     | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects   |
+| `initial`     | `T[]`                | —       | Skip prompt and return these values (order kept) |
+| `default`     | `T[]`                | —       | Pre-selected; used when not a TTY              |
+| `required`   | `boolean`            | `false` | Require at least one selection                 |
+| `min`        | `number`             | —       | Minimum selections required                    |
+| `max`        | `number`             | —       | Maximum selections allowed                     |
 | `placeholder` | `string`             | —       | Placeholder text for the query input           |
 | `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling       |
 | `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                     |
@@ -350,7 +380,8 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `ConfirmOptions`      | Options for `confirm()`                          |
 | `SelectOptions<T>`    | Options for `select()`                           |
 | `MultiselectOptions<T>` | Options for `multiselect()`                    |
-| `FilterOptions<T>`    | Options for `filter()`                           |
+| `FilterOptions<T>`    | Options for `filter()` (single selection)        |
+| `FilterMultipleOptions<T>` | Options for `filter()` when `multiple: true`  |
 | `PromptTheme`         | Complete theme with all style slots              |
 | `PartialPromptTheme`  | Partial theme for overrides                      |
 | `Choice<T>`           | Choice item: string or `{ label, value, hint? }` |

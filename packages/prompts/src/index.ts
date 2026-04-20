@@ -56,7 +56,7 @@ export type {
 export { spinner } from "@crustjs/progress";
 export type { ConfirmOptions } from "./prompts/confirm.ts";
 export { confirm } from "./prompts/confirm.ts";
-export type { FilterOptions } from "./prompts/filter.ts";
+export type { FilterMultipleOptions, FilterOptions } from "./prompts/filter.ts";
 export { filter } from "./prompts/filter.ts";
 export type { InputOptions } from "./prompts/input.ts";
 export { input } from "./prompts/input.ts";

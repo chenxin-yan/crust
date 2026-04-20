@@ -761,3 +761,181 @@ describe("filter — non-TTY", () => {
 		expect(result).toBe("a");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Multiple selection (multiple: true)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("filter — multiple: initial / default", () => {
+	it("returns initial array immediately without rendering", async () => {
+		const result = await filter({
+			message: "Search",
+			multiple: true,
+			choices: ["TypeScript", "JavaScript", "Rust"],
+			initial: ["Rust", "JavaScript"],
+		});
+
+		expect(result).toEqual(["Rust", "JavaScript"]);
+	});
+
+	it("returns initial for object choices", async () => {
+		const result = await filter<number>({
+			message: "Ports",
+			multiple: true,
+			choices: [
+				{ label: "HTTP", value: 80 },
+				{ label: "HTTPS", value: 443 },
+			],
+			initial: [443, 80],
+		});
+
+		expect(result).toEqual([443, 80]);
+	});
+});
+
+describe("filter — multiple: non-TTY", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("returns default array in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await filter({
+			message: "Search",
+			multiple: true,
+			choices: ["a", "b", "c"],
+			default: ["b", "c"],
+		});
+
+		expect(result).toEqual(["b", "c"]);
+	});
+
+	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		await expect(
+			filter({
+				message: "Search",
+				multiple: true,
+				choices: ["a", "b", "c"],
+			}),
+		).rejects.toThrow("interactive terminal");
+	});
+
+	it("prefers initial over default in non-TTY environment", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		const result = await filter({
+			message: "Search",
+			multiple: true,
+			choices: ["a", "b", "c"],
+			initial: ["a"],
+			default: ["c"],
+		});
+
+		expect(result).toEqual(["a"]);
+	});
+});
+
+describe("filter — multiple: interactive", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("Space toggles selection; Enter submits values in choice order", async () => {
+		const promise = filter({
+			message: "Search",
+			multiple: true,
+			choices: ["alpha", "beta", "gamma"],
+		});
+
+		await tick();
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("", { name: "down" });
+		await tick();
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toEqual(["alpha", "beta"]);
+	});
+
+	it("pre-selects from default", async () => {
+		const promise = filter({
+			message: "Search",
+			multiple: true,
+			choices: ["a", "b", "c"],
+			default: ["c"],
+		});
+
+		await tick();
+		expect(stderrOutput).toContain("●");
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toEqual(["c"]);
+	});
+
+	it("Enter with required and no selection shows error", async () => {
+		const promise = filter({
+			message: "Search",
+			multiple: true,
+			choices: ["x", "y"],
+			required: true,
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("At least one");
+
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toEqual(["x"]);
+	});
+
+	it("keeps selections when query filters the list", async () => {
+		const promise = filter({
+			message: "Search",
+			multiple: true,
+			choices: ["alpha", "beta", "gamma"],
+		});
+
+		await tick();
+		pressKey("", { name: "down" });
+		await tick();
+		pressKey("", { name: "down" });
+		await tick();
+		pressKey("", { name: "space" });
+		await tick();
+		pressKey("g", { name: "g" });
+		await tick();
+		pressKey("a", { name: "a" });
+		await tick();
+		pressKey("m", { name: "m" });
+		await tick();
+
+		expect(stderrOutput).toContain("gamma");
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toEqual(["gamma"]);
+	});
+});

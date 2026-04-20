@@ -177,6 +177,16 @@ describe("initial value short-circuit", () => {
 		});
 		expect(result).toBe("banana");
 	});
+
+	it("filter with multiple returns initial array without rendering", async () => {
+		const result = await filter({
+			message: "Search",
+			multiple: true,
+			choices: ["apple", "banana", "cherry"],
+			initial: ["banana", "apple"],
+		});
+		expect(result).toEqual(["banana", "apple"]);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -257,6 +267,7 @@ describe("NonInteractiveError", () => {
 import type {
 	Choice,
 	ConfirmOptions,
+	FilterMultipleOptions,
 	FilterOptions,
 	FuzzyFilterResult,
 	FuzzyMatchResult,
@@ -307,6 +318,15 @@ describe("type exports", () => {
 			choices: ["a"],
 		};
 		const _filterOptsNoMsg: FilterOptions<string> = {
+			choices: ["a"],
+		};
+		const _filterMultiOpts: FilterMultipleOptions<string> = {
+			multiple: true,
+			message: "m",
+			choices: ["a"],
+		};
+		const _filterMultiOptsNoMsg: FilterMultipleOptions<string> = {
+			multiple: true,
 			choices: ["a"],
 		};
 		const _spinnerOpts: SpinnerOptions<string> = {
