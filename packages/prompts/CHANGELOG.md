@@ -1,5 +1,11 @@
 # @crustjs/prompts
 
+## 0.0.12
+
+### Patch Changes
+
+- 23fae62: add multiple option to filter prompt
+
 ## 0.0.11
 
 ### Patch Changes

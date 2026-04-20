@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/prompts",
-	"version": "0.0.11",
+	"version": "0.0.12",
 	"description": "Interactive terminal prompts for the Crust CLI ecosystem",
 	"type": "module",
 	"license": "MIT",
