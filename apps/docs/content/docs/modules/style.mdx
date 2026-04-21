@@ -63,6 +63,13 @@ ANSI pair factories for composition:
 | `bgHexCode(hex)` | Create background `AnsiPair` from hex string |
 | `parseHex(hex)` | Parse a hex color string into `[r, g, b]` tuple |
 
+### Hyperlinks (OSC 8)
+
+| Export | Description |
+| --- | --- |
+| `link(text, url, options?)` | Wrap text in OSC 8 hyperlink escape sequences |
+| `linkCode(url, options?)` | Create an OSC 8 open/close pair for composition |
+
 ### Style Engine
 
 | Export | Description |
@@ -118,6 +125,7 @@ To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(
 | `StyleOptions` | Options for `createStyle` |
 | `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
 | `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
+| `HyperlinkOptions` | Optional OSC 8 hyperlink parameters such as `id` |
 | `StyleFn` | `(text: string) => string` style function |
 | `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, and `trueColorEnabled` capability flags |
 | `WrapOptions` | Options for `wrapText` |
@@ -181,7 +189,7 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Disable colors but keep bold / italic / underline
+// Disable colors but keep bold / italic / underline / hyperlinks
 setGlobalColorMode("never");
 console.log(style.bold.red("bold, but no red"));
 
@@ -253,6 +261,26 @@ Invalid inputs throw immediately: `RangeError` for out-of-range RGB values, `Typ
 Dynamic colors use truecolor (24-bit) ANSI sequences with no automatic fallback to 256 or 16 colors. On unsupported terminals, colors may be approximated or silently ignored — no runtime errors will occur.
 </Callout>
 
+### Hyperlinks (OSC 8)
+
+```ts
+import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
+
+const s = createStyle({ mode: "always" });
+
+console.log(s.link("Crust docs", "https://crustjs.com"));
+console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
+
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
+console.log(applyStyle("Visit Crust", underlinedLink));
+```
+
+In `"auto"` mode, hyperlinks are emitted when stdout is a TTY. They are not disabled by `NO_COLOR`, since OSC 8 links are not color sequences. In `"never"` mode, link helpers return plain text.
+
+<Callout type="info">
+Terminal support for OSC 8 varies by emulator. Many modern terminals support it, but there is no reliable cross-terminal capability probe yet, so unsupported terminals may simply show plain text without clickable behavior.
+</Callout>
+
 ### Text Layout
 
 ```ts
@@ -291,6 +319,8 @@ const custom = createMarkdownTheme({
   },
 });
 ```
+
+The markdown theme controls how links look, but it does not create OSC 8 hyperlinks by itself. When your renderer has both the link label and destination URL, use `style.link()` or `linkCode()` to emit a clickable link.
 
 ## Design
 

@@ -8,6 +8,7 @@
 // import time.
 
 import { style } from "./createStyle.ts";
+import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { StyleFn } from "./types.ts";
 
 export const black: StyleFn = (text) => style.black(text);
@@ -49,6 +50,14 @@ export const underline: StyleFn = (text) => style.underline(text);
 export const inverse: StyleFn = (text) => style.inverse(text);
 export const hidden: StyleFn = (text) => style.hidden(text);
 export const strikethrough: StyleFn = (text) => style.strikethrough(text);
+
+export function link(
+	text: string,
+	url: string,
+	options?: HyperlinkOptions,
+): string {
+	return style.link(text, url, options);
+}
 
 export function rgb(text: string, r: number, g: number, b: number): string {
 	return style.rgb(text, r, g, b);

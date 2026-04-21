@@ -92,6 +92,35 @@ export function resolveModifierCapability(
 }
 
 /**
+ * Resolve whether OSC 8 hyperlinks should be emitted.
+ *
+ * There is no reliable cross-terminal capability probe for hyperlinks today,
+ * so `"auto"` mode uses a conservative TTY check similar to non-color
+ * modifiers while still allowing explicit `"always"` / `"never"` overrides.
+ *
+ * @internal Exported for use by {@link createStyle}; not part of the stable
+ * public surface of `@crustjs/style`.
+ */
+export function resolveHyperlinkCapability(
+	mode: ColorMode,
+	overrides?: CapabilityOverrides,
+): boolean {
+	if (mode === "always") {
+		return true;
+	}
+
+	if (mode === "never") {
+		return false;
+	}
+
+	const hasIsTTYOverride = overrides !== undefined && "isTTY" in overrides;
+	const isTTY = hasIsTTYOverride
+		? (overrides.isTTY ?? false)
+		: (process.stdout?.isTTY ?? false);
+	return isTTY;
+}
+
+/**
  * Resolve whether the terminal supports truecolor (24-bit) ANSI sequences.
  *
  * Detection heuristics (checked in order):

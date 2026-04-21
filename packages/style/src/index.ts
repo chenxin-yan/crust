@@ -77,6 +77,8 @@ export {
 	parseHex,
 	rgbCode,
 } from "./dynamicColors.ts";
+export type { HyperlinkOptions } from "./hyperlinks.ts";
+export { linkCode } from "./hyperlinks.ts";
 export {
 	// Background
 	bgBlack,
@@ -117,6 +119,7 @@ export {
 	hidden,
 	inverse,
 	italic,
+	link,
 	magenta,
 	red,
 	rgb,
