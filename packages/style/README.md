@@ -26,7 +26,11 @@ console.log(style.bold.red("Critical failure"));
 
 ## Primitive Styling
 
-Direct styling functions that always emit ANSI codes (useful when you control output directly):
+Direct styling functions respect the default runtime color policy:
+
+- All ANSI output (colors and modifiers) requires stdout to be a TTY
+- `NO_COLOR` disables only color, not modifiers like `bold()` and `underline()`, following [no-color.org](https://no-color.org/)
+- Piped / non-interactive output is plain text with no ANSI codes
 
 ```ts
 import { bold, red, italic, bgYellow } from "@crustjs/style";
@@ -122,7 +126,7 @@ Control when ANSI codes are emitted using `createStyle`:
 ```ts
 import { createStyle } from "@crustjs/style";
 
-// Auto-detect (default) — respects NO_COLOR and TTY status
+// Auto-detect (default) — respects NO_COLOR and TTY status for colors
 const auto = createStyle({ mode: "auto" });
 
 // Always emit ANSI codes
@@ -137,8 +141,43 @@ console.log(plain.red("just text")); // "just text"
 
 The default `style` export uses `"auto"` mode:
 
-- Emits ANSI when stdout is a TTY and `NO_COLOR` is not set
-- Returns plain text otherwise
+- Color methods emit ANSI when stdout is a TTY and `NO_COLOR` is unset or `""`
+- Modifier methods stay enabled in `auto` mode even when `NO_COLOR=1`
+- Dynamic colors are disabled whenever base colors are disabled
+
+### NO_COLOR Semantics
+
+`@crustjs/style` follows [no-color.org](https://no-color.org/):
+
+- `NO_COLOR=1` disables color output by default
+- `NO_COLOR=""` does not disable color
+- `NO_COLOR` does not disable non-color ANSI styling such as bold or underline
+
+### Runtime Color Overrides
+
+The default `style` export and all named helpers (`red`, `bold`, etc.) re-resolve their color mode on every call, so you can override it globally at runtime:
+
+```ts
+import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
+
+// Force colors on for the remainder of this process
+setGlobalColorMode("always");
+console.log(style.red("always red"));
+
+// Turn colors off while keeping bold/italic/etc.
+setGlobalColorMode("never");
+console.log(style.bold.red("bold, but no red"));
+
+// Revert to auto (respect TTY + NO_COLOR)
+setGlobalColorMode(undefined);
+
+// Read the current override
+getGlobalColorMode(); // ColorMode | undefined
+```
+
+Instances returned by `createStyle()` are not affected — they capture their mode at creation time. The override only applies to the default `style` facade and the named re-exports.
+
+For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](https://crustjs.com/docs/modules/plugins/no-color) from `@crustjs/plugins`, which saves and restores the previous mode around the command invocation.
 
 ### Deterministic Testing
 
@@ -254,9 +293,9 @@ console.log(defaultTheme.linkText("docs") + " " + defaultTheme.linkUrl("https://
 Override specific slots while inheriting defaults:
 
 ```ts
-import { createTheme } from "@crustjs/style";
+import { createMarkdownTheme } from "@crustjs/style";
 
-const theme = createTheme({
+const theme = createMarkdownTheme({
   style: { mode: "always" },
   overrides: {
     heading1: (text) => `>>> ${text.toUpperCase()} <<<`,

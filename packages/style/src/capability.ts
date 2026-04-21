@@ -15,8 +15,7 @@ import type {
  * - `"always"` → `true` regardless of environment.
  * - `"never"` → `false` regardless of environment.
  * - `"auto"` → `true` only when stdout is a TTY **and** the `NO_COLOR`
- *   environment variable is not set. Any non-undefined value of `NO_COLOR`
- *   (including the empty string `""`) disables color, per the
+ *   environment variable is not present with a non-empty value, per the
  *   [NO_COLOR convention](https://no-color.org/).
  *
  * The `overrides` parameter allows deterministic testing by injecting
@@ -28,14 +27,14 @@ import type {
  *
  * @example
  * ```ts
- * resolveCapability("auto"); // true if TTY and NO_COLOR not set
- * resolveCapability("always"); // true
- * resolveCapability("never"); // false
- * resolveCapability("auto", { isTTY: true, noColor: undefined }); // true
- * resolveCapability("auto", { isTTY: true, noColor: "" }); // false
+ * resolveColorCapability("auto"); // true if TTY and NO_COLOR not set
+ * resolveColorCapability("always"); // true
+ * resolveColorCapability("never"); // false
+ * resolveColorCapability("auto", { isTTY: true, noColor: undefined }); // true
+ * resolveColorCapability("auto", { isTTY: true, noColor: "" }); // true
  * ```
  */
-export function resolveCapability(
+export function resolveColorCapability(
 	mode: ColorMode,
 	overrides?: CapabilityOverrides,
 ): boolean {
@@ -56,11 +55,39 @@ export function resolveCapability(
 	const hasNoColorOverride = overrides !== undefined && "noColor" in overrides;
 	const noColor = hasNoColorOverride ? overrides.noColor : process.env.NO_COLOR;
 
-	// NO_COLOR is set (any value including empty string) → disable color
-	if (noColor !== undefined) {
+	// NO_COLOR disables color only when present and non-empty.
+	if (noColor !== undefined && noColor !== "") {
 		return false;
 	}
 
+	return isTTY;
+}
+
+/**
+ * Resolve whether non-color ANSI modifiers should be emitted.
+ *
+ * In `"auto"` mode, modifiers are enabled when stdout is a TTY, but are
+ * **not** affected by `NO_COLOR` (which only controls color output).
+ *
+ * @internal Exported only for use by {@link createStyle}; not part of the
+ * public surface of `@crustjs/style`.
+ */
+export function resolveModifierCapability(
+	mode: ColorMode,
+	overrides?: CapabilityOverrides,
+): boolean {
+	if (mode === "always") {
+		return true;
+	}
+
+	if (mode === "never") {
+		return false;
+	}
+
+	const hasIsTTYOverride = overrides !== undefined && "isTTY" in overrides;
+	const isTTY = hasIsTTYOverride
+		? (overrides.isTTY ?? false)
+		: (process.stdout?.isTTY ?? false);
 	return isTTY;
 }
 
@@ -82,17 +109,17 @@ export function resolveCapability(
  *
  * @example
  * ```ts
- * resolveTrueColor("auto"); // true if TTY + truecolor env detected
- * resolveTrueColor("always"); // true
- * resolveTrueColor("never"); // false
- * resolveTrueColor("auto", {
+ * resolveTrueColorCapability("auto"); // true if TTY + truecolor env detected
+ * resolveTrueColorCapability("always"); // true
+ * resolveTrueColorCapability("never"); // false
+ * resolveTrueColorCapability("auto", {
  *   isTTY: true,
  *   noColor: undefined,
  *   colorTerm: "truecolor",
  * }); // true
  * ```
  */
-export function resolveTrueColor(
+export function resolveTrueColorCapability(
 	mode: ColorMode,
 	overrides?: CapabilityOverrides & TrueColorOverrides,
 ): boolean {
@@ -105,7 +132,7 @@ export function resolveTrueColor(
 	}
 
 	// Base color must be enabled first
-	if (!resolveCapability(mode, overrides)) {
+	if (!resolveColorCapability(mode, overrides)) {
 		return false;
 	}
 

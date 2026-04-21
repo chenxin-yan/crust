@@ -13,6 +13,7 @@ bun add @crustjs/plugins
 | Plugin | Description |
 | --- | --- |
 | `helpPlugin()` | Adds `--help` / `-h` flag and auto-generates help text |
+| `noColorPlugin()` | Adds `--color` / `--no-color` and controls runtime color output |
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
 | `autoCompletePlugin(options?)` | Shell autocompletion support |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
@@ -44,6 +45,31 @@ runMain(main, {
 ```
 
 For **manual pages** (mdoc), use [`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) or `crust build --man` — see [Man](/docs/modules/man).
+
+### No Color
+
+The `noColorPlugin()` adds a root `color` boolean flag with default `true`, exposing `--color` and `--no-color`.
+
+It follows [no-color.org](https://no-color.org/):
+
+- `--no-color` disables color output for the current run
+- `--color` overrides `NO_COLOR=1` for the current run
+- Only color is disabled; non-color modifiers such as bold remain available
+
+Register `noColorPlugin()` before plugins that may render output and short-circuit without calling `next()`, such as `helpPlugin()`.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { helpPlugin, noColorPlugin, versionPlugin } from "@crustjs/plugins";
+
+const app = new Crust("my-cli")
+  .use(noColorPlugin())
+  .use(versionPlugin("1.0.0"))
+  .use(helpPlugin())
+  .run(() => {
+    console.log("Hello!");
+  });
+```
 
 ### Update Notifier
 

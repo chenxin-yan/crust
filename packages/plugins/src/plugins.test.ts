@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust, type CrustPlugin } from "@crustjs/core";
+import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 import { autoCompletePlugin } from "./autocomplete.ts";
 import { helpPlugin, renderHelp } from "./help.ts";
+import { noColorPlugin } from "./no-color.ts";
 import { versionPlugin } from "./version.ts";
 
 let stdoutChunks: string[];
@@ -27,6 +29,7 @@ afterEach(() => {
 	console.log = originalLog;
 	console.error = originalError;
 	process.exitCode = 0;
+	setGlobalColorMode(undefined);
 });
 
 function getStdout() {
@@ -61,6 +64,10 @@ function lateSkillPlugin(): CrustPlugin {
 
 describe("built-in plugins", () => {
 	it("renderHelp styles sections and preserves plain-text structure", () => {
+		// Force colors on so the ANSI assertion is deterministic in non-TTY
+		// test environments (e.g. CI). Reset via afterEach.
+		setGlobalColorMode("always");
+
 		const command = new Crust("app")
 			.meta({ description: "Test app" })
 			.flags({
@@ -196,6 +203,93 @@ describe("built-in plugins", () => {
 		expect(output).toContain("build");
 		expect(output).toContain("-h, --help");
 		expect(output).not.toContain("--no-help");
+	});
+
+	it("noColorPlugin injects --color and --no-color into help output", async () => {
+		const app = new Crust("app")
+			.use(noColorPlugin())
+			.use(helpPlugin())
+			.command("build", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["--help"] });
+
+		const output = stripAnsi(getStdout());
+		expect(output).toContain("--color, --no-color");
+	});
+
+	it("noColorPlugin disables color but preserves modifiers", async () => {
+		const app = new Crust("app").use(noColorPlugin()).use(helpPlugin());
+
+		await app.execute({ argv: ["--help", "--no-color"] });
+
+		const output = getStdout();
+		expect(output).not.toContain("\x1b[36m");
+		expect(output).not.toContain("\x1b[33m");
+		expect(output).toContain("\x1b[1mUSAGE:\x1b[22m");
+	});
+
+	it("noColorPlugin overrides NO_COLOR with --color", async () => {
+		const previousNoColor = process.env.NO_COLOR;
+		process.env.NO_COLOR = "1";
+
+		try {
+			const app = new Crust("app").use(noColorPlugin()).use(helpPlugin());
+
+			await app.execute({ argv: ["--help", "--color"] });
+
+			const output = getStdout();
+			expect(output).toContain("\x1b[36m");
+			expect(output).toContain("\x1b[1m");
+		} finally {
+			if (previousNoColor === undefined) {
+				delete process.env.NO_COLOR;
+			} else {
+				process.env.NO_COLOR = previousNoColor;
+			}
+		}
+	});
+
+	it("noColorPlugin respects NO_COLOR without explicit --color flag", async () => {
+		const previousNoColor = process.env.NO_COLOR;
+		process.env.NO_COLOR = "1";
+
+		try {
+			const app = new Crust("app").use(noColorPlugin()).use(helpPlugin());
+
+			await app.execute({ argv: ["--help"] });
+
+			const output = getStdout();
+			expect(output).not.toContain("\x1b[36m");
+			expect(output).not.toContain("\x1b[33m");
+		} finally {
+			if (previousNoColor === undefined) {
+				delete process.env.NO_COLOR;
+			} else {
+				process.env.NO_COLOR = previousNoColor;
+			}
+		}
+	});
+
+	it("noColorPlugin restores the prior global color override", async () => {
+		setGlobalColorMode("always");
+
+		const app = new Crust("app").use(noColorPlugin()).use(helpPlugin());
+
+		await app.execute({ argv: ["--help", "--no-color"] });
+
+		expect(getGlobalColorMode()).toBe("always");
+	});
+
+	it("noColorPlugin flag is inherited by subcommands", async () => {
+		const app = new Crust("app")
+			.use(noColorPlugin())
+			.use(helpPlugin())
+			.command("build", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["build", "--help"] });
+
+		const output = stripAnsi(getStdout());
+		expect(output).toContain("--color, --no-color");
 	});
 
 	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {

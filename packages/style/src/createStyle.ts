@@ -3,7 +3,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
-import { resolveCapability, resolveTrueColor } from "./capability.ts";
+import {
+	resolveColorCapability,
+	resolveModifierCapability,
+	resolveTrueColorCapability,
+} from "./capability.ts";
 import {
 	bgHex as bgHexDirect,
 	bgRgb as bgRgbDirect,
@@ -11,9 +15,15 @@ import {
 	rgb as rgbDirect,
 } from "./dynamicColors.ts";
 import { applyStyle } from "./styleEngine.ts";
-import { styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
+import {
+	isModifierName,
+	isModifierPair,
+	styleMethodNames,
+	stylePairFor,
+} from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
+	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
 	StyleMethodName,
@@ -23,9 +33,10 @@ import type {
 function applyChain(
 	text: string,
 	methodNames: readonly StyleMethodName[],
-	enabled: boolean,
+	modifiersEnabled: boolean,
+	colorsEnabled: boolean,
 ): string {
-	if (!enabled || text === "") {
+	if (text === "") {
 		return text;
 	}
 
@@ -35,13 +46,19 @@ function applyChain(
 		if (methodName === undefined) {
 			continue;
 		}
+		if (isModifierName(methodName) ? !modifiersEnabled : !colorsEnabled) {
+			continue;
+		}
 		result = applyStyle(result, stylePairFor(methodName));
 	}
 
 	return result;
 }
 
-function buildChainableStyleFactory(enabled: boolean) {
+function buildChainableStyleFactory(
+	modifiersEnabled: boolean,
+	colorsEnabled: boolean,
+) {
 	const cache = new Map<string, ChainableStyleFn>();
 
 	function makeKey(methodNames: readonly StyleMethodName[]): string {
@@ -58,7 +75,12 @@ function buildChainableStyleFactory(enabled: boolean) {
 		}
 
 		const styleFn = ((text: string) =>
-			applyChain(text, methodNames, enabled)) as ChainableStyleFn;
+			applyChain(
+				text,
+				methodNames,
+				modifiersEnabled,
+				colorsEnabled,
+			)) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
 
@@ -96,10 +118,11 @@ function buildStyleMethods(
  * Create a configured style instance with mode-aware styling functions.
  *
  * The returned instance provides the full set of modifier, foreground color,
- * and background color functions. In `"never"` mode (or when `"auto"` mode
- * resolves to disabled), all functions return plain text without ANSI codes.
- * In `"always"` mode (or when `"auto"` resolves to enabled), ANSI codes are
- * emitted via the nesting-safe style engine.
+ * and background color functions. In `"never"` mode, all functions return
+ * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
+ * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
+ * `NO_COLOR`, while non-color modifiers (bold, italic, etc.) are always
+ * emitted.
  *
  * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
  * @returns A frozen {@link StyleInstance} with all styling functions.
@@ -128,20 +151,31 @@ function buildStyleMethods(
  */
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
-	const enabled = resolveCapability(mode, options?.overrides);
-	const trueColorEnabled = resolveTrueColor(mode, options?.overrides);
-	const createChainableStyle = buildChainableStyleFactory(enabled);
+	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
+	const colorsEnabled = resolveColorCapability(mode, options?.overrides);
+	const enabled = modifiersEnabled || colorsEnabled;
+	const trueColorEnabled = resolveTrueColorCapability(mode, options?.overrides);
+	const createChainableStyle = buildChainableStyleFactory(
+		modifiersEnabled,
+		colorsEnabled,
+	);
 	const methods = buildStyleMethods(createChainableStyle);
 
 	const instance: StyleInstance = {
 		enabled,
+		colorsEnabled,
 		trueColorEnabled,
 
 		// ── Style engine ────────────────────────────────────────────────────
 
-		apply: enabled
-			? (text: string, pair: AnsiPair) => applyStyle(text, pair)
-			: (text: string, _pair: AnsiPair) => text,
+		apply: (text: string, pair: AnsiPair) => {
+			// Registered modifier pairs are gated on `modifiersEnabled` so
+			// they survive `NO_COLOR` (which only disables colors). Color
+			// pairs — and any ad-hoc pair constructed outside the registry
+			// — fall through to `colorsEnabled`.
+			const gate = isModifierPair(pair) ? modifiersEnabled : colorsEnabled;
+			return gate ? applyStyle(text, pair) : text;
+		},
 
 		// ── Dynamic colors (truecolor) ──────────────────────────────────────
 
@@ -169,10 +203,101 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	return Object.freeze(instance);
 }
 
+let globalColorMode: ColorMode | undefined;
+
+export function setGlobalColorMode(mode: ColorMode | undefined): void {
+	globalColorMode = mode;
+}
+
+export function getGlobalColorMode(): ColorMode | undefined {
+	return globalColorMode;
+}
+
+// Runtime style cache keyed on `(globalMode, isTTY, NO_COLOR)`. The
+// `"never"` override intentionally maps to an `auto` instance with
+// `noColor: "1"` so that modifiers (bold, italic, etc.) remain enabled —
+// matching the no-color.org semantics for `--no-color` without also
+// suppressing non-color ANSI.
+const runtimeStyleCache = new Map<string, StyleInstance>();
+
+function buildRuntimeStyle(): StyleInstance {
+	if (globalColorMode === "always") {
+		return createStyle({ mode: "always" });
+	}
+	if (globalColorMode === "never") {
+		return createStyle({
+			mode: "auto",
+			overrides: { isTTY: true, noColor: "1" },
+		});
+	}
+	return createStyle({ mode: "auto" });
+}
+
+export function getRuntimeStyle(): StyleInstance {
+	const key = `${globalColorMode ?? "auto"}|${process.stdout?.isTTY ?? false}|${process.env.NO_COLOR ?? ""}`;
+	const cached = runtimeStyleCache.get(key);
+	if (cached) {
+		return cached;
+	}
+	const built = buildRuntimeStyle();
+	runtimeStyleCache.set(key, built);
+	return built;
+}
+
+// Members whose implementation is a function and must be forwarded as a
+// bound method so callers can invoke them like `style.apply(...)`.
+const FORWARDED_METHODS = ["apply", "rgb", "bgRgb", "hex", "bgHex"] as const;
+
+// Members that read a value off the current runtime style on every access.
+const FORWARDED_GETTERS = [
+	"enabled",
+	"colorsEnabled",
+	"trueColorEnabled",
+] as const;
+
+function createRuntimeStyleFacade(): StyleInstance {
+	const facade = {} as StyleInstance;
+
+	for (const key of FORWARDED_GETTERS) {
+		Object.defineProperty(facade, key, {
+			configurable: false,
+			enumerable: true,
+			get() {
+				return getRuntimeStyle()[key];
+			},
+		});
+	}
+
+	for (const key of FORWARDED_METHODS) {
+		Object.defineProperty(facade, key, {
+			configurable: false,
+			enumerable: true,
+			value: (...args: unknown[]) => {
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding preserves the runtime instance signature
+				return (getRuntimeStyle()[key] as any)(...args);
+			},
+			writable: false,
+		});
+	}
+
+	for (const name of styleMethodNames) {
+		Object.defineProperty(facade, name, {
+			configurable: false,
+			enumerable: true,
+			get() {
+				return getRuntimeStyle()[name];
+			},
+		});
+	}
+
+	return Object.freeze(facade);
+}
+
 /**
  * Default style instance using `"auto"` mode.
  *
- * Emits ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
+ * Emits color ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
+ * Non-color modifiers (bold, italic, etc.) are always emitted.
  * Import this for convenient access without explicit configuration.
  *
  * @example
@@ -183,4 +308,4 @@ export function createStyle(options?: StyleOptions): StyleInstance {
  * console.log(style.red("error"));
  * ```
  */
-export const style: StyleInstance = createStyle();
+export const style: StyleInstance = createRuntimeStyleFacade();

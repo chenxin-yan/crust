@@ -23,6 +23,6 @@
 	"devDependencies": {
 		"@crustjs/crust": "latest",
 		"@types/bun": "latest",
-		"typescript": "^5"
+		"typescript": "^6"
 	}
 }

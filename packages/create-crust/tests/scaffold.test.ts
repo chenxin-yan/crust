@@ -114,7 +114,7 @@ describe("scaffold", () => {
 			"@crustjs/crust": "latest",
 			"@crustjs/plugins": "latest",
 			"@types/bun": "latest",
-			typescript: "^5",
+			typescript: "^6",
 		});
 		expect(pkg.scripts).toEqual({
 			dev: "bun run src/cli.ts",
@@ -146,7 +146,7 @@ describe("scaffold", () => {
 		expect(pkg.devDependencies).toEqual({
 			"@crustjs/crust": "latest",
 			"@types/bun": "latest",
-			typescript: "^5",
+			typescript: "^6",
 		});
 		expect(pkg.scripts).toEqual({
 			dev: "bun run src/cli.ts",

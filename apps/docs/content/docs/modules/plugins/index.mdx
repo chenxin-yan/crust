@@ -18,6 +18,7 @@ bun add @crustjs/plugins
 | Export                                                            | Description                                              |
 | ----------------------------------------------------------------- | -------------------------------------------------------- |
 | [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
+| [`noColorPlugin()`](/docs/modules/plugins/no-color)               | Adds `--color` / `--no-color` runtime color control      |
 | [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
 | [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands            |
 | [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
@@ -47,6 +48,7 @@ Manual pages are provided by [`@crustjs/man`](/docs/modules/man) (build-time mdo
 ```ts
 import {
   helpPlugin,
+  noColorPlugin,
   versionPlugin,
   autoCompletePlugin,
   updateNotifierPlugin,
@@ -55,6 +57,7 @@ import { Crust } from "@crustjs/core";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
+  .use(noColorPlugin())
   .use(versionPlugin("1.0.0"))
   .use(autoCompletePlugin({ mode: "help" }))
   .use(helpPlugin())
@@ -65,6 +68,8 @@ const main = new Crust("my-cli")
 
 await main.execute();
 ```
+
+`noColorPlugin()` should be registered before plugins that may render output and short-circuit, such as `helpPlugin()`, so `--color` and `--no-color` can affect their output.
 
 ## When to Use Directly
 

@@ -8,7 +8,9 @@ import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethod
 /**
  * Color emission mode for the style engine.
  *
- * - `"auto"` — Emit ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
+ * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR` is
+ *   not set (or is empty). Non-color modifiers (bold, italic, etc.) are always
+ *   emitted in `"auto"` mode regardless of TTY or `NO_COLOR`.
  * - `"always"` — Always emit ANSI codes regardless of terminal detection.
  * - `"never"` — Never emit ANSI codes; return plain text.
  *
@@ -30,7 +32,7 @@ export type ColorMode = "auto" | "always" | "never";
 export interface CapabilityOverrides {
 	/** Override `process.stdout.isTTY`. */
 	readonly isTTY?: boolean;
-	/** Override `process.env.NO_COLOR`. */
+	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
 }
 
@@ -38,7 +40,7 @@ export interface CapabilityOverrides {
  * Truecolor capability overrides for deterministic testing.
  *
  * These override environment variable checks used by
- * {@link resolveTrueColor} to detect 24-bit color support.
+ * {@link resolveTrueColorCapability} to detect 24-bit color support.
  */
 export interface TrueColorOverrides {
 	/** Override `process.env.COLORTERM`. */
@@ -101,8 +103,11 @@ export type StyleMethodName = RegisteredStyleMethodName;
  * In `"auto"` mode, behavior depends on terminal capability detection.
  */
 export interface StyleInstance extends StyleMethodMap {
-	/** Whether ANSI codes will be emitted by this instance. */
+	/** Whether any ANSI styling will be emitted by this instance. */
 	readonly enabled: boolean;
+
+	/** Whether ANSI color codes will be emitted by this instance. */
+	readonly colorsEnabled: boolean;
 
 	/** Whether truecolor (24-bit) sequences will be emitted by this instance. */
 	readonly trueColorEnabled: boolean;

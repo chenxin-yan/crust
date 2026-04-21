@@ -21,6 +21,8 @@ bun add @crustjs/style
 | --- | --- |
 | `style` | Default auto-mode style instance |
 | `createStyle(options?)` | Create a configured style instance |
+| `setGlobalColorMode(mode)` | Override runtime color output for the default exports |
+| `getGlobalColorMode()` | Read the current runtime color override |
 
 ### Modifiers
 
@@ -72,8 +74,9 @@ ANSI pair factories for composition:
 
 | Export | Description |
 | --- | --- |
-| `resolveCapability(mode, overrides?)` | Resolve whether colors should be emitted |
-| `resolveTrueColor(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
+| `resolveColorCapability(mode, overrides?)` | Resolve whether colors should be emitted |
+| `resolveModifierCapability(mode, overrides?)` | Resolve whether non-color modifiers (bold, italic, etc.) should be emitted |
+| `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
 
 ### Text Utilities
 
@@ -116,7 +119,7 @@ To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(
 | `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
 | `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
 | `StyleFn` | `(text: string) => string` style function |
-| `StyleInstance` | Configured style object with all styling methods |
+| `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, and `trueColorEnabled` capability flags |
 | `WrapOptions` | Options for `wrapText` |
 | `ColumnAlignment` | `"left" \| "right" \| "center"` |
 | `TableOptions` | Options for `table` |
@@ -142,6 +145,12 @@ console.log(italic("note: check your config"));
 console.log(style.bold.red("Critical failure"));
 ```
 
+By default:
+
+- Color helpers respect `stdout.isTTY` and `NO_COLOR`
+- `NO_COLOR` disables color only when it is present and non-empty
+- Modifier helpers such as `bold()` and `italic()` are not disabled by `NO_COLOR`
+
 ### Mode-Aware Styling
 
 ```ts
@@ -160,6 +169,34 @@ console.log(color.bold.red("always bold red"));
 const plain = createStyle({ mode: "never" });
 console.log(plain.red("error")); // "error" (no ANSI)
 ```
+
+### Runtime Color Overrides
+
+The default `style` export and all named helpers (`red`, `bold`, etc.) re-resolve their color mode on every call, so you can override it globally at runtime with `setGlobalColorMode` / `getGlobalColorMode`:
+
+```ts
+import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
+
+// Force colors on
+setGlobalColorMode("always");
+console.log(style.red("always red"));
+
+// Disable colors but keep bold / italic / underline
+setGlobalColorMode("never");
+console.log(style.bold.red("bold, but no red"));
+
+// Revert to auto (respect TTY + NO_COLOR)
+setGlobalColorMode(undefined);
+
+// Read the current override (ColorMode | undefined)
+getGlobalColorMode();
+```
+
+<Callout type="info">
+Instances returned by `createStyle()` capture their mode at creation time and are **not** affected by `setGlobalColorMode`. The override only applies to the default `style` facade and the named re-exports.
+
+For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](/docs/modules/plugins/no-color).
+</Callout>
 
 ### Composing Styles
 
@@ -208,7 +245,7 @@ console.log(s.rgb("text", 255, 0, 0));
 console.log(s.hex("text", "#ff0000"));
 ```
 
-In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor — detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`. When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work normally.
+In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor and base colors are enabled — detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`. When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work normally.
 
 Invalid inputs throw immediately: `RangeError` for out-of-range RGB values, `TypeError` for malformed hex strings.
 
@@ -266,4 +303,4 @@ The architecture follows four layers:
 3. **Layout Layer** — ANSI-aware width, wrapping, padding, and block formatting
 4. **Theme Layer** — Semantic style slots for GFM constructs
 
-The `NO_COLOR` environment variable and non-TTY detection are respected in `auto` mode. All APIs are pure and side-effect free.
+The `NO_COLOR` environment variable and non-TTY detection are respected in `auto` mode for colors. `NO_COLOR=""` does not disable color, and non-color modifiers remain available even when `NO_COLOR=1`.
