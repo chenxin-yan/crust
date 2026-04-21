@@ -28,6 +28,14 @@ Crust is a modern CLI framework built specifically for TypeScript and Bun. It pr
 
 - [Nia CLI](https://github.com/nozomio-labs/nia-cli) by [Nozomio Labs](https://www.trynia.ai/)
 
+## Getting Started
+
+```sh
+bun create crust my-cli
+cd my-cli
+bun run dev
+```
+
 ## Packages
 
 | Package                                                                | Description                                                                      | Version                                                                                                   | Downloads                                                                                                        |
@@ -44,10 +52,12 @@ Crust is a modern CLI framework built specifically for TypeScript and Bun. It pr
 | [`@crustjs/create`](https://www.npmjs.com/package/@crustjs/create)     | Headless scaffolding engine for building create-xxx tools                        | [![npm](https://img.shields.io/npm/v/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)     | [![downloads](https://img.shields.io/npm/dm/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)     |
 | [`create-crust`](https://www.npmjs.com/package/create-crust)           | Project scaffolding tool                                                         | [![npm](https://img.shields.io/npm/v/create-crust)](https://www.npmjs.com/package/create-crust)           | [![downloads](https://img.shields.io/npm/dm/create-crust)](https://www.npmjs.com/package/create-crust)           |
 
-## Getting Started
+## Star History
 
-```sh
-bun create crust my-cli
-cd my-cli
-bun run dev
-```
+<a href="https://www.star-history.com/?repos=chenxin-yan%2Fcrust&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left" />
+ </picture>
+</a>
