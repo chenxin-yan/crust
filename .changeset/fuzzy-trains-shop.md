@@ -1,5 +1,5 @@
 ---
-"@crustjs/plugins": minor
+"@crustjs/plugins": patch
 "@crustjs/style": minor
 ---
 
