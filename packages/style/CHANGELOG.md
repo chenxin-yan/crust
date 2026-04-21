@@ -1,5 +1,30 @@
 # @crustjs/style
 
+## 0.1.0
+
+### Minor Changes
+
+- df08a3a: Add NO_COLOR-aligned runtime color control.
+
+  `@crustjs/style` now disables colors, but not non-color modifiers, when `NO_COLOR` is set to a non-empty value or when output is non-interactive in auto mode. The default exports also support runtime color overrides via `setGlobalColorMode()` and `getGlobalColorMode()`.
+
+  `@crustjs/plugins` now includes `noColorPlugin()`, which adds `--color` and `--no-color` to a Crust CLI and applies the override for the current run.
+
+  **Breaking:** The capability resolver exports have been renamed for symmetry with the new `resolveModifierCapability`:
+
+  - `resolveCapability` → `resolveColorCapability`
+  - `resolveTrueColor` → `resolveTrueColorCapability`
+
+### Patch Changes
+
+- df08a3a: Fix `apply()` stripping modifier ANSI codes when only colors are disabled (e.g. `NO_COLOR` on a TTY). `apply()` now distinguishes registered modifier pairs from color pairs and gates each on `modifiersEnabled` / `colorsEnabled` independently, matching the behaviour of chained methods like `s.bold()`.
+
+  Centralize modifier classification in `styleMethodRegistry` via new `modifierNames`, `isModifierName`, and `isModifierPair` exports, removing the hardcoded modifier list duplicated in `applyChain`. A compile-time assertion enforces that every modifier name remains a valid registered style method.
+
+- 67a9f25: Add OSC 8 hyperlink styling primitives to `@crustjs/style` via `linkCode()`, `link()`, and `style.link()`, so CLIs can emit clickable terminal links instead of only visually styled link text.
+
+  Hyperlinks now follow the package's mode-aware runtime behaviour: they emit in `always` mode, emit in `auto` mode when stdout is a TTY, and return plain text in `never` mode. The package docs now also explain how OSC 8 link emission relates to the markdown theme's visual link slots.
+
 ## 0.0.6
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # create-crust
 
+## 0.0.28
+
+### Patch Changes
+
+- df08a3a: fix create crust typescript version
+- Updated dependencies [7ca5e5f]
+  - @crustjs/prompts@0.0.13
+  - @crustjs/progress@0.0.3
+
 ## 0.0.27
 
 ### Patch Changes

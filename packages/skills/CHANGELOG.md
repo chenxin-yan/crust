@@ -1,5 +1,17 @@
 # @crustjs/skills
 
+## 0.0.24
+
+### Patch Changes
+
+- Updated dependencies [df08a3a]
+- Updated dependencies [7ca5e5f]
+- Updated dependencies [df08a3a]
+- Updated dependencies [67a9f25]
+  - @crustjs/style@0.1.0
+  - @crustjs/prompts@0.0.13
+  - @crustjs/progress@0.0.3
+
 ## 0.0.23
 
 ### Patch Changes
