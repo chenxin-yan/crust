@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Filter — Fuzzy-search interactive filter prompt for @crustjs/prompts
+// Multifilter — Fuzzy-search multi selection for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
@@ -7,6 +7,8 @@ import { fuzzyFilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import {
+	CHECKBOX_CHECKED,
+	CHECKBOX_UNCHECKED,
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
@@ -28,16 +30,24 @@ import {
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Options for the {@link filter} prompt. */
-export interface FilterOptions<T> {
+/**
+ * Options for the {@link multifilter} prompt.
+ */
+export interface MultifilterOptions<T> {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
+	/** Default selected values — pre-selects matching choices */
+	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
-	readonly initial?: T;
-	/** Default value — sets the initial cursor position to the matching choice. In non-interactive environments, this value is returned automatically */
-	readonly default?: T;
+	readonly initial?: readonly T[];
+	/** Whether at least one item must be selected (defaults to false) */
+	readonly required?: boolean;
+	/** Minimum number of selections required */
+	readonly min?: number;
+	/** Maximum number of selections allowed */
+	readonly max?: number;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
 	/** Maximum number of visible filtered results before scrolling (defaults to 10) */
@@ -51,12 +61,13 @@ export interface FilterOptions<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_VISIBLE = 10;
+const HINT_LINE = "(Type to filter, Space to toggle, Enter to confirm)";
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
 // ────────────────────────────────────────────────────────────────────────────
 
-interface FilterState<T> {
+interface MultifilterState<T> {
 	/** Current query text */
 	readonly query: string;
 	/** Cursor position within the query text */
@@ -69,17 +80,51 @@ interface FilterState<T> {
 	readonly listCursor: number;
 	/** Scroll offset for the filtered results viewport */
 	readonly scrollOffset: number;
+	/** Indices into `choices` for selected items */
+	readonly selected: ReadonlySet<number>;
+	/** Current validation error */
+	readonly error: string | null;
 }
 
-/**
- * Re-run the fuzzy filter on the current query and update results + cursor.
- */
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+function choiceIndex<T>(
+	choices: readonly NormalizedChoice<T>[],
+	item: { readonly label: string; readonly value: T },
+): number {
+	return choices.findIndex(
+		(choice) => choice.label === item.label && choice.value === item.value,
+	);
+}
+
+function validateSelection(
+	selectedCount: number,
+	required?: boolean,
+	min?: number,
+	max?: number,
+): string | null {
+	if (required && selectedCount === 0) {
+		return "At least one item must be selected";
+	}
+
+	if (min !== undefined && selectedCount < min) {
+		return `Select at least ${min} item${min === 1 ? "" : "s"}`;
+	}
+
+	if (max !== undefined && selectedCount > max) {
+		return `Select at most ${max} item${max === 1 ? "" : "s"}`;
+	}
+
+	return null;
+}
+
 function refilter<T>(
-	state: FilterState<T>,
+	state: MultifilterState<T>,
 	maxVisible: number,
-): FilterState<T> {
+): MultifilterState<T> {
 	const results = fuzzyFilter(state.query, state.choices);
-	// Reset list cursor to 0 when results change (query was edited)
 	const listCursor = 0;
 	const scrollOffset = calculateScrollOffset(
 		listCursor,
@@ -87,92 +132,9 @@ function refilter<T>(
 		results.length,
 		maxVisible,
 	);
-	return { ...state, results, listCursor, scrollOffset };
+	return { ...state, results, listCursor, scrollOffset, error: null };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Keypress handler — single select
-// ────────────────────────────────────────────────────────────────────────────
-
-function createHandleKey<T>(
-	maxVisible: number,
-): (
-	key: KeypressEvent,
-	state: FilterState<T>,
-) => FilterState<T> | SubmitResult<T> {
-	return (key, state) => {
-		// Enter — submit the currently highlighted item
-		if (key.name === "return") {
-			const result = state.results[state.listCursor];
-			if (result) {
-				return submit(result.item.value);
-			}
-			// No results to select — ignore
-			return state;
-		}
-
-		// Up arrow — move list cursor up with wrapping
-		if (key.name === "up") {
-			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const newCursor =
-				state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
-			return {
-				...state,
-				listCursor: newCursor,
-				scrollOffset: newScrollOffset,
-			};
-		}
-
-		// Down arrow — move list cursor down with wrapping
-		if (key.name === "down") {
-			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const newCursor =
-				state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
-			return {
-				...state,
-				listCursor: newCursor,
-				scrollOffset: newScrollOffset,
-			};
-		}
-
-		// Delegate text-editing keys to shared handler
-		const edit = handleTextEdit(key, state.query, state.cursorPos);
-		if (edit) {
-			const queryChanged = edit.text !== state.query;
-			const newState: FilterState<T> = {
-				...state,
-				query: edit.text,
-				cursorPos: edit.cursorPos,
-			};
-			// Re-filter only when the query text actually changed
-			return queryChanged ? refilter(newState, maxVisible) : newState;
-		}
-
-		return state;
-	};
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Render
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Highlight matched characters in a label using the theme's filterMatch style.
- */
 function highlightMatches(
 	label: string,
 	indices: readonly number[],
@@ -186,7 +148,6 @@ function highlightMatches(
 
 	while (i < label.length) {
 		if (indexSet.has(i)) {
-			// Collect consecutive matched characters for batch styling
 			let matchedChars = "";
 			while (i < label.length && indexSet.has(i)) {
 				matchedChars += label[i];
@@ -202,8 +163,98 @@ function highlightMatches(
 	return result;
 }
 
-function renderFilter<T>(
-	state: FilterState<T>,
+// ────────────────────────────────────────────────────────────────────────────
+// Keypress handler
+// ────────────────────────────────────────────────────────────────────────────
+
+function createHandleKey<T>(
+	maxVisible: number,
+	required?: boolean,
+	min?: number,
+	max?: number,
+): (
+	key: KeypressEvent,
+	state: MultifilterState<T>,
+) => MultifilterState<T> | SubmitResult<T[]> {
+	return (key, state) => {
+		if (key.name === "return") {
+			const error = validateSelection(state.selected.size, required, min, max);
+			if (error) {
+				return { ...state, error };
+			}
+
+			const selectedValues = state.choices
+				.filter((_, i) => state.selected.has(i))
+				.map((choice) => choice.value);
+			return submit(selectedValues);
+		}
+
+		if (key.name === "space") {
+			const result = state.results[state.listCursor];
+			if (!result) return state;
+
+			const selectedIndex = choiceIndex(state.choices, result.item);
+			if (selectedIndex === -1) return state;
+
+			const selected = new Set(state.selected);
+			if (selected.has(selectedIndex)) {
+				selected.delete(selectedIndex);
+			} else if (max === undefined || selected.size < max) {
+				selected.add(selectedIndex);
+			}
+
+			return { ...state, selected, error: null };
+		}
+
+		if (key.name === "up") {
+			if (state.results.length === 0) return state;
+			const totalItems = state.results.length;
+			const listCursor =
+				state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
+			const scrollOffset = calculateScrollOffset(
+				listCursor,
+				state.scrollOffset,
+				totalItems,
+				maxVisible,
+			);
+			return { ...state, listCursor, scrollOffset, error: null };
+		}
+
+		if (key.name === "down") {
+			if (state.results.length === 0) return state;
+			const totalItems = state.results.length;
+			const listCursor =
+				state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
+			const scrollOffset = calculateScrollOffset(
+				listCursor,
+				state.scrollOffset,
+				totalItems,
+				maxVisible,
+			);
+			return { ...state, listCursor, scrollOffset, error: null };
+		}
+
+		const edit = handleTextEdit(key, state.query, state.cursorPos);
+		if (edit) {
+			const queryChanged = edit.text !== state.query;
+			const nextState: MultifilterState<T> = {
+				...state,
+				query: edit.text,
+				cursorPos: edit.cursorPos,
+			};
+			return queryChanged ? refilter(nextState, maxVisible) : nextState;
+		}
+
+		return state;
+	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Render
+// ────────────────────────────────────────────────────────────────────────────
+
+function renderMultifilter<T>(
+	state: MultifilterState<T>,
 	theme: PromptTheme,
 	message: string | undefined,
 	placeholder: string | undefined,
@@ -212,7 +263,6 @@ function renderFilter<T>(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Search and select");
 
-	// Query input line
 	let queryLine: string;
 	if (state.query === "") {
 		if (placeholder) {
@@ -226,62 +276,76 @@ function renderFilter<T>(
 		queryLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	const lines: string[] = [formatPromptLine(prefix, msg, queryLine)];
+	const lines: string[] = [
+		formatPromptLine(prefix, msg, queryLine),
+		theme.hint(HINT_LINE),
+	];
 
-	// Filtered results list
 	const totalResults = state.results.length;
-
 	if (totalResults === 0 && state.query.length > 0) {
 		lines.push(theme.hint("No matches"));
+		if (state.error) {
+			lines.push(theme.error(state.error));
+		}
 		return lines.join("\n");
 	}
 
 	const visibleCount = Math.min(totalResults, maxVisible);
-
-	// Scroll-up indicator
-	const hasScrollUp = state.scrollOffset > 0;
-	if (hasScrollUp) {
+	if (state.scrollOffset > 0) {
 		lines.push(theme.hint(SCROLL_UP_INDICATOR));
 	}
 
-	// Render visible results
 	for (let i = 0; i < visibleCount; i++) {
 		const resultIndex = state.scrollOffset + i;
 		const result = state.results[resultIndex];
 		if (!result) break;
 
+		const choiceIdx = choiceIndex(state.choices, result.item);
+		const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
 		const isActive = resultIndex === state.listCursor;
+		const isChecked = choiceIdx !== -1 ? state.selected.has(choiceIdx) : false;
+		const checkbox = isChecked
+			? theme.success(CHECKBOX_CHECKED)
+			: CHECKBOX_UNCHECKED;
 		const label = highlightMatches(result.item.label, result.indices, theme);
+		const hintText = choice?.hint ? ` ${theme.hint(choice.hint)}` : "";
 
 		if (isActive) {
-			lines.push(`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`);
+			lines.push(
+				`${theme.cursor(CURSOR_INDICATOR)} ${checkbox} ${theme.selected(label)}${hintText}`,
+			);
 		} else {
-			lines.push(`  ${theme.unselected(label)}`);
+			lines.push(`  ${checkbox} ${theme.unselected(label)}${hintText}`);
 		}
 	}
 
-	// Scroll-down indicator
-	const hasScrollDown = state.scrollOffset + visibleCount < totalResults;
-	if (hasScrollDown) {
+	if (state.scrollOffset + visibleCount < totalResults) {
 		lines.push(theme.hint(SCROLL_DOWN_INDICATOR));
+	}
+
+	if (state.error) {
+		lines.push(theme.error(state.error));
 	}
 
 	return lines.join("\n");
 }
 
 function renderSubmitted<T>(
-	_state: FilterState<T>,
-	_value: T,
+	_state: MultifilterState<T>,
+	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
-	results: readonly FuzzyFilterResult<T>[],
-	listCursor: number,
+	choices: readonly NormalizedChoice<T>[],
+	selected: ReadonlySet<number>,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Search and select");
-	const selected = results[listCursor];
-	const label = selected ? selected.item.label : "";
-	return formatSubmitted(prefix, msg, theme.success(label));
+	const selectedLabels = choices
+		.filter((_, i) => selected.has(i))
+		.map((choice) => choice.label)
+		.join(", ");
+
+	return formatSubmitted(prefix, msg, theme.success(selectedLabels));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -289,118 +353,97 @@ function renderSubmitted<T>(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Display an interactive fuzzy-filter prompt over a list of choices.
+ * Display an interactive fuzzy-filter prompt with checkbox-style multi-selection.
  *
- * Type to filter the list using fuzzy matching. Navigate filtered results
- * with Up/Down arrows, confirm with Enter. Matched characters are
- * highlighted in the results.
+ * Type to filter the list using fuzzy matching. Navigate filtered results with
+ * Up/Down arrows, toggle the highlighted item with Space, and confirm with
+ * Enter. Matched characters are highlighted in the results.
  *
- * If `initial` is provided, the prompt is skipped and the value is returned
- * immediately — useful for prefilling from CLI flags.
+ * If `initial` is provided, the prompt is skipped and the values are returned
+ * immediately.
  *
- * In non-interactive environments (no TTY), the `default` value is returned
+ * In non-interactive environments (no TTY), the `default` values are returned
  * automatically if provided.
- *
- * @param options - Filter prompt configuration
- * @returns The value of the selected choice
- * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
- *
- * @example
- * ```ts
- * const lang = await filter({
- *   message: "Search for a language",
- *   choices: ["TypeScript", "JavaScript", "Rust", "Python", "Go"],
- * });
- * ```
- *
- * @example
- * ```ts
- * const pkg = await filter<{ name: string; version: string }>({
- *   message: "Find a package",
- *   choices: [
- *     { label: "react", value: { name: "react", version: "18.2" } },
- *     { label: "vue", value: { name: "vue", version: "3.3" } },
- *   ],
- *   placeholder: "Type to filter...",
- * });
- * ```
- *
- * @example
- * ```ts
- * // Skip prompt when flag is provided
- * const tool = await filter({
- *   message: "Pick a tool",
- *   choices: ["prettier", "eslint", "biome"],
- *   initial: flags.tool,
- * });
- * ```
  */
-export async function filter<T>(options: FilterOptions<T>): Promise<T> {
-	// Short-circuit: return initial value immediately without rendering
+export async function multifilter<T>(
+	options: MultifilterOptions<T>,
+): Promise<T[]> {
 	if (options.initial !== undefined) {
-		return options.initial;
+		return [...options.initial];
 	}
 
-	// Non-interactive fallback: return default value when stdin is not a TTY
 	if (!isTTY() && options.default !== undefined) {
-		return options.default;
+		return [...options.default];
 	}
 
 	const theme = resolveTheme(options.theme);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
 	const choices = normalizeChoices(options.choices);
+	const results = fuzzyFilter("", choices);
 
-	// Initial results: all items (empty query matches everything)
-	const initialResults = fuzzyFilter("", choices);
-
-	// Find initial cursor position from default value
-	let initialListCursor = 0;
-	if (options.default !== undefined) {
-		const idx = initialResults.findIndex(
-			(result) => result.item.value === options.default,
-		);
-		if (idx !== -1) {
-			initialListCursor = idx;
+	const selected = new Set<number>();
+	if (options.default) {
+		for (const defaultValue of options.default) {
+			const idx = choices.findIndex((choice) => choice.value === defaultValue);
+			if (idx !== -1) {
+				selected.add(idx);
+			}
 		}
 	}
 
-	// Calculate initial scroll offset to keep cursor visible
-	const initialScrollOffset = calculateScrollOffset(
-		initialListCursor,
+	let listCursor = 0;
+	if (options.default && options.default.length > 0) {
+		const idx = results.findIndex(
+			(result) => result.item.value === options.default?.[0],
+		);
+		if (idx !== -1) {
+			listCursor = idx;
+		}
+	}
+
+	const scrollOffset = calculateScrollOffset(
+		listCursor,
 		0,
-		initialResults.length,
+		results.length,
 		maxVisible,
 	);
 
-	const initialState: FilterState<T> = {
+	const initialState: MultifilterState<T> = {
 		query: "",
 		cursorPos: 0,
 		choices,
-		results: initialResults,
-		listCursor: initialListCursor,
-		scrollOffset: initialScrollOffset,
+		results,
+		listCursor,
+		scrollOffset,
+		selected,
+		error: null,
 	};
 
-	return runPrompt<FilterState<T>, T>({
+	return runPrompt<MultifilterState<T>, T[]>({
 		initialState,
 		theme,
 		render: (state, resolvedTheme) =>
-			renderFilter(
+			renderMultifilter(
 				state,
 				resolvedTheme,
 				options.message,
 				options.placeholder,
 				maxVisible,
 			),
-		handleKey: createHandleKey<T>(maxVisible),
+		handleKey: createHandleKey<T>(
+			maxVisible,
+			options.required,
+			options.min,
+			options.max,
+		),
 		renderSubmitted: (state, value, resolvedTheme) =>
 			renderSubmitted(
 				state,
 				value,
 				resolvedTheme,
 				options.message,
-				state.results,
-				state.listCursor,
+				choices,
+				state.selected,
 			),
 	});
 }

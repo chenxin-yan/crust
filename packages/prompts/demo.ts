@@ -8,6 +8,7 @@ import {
 	confirm,
 	filter,
 	input,
+	multifilter,
 	multiselect,
 	password,
 	select,
@@ -158,7 +159,25 @@ async function main() {
 	});
 	console.log(`  -> Language: ${language}\n`);
 
-	// ── 15. Spinner ───────────────────────────────────────────────────────
+	// ── 15. Multifilter ───────────────────────────────────────────────────
+	const addons = await multifilter({
+		message: "Search and enable add-ons",
+		choices: [
+			{ label: "TypeScript", value: "ts", hint: "recommended" },
+			{ label: "ESLint", value: "eslint" },
+			{ label: "Prettier", value: "prettier" },
+			{ label: "Tailwind CSS", value: "tailwind" },
+			{ label: "Testing", value: "testing" },
+			{ label: "Storybook", value: "storybook" },
+			{ label: "GitHub Actions", value: "gha" },
+		],
+		default: ["ts"],
+		min: 1,
+		placeholder: "Type to narrow add-ons...",
+	});
+	console.log(`  -> Add-ons: ${addons.join(", ")}\n`);
+
+	// ── 16. Spinner ───────────────────────────────────────────────────────
 	const data = await spinner({
 		message: "Simulating some work...",
 		task: async () => {
@@ -168,7 +187,7 @@ async function main() {
 	});
 	console.log(`  -> Spinner result: ${JSON.stringify(data)}\n`);
 
-	// ── 16. Spinner (message updates) ─────────────────────────────────────
+	// ── 17. Spinner (message updates) ─────────────────────────────────────
 	await spinner({
 		message: "Installing dependencies...",
 		task: async ({ updateMessage }) => {
@@ -193,6 +212,7 @@ async function main() {
 	console.log(`  Features:  ${features.join(", ")}`);
 	console.log(`  Extras:    ${extras.join(", ")}`);
 	console.log(`  Language:  ${language}`);
+	console.log(`  Add-ons:   ${addons.join(", ")}`);
 	console.log("");
 }
 

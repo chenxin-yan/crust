@@ -1,11 +1,11 @@
 ---
 title: "Prompts"
-description: Interactive terminal prompts for CLI applications — input, password, confirm, select, multiselect, and filter.
+description: Interactive terminal prompts for CLI applications — input, password, confirm, select, multiselect, filter, and multifilter.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes six prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
+`@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
 
 <Callout>
   Spinner support has moved to [`@crustjs/progress`](/docs/modules/progress). `@crustjs/prompts` still re-exports `spinner` temporarily for compatibility, but that re-export is deprecated and will be removed in `v0.1.0`.
@@ -26,7 +26,14 @@ bun add @crustjs/prompts
 ## Quick Example
 
 ```ts
-import { input, confirm, select, multiselect } from "@crustjs/prompts";
+import {
+  input,
+  confirm,
+  select,
+  multiselect,
+  filter,
+  multifilter,
+} from "@crustjs/prompts";
 
 const name = await input({ message: "Project name?" });
 const useTS = await confirm({ message: "Use TypeScript?" });
@@ -40,6 +47,16 @@ const features = await multiselect({
   message: "Features",
   choices: ["linting", "testing", "ci"],
   required: true,
+});
+
+const language = await filter({
+  message: "Language",
+  choices: ["typescript", "javascript", "rust"],
+});
+
+const addons = await multifilter({
+  message: "Add-ons",
+  choices: ["tailwind", "testing", "storybook", "eslint"],
 });
 ```
 
@@ -168,7 +185,7 @@ const features = await multiselect({
 
 Fuzzy-search selection. Type to filter, navigate with Up/Down, and confirm with Enter. Matched characters are highlighted in results.
 
-Pass `{ multiple: true }` for checkbox-style multi-selection: **Space** toggles the highlighted row, **Enter** confirms and returns `T[]` in original choice order (same validation options as `multiselect`: `required`, `min`, `max`). Use `multiselect` when you want the full list without a search box; use `filter` with `multiple: true` when the list is long and users need to narrow it first.
+Use `filter` when users should choose a single item from a long list and need search to narrow it quickly. For fuzzy multi-selection, use `multifilter`.
 
 ```ts
 const lang = await filter({
@@ -177,8 +194,6 @@ const lang = await filter({
   placeholder: "Type to filter...",
 });
 ```
-
-**Single selection (default)** — returns `T`.
 
 | Option        | Type                 | Default | Description                                    |
 | ------------- | -------------------- | ------- | ---------------------------------------------- |
@@ -190,27 +205,38 @@ const lang = await filter({
 | `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling       |
 | `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                     |
 
-**Multiple selection** — set `multiple: true`; returns `T[]`.
+### `multifilter(options)`
+
+Fuzzy-search multi-selection. Type to filter, navigate with Up/Down, use Space to toggle the highlighted result, and confirm with Enter. Selected values are returned in original choice order.
+
+Use `multifilter` when the list is large enough that users need a search box before they can comfortably select multiple items.
+
+`filter` and `multifilter` mirror the `select` and `multiselect` split:
+- `filter` returns a single `T`
+- `multifilter` returns `T[]`
 
 ```ts
-const langs = await filter({
-  message: "Languages",
-  multiple: true,
-  choices: ["TypeScript", "JavaScript", "Rust"],
+const features = await multifilter({
+  message: "Enable features",
+  choices: [
+    { label: "TypeScript", value: "ts", hint: "recommended" },
+    { label: "ESLint", value: "eslint" },
+    { label: "Prettier", value: "prettier" },
+  ],
+  default: ["ts"],
   required: true,
 });
 ```
 
 | Option        | Type                 | Default | Description                                    |
 | ------------- | -------------------- | ------- | ---------------------------------------------- |
-| `multiple`    | `true`               | —       | Enable multi-select (fuzzy list + checkboxes)  |
 | `message`     | `string`             | —       | Prompt message                                 |
 | `choices`     | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects   |
-| `initial`     | `T[]`                | —       | Skip prompt and return these values (order kept) |
-| `default`     | `T[]`                | —       | Pre-selected; used when not a TTY              |
-| `required`   | `boolean`            | `false` | Require at least one selection                 |
-| `min`        | `number`             | —       | Minimum selections required                    |
-| `max`        | `number`             | —       | Maximum selections allowed                     |
+| `default`     | `T[]`                | —       | Pre-selects matching choices                   |
+| `initial`     | `T[]`                | —       | Skip prompt and return these values immediately |
+| `required`    | `boolean`            | `false` | Require at least one selection                 |
+| `min`         | `number`             | —       | Minimum selections required                    |
+| `max`         | `number`             | —       | Maximum selections allowed                     |
 | `placeholder` | `string`             | —       | Placeholder text for the query input           |
 | `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling       |
 | `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                     |
@@ -338,6 +364,7 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `select`      | Single selection from a list   |
 | `multiselect` | Checkbox-style multi-selection |
 | `filter`      | Fuzzy-search selection         |
+| `multifilter` | Fuzzy-search multi-selection   |
 
 ### Theme
 
@@ -380,8 +407,8 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `ConfirmOptions`      | Options for `confirm()`                          |
 | `SelectOptions<T>`    | Options for `select()`                           |
 | `MultiselectOptions<T>` | Options for `multiselect()`                    |
-| `FilterOptions<T>`    | Options for `filter()` (single selection)        |
-| `FilterMultipleOptions<T>` | Options for `filter()` when `multiple: true`  |
+| `FilterOptions<T>`    | Options for `filter()`                           |
+| `MultifilterOptions<T>` | Options for `multifilter()`                   |
 | `PromptTheme`         | Complete theme with all style slots              |
 | `PartialPromptTheme`  | Partial theme for overrides                      |
 | `Choice<T>`           | Choice item: string or `{ label, value, hint? }` |

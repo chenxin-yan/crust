@@ -19,6 +19,7 @@ import {
 	fuzzyMatch,
 	getTheme,
 	input,
+	multifilter,
 	multiselect,
 	// Renderer
 	NonInteractiveError,
@@ -42,6 +43,7 @@ describe("barrel exports", () => {
 		expect(typeof select).toBe("function");
 		expect(typeof multiselect).toBe("function");
 		expect(typeof filter).toBe("function");
+		expect(typeof multifilter).toBe("function");
 		expect(typeof spinner).toBe("function");
 	});
 
@@ -178,10 +180,9 @@ describe("initial value short-circuit", () => {
 		expect(result).toBe("banana");
 	});
 
-	it("filter with multiple returns initial array without rendering", async () => {
-		const result = await filter({
+	it("multifilter returns initial value without rendering", async () => {
+		const result = await multifilter({
 			message: "Search",
-			multiple: true,
 			choices: ["apple", "banana", "cherry"],
 			initial: ["banana", "apple"],
 		});
@@ -267,13 +268,13 @@ describe("NonInteractiveError", () => {
 import type {
 	Choice,
 	ConfirmOptions,
-	FilterMultipleOptions,
 	FilterOptions,
 	FuzzyFilterResult,
 	FuzzyMatchResult,
 	HandleKeyResult,
 	InputOptions,
 	KeypressEvent,
+	MultifilterOptions,
 	MultiselectOptions,
 	NormalizedChoice,
 	PartialPromptTheme,
@@ -320,13 +321,17 @@ describe("type exports", () => {
 		const _filterOptsNoMsg: FilterOptions<string> = {
 			choices: ["a"],
 		};
-		const _filterMultiOpts: FilterMultipleOptions<string> = {
+		const _filterMultipleOpts: FilterOptions<string> = {
+			message: "m",
+			// @ts-expect-error `filter` no longer supports multi-select mode
 			multiple: true,
+			choices: ["a"],
+		};
+		const _multifilterOpts: MultifilterOptions<string> = {
 			message: "m",
 			choices: ["a"],
 		};
-		const _filterMultiOptsNoMsg: FilterMultipleOptions<string> = {
-			multiple: true,
+		const _multifilterOptsNoMsg: MultifilterOptions<string> = {
 			choices: ["a"],
 		};
 		const _spinnerOpts: SpinnerOptions<string> = {
