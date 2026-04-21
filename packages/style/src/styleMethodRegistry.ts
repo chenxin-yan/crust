@@ -32,10 +32,8 @@ export function stylePairFor(name: StyleMethodName): AnsiPair {
  * `modifiersEnabled` vs `colorsEnabled` (e.g. under `NO_COLOR`, modifiers
  * remain enabled while colors are disabled).
  *
- * @remarks
- * Every name listed here must also appear in {@link styleMethodNames}. A
- * compile-time assertion (`_ModifiersAreStyleMethodNames`) enforces the
- * forward direction; a runtime test asserts the set membership.
+ * The inline `satisfies readonly StyleMethodName[]` clause guarantees at
+ * compile time that every listed name is a valid {@link StyleMethodName}.
  */
 export type ModifierName =
 	| "bold"
@@ -54,14 +52,7 @@ export const modifierNames: readonly ModifierName[] = Object.freeze([
 	"inverse",
 	"hidden",
 	"strikethrough",
-]);
-
-// Compile-time guarantee: every modifier name is a valid StyleMethodName.
-type _ModifiersAreStyleMethodNames = ModifierName extends StyleMethodName
-	? true
-	: never;
-const _modifiersAreStyleMethodNames: _ModifiersAreStyleMethodNames = true;
-void _modifiersAreStyleMethodNames;
+] as const satisfies readonly StyleMethodName[]);
 
 const modifierNameSet: ReadonlySet<StyleMethodName> = new Set(modifierNames);
 

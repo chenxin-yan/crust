@@ -213,77 +213,84 @@ export function getGlobalColorMode(): ColorMode | undefined {
 	return globalColorMode;
 }
 
-const alwaysRuntimeStyle = createStyle({ mode: "always" });
-const noColorRuntimeStyle = createStyle({
-	mode: "auto",
-	overrides: {
-		isTTY: true,
-		noColor: "1",
-	},
-});
+// Runtime style cache keyed on `(globalMode, isTTY, NO_COLOR)`. The
+// `"never"` override intentionally maps to an `auto` instance with
+// `noColor: "1"` so that modifiers (bold, italic, etc.) remain enabled —
+// matching the no-color.org semantics for `--no-color` without also
+// suppressing non-color ANSI.
+const runtimeStyleCache = new Map<string, StyleInstance>();
 
-let cachedAutoKey: string | undefined;
-let cachedAutoStyle: StyleInstance | undefined;
-
-export function getRuntimeStyle(): StyleInstance {
+function buildRuntimeStyle(): StyleInstance {
 	if (globalColorMode === "always") {
-		return alwaysRuntimeStyle;
+		return createStyle({ mode: "always" });
 	}
-
 	if (globalColorMode === "never") {
-		return noColorRuntimeStyle;
+		return createStyle({
+			mode: "auto",
+			overrides: { isTTY: true, noColor: "1" },
+		});
 	}
-
-	const isTTY = process.stdout?.isTTY ?? false;
-	const noColor = process.env.NO_COLOR;
-	const key = `${isTTY}|${noColor}`;
-	if (cachedAutoKey === key && cachedAutoStyle) {
-		return cachedAutoStyle;
-	}
-	cachedAutoStyle = createStyle({ mode: "auto" });
-	cachedAutoKey = key;
-	return cachedAutoStyle;
+	return createStyle({ mode: "auto" });
 }
 
-function createRuntimeStyleFacade(): StyleInstance {
-	const facade: Partial<StyleInstance> = {
-		get enabled() {
-			return getRuntimeStyle().enabled;
-		},
-		get colorsEnabled() {
-			return getRuntimeStyle().colorsEnabled;
-		},
-		get trueColorEnabled() {
-			return getRuntimeStyle().trueColorEnabled;
-		},
-		apply(text: string, pair: AnsiPair) {
-			return getRuntimeStyle().apply(text, pair);
-		},
-		rgb(text: string, r: number, g: number, b: number) {
-			return getRuntimeStyle().rgb(text, r, g, b);
-		},
-		bgRgb(text: string, r: number, g: number, b: number) {
-			return getRuntimeStyle().bgRgb(text, r, g, b);
-		},
-		hex(text: string, hexColor: string) {
-			return getRuntimeStyle().hex(text, hexColor);
-		},
-		bgHex(text: string, hexColor: string) {
-			return getRuntimeStyle().bgHex(text, hexColor);
-		},
-	};
+export function getRuntimeStyle(): StyleInstance {
+	const key = `${globalColorMode ?? "auto"}|${process.stdout?.isTTY ?? false}|${process.env.NO_COLOR ?? ""}`;
+	const cached = runtimeStyleCache.get(key);
+	if (cached) {
+		return cached;
+	}
+	const built = buildRuntimeStyle();
+	runtimeStyleCache.set(key, built);
+	return built;
+}
 
-	for (const methodName of styleMethodNames) {
-		Object.defineProperty(facade, methodName, {
+// Members whose implementation is a function and must be forwarded as a
+// bound method so callers can invoke them like `style.apply(...)`.
+const FORWARDED_METHODS = ["apply", "rgb", "bgRgb", "hex", "bgHex"] as const;
+
+// Members that read a value off the current runtime style on every access.
+const FORWARDED_GETTERS = [
+	"enabled",
+	"colorsEnabled",
+	"trueColorEnabled",
+] as const;
+
+function createRuntimeStyleFacade(): StyleInstance {
+	const facade = {} as StyleInstance;
+
+	for (const key of FORWARDED_GETTERS) {
+		Object.defineProperty(facade, key, {
 			configurable: false,
 			enumerable: true,
 			get() {
-				return getRuntimeStyle()[methodName];
+				return getRuntimeStyle()[key];
 			},
 		});
 	}
 
-	return Object.freeze(facade as StyleInstance);
+	for (const key of FORWARDED_METHODS) {
+		Object.defineProperty(facade, key, {
+			configurable: false,
+			enumerable: true,
+			value: (...args: unknown[]) => {
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding preserves the runtime instance signature
+				return (getRuntimeStyle()[key] as any)(...args);
+			},
+			writable: false,
+		});
+	}
+
+	for (const name of styleMethodNames) {
+		Object.defineProperty(facade, name, {
+			configurable: false,
+			enumerable: true,
+			get() {
+				return getRuntimeStyle()[name];
+			},
+		});
+	}
+
+	return Object.freeze(facade);
 }
 
 /**

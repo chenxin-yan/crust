@@ -68,6 +68,9 @@ export function resolveColorCapability(
  *
  * In `"auto"` mode, modifiers are enabled when stdout is a TTY, but are
  * **not** affected by `NO_COLOR` (which only controls color output).
+ *
+ * @internal Exported only for use by {@link createStyle}; not part of the
+ * public surface of `@crustjs/style`.
  */
 export function resolveModifierCapability(
 	mode: ColorMode,
