@@ -119,7 +119,7 @@ To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(
 | `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
 | `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
 | `StyleFn` | `(text: string) => string` style function |
-| `StyleInstance` | Configured style object with all styling methods |
+| `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, and `trueColorEnabled` capability flags |
 | `WrapOptions` | Options for `wrapText` |
 | `ColumnAlignment` | `"left" \| "right" \| "center"` |
 | `TableOptions` | Options for `table` |
@@ -169,6 +169,34 @@ console.log(color.bold.red("always bold red"));
 const plain = createStyle({ mode: "never" });
 console.log(plain.red("error")); // "error" (no ANSI)
 ```
+
+### Runtime Color Overrides
+
+The default `style` export and all named helpers (`red`, `bold`, etc.) re-resolve their color mode on every call, so you can override it globally at runtime with `setGlobalColorMode` / `getGlobalColorMode`:
+
+```ts
+import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
+
+// Force colors on
+setGlobalColorMode("always");
+console.log(style.red("always red"));
+
+// Disable colors but keep bold / italic / underline
+setGlobalColorMode("never");
+console.log(style.bold.red("bold, but no red"));
+
+// Revert to auto (respect TTY + NO_COLOR)
+setGlobalColorMode(undefined);
+
+// Read the current override (ColorMode | undefined)
+getGlobalColorMode();
+```
+
+<Callout type="info">
+Instances returned by `createStyle()` capture their mode at creation time and are **not** affected by `setGlobalColorMode`. The override only applies to the default `style` facade and the named re-exports.
+
+For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](/docs/modules/plugins/no-color).
+</Callout>
 
 ### Composing Styles
 

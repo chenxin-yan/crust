@@ -64,6 +64,10 @@ function lateSkillPlugin(): CrustPlugin {
 
 describe("built-in plugins", () => {
 	it("renderHelp styles sections and preserves plain-text structure", () => {
+		// Force colors on so the ANSI assertion is deterministic in non-TTY
+		// test environments (e.g. CI). Reset via afterEach.
+		setGlobalColorMode("always");
+
 		const command = new Crust("app")
 			.meta({ description: "Test app" })
 			.flags({

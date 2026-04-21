@@ -153,6 +153,32 @@ The default `style` export uses `"auto"` mode:
 - `NO_COLOR=""` does not disable color
 - `NO_COLOR` does not disable non-color ANSI styling such as bold or underline
 
+### Runtime Color Overrides
+
+The default `style` export and all named helpers (`red`, `bold`, etc.) re-resolve their color mode on every call, so you can override it globally at runtime:
+
+```ts
+import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
+
+// Force colors on for the remainder of this process
+setGlobalColorMode("always");
+console.log(style.red("always red"));
+
+// Turn colors off while keeping bold/italic/etc.
+setGlobalColorMode("never");
+console.log(style.bold.red("bold, but no red"));
+
+// Revert to auto (respect TTY + NO_COLOR)
+setGlobalColorMode(undefined);
+
+// Read the current override
+getGlobalColorMode(); // ColorMode | undefined
+```
+
+Instances returned by `createStyle()` are not affected — they capture their mode at creation time. The override only applies to the default `style` facade and the named re-exports.
+
+For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](https://crustjs.com/docs/modules/plugins/no-color) from `@crustjs/plugins`, which saves and restores the previous mode around the command invocation.
+
 ### Deterministic Testing
 
 Inject capability overrides for predictable test output:
@@ -267,9 +293,9 @@ console.log(defaultTheme.linkText("docs") + " " + defaultTheme.linkUrl("https://
 Override specific slots while inheriting defaults:
 
 ```ts
-import { createTheme } from "@crustjs/style";
+import { createMarkdownTheme } from "@crustjs/style";
 
-const theme = createTheme({
+const theme = createMarkdownTheme({
   style: { mode: "always" },
   overrides: {
     heading1: (text) => `>>> ${text.toUpperCase()} <<<`,
