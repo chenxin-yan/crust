@@ -1,6 +1,6 @@
 ---
 "create-crust": patch
-"@crustjs/create": minor
+"@crustjs/create": patch
 ---
 
 `create-crust` now resolves and pins `@crustjs/*` package versions at scaffold time instead of shipping `"latest"` in the generated `package.json`.
