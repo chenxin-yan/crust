@@ -40,7 +40,32 @@ describe("createCrustProject", () => {
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "bun.lock"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "node_modules"))).toBe(true);
-	});
+
+		const pkg = JSON.parse(
+			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
+		);
+
+		// No leftover "latest" tags — every range must be a resolved semver.
+		const allDepValues = [
+			...Object.values(pkg.dependencies ?? {}),
+			...Object.values(pkg.devDependencies ?? {}),
+		];
+		for (const value of allDepValues) {
+			expect(value).not.toBe("latest");
+		}
+
+		// Every @crustjs/* entry must be a caret semver range
+		// (prerelease allowed).
+		const crustEntries = [
+			...Object.entries(pkg.dependencies ?? {}),
+			...Object.entries(pkg.devDependencies ?? {}),
+		].filter(([name]) => name.startsWith("@crustjs/"));
+
+		expect(crustEntries.length).toBeGreaterThan(0);
+		for (const [, range] of crustEntries) {
+			expect(range as string).toMatch(/^\^\d+\.\d+\.\d+(-.+)?$/);
+		}
+	}, 60_000);
 
 	it("scaffolds a project without installing dependencies when skipped", async () => {
 		await createCrustProject({

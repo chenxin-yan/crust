@@ -73,6 +73,22 @@ export interface ScaffoldResult {
  */
 export type PostScaffoldStep =
 	| { readonly type: "install" }
+	/**
+	 * Add packages to `package.json` using the detected package manager's
+	 * `add` command, resolving `@latest` to the current semver range (e.g.
+	 * `^1.2.3`) and installing them in one shot.
+	 *
+	 * Each entry is a BARE package name (e.g. `"@crustjs/core"`). The step
+	 * appends `@latest` itself when invoking the underlying command. Use
+	 * `dependencies` for regular deps and `devDependencies` for dev deps.
+	 * Packages are batched per dep-kind — at most two spawns are issued.
+	 * If both lists are empty or omitted, the step is a no-op.
+	 */
+	| {
+			readonly type: "add";
+			readonly dependencies?: readonly string[];
+			readonly devDependencies?: readonly string[];
+	  }
 	| { readonly type: "git-init"; readonly commit?: string }
 	| { readonly type: "open-editor" }
 	/**

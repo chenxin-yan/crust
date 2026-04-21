@@ -99,6 +99,72 @@ describe("runSteps", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────────
+	// Tests: add step
+	// ────────────────────────────────────────────────────────────────────────────
+
+	describe("add step", () => {
+		it("writes a resolved caret range for a regular dependency", async () => {
+			writeFileSync(
+				join(tempDir, "package.json"),
+				JSON.stringify({ name: "add-test-project", version: "0.0.0" }),
+			);
+			// Force bun detection so `bun add` is used.
+			writeFileSync(join(tempDir, "bun.lock"), "");
+
+			await runSteps([{ type: "add", dependencies: ["is-number"] }], tempDir);
+
+			const pkg = JSON.parse(
+				readFileSync(join(tempDir, "package.json"), "utf-8"),
+			);
+			expect(pkg.dependencies).toBeDefined();
+			expect(pkg.dependencies["is-number"]).toMatch(/^\^\d+\.\d+\.\d+$/);
+			// Should not be the literal "latest" tag.
+			expect(pkg.dependencies["is-number"]).not.toBe("latest");
+		}, 30_000);
+
+		it("writes a resolved caret range for a dev dependency", async () => {
+			writeFileSync(
+				join(tempDir, "package.json"),
+				JSON.stringify({ name: "add-test-project", version: "0.0.0" }),
+			);
+			writeFileSync(join(tempDir, "bun.lock"), "");
+
+			await runSteps(
+				[{ type: "add", devDependencies: ["is-number"] }],
+				tempDir,
+			);
+
+			const pkg = JSON.parse(
+				readFileSync(join(tempDir, "package.json"), "utf-8"),
+			);
+			expect(pkg.devDependencies).toBeDefined();
+			expect(pkg.devDependencies["is-number"]).toMatch(/^\^\d+\.\d+\.\d+$/);
+			// Should land in devDependencies, not dependencies.
+			expect(pkg.dependencies?.["is-number"]).toBeUndefined();
+		}, 30_000);
+
+		it("is a no-op when both lists are empty or omitted", async () => {
+			const initialPkg = { name: "add-test-project", version: "0.0.0" };
+			writeFileSync(join(tempDir, "package.json"), JSON.stringify(initialPkg));
+			writeFileSync(join(tempDir, "bun.lock"), "");
+
+			// No throw, no mutation.
+			await runSteps([{ type: "add" }], tempDir);
+			await runSteps(
+				[{ type: "add", dependencies: [], devDependencies: [] }],
+				tempDir,
+			);
+
+			const pkg = JSON.parse(
+				readFileSync(join(tempDir, "package.json"), "utf-8"),
+			);
+			expect(pkg).toEqual(initialPkg);
+			// Confirm no node_modules was created either (no install ran).
+			expect(existsSync(join(tempDir, "node_modules"))).toBe(false);
+		});
+	});
+
+	// ────────────────────────────────────────────────────────────────────────────
 	// Tests: command step
 	// ────────────────────────────────────────────────────────────────────────────
 

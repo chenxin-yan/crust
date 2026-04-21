@@ -108,12 +108,11 @@ describe("scaffold", () => {
 		expect(pkg.version).toBe("0.0.0");
 		expect(pkg.type).toBe("module");
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli" });
+		// @crustjs/* packages are added by the post-scaffold `add` step
+		// (when installDeps is true), not by the template itself, so the
+		// raw scaffolded package.json only contains typescript here.
 		expect(pkg.dependencies).toBeUndefined();
 		expect(pkg.devDependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/crust": "latest",
-			"@crustjs/plugins": "latest",
-			"@types/bun": "latest",
 			typescript: "^6",
 		});
 		expect(pkg.scripts).toEqual({
@@ -139,13 +138,10 @@ describe("scaffold", () => {
 
 		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
 		expect(pkg.files).toEqual(["dist"]);
-		expect(pkg.dependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/plugins": "latest",
-		});
+		// @crustjs/* packages are added by the post-scaffold `add` step,
+		// not by the template itself.
+		expect(pkg.dependencies).toBeUndefined();
 		expect(pkg.devDependencies).toEqual({
-			"@crustjs/crust": "latest",
-			"@types/bun": "latest",
 			typescript: "^6",
 		});
 		expect(pkg.scripts).toEqual({
@@ -284,9 +280,11 @@ describe("scaffold", () => {
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
 		expect(pkg.bin["modular-runtime-cli"]).toBe("dist/cli.js");
-		expect(pkg.dependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/plugins": "latest",
+		// @crustjs/* packages are added by the post-scaffold `add` step,
+		// not by the template itself.
+		expect(pkg.dependencies).toBeUndefined();
+		expect(pkg.devDependencies).toEqual({
+			typescript: "^6",
 		});
 	});
 

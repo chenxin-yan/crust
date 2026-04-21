@@ -25,6 +25,25 @@ Every generated project includes:
 
 Generated templates can be configured for either standalone binary distribution or Bun runtime package distribution during scaffolding.
 
+## Dependency Versions
+
+By default (when dependencies are installed at scaffold time), `@crustjs/*` packages are resolved to their latest published versions and written as caret ranges (for example `^1.2.3`) directly into the new project's `package.json` — the generated file never contains a literal `"latest"` tag.
+
+When `--no-install` is passed, `@crustjs/*` packages are not added automatically. Run one of the following inside the generated project afterwards:
+
+- Runtime distribution:
+
+  ```sh
+  bun add @crustjs/core@latest @crustjs/plugins@latest
+  bun add -d @crustjs/crust@latest @types/bun@latest
+  ```
+
+- Binary distribution:
+
+  ```sh
+  bun add -d @crustjs/core@latest @crustjs/crust@latest @crustjs/plugins@latest @types/bun@latest
+  ```
+
 For standalone binary projects, the intended workflow is:
 
 1. `bun run build` — raw binaries (`crust build`)

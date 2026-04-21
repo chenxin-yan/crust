@@ -20,10 +20,6 @@
 		"check:types": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@crustjs/core": "latest",
-		"@crustjs/crust": "latest",
-		"@crustjs/plugins": "latest",
-		"@types/bun": "latest",
 		"typescript": "^6"
 	}
 }

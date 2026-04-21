@@ -16,13 +16,7 @@
 		"start": "bun run dist/cli.js",
 		"check:types": "tsc --noEmit"
 	},
-	"dependencies": {
-		"@crustjs/core": "latest",
-		"@crustjs/plugins": "latest"
-	},
 	"devDependencies": {
-		"@crustjs/crust": "latest",
-		"@types/bun": "latest",
 		"typescript": "^6"
 	}
 }

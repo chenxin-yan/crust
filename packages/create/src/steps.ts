@@ -1,6 +1,6 @@
 import { $ } from "bun";
 import type { PostScaffoldStep } from "./types.ts";
-import { detectPackageManager } from "./utils.ts";
+import { detectPackageManager, type PackageManager } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
@@ -37,6 +37,9 @@ export async function runSteps(
 			case "install":
 				await runInstall(cwd);
 				break;
+			case "add":
+				await runAdd(cwd, step.dependencies, step.devDependencies);
+				break;
 			case "git-init":
 				await runGitInit(cwd, step.commit);
 				break;
@@ -67,6 +70,88 @@ async function runInstall(cwd: string): Promise<void> {
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
+	}
+}
+
+/**
+ * Detect the package manager and run its `add` command for the provided
+ * package lists.
+ *
+ * Each entry is a BARE package name — `@latest` is appended here so the
+ * package manager resolves the current version and writes a caret range
+ * (e.g. `^1.2.3`) into the consumer's `package.json`, rather than leaving
+ * a literal `"latest"` tag.
+ *
+ * - Regular deps and dev deps are added in separate spawns (max two).
+ * - Empty / omitted lists are skipped entirely.
+ * - If both lists are empty, this is a no-op.
+ * - `--exact` / `-E` is intentionally NOT passed: caret ranges are desired.
+ */
+async function runAdd(
+	cwd: string,
+	dependencies: readonly string[] = [],
+	devDependencies: readonly string[] = [],
+): Promise<void> {
+	if (dependencies.length === 0 && devDependencies.length === 0) {
+		return;
+	}
+
+	const pm = detectPackageManager(cwd);
+
+	if (dependencies.length > 0) {
+		await spawnAdd(pm, cwd, dependencies, false);
+	}
+	if (devDependencies.length > 0) {
+		await spawnAdd(pm, cwd, devDependencies, true);
+	}
+}
+
+/**
+ * Build and run a single `<pm> add` invocation for one dep-kind.
+ */
+async function spawnAdd(
+	pm: PackageManager,
+	cwd: string,
+	packages: readonly string[],
+	dev: boolean,
+): Promise<void> {
+	const pinned = packages.map((name) => `${name}@latest`);
+	const argv = buildAddArgv(pm, pinned, dev);
+
+	const proc = Bun.spawn(argv, {
+		cwd,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		throw new Error(`"${argv.join(" ")}" exited with code ${exitCode}`);
+	}
+}
+
+/**
+ * Map a package manager + dep-kind to the concrete `add` argv.
+ */
+function buildAddArgv(
+	pm: PackageManager,
+	pinned: readonly string[],
+	dev: boolean,
+): string[] {
+	switch (pm) {
+		case "bun":
+			return dev ? ["bun", "add", "-d", ...pinned] : ["bun", "add", ...pinned];
+		case "pnpm":
+			return dev
+				? ["pnpm", "add", "-D", ...pinned]
+				: ["pnpm", "add", ...pinned];
+		case "yarn":
+			return dev
+				? ["yarn", "add", "-D", ...pinned]
+				: ["yarn", "add", ...pinned];
+		case "npm":
+			return dev
+				? ["npm", "install", "-D", ...pinned]
+				: ["npm", "install", ...pinned];
 	}
 }
 
