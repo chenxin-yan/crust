@@ -5,6 +5,7 @@
 import type { AnsiPair } from "./ansiCodes.ts";
 import {
 	resolveColorCapability,
+	resolveHyperlinkCapability,
 	resolveModifierCapability,
 	resolveTrueColorCapability,
 } from "./capability.ts";
@@ -14,6 +15,7 @@ import {
 	hex as hexDirect,
 	rgb as rgbDirect,
 } from "./dynamicColors.ts";
+import { link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import {
 	isModifierName,
@@ -153,6 +155,10 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
 	const colorsEnabled = resolveColorCapability(mode, options?.overrides);
+	const hyperlinksEnabled = resolveHyperlinkCapability(
+		mode,
+		options?.overrides,
+	);
 	const enabled = modifiersEnabled || colorsEnabled;
 	const trueColorEnabled = resolveTrueColorCapability(mode, options?.overrides);
 	const createChainableStyle = buildChainableStyleFactory(
@@ -176,6 +182,11 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			const gate = isModifierPair(pair) ? modifiersEnabled : colorsEnabled;
 			return gate ? applyStyle(text, pair) : text;
 		},
+
+		link: hyperlinksEnabled
+			? (text: string, url: string, hyperlinkOptions) =>
+					linkDirect(text, url, hyperlinkOptions)
+			: (text: string, _url: string) => text,
 
 		// ── Dynamic colors (truecolor) ──────────────────────────────────────
 
@@ -246,7 +257,14 @@ export function getRuntimeStyle(): StyleInstance {
 
 // Members whose implementation is a function and must be forwarded as a
 // bound method so callers can invoke them like `style.apply(...)`.
-const FORWARDED_METHODS = ["apply", "rgb", "bgRgb", "hex", "bgHex"] as const;
+const FORWARDED_METHODS = [
+	"apply",
+	"link",
+	"rgb",
+	"bgRgb",
+	"hex",
+	"bgHex",
+] as const;
 
 // Members that read a value off the current runtime style on every access.
 const FORWARDED_GETTERS = [

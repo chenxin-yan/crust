@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
+import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
@@ -116,6 +117,13 @@ export interface StyleInstance extends StyleMethodMap {
 
 	/** Apply an arbitrary ANSI pair to text, respecting the color mode. */
 	readonly apply: (text: string, pair: AnsiPair) => string;
+
+	/** Wrap text in an OSC 8 hyperlink when link styling is enabled. */
+	readonly link: (
+		text: string,
+		url: string,
+		options?: HyperlinkOptions,
+	) => string;
 
 	// ── Dynamic colors (truecolor) ───────────────────────────────────────
 

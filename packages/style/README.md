@@ -22,6 +22,7 @@ console.log(style.bold("Build succeeded"));
 console.log(style.red("Error: missing argument"));
 console.log(style.dim("hint: use --help for usage"));
 console.log(style.bold.red("Critical failure"));
+console.log(style.link("Docs", "https://crustjs.com"));
 ```
 
 ## Primitive Styling
@@ -61,6 +62,26 @@ console.log(applyStyle("critical error", boldRed));
 ```
 
 Nested styles are handled safely — no style bleed across boundaries.
+
+## Hyperlinks (OSC 8)
+
+Wrap text in terminal hyperlink escape sequences:
+
+```ts
+import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
+
+const s = createStyle({ mode: "always" });
+
+console.log(s.link("Crust docs", "https://crustjs.com"));
+console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
+
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
+console.log(applyStyle("Visit Crust", underlinedLink));
+```
+
+In `"auto"` mode, hyperlinks are emitted when stdout is a TTY. They are not disabled by `NO_COLOR`, since OSC 8 links are not color sequences. In `"never"` mode, link methods return plain text.
+
+Terminal support for OSC 8 varies. Many modern terminals support it, but there is no reliable cross-terminal feature probe yet, so unsupported terminals may simply render plain text without clickable behavior.
 
 ## Dynamic Colors (Truecolor)
 
@@ -287,6 +308,8 @@ console.log(defaultTheme.strong("important"));
 console.log(defaultTheme.inlineCode("npm install"));
 console.log(defaultTheme.linkText("docs") + " " + defaultTheme.linkUrl("https://crustjs.com"));
 ```
+
+The markdown theme styles how links look, but it does not create OSC 8 hyperlinks by itself. When your renderer has both the label and destination URL, use `style.link()` or `linkCode()` to emit a clickable link.
 
 ### Custom Themes
 

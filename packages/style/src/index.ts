@@ -61,6 +61,7 @@ export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export {
 	resolveColorCapability,
+	resolveHyperlinkCapability,
 	resolveTrueColorCapability,
 } from "./capability.ts";
 export {
@@ -77,6 +78,8 @@ export {
 	parseHex,
 	rgbCode,
 } from "./dynamicColors.ts";
+export type { HyperlinkOptions } from "./hyperlinks.ts";
+export { linkCode } from "./hyperlinks.ts";
 export {
 	// Background
 	bgBlack,
@@ -117,6 +120,7 @@ export {
 	hidden,
 	inverse,
 	italic,
+	link,
 	magenta,
 	red,
 	rgb,
