@@ -1,5 +1,14 @@
 # @crustjs/progress
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [df08a3a]
+- Updated dependencies [df08a3a]
+- Updated dependencies [67a9f25]
+  - @crustjs/style@0.1.0
+
 ## 0.0.2
 
 ### Patch Changes
