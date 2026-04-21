@@ -24,6 +24,6 @@
 		"@crustjs/crust": "latest",
 		"@crustjs/plugins": "latest",
 		"@types/bun": "latest",
-		"typescript": "^5"
+		"typescript": "^6"
 	}
 }
