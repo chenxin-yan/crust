@@ -158,6 +158,11 @@ const MODULES: Array<{
     doc: "modules/skills",
   },
   {
+    pkg: "@crustjs/man",
+    desc: "Generate mdoc(7) manual pages",
+    doc: "modules/man",
+  },
+  {
     pkg: "@crustjs/test",
     desc: "CLI testing helpers",
     doc: "modules/test",
