@@ -5,6 +5,7 @@ const OSC = "\x1b]";
 const ST = "\x1b\\";
 const HYPERLINK_CLOSE = `${OSC}8;;${ST}`;
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+const PRINTABLE_ASCII_NO_SPACE = /^[\x21-\x7e]*$/;
 
 export interface HyperlinkOptions {
 	/**
@@ -18,6 +19,14 @@ function assertPrintableAscii(value: string, label: string): void {
 	if (!PRINTABLE_ASCII.test(value)) {
 		throw new TypeError(
 			`Invalid ${label}: must contain only printable ASCII characters.`,
+		);
+	}
+}
+
+function assertPrintableAsciiNoSpace(value: string, label: string): void {
+	if (!PRINTABLE_ASCII_NO_SPACE.test(value)) {
+		throw new TypeError(
+			`Invalid ${label}: must contain only printable ASCII characters without spaces.`,
 		);
 	}
 }
@@ -45,7 +54,7 @@ function serializeParams(options?: HyperlinkOptions): string {
  * {@link link} for convenience.
  */
 export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
-	assertPrintableAscii(url, "hyperlink URL");
+	assertPrintableAsciiNoSpace(url, "hyperlink URL");
 	const params = serializeParams(options);
 	return {
 		open: `${OSC}8;${params};${url}${ST}`,

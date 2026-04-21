@@ -226,9 +226,9 @@ export function getGlobalColorMode(): ColorMode | undefined {
 
 // Runtime style cache keyed on `(globalMode, isTTY, NO_COLOR)`. The
 // `"never"` override intentionally maps to an `auto` instance with
-// `noColor: "1"` so that modifiers (bold, italic, etc.) remain enabled —
-// matching the no-color.org semantics for `--no-color` without also
-// suppressing non-color ANSI.
+// `noColor: "1"` so that modifiers (bold, italic, hyperlinks, etc.) remain
+// enabled while colors are suppressed — matching the no-color.org semantics
+// used by `--no-color`.
 const runtimeStyleCache = new Map<string, StyleInstance>();
 
 function buildRuntimeStyle(): StyleInstance {

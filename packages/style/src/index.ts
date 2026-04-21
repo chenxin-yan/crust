@@ -61,7 +61,6 @@ export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export {
 	resolveColorCapability,
-	resolveHyperlinkCapability,
 	resolveTrueColorCapability,
 } from "./capability.ts";
 export {

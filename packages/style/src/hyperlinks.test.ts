@@ -18,6 +18,12 @@ describe("hyperlinks", () => {
 		});
 	});
 
+	it("rejects URLs containing spaces", () => {
+		expect(() => linkCode("https://example.com/foo bar")).toThrow(
+			/Invalid hyperlink URL/,
+		);
+	});
+
 	it("wraps text in OSC 8 sequences", () => {
 		const s = createStyle({ mode: "always" });
 		expect(s.link("Crust docs", "https://crustjs.com")).toBe(
@@ -83,6 +89,17 @@ describe("createStyle().link", () => {
 describe("runtime link export", () => {
 	it("delegates through the runtime style facade", () => {
 		setGlobalColorMode("always");
+		try {
+			expect(link("Crust", "https://crustjs.com")).toBe(
+				"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
+			);
+		} finally {
+			setGlobalColorMode(undefined);
+		}
+	});
+
+	it('still emits hyperlinks when global color mode is "never"', () => {
+		setGlobalColorMode("never");
 		try {
 			expect(link("Crust", "https://crustjs.com")).toBe(
 				"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",

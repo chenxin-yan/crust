@@ -82,7 +82,6 @@ ANSI pair factories for composition:
 | Export | Description |
 | --- | --- |
 | `resolveColorCapability(mode, overrides?)` | Resolve whether colors should be emitted |
-| `resolveHyperlinkCapability(mode, overrides?)` | Resolve whether OSC 8 hyperlinks should be emitted |
 | `resolveModifierCapability(mode, overrides?)` | Resolve whether non-color modifiers (bold, italic, etc.) should be emitted |
 | `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
 
@@ -190,7 +189,7 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Disable colors but keep bold / italic / underline
+// Disable colors but keep bold / italic / underline / hyperlinks
 setGlobalColorMode("never");
 console.log(style.bold.red("bold, but no red"));
 

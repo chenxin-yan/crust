@@ -185,7 +185,7 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Turn colors off while keeping bold/italic/etc.
+// Turn colors off while keeping bold/italic/hyperlinks/etc.
 setGlobalColorMode("never");
 console.log(style.bold.red("bold, but no red"));
 
