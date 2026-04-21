@@ -4,9 +4,9 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import {
-	resolveCapability,
+	resolveColorCapability,
 	resolveModifierCapability,
-	resolveTrueColor,
+	resolveTrueColorCapability,
 } from "./capability.ts";
 import {
 	bgHex as bgHexDirect,
@@ -15,7 +15,12 @@ import {
 	rgb as rgbDirect,
 } from "./dynamicColors.ts";
 import { applyStyle } from "./styleEngine.ts";
-import { styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
+import {
+	isModifierName,
+	isModifierPair,
+	styleMethodNames,
+	stylePairFor,
+} from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
 	ColorMode,
@@ -41,15 +46,7 @@ function applyChain(
 		if (methodName === undefined) {
 			continue;
 		}
-		const isModifier =
-			methodName === "bold" ||
-			methodName === "dim" ||
-			methodName === "italic" ||
-			methodName === "underline" ||
-			methodName === "inverse" ||
-			methodName === "hidden" ||
-			methodName === "strikethrough";
-		if (isModifier ? !modifiersEnabled : !colorsEnabled) {
+		if (isModifierName(methodName) ? !modifiersEnabled : !colorsEnabled) {
 			continue;
 		}
 		result = applyStyle(result, stylePairFor(methodName));
@@ -155,9 +152,9 @@ function buildStyleMethods(
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
-	const colorsEnabled = resolveCapability(mode, options?.overrides);
+	const colorsEnabled = resolveColorCapability(mode, options?.overrides);
 	const enabled = modifiersEnabled || colorsEnabled;
-	const trueColorEnabled = resolveTrueColor(mode, options?.overrides);
+	const trueColorEnabled = resolveTrueColorCapability(mode, options?.overrides);
 	const createChainableStyle = buildChainableStyleFactory(
 		modifiersEnabled,
 		colorsEnabled,
@@ -171,9 +168,14 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 
 		// ── Style engine ────────────────────────────────────────────────────
 
-		apply: colorsEnabled
-			? (text: string, pair: AnsiPair) => applyStyle(text, pair)
-			: (text: string, _pair: AnsiPair) => text,
+		apply: (text: string, pair: AnsiPair) => {
+			// Registered modifier pairs are gated on `modifiersEnabled` so
+			// they survive `NO_COLOR` (which only disables colors). Color
+			// pairs — and any ad-hoc pair constructed outside the registry
+			// — fall through to `colorsEnabled`.
+			const gate = isModifierPair(pair) ? modifiersEnabled : colorsEnabled;
+			return gate ? applyStyle(text, pair) : text;
+		},
 
 		// ── Dynamic colors (truecolor) ──────────────────────────────────────
 

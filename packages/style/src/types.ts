@@ -40,7 +40,7 @@ export interface CapabilityOverrides {
  * Truecolor capability overrides for deterministic testing.
  *
  * These override environment variable checks used by
- * {@link resolveTrueColor} to detect 24-bit color support.
+ * {@link resolveTrueColorCapability} to detect 24-bit color support.
  */
 export interface TrueColorOverrides {
 	/** Override `process.env.COLORTERM`. */

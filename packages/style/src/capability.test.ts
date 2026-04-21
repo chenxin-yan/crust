@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as codes from "./ansiCodes.ts";
-import { resolveCapability, resolveTrueColor } from "./capability.ts";
+import {
+	resolveColorCapability,
+	resolveTrueColorCapability,
+} from "./capability.ts";
 import {
 	createStyle,
 	getGlobalColorMode,
@@ -40,94 +43,96 @@ afterEach(() => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// resolveCapability — mode resolution
+// resolveColorCapability — mode resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("resolveCapability", () => {
+describe("resolveColorCapability", () => {
 	describe("always mode", () => {
 		it("returns true regardless of overrides", () => {
-			expect(resolveCapability("always")).toBe(true);
+			expect(resolveColorCapability("always")).toBe(true);
 		});
 
 		it("returns true even when TTY is false", () => {
 			expect(
-				resolveCapability("always", { isTTY: false, noColor: undefined }),
+				resolveColorCapability("always", { isTTY: false, noColor: undefined }),
 			).toBe(true);
 		});
 
 		it("returns true even when NO_COLOR is set", () => {
-			expect(resolveCapability("always", { isTTY: false, noColor: "1" })).toBe(
-				true,
-			);
+			expect(
+				resolveColorCapability("always", { isTTY: false, noColor: "1" }),
+			).toBe(true);
 		});
 	});
 
 	describe("never mode", () => {
 		it("returns false regardless of overrides", () => {
-			expect(resolveCapability("never")).toBe(false);
+			expect(resolveColorCapability("never")).toBe(false);
 		});
 
 		it("returns false even when TTY is true", () => {
 			expect(
-				resolveCapability("never", { isTTY: true, noColor: undefined }),
+				resolveColorCapability("never", { isTTY: true, noColor: undefined }),
 			).toBe(false);
 		});
 
 		it("returns false even when environment supports color", () => {
-			expect(resolveCapability("never", { isTTY: true })).toBe(false);
+			expect(resolveColorCapability("never", { isTTY: true })).toBe(false);
 		});
 	});
 
 	describe("auto mode", () => {
 		it("returns true when TTY and NO_COLOR not set", () => {
 			expect(
-				resolveCapability("auto", { isTTY: true, noColor: undefined }),
+				resolveColorCapability("auto", { isTTY: true, noColor: undefined }),
 			).toBe(true);
 		});
 
 		it("returns false when not a TTY", () => {
 			expect(
-				resolveCapability("auto", { isTTY: false, noColor: undefined }),
+				resolveColorCapability("auto", { isTTY: false, noColor: undefined }),
 			).toBe(false);
 		});
 
 		it("returns false when NO_COLOR is set to non-empty string", () => {
-			expect(resolveCapability("auto", { isTTY: true, noColor: "1" })).toBe(
-				false,
-			);
+			expect(
+				resolveColorCapability("auto", { isTTY: true, noColor: "1" }),
+			).toBe(false);
 		});
 
 		it("returns true when NO_COLOR is empty string (per no-color.org)", () => {
-			expect(resolveCapability("auto", { isTTY: true, noColor: "" })).toBe(
+			expect(resolveColorCapability("auto", { isTTY: true, noColor: "" })).toBe(
 				true,
 			);
 		});
 
 		it("returns false when both non-TTY and NO_COLOR set", () => {
-			expect(resolveCapability("auto", { isTTY: false, noColor: "true" })).toBe(
-				false,
-			);
+			expect(
+				resolveColorCapability("auto", { isTTY: false, noColor: "true" }),
+			).toBe(false);
 		});
 
 		it("returns false when TTY is not provided (defaults to false)", () => {
-			expect(resolveCapability("auto", { noColor: undefined })).toBe(false);
+			expect(resolveColorCapability("auto", { noColor: undefined })).toBe(
+				false,
+			);
 		});
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// resolveTrueColor — truecolor capability detection
+// resolveTrueColorCapability — truecolor capability detection
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("resolveTrueColor", () => {
+describe("resolveTrueColorCapability", () => {
 	describe("always mode", () => {
 		it("returns true regardless of overrides", () => {
-			expect(resolveTrueColor("always")).toBe(true);
+			expect(resolveTrueColorCapability("always")).toBe(true);
 		});
 
 		it("returns true even without truecolor env vars", () => {
 			expect(
-				resolveTrueColor("always", {
+				resolveTrueColorCapability("always", {
 					isTTY: false,
 					noColor: "1",
 					colorTerm: undefined,
@@ -139,12 +144,12 @@ describe("resolveTrueColor", () => {
 
 	describe("never mode", () => {
 		it("returns false regardless of overrides", () => {
-			expect(resolveTrueColor("never")).toBe(false);
+			expect(resolveTrueColorCapability("never")).toBe(false);
 		});
 
 		it("returns false even with truecolor env vars", () => {
 			expect(
-				resolveTrueColor("never", {
+				resolveTrueColorCapability("never", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: "truecolor",
@@ -156,7 +161,7 @@ describe("resolveTrueColor", () => {
 	describe("auto mode", () => {
 		it("returns true when TTY + COLORTERM=truecolor", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: "truecolor",
@@ -166,7 +171,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns true when TTY + COLORTERM=24bit", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: "24bit",
@@ -176,7 +181,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns true when TTY + TERM contains truecolor", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
@@ -187,7 +192,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns true when TTY + TERM contains 24bit", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
@@ -198,7 +203,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns true when TTY + TERM contains -direct", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
@@ -209,7 +214,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns false when not a TTY", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: false,
 					noColor: undefined,
 					colorTerm: "truecolor",
@@ -219,7 +224,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns false when NO_COLOR is set", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: "1",
 					colorTerm: "truecolor",
@@ -229,7 +234,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns false when TTY but no truecolor env vars", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
@@ -240,7 +245,7 @@ describe("resolveTrueColor", () => {
 
 		it("returns false when TTY but COLORTERM is something else", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: "256color",
@@ -251,7 +256,7 @@ describe("resolveTrueColor", () => {
 
 		it("TERM check is case-insensitive", () => {
 			expect(
-				resolveTrueColor("auto", {
+				resolveTrueColorCapability("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,

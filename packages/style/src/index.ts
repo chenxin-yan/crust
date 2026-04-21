@@ -59,7 +59,11 @@ export type {
 export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
 export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
-export { resolveCapability, resolveTrueColor } from "./capability.ts";
+export {
+	resolveColorCapability,
+	resolveModifierCapability,
+	resolveTrueColorCapability,
+} from "./capability.ts";
 export {
 	createStyle,
 	getGlobalColorMode,

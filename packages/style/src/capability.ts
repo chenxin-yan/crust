@@ -27,14 +27,14 @@ import type {
  *
  * @example
  * ```ts
- * resolveCapability("auto"); // true if TTY and NO_COLOR not set
- * resolveCapability("always"); // true
- * resolveCapability("never"); // false
- * resolveCapability("auto", { isTTY: true, noColor: undefined }); // true
- * resolveCapability("auto", { isTTY: true, noColor: "" }); // true
+ * resolveColorCapability("auto"); // true if TTY and NO_COLOR not set
+ * resolveColorCapability("always"); // true
+ * resolveColorCapability("never"); // false
+ * resolveColorCapability("auto", { isTTY: true, noColor: undefined }); // true
+ * resolveColorCapability("auto", { isTTY: true, noColor: "" }); // true
  * ```
  */
-export function resolveCapability(
+export function resolveColorCapability(
 	mode: ColorMode,
 	overrides?: CapabilityOverrides,
 ): boolean {
@@ -106,17 +106,17 @@ export function resolveModifierCapability(
  *
  * @example
  * ```ts
- * resolveTrueColor("auto"); // true if TTY + truecolor env detected
- * resolveTrueColor("always"); // true
- * resolveTrueColor("never"); // false
- * resolveTrueColor("auto", {
+ * resolveTrueColorCapability("auto"); // true if TTY + truecolor env detected
+ * resolveTrueColorCapability("always"); // true
+ * resolveTrueColorCapability("never"); // false
+ * resolveTrueColorCapability("auto", {
  *   isTTY: true,
  *   noColor: undefined,
  *   colorTerm: "truecolor",
  * }); // true
  * ```
  */
-export function resolveTrueColor(
+export function resolveTrueColorCapability(
 	mode: ColorMode,
 	overrides?: CapabilityOverrides & TrueColorOverrides,
 ): boolean {
@@ -129,7 +129,7 @@ export function resolveTrueColor(
 	}
 
 	// Base color must be enabled first
-	if (!resolveCapability(mode, overrides)) {
+	if (!resolveColorCapability(mode, overrides)) {
 		return false;
 	}
 
