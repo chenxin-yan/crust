@@ -73,7 +73,7 @@ export {
 	style,
 } from "./createStyle.ts";
 // Deprecated truecolor pair factories + hex parser — superseded by
-// `fgCode` / `bgCode`. Will be removed in a future major release.
+// `fgCode` / `bgCode`. Will be removed in v1.0.0.
 export {
 	bgHexCode,
 	bgRgbCode,
@@ -83,6 +83,7 @@ export {
 } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
+export type { LiteralUnion, NamedColor } from "./namedColors.ts";
 export {
 	bg,
 	// Background
@@ -99,7 +100,7 @@ export {
 	bgCyan,
 	bgGreen,
 	// Deprecated direct helpers — superseded by `fg` / `bg`. Will be removed
-	// in a future major release.
+	// in v1.0.0.
 	bgHex,
 	bgMagenta,
 	bgRed,
@@ -161,6 +162,7 @@ export type {
 	ColorDepth,
 	ColorInput,
 	ColorMode,
+	ColorString,
 	StyleFn,
 	StyleInstance,
 	StyleOptions,

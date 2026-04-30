@@ -8,14 +8,19 @@ import {
 	resolveHyperlinkCapability,
 	resolveModifierCapability,
 } from "./capability.ts";
-import { bg as bgDirect, fg as fgDirect } from "./color.ts";
+import {
+	bg as bgDirect,
+	bgPairAtDepth,
+	fg as fgDirect,
+	fgPairAtDepth,
+} from "./color.ts";
 import {
 	bgHex as bgHexDirect,
 	bgRgb as bgRgbDirect,
 	hex as hexDirect,
 	rgb as rgbDirect,
 } from "./dynamicColors.ts";
-import { link as linkDirect } from "./hyperlinks.ts";
+import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import {
 	isModifierName,
@@ -34,26 +39,55 @@ import type {
 	StyleOptions,
 } from "./types.ts";
 
+// A single step in a chainable style. Either a registered method (looked
+// up by name in the style registry) or an ad-hoc `AnsiPair` produced by a
+// dynamic-color call like `style.bold.fg("#f00")`. The `isModifier` flag on
+// pair-steps is `false` for dynamic colors (currently the only producers).
+type ChainStep =
+	| { readonly kind: "named"; readonly name: StyleMethodName }
+	| {
+			readonly kind: "pair";
+			readonly pair: AnsiPair;
+			readonly isModifier: boolean;
+	  };
+
+function stepIsModifier(step: ChainStep): boolean {
+	return step.kind === "named" ? isModifierName(step.name) : step.isModifier;
+}
+
+function stepPair(step: ChainStep): AnsiPair {
+	return step.kind === "named" ? stylePairFor(step.name) : step.pair;
+}
+
 function applyChain(
 	text: string,
-	methodNames: readonly StyleMethodName[],
+	steps: readonly ChainStep[],
 	modifiersEnabled: boolean,
 	colorsEnabled: boolean,
 ): string {
+	// Defensive: nullish in → nullish out, never crash. JS callers passing
+	// `undefined` previously hit `text.includes` and threw a TypeError; we
+	// follow ansis here and return "".
+	if (text == null) {
+		return "";
+	}
+	if (typeof text !== "string") {
+		text = String(text);
+	}
 	if (text === "") {
 		return text;
 	}
 
 	let result = text;
-	for (let i = methodNames.length - 1; i >= 0; i--) {
-		const methodName = methodNames[i];
-		if (methodName === undefined) {
+	for (let i = steps.length - 1; i >= 0; i--) {
+		const step = steps[i];
+		if (step === undefined) {
 			continue;
 		}
-		if (isModifierName(methodName) ? !modifiersEnabled : !colorsEnabled) {
+		if (stepIsModifier(step) ? !modifiersEnabled : !colorsEnabled) {
 			continue;
 		}
-		result = applyStyle(result, stylePairFor(methodName));
+		result = applyStyle(result, stepPair(step));
 	}
 
 	return result;
@@ -62,41 +96,122 @@ function applyChain(
 function buildChainableStyleFactory(
 	modifiersEnabled: boolean,
 	colorsEnabled: boolean,
+	colorDepth: ColorDepth,
 ) {
 	const cache = new Map<string, ChainableStyleFn>();
 
-	function makeKey(methodNames: readonly StyleMethodName[]): string {
-		return methodNames.join("|");
+	function makeKey(steps: readonly ChainStep[]): string {
+		// Cache key: registered names use the name; dynamic pairs use the
+		// open code (small enough, unique per pair).
+		return steps
+			.map((s) => (s.kind === "named" ? s.name : `~${s.pair.open}`))
+			.join("|");
 	}
 
-	function createChainableStyle(
-		methodNames: readonly StyleMethodName[],
-	): ChainableStyleFn {
-		const key = makeKey(methodNames);
+	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
+		const key = makeKey(steps);
 		const cached = cache.get(key);
 		if (cached) {
 			return cached;
 		}
 
-		const styleFn = ((text: string) =>
-			applyChain(
-				text,
-				methodNames,
+		// Dispatcher: handles three call shapes
+		//   chain(text)                          — direct
+		//   chain`tagged ${value} template`      — tagged template
+		//   chain(undefined | null)               — defensive (returns "")
+		const styleFn = ((
+			first?: string | TemplateStringsArray,
+			...rest: unknown[]
+		) => {
+			// Tagged template: first arg is a TemplateStringsArray (array-like
+			// with a `.raw` property). Interleave with `${...}` values.
+			if (
+				Array.isArray(first) &&
+				"raw" in (first as object) &&
+				Array.isArray((first as { raw: unknown }).raw)
+			) {
+				const strings = first as unknown as TemplateStringsArray;
+				let text = "";
+				for (let i = 0; i < strings.length; i++) {
+					text += strings[i] ?? "";
+					if (i < rest.length) text += String(rest[i]);
+				}
+				return applyChain(text, steps, modifiersEnabled, colorsEnabled);
+			}
+			return applyChain(
+				first as string,
+				steps,
 				modifiersEnabled,
 				colorsEnabled,
-			)) as ChainableStyleFn;
+			);
+		}) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
 
+		// Registered chain methods (bold, red, bgYellow, ...)
 		for (const name of styleMethodNames) {
 			Object.defineProperty(styleFn, name, {
 				configurable: false,
 				enumerable: true,
 				get() {
-					return createChainableStyle([...methodNames, name]);
+					return createChainableStyle([...steps, { kind: "named", name }]);
 				},
 			});
 		}
+
+		// Dynamic-color chain methods (depth-aware via instance's `colorDepth`)
+		Object.defineProperty(styleFn, "fg", {
+			configurable: false,
+			enumerable: true,
+			value: (input: ColorInput): ChainableStyleFn =>
+				createChainableStyle([
+					...steps,
+					{
+						kind: "pair",
+						pair: fgPairAtDepth(input, colorDepth),
+						isModifier: false,
+					},
+				]),
+			writable: false,
+		});
+		Object.defineProperty(styleFn, "bg", {
+			configurable: false,
+			enumerable: true,
+			value: (input: ColorInput): ChainableStyleFn =>
+				createChainableStyle([
+					...steps,
+					{
+						kind: "pair",
+						pair: bgPairAtDepth(input, colorDepth),
+						isModifier: false,
+					},
+				]),
+			writable: false,
+		});
+
+		// Attach `open` / `close` so the chainable doubles as an `AnsiPair`.
+		// Composition rule: open in declaration order, close in reverse —
+		// matches what `applyChain` actually emits (innermost wraps first,
+		// then walks outward).
+		let open = "";
+		let close = "";
+		for (const step of steps) {
+			const pair = stepPair(step);
+			open += pair.open;
+			close = pair.close + close;
+		}
+		Object.defineProperty(styleFn, "open", {
+			value: open,
+			writable: false,
+			configurable: false,
+			enumerable: true,
+		});
+		Object.defineProperty(styleFn, "close", {
+			value: close,
+			writable: false,
+			configurable: false,
+			enumerable: true,
+		});
 
 		return Object.freeze(styleFn);
 	}
@@ -105,14 +220,14 @@ function buildChainableStyleFactory(
 }
 
 function buildStyleMethods(
-	createChainableStyle: (
-		methodNames: readonly StyleMethodName[],
-	) => ChainableStyleFn,
+	createChainableStyle: (steps: readonly ChainStep[]) => ChainableStyleFn,
 ): StyleMethodMap {
 	const methods = {} as { [K in StyleMethodName]: ChainableStyleFn };
 
 	for (const methodName of styleMethodNames) {
-		methods[methodName] = createChainableStyle([methodName]);
+		methods[methodName] = createChainableStyle([
+			{ kind: "named", name: methodName },
+		]);
 	}
 
 	return methods;
@@ -167,6 +282,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	const createChainableStyle = buildChainableStyleFactory(
 		modifiersEnabled,
 		colorsEnabled,
+		colorDepth,
 	);
 	const methods = buildStyleMethods(createChainableStyle);
 
@@ -190,13 +306,50 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		link: hyperlinksEnabled
 			? (text: string, url: string, hyperlinkOptions) =>
 					linkDirect(text, url, hyperlinkOptions)
-			: (text: string, _url: string) => text,
+			: (text: string, url: string, hyperlinkOptions) => {
+					// Validate even when emission is disabled so callers can't
+					// silently smuggle malformed URLs/IDs through non-TTY paths.
+					// linkCode throws on bad input; we discard the returned pair.
+					linkCode(url, hyperlinkOptions);
+					return text;
+				},
 
 		// ── Dynamic colors (depth-aware) ──────────────────────────────
 
-		fg: (text: string, input: ColorInput) => fgDirect(text, input, colorDepth),
+		// Two call shapes (see StyleInstance.fg JSDoc):
+		//   fg(input)        → ChainableStyleFn (chain root)
+		//   fg(text, input)  → string (direct)
+		fg: ((
+			textOrInput: string | ColorInput,
+			maybeInput?: ColorInput,
+		): string | ChainableStyleFn => {
+			if (maybeInput === undefined) {
+				return createChainableStyle([
+					{
+						kind: "pair",
+						pair: fgPairAtDepth(textOrInput as ColorInput, colorDepth),
+						isModifier: false,
+					},
+				]);
+			}
+			return fgDirect(textOrInput as string, maybeInput, colorDepth);
+		}) as StyleInstance["fg"],
 
-		bg: (text: string, input: ColorInput) => bgDirect(text, input, colorDepth),
+		bg: ((
+			textOrInput: string | ColorInput,
+			maybeInput?: ColorInput,
+		): string | ChainableStyleFn => {
+			if (maybeInput === undefined) {
+				return createChainableStyle([
+					{
+						kind: "pair",
+						pair: bgPairAtDepth(textOrInput as ColorInput, colorDepth),
+						isModifier: false,
+					},
+				]);
+			}
+			return bgDirect(textOrInput as string, maybeInput, colorDepth);
+		}) as StyleInstance["bg"],
 
 		// ── Deprecated dynamic-color helpers ────────────────────────
 		//
@@ -231,10 +384,64 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 
 let globalColorMode: ColorMode | undefined;
 
+/**
+ * Override the {@link ColorMode} for the runtime {@link style} facade and
+ * the top-level color/modifier helpers (`fg`, `bg`, `red`, `bold`, …).
+ *
+ * Pass `undefined` to clear the override and fall back to `"auto"` (the
+ * default), which detects TTY status, `NO_COLOR`, `COLORTERM`, and `TERM`
+ * on every call.
+ *
+ * **Capture semantics:**
+ * - Top-level helpers (`bold`, `red`, etc.) and `style.bold` etc. are
+ *   forwarders — captured references like `const myBold = style.bold`
+ *   re-resolve the active mode on every call/property access, so later
+ *   `setGlobalColorMode()` flips affect them.
+ * - **Sub-chain captures snapshot.** `const myBoldRed = style.bold.red`
+ *   captures the chainable for the mode active at access time and is
+ *   locked to it. This matches chalk/ansis. To stay dynamic, capture the
+ *   leaf and chain at call site: `const fmt = style.bold; fmt.red("x")`.
+ * - Configured `createStyle()` instances are NOT affected by this knob —
+ *   they capture their mode at construction time.
+ *
+ * Use this when callers want a single runtime knob (e.g. CLI
+ * `--color`/`--no-color` flags) that affects every standalone import.
+ *
+ * @param mode - `"auto"`, `"always"`, `"never"`, or `undefined` to clear.
+ *
+ * @example
+ * ```ts
+ * import { setGlobalColorMode, red } from "@crustjs/style";
+ *
+ * setGlobalColorMode("never");
+ * red("plain text");           // "plain text"
+ *
+ * setGlobalColorMode("always");
+ * red("forced color");         // includes ANSI even off-TTY
+ *
+ * setGlobalColorMode(undefined); // back to auto-detect
+ * ```
+ */
 export function setGlobalColorMode(mode: ColorMode | undefined): void {
 	globalColorMode = mode;
 }
 
+/**
+ * Read the current global color mode override, or `undefined` if the
+ * runtime is in default `"auto"` mode (no override set).
+ *
+ * @returns The override set by the most recent call to
+ *   {@link setGlobalColorMode}, or `undefined`.
+ *
+ * @example
+ * ```ts
+ * import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
+ *
+ * getGlobalColorMode();         // undefined
+ * setGlobalColorMode("never");
+ * getGlobalColorMode();         // "never"
+ * ```
+ */
 export function getGlobalColorMode(): ColorMode | undefined {
 	return globalColorMode;
 }
@@ -282,7 +489,7 @@ const FORWARDED_METHODS = [
 	"link",
 	"fg",
 	"bg",
-	// Deprecated — keep until the next major release.
+	// Deprecated — keep until v1.0.0.
 	"rgb",
 	"bgRgb",
 	"hex",
@@ -296,6 +503,92 @@ const FORWARDED_GETTERS = [
 	"trueColorEnabled",
 	"colorDepth",
 ] as const;
+
+/**
+ * Build a `ChainableStyleFn` whose calls and chain accesses forward to
+ * `getRuntimeStyle()[name]` on every invocation. This is the bridge that
+ * lets {@link setGlobalColorMode} take effect on captured references:
+ *
+ * ```ts
+ * setGlobalColorMode("always");
+ * const myBold = style.bold; // captured forwarder, not a snapshot
+ * setGlobalColorMode("never");
+ * myBold("x"); // "x" — resolves the current runtime instance
+ * ```
+ *
+ * The forwarder is also the implementation of the top-level re-exports in
+ * `runtimeExports.ts` (`bold`, `red`, etc.) so they share the same
+ * lifecycle semantics.
+ *
+ * `open` / `close` are static — the ANSI codes for `name` never change at
+ * runtime; only emission gating depends on the active mode.
+ *
+ * @internal
+ */
+export function createForwardingChainable(
+	name: StyleMethodName,
+): ChainableStyleFn {
+	// Forward (...args) so tagged-template calls work (the runtime
+	// instance's chainable dispatcher detects TemplateStringsArray on its
+	// own).
+	const fn = ((...args: unknown[]) =>
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+		(getRuntimeStyle()[name] as any)(...args)) as ChainableStyleFn;
+
+	// Child chain methods (bold, red, bgYellow, ...) — each property
+	// access re-resolves the runtime instance so further chaining honors
+	// the current global mode.
+	for (const childName of styleMethodNames) {
+		Object.defineProperty(fn, childName, {
+			configurable: false,
+			enumerable: true,
+			get() {
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+				return (getRuntimeStyle()[name] as any)[childName];
+			},
+		});
+	}
+
+	// Dynamic-color chain methods. Resolved at call time — the returned
+	// chainable is locked to the runtime instance active when `.fg(input)` /
+	// `.bg(input)` is called (matching how every chalk/ansis chain composes).
+	Object.defineProperty(fn, "fg", {
+		configurable: false,
+		enumerable: true,
+		value: (input: ColorInput): ChainableStyleFn =>
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+			(getRuntimeStyle()[name] as any).fg(input) as ChainableStyleFn,
+		writable: false,
+	});
+	Object.defineProperty(fn, "bg", {
+		configurable: false,
+		enumerable: true,
+		value: (input: ColorInput): ChainableStyleFn =>
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+			(getRuntimeStyle()[name] as any).bg(input) as ChainableStyleFn,
+		writable: false,
+	});
+
+	// Static `open` / `close`. These are the ANSI codes for the leaf
+	// `name` only — chained accesses (e.g. `bold.red`) compose their own
+	// open/close on the inner chainable returned from the runtime
+	// instance. See `createChainableStyle` in this file.
+	const pair = stylePairFor(name);
+	Object.defineProperty(fn, "open", {
+		value: pair.open,
+		writable: false,
+		configurable: false,
+		enumerable: true,
+	});
+	Object.defineProperty(fn, "close", {
+		value: pair.close,
+		writable: false,
+		configurable: false,
+		enumerable: true,
+	});
+
+	return Object.freeze(fn);
+}
 
 function createRuntimeStyleFacade(): StyleInstance {
 	const facade = {} as StyleInstance;
@@ -322,13 +615,15 @@ function createRuntimeStyleFacade(): StyleInstance {
 		});
 	}
 
+	// Use forwarding chainables so captured references (`const x = style.bold`)
+	// honor later `setGlobalColorMode()` calls. Each chain method is built
+	// once at facade construction time and shared across all accesses.
 	for (const name of styleMethodNames) {
 		Object.defineProperty(facade, name, {
 			configurable: false,
 			enumerable: true,
-			get() {
-				return getRuntimeStyle()[name];
-			},
+			value: createForwardingChainable(name),
+			writable: false,
 		});
 	}
 

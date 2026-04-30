@@ -4,17 +4,45 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
+import type { LiteralUnion, NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
- * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode` — sourced directly
- * from [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
- * type, so it always tracks Bun's accepted surface (hex, named CSS
- * colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric
- * literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]`
- * arrays).
+ * String forms accepted by `fg` / `bg` / `fgCode` / `bgCode`.
+ *
+ * Editors autocomplete the 148 CSS {@link NamedColor | named colors} and
+ * the `#` hex prefix while still accepting any other string Bun's CSS
+ * parser understands (`rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`,
+ * `oklch()`, `#RGBA`, etc.).
+ *
+ * The `string` fallback is preserved via {@link LiteralUnion} so dynamic
+ * values — e.g. theme tokens loaded from JSON — still type-check.
  */
-export type ColorInput = Parameters<typeof Bun.color>[0];
+export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+
+/**
+ * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode`.
+ *
+ * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
+ * surface, with a richer `string` branch so editors autocomplete CSS
+ * named colors and hint at hex literals. All members are assignable to
+ * `Bun.color()` at runtime.
+ *
+ * Accepted shapes:
+ * - {@link ColorString} — hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`),
+ *   {@link NamedColor | named CSS colors} (`"rebeccapurple"`),
+ *   functional notation (`"rgb(0, 128, 255)"`, `"hsl(210, 100%, 50%)"`,
+ *   `"lab(50% 30 -20)"`).
+ * - `number` — packed `0xRRGGBB` (24-bit, no alpha).
+ * - `[r, g, b]` / `[r, g, b, a]` — channel tuples (0–255).
+ * - `{ r, g, b, a? }` — channel objects (0–255; `a` defaults to 255).
+ */
+export type ColorInput =
+	| ColorString
+	| number
+	| readonly [r: number, g: number, b: number]
+	| readonly [r: number, g: number, b: number, a: number]
+	| { r: number; g: number; b: number; a?: number };
 
 /**
  * Color emission mode for the style engine.
@@ -108,15 +136,69 @@ export type StyleMethodMap = {
 };
 
 /**
- * A callable style function that also exposes all style methods for chaining.
+ * A callable style function that also exposes all style methods for
+ * chaining and the underlying {@link AnsiPair} (`open` / `close`) for
+ * direct composition with {@link composeStyles} and {@link applyStyle}.
+ *
+ * Every chainable is simultaneously a function, a chain root, and an
+ * ANSI pair. Chains compose `open` left-to-right and `close` right-to-left.
+ *
+ * **Byte-equivalence caveat.** `chain.open + text + chain.close` matches
+ * `chain(text)` byte-for-byte only when adjacent steps have *distinct*
+ * close codes. When two adjacent steps share a close code (e.g. `bold` and
+ * `dim` both close with `\x1b[22m`), `applyStyle` emits an extra re-open
+ * after the inner close to keep the outer style active on text the inner
+ * step closed early; that re-open is part of `chain(text)` but not part
+ * of the cached `chain.close`. Use `chain(text)` for emission and treat
+ * `open` / `close` as composable building blocks for {@link composeStyles}.
  *
  * @example
  * ```ts
+ * import { applyStyle, composeStyles, style } from "@crustjs/style";
+ *
+ * // Direct call
  * style.bold.red("error");
+ *
+ * // Same function reused as an AnsiPair
+ * applyStyle("error", style.bold.red);
+ * composeStyles(style.bold, style.red, style.bgYellow);
  * ```
  */
-export interface ChainableStyleFn extends StyleMethodMap {
+export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
+	/**
+	 * Apply the chain to a string. `null` / `undefined` return `""`;
+	 * other non-string inputs are stringified via `String(value)`.
+	 */
 	(text: string): string;
+	/**
+	 * Apply the chain to a tagged template literal. Interpolated values
+	 * are coerced via `String(...)`; nested chain calls inside `${...}`
+	 * work because each inner chainable emits its own ANSI sequences,
+	 * and `applyStyle` re-opens the outer style after any inner close
+	 * code that matches the outer close.
+	 *
+	 * @example
+	 * ```ts
+	 * style.bold.red`Build ${style.cyan`./dist`} in ${ms}ms`;
+	 * ```
+	 */
+	(strings: TemplateStringsArray, ...values: unknown[]): string;
+	/**
+	 * Append a depth-aware foreground color to the chain. The resulting
+	 * chainable can be called or chained further like any other.
+	 *
+	 * @example
+	 * ```ts
+	 * style.bold.fg("#ff8800")("warning");
+	 * style.fg("rebeccapurple").italic`accent ${value}`;
+	 * ```
+	 */
+	fg(input: ColorInput): ChainableStyleFn;
+	/**
+	 * Append a depth-aware background color to the chain. Mirrors
+	 * {@link ChainableStyleFn.fg}.
+	 */
+	bg(input: ColorInput): ChainableStyleFn;
 }
 
 /**
@@ -167,15 +249,32 @@ export interface StyleInstance extends StyleMethodMap {
 	 * (hex, named CSS colors, `rgb()`, `hsl()`, numeric, `{ r, g, b }`,
 	 * `[r, g, b]`, etc.). Output is rendered at the depth captured at
 	 * `createStyle()` time — see {@link StyleInstance.colorDepth}.
+	 *
+	 * Two call shapes:
+	 * - `fg(text, input)` — direct application, returns the styled string.
+	 * - `fg(input)` — returns a {@link ChainableStyleFn} pre-bound with the
+	 *   color, ready to be called or chained further.
+	 *
+	 * @example
+	 * ```ts
+	 * style.fg("warning", "#ff8800");           // direct
+	 * style.fg("#ff8800").bold("warning");      // chain root
+	 * ```
 	 */
-	readonly fg: (text: string, input: ColorInput) => string;
+	readonly fg: {
+		(input: ColorInput): ChainableStyleFn;
+		(text: string, input: ColorInput): string;
+	};
 
 	/**
-	 * Apply a background color to text from any {@link ColorInput}. Output is
-	 * rendered at the depth captured at `createStyle()` time — see
-	 * {@link StyleInstance.colorDepth}.
+	 * Apply a background color to text. Mirrors {@link StyleInstance.fg} —
+	 * supports both `bg(text, input)` direct application and `bg(input)`
+	 * chain-root forms.
 	 */
-	readonly bg: (text: string, input: ColorInput) => string;
+	readonly bg: {
+		(input: ColorInput): ChainableStyleFn;
+		(text: string, input: ColorInput): string;
+	};
 
 	// ── Deprecated dynamic-color helpers ───────────────────────────────
 
@@ -183,7 +282,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor foreground RGB color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.fg | `fg(text, [r, g, b])`}
-	 * instead.
+	 * instead. Will be removed in v1.0.0.
 	 */
 	readonly rgb: (text: string, r: number, g: number, b: number) => string;
 
@@ -191,7 +290,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor background RGB color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.bg | `bg(text, [r, g, b])`}
-	 * instead.
+	 * instead. Will be removed in v1.0.0.
 	 */
 	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
 
@@ -199,7 +298,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor foreground hex color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.fg | `fg(text, "#rrggbb")`}
-	 * instead.
+	 * instead. Will be removed in v1.0.0.
 	 */
 	readonly hex: (text: string, hexColor: string) => string;
 
@@ -207,7 +306,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor background hex color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.bg | `bg(text, "#rrggbb")`}
-	 * instead.
+	 * instead. Will be removed in v1.0.0.
 	 */
 	readonly bgHex: (text: string, hexColor: string) => string;
 }

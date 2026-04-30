@@ -4,7 +4,7 @@
 //
 // Superseded by the depth-aware `fg` / `bg` (and `fgCode` / `bgCode`)
 // helpers in `./color.ts`. Every export here is `@deprecated` and will be
-// removed in a future major release. The implementations are unchanged so
+// removed in v1.0.0. The implementations are unchanged so
 // existing call sites keep their original behavior — including the
 // `RangeError` on out-of-range RGB channels and the `TypeError` on
 // malformed hex strings — until they migrate.
@@ -63,7 +63,7 @@ const HEX_LONG = /^#([0-9a-f]{6})$/i;
  *
  * @deprecated `Bun.color()` parses every hex form this helper accepts.
  * Pass the hex string directly to `fg` / `bg` / `fgCode` / `bgCode`
- * instead.
+ * instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -115,7 +115,7 @@ export function parseHex(hex: string): [r: number, g: number, b: number] {
  * @returns An ANSI pair for the specified foreground color.
  * @throws {RangeError} If any channel value is invalid.
  *
- * @deprecated Use `fgCode([r, g, b])` from `./color.ts` instead.
+ * @deprecated Use `fgCode([r, g, b])` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -139,7 +139,7 @@ export function rgbCode(r: number, g: number, b: number): AnsiPair {
  * @returns An ANSI pair for the specified background color.
  * @throws {RangeError} If any channel value is invalid.
  *
- * @deprecated Use `bgCode([r, g, b])` from `./color.ts` instead.
+ * @deprecated Use `bgCode([r, g, b])` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -159,7 +159,7 @@ export function bgRgbCode(r: number, g: number, b: number): AnsiPair {
  * @returns An ANSI pair for the specified foreground color.
  * @throws {TypeError} If the hex string is invalid.
  *
- * @deprecated Use `fgCode("#rrggbb")` from `./color.ts` instead.
+ * @deprecated Use `fgCode("#rrggbb")` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -179,7 +179,7 @@ export function hexCode(hex: string): AnsiPair {
  * @returns An ANSI pair for the specified background color.
  * @throws {TypeError} If the hex string is invalid.
  *
- * @deprecated Use `bgCode("#rrggbb")` from `./color.ts` instead.
+ * @deprecated Use `bgCode("#rrggbb")` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -206,7 +206,7 @@ export function bgHexCode(hex: string): AnsiPair {
  * @returns The styled string.
  * @throws {RangeError} If any channel value is invalid.
  *
- * @deprecated Use `fg(text, [r, g, b])` from `./color.ts` instead.
+ * @deprecated Use `fg(text, [r, g, b])` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -228,7 +228,7 @@ export function rgb(text: string, r: number, g: number, b: number): string {
  * @returns The styled string.
  * @throws {RangeError} If any channel value is invalid.
  *
- * @deprecated Use `bg(text, [r, g, b])` from `./color.ts` instead.
+ * @deprecated Use `bg(text, [r, g, b])` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -247,7 +247,7 @@ export function bgRgb(text: string, r: number, g: number, b: number): string {
  * @returns The styled string.
  * @throws {TypeError} If the hex string is invalid.
  *
- * @deprecated Use `fg(text, "#rrggbb")` from `./color.ts` instead.
+ * @deprecated Use `fg(text, "#rrggbb")` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts
@@ -268,7 +268,7 @@ export function hex(text: string, hexColor: string): string {
  * @returns The styled string.
  * @throws {TypeError} If the hex string is invalid.
  *
- * @deprecated Use `bg(text, "#rrggbb")` from `./color.ts` instead.
+ * @deprecated Use `bg(text, "#rrggbb")` from `./color.ts` instead. Will be removed in v1.0.0.
  *
  * @example
  * ```ts

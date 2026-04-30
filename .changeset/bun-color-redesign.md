@@ -8,7 +8,7 @@ fallback so dynamic colors automatically downgrade to `ansi-256` or
 `ansi-16` on terminals that don't support truecolor. The earlier
 `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` /
 `style.*` variants) are kept as `@deprecated` aliases and will be
-removed in a future major release.
+removed in v1.0.0.
 
 ### Added
 
@@ -32,8 +32,7 @@ removed in a future major release.
 The following exports continue to work with their original signatures
 and error contracts (`RangeError` for out-of-range RGB, `TypeError` for
 malformed hex). They emit `@deprecated` JSDoc warnings in IDEs and
-`tsc`, and will be removed in a future major release. Migrate at your
-leisure.
+`tsc`, and will be removed in v1.0.0. Migrate at your leisure.
 
 | Deprecated | Replacement |
 | --- | --- |

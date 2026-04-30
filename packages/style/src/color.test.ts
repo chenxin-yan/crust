@@ -122,13 +122,18 @@ describe("fg", () => {
 		);
 	});
 
-	it('returns `""` for empty text without parsing input', () => {
-		// "definitely-not-a-color" would normally throw — empty text short-circuits.
-		expect(fg("", "definitely-not-a-color")).toBe("");
+	it('returns `""` for empty text after validating input', () => {
+		// Valid color + empty text → "". Invalid color still throws (see
+		// next test) so empty-text callers can't accidentally mask bugs.
+		expect(fg("", "#ff0000")).toBe("");
 	});
 
-	it("throws TypeError for invalid input (non-empty text)", () => {
+	it("throws TypeError for invalid input even when text is empty", () => {
+		// Empty text used to silently short-circuit before the color was
+		// validated. Now both empty- and non-empty-text callers get the
+		// same TypeError.
 		expect(() => fg("hello", "definitely-not-a-color")).toThrow(TypeError);
+		expect(() => fg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 
 	it("byte-identical foreground escape to legacy `(0, 128, 255)`", () => {
@@ -149,12 +154,16 @@ describe("bg", () => {
 		expect(bg("hi", "rebeccapurple")).toBe("\x1b[48;2;102;51;153mhi\x1b[49m");
 	});
 
-	it('returns `""` for empty text without parsing input', () => {
-		expect(bg("", "rgb(999, 0, 0)")).toBe("");
+	it('returns `""` for empty text after validating input', () => {
+		expect(bg("", "#00ff88")).toBe("");
 	});
 
-	it("throws TypeError for invalid input (non-empty text)", () => {
+	it("throws for invalid input even when text is empty", () => {
+		// Empty text used to silently short-circuit before color
+		// validation, so `bg("", "definitely-not-a-color")` returned "".
+		// Now both empty- and non-empty-text callers get TypeError.
 		expect(() => bg("hi", "definitely-not-a-color")).toThrow(TypeError);
+		expect(() => bg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 
 	it("byte-identical background escape to legacy `bgRgb`", () => {
@@ -316,11 +325,17 @@ describe("fg — depth fallback", () => {
 		);
 	});
 
-	it("empty text short-circuits at every depth", () => {
+	it("empty text returns '' at every depth (after validation)", () => {
 		expect(fg("", "#ff0000", "truecolor")).toBe("");
 		expect(fg("", "#ff0000", "256")).toBe("");
 		expect(fg("", "#ff0000", "16")).toBe("");
 		expect(fg("", "#ff0000", "none")).toBe("");
+	});
+
+	it("empty text + invalid color still throws at every depth", () => {
+		for (const depth of ["truecolor", "256", "16", "none"] as const) {
+			expect(() => fg("", "definitely-not-a-color", depth)).toThrow();
+		}
 	});
 });
 

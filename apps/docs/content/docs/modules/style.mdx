@@ -62,12 +62,17 @@ ANSI pair factories for composition:
 
 ```ts
 type ColorInput =
-  | string
+  | ColorString
   | number
-  | { r: number; g: number; b: number; a?: number }
-  | readonly [number, number, number]
-  | readonly [number, number, number, number];
+  | readonly [r: number, g: number, b: number]
+  | readonly [r: number, g: number, b: number, a: number]
+  | { r: number; g: number; b: number; a?: number };
+
+type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowgreen";
 ```
+
+The string branch uses [`LiteralUnion`](https://github.com/sindresorhus/type-fest/blob/main/source/literal-union.d.ts) so editors autocomplete the 148 CSS [named colors](https://drafts.csswg.org/css-color/#named-colors) and the `#` hex prefix while still accepting any other string Bun's CSS parser understands (`rgb()`, `hsl()`, `lab()`, `oklch()`, …). `LiteralUnion` and `NamedColor` are both re-exported from `@crustjs/style` if you need them in your own helpers.
 
 ### Hyperlinks (OSC 8)
 
@@ -215,12 +220,66 @@ For a scoped override that only lasts for a single CLI run, use [`noColorPlugin(
 
 ### Composing Styles
 
-```ts
-import { applyStyle, composeStyles, boldCode, redCode } from "@crustjs/style";
+Three composition shapes — pick whichever fits the call site.
 
-const boldRed = composeStyles(boldCode, redCode);
-console.log(applyStyle("critical", boldRed));
+#### 1. Chainable getters
+
+```ts
+import { style } from "@crustjs/style";
+
+console.log(style.bold.red("critical error"));
+console.log(style.italic.brightCyan.bgYellow("highlight"));
 ```
+
+#### 2. Tagged template literals
+
+```ts
+const ms = 42;
+console.log(style.bold.red`Build in ${ms}ms`);
+console.log(style.bold`Build ${style.cyan`./dist`} in ${ms}ms`); // nested
+```
+
+#### 3. AnsiPair composition
+
+Every chainable doubles as an `AnsiPair` (`open` / `close` properties), so
+it can be passed to `composeStyles` and `applyStyle` directly. The
+pre-built `*Code` exports are still available for callers that prefer
+pure data:
+
+```ts
+import {
+  applyStyle,
+  composeStyles,
+  bold,
+  red,
+  bgYellow,
+  fgCode,
+} from "@crustjs/style";
+
+const danger = composeStyles(bold, red, bgYellow);
+console.log(applyStyle("DANGER", danger));
+
+// Dynamic colors compose too
+const brand = composeStyles(bold, fgCode("#4FA83D"));
+console.log(applyStyle("Crust", brand));
+```
+
+#### Dynamic colors in chains
+
+```ts
+style.bold.fg("#ff8800")("warning");
+style.fg("rebeccapurple").italic.underline("emphasis");
+```
+
+<Callout type="warn">
+`chain.open + text + chain.close` matches `chain(text)` byte-for-byte
+*only* when adjacent chain steps have distinct close codes. When two
+adjacent steps share a close code (e.g. `bold` and `dim` both close with
+`\x1b[22m`), `applyStyle` re-opens the outer style after each shared
+close to prevent bleed; that re-open is part of `chain(text)` but not of
+the cached `chain.close`. Use `chain(text)` for emission and reserve
+`chain.open` / `chain.close` for `composeStyles` / `applyStyle`.
+</Callout>
 
 ### Dynamic Colors
 
@@ -273,7 +332,7 @@ console.log(s.bg("text", "rebeccapurple"));
 In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
 
 <Callout type="info">
-The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in a future major release. IDEs and `tsc` surface the deprecation with a one-line replacement hint at every call site — prefer `fg` / `bg` for new code.
+The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in v1.0.0. IDEs and `tsc` surface the deprecation with a one-line replacement hint at every call site — prefer `fg` / `bg` for new code.
 </Callout>
 
 ### Color Depth & Auto-Fallback
@@ -299,7 +358,9 @@ style.colorDepth;          // depth currently used by the runtime style
 ```
 
 <Callout type="info">
-Invalid color inputs (e.g. `fg("hello", "not-a-color")`) raise `TypeError` (`Invalid color input: ...`) at every depth — including `"none"` — so user bugs are not silently masked when colors are off. Empty `text` always returns `""` without consulting the parser.
+Invalid color inputs (e.g. `fg("hello", "not-a-color")`) raise `TypeError` (`Invalid color input: ...`) at every depth — including `"none"` — and **regardless of whether `text` is empty**. `fg("", "garbage")` still throws, so callers can't silently mask bugs.
+
+Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensively. This protects JS callers that bypass TypeScript types from crashes.
 </Callout>
 
 ### Hyperlinks (OSC 8)

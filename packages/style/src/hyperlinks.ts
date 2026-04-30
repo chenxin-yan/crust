@@ -18,7 +18,7 @@ export interface HyperlinkOptions {
 function assertPrintableAscii(value: string, label: string): void {
 	if (!PRINTABLE_ASCII.test(value)) {
 		throw new TypeError(
-			`Invalid ${label}: must contain only printable ASCII characters.`,
+			`Invalid ${label}: ${JSON.stringify(value)} must contain only printable ASCII characters.`,
 		);
 	}
 }
@@ -26,7 +26,7 @@ function assertPrintableAscii(value: string, label: string): void {
 function assertPrintableAsciiNoSpace(value: string, label: string): void {
 	if (!PRINTABLE_ASCII_NO_SPACE.test(value)) {
 		throw new TypeError(
-			`Invalid ${label}: must contain only printable ASCII characters without spaces.`,
+			`Invalid ${label}: ${JSON.stringify(value)} must contain only printable ASCII characters without spaces.`,
 		);
 	}
 }
@@ -48,10 +48,28 @@ function serializeParams(options?: HyperlinkOptions): string {
 }
 
 /**
- * Create an OSC 8 hyperlink escape pair for a target URL.
+ * Create an OSC 8 hyperlink escape pair for `url`. The returned
+ * {@link AnsiPair} can be applied directly with {@link applyStyle} or
+ * composed via {@link composeStyles}; for one-shot use see {@link link}.
  *
- * The returned pair can be applied directly with {@link applyStyle} or used via
- * {@link link} for convenience.
+ * @param url - Target URL. Must contain only printable ASCII characters
+ *   and no spaces (per the OSC 8 spec). URL-encode characters outside
+ *   that range before passing.
+ * @param options - Optional {@link HyperlinkOptions} — currently just
+ *   `id` for grouping multi-segment links.
+ * @returns An {@link AnsiPair} whose `open` carries the URL and `close`
+ *   terminates the hyperlink.
+ * @throws {TypeError} If `url` contains spaces or non-printable ASCII,
+ *   or if `options.id` contains `":"` / `";"` (reserved by OSC 8) or
+ *   non-printable characters.
+ *
+ * @example
+ * ```ts
+ * import { applyStyle, linkCode } from "@crustjs/style";
+ *
+ * const pair = linkCode("https://crustjs.dev");
+ * console.log(applyStyle("docs", pair));
+ * ```
  */
 export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
 	assertPrintableAsciiNoSpace(url, "hyperlink URL");
@@ -63,7 +81,23 @@ export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
 }
 
 /**
- * Wrap text in OSC 8 hyperlink escape sequences.
+ * Wrap `text` in OSC 8 hyperlink escape sequences. Equivalent to
+ * `applyStyle(text, linkCode(url, options))` but a single call.
+ *
+ * @param text - The visible label.
+ * @param url - Target URL (see {@link linkCode} for the constraints).
+ * @param options - Optional {@link HyperlinkOptions}.
+ * @returns The styled string.
+ * @throws {TypeError} If `url` or `options.id` are invalid — see
+ *   {@link linkCode}.
+ *
+ * @example
+ * ```ts
+ * import { link } from "@crustjs/style";
+ *
+ * console.log(link("docs", "https://crustjs.dev"));
+ * console.log(link("page 1", "https://example.com/p1", { id: "intro" }));
+ * ```
  */
 export function link(
 	text: string,

@@ -54,14 +54,98 @@ console.log(bgYellow("highlighted"));
 
 ### Composing Styles
 
-```ts
-import { applyStyle, composeStyles, boldCode, redCode } from "@crustjs/style";
+Three composition shapes are supported — pick whichever fits the call site.
 
-const boldRed = composeStyles(boldCode, redCode);
-console.log(applyStyle("critical error", boldRed));
+#### 1. Chainable getter style (chalk-style)
+
+```ts
+import { style } from "@crustjs/style";
+
+console.log(style.bold.red("critical error"));
+console.log(style.italic.brightCyan.bgYellow("highlight"));
+```
+
+#### 2. Tagged template literals (ansis-style)
+
+```ts
+import { style } from "@crustjs/style";
+
+const ms = 42;
+console.log(style.bold.red`Build in ${ms}ms`);
+
+// Nested chains inside ${...} re-open the outer style after the inner close.
+console.log(style.bold`Build ${style.cyan`./dist`} in ${ms}ms`);
+```
+
+#### 3. AnsiPair composition
+
+Every chainable doubles as an `AnsiPair` with `open` / `close` properties,
+so it can be passed to `composeStyles` and `applyStyle` without going
+through the `*Code` factories. The pre-built `*Code` exports are still
+available for callers that prefer pure data:
+
+```ts
+import {
+  applyStyle,
+  composeStyles,
+  bold,
+  red,
+  bgYellow,
+  fgCode,
+} from "@crustjs/style";
+
+// Mix top-level chainables and AnsiPair factories freely
+const danger = composeStyles(bold, red, bgYellow);
+console.log(applyStyle("DANGER", danger));
+
+// Dynamic colors compose too
+const brand = composeStyles(bold, fgCode("#4FA83D"));
+console.log(applyStyle("Crust", brand));
+```
+
+#### Dynamic colors in chains
+
+`fg(input)` and `bg(input)` extend any chain (or start a new one):
+
+```ts
+style.bold.fg("#ff8800")("warning");
+style.fg("rebeccapurple").italic.underline("emphasis");
+style.bold.fg("#fff").bg("#dc2626")` ERROR `;
 ```
 
 Nested styles are handled safely — no style bleed across boundaries.
+
+> **Byte-equivalence caveat**: `chain.open + text + chain.close` matches
+> `chain(text)` only when adjacent chain steps have distinct close codes.
+> When two adjacent steps share a close code (e.g. `bold` and `dim` both
+> close with `\x1b[22m`), `applyStyle` emits an extra re-open after the
+> inner close to prevent style bleed. Use `chain(text)` for emission and
+> reserve `chain.open` / `chain.close` for `composeStyles` / `applyStyle`.
+
+#### `setGlobalColorMode` and captured references
+
+Top-level helpers (`bold`, `red`, etc.) and `style.bold` are forwarders —
+captured references re-resolve the active color mode on every call:
+
+```ts
+import { setGlobalColorMode, style, bold } from "@crustjs/style";
+
+setGlobalColorMode("always");
+const myBold = style.bold;          // forwarder, dynamic
+setGlobalColorMode("never");
+myBold("x");                        // honors the new mode
+```
+
+**Sub-chain captures snapshot.** `const myBoldRed = style.bold.red`
+locks to the chainable resolved at access time. To stay dynamic, capture
+the leaf forwarder and chain at the call site:
+
+```ts
+const fmt = style.bold;             // dynamic forwarder
+fmt.red("x");                       // re-resolves on every chain access
+```
+
+This matches chalk and ansis.
 
 ## Hyperlinks (OSC 8)
 
@@ -116,14 +200,21 @@ console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 
 ```ts
 type ColorInput =
-  | string
+  | ColorString
   | number
-  | { r: number; g: number; b: number; a?: number }
-  | readonly [number, number, number]
-  | readonly [number, number, number, number];
+  | readonly [r: number, g: number, b: number]
+  | readonly [r: number, g: number, b: number, a: number]
+  | { r: number; g: number; b: number; a?: number };
+
+type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowgreen";
 ```
 
-Invalid inputs raise `TypeError` (`Invalid color input: ...`). Empty `text` short-circuits to `""` without parsing.
+**Editor autocomplete.** Typing `fg("text", "…")` surfaces all 148 CSS named colors plus `#` as completions. Other strings that `Bun.color()` accepts — `rgb()`, `hsl()`, `lab()`, `oklch()`, etc. — still type-check via the `string` fallback (`LiteralUnion` from [type-fest's pattern](https://github.com/sindresorhus/type-fest/blob/main/source/literal-union.d.ts)).
+
+Invalid inputs raise `TypeError` (`Invalid color input: ...`). The color is validated **before** any empty-text short-circuit, so `fg("", "definitely-not-a-color")` still throws — callers can't silently mask bugs by passing empty strings.
+
+Nullish text (`fg(undefined, "#f00")`, `bold(null)`, etc.) returns `""` defensively. JS callers that bypass TypeScript types still get safe output.
 
 ### Pair Factories
 
@@ -157,7 +248,7 @@ In `"auto"` mode, `fg` / `bg` automatically pick the best `Bun.color()` format t
 
 In `"never"` mode, `fg` / `bg` return plain text. In `"always"` mode, truecolor sequences are always emitted.
 
-The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in a future major release. IDEs/`tsc` will surface the deprecation with a one-line replacement hint at the call site — prefer `fg` / `bg` for new code.
+The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in v1.0.0. IDEs/`tsc` will surface the deprecation with a one-line replacement hint at the call site — prefer `fg` / `bg` for new code.
 
 ### Color Depth & Auto-Fallback
 
