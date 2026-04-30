@@ -44,24 +44,30 @@ bun add @crustjs/style
 
 ### Dynamic Colors (Truecolor)
 
-Direct styling functions using 24-bit truecolor ANSI sequences:
+A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex, named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric (`0xff0000`), `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays:
 
 | Export | Description |
 | --- | --- |
-| `rgb(text, r, g, b)` | Apply truecolor foreground RGB color |
-| `bgRgb(text, r, g, b)` | Apply truecolor background RGB color |
-| `hex(text, hexColor)` | Apply truecolor foreground hex color (`#RGB` or `#RRGGBB`) |
-| `bgHex(text, hexColor)` | Apply truecolor background hex color |
+| `fg(text, input)` | Apply a truecolor foreground from any [`ColorInput`](#colorinput) |
+| `bg(text, input)` | Apply a truecolor background from any [`ColorInput`](#colorinput) |
 
 ANSI pair factories for composition:
 
 | Export | Description |
 | --- | --- |
-| `rgbCode(r, g, b)` | Create foreground `AnsiPair` from RGB values |
-| `bgRgbCode(r, g, b)` | Create background `AnsiPair` from RGB values |
-| `hexCode(hex)` | Create foreground `AnsiPair` from hex string |
-| `bgHexCode(hex)` | Create background `AnsiPair` from hex string |
-| `parseHex(hex)` | Parse a hex color string into `[r, g, b]` tuple |
+| `fgCode(input)` | Create a foreground `AnsiPair` from a [`ColorInput`](#colorinput) |
+| `bgCode(input)` | Create a background `AnsiPair` from a [`ColorInput`](#colorinput) |
+
+#### `ColorInput`
+
+```ts
+type ColorInput =
+  | string
+  | number
+  | { r: number; g: number; b: number; a?: number }
+  | readonly [number, number, number]
+  | readonly [number, number, number, number];
+```
 
 ### Hyperlinks (OSC 8)
 
@@ -84,6 +90,7 @@ ANSI pair factories for composition:
 | `resolveColorCapability(mode, overrides?)` | Resolve whether colors should be emitted |
 | `resolveModifierCapability(mode, overrides?)` | Resolve whether non-color modifiers (bold, italic, etc.) should be emitted |
 | `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
+| `resolveColorDepth(mode, overrides?)` | Resolve the [`ColorDepth`](#colordepth) tier (`"truecolor" \| "256" \| "16" \| "none"`) |
 
 ### Text Utilities
 
@@ -127,7 +134,8 @@ To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(
 | `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
 | `HyperlinkOptions` | Optional OSC 8 hyperlink parameters such as `id` |
 | `StyleFn` | `(text: string) => string` style function |
-| `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, and `trueColorEnabled` capability flags |
+| `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, `trueColorEnabled`, and `colorDepth` capability flags |
+| `ColorDepth` | `"truecolor" \| "256" \| "16" \| "none"` |
 | `WrapOptions` | Options for `wrapText` |
 | `ColumnAlignment` | `"left" \| "right" \| "center"` |
 | `TableOptions` | Options for `table` |
@@ -217,29 +225,39 @@ console.log(applyStyle("critical", boldRed));
 
 ### Dynamic Colors (Truecolor)
 
-Use any RGB or hex color via 24-bit truecolor ANSI sequences:
+Use any color [`Bun.color()`](https://bun.com/docs/runtime/color) understands via 24-bit truecolor ANSI sequences — hex (3/6/8 digit), named CSS colors (`"red"`, `"rebeccapurple"`), `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays:
 
 ```ts
-import { rgb, bgRgb, hex, bgHex } from "@crustjs/style";
+import { fg, bg } from "@crustjs/style";
 
-// RGB values (0–255 per channel)
-console.log(rgb("ocean", 0, 128, 255));
-console.log(bgRgb("warning", 255, 128, 0));
+// Hex (3-, 6-, or 8-digit)
+console.log(fg("error", "#ff0000"));
+console.log(bg("highlight", "#ff8800"));
 
-// Hex colors (#RGB or #RRGGBB)
-console.log(hex("error", "#ff0000"));
-console.log(bgHex("highlight", "#ff8800"));
+// Named CSS colors
+console.log(fg("royal", "rebeccapurple"));
+
+// rgb() / hsl() strings
+console.log(fg("ocean", "rgb(0, 128, 255)"));
+console.log(bg("sun",   "hsl(45, 100%, 50%)"));
+
+// Numeric literal
+console.log(fg("red", 0xff0000));
+
+// Tuple or object
+console.log(fg("coral", [255, 127, 80]));
+console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 ```
 
 Pair factories work with `applyStyle` and `composeStyles`:
 
 ```ts
-import { rgbCode, hexCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
 
-const coral = rgbCode(255, 127, 80);
+const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
 
-const boldCoral = composeStyles(boldCode, hexCode("#ff7f50"));
+const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
@@ -249,13 +267,39 @@ On `createStyle` instances, dynamic colors respect mode and truecolor detection:
 import { createStyle } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
-console.log(s.rgb("text", 255, 0, 0));
-console.log(s.hex("text", "#ff0000"));
+console.log(s.fg("text", "#ff0000"));
+console.log(s.bg("text", "rebeccapurple"));
 ```
 
-In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor and base colors are enabled — detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`. When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work normally.
+In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
 
-Invalid inputs throw immediately: `RangeError` for out-of-range RGB values, `TypeError` for malformed hex strings.
+### Color Depth & Auto-Fallback
+
+`fg` / `bg` are capability-aware: the resolved color depth determines which `Bun.color()` format is emitted. The standalone exports re-resolve on every call (so `setGlobalColorMode` and `NO_COLOR` take effect immediately), while instances created with `createStyle()` capture the depth at construction time.
+
+| Resolved depth | Output | Detection (in `"auto"` mode) |
+| --- | --- | --- |
+| `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
+| `"16"` | `Bun.color(input, "ansi-16")` | Any other TTY value |
+| `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
+
+Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables are introduced. Disable color emission entirely with `setGlobalColorMode("never")` or `NO_COLOR=1`; force truecolor with `setGlobalColorMode("always")`.
+
+Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly, or read `style.colorDepth` / `instance.colorDepth`:
+
+```ts
+import { resolveColorDepth, style } from "@crustjs/style";
+
+resolveColorDepth("auto"); // "truecolor" | "256" | "16" | "none"
+style.colorDepth;          // depth currently used by the runtime style
+```
+
+<Callout type="info">
+Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at every depth — including `"none"` — so user bugs are not silently masked when colors are off.
+</Callout>
+
+Invalid inputs throw immediately: `fg` and `bg` raise `TypeError` (`Invalid color input: ...`) whenever `Bun.color()` cannot parse the input. Empty `text` always returns `""` without consulting the parser.
 
 <Callout type="info">
 Dynamic colors use truecolor (24-bit) ANSI sequences with no automatic fallback to 256 or 16 colors. On unsupported terminals, colors may be approximated or silently ignored — no runtime errors will occur.

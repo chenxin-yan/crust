@@ -7,6 +7,32 @@ import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
+ * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode`.
+ *
+ * Mirrors the input surface of [`Bun.color()`](https://bun.com/docs/runtime/color):
+ * hex strings (`#rgb`, `#rrggbb`, `#rrggbbaa`), named CSS colors (`"red"`,
+ * `"rebeccapurple"`), `rgb()` / `rgba()` strings, `hsl()` / `hsla()` strings,
+ * `lab()` strings, numeric literals (`0xff0000`), `{ r, g, b, a? }` objects,
+ * and `[r, g, b]` / `[r, g, b, a]` arrays.
+ *
+ * @example
+ * ```ts
+ * const a: ColorInput = "#ff0000";
+ * const b: ColorInput = "rebeccapurple";
+ * const c: ColorInput = "rgb(0, 128, 255)";
+ * const d: ColorInput = 0xff0000;
+ * const e: ColorInput = { r: 255, g: 0, b: 0 };
+ * const f: ColorInput = [0, 128, 255];
+ * ```
+ */
+export type ColorInput =
+	| string
+	| number
+	| { r: number; g: number; b: number; a?: number }
+	| readonly [number, number, number]
+	| readonly [number, number, number, number];
+
+/**
  * Color emission mode for the style engine.
  *
  * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR` is
@@ -22,6 +48,23 @@ import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethod
  * ```
  */
 export type ColorMode = "auto" | "always" | "never";
+
+/**
+ * Resolved color depth tier for a terminal.
+ *
+ * - `"truecolor"` — 24-bit color (`Bun.color(input, "ansi-16m")`). Required
+ *   for full {@link ColorInput} fidelity.
+ * - `"256"` — 256-color extended palette (`Bun.color(input, "ansi-256")`).
+ *   `Bun.color()` picks the closest palette index for arbitrary RGB inputs.
+ * - `"16"` — Standard 16-color ANSI (`Bun.color(input, "ansi-16")`). Closest
+ *   match against the basic ANSI color set.
+ * - `"none"` — Color emission is disabled. {@link fg} / {@link bg} return the
+ *   input text unchanged.
+ *
+ * Used by {@link resolveColorDepth} and exposed on {@link StyleInstance} as
+ * `colorDepth` for introspection.
+ */
+export type ColorDepth = "truecolor" | "256" | "16" | "none";
 
 /**
  * Capability inputs for deterministic testing.
@@ -113,6 +156,13 @@ export interface StyleInstance extends StyleMethodMap {
 	/** Whether truecolor (24-bit) sequences will be emitted by this instance. */
 	readonly trueColorEnabled: boolean;
 
+	/**
+	 * The resolved color depth tier this instance will emit through
+	 * {@link fg} / {@link bg}. Equivalent to {@link trueColorEnabled} when
+	 * `"truecolor"`; `"none"` indicates color emission is disabled.
+	 */
+	readonly colorDepth: ColorDepth;
+
 	// ── Style engine ──────────────────────────────────────────────────────
 
 	/** Apply an arbitrary ANSI pair to text, respecting the color mode. */
@@ -127,15 +177,13 @@ export interface StyleInstance extends StyleMethodMap {
 
 	// ── Dynamic colors (truecolor) ───────────────────────────────────────
 
-	/** Apply a truecolor foreground RGB color to text. */
-	readonly rgb: (text: string, r: number, g: number, b: number) => string;
+	/**
+	 * Apply a truecolor foreground to text from any input `Bun.color()`
+	 * accepts (hex, named CSS colors, `rgb()`, `hsl()`, numeric, `{ r, g, b }`,
+	 * `[r, g, b]`, etc.).
+	 */
+	readonly fg: (text: string, input: ColorInput) => string;
 
-	/** Apply a truecolor background RGB color to text. */
-	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
-
-	/** Apply a truecolor foreground hex color to text. */
-	readonly hex: (text: string, hexColor: string) => string;
-
-	/** Apply a truecolor background hex color to text. */
-	readonly bgHex: (text: string, hexColor: string) => string;
+	/** Apply a truecolor background to text from any {@link ColorInput}. */
+	readonly bg: (text: string, input: ColorInput) => string;
 }

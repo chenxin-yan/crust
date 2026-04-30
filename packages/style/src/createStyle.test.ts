@@ -52,6 +52,153 @@ describe("createStyle — apply() in other modes", () => {
 	});
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// Depth-aware fg / bg on style instances
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Tests assert against `Bun.color()` output directly to stay tolerant of
+// Bun version-specific format differences across `ansi-16m`, `ansi-256`,
+// and `ansi-16`.
+
+describe("createStyle — colorDepth introspection", () => {
+	it('reflects "truecolor" in always mode', () => {
+		const s = createStyle({ mode: "always" });
+		expect(s.colorDepth).toBe("truecolor");
+		expect(s.trueColorEnabled).toBe(true);
+		expect(s.colorsEnabled).toBe(true);
+	});
+
+	it('reflects "none" in never mode', () => {
+		const s = createStyle({ mode: "never" });
+		expect(s.colorDepth).toBe("none");
+		expect(s.trueColorEnabled).toBe(false);
+		expect(s.colorsEnabled).toBe(false);
+	});
+
+	it('reflects "256" in auto mode with TERM=xterm-256color', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: "xterm-256color",
+			},
+		});
+		expect(s.colorDepth).toBe("256");
+		expect(s.trueColorEnabled).toBe(false);
+		expect(s.colorsEnabled).toBe(true);
+	});
+
+	it('reflects "16" in auto mode with bare TTY', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: undefined,
+			},
+		});
+		expect(s.colorDepth).toBe("16");
+	});
+});
+
+describe("createStyle — fg/bg emit format matching colorDepth", () => {
+	it('fg emits ansi-256 escape when capability is "256"', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: "xterm-256color",
+			},
+		});
+		const expectedOpen = Bun.color("#ff0000", "ansi-256");
+		expect(s.fg("text", "#ff0000")).toBe(`${expectedOpen}text\x1b[39m`);
+	});
+
+	it('fg emits ansi-16 escape when capability is "16"', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: undefined,
+			},
+		});
+		const expectedOpen = Bun.color("#ff0000", "ansi-16");
+		expect(s.fg("text", "#ff0000")).toBe(`${expectedOpen}text\x1b[39m`);
+	});
+
+	it('fg returns text unchanged when capability is "none"', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: false,
+				noColor: undefined,
+			},
+		});
+		expect(s.colorDepth).toBe("none");
+		expect(s.fg("text", "#ff0000")).toBe("text");
+	});
+
+	it('bg emits ansi-256 background when capability is "256"', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: "xterm-256color",
+			},
+		});
+		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;
+		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
+		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
+	});
+
+	it('bg emits ansi-16 background when capability is "16"', () => {
+		const s = createStyle({
+			mode: "auto",
+			overrides: {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: undefined,
+				term: undefined,
+			},
+		});
+		const fgOpen = Bun.color("#00ff88", "ansi-16") as string;
+		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
+		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
+	});
+
+	it('bg returns text unchanged when capability is "none"', () => {
+		const s = createStyle({
+			mode: "never",
+		});
+		expect(s.bg("text", "#00ff88")).toBe("text");
+	});
+
+	it("empty text short-circuits at every depth", () => {
+		for (const term of [undefined, "xterm-256color", "xterm-direct"]) {
+			const s = createStyle({
+				mode: "auto",
+				overrides: {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term,
+				},
+			});
+			expect(s.fg("", "#ff0000")).toBe("");
+			expect(s.bg("", "#ff0000")).toBe("");
+		}
+	});
+});
+
 describe("styleMethodRegistry — modifier classification", () => {
 	it("every modifier name is a registered style method name", () => {
 		const allNames = new Set<string>(styleMethodNames);

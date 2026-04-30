@@ -85,32 +85,57 @@ Terminal support for OSC 8 varies. Many modern terminals support it, but there i
 
 ## Dynamic Colors (Truecolor)
 
-Use any RGB or hex color via 24-bit truecolor ANSI sequences:
+A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex (3/6/8 digit), named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays.
 
 ```ts
-import { rgb, bgRgb, hex, bgHex } from "@crustjs/style";
+import { fg, bg } from "@crustjs/style";
 
-// RGB values (0–255)
-console.log(rgb("ocean", 0, 128, 255));
-console.log(bgRgb("warning", 255, 128, 0));
+// Hex (3-, 6-, or 8-digit)
+console.log(fg("error", "#ff0000"));
+console.log(fg("short", "#f00"));
+console.log(bg("highlight", "#ff8800"));
 
-// Hex colors (#RGB or #RRGGBB)
-console.log(hex("error", "#ff0000"));
-console.log(hex("short", "#f00"));
-console.log(bgHex("highlight", "#ff8800"));
+// Named CSS colors
+console.log(fg("royal", "rebeccapurple"));
+
+// rgb() / hsl() strings
+console.log(fg("ocean", "rgb(0, 128, 255)"));
+console.log(bg("sun",   "hsl(45, 100%, 50%)"));
+
+// Numeric literal
+console.log(fg("red", 0xff0000));
+
+// Tuple or object
+console.log(fg("coral", [255, 127, 80]));
+console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 ```
+
+### `ColorInput`
+
+`fg`, `bg`, `fgCode`, and `bgCode` all accept the same `ColorInput` union:
+
+```ts
+type ColorInput =
+  | string
+  | number
+  | { r: number; g: number; b: number; a?: number }
+  | readonly [number, number, number]
+  | readonly [number, number, number, number];
+```
+
+Invalid inputs raise `TypeError` (`Invalid color input: ...`). Empty `text` short-circuits to `""` without parsing.
 
 ### Pair Factories
 
 Create reusable `AnsiPair` objects for composition:
 
 ```ts
-import { rgbCode, bgRgbCode, hexCode, bgHexCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
 
-const coral = rgbCode(255, 127, 80);
+const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
 
-const boldCoral = composeStyles(boldCode, hexCode("#ff7f50"));
+const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
@@ -122,23 +147,39 @@ Dynamic colors on `createStyle` instances respect mode and truecolor detection:
 import { createStyle } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
-console.log(s.rgb("text", 255, 0, 0));
-console.log(s.hex("text", "#ff0000"));
-console.log(s.bgRgb("text", 0, 128, 255));
-console.log(s.bgHex("text", "#0080ff"));
+console.log(s.fg("text", "#ff0000"));
+console.log(s.fg("text", "rebeccapurple"));
+console.log(s.bg("text", [0, 128, 255]));
+console.log(s.bg("text", "hsl(210, 100%, 50%)"));
 ```
 
-In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor (detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`). When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work.
+In `"auto"` mode, `fg` / `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below.
 
-In `"never"` mode, all dynamic color methods return plain text. In `"always"` mode, truecolor sequences are always emitted.
+In `"never"` mode, `fg` / `bg` return plain text. In `"always"` mode, truecolor sequences are always emitted.
 
-### Terminal Compatibility
+### Color Depth & Auto-Fallback
 
-Dynamic colors use truecolor (24-bit) ANSI sequences. There is no automatic fallback to 256 or 16 colors. On terminals that do not support truecolor:
+`fg` / `bg` are capability-aware: the resolved color depth determines which `Bun.color()` format is emitted on every call. The standalone exports re-resolve on every call, while instances created with `createStyle()` capture the depth at construction time.
 
-- Colors may be approximated to the nearest supported color
-- Colors may be silently ignored (text renders in default color)
-- No runtime errors will occur
+| Resolved depth | Output | Detection (in `"auto"` mode) |
+| --- | --- | --- |
+| `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
+| `"16"` | `Bun.color(input, "ansi-16")` | Any other TTY value |
+| `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
+
+Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables. Disable color emission entirely with `setGlobalColorMode("never")` or by setting `NO_COLOR=1`. Force truecolor with `setGlobalColorMode("always")` or `mode: "always"` on `createStyle()`.
+
+Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly, or read `style.colorDepth` / `instance.colorDepth` for the live value:
+
+```ts
+import { resolveColorDepth, style } from "@crustjs/style";
+
+resolveColorDepth("auto"); // "truecolor" | "256" | "16" | "none"
+style.colorDepth;          // depth currently used by the runtime style
+```
+
+Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at every depth — including `"none"` — so user bugs are not silently masked when colors are off.
 
 ## Color Modes
 

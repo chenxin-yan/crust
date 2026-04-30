@@ -61,25 +61,21 @@ export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export {
 	resolveColorCapability,
+	resolveColorDepth,
 	resolveTrueColorCapability,
 } from "./capability.ts";
+// Style primitives — Dynamic colors (truecolor) powered by `Bun.color()`
+export { bgCode, fgCode } from "./color.ts";
 export {
 	createStyle,
 	getGlobalColorMode,
 	setGlobalColorMode,
 	style,
 } from "./createStyle.ts";
-// Style primitives — Dynamic colors (truecolor)
-export {
-	bgHexCode,
-	bgRgbCode,
-	hexCode,
-	parseHex,
-	rgbCode,
-} from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
 export {
+	bg,
 	// Background
 	bgBlack,
 	bgBlue,
@@ -93,10 +89,8 @@ export {
 	bgBrightYellow,
 	bgCyan,
 	bgGreen,
-	bgHex,
 	bgMagenta,
 	bgRed,
-	bgRgb,
 	bgWhite,
 	bgYellow,
 	// Foreground
@@ -113,16 +107,15 @@ export {
 	brightYellow,
 	cyan,
 	dim,
+	fg,
 	gray,
 	green,
-	hex,
 	hidden,
 	inverse,
 	italic,
 	link,
 	magenta,
 	red,
-	rgb,
 	strikethrough,
 	underline,
 	white,
@@ -150,6 +143,8 @@ export { buildDefaultMarkdownTheme } from "./theme/markdownTheme.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
+	ColorDepth,
+	ColorInput,
 	ColorMode,
 	StyleFn,
 	StyleInstance,

@@ -4,17 +4,11 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import {
-	resolveColorCapability,
+	resolveColorDepth,
 	resolveHyperlinkCapability,
 	resolveModifierCapability,
-	resolveTrueColorCapability,
 } from "./capability.ts";
-import {
-	bgHex as bgHexDirect,
-	bgRgb as bgRgbDirect,
-	hex as hexDirect,
-	rgb as rgbDirect,
-} from "./dynamicColors.ts";
+import { bg as bgDirect, fg as fgDirect } from "./color.ts";
 import { link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import {
@@ -25,6 +19,8 @@ import {
 } from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
+	ColorDepth,
+	ColorInput,
 	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
@@ -154,13 +150,14 @@ function buildStyleMethods(
 export function createStyle(options?: StyleOptions): StyleInstance {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
-	const colorsEnabled = resolveColorCapability(mode, options?.overrides);
+	const colorDepth: ColorDepth = resolveColorDepth(mode, options?.overrides);
+	const colorsEnabled = colorDepth !== "none";
+	const trueColorEnabled = colorDepth === "truecolor";
 	const hyperlinksEnabled = resolveHyperlinkCapability(
 		mode,
 		options?.overrides,
 	);
 	const enabled = modifiersEnabled || colorsEnabled;
-	const trueColorEnabled = resolveTrueColorCapability(mode, options?.overrides);
 	const createChainableStyle = buildChainableStyleFactory(
 		modifiersEnabled,
 		colorsEnabled,
@@ -171,6 +168,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		enabled,
 		colorsEnabled,
 		trueColorEnabled,
+		colorDepth,
 
 		// ── Style engine ────────────────────────────────────────────────────
 
@@ -190,23 +188,9 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 
 		// ── Dynamic colors (truecolor) ──────────────────────────────────────
 
-		rgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) =>
-					rgbDirect(text, r, g, b)
-			: (text: string, _r: number, _g: number, _b: number) => text,
+		fg: (text: string, input: ColorInput) => fgDirect(text, input, colorDepth),
 
-		bgRgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) =>
-					bgRgbDirect(text, r, g, b)
-			: (text: string, _r: number, _g: number, _b: number) => text,
-
-		hex: trueColorEnabled
-			? (text: string, hexColor: string) => hexDirect(text, hexColor)
-			: (text: string, _hexColor: string) => text,
-
-		bgHex: trueColorEnabled
-			? (text: string, hexColor: string) => bgHexDirect(text, hexColor)
-			: (text: string, _hexColor: string) => text,
+		bg: (text: string, input: ColorInput) => bgDirect(text, input, colorDepth),
 
 		...methods,
 	};
@@ -257,20 +241,14 @@ export function getRuntimeStyle(): StyleInstance {
 
 // Members whose implementation is a function and must be forwarded as a
 // bound method so callers can invoke them like `style.apply(...)`.
-const FORWARDED_METHODS = [
-	"apply",
-	"link",
-	"rgb",
-	"bgRgb",
-	"hex",
-	"bgHex",
-] as const;
+const FORWARDED_METHODS = ["apply", "link", "fg", "bg"] as const;
 
 // Members that read a value off the current runtime style on every access.
 const FORWARDED_GETTERS = [
 	"enabled",
 	"colorsEnabled",
 	"trueColorEnabled",
+	"colorDepth",
 ] as const;
 
 function createRuntimeStyleFacade(): StyleInstance {

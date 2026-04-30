@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as codes from "./ansiCodes.ts";
 import {
 	resolveColorCapability,
+	resolveColorDepth,
 	resolveTrueColorCapability,
 } from "./capability.ts";
 import {
@@ -116,6 +117,176 @@ describe("resolveColorCapability", () => {
 			expect(resolveColorCapability("auto", { noColor: undefined })).toBe(
 				false,
 			);
+		});
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// resolveColorDepth — depth-tier resolution
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolveColorDepth", () => {
+	it('`never` mode → "none"', () => {
+		expect(resolveColorDepth("never")).toBe("none");
+		expect(
+			resolveColorDepth("never", {
+				isTTY: true,
+				noColor: undefined,
+				colorTerm: "truecolor",
+			}),
+		).toBe("none");
+	});
+
+	it('`always` mode → "truecolor"', () => {
+		expect(resolveColorDepth("always")).toBe("truecolor");
+		expect(
+			resolveColorDepth("always", {
+				isTTY: false,
+				noColor: "1",
+				colorTerm: undefined,
+				term: undefined,
+			}),
+		).toBe("truecolor");
+	});
+
+	describe("`auto` mode", () => {
+		it('non-TTY → "none"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: false,
+					noColor: undefined,
+					colorTerm: "truecolor",
+					term: "xterm-256color",
+				}),
+			).toBe("none");
+		});
+
+		it('TTY + NO_COLOR set → "none"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: "1",
+					colorTerm: "truecolor",
+				}),
+			).toBe("none");
+		});
+
+		it('TTY + NO_COLOR="" (empty) does NOT disable color', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: "",
+					colorTerm: "truecolor",
+				}),
+			).toBe("truecolor");
+		});
+
+		it('TTY + COLORTERM=truecolor → "truecolor"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: "truecolor",
+				}),
+			).toBe("truecolor");
+		});
+
+		it('TTY + COLORTERM=24bit (case-insensitive) → "truecolor"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: "24BIT",
+				}),
+			).toBe("truecolor");
+		});
+
+		it('TTY + TERM=xterm-direct → "truecolor"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "xterm-direct",
+				}),
+			).toBe("truecolor");
+		});
+
+		it('TTY + TERM contains truecolor → "truecolor"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "xterm-truecolor",
+				}),
+			).toBe("truecolor");
+		});
+
+		it('TTY + TERM=xterm-256color → "256"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "xterm-256color",
+				}),
+			).toBe("256");
+		});
+
+		it('TTY + TERM=screen-256color (uppercase) → "256" (case-insensitive)', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "SCREEN-256COLOR",
+				}),
+			).toBe("256");
+		});
+
+		it('TTY + TERM=xterm → "16"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "xterm",
+				}),
+			).toBe("16");
+		});
+
+		it('TTY + TERM=dumb → "none"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: "dumb",
+				}),
+			).toBe("none");
+		});
+
+		it('TTY + no env vars → "16"', () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term: undefined,
+				}),
+			).toBe("16");
+		});
+
+		it("COLORTERM truecolor wins over TERM=dumb (TERM=dumb only checked when no truecolor signal)", () => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: "truecolor",
+					term: "dumb",
+				}),
+			).toBe("truecolor");
 		});
 	});
 });
@@ -579,27 +750,27 @@ describe("createStyle — dynamic colors always mode", () => {
 		expect(s.trueColorEnabled).toBe(true);
 	});
 
-	it("rgb emits truecolor ANSI codes", () => {
-		expect(s.rgb("text", 255, 0, 0)).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
+	it("fg emits truecolor ANSI codes from `[r, g, b]`", () => {
+		expect(s.fg("text", [255, 0, 0])).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
 	});
 
-	it("bgRgb emits truecolor ANSI codes", () => {
-		expect(s.bgRgb("text", 0, 128, 255)).toBe(
+	it("bg emits truecolor ANSI codes from `[r, g, b]`", () => {
+		expect(s.bg("text", [0, 128, 255])).toBe(
 			"\x1b[48;2;0;128;255mtext\x1b[49m",
 		);
 	});
 
-	it("hex emits truecolor ANSI codes", () => {
-		expect(s.hex("text", "#ff0000")).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
+	it("fg emits truecolor ANSI codes from hex string", () => {
+		expect(s.fg("text", "#ff0000")).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
 	});
 
-	it("bgHex emits truecolor ANSI codes", () => {
-		expect(s.bgHex("text", "#00ff88")).toBe("\x1b[48;2;0;255;136mtext\x1b[49m");
+	it("bg emits truecolor ANSI codes from hex string", () => {
+		expect(s.bg("text", "#00ff88")).toBe("\x1b[48;2;0;255;136mtext\x1b[49m");
 	});
 
 	it("handles empty string", () => {
-		expect(s.rgb("", 255, 0, 0)).toBe("");
-		expect(s.hex("", "#fff")).toBe("");
+		expect(s.fg("", [255, 0, 0])).toBe("");
+		expect(s.fg("", "#fff")).toBe("");
 	});
 });
 
@@ -610,20 +781,20 @@ describe("createStyle — dynamic colors never mode", () => {
 		expect(s.trueColorEnabled).toBe(false);
 	});
 
-	it("rgb returns plain text", () => {
-		expect(s.rgb("text", 255, 0, 0)).toBe("text");
+	it("fg returns plain text from `[r, g, b]`", () => {
+		expect(s.fg("text", [255, 0, 0])).toBe("text");
 	});
 
-	it("bgRgb returns plain text", () => {
-		expect(s.bgRgb("text", 0, 128, 255)).toBe("text");
+	it("bg returns plain text from `[r, g, b]`", () => {
+		expect(s.bg("text", [0, 128, 255])).toBe("text");
 	});
 
-	it("hex returns plain text", () => {
-		expect(s.hex("text", "#ff0000")).toBe("text");
+	it("fg returns plain text from hex", () => {
+		expect(s.fg("text", "#ff0000")).toBe("text");
 	});
 
-	it("bgHex returns plain text", () => {
-		expect(s.bgHex("text", "#00ff88")).toBe("text");
+	it("bg returns plain text from hex", () => {
+		expect(s.bg("text", "#00ff88")).toBe("text");
 	});
 });
 
@@ -634,10 +805,10 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 			overrides: { isTTY: true, noColor: undefined, colorTerm: "truecolor" },
 		});
 		expect(s.trueColorEnabled).toBe(true);
-		expect(s.rgb("text", 255, 0, 0)).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
+		expect(s.fg("text", [255, 0, 0])).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
 	});
 
-	it("disables truecolor when TTY but no truecolor env", () => {
+	it("falls back to 256-color when TTY + TERM=xterm-256color (no truecolor env)", () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: {
@@ -649,10 +820,13 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 		});
 		expect(s.enabled).toBe(true);
 		expect(s.trueColorEnabled).toBe(false);
-		expect(s.rgb("text", 255, 0, 0)).toBe("text");
+		expect(s.colorDepth).toBe("256");
+		// fg now downgrades to ansi-256 instead of returning plain text.
+		const expectedOpen = Bun.color([255, 0, 0], "ansi-256");
+		expect(s.fg("text", [255, 0, 0])).toBe(`${expectedOpen}text\x1b[39m`);
 	});
 
-	it("base color still works when truecolor disabled", () => {
+	it("falls back to 16-color when TTY but no truecolor / 256 env", () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: {
@@ -664,10 +838,12 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 		});
 		expect(s.enabled).toBe(true);
 		expect(s.trueColorEnabled).toBe(false);
-		// Static colors still work
+		expect(s.colorDepth).toBe("16");
+		// Static 16-color helpers continue to work.
 		expect(s.red("text")).toBe("\x1b[31mtext\x1b[39m");
-		// Dynamic colors are gated off
-		expect(s.rgb("text", 255, 0, 0)).toBe("text");
+		// Dynamic colors emit ansi-16 sequences (Bun.color is the source of truth).
+		const expectedOpen = Bun.color([255, 0, 0], "ansi-16");
+		expect(s.fg("text", [255, 0, 0])).toBe(`${expectedOpen}text\x1b[39m`);
 	});
 
 	it("disables everything when not a TTY", () => {
@@ -684,7 +860,7 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 		expect(s.trueColorEnabled).toBe(false);
 		expect(s.red("text")).toBe("text");
 		expect(s.bold("text")).toBe("text");
-		expect(s.rgb("text", 255, 0, 0)).toBe("text");
+		expect(s.fg("text", [255, 0, 0])).toBe("text");
 	});
 });
 

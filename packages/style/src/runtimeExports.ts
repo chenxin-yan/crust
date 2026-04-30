@@ -9,7 +9,7 @@
 
 import { style } from "./createStyle.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { StyleFn } from "./types.ts";
+import type { ColorInput, StyleFn } from "./types.ts";
 
 export const black: StyleFn = (text) => style.black(text);
 export const red: StyleFn = (text) => style.red(text);
@@ -59,18 +59,10 @@ export function link(
 	return style.link(text, url, options);
 }
 
-export function rgb(text: string, r: number, g: number, b: number): string {
-	return style.rgb(text, r, g, b);
+export function fg(text: string, input: ColorInput): string {
+	return style.fg(text, input);
 }
 
-export function bgRgb(text: string, r: number, g: number, b: number): string {
-	return style.bgRgb(text, r, g, b);
-}
-
-export function hex(text: string, hexColor: string): string {
-	return style.hex(text, hexColor);
-}
-
-export function bgHex(text: string, hexColor: string): string {
-	return style.bgHex(text, hexColor);
+export function bg(text: string, input: ColorInput): string {
+	return style.bg(text, input);
 }
