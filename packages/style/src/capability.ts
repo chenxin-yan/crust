@@ -158,9 +158,13 @@ export function resolveColorDepth(
  *
  * The `overrides` parameter allows deterministic testing by injecting
  * capability inputs instead of reading from the runtime environment.
+ * Because this delegates to {@link resolveColorDepth}, callers should
+ * also pass `term` / `colorTerm` when they need full env isolation —
+ * `TERM=dumb` in the ambient environment otherwise forces `"none"`.
  *
  * @param mode - The color emission mode.
- * @param overrides - Optional overrides for TTY and NO_COLOR detection.
+ * @param overrides - Optional overrides for TTY, NO_COLOR, TERM, and
+ * COLORTERM detection.
  * @returns `true` if ANSI codes should be emitted, `false` otherwise.
  *
  * @example
@@ -168,13 +172,18 @@ export function resolveColorDepth(
  * resolveColorCapability("auto"); // true if TTY and NO_COLOR not set
  * resolveColorCapability("always"); // true
  * resolveColorCapability("never"); // false
- * resolveColorCapability("auto", { isTTY: true, noColor: undefined }); // true
- * resolveColorCapability("auto", { isTTY: true, noColor: "" }); // true
+ * resolveColorCapability("auto", { isTTY: true, noColor: undefined }); // env-dependent
+ * resolveColorCapability("auto", {
+ *   isTTY: true,
+ *   noColor: undefined,
+ *   term: "xterm-256color",
+ *   colorTerm: undefined,
+ * }); // true, deterministic
  * ```
  */
 export function resolveColorCapability(
 	mode: ColorMode,
-	overrides?: CapabilityOverrides,
+	overrides?: CapabilityOverrides & TrueColorOverrides,
 ): boolean {
 	return resolveColorDepth(mode, overrides) !== "none";
 }

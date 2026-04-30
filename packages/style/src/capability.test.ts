@@ -17,7 +17,8 @@ import { composeStyles } from "./styleEngine.ts";
 const originalNoColor = process.env.NO_COLOR;
 const originalStdoutIsTTY = process.stdout.isTTY;
 
-beforeEach(() => {
+/** Restore mutable runtime env (`NO_COLOR`, `isTTY`, global mode). */
+function restoreRuntimeEnv() {
 	setGlobalColorMode(undefined);
 	if (originalNoColor === undefined) {
 		delete process.env.NO_COLOR;
@@ -28,20 +29,10 @@ beforeEach(() => {
 		configurable: true,
 		value: originalStdoutIsTTY,
 	});
-});
+}
 
-afterEach(() => {
-	setGlobalColorMode(undefined);
-	if (originalNoColor === undefined) {
-		delete process.env.NO_COLOR;
-	} else {
-		process.env.NO_COLOR = originalNoColor;
-	}
-	Object.defineProperty(process.stdout, "isTTY", {
-		configurable: true,
-		value: originalStdoutIsTTY,
-	});
-});
+beforeEach(restoreRuntimeEnv);
+afterEach(restoreRuntimeEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveColorCapability — mode resolution
@@ -117,6 +108,27 @@ describe("resolveColorCapability", () => {
 			expect(resolveColorCapability("auto", { noColor: undefined })).toBe(
 				false,
 			);
+		});
+
+		it("accepts term / colorTerm overrides for full env isolation", () => {
+			// Regression: overrides type once excluded `term` / `colorTerm`,
+			// so callers couldn't isolate from `TERM=dumb` in the ambient env.
+			expect(
+				resolveColorCapability("auto", {
+					isTTY: true,
+					noColor: undefined,
+					term: "dumb",
+					colorTerm: undefined,
+				}),
+			).toBe(false);
+			expect(
+				resolveColorCapability("auto", {
+					isTTY: true,
+					noColor: undefined,
+					term: "xterm-256color",
+					colorTerm: undefined,
+				}),
+			).toBe(true);
 		});
 	});
 });
@@ -918,16 +930,14 @@ describe("runtime style cache — TERM/COLORTERM invalidation", () => {
 	const originalTerm = process.env.TERM;
 	const originalColorTerm = process.env.COLORTERM;
 
-	function restoreTermEnv() {
-		if (originalTerm === undefined) {
-			delete process.env.TERM;
+	function restoreVar(
+		name: "TERM" | "COLORTERM",
+		original: string | undefined,
+	) {
+		if (original === undefined) {
+			delete process.env[name];
 		} else {
-			process.env.TERM = originalTerm;
-		}
-		if (originalColorTerm === undefined) {
-			delete process.env.COLORTERM;
-		} else {
-			process.env.COLORTERM = originalColorTerm;
+			process.env[name] = original;
 		}
 	}
 
@@ -940,7 +950,8 @@ describe("runtime style cache — TERM/COLORTERM invalidation", () => {
 	});
 
 	afterEach(() => {
-		restoreTermEnv();
+		restoreVar("TERM", originalTerm);
+		restoreVar("COLORTERM", originalColorTerm);
 	});
 
 	it("re-resolves colorDepth when TERM changes", () => {

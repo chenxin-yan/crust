@@ -1,18 +1,9 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Dynamic Colors — Depth-aware helpers powered by `Bun.color()`
+// Dynamic Colors — depth-aware `fg` / `bg` helpers powered by `Bun.color()`.
 // ────────────────────────────────────────────────────────────────────────────
-//
-// One canonical foreground / background pair driven by Bun's built-in color
-// parser. Accepts any input `Bun.color()` understands: hex (3/6/8 digit),
-// named CSS colors (`"red"`, `"rebeccapurple"`), `rgb()` / `rgba()` strings,
-// `hsl()` / `hsla()` strings, `lab()` strings, numeric (`0xff0000`),
-// `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays.
-//
-// At call time these helpers fall back to a coarser `Bun.color()` format
-// when the resolved {@link ColorDepth} is `"256"` or `"16"`, mirroring how
-// `style.fg` / `style.bg` honor the terminal's capability.
-//
-// See https://bun.com/docs/runtime/color for the full input surface.
+// `truecolor` / `256` go through `Bun.color()`; `16` uses an in-package
+// quantizer (see {@link rgbToAnsi16Param}). See {@link ColorInput} for the
+// accepted input surface.
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { applyStyle } from "./styleEngine.ts";
@@ -38,17 +29,12 @@ const BG_INTRODUCER = "\x1b[48;";
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Render `input` for inclusion in error messages. Strings are quoted (matching
- * the previous `parseHex` error-message style); everything else falls back to
- * `String(...)` with a `JSON.stringify` attempt for objects so error text stays
- * readable.
- */
+/** Quote strings, JSON-stringify objects, fall back to `String()`. */
 function describeInput(input: unknown): string {
-	if (typeof input === "string") {
-		return JSON.stringify(input);
-	}
-	if (input !== null && typeof input === "object") {
+	if (
+		typeof input === "string" ||
+		(input !== null && typeof input === "object")
+	) {
 		try {
 			return JSON.stringify(input);
 		} catch {
@@ -65,25 +51,18 @@ function describeInput(input: unknown): string {
  * @internal
  */
 function parseRgb(input: ColorInput): readonly [number, number, number] {
-	const rgb = Bun.color(input as Parameters<typeof Bun.color>[0], "[rgb]");
+	const rgb = Bun.color(input, "[rgb]");
 	if (rgb === null) {
 		throw new TypeError(`Invalid color input: ${describeInput(input)}`);
 	}
-	// Bun.color(_, "[rgb]") returns a 3-element numeric tuple. Re-shape so
-	// the consumer never has to think about array length.
-	return [rgb[0] as number, rgb[1] as number, rgb[2] as number];
+	return rgb as readonly [number, number, number];
 }
 
 /**
- * Quantize an `[r, g, b]` triple to a standard 16-color SGR parameter.
- *
- * Same algorithm as `ansi-styles` / `chalk` (and `color-convert`): bucket
- * each channel at 50%, pack into a 3-bit base color, and use the high-end
- * brightness bucket (max channel ≥ ~75% of 255) to select the bright
- * variant. Channels with very low max are forced to black.
- *
- * Returns the SGR parameter for *foreground* (`30`–`37`, `90`–`97`); call
- * sites add `+10` for backgrounds.
+ * Quantize `[r, g, b]` to a foreground SGR parameter (`30`–`37`, `90`–`97`).
+ * Same algorithm as `ansi-styles` / `chalk`: bucket each channel at 50%,
+ * pack into a 3-bit base color, then add 60 for bright when the max
+ * channel rounds up. Call sites add `+10` for backgrounds.
  *
  * @internal
  */
@@ -106,16 +85,9 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 }
 
 /**
- * Parse `input` into a foreground ANSI open sequence at the requested depth.
- *
- * - `"truecolor"` and `"256"` go directly through `Bun.color()`.
- * - `"16"` is rendered by an in-package RGB → 16-color quantizer because
- *   `Bun.color(_, "ansi-16")` produces malformed output in some Bun
- *   versions (see `oven-sh/bun#22161`). The quantizer also lets us emit
- *   real background sequences (`\x1b[4Xm` / `\x1b[10Xm`) instead of
- *   relying on a `38;` → `48;` rewrite that does not apply at this depth.
- *
- * Throws `TypeError` on inputs Bun cannot parse.
+ * Foreground SGR open sequence at `depth`. `truecolor` / `256` use
+ * `Bun.color()`; `16` uses {@link rgbToAnsi16Param} because
+ * `Bun.color(_, "ansi-16")` is malformed in current Bun (oven-sh/bun#22161).
  *
  * @internal
  */
@@ -125,7 +97,7 @@ function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 		return `\x1b[${rgbToAnsi16Param(r, g, b)}m`;
 	}
 	const format = depth === "truecolor" ? "ansi-16m" : "ansi-256";
-	const open = Bun.color(input as Parameters<typeof Bun.color>[0], format);
+	const open = Bun.color(input, format);
 	if (open === null) {
 		throw new TypeError(`Invalid color input: ${describeInput(input)}`);
 	}
@@ -133,17 +105,10 @@ function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 }
 
 /**
- * Parse `input` into a background ANSI open sequence at the requested
- * depth.
- *
- * - For `"truecolor"` / `"256"`, derives bg from fg by swapping the
- *   `\x1b[38;` SGR introducer for `\x1b[48;`. Both formats use the
- *   `38;` introducer, so the swap is total.
- * - For `"16"`, quantizes directly to a `\x1b[4Xm` / `\x1b[10Xm`
- *   background SGR. This avoids the `38;` swap (which is a no-op on the
- *   compact 16-color sequences `Bun.color` would emit if its `ansi-16`
- *   format were correct) and keeps the bg path correct regardless of
- *   `Bun.color`'s `ansi-16` behavior.
+ * Background SGR open sequence at `depth`. For `truecolor` / `256`,
+ * derived from {@link fgOpen} by swapping the `\x1b[38;` introducer for
+ * `\x1b[48;` (both Bun formats use it). For `16`, quantized directly to
+ * a real background SGR.
  *
  * @internal
  */
@@ -163,25 +128,16 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Create an {@link AnsiPair} for a truecolor foreground from any input
- * `Bun.color()` accepts.
- *
- * The pair's `close` is `\x1b[39m`, matching the close of every static
- * foreground color in {@link ./ansiCodes.ts} so nesting and `composeStyles`
- * behave identically to the 16-color helpers.
- *
- * Pair factories are deterministic primitives: they always emit `ansi-16m`
- * regardless of resolved capability so they remain safe to cache and
- * compose. Capability gating happens at apply time on
- * {@link StyleInstance.fg} / {@link StyleInstance.bg}.
+ * `AnsiPair` for a truecolor foreground from any {@link ColorInput}. Always
+ * emits `ansi-16m`; use {@link fg} for depth-aware output. Close is
+ * `\x1b[39m` so nesting and `composeStyles` match the 16-color helpers.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  *
  * @example
  * ```ts
- * fgCode("#ff0000");           // { open: "\x1b[38;2;255;0;0m",  close: "\x1b[39m" }
- * fgCode("rebeccapurple");     // { open: "\x1b[38;2;102;51;153m", close: "\x1b[39m" }
- * fgCode([0, 128, 255]);       // { open: "\x1b[38;2;0;128;255m", close: "\x1b[39m" }
+ * fgCode("#ff0000");        // { open: "\x1b[38;2;255;0;0m", close: "\x1b[39m" }
+ * fgCode([0, 128, 255]);
  * fgCode({ r: 255, g: 0, b: 0 });
  * ```
  */
@@ -190,16 +146,9 @@ export function fgCode(input: ColorInput): AnsiPair {
 }
 
 /**
- * Create an {@link AnsiPair} for a truecolor background from any input
- * `Bun.color()` accepts.
- *
- * Derived from the foreground sequence by swapping the leading `38;` SGR
- * introducer for `48;`. The pair's `close` is `\x1b[49m`, matching every
- * static background color in {@link ./ansiCodes.ts}.
- *
- * Pair factories are deterministic primitives: they always emit `ansi-16m`
- * regardless of resolved capability so they remain safe to cache and
- * compose.
+ * `AnsiPair` for a truecolor background from any {@link ColorInput}. Always
+ * emits `ansi-16m`; use {@link bg} for depth-aware output. Close is
+ * `\x1b[49m`.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  *
@@ -207,7 +156,6 @@ export function fgCode(input: ColorInput): AnsiPair {
  * ```ts
  * bgCode("#ff8800");
  * bgCode("hsl(120, 100%, 50%)");
- * bgCode(0x0080ff);
  * ```
  */
 export function bgCode(input: ColorInput): AnsiPair {
@@ -219,31 +167,19 @@ export function bgCode(input: ColorInput): AnsiPair {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Apply a foreground color to `text` from any color input `Bun.color()`
- * accepts (hex, named CSS colors, `rgb()`, `hsl()`, numeric,
- * `{ r, g, b, a? }` objects, `[r, g, b]` / `[r, g, b, a]` arrays).
- *
- * The optional `depth` parameter selects the `Bun.color()` format:
- *
- * - `"truecolor"` (default) → `ansi-16m` 24-bit sequence
- * - `"256"` → `ansi-256` extended-palette sequence
- * - `"16"` → standard 16-color SGR (`\x1b[3Xm` / `\x1b[9Xm`),
- *   quantized in-package via the same algorithm as `ansi-styles`
- * - `"none"` → returns `text` unchanged (still validates `input`)
- *
- * Empty `text` short-circuits to `""` without consulting `Bun.color()`.
- * Invalid `input` raises `TypeError` regardless of `depth` so user bugs are
- * surfaced even on no-color terminals.
+ * Apply a foreground color to `text` from any {@link ColorInput}. `depth`
+ * selects the output format (`"truecolor"` default, `"256"`, `"16"`, or
+ * `"none"`). `"none"` returns `text` unchanged but still validates
+ * `input`. Empty `text` short-circuits to `""`.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  *
  * @example
  * ```ts
- * fg("error",  "#ff0000");
- * fg("ocean",  "rgb(0, 128, 255)");
- * fg("warn",   "rebeccapurple");
+ * fg("error", "#ff0000");
+ * fg("ocean", "rgb(0, 128, 255)");
  * fg("custom", [255, 127, 80]);
- * fg("256-only", "#ff0000", "256"); // emits `\x1b[38;5;196m...`
+ * fg("256-only", "#ff0000", "256"); // \x1b[38;5;196m...
  * ```
  */
 export function fg(
@@ -251,36 +187,23 @@ export function fg(
 	input: ColorInput,
 	depth: ColorDepth = "truecolor",
 ): string {
-	if (text === "") {
-		return "";
-	}
+	if (text === "") return "";
 	if (depth === "none") {
-		// Validate input even when emission is disabled — silent non-throws on
-		// invalid input would mask user bugs.
-		fgOpen(input, "truecolor");
+		fgOpen(input, "truecolor"); // validate, do not emit
 		return text;
 	}
-	const open = fgOpen(input, depth);
-	const close = FG_CLOSE;
-	return applyStyle(text, { open, close });
+	return applyStyle(text, { open: fgOpen(input, depth), close: FG_CLOSE });
 }
 
 /**
- * Apply a background color to `text` from any color input `Bun.color()`
- * accepts.
- *
- * Mirrors {@link fg} for background sequences. The optional `depth`
- * parameter selects the `Bun.color()` format; `"none"` returns `text`
- * unchanged (after validating `input`).
+ * Apply a background color to `text`. Mirrors {@link fg}.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  *
  * @example
  * ```ts
  * bg("warning", "#ff8800");
- * bg("info",    "hsl(210, 100%, 50%)");
- * bg("debug",   { r: 100, g: 100, b: 100 });
- * bg("256-only", "#ff8800", "256");
+ * bg("info", "hsl(210, 100%, 50%)");
  * ```
  */
 export function bg(
@@ -288,9 +211,7 @@ export function bg(
 	input: ColorInput,
 	depth: ColorDepth = "truecolor",
 ): string {
-	if (text === "") {
-		return "";
-	}
+	if (text === "") return "";
 	if (depth === "none") {
 		fgOpen(input, "truecolor");
 		return text;

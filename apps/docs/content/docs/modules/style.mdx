@@ -42,14 +42,14 @@ bun add @crustjs/style
 
 **Background:** `bgBlack`, `bgRed`, `bgGreen`, `bgYellow`, `bgBlue`, `bgMagenta`, `bgCyan`, `bgWhite`, `bgBrightBlack`, `bgBrightRed`, `bgBrightGreen`, `bgBrightYellow`, `bgBrightBlue`, `bgBrightMagenta`, `bgBrightCyan`, `bgBrightWhite`
 
-### Dynamic Colors (Truecolor)
+### Dynamic Colors
 
-A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex, named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric (`0xff0000`), `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays:
+A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex, named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric (`0xff0000`), `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays. Output adapts to the resolved [`ColorDepth`](#colordepth):
 
 | Export | Description |
 | --- | --- |
-| `fg(text, input)` | Apply a truecolor foreground from any [`ColorInput`](#colorinput) |
-| `bg(text, input)` | Apply a truecolor background from any [`ColorInput`](#colorinput) |
+| `fg(text, input)` | Apply a foreground color from any [`ColorInput`](#colorinput) |
+| `bg(text, input)` | Apply a background color from any [`ColorInput`](#colorinput) |
 
 ANSI pair factories for composition:
 
@@ -284,7 +284,7 @@ The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-fa
 | --- | --- | --- |
 | `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
 | `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
-| `"16"` | `Bun.color(input, "ansi-16")` | Any other TTY value |
+| `"16"` | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value |
 | `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
 
 Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables are introduced. Disable color emission entirely with `setGlobalColorMode("never")` or `NO_COLOR=1`; force truecolor with `setGlobalColorMode("always")`.
@@ -299,10 +299,8 @@ style.colorDepth;          // depth currently used by the runtime style
 ```
 
 <Callout type="info">
-Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at every depth — including `"none"` — so user bugs are not silently masked when colors are off.
+Invalid color inputs (e.g. `fg("hello", "not-a-color")`) raise `TypeError` (`Invalid color input: ...`) at every depth — including `"none"` — so user bugs are not silently masked when colors are off. Empty `text` always returns `""` without consulting the parser.
 </Callout>
-
-Invalid inputs throw immediately: `fg` and `bg` raise `TypeError` (`Invalid color input: ...`) whenever `Bun.color()` cannot parse the input. Empty `text` always returns `""` without consulting the parser.
 
 ### Hyperlinks (OSC 8)
 

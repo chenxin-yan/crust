@@ -76,32 +76,28 @@ export function bg(text: string, input: ColorInput): string {
 // detection. They will be removed in a future major release.
 
 /**
- * @deprecated Use {@link fg | `fg(text, [r, g, b])`} instead. Will be
- * removed in a future major release.
+ * @deprecated Use {@link fg | `fg(text, [r, g, b])`} instead.
  */
 export function rgb(text: string, r: number, g: number, b: number): string {
 	return style.rgb(text, r, g, b);
 }
 
 /**
- * @deprecated Use {@link bg | `bg(text, [r, g, b])`} instead. Will be
- * removed in a future major release.
+ * @deprecated Use {@link bg | `bg(text, [r, g, b])`} instead.
  */
 export function bgRgb(text: string, r: number, g: number, b: number): string {
 	return style.bgRgb(text, r, g, b);
 }
 
 /**
- * @deprecated Use {@link fg | `fg(text, "#rrggbb")`} instead. Will be
- * removed in a future major release.
+ * @deprecated Use {@link fg | `fg(text, "#rrggbb")`} instead.
  */
 export function hex(text: string, hexColor: string): string {
 	return style.hex(text, hexColor);
 }
 
 /**
- * @deprecated Use {@link bg | `bg(text, "#rrggbb")`} instead. Will be
- * removed in a future major release.
+ * @deprecated Use {@link bg | `bg(text, "#rrggbb")`} instead.
  */
 export function bgHex(text: string, hexColor: string): string {
 	return style.bgHex(text, hexColor);

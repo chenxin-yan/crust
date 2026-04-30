@@ -7,30 +7,14 @@ import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
- * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode`.
- *
- * Mirrors the input surface of [`Bun.color()`](https://bun.com/docs/runtime/color):
- * hex strings (`#rgb`, `#rrggbb`, `#rrggbbaa`), named CSS colors (`"red"`,
- * `"rebeccapurple"`), `rgb()` / `rgba()` strings, `hsl()` / `hsla()` strings,
- * `lab()` strings, numeric literals (`0xff0000`), `{ r, g, b, a? }` objects,
- * and `[r, g, b]` / `[r, g, b, a]` arrays.
- *
- * @example
- * ```ts
- * const a: ColorInput = "#ff0000";
- * const b: ColorInput = "rebeccapurple";
- * const c: ColorInput = "rgb(0, 128, 255)";
- * const d: ColorInput = 0xff0000;
- * const e: ColorInput = { r: 255, g: 0, b: 0 };
- * const f: ColorInput = [0, 128, 255];
- * ```
+ * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode` — sourced directly
+ * from [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
+ * type, so it always tracks Bun's accepted surface (hex, named CSS
+ * colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric
+ * literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]`
+ * arrays).
  */
-export type ColorInput =
-	| string
-	| number
-	| { r: number; g: number; b: number; a?: number }
-	| readonly [number, number, number]
-	| readonly [number, number, number, number];
+export type ColorInput = Parameters<typeof Bun.color>[0];
 
 /**
  * Color emission mode for the style engine.
@@ -56,8 +40,9 @@ export type ColorMode = "auto" | "always" | "never";
  *   for full {@link ColorInput} fidelity.
  * - `"256"` — 256-color extended palette (`Bun.color(input, "ansi-256")`).
  *   `Bun.color()` picks the closest palette index for arbitrary RGB inputs.
- * - `"16"` — Standard 16-color ANSI (`Bun.color(input, "ansi-16")`). Closest
- *   match against the basic ANSI color set.
+ * - `"16"` — Standard 16-color ANSI (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg).
+ *   Quantized in-package to the closest match against the basic ANSI
+ *   color set.
  * - `"none"` — Color emission is disabled. {@link fg} / {@link bg} return the
  *   input text unchanged.
  *
@@ -198,7 +183,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor foreground RGB color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.fg | `fg(text, [r, g, b])`}
-	 * instead. Will be removed in a future major release.
+	 * instead.
 	 */
 	readonly rgb: (text: string, r: number, g: number, b: number) => string;
 
@@ -206,7 +191,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor background RGB color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.bg | `bg(text, [r, g, b])`}
-	 * instead. Will be removed in a future major release.
+	 * instead.
 	 */
 	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
 
@@ -214,7 +199,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor foreground hex color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.fg | `fg(text, "#rrggbb")`}
-	 * instead. Will be removed in a future major release.
+	 * instead.
 	 */
 	readonly hex: (text: string, hexColor: string) => string;
 
@@ -222,7 +207,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * Apply a truecolor background hex color to text.
 	 *
 	 * @deprecated Use {@link StyleInstance.bg | `bg(text, "#rrggbb")`}
-	 * instead. Will be removed in a future major release.
+	 * instead.
 	 */
 	readonly bgHex: (text: string, hexColor: string) => string;
 }

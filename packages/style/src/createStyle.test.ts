@@ -55,10 +55,23 @@ describe("createStyle — apply() in other modes", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // Depth-aware fg / bg on style instances
 // ────────────────────────────────────────────────────────────────────────────
-//
-// Tests assert against `Bun.color()` output directly to stay tolerant of
-// Bun version-specific format differences across `ansi-16m`, `ansi-256`,
-// and `ansi-16`.
+
+/** Build an `auto`-mode style with all capability inputs explicitly set. */
+function autoStyle(overrides: {
+	term?: string | undefined;
+	colorTerm?: string | undefined;
+	isTTY?: boolean;
+}) {
+	return createStyle({
+		mode: "auto",
+		overrides: {
+			isTTY: overrides.isTTY ?? true,
+			noColor: undefined,
+			colorTerm: overrides.colorTerm,
+			term: overrides.term,
+		},
+	});
+}
 
 describe("createStyle — colorDepth introspection", () => {
 	it('reflects "truecolor" in always mode', () => {
@@ -76,105 +89,48 @@ describe("createStyle — colorDepth introspection", () => {
 	});
 
 	it('reflects "256" in auto mode with TERM=xterm-256color', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: "xterm-256color",
-			},
-		});
+		const s = autoStyle({ term: "xterm-256color" });
 		expect(s.colorDepth).toBe("256");
 		expect(s.trueColorEnabled).toBe(false);
 		expect(s.colorsEnabled).toBe(true);
 	});
 
 	it('reflects "16" in auto mode with bare TTY', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: undefined,
-			},
-		});
-		expect(s.colorDepth).toBe("16");
+		expect(autoStyle({}).colorDepth).toBe("16");
 	});
 });
 
 describe("createStyle — fg/bg emit format matching colorDepth", () => {
 	it('fg emits ansi-256 escape when capability is "256"', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: "xterm-256color",
-			},
-		});
+		const s = autoStyle({ term: "xterm-256color" });
 		const expectedOpen = Bun.color("#ff0000", "ansi-256");
 		expect(s.fg("text", "#ff0000")).toBe(`${expectedOpen}text\x1b[39m`);
 	});
 
 	it('fg emits a standard 16-color SGR when capability is "16"', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: undefined,
-			},
-		});
 		// Pure red → bright red (`91`); quantized in-package, not via
-		// `Bun.color(_, "ansi-16")` which emits malformed output in some
-		// Bun versions (oven-sh/bun#22161).
-		expect(s.fg("text", "#ff0000")).toBe("\x1b[91mtext\x1b[39m");
+		// `Bun.color(_, "ansi-16")` which is malformed in some Bun versions
+		// (oven-sh/bun#22161).
+		expect(autoStyle({}).fg("text", "#ff0000")).toBe("\x1b[91mtext\x1b[39m");
 	});
 
 	it('fg returns text unchanged when capability is "none"', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: false,
-				noColor: undefined,
-			},
-		});
+		const s = autoStyle({ isTTY: false });
 		expect(s.colorDepth).toBe("none");
 		expect(s.fg("text", "#ff0000")).toBe("text");
 	});
 
 	it('bg emits ansi-256 background when capability is "256"', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: "xterm-256color",
-			},
-		});
+		const s = autoStyle({ term: "xterm-256color" });
 		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;
 		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
 		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
 	});
 
 	it('bg emits a real 16-color background SGR when capability is "16"', () => {
-		const s = createStyle({
-			mode: "auto",
-			overrides: {
-				isTTY: true,
-				noColor: undefined,
-				colorTerm: undefined,
-				term: undefined,
-			},
-		});
 		// `#00ff88` quantizes to bright cyan (`96` fg → `106` bg) under the
 		// standard half-channel bucketing (b=0x88=136 rounds to 1).
-		const out = s.bg("text", "#00ff88");
+		const out = autoStyle({}).bg("text", "#00ff88");
 		expect(out).toBe("\x1b[106mtext\x1b[49m");
 		// Invariant: bg open must always be a background SGR, never a fg one.
 		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
@@ -182,23 +138,12 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 	});
 
 	it('bg returns text unchanged when capability is "none"', () => {
-		const s = createStyle({
-			mode: "never",
-		});
-		expect(s.bg("text", "#00ff88")).toBe("text");
+		expect(createStyle({ mode: "never" }).bg("text", "#00ff88")).toBe("text");
 	});
 
 	it("empty text short-circuits at every depth", () => {
 		for (const term of [undefined, "xterm-256color", "xterm-direct"]) {
-			const s = createStyle({
-				mode: "auto",
-				overrides: {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term,
-				},
-			});
+			const s = autoStyle({ term });
 			expect(s.fg("", "#ff0000")).toBe("");
 			expect(s.bg("", "#ff0000")).toBe("");
 		}

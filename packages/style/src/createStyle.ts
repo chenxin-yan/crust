@@ -239,17 +239,10 @@ export function getGlobalColorMode(): ColorMode | undefined {
 	return globalColorMode;
 }
 
-// Runtime style cache keyed on every input that affects the resolved
-// instance: global mode, `stdout.isTTY`, `NO_COLOR`, plus `COLORTERM` and
-// `TERM` because `resolveColorDepth` reads them. Any of these changing
-// between calls must invalidate the cached instance — otherwise standalone
-// `fg`/`bg` and `style.colorDepth` go stale and the documented "resolves
-// per call" guarantee silently breaks.
-//
-// The `"never"` override intentionally maps to an `auto` instance with
-// `noColor: "1"` so that modifiers (bold, italic, hyperlinks, etc.) remain
-// enabled while colors are suppressed — matching the no-color.org semantics
-// used by `--no-color`.
+// Cache key must include every input the resolved instance depends on:
+// `globalColorMode`, `stdout.isTTY`, `NO_COLOR`, `COLORTERM`, `TERM`.
+// `"never"` maps to `auto` + `noColor: "1"` so modifiers survive while
+// colors are suppressed (no-color.org semantics).
 const runtimeStyleCache = new Map<string, StyleInstance>();
 
 function buildRuntimeStyle(): StyleInstance {

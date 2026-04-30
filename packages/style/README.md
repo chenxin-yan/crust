@@ -167,7 +167,7 @@ The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory va
 | --- | --- | --- |
 | `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
 | `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
-| `"16"` | `Bun.color(input, "ansi-16")` | Any other TTY value |
+| `"16"` | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value |
 | `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
 
 Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables. Disable color emission entirely with `setGlobalColorMode("never")` or by setting `NO_COLOR=1`. Force truecolor with `setGlobalColorMode("always")` or `mode: "always"` on `createStyle()`.
