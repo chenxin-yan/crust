@@ -83,9 +83,9 @@ In `"auto"` mode, hyperlinks are emitted when stdout is a TTY. They are not disa
 
 Terminal support for OSC 8 varies. Many modern terminals support it, but there is no reliable cross-terminal feature probe yet, so unsupported terminals may simply render plain text without clickable behavior.
 
-## Dynamic Colors (Truecolor)
+## Dynamic Colors
 
-A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex (3/6/8 digit), named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays.
+A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex (3/6/8 digit), named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays. Output adapts to the terminal's resolved color depth (truecolor / 256 / 16 / none) — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback).
 
 ```ts
 import { fg, bg } from "@crustjs/style";
@@ -141,7 +141,7 @@ console.log(applyStyle("bold coral", boldCoral));
 
 ### Style Instance
 
-Dynamic colors on `createStyle` instances respect mode and truecolor detection:
+Dynamic colors on `createStyle` instances respect mode and the resolved color depth:
 
 ```ts
 import { createStyle } from "@crustjs/style";
@@ -156,6 +156,8 @@ console.log(s.bg("text", "hsl(210, 100%, 50%)"));
 In `"auto"` mode, `fg` / `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below.
 
 In `"never"` mode, `fg` / `bg` return plain text. In `"always"` mode, truecolor sequences are always emitted.
+
+The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in a future major release. IDEs/`tsc` will surface the deprecation with a one-line replacement hint at the call site — prefer `fg` / `bg` for new code.
 
 ### Color Depth & Auto-Fallback
 

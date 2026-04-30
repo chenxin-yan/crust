@@ -88,7 +88,6 @@ type ColorInput =
 | Export | Description |
 | --- | --- |
 | `resolveColorCapability(mode, overrides?)` | Resolve whether colors should be emitted |
-| `resolveModifierCapability(mode, overrides?)` | Resolve whether non-color modifiers (bold, italic, etc.) should be emitted |
 | `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
 | `resolveColorDepth(mode, overrides?)` | Resolve the [`ColorDepth`](#colordepth) tier (`"truecolor" \| "256" \| "16" \| "none"`) |
 
@@ -223,9 +222,9 @@ const boldRed = composeStyles(boldCode, redCode);
 console.log(applyStyle("critical", boldRed));
 ```
 
-### Dynamic Colors (Truecolor)
+### Dynamic Colors
 
-Use any color [`Bun.color()`](https://bun.com/docs/runtime/color) understands via 24-bit truecolor ANSI sequences — hex (3/6/8 digit), named CSS colors (`"red"`, `"rebeccapurple"`), `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays:
+Use any color [`Bun.color()`](https://bun.com/docs/runtime/color) understands — hex (3/6/8 digit), named CSS colors (`"red"`, `"rebeccapurple"`), `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays. Output adapts to the terminal's resolved color depth (truecolor, 256-color, 16-color, or none) — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback).
 
 ```ts
 import { fg, bg } from "@crustjs/style";
@@ -261,7 +260,7 @@ const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
-On `createStyle` instances, dynamic colors respect mode and truecolor detection:
+On `createStyle` instances, dynamic colors respect mode and the resolved color depth:
 
 ```ts
 import { createStyle } from "@crustjs/style";
@@ -272,6 +271,10 @@ console.log(s.bg("text", "rebeccapurple"));
 ```
 
 In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
+
+<Callout type="info">
+The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-factory variants, plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked `@deprecated` and will be removed in a future major release. IDEs and `tsc` surface the deprecation with a one-line replacement hint at every call site — prefer `fg` / `bg` for new code.
+</Callout>
 
 ### Color Depth & Auto-Fallback
 
@@ -300,10 +303,6 @@ Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at e
 </Callout>
 
 Invalid inputs throw immediately: `fg` and `bg` raise `TypeError` (`Invalid color input: ...`) whenever `Bun.color()` cannot parse the input. Empty `text` always returns `""` without consulting the parser.
-
-<Callout type="info">
-Dynamic colors use truecolor (24-bit) ANSI sequences with no automatic fallback to 256 or 16 colors. On unsupported terminals, colors may be approximated or silently ignored — no runtime errors will occur.
-</Callout>
 
 ### Hyperlinks (OSC 8)
 

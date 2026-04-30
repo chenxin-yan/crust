@@ -119,7 +119,7 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 		expect(s.fg("text", "#ff0000")).toBe(`${expectedOpen}text\x1b[39m`);
 	});
 
-	it('fg emits ansi-16 escape when capability is "16"', () => {
+	it('fg emits a standard 16-color SGR when capability is "16"', () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: {
@@ -129,8 +129,10 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 				term: undefined,
 			},
 		});
-		const expectedOpen = Bun.color("#ff0000", "ansi-16");
-		expect(s.fg("text", "#ff0000")).toBe(`${expectedOpen}text\x1b[39m`);
+		// Pure red → bright red (`91`); quantized in-package, not via
+		// `Bun.color(_, "ansi-16")` which emits malformed output in some
+		// Bun versions (oven-sh/bun#22161).
+		expect(s.fg("text", "#ff0000")).toBe("\x1b[91mtext\x1b[39m");
 	});
 
 	it('fg returns text unchanged when capability is "none"', () => {
@@ -160,7 +162,7 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
 	});
 
-	it('bg emits ansi-16 background when capability is "16"', () => {
+	it('bg emits a real 16-color background SGR when capability is "16"', () => {
 		const s = createStyle({
 			mode: "auto",
 			overrides: {
@@ -170,9 +172,13 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 				term: undefined,
 			},
 		});
-		const fgOpen = Bun.color("#00ff88", "ansi-16") as string;
-		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
+		// `#00ff88` quantizes to bright cyan (`96` fg → `106` bg) under the
+		// standard half-channel bucketing (b=0x88=136 rounds to 1).
+		const out = s.bg("text", "#00ff88");
+		expect(out).toBe("\x1b[106mtext\x1b[49m");
+		// Invariant: bg open must always be a background SGR, never a fg one.
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
+		expect(/^\x1b\[(?:4[0-7]|10[0-7])m/.test(out)).toBe(true);
 	});
 
 	it('bg returns text unchanged when capability is "none"', () => {

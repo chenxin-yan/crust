@@ -175,15 +175,54 @@ export interface StyleInstance extends StyleMethodMap {
 		options?: HyperlinkOptions,
 	) => string;
 
-	// ── Dynamic colors (truecolor) ───────────────────────────────────────
+	// ── Dynamic colors ──
 
 	/**
-	 * Apply a truecolor foreground to text from any input `Bun.color()`
-	 * accepts (hex, named CSS colors, `rgb()`, `hsl()`, numeric, `{ r, g, b }`,
-	 * `[r, g, b]`, etc.).
+	 * Apply a foreground color to text from any input `Bun.color()` accepts
+	 * (hex, named CSS colors, `rgb()`, `hsl()`, numeric, `{ r, g, b }`,
+	 * `[r, g, b]`, etc.). Output is rendered at the depth captured at
+	 * `createStyle()` time — see {@link StyleInstance.colorDepth}.
 	 */
 	readonly fg: (text: string, input: ColorInput) => string;
 
-	/** Apply a truecolor background to text from any {@link ColorInput}. */
+	/**
+	 * Apply a background color to text from any {@link ColorInput}. Output is
+	 * rendered at the depth captured at `createStyle()` time — see
+	 * {@link StyleInstance.colorDepth}.
+	 */
 	readonly bg: (text: string, input: ColorInput) => string;
+
+	// ── Deprecated dynamic-color helpers ───────────────────────────────
+
+	/**
+	 * Apply a truecolor foreground RGB color to text.
+	 *
+	 * @deprecated Use {@link StyleInstance.fg | `fg(text, [r, g, b])`}
+	 * instead. Will be removed in a future major release.
+	 */
+	readonly rgb: (text: string, r: number, g: number, b: number) => string;
+
+	/**
+	 * Apply a truecolor background RGB color to text.
+	 *
+	 * @deprecated Use {@link StyleInstance.bg | `bg(text, [r, g, b])`}
+	 * instead. Will be removed in a future major release.
+	 */
+	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
+
+	/**
+	 * Apply a truecolor foreground hex color to text.
+	 *
+	 * @deprecated Use {@link StyleInstance.fg | `fg(text, "#rrggbb")`}
+	 * instead. Will be removed in a future major release.
+	 */
+	readonly hex: (text: string, hexColor: string) => string;
+
+	/**
+	 * Apply a truecolor background hex color to text.
+	 *
+	 * @deprecated Use {@link StyleInstance.bg | `bg(text, "#rrggbb")`}
+	 * instead. Will be removed in a future major release.
+	 */
+	readonly bgHex: (text: string, hexColor: string) => string;
 }

@@ -841,9 +841,9 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 		expect(s.colorDepth).toBe("16");
 		// Static 16-color helpers continue to work.
 		expect(s.red("text")).toBe("\x1b[31mtext\x1b[39m");
-		// Dynamic colors emit ansi-16 sequences (Bun.color is the source of truth).
-		const expectedOpen = Bun.color([255, 0, 0], "ansi-16");
-		expect(s.fg("text", [255, 0, 0])).toBe(`${expectedOpen}text\x1b[39m`);
+		// Dynamic colors quantize in-package to a clean compact 16-color SGR.
+		// Pure red → bright red (`91`).
+		expect(s.fg("text", [255, 0, 0])).toBe("\x1b[91mtext\x1b[39m");
 	});
 
 	it("disables everything when not a TTY", () => {
@@ -902,5 +902,72 @@ describe("runtime-aware default exports", () => {
 		expect(red("text")).toBe("text");
 		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
 		expect(style.colorsEnabled).toBe(false);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Runtime style cache — TERM / COLORTERM invalidation
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Regression: the runtime cache once keyed only on (mode, isTTY, NO_COLOR),
+// so changing `TERM` or `COLORTERM` between calls did not re-resolve
+// `style.colorDepth`. Docs promise per-call re-resolution — these tests
+// pin the contract.
+
+describe("runtime style cache — TERM/COLORTERM invalidation", () => {
+	const originalTerm = process.env.TERM;
+	const originalColorTerm = process.env.COLORTERM;
+
+	function restoreTermEnv() {
+		if (originalTerm === undefined) {
+			delete process.env.TERM;
+		} else {
+			process.env.TERM = originalTerm;
+		}
+		if (originalColorTerm === undefined) {
+			delete process.env.COLORTERM;
+		} else {
+			process.env.COLORTERM = originalColorTerm;
+		}
+	}
+
+	beforeEach(() => {
+		delete process.env.NO_COLOR;
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+	});
+
+	afterEach(() => {
+		restoreTermEnv();
+	});
+
+	it("re-resolves colorDepth when TERM changes", () => {
+		delete process.env.COLORTERM;
+		process.env.TERM = "xterm-16color";
+		expect(style.colorDepth).toBe("16");
+
+		process.env.TERM = "xterm-256color";
+		expect(style.colorDepth).toBe("256");
+	});
+
+	it("re-resolves colorDepth when COLORTERM changes", () => {
+		process.env.TERM = "xterm-256color";
+		delete process.env.COLORTERM;
+		expect(style.colorDepth).toBe("256");
+
+		process.env.COLORTERM = "truecolor";
+		expect(style.colorDepth).toBe("truecolor");
+	});
+
+	it("re-resolves colorDepth when both TERM and COLORTERM change", () => {
+		process.env.TERM = "dumb";
+		delete process.env.COLORTERM;
+		expect(style.colorDepth).toBe("none");
+
+		process.env.TERM = "xterm-256color";
+		process.env.COLORTERM = "truecolor";
+		expect(style.colorDepth).toBe("truecolor");
 	});
 });

@@ -2,27 +2,59 @@
 "@crustjs/style": minor
 ---
 
-**Breaking change:** Replaced the hand-rolled hex / RGB dynamic-color helpers
-with a single canonical `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color).
-
-### Removed
-
-Direct calls and pair factories: `rgb`, `bgRgb`, `hex`, `bgHex`, `rgbCode`,
-`bgRgbCode`, `hexCode`, `bgHexCode`, `parseHex`. Style-instance methods
-`style.rgb`, `style.bgRgb`, `style.hex`, `style.bgHex`.
+**Color redesign:** added a single canonical `fg` / `bg` pair powered by
+[`Bun.color()`](https://bun.com/docs/runtime/color), plus depth-aware
+fallback so dynamic colors automatically downgrade to `ansi-256` or
+`ansi-16` on terminals that don't support truecolor. The earlier
+`rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` /
+`style.*` variants) are kept as `@deprecated` aliases and will be
+removed in a future major release.
 
 ### Added
 
-- `fg(text, input)` / `bg(text, input)` — apply a truecolor foreground or
-  background from anything `Bun.color()` accepts.
-- `fgCode(input)` / `bgCode(input)` — `AnsiPair` factories for composition.
-- `style.fg(text, input)` / `style.bg(text, input)` on style instances and
-  the runtime `style` facade.
-- `ColorInput` type and `ColorInput` re-export.
+- `fg(text, input)` / `bg(text, input)` — apply a foreground or
+  background color from anything `Bun.color()` accepts. Output adapts to
+  the resolved `ColorDepth` (see *Fallback* below).
+- `fgCode(input)` / `bgCode(input)` — deterministic `AnsiPair` factories
+  for composition. Always emit `ansi-16m`; runtime capability gating
+  happens at apply time.
+- `style.fg(text, input)` / `style.bg(text, input)` on style instances
+  and the runtime `style` facade.
+- `ColorInput` type — accepted by every dynamic-color helper.
+- `ColorDepth` type — `"truecolor" | "256" | "16" | "none"`.
+- `resolveColorDepth(mode, overrides?)` — resolves the active color
+  depth for any emission decision.
+- `colorDepth` property on `StyleInstance` (and the default `style`
+  facade).
 
-### New input surface
+### Deprecated
 
-`fg`, `bg`, `fgCode`, and `bgCode` accept any input `Bun.color()` understands:
+The following exports continue to work with their original signatures
+and error contracts (`RangeError` for out-of-range RGB, `TypeError` for
+malformed hex). They emit `@deprecated` JSDoc warnings in IDEs and
+`tsc`, and will be removed in a future major release. Migrate at your
+leisure.
+
+| Deprecated | Replacement |
+| --- | --- |
+| `rgb(text, r, g, b)` | `fg(text, [r, g, b])` |
+| `bgRgb(text, r, g, b)` | `bg(text, [r, g, b])` |
+| `hex(text, "#rrggbb")` | `fg(text, "#rrggbb")` |
+| `bgHex(text, "#rrggbb")` | `bg(text, "#rrggbb")` |
+| `rgbCode(r, g, b)` | `fgCode([r, g, b])` |
+| `bgRgbCode(r, g, b)` | `bgCode([r, g, b])` |
+| `hexCode("#rrggbb")` | `fgCode("#rrggbb")` |
+| `bgHexCode("#rrggbb")` | `bgCode("#rrggbb")` |
+| `parseHex("#rrggbb")` | Pass the hex string directly to `fg` / `bg` / `fgCode` / `bgCode` |
+| `style.rgb(text, r, g, b)` | `style.fg(text, [r, g, b])` |
+| `style.bgRgb(text, r, g, b)` | `style.bg(text, [r, g, b])` |
+| `style.hex(text, "#rrggbb")` | `style.fg(text, "#rrggbb")` |
+| `style.bgHex(text, "#rrggbb")` | `style.bg(text, "#rrggbb")` |
+
+### Input surface
+
+`fg`, `bg`, `fgCode`, and `bgCode` accept any input `Bun.color()`
+understands:
 
 - Hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`)
 - Named CSS colors (`"red"`, `"rebeccapurple"`)
@@ -33,44 +65,35 @@ Direct calls and pair factories: `rgb`, `bgRgb`, `hex`, `bgHex`, `rgbCode`,
 - `{ r, g, b, a? }` objects
 - `[r, g, b]` and `[r, g, b, a]` arrays
 
-### Migration
+### Fallback
 
-```ts
-// Before
-rgb(text, 0, 128, 255);
-bgRgb(text, 255, 128, 0);
-hex(text, "#ff0000");
-bgHex(text, "#ff8800");
-style.rgb(text, 0, 128, 255);
-style.hex(text, "#ff0000");
+Dynamic colors now resolve at runtime against the terminal's color depth:
 
-// After
-fg(text, [0, 128, 255]);
-bg(text, [255, 128, 0]);
-fg(text, "#ff0000");
-bg(text, "#ff8800");
-style.fg(text, [0, 128, 255]);
-style.fg(text, "#ff0000");
-```
+| Resolved depth | Detection (in `"auto"` mode) |
+| --- | --- |
+| `"truecolor"` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"` | `TERM` contains `256color` |
+| `"16"` | Any other TTY value |
+| `"none"` | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
 
-Pair factories migrate the same way (`rgbCode(r, g, b)` → `fgCode([r, g, b])`,
-`hexCode("#ff0000")` → `fgCode("#ff0000")`, etc.).
+- Standalone `fg` / `bg` resolve depth on every call through the runtime
+  `style` facade, so `setGlobalColorMode("never")`, `NO_COLOR=1`, and
+  changes to `TERM` / `COLORTERM` continue to gate emission as expected.
+- `style.fg` / `style.bg` on instances created by `createStyle()` capture
+  the depth at construction time (consistent with how `mode` is locked).
+- Invalid color inputs raise `TypeError` at every depth — including
+  `"none"` — so user bugs are not silently masked when colors are off.
+- The deprecated helpers above are still gated on `trueColorEnabled`
+  exactly as before; they don't participate in depth fallback.
 
-### Error contract
+### Compatibility
 
-Invalid inputs now raise `TypeError` (`Invalid color input: <input>`) whenever
-`Bun.color()` cannot parse them. The previous `RangeError` for out-of-range RGB
-channels and the previous `TypeError` for malformed hex strings have been
-unified into this single contract.
-
-Empty `text` continues to short-circuit to `""` without consulting the parser.
-
-### Notes
-
-- Foreground and background ANSI escapes are byte-identical to the previous
-  API for the same color (e.g. `fg("x", [0, 128, 255])` produces the exact
-  same sequence as `rgb("x", 0, 128, 255)` did).
-- Capability gating is unchanged: `fg` / `bg` are still suppressed when
-  `trueColorEnabled` is `false` on a style instance.
-- Depth-aware fallback (`ansi-256` / `ansi-16` for non-truecolor terminals)
-  is intentionally **not** included in this release; tracked separately.
+- All deprecated exports keep their original behavior, signatures, and
+  error contracts.
+- Truecolor escape bytes from `fg` / `fgCode` for the same input are
+  byte-identical to the deprecated helpers (e.g. `fg("x", [0, 128, 255])`
+  produces the exact same sequence as `rgb("x", 0, 128, 255)`).
+- `resolveColorCapability` and `resolveTrueColorCapability` keep their
+  signatures; they are now thin wrappers over `resolveColorDepth`.
+- `trueColorEnabled` is retained on `StyleInstance` and equals
+  `colorDepth === "truecolor"`.

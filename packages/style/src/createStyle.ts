@@ -9,6 +9,12 @@ import {
 	resolveModifierCapability,
 } from "./capability.ts";
 import { bg as bgDirect, fg as fgDirect } from "./color.ts";
+import {
+	bgHex as bgHexDirect,
+	bgRgb as bgRgbDirect,
+	hex as hexDirect,
+	rgb as rgbDirect,
+} from "./dynamicColors.ts";
 import { link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import {
@@ -186,11 +192,36 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 					linkDirect(text, url, hyperlinkOptions)
 			: (text: string, _url: string) => text,
 
-		// ── Dynamic colors (truecolor) ──────────────────────────────────────
+		// ── Dynamic colors (depth-aware) ──────────────────────────────
 
 		fg: (text: string, input: ColorInput) => fgDirect(text, input, colorDepth),
 
 		bg: (text: string, input: ColorInput) => bgDirect(text, input, colorDepth),
+
+		// ── Deprecated dynamic-color helpers ────────────────────────
+		//
+		// Gated on `trueColorEnabled` to preserve original (pre-deprecation)
+		// behavior: these emitted truecolor sequences when truecolor was
+		// available, otherwise plain text. Migrate to `fg` / `bg` for
+		// depth-aware output.
+
+		rgb: trueColorEnabled
+			? (text: string, r: number, g: number, b: number) =>
+					rgbDirect(text, r, g, b)
+			: (text: string, _r: number, _g: number, _b: number) => text,
+
+		bgRgb: trueColorEnabled
+			? (text: string, r: number, g: number, b: number) =>
+					bgRgbDirect(text, r, g, b)
+			: (text: string, _r: number, _g: number, _b: number) => text,
+
+		hex: trueColorEnabled
+			? (text: string, hexColor: string) => hexDirect(text, hexColor)
+			: (text: string, _hexColor: string) => text,
+
+		bgHex: trueColorEnabled
+			? (text: string, hexColor: string) => bgHexDirect(text, hexColor)
+			: (text: string, _hexColor: string) => text,
 
 		...methods,
 	};
@@ -208,8 +239,14 @@ export function getGlobalColorMode(): ColorMode | undefined {
 	return globalColorMode;
 }
 
-// Runtime style cache keyed on `(globalMode, isTTY, NO_COLOR)`. The
-// `"never"` override intentionally maps to an `auto` instance with
+// Runtime style cache keyed on every input that affects the resolved
+// instance: global mode, `stdout.isTTY`, `NO_COLOR`, plus `COLORTERM` and
+// `TERM` because `resolveColorDepth` reads them. Any of these changing
+// between calls must invalidate the cached instance — otherwise standalone
+// `fg`/`bg` and `style.colorDepth` go stale and the documented "resolves
+// per call" guarantee silently breaks.
+//
+// The `"never"` override intentionally maps to an `auto` instance with
 // `noColor: "1"` so that modifiers (bold, italic, hyperlinks, etc.) remain
 // enabled while colors are suppressed — matching the no-color.org semantics
 // used by `--no-color`.
@@ -229,7 +266,13 @@ function buildRuntimeStyle(): StyleInstance {
 }
 
 export function getRuntimeStyle(): StyleInstance {
-	const key = `${globalColorMode ?? "auto"}|${process.stdout?.isTTY ?? false}|${process.env.NO_COLOR ?? ""}`;
+	const key = [
+		globalColorMode ?? "auto",
+		process.stdout?.isTTY ?? false,
+		process.env.NO_COLOR ?? "",
+		process.env.COLORTERM ?? "",
+		process.env.TERM ?? "",
+	].join("|");
 	const cached = runtimeStyleCache.get(key);
 	if (cached) {
 		return cached;
@@ -241,7 +284,17 @@ export function getRuntimeStyle(): StyleInstance {
 
 // Members whose implementation is a function and must be forwarded as a
 // bound method so callers can invoke them like `style.apply(...)`.
-const FORWARDED_METHODS = ["apply", "link", "fg", "bg"] as const;
+const FORWARDED_METHODS = [
+	"apply",
+	"link",
+	"fg",
+	"bg",
+	// Deprecated — keep until the next major release.
+	"rgb",
+	"bgRgb",
+	"hex",
+	"bgHex",
+] as const;
 
 // Members that read a value off the current runtime style on every access.
 const FORWARDED_GETTERS = [

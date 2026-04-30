@@ -66,3 +66,43 @@ export function fg(text: string, input: ColorInput): string {
 export function bg(text: string, input: ColorInput): string {
 	return style.bg(text, input);
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Deprecated dynamic-color helpers — superseded by `fg` / `bg`.
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These delegate to `style.rgb` / `style.bgRgb` / `style.hex` / `style.bgHex`
+// so they continue to honor `setGlobalColorMode`, `NO_COLOR`, and TTY
+// detection. They will be removed in a future major release.
+
+/**
+ * @deprecated Use {@link fg | `fg(text, [r, g, b])`} instead. Will be
+ * removed in a future major release.
+ */
+export function rgb(text: string, r: number, g: number, b: number): string {
+	return style.rgb(text, r, g, b);
+}
+
+/**
+ * @deprecated Use {@link bg | `bg(text, [r, g, b])`} instead. Will be
+ * removed in a future major release.
+ */
+export function bgRgb(text: string, r: number, g: number, b: number): string {
+	return style.bgRgb(text, r, g, b);
+}
+
+/**
+ * @deprecated Use {@link fg | `fg(text, "#rrggbb")`} instead. Will be
+ * removed in a future major release.
+ */
+export function hex(text: string, hexColor: string): string {
+	return style.hex(text, hexColor);
+}
+
+/**
+ * @deprecated Use {@link bg | `bg(text, "#rrggbb")`} instead. Will be
+ * removed in a future major release.
+ */
+export function bgHex(text: string, hexColor: string): string {
+	return style.bgHex(text, hexColor);
+}

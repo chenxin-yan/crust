@@ -263,9 +263,45 @@ describe("fg — depth fallback", () => {
 		expect(fg("hello", "#ff0000", "256")).toBe(`${open}hello\x1b[39m`);
 	});
 
-	it('depth="16" emits ansi-16 sequence from Bun.color', () => {
-		const open = Bun.color("#ff0000", "ansi-16");
-		expect(fg("hello", "#ff0000", "16")).toBe(`${open}hello\x1b[39m`);
+	it('depth="16" quantizes to a standard 16-color SGR (no Bun.color ansi-16)', () => {
+		// Pure red → bright red (`91`). Open must be a clean compact fg SGR.
+		expect(fg("hello", "#ff0000", "16")).toBe("\x1b[91mhello\x1b[39m");
+	});
+
+	it('depth="16" covers the standard 16-color palette mapping', () => {
+		const cases: ReadonlyArray<{
+			input: string;
+			param: number;
+		}> = [
+			{ input: "#000000", param: 30 }, // black
+			{ input: "#800000", param: 31 }, // dark red
+			{ input: "#008000", param: 32 }, // dark green
+			{ input: "#808000", param: 33 }, // dark yellow
+			{ input: "#000080", param: 34 }, // dark blue
+			{ input: "#800080", param: 35 }, // dark magenta
+			{ input: "#008080", param: 36 }, // dark cyan
+			{ input: "#c0c0c0", param: 97 }, // bright white (max channel ≥ 75% → bright bucket)
+			{ input: "#ff0000", param: 91 }, // bright red
+			{ input: "#00ff00", param: 92 }, // bright green
+			{ input: "#ffff00", param: 93 }, // bright yellow
+			{ input: "#0000ff", param: 94 }, // bright blue
+			{ input: "#ff00ff", param: 95 }, // bright magenta
+			{ input: "#00ffff", param: 96 }, // bright cyan
+			{ input: "#ffffff", param: 97 }, // bright white
+		];
+		for (const { input, param } of cases) {
+			expect(fg("x", input, "16")).toBe(`\x1b[${param}mx\x1b[39m`);
+		}
+	});
+
+	it('depth="16" output contains no control characters in SGR params (regression)', () => {
+		// Bun.color(_, "ansi-16") emits a literal TAB (0x09) where a numeric
+		// SGR parameter belongs in some Bun versions (oven-sh/bun#22161). Our
+		// quantizer must never produce one.
+		for (const input of ["#ff0000", "#00ff00", "#abcdef", "rebeccapurple"]) {
+			const out = fg("x", input, "16");
+			expect(/[\t\n\r\v\f]/.test(out)).toBe(false);
+		}
 	});
 
 	it('depth="none" returns text unchanged', () => {
@@ -301,12 +337,34 @@ describe("bg — depth fallback", () => {
 		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;
 		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
 		expect(bg("hello", "#00ff88", "256")).toBe(`${expectedOpen}hello\x1b[49m`);
+		// Invariant: must end in bg close, must start with bg SGR introducer.
+		expect(bg("hello", "#00ff88", "256").startsWith("\x1b[48;")).toBe(true);
 	});
 
-	it('depth="16" emits ansi-16 background (38; → 48; swap)', () => {
-		const fgOpen = Bun.color("#00ff88", "ansi-16") as string;
-		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(bg("hello", "#00ff88", "16")).toBe(`${expectedOpen}hello\x1b[49m`);
+	it('depth="16" emits a real 16-color background SGR', () => {
+		// Pure red bg → bright red bg (`101`).
+		expect(bg("hello", "#ff0000", "16")).toBe("\x1b[101mhello\x1b[49m");
+	});
+
+	it('depth="16" bg open is always a background SGR (4X / 10X), never a fg SGR', () => {
+		// Invariant: regardless of input color, the bg open must start with
+		// a background SGR introducer. Catches the regression where a `38;`
+		// → `48;` rewrite would no-op on compact `\x1b[3Xm` sequences.
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
+		const bgSgr = /^\x1b\[(?:4[0-7]|10[0-7])m/;
+		for (const input of [
+			"#000000",
+			"#ff0000",
+			"#00ff00",
+			"#0000ff",
+			"rebeccapurple",
+			[128, 128, 128] as const,
+		]) {
+			const out = bg("x", input as never, "16");
+			expect(bgSgr.test(out)).toBe(true);
+			expect(out.endsWith("\x1b[49m")).toBe(true);
+			expect(/[\t\n\r\v\f]/.test(out)).toBe(false);
+		}
 	});
 
 	it('depth="none" returns text unchanged but validates input', () => {
