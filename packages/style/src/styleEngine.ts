@@ -29,6 +29,16 @@ import type { AnsiPair } from "./ansiCodes.ts";
  * ```
  */
 export function applyStyle(text: string, style: AnsiPair): string {
+	// Defensive: coerce nullish/non-string inputs to "" so styled output is
+	// safe to capture in logs and pipe into files. JS callers ignoring our
+	// types still get correct behavior — no crashes, no `"undefined"` ANSI
+	// blobs (chalk's behavior). See `ansis` parity table for prior art.
+	if (text == null) {
+		return "";
+	}
+	if (typeof text !== "string") {
+		text = String(text);
+	}
 	if (text === "") {
 		return "";
 	}

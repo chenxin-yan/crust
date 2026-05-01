@@ -17,24 +17,24 @@ bun add @crustjs/style
 
 ### Style Instance
 
-| Export | Description |
-| --- | --- |
-| `style` | Default auto-mode style instance |
-| `createStyle(options?)` | Create a configured style instance |
+| Export                     | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `style`                    | Default auto-mode style instance                      |
+| `createStyle(options?)`    | Create a configured style instance                    |
 | `setGlobalColorMode(mode)` | Override runtime color output for the default exports |
-| `getGlobalColorMode()` | Read the current runtime color override |
+| `getGlobalColorMode()`     | Read the current runtime color override               |
 
 ### Modifiers
 
-| Export | Description |
-| --- | --- |
-| `bold(text)` | Bold text |
-| `dim(text)` | Dimmed text |
-| `italic(text)` | Italic text |
-| `underline(text)` | Underlined text |
-| `inverse(text)` | Inverted foreground/background |
-| `hidden(text)` | Hidden text |
-| `strikethrough(text)` | Strikethrough text |
+| Export                | Description                    |
+| --------------------- | ------------------------------ |
+| `bold(text)`          | Bold text                      |
+| `dim(text)`           | Dimmed text                    |
+| `italic(text)`        | Italic text                    |
+| `underline(text)`     | Underlined text                |
+| `inverse(text)`       | Inverted foreground/background |
+| `hidden(text)`        | Hidden text                    |
+| `strikethrough(text)` | Strikethrough text             |
 
 ### Colors
 
@@ -42,103 +42,114 @@ bun add @crustjs/style
 
 **Background:** `bgBlack`, `bgRed`, `bgGreen`, `bgYellow`, `bgBlue`, `bgMagenta`, `bgCyan`, `bgWhite`, `bgBrightBlack`, `bgBrightRed`, `bgBrightGreen`, `bgBrightYellow`, `bgBrightBlue`, `bgBrightMagenta`, `bgBrightCyan`, `bgBrightWhite`
 
-### Dynamic Colors (Truecolor)
+### Dynamic Colors
 
-Direct styling functions using 24-bit truecolor ANSI sequences:
+A single `fg` / `bg` pair powered by [`Bun.color()`](https://bun.com/docs/runtime/color). Accepts every input Bun.color understands — hex, named CSS colors, `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric (`0xff0000`), `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays. Output adapts to the resolved [`ColorDepth`](#colordepth):
 
-| Export | Description |
-| --- | --- |
-| `rgb(text, r, g, b)` | Apply truecolor foreground RGB color |
-| `bgRgb(text, r, g, b)` | Apply truecolor background RGB color |
-| `hex(text, hexColor)` | Apply truecolor foreground hex color (`#RGB` or `#RRGGBB`) |
-| `bgHex(text, hexColor)` | Apply truecolor background hex color |
+| Export            | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| `fg(text, input)` | Apply a foreground color from any [`ColorInput`](#colorinput) |
+| `bg(text, input)` | Apply a background color from any [`ColorInput`](#colorinput) |
 
 ANSI pair factories for composition:
 
-| Export | Description |
-| --- | --- |
-| `rgbCode(r, g, b)` | Create foreground `AnsiPair` from RGB values |
-| `bgRgbCode(r, g, b)` | Create background `AnsiPair` from RGB values |
-| `hexCode(hex)` | Create foreground `AnsiPair` from hex string |
-| `bgHexCode(hex)` | Create background `AnsiPair` from hex string |
-| `parseHex(hex)` | Parse a hex color string into `[r, g, b]` tuple |
+| Export          | Description                                                       |
+| --------------- | ----------------------------------------------------------------- |
+| `fgCode(input)` | Create a foreground `AnsiPair` from a [`ColorInput`](#colorinput) |
+| `bgCode(input)` | Create a background `AnsiPair` from a [`ColorInput`](#colorinput) |
+
+#### `ColorInput`
+
+```ts
+type ColorInput =
+  | ColorString
+  | number
+  | readonly [r: number, g: number, b: number]
+  | readonly [r: number, g: number, b: number, a: number]
+  | { r: number; g: number; b: number; a?: number };
+
+type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowgreen";
+```
+
+The string branch uses [`LiteralUnion`](https://github.com/sindresorhus/type-fest/blob/main/source/literal-union.d.ts) so editors autocomplete the 148 CSS [named colors](https://drafts.csswg.org/css-color/#named-colors) and the `#` hex prefix while still accepting any other string Bun's CSS parser understands (`rgb()`, `hsl()`, `lab()`, `oklch()`, …). `LiteralUnion` and `NamedColor` are both re-exported from `@crustjs/style` if you need them in your own helpers.
 
 ### Hyperlinks (OSC 8)
 
-| Export | Description |
-| --- | --- |
-| `link(text, url, options?)` | Wrap text in OSC 8 hyperlink escape sequences |
-| `linkCode(url, options?)` | Create an OSC 8 open/close pair for composition |
+| Export                      | Description                                     |
+| --------------------------- | ----------------------------------------------- |
+| `link(text, url, options?)` | Wrap text in OSC 8 hyperlink escape sequences   |
+| `linkCode(url, options?)`   | Create an OSC 8 open/close pair for composition |
 
 ### Style Engine
 
-| Export | Description |
-| --- | --- |
-| `applyStyle(text, pair)` | Apply an ANSI pair with nesting-safe composition |
-| `composeStyles(...pairs)` | Compose multiple ANSI pairs into one |
+| Export                    | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `applyStyle(text, pair)`  | Apply an ANSI pair with nesting-safe composition |
+| `composeStyles(...pairs)` | Compose multiple ANSI pairs into one             |
 
 ### Capability Detection
 
-| Export | Description |
-| --- | --- |
-| `resolveColorCapability(mode, overrides?)` | Resolve whether colors should be emitted |
-| `resolveModifierCapability(mode, overrides?)` | Resolve whether non-color modifiers (bold, italic, etc.) should be emitted |
-| `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted |
+| Export                                | Description                                                                                                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `resolveColorDepth(mode, overrides?)` | Resolve the [`ColorDepth`](#colordepth) tier (`"truecolor" \| "256" \| "16" \| "none"`). Compare against `"none"` for a yes/no "is color enabled" check, or `"truecolor"` to gate 24-bit output. |
 
 ### Text Utilities
 
-| Export | Description |
-| --- | --- |
-| `visibleWidth(text)` | Compute visible width (ANSI-aware, CJK-aware) |
+| Export                            | Description                                      |
+| --------------------------------- | ------------------------------------------------ |
+| `visibleWidth(text)`              | Compute visible width (ANSI-aware, CJK-aware)    |
 | `wrapText(text, width, options?)` | Wrap text by visible width with style continuity |
-| `padStart(text, width, char?)` | Left-pad to visible width |
-| `padEnd(text, width, char?)` | Right-pad to visible width |
-| `center(text, width, char?)` | Center-align to visible width |
+| `padStart(text, width, char?)`    | Left-pad to visible width                        |
+| `padEnd(text, width, char?)`      | Right-pad to visible width                       |
+| `center(text, width, char?)`      | Center-align to visible width                    |
 
 <Callout type="info">
-To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(text)` function.
+  To strip ANSI escape sequences from a string, use Bun's built-in
+  `Bun.stripANSI(text)` function.
 </Callout>
 
 ### Block Helpers
 
-| Export | Description |
-| --- | --- |
+| Export                           | Description                                  |
+| -------------------------------- | -------------------------------------------- |
 | `unorderedList(items, options?)` | Format an unordered list with bullet markers |
-| `orderedList(items, options?)` | Format an ordered list with number markers |
-| `taskList(items, options?)` | Format a task list with check markers |
-| `table(headers, rows, options?)` | Format a column-aligned table |
+| `orderedList(items, options?)`   | Format an ordered list with number markers   |
+| `taskList(items, options?)`      | Format a task list with check markers        |
+| `table(headers, rows, options?)` | Format a column-aligned table                |
 
 ### Markdown Theme
 
-| Export | Description |
-| --- | --- |
-| `defaultTheme` | Default auto-mode markdown theme |
-| `createMarkdownTheme(options?)` | Create a theme with optional overrides |
+| Export                             | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `defaultTheme`                     | Default auto-mode markdown theme            |
+| `createMarkdownTheme(options?)`    | Create a theme with optional overrides      |
 | `buildDefaultMarkdownTheme(style)` | Build a default theme from a style instance |
 
 ### Types
 
-| Type | Description |
-| --- | --- |
-| `AnsiPair` | Open/close ANSI escape sequence pair |
-| `ColorMode` | `"auto" \| "always" \| "never"` |
-| `StyleOptions` | Options for `createStyle` |
-| `CapabilityOverrides` | Injectable TTY/NO_COLOR overrides for testing |
-| `TrueColorOverrides` | Injectable COLORTERM/TERM overrides for truecolor testing |
-| `HyperlinkOptions` | Optional OSC 8 hyperlink parameters such as `id` |
-| `StyleFn` | `(text: string) => string` style function |
-| `StyleInstance` | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, and `trueColorEnabled` capability flags |
-| `WrapOptions` | Options for `wrapText` |
-| `ColumnAlignment` | `"left" \| "right" \| "center"` |
-| `TableOptions` | Options for `table` |
-| `UnorderedListOptions` | Options for `unorderedList` |
-| `OrderedListOptions` | Options for `orderedList` |
-| `TaskListItem` | `{ text: string; checked: boolean }` |
-| `TaskListOptions` | Options for `taskList` |
-| `MarkdownTheme` | Semantic theme contract with 30 GFM slots |
-| `PartialMarkdownTheme` | Partial override type for theme customization |
-| `ThemeSlotFn` | `(value: string) => string` theme slot function |
-| `CreateMarkdownThemeOptions` | Options for `createMarkdownTheme` |
+| Type                         | Description                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AnsiPair`                   | Open/close ANSI escape sequence pair                                                                                                        |
+| `ColorMode`                  | `"auto" \| "always" \| "never"`                                                                                                             |
+| `StyleOptions`               | Options for `createStyle`                                                                                                                   |
+| `CapabilityOverrides`        | Injectable TTY/NO_COLOR overrides for testing                                                                                               |
+| `TrueColorOverrides`         | Injectable COLORTERM/TERM overrides for truecolor testing                                                                                   |
+| `HyperlinkOptions`           | Optional OSC 8 hyperlink parameters such as `id`                                                                                            |
+| `StyleFn`                    | `(text: string) => string` style function                                                                                                   |
+| `StyleInstance`              | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, `trueColorEnabled`, and `colorDepth` capability flags |
+| `ColorDepth`                 | `"truecolor" \| "256" \| "16" \| "none"`                                                                                                    |
+| `WrapOptions`                | Options for `wrapText`                                                                                                                      |
+| `ColumnAlignment`            | `"left" \| "right" \| "center"`                                                                                                             |
+| `TableOptions`               | Options for `table`                                                                                                                         |
+| `UnorderedListOptions`       | Options for `unorderedList`                                                                                                                 |
+| `OrderedListOptions`         | Options for `orderedList`                                                                                                                   |
+| `TaskListItem`               | `{ text: string; checked: boolean }`                                                                                                        |
+| `TaskListOptions`            | Options for `taskList`                                                                                                                      |
+| `MarkdownTheme`              | Semantic theme contract with 30 GFM slots                                                                                                   |
+| `PartialMarkdownTheme`       | Partial override type for theme customization                                                                                               |
+| `ThemeSlotFn`                | `(value: string) => string` theme slot function                                                                                             |
+| `CreateMarkdownThemeOptions` | Options for `createMarkdownTheme`                                                                                                           |
 
 ## Usage
 
@@ -189,7 +200,7 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Disable colors but keep bold / italic / underline / hyperlinks
+// Disable colors but keep bold / italic / underline / hyperlinks (no-color.org)
 setGlobalColorMode("never");
 console.log(style.bold.red("bold, but no red"));
 
@@ -204,81 +215,198 @@ getGlobalColorMode();
 Instances returned by `createStyle()` capture their mode at creation time and are **not** affected by `setGlobalColorMode`. The override only applies to the default `style` facade and the named re-exports.
 
 For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](/docs/modules/plugins/no-color).
+
 </Callout>
 
 ### Composing Styles
 
-```ts
-import { applyStyle, composeStyles, boldCode, redCode } from "@crustjs/style";
+Three composition shapes — pick whichever fits the call site.
 
-const boldRed = composeStyles(boldCode, redCode);
-console.log(applyStyle("critical", boldRed));
+#### 1. Chainable getters
+
+```ts
+import { style } from "@crustjs/style";
+
+console.log(style.bold.red("critical error"));
+console.log(style.italic.brightCyan.bgYellow("highlight"));
 ```
 
-### Dynamic Colors (Truecolor)
-
-Use any RGB or hex color via 24-bit truecolor ANSI sequences:
+#### 2. Tagged template literals
 
 ```ts
-import { rgb, bgRgb, hex, bgHex } from "@crustjs/style";
+const ms = 42;
+console.log(style.bold.red`Build in ${ms}ms`);
+console.log(style.bold`Build ${style.cyan`./dist`} in ${ms}ms`); // nested
+```
 
-// RGB values (0–255 per channel)
-console.log(rgb("ocean", 0, 128, 255));
-console.log(bgRgb("warning", 255, 128, 0));
+#### 3. AnsiPair composition
 
-// Hex colors (#RGB or #RRGGBB)
-console.log(hex("error", "#ff0000"));
-console.log(bgHex("highlight", "#ff8800"));
+Every chainable doubles as an `AnsiPair` (`open` / `close` properties), so
+it can be passed to `composeStyles` and `applyStyle` directly. The
+pre-built `*Code` exports are still available for callers that prefer
+pure data:
+
+```ts
+import {
+  applyStyle,
+  composeStyles,
+  bold,
+  red,
+  bgYellow,
+  fgCode,
+} from "@crustjs/style";
+
+const danger = composeStyles(bold, red, bgYellow);
+console.log(applyStyle("DANGER", danger));
+
+// Dynamic colors compose too
+const brand = composeStyles(bold, fgCode("#4FA83D"));
+console.log(applyStyle("Crust", brand));
+```
+
+#### Dynamic colors in chains
+
+```ts
+style.bold.fg("#ff8800")("warning");
+style.fg("rebeccapurple").italic.underline("emphasis");
+```
+
+<Callout type="warn">
+  `chain.open + text + chain.close` matches `chain(text)` byte-for-byte *only*
+  when adjacent chain steps have distinct close codes. When two adjacent steps
+  share a close code (e.g. `bold` and `dim` both close with `\x1b[22m`),
+  `applyStyle` re-opens the outer style after each shared close to prevent
+  bleed; that re-open is part of `chain(text)` but not of the cached
+  `chain.close`. Use `chain(text)` for emission and reserve `chain.open` /
+  `chain.close` for `composeStyles` / `applyStyle`.
+</Callout>
+
+### Dynamic Colors
+
+Use any color [`Bun.color()`](https://bun.com/docs/runtime/color) understands — hex (3/6/8 digit), named CSS colors (`"red"`, `"rebeccapurple"`), `rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`, numeric literals, `{ r, g, b, a? }` objects, and `[r, g, b]` / `[r, g, b, a]` arrays. Output adapts to the terminal's resolved color depth (truecolor, 256-color, 16-color, or none) — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback).
+
+```ts
+import { fg, bg } from "@crustjs/style";
+
+// Hex (3-, 6-, or 8-digit)
+console.log(fg("error", "#ff0000"));
+console.log(bg("highlight", "#ff8800"));
+
+// Named CSS colors
+console.log(fg("royal", "rebeccapurple"));
+
+// rgb() / hsl() strings
+console.log(fg("ocean", "rgb(0, 128, 255)"));
+console.log(bg("sun", "hsl(45, 100%, 50%)"));
+
+// Numeric literal
+console.log(fg("red", 0xff0000));
+
+// Tuple or object
+console.log(fg("coral", [255, 127, 80]));
+console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 ```
 
 Pair factories work with `applyStyle` and `composeStyles`:
 
 ```ts
-import { rgbCode, hexCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+import {
+  fgCode,
+  bgCode,
+  applyStyle,
+  composeStyles,
+  boldCode,
+} from "@crustjs/style";
 
-const coral = rgbCode(255, 127, 80);
+const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
 
-const boldCoral = composeStyles(boldCode, hexCode("#ff7f50"));
+const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
-On `createStyle` instances, dynamic colors respect mode and truecolor detection:
+On `createStyle` instances, dynamic colors respect mode and the resolved color depth:
 
 ```ts
 import { createStyle } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
-console.log(s.rgb("text", 255, 0, 0));
-console.log(s.hex("text", "#ff0000"));
+console.log(s.fg("text", "#ff0000"));
+console.log(s.bg("text", "rebeccapurple"));
 ```
 
-In `"auto"` mode, dynamic colors are emitted only when the terminal supports truecolor and base colors are enabled — detected via `COLORTERM=truecolor|24bit` or `TERM` containing `truecolor`, `24bit`, or `-direct`. When truecolor is not detected, dynamic color methods return plain text while standard 16-color methods continue to work normally.
-
-Invalid inputs throw immediately: `RangeError` for out-of-range RGB values, `TypeError` for malformed hex strings.
+In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
 
 <Callout type="info">
-Dynamic colors use truecolor (24-bit) ANSI sequences with no automatic fallback to 256 or 16 colors. On unsupported terminals, colors may be approximated or silently ignored — no runtime errors will occur.
+  The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code`
+  pair-factory variants, plus matching `style.*` instance methods) still ship
+  and behave exactly as before, but are marked `@deprecated` and will be removed
+  in v1.0.0. IDEs and `tsc` surface the deprecation with a one-line replacement
+  hint at every call site — prefer `fg` / `bg` for new code.
+</Callout>
+
+### Color Depth & Auto-Fallback
+
+`fg` / `bg` are capability-aware: the resolved color depth determines which `Bun.color()` format is emitted. The standalone exports re-resolve on every call (so `setGlobalColorMode` and `NO_COLOR` take effect immediately), while instances created with `createStyle()` capture the depth at construction time.
+
+| Resolved depth | Output                                                                    | Detection (in `"auto"` mode)                                                             |
+| -------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `"truecolor"`  | `Bun.color(input, "ansi-16m")`                                            | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"`        | `Bun.color(input, "ansi-256")`                                            | `TERM` contains `256color`                                                               |
+| `"16"`         | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value                                                                      |
+| `"none"`       | `text` returned unchanged                                                 | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
+
+The `"16"` row uses an in-package quantizer (same algorithm as `ansi-styles` / `chalk`) pending an upstream Bun fix ([oven-sh/bun#22161](https://github.com/oven-sh/bun/issues/22161)).
+
+Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables are introduced. Disable color emission entirely with `setGlobalColorMode("never")` or `NO_COLOR=1`; force truecolor with `setGlobalColorMode("always")`.
+
+Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly, or read `style.colorDepth` / `instance.colorDepth`:
+
+```ts
+import { resolveColorDepth, style } from "@crustjs/style";
+
+resolveColorDepth("auto"); // "truecolor" | "256" | "16" | "none"
+style.colorDepth; // depth currently used by the runtime style
+```
+
+<Callout type="info">
+Invalid color inputs (e.g. `fg("hello", "not-a-color")`) raise `TypeError` (`Invalid color input: ...`) at every depth — including `"none"` — and **regardless of whether `text` is empty**. `fg("", "garbage")` still throws, so callers can't silently mask bugs.
+
+Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensively. This protects JS callers that bypass TypeScript types from crashes.
+
 </Callout>
 
 ### Hyperlinks (OSC 8)
 
 ```ts
-import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
+import {
+  createStyle,
+  linkCode,
+  composeStyles,
+  applyStyle,
+  underlineCode,
+} from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
 
 console.log(s.link("Crust docs", "https://crustjs.com"));
-console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
+console.log(
+  s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }),
+);
 
-const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
+const underlinedLink = composeStyles(
+  linkCode("https://crustjs.com"),
+  underlineCode,
+);
 console.log(applyStyle("Visit Crust", underlinedLink));
 ```
 
 In `"auto"` mode, hyperlinks are emitted when stdout is a TTY. They are not disabled by `NO_COLOR`, since OSC 8 links are not color sequences. In `"never"` mode, link helpers return plain text.
 
 <Callout type="info">
-Terminal support for OSC 8 varies by emulator. Many modern terminals support it, but there is no reliable cross-terminal capability probe yet, so unsupported terminals may simply show plain text without clickable behavior.
+  Terminal support for OSC 8 varies by emulator. Many modern terminals support
+  it, but there is no reliable cross-terminal capability probe yet, so
+  unsupported terminals may simply show plain text without clickable behavior.
 </Callout>
 
 ### Text Layout

@@ -99,6 +99,8 @@ describe("runtime link export", () => {
 	});
 
 	it('still emits hyperlinks when global color mode is "never"', () => {
+		// Runtime facade `"never"` follows no-color.org: colors off,
+		// modifiers + hyperlinks survive.
 		setGlobalColorMode("never");
 		try {
 			expect(link("Crust", "https://crustjs.com")).toBe(

@@ -168,10 +168,9 @@ export type PartialMarkdownTheme = Partial<MarkdownTheme>;
  *
  * @example
  * ```ts
- * import { createStyle } from "@crustjs/style";
- * import { buildDefaultTheme } from "./defaultTheme.ts";
+ * import { buildDefaultMarkdownTheme, createStyle } from "@crustjs/style";
  *
- * const theme = buildDefaultTheme(createStyle({ mode: "always" }));
+ * const theme = buildDefaultMarkdownTheme(createStyle({ mode: "always" }));
  * console.log(theme.heading1("Title")); // bold + underlined
  * ```
  */

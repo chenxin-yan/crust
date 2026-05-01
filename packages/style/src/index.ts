@@ -59,17 +59,17 @@ export type {
 export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
 export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
-export {
-	resolveColorCapability,
-	resolveTrueColorCapability,
-} from "./capability.ts";
+export { resolveColorDepth } from "./capability.ts";
+// Style primitives — Dynamic colors (depth-aware) powered by `Bun.color()`
+export { bgCode, fgCode } from "./color.ts";
 export {
 	createStyle,
 	getGlobalColorMode,
 	setGlobalColorMode,
 	style,
 } from "./createStyle.ts";
-// Style primitives — Dynamic colors (truecolor)
+// Deprecated truecolor pair factories + hex parser — superseded by
+// `fgCode` / `bgCode`. Will be removed in v1.0.0.
 export {
 	bgHexCode,
 	bgRgbCode,
@@ -79,7 +79,9 @@ export {
 } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
+export type { LiteralUnion, NamedColor } from "./namedColors.ts";
 export {
+	bg,
 	// Background
 	bgBlack,
 	bgBlue,
@@ -93,6 +95,8 @@ export {
 	bgBrightYellow,
 	bgCyan,
 	bgGreen,
+	// Deprecated direct helpers — superseded by `fg` / `bg`. Will be removed
+	// in v1.0.0.
 	bgHex,
 	bgMagenta,
 	bgRed,
@@ -113,6 +117,7 @@ export {
 	brightYellow,
 	cyan,
 	dim,
+	fg,
 	gray,
 	green,
 	hex,
@@ -150,7 +155,10 @@ export { buildDefaultMarkdownTheme } from "./theme/markdownTheme.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
+	ColorDepth,
+	ColorInput,
 	ColorMode,
+	ColorString,
 	StyleFn,
 	StyleInstance,
 	StyleOptions,
