@@ -1,53 +1,64 @@
+// ────────────────────────────────────────────────────────────────────────────
+// Validated run middleware — reads `[VALIDATED_SCHEMA]` brand off command defs
+// ────────────────────────────────────────────────────────────────────────────
+
 import type { CrustCommandContext } from "@crustjs/core";
-import type { ValidationResult } from "./standard/types.ts";
-import type { ValidatedContext, ValidationIssue } from "./types.ts";
+import { VALIDATED_SCHEMA } from "./schema-types.ts";
+import type {
+	StandardSchema,
+	ValidatedContext,
+	ValidationIssue,
+	ValidationResult,
+} from "./types.ts";
+import { validateStandard } from "./validate.ts";
 import { throwValidationError } from "./validation.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Shared types for provider-agnostic validation
-// ────────────────────────────────────────────────────────────────────────────
-
-// Re-export ValidationResult from the Standard Schema core so consumers
-// that previously imported it from middleware.ts continue to work.
-export type { ValidationResult } from "./standard/types.ts";
+// Re-export the result type so callers that previously imported it from
+// `middleware.ts` continue to work.
+export type { ValidationResult } from "./types.ts";
 
 /**
- * Provider-specific function that validates a single value against a schema.
- *
- * May return synchronously or asynchronously — the shared runner `await`s
- * the result either way.
+ * Per-value validator. The Standard Schema spec allows
+ * `~standard.validate` to return either a synchronous result or a
+ * `Promise`; both are handled here.
  */
 export type ValidateValueFn = (
-	schema: unknown,
+	schema: StandardSchema,
 	value: unknown,
 	prefix: readonly PropertyKey[],
 ) => ValidationResult | Promise<ValidationResult>;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Shared validation middleware — reads schemas from command defs via symbol
+// buildValidatedRunner
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build a validated `run` handler that reads schema metadata from the
- * command's own `args` / `flags` definitions via a provider-specific symbol key.
+ * Build a validated `run` handler that reads the Standard Schema attached
+ * to each command def via the `[VALIDATED_SCHEMA]` brand and runs it
+ * against the parsed CLI input.
  *
- * At runtime:
- * 1. Reads `context.command.args` and `context.command.flags`
- * 2. Extracts schemas from each def via `def[schemaKey]`
- * 3. Validates `context.args[name]` / `context.flags[name]` against schemas
- * 4. Collects issues → throws `CrustError("VALIDATION")` if any
- * 5. Calls user handler with `ValidatedContext`
+ * Behaviour:
  *
- * @param userRun - The user's validated handler
- * @param validateValue - Provider-specific single-value validation function
- * @param schemaKey - The symbol key used to attach schemas to defs
- * @param label - Label for error messages (e.g. `"commandValidator"`)
+ * 1. Iterates `context.command.args` and `context.command.effectiveFlags`.
+ * 2. For each def carrying `[VALIDATED_SCHEMA]`, validates the parsed value
+ *    against the schema (await-safe so async refinements work).
+ * 3. Defs without the brand pass through unchanged — this allows plugins
+ *    (e.g. `helpPlugin` injecting `--help`) to coexist with validated args.
+ * 4. Collects issues across all schemas, then either throws
+ *    `CrustError("VALIDATION")` with a bullet-list message or calls
+ *    `userRun` with a `ValidatedContext` containing the transformed values.
+ *
+ * @param userRun - The user's validated handler.
+ * @param validateValue - Validator override. Defaults to `validateStandard`,
+ *   which awaits sync/async results from `schema["~standard"].validate`.
+ *   The override exists so deprecated alias barrels can pre-process schemas
+ *   without re-implementing the runner.
+ * @param label - Prefix for error messages (e.g. `"commandValidator"`).
  */
 export function buildValidatedRunner(
 	userRun: (ctx: ValidatedContext<unknown, unknown>) => void | Promise<void>,
-	validateValue: ValidateValueFn,
-	schemaKey: symbol,
-	label: string,
+	validateValue: ValidateValueFn = validateStandard,
+	label = "commandValidator",
 ): (context: CrustCommandContext) => Promise<void> {
 	return async (context: CrustCommandContext) => {
 		const issues: ValidationIssue[] = [];
@@ -57,11 +68,10 @@ export function buildValidatedRunner(
 		const validatedArgs: Record<string, unknown> = {};
 
 		for (const def of argDefs) {
-			const schema = (def as unknown as Record<symbol, unknown>)[schemaKey];
+			const schema = (def as unknown as Record<symbol, unknown>)[
+				VALIDATED_SCHEMA
+			] as StandardSchema | undefined;
 			if (!schema) {
-				// Skip args without schema metadata — they may be injected by
-				// plugins. Compile-time `HasAllSchemas` catches user mistakes;
-				// at runtime we silently pass through non-schema defs.
 				validatedArgs[def.name] = (context.args as Record<string, unknown>)[
 					def.name
 				];
@@ -109,12 +119,13 @@ export function buildValidatedRunner(
 		const validatedFlags: Record<string, unknown> = {};
 
 		for (const [name, def] of Object.entries(flagDefs)) {
-			const schema = (def as unknown as Record<symbol, unknown>)[schemaKey];
+			const schema = (def as unknown as Record<symbol, unknown>)[
+				VALIDATED_SCHEMA
+			] as StandardSchema | undefined;
 			if (!schema) {
 				// Skip flags without schema metadata — they may be injected by
-				// plugins (e.g. helpPlugin injects --help). Compile-time
-				// `HasAllSchemas` catches user mistakes; at runtime we silently
-				// pass through non-schema defs.
+				// plugins (e.g. helpPlugin's `--help`). Compile-time
+				// `HasAllSchemas` catches user mistakes; runtime is permissive.
 				validatedFlags[name] = (context.flags as Record<string, unknown>)[name];
 				continue;
 			}

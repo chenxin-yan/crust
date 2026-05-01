@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/validate",
-	"version": "0.0.15",
+	"version": "0.1.0",
 	"description": "Validation helpers for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
@@ -17,6 +17,7 @@
 	"keywords": [
 		"cli",
 		"validation",
+		"standard-schema",
 		"effect",
 		"zod",
 		"bun",
@@ -64,15 +65,11 @@
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:*",
-		"effect": "^3.19.0",
-		"zod": "^4.0.0",
+		"effect": "^3.14.0",
 		"typescript": "catalog:"
 	},
 	"peerDependenciesMeta": {
 		"effect": {
-			"optional": true
-		},
-		"zod": {
 			"optional": true
 		}
 	},

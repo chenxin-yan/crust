@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type { ValidationIssue } from "../types.ts";
-import type { StandardSchema, ValidationResult } from "./types.ts";
+import type {
+	StandardSchema,
+	ValidationIssue,
+	ValidationResult,
+} from "./types.ts";
 import {
 	failure,
 	isStandardSchema,

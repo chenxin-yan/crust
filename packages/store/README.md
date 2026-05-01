@@ -56,15 +56,21 @@ No explicit generics needed — types are inferred from your `fields` definition
 
 `@crustjs/store` provides four path helpers that resolve platform-standard directories for different storage intents. Use the one that matches what you're persisting:
 
-| Helper      | Intent                     | Example Use Case                        |
-| ----------- | -------------------------- | --------------------------------------- |
-| `configDir` | User preferences & config  | Theme, editor settings, API keys        |
-| `dataDir`   | Important app data         | Local databases, downloaded resources   |
-| `stateDir`  | Runtime state              | Window positions, scroll offsets, undo  |
-| `cacheDir`  | Regenerable cached data    | HTTP caches, compiled assets            |
+| Helper      | Intent                    | Example Use Case                       |
+| ----------- | ------------------------- | -------------------------------------- |
+| `configDir` | User preferences & config | Theme, editor settings, API keys       |
+| `dataDir`   | Important app data        | Local databases, downloaded resources  |
+| `stateDir`  | Runtime state             | Window positions, scroll offsets, undo |
+| `cacheDir`  | Regenerable cached data   | HTTP caches, compiled assets           |
 
 ```ts
-import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/store";
+import {
+  createStore,
+  configDir,
+  dataDir,
+  stateDir,
+  cacheDir,
+} from "@crustjs/store";
 
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
@@ -106,12 +112,12 @@ const cache = createStore({
 
 All four helpers follow XDG conventions on Linux and macOS, and Windows-native conventions on Windows:
 
-| Helper      | Linux / macOS                       | Windows                                     | Env Override         |
-| ----------- | ----------------------------------- | ------------------------------------------- | -------------------- |
-| `configDir` | `~/.config/<app>`                   | `%APPDATA%\<app>`                           | `$XDG_CONFIG_HOME`   |
-| `dataDir`   | `~/.local/share/<app>`              | `%LOCALAPPDATA%\<app>\Data`                 | `$XDG_DATA_HOME`     |
-| `stateDir`  | `~/.local/state/<app>`              | `%LOCALAPPDATA%\<app>\State`                | `$XDG_STATE_HOME`    |
-| `cacheDir`  | `~/.cache/<app>`                    | `%LOCALAPPDATA%\<app>\Cache`                | `$XDG_CACHE_HOME`    |
+| Helper      | Linux / macOS          | Windows                      | Env Override       |
+| ----------- | ---------------------- | ---------------------------- | ------------------ |
+| `configDir` | `~/.config/<app>`      | `%APPDATA%\<app>`            | `$XDG_CONFIG_HOME` |
+| `dataDir`   | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data`  | `$XDG_DATA_HOME`   |
+| `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `$XDG_STATE_HOME`  |
+| `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `$XDG_CACHE_HOME`  |
 
 macOS uses XDG conventions (same as Linux) for a unified Unix mental model.
 
@@ -131,12 +137,12 @@ const store = createStore(options);
 
 #### Options
 
-| Option         | Type                       | Required | Description                                                        |
-| -------------- | -------------------------- | -------- | ------------------------------------------------------------------ |
-| `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.             |
-| `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`).  |
-| `fields`       | `FieldsDef`                | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
-| `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).              |
+| Option         | Type        | Required | Description                                                                                  |
+| -------------- | ----------- | -------- | -------------------------------------------------------------------------------------------- |
+| `dirPath`      | `string`    | Yes      | Absolute directory path where the JSON file is stored.                                       |
+| `name`         | `string`    | No       | Store name used as filename (default `"config"` → `config.json`).                            |
+| `fields`       | `FieldsDef` | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
+| `pruneUnknown` | `boolean`   | No       | Drop unknown persisted keys on read (default `true`).                                        |
 
 ### `store.read()`
 
@@ -317,7 +323,7 @@ The easiest way to add validation is with field adapters from `@crustjs/validate
 
 ```ts
 import { z } from "zod";
-import { field } from "@crustjs/validate/zod";
+import { field } from "@crustjs/validate";
 import { createStore, configDir } from "@crustjs/store";
 
 const store = createStore({
@@ -347,7 +353,7 @@ For Effect schemas, wrap with `Schema.standardSchemaV1()`:
 
 ```ts
 import * as Schema from "effect/Schema";
-import { field } from "@crustjs/validate/effect";
+import { field } from "@crustjs/validate";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
@@ -355,11 +361,7 @@ const store = createStore({
     theme: {
       type: "string",
       default: "light",
-      validate: field(
-        Schema.standardSchemaV1(
-          Schema.Literal("light", "dark"),
-        ),
-      ),
+      validate: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
     },
   },
 });
@@ -423,12 +425,12 @@ try {
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                            | Details                     |
-| ------------ | --------------------------------------------------------------- | --------------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform         | `{ path: string }`         |
-| `PARSE`      | Malformed JSON in persisted config file                         | `{ path: string }`         |
-| `IO`         | Filesystem read, write, or delete failure                       | `{ path, operation }`      |
-| `VALIDATION` | Config fails validator on read, write, update, or patch         | `{ operation, issues }`    |
+| Code         | When                                                    | Details                 |
+| ------------ | ------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
+| `PARSE`      | Malformed JSON in persisted config file                 | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
+| `VALIDATION` | Config fails validator on read, write, update, or patch | `{ operation, issues }` |
 
 ### Catching errors by code
 
@@ -499,22 +501,22 @@ import type {
 } from "@crustjs/store";
 ```
 
-| Type                      | Description                                                             |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `CreateStoreOptions`      | Options object for `createStore()`.                                     |
-| `Store`                   | Store instance with `read`, `write`, `update`, `patch`, `reset`.        |
-| `StoreUpdater`            | Updater function type `(current: T) => T`.                              |
-| `FieldDef`                | Single field definition with `type`, optional `default`, and optional `validate`. |
-| `FieldsDef`               | Record of field names to `FieldDef` definitions.                        |
-| `InferStoreConfig`        | Inferred store state type from a `FieldsDef` definition.                |
-| `StoreValidator`          | Validator function contract `(value: unknown) => StoreValidatorResult`. |
-| `StoreValidatorResult`    | Discriminated union: `{ ok: true, value: T } \| { ok: false, issues: StoreValidatorIssue[] }`. |
-| `StoreValidatorIssue`     | `{ message: string, path: string }`.                                   |
-| `StoreValidationIssue`    | Validation issue in error details payload.                              |
-| `ValidationErrorDetails`  | Error details for `VALIDATION` code: `{ operation, issues }`.          |
-| `StoreErrorCode`          | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.    |
-| `PlatformEnv`             | Injectable platform environment for testing path helpers.               |
-| `CrustStoreError`         | Typed error class with `code`, `details`, and `cause`.                  |
+| Type                     | Description                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `CreateStoreOptions`     | Options object for `createStore()`.                                                            |
+| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                               |
+| `StoreUpdater`           | Updater function type `(current: T) => T`.                                                     |
+| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.              |
+| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                               |
+| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                                       |
+| `StoreValidator`         | Validator function contract `(value: unknown) => StoreValidatorResult`.                        |
+| `StoreValidatorResult`   | Discriminated union: `{ ok: true, value: T } \| { ok: false, issues: StoreValidatorIssue[] }`. |
+| `StoreValidatorIssue`    | `{ message: string, path: string }`.                                                           |
+| `StoreValidationIssue`   | Validation issue in error details payload.                                                     |
+| `ValidationErrorDetails` | Error details for `VALIDATION` code: `{ operation, issues }`.                                  |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.                             |
+| `PlatformEnv`            | Injectable platform environment for testing path helpers.                                      |
+| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                                         |
 
 ## Scope & Non-Goals
 

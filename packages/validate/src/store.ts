@@ -24,7 +24,7 @@ import { normalizeStandardIssues } from "./validate.ts";
  * @example
  * ```ts
  * import { z } from "zod";
- * import { field } from "@crustjs/validate/standard";
+ * import { field } from "@crustjs/validate";
  * import { createStore, configDir } from "@crustjs/store";
  *
  * const store = createStore({
@@ -75,7 +75,7 @@ export function field<S extends StandardSchema>(
  * @example
  * ```ts
  * import { z } from "zod";
- * import { fieldSync } from "@crustjs/validate/standard";
+ * import { fieldSync } from "@crustjs/validate";
  * import { createStore, configDir } from "@crustjs/store";
  *
  * const store = createStore({

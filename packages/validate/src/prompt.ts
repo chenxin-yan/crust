@@ -1,7 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { renderBulletList, throwValidationError } from "../validation.ts";
 import type { InferOutput, StandardSchema } from "./types.ts";
 import { validateStandard, validateStandardSync } from "./validate.ts";
+import { renderBulletList, throwValidationError } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompt error rendering strategies
@@ -54,7 +54,7 @@ export interface PromptValidatorOptions {
  * @example
  * ```ts
  * import { z } from "zod";
- * import { promptValidator } from "@crustjs/validate/standard";
+ * import { promptValidator } from "@crustjs/validate";
  * import { input } from "@crustjs/prompts";
  *
  * const name = await input({
@@ -113,7 +113,7 @@ export function promptValidator<S extends StandardSchema>(
  * @example
  * ```ts
  * import { z } from "zod";
- * import { parsePromptValue } from "@crustjs/validate/standard";
+ * import { parsePromptValue } from "@crustjs/validate";
  * import { input } from "@crustjs/prompts";
  *
  * const raw = await input({ message: "Enter port" });
@@ -154,7 +154,7 @@ export async function parsePromptValue<S extends StandardSchema>(
  * @example
  * ```ts
  * import { z } from "zod";
- * import { parsePromptValueSync } from "@crustjs/validate/standard";
+ * import { parsePromptValueSync } from "@crustjs/validate";
  *
  * const port = parsePromptValueSync(z.coerce.number().int().positive(), "8080");
  * // port is typed as `number`

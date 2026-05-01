@@ -207,7 +207,7 @@
     },
     "packages/validate": {
       "name": "@crustjs/validate",
-      "version": "0.0.15",
+      "version": "0.1.0",
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
       },
@@ -222,13 +222,11 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:*",
-        "effect": "^3.19.0",
+        "effect": "^3.14.0",
         "typescript": "catalog:",
-        "zod": "^4.0.0",
       },
       "optionalPeers": [
         "effect",
-        "zod",
       ],
     },
   },

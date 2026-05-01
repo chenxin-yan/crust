@@ -21,30 +21,64 @@ import { CrustStoreError, createStore } from "@crustjs/store";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
 
+// All targets now import from the unified root entry point. The deprecated
+// `/zod`, `/effect`, and `/standard` subpath barrels are exercised separately
+// in the "Deprecated subpath aliases" describe block at the end of this file.
 import {
-	arg as effectArg,
-	commandValidator as effectCommandValidator,
-	field as effectFieldValidator,
-	flag as effectFlag,
-	parsePromptValue as effectParsePromptValue,
-	promptValidator as effectPromptValidator,
-} from "../src/effect/index.ts";
-import {
+	arg,
+	commandValidator,
 	field,
 	fieldSync,
+	flag,
 	parsePromptValue,
 	parsePromptValueSync,
 	promptValidator,
-} from "../src/standard/index.ts";
-import {
 	validateStandard,
 	validateStandardSync,
-} from "../src/standard/validate.ts";
-import {
-	arg as zodArg,
-	commandValidator as zodCommandValidator,
-	flag as zodFlag,
-} from "../src/zod/index.ts";
+} from "../src/index.ts";
+import type { StandardSchema } from "../src/types.ts";
+
+// ── Effect helpers (mirror the README user-space `earg`/`eflag` recipe) ────
+// These exist because the new root API requires Effect schemas to be wrapped
+// via `Schema.standardSchemaV1(...)` before introspection.
+function toStandard<A, I>(s: Schema.Schema<A, I, never>): StandardSchema<I, A> {
+	return Schema.standardSchemaV1(s) as unknown as StandardSchema<I, A>;
+}
+function effectArg<
+	Name extends string,
+	A,
+	I,
+	const Variadic extends true | undefined = undefined,
+>(
+	name: Name,
+	schema: Schema.Schema<A, I, never>,
+	options?: Parameters<typeof arg>[2] & { variadic?: Variadic },
+) {
+	return arg(name, toStandard(schema), options);
+}
+function effectFlag<
+	A,
+	I,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
+>(
+	schema: Schema.Schema<A, I, never>,
+	options?: Parameters<typeof flag>[1] & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
+) {
+	return flag(toStandard(schema), options);
+}
+const effectCommandValidator = commandValidator;
+const effectFieldValidator = field;
+const effectPromptValidator = promptValidator;
+const effectParsePromptValue = parsePromptValue;
+const zodArg = arg;
+const zodFlag = flag;
+const zodCommandValidator = commandValidator;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1229,5 +1263,73 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 			expect(err).toBeInstanceOf(CrustStoreError);
 			expect((err as CrustStoreError).is("VALIDATION")).toBe(true);
 		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 8. Deprecated subpath aliases — kept until 1.0.0
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These tests exercise the `/zod`, `/effect`, and `/standard` barrels to
+// confirm they continue to work for pre-0.1.0 imports. The `/effect` barrel
+// retains its auto-wrap shim so raw Effect schemas keep working without
+// `Schema.standardSchemaV1(...)`.
+
+describe("Deprecated subpath aliases", () => {
+	it("/zod: arg/flag/commandValidator work for raw Zod schemas", async () => {
+		const mod = await import("../src/zod/index.ts");
+		const received = capture<{ args: unknown; flags: unknown }>();
+		const app = new Crust("zod-alias")
+			.args([mod.arg("port", z.number())])
+			.flags({ verbose: mod.flag(z.boolean().default(false), { short: "v" }) })
+			.run(
+				mod.commandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
+		await app.execute({ argv: ["8080", "-v"] });
+		expect(received.value).toEqual({
+			args: { port: 8080 },
+			flags: { verbose: true },
+		});
+	});
+
+	it("/effect: arg/flag/commandValidator auto-wrap raw Effect schemas", async () => {
+		const mod = await import("../src/effect/index.ts");
+		const received = capture<{ args: unknown; flags: unknown }>();
+		const app = new Crust("effect-alias")
+			.args([mod.arg("port", Schema.Number)])
+			.flags({ verbose: mod.flag(Schema.UndefinedOr(Schema.Boolean)) })
+			.run(
+				mod.commandValidator(({ args, flags }) => {
+					received.set({ args, flags });
+				}),
+			);
+		await app.execute({ argv: ["8080", "--verbose"] });
+		expect(received.value?.args).toEqual({ port: 8080 });
+		expect(received.value?.flags).toEqual({ verbose: true });
+	});
+
+	it("/standard: prompt + store helpers work for any Standard Schema", async () => {
+		const mod = await import("../src/standard/index.ts");
+		const validate = mod.promptValidator(z.string().min(3));
+		expect(await validate("hello")).toBe(true);
+		expect(typeof (await validate("ab"))).toBe("string");
+
+		const fieldValidate = mod.field(z.boolean());
+		await expect(fieldValidate(true)).resolves.toBeUndefined();
+		await expect(
+			fieldValidate("not-bool" as unknown as boolean),
+		).rejects.toThrow();
+	});
+
+	it("/effect: prompt + store helpers re-export root behavior (require manual wrapping)", async () => {
+		const mod = await import("../src/effect/index.ts");
+		const wrapped = Schema.standardSchemaV1(Schema.String);
+		const validate = mod.promptValidator(wrapped);
+		expect(await validate("hello")).toBe(true);
+
+		const fieldValidate = mod.field(wrapped);
+		await expect(fieldValidate("hello")).resolves.toBeUndefined();
 	});
 });

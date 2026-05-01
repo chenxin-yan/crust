@@ -1,319 +1,186 @@
 ---
 title: "Validate"
-description: Standard Schema-based validation for CLI arguments, flags, prompts, and stores.
+description: Standard Schema-first validation for CLI arguments, flags, prompts, and stores.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/validate` provides schema-first validation for Crust commands, prompts, and stores. It is built on the [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema) — any schema library that implements this spec works with the prompt and store adapters out of the box.
+`@crustjs/validate` exposes a single, library-agnostic API. You pass any
+[Standard Schema v1](https://standardschema.dev/) object — Zod, Effect,
+Valibot, ArkType, Sury, or anything else — and the package introspects what
+it can (Zod and Effect natively, via vendor dispatch), then validates
+arguments, flags, prompts, and store fields against your schema.
 
-For command validation, provider-specific entrypoints offer `arg()` / `flag()` helpers and `commandValidator()` middleware that derive CLI metadata (type, required, description, variadic) from the schema automatically — single source of truth.
-
-## Entrypoints
-
-| Entrypoint                   | Command Middleware | Prompt & Store Adapters | Schema Libraries                               |
-| ---------------------------- | ------------------ | ----------------------- | ---------------------------------------------- |
-| `@crustjs/validate/zod`      | `commandValidator` | Yes                     | [Zod 4](#zod-provider)                          |
-| `@crustjs/validate/effect`   | `commandValidator` | Yes                     | [Effect Schema](#effect-provider)               |
-| `@crustjs/validate/standard` | —                  | Yes                     | Any [Standard Schema v1](https://github.com/standard-schema/standard-schema) library (Zod, Valibot, ArkType, etc.) |
-
-The root entrypoint (`@crustjs/validate`) exports [shared types](#shared-exports) only.
+Earlier versions shipped `/zod`, `/effect`, and `/standard` subpath
+exports. In **0.1.0** the public API consolidates around the spec: one
+root entry, one `arg()`, one `flag()`, one `commandValidator()`. The old
+subpaths still work for the entire 0.x cycle and are removed in 1.0.0.
 
 ## Install
 
 ```sh
 bun add @crustjs/validate
+# Pick whichever schema library you like:
+bun add zod      # Zod 4 schemas are Standard Schemas natively
+bun add effect   # wrap once with Schema.standardSchemaV1(...)
 ```
 
-Then install the validator of your choice:
-
-```sh
-# Zod
-bun add zod
-
-# Effect
-bun add effect
-```
-
-`@crustjs/core` is a required peer dependency.
-
-## How It Works
-
-1. You declare args with `arg(name, schema)` and flags with `flag(schema, options)` from a provider entrypoint.
-2. Each helper introspects the schema to generate core-compatible `ArgDef` / `FlagDef` with hidden schema metadata attached via a symbol key.
-3. You pass these definitions to `.args()` and `.flags()` on the `Crust` builder, and use `commandValidator()` as the `.run()` handler.
-4. At runtime, after Crust parses argv, the middleware validates and transforms each value through its schema before calling your handler.
-5. Validation errors are collected and thrown as a single `CrustError("VALIDATION")` with structured `details.issues`.
-
-### Transformation Behavior
-
-Transformation support differs by target:
-
-| Target / API | Validates | Applies schema transforms to returned value |
-| --- | --- | --- |
-| `commandValidator` | Yes | Yes |
-| `promptValidator` | Yes | No (returns `true` or error string only) |
-| `parsePromptValue` / `parsePromptValueSync` | Yes | Yes |
-| `field` / `fieldSync` (store fields) | Yes | No (validation-only adapter) |
-
-So command middleware can transform handler inputs, and prompt parsing can transform parsed prompt values. Store field adapters only validate; they do not write transformed schema outputs back into store state.
-
-Descriptions for help text are provided directly on the schema using the validator's native API (`.describe()` for Zod, `.annotations()` for Effect). The framework automatically extracts descriptions even through wrappers like `.optional()`, `.default()`, and `.transform()`.
-
----
-
-## Zod Provider
-
-Import from `@crustjs/validate/zod`.
-
-### Quick Example (Zod)
+## Quick start — Zod
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { arg, flag, commandValidator } from "@crustjs/validate/zod";
+import { arg, commandValidator, flag } from "@crustjs/validate";
 import { z } from "zod";
 
-const greet = new Crust("greet")
-  .meta({ description: "Say hello" })
-  .args([arg("name", z.string().describe("Person to greet"))])
-  .flags({
-    loud: flag(z.boolean().default(false).describe("Shout the greeting"), {
-      short: "l",
-    }),
-  })
-  .run(commandValidator(({ args, flags }) => {
-    // args.name is string, flags.loud is boolean — fully typed
-    const msg = `Hello, ${args.name}!`;
-    console.log(flags.loud ? msg.toUpperCase() : msg);
-  }));
-
-await greet.execute();
-```
-
-### Descriptions (Zod)
-
-Use `.describe()` on the schema to provide help text. Descriptions are automatically resolved through wrappers:
-
-```ts
-// Description on the inner schema — resolved through .optional()
-arg("name", z.string().describe("Person to greet").optional());
-
-// Description on the inner schema — resolved through .default()
-flag(z.number().describe("Port number").default(3000));
-
-// Description on the inner schema — resolved through .transform()
-flag(
-  z
-    .string()
-    .describe("Output format")
-    .transform((v) => v.toUpperCase()),
-);
-```
-
-### Schema Support (Zod)
-
-- **Primitives**: `z.string()`, `z.number()`, `z.boolean()`
-- **Enums and literals**: `z.enum(["a", "b"])`, `z.literal("value")`
-- **Arrays**: `z.array(z.string())` (flags with `multiple: true`)
-- **Wrappers**: `.optional()`, `.default()`, `.nullable()`, `.transform()`, `.pipe()`
-- **Descriptions**: `z.string().describe("Help text")` (auto-extracted for help output)
-
-Schemas are introspected at definition time to determine CLI parser types (`string`, `number`, `boolean`) and optionality. Transforms and pipes are unwrapped to find the input type.
-
-### Variadic Args (Zod)
-
-The last positional arg can be variadic, collecting all remaining positionals into an array:
-
-```ts
-const cmd = new Crust("rm")
-  .args([arg("files", z.string(), { variadic: true })])
-  .run(commandValidator(({ args }) => {
-    // args.files is string[]
-    for (const file of args.files) {
-      console.log(`Removing ${file}`);
-    }
-  }));
-```
-
-Use a scalar schema (not `z.array()`). The framework handles array collection. Compile-time validation ensures variadic args are only in the last position.
-
-### Exports (Zod)
-
-| Export                          | Kind     | Description                                           |
-| ------------------------------- | -------- | ----------------------------------------------------- |
-| `arg`                           | function | Declare a named positional argument with a Zod schema |
-| `flag`                          | function | Declare a flag with a Zod schema and optional short/aliases |
-| `commandValidator`              | function | Create a validated `run` handler via Zod schemas      |
-| `ZodArgDef<N, S, V, T>`         | type     | `ArgDef` with hidden Zod schema metadata              |
-| `ZodFlagDef<S, Short, Aliases, Inherit, T>` | type     | `FlagDef` with hidden Zod schema metadata             |
-| `CommandValidatorHandler<A, F>` | type     | Handler receiving `ValidatedContext`                  |
-| `InferValidatedArgs<A>`         | type     | Infer validated args from definitions                 |
-| `InferValidatedFlags<F>`        | type     | Infer validated flags from definitions                |
-
-Prompt and store adapters (`promptValidator`, `parsePromptValue`, `parsePromptValueSync`, `field`, `fieldSync`) are also re-exported — see [Prompt Validation](#prompt-validation) and [Store Validation](#store-validation). Zod 4 implements Standard Schema natively, so no wrapping is needed.
-
----
-
-## Effect Provider
-
-Import from `@crustjs/validate/effect`.
-
-> **Constraint:** Only context-free, synchronous schemas (`R = never`) are supported in v1. Schemas that require an Effect context or use async combinators will produce a type error or throw at runtime.
-
-### Quick Example (Effect)
-
-```ts
-import { Crust } from "@crustjs/core";
-import { arg, flag, commandValidator } from "@crustjs/validate/effect";
-import { Schema } from "effect";
-
-const greet = new Crust("greet")
-  .meta({ description: "Say hello" })
+const serve = new Crust("serve")
+  .meta({ description: "Start the dev server" })
   .args([
-    arg("name", Schema.String.annotations({ description: "Person to greet" })),
+    arg("port", z.number().int().min(1).describe("Port to listen on")),
+    arg("host", z.string().default("localhost")),
   ])
   .flags({
-    loud: flag(
-      Schema.Boolean.annotations({ description: "Shout the greeting" }),
-      { short: "l" },
+    verbose: flag(
+      z.boolean().default(false).describe("Enable verbose logging"),
+      {
+        short: "v",
+      },
     ),
   })
-  .run(commandValidator(({ args, flags }) => {
-    // args.name is string, flags.loud is boolean — fully typed
-    const msg = `Hello, ${args.name}!`;
-    console.log(flags.loud ? msg.toUpperCase() : msg);
-  }));
-
-await greet.execute();
+  .run(
+    commandValidator(({ args, flags }) => {
+      // args.port: number, flags.verbose: boolean
+    }),
+  );
 ```
 
-### Descriptions (Effect)
+Inferred CLI metadata (`type`, `required`, `description`, plus
+array/variadic detection) comes from the schema. No additional wrapping
+needed.
 
-Use `.annotations({ description: "..." })` on the schema to provide help text. Descriptions are automatically resolved through wrappers:
+## Quick start — Effect
+
+Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
+passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
+registry walks to recover the same metadata Zod gives natively.
 
 ```ts
-// Description on the inner schema — resolved through UndefinedOr
-arg(
-  "name",
-  Schema.UndefinedOr(
-    Schema.String.annotations({ description: "Person to greet" }),
-  ),
-);
+import { Crust } from "@crustjs/core";
+import { arg, commandValidator, flag } from "@crustjs/validate";
+import * as Schema from "effect/Schema";
 
-// Description on the inner schema — resolved through transform
-flag(
-  Schema.transform(
-    Schema.String.annotations({ description: "Output format" }),
-    Schema.String,
-    { strict: false, decode: (v) => v.toUpperCase(), encode: (v) => v },
-  ),
-);
+const serve = new Crust("serve")
+  .args([
+    arg(
+      "port",
+      Schema.standardSchemaV1(
+        Schema.Number.annotations({ description: "Port to listen on" }),
+      ),
+    ),
+  ])
+  .flags({
+    verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
+      short: "v",
+    }),
+  })
+  .run(
+    commandValidator(({ args, flags }) => {
+      // args.port: number, flags.verbose: boolean | undefined
+    }),
+  );
 ```
 
-### Schema Support (Effect)
-
-- **Primitives**: `Schema.String`, `Schema.Number`, `Schema.Boolean`
-- **Enums and literals**: `Schema.Literal("a", "b")`, `Schema.Enums(MyEnum)`
-- **Arrays**: `Schema.Array(Schema.String)` (flags with `multiple: true`)
-- **Wrappers**: `Schema.UndefinedOr(...)`, `Schema.transform(...)`, `Schema.TemplateLiteral`
-- **Descriptions**: `schema.annotations({ description: "Help text" })` (auto-extracted for help output)
-
-Schemas are introspected via AST at definition time to determine CLI parser types (`string`, `number`, `boolean`) and optionality. Transformations and refinements are unwrapped to find the encoded input type.
-
-### Variadic Args (Effect)
-
-The last positional arg can be variadic, collecting all remaining positionals into an array:
+If the boilerplate gets noisy, drop these two helpers into your project
+and use them as 1:1 replacements for `arg`/`flag`:
 
 ```ts
-const cmd = new Crust("rm")
-  .args([arg("files", Schema.String, { variadic: true })])
-  .run(commandValidator(({ args }) => {
-    // args.files is string[]
-    for (const file of args.files) {
-      console.log(`Removing ${file}`);
-    }
-  }));
+import { arg, flag } from "@crustjs/validate";
+import * as Schema from "effect/Schema";
+
+export const earg: typeof arg = (name, schema, options) =>
+  arg(name, Schema.standardSchemaV1(schema as never), options);
+export const eflag: typeof flag = (schema, options) =>
+  flag(Schema.standardSchemaV1(schema as never), options);
 ```
 
-Use a scalar schema (not `Schema.Array()`). The framework handles array collection. Compile-time validation ensures variadic args are only in the last position.
+The package itself does **not** export these helpers — keeping the
+public surface vendor-neutral lets every Standard Schema library land on
+the same code path.
 
-### Exports (Effect)
-
-| Export                          | Kind     | Description                                               |
-| ------------------------------- | -------- | --------------------------------------------------------- |
-| `arg`                           | function | Declare a named positional argument with an Effect schema |
-| `flag`                          | function | Declare a flag with an Effect schema and optional short/aliases |
-| `commandValidator`              | function | Create a validated `run` handler via Effect schemas       |
-| `EffectArgDef<N, S, V, T>`      | type     | `ArgDef` with hidden Effect schema metadata               |
-| `EffectFlagDef<S, Short, Aliases, Inherit, T>` | type     | `FlagDef` with hidden Effect schema metadata              |
-| `CommandValidatorHandler<A, F>` | type     | Handler receiving `ValidatedContext`                      |
-| `InferValidatedArgs<A>`         | type     | Infer validated args from definitions                     |
-| `InferValidatedFlags<F>`        | type     | Infer validated flags from definitions                    |
-
-Prompt and store adapters are also re-exported — see [Prompt Validation](#prompt-validation) and [Store Validation](#store-validation). Effect schemas must be wrapped with `Schema.standardSchemaV1()` before passing to these functions.
-
----
-
-## Prompt Validation
-
-Validate prompt answers with schema-driven validation. These adapters accept any [Standard Schema v1](https://github.com/standard-schema/standard-schema) compatible schema and return functions compatible with [`@crustjs/prompts`](/docs/modules/prompts).
-
-Available from all three entrypoints: `@crustjs/validate/zod`, `@crustjs/validate/effect`, and `@crustjs/validate/standard`. Any Standard Schema library (Zod, Valibot, ArkType, etc.) works directly.
-
-### `promptValidator(schema, options?)`
-
-Returns a function compatible with the `validate` option on prompts — returns `true` when valid, or a `string` error message when invalid.
-
-```ts
-import { promptValidator } from "@crustjs/validate/zod";
-import { input } from "@crustjs/prompts";
-import { z } from "zod";
-
-const name = await input({
-  message: "Enter your name",
-  validate: promptValidator(z.string().min(1, "Name is required")),
-});
-```
-
-| Option          | Type                 | Default   | Description                                    |
-| --------------- | -------------------- | --------- | ---------------------------------------------- |
-| `errorStrategy` | `"first"` \| `"all"` | `"first"` | Show first issue only, or all issues as a list |
-
-`promptValidator` does validation only. It does not transform prompt values.
-
-### `parsePromptValue(schema, value)` / `parsePromptValueSync`
-
-Parse a prompt answer through a schema and return the typed output. Useful for coercion (e.g. string to number). Throws `CrustError("VALIDATION")` on failure. The sync variant throws `TypeError` if the schema returns a Promise.
-
-```ts
-import { parsePromptValue } from "@crustjs/validate/zod";
-import { input } from "@crustjs/prompts";
-import { z } from "zod";
-
-const raw = await input({ message: "Enter port" });
-const port = await parsePromptValue(z.coerce.number().int().positive(), raw);
-// port is typed as `number` — coerced from string input
-```
-
-<Callout>
-  Effect schemas must be wrapped with `Schema.standardSchemaV1()` before passing to prompt adapters.
+<Callout type="warn" title="Effect ≥ 3.14 required">
+  Effect 3.14 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
+  registry walks. Earlier Effect versions ship opaque wrappers and the registry
+  cannot introspect them — supply `type:` (and `required:` / `description:`)
+  explicitly via the second argument, or stay on the deprecated
+  `@crustjs/validate/effect` subpath which auto-wraps internally.
 </Callout>
 
----
+## Quick start — other Standard Schema vendors
 
-## Store Validation
-
-Validate store fields with schema-driven validation. These adapters accept any Standard Schema v1 compatible schema and return functions for use with the per-field `validate` option in [`@crustjs/store`](/docs/modules/store).
-
-Available from all three entrypoints: `@crustjs/validate/zod`, `@crustjs/validate/effect`, and `@crustjs/validate/standard`. Any Standard Schema library works directly.
-
-### `field(schema)` / `fieldSync`
-
-Returns a validator function for use with a field's `validate` option. It returns `void` on success and throws on failure. The sync variant throws `TypeError` if the schema returns a Promise.
+For any other library implementing the spec (Valibot, ArkType, Sury,
+…), supply CLI metadata explicitly. The schema still drives validation;
+you just hand-craft the parser hint:
 
 ```ts
-import { field } from "@crustjs/validate/zod";
-import { createStore, configDir } from "@crustjs/store";
+import { arg, commandValidator } from "@crustjs/validate";
+import { Crust } from "@crustjs/core";
+import * as v from "valibot";
+
+new Crust("hi")
+  .args([
+    arg("name", v.pipe(v.string(), v.minLength(1)), {
+      type: "string",
+      description: "Your name",
+    }),
+  ])
+  .run(
+    commandValidator(({ args }) => {
+      // args.name: string
+    }),
+  );
+```
+
+If you forget to supply `type:` for an unknown vendor, `arg()` / `flag()`
+throws a `CrustError("DEFINITION")` that names the failing arg/flag and
+the detected `vendor`.
+
+## Command validation
+
+`commandValidator(handler)` returns a `run` function for the Crust
+builder that:
+
+1. Reads the Standard Schema attached to each `arg()` / `flag()` definition.
+2. Validates parsed CLI input against every schema (handles sync and
+   `Promise`-returning `~standard.validate` transparently).
+3. Calls `handler` with `ValidatedContext` containing the transformed
+   values, or throws `CrustError("VALIDATION")` with normalized issues.
+
+**Strict mode**: every `arg`/`flag` must come from this package's `arg()`
+/ `flag()` helpers. Mixing in a plain core def causes the handler
+parameter to resolve to `never` at compile time.
+
+## Prompt validation
+
+```ts
+import { promptValidator, parsePromptValue } from "@crustjs/validate";
+import { z } from "zod";
+
+const validate = promptValidator(z.email("Enter a valid email"));
+//   ^? (input: unknown) => Promise<true | string>
+
+const value = await parsePromptValue(z.email(), userInput);
+//    ^? string  (throws CrustError("VALIDATION") on failure)
+```
+
+`promptValidator(schema, { errorStrategy })` accepts:
+
+- `errorStrategy: "first"` (default) — single first-issue message
+- `errorStrategy: "all"` — multi-line bullet list with every issue
+
+## Store field validation
+
+```ts
+import { configDir, createStore } from "@crustjs/store";
+import { field, fieldSync } from "@crustjs/validate";
 import { z } from "zod";
 
 const store = createStore({
@@ -324,105 +191,95 @@ const store = createStore({
       default: "light",
       validate: field(z.enum(["light", "dark"])),
     },
-    verbose: { type: "boolean", default: false },
+    port: {
+      type: "number",
+      default: 3000,
+      validate: fieldSync(z.number().int().min(1)),
+    },
   },
 });
 ```
 
-<Callout>
-  Effect schemas must be wrapped with `Schema.standardSchemaV1()` before passing to field adapters.
-</Callout>
+`field(schema)` is async-safe; `fieldSync(schema)` throws if the schema
+returns a `Promise`.
 
-<Callout>
-  Store field adapters are validation-only. If your schema has transforms/coercions,
-  those transformed outputs are not written back into store state by `field()` / `fieldSync()`.
-</Callout>
+## Validation errors
 
----
+All failures normalize to `CrustError("VALIDATION")` with:
 
-## Shared Behavior
+- A bullet-list message rendered from each issue's `path` and `message`.
+- `error.details.issues: { path: string; message: string }[]` — the raw
+  issues with dot-paths (`args[0].port`, `flags.verbose`, …).
+- `error.cause` — the same array of issues.
 
-These apply to both the Zod and Effect providers.
+## Migration: 0.0.x → 0.1.0
 
-### Strict Mode
+The change is a deprecation, not a breaking change. Existing imports
+keep working through 1.0.0.
 
-When using `commandValidator()`, **all** args and flags in the command must be created with the matching provider's `arg()` / `flag()` helpers. Mixing plain core definitions causes a compile-time error (the handler parameter becomes `never`).
+**Zod (recommended migration):**
 
-Plugin-injected flags (e.g. `--help` from `helpPlugin`) are silently skipped at runtime — they don't need schema metadata.
+```ts
+// Before (still works, but TSDoc marks the import as @deprecated)
+import { arg, flag, commandValidator } from "@crustjs/validate/zod";
 
-### Compile-Time Validation
-
-Both providers inherit the same compile-time checks as the `Crust` builder:
-
-- **Variadic position** — only the last arg can be `{ variadic: true }`
-- **Flag alias collisions** — aliases must not conflict with other flag names or aliases
-
-These produce TypeScript errors at the call site if violated.
-
-### Error Handling
-
-When validation fails, a `CrustError("VALIDATION")` is thrown with:
-
-- A human-readable bullet-list message suitable for CLI output
-- Structured `details.issues` array of `{ message, path }` objects
-
-```
-commandValidator: validation failed
-  - args.name: Expected string, received number
-  - flags.port: Number must be greater than or equal to 1
+// After
+import { arg, flag, commandValidator } from "@crustjs/validate";
 ```
 
----
+Zod 4 schemas are Standard Schemas natively, so no other code changes
+are needed.
 
-## Exports
+**Effect (recommended migration):**
 
-### Shared Exports
+```ts
+// Before — raw Effect schemas accepted directly
+import { arg, flag, commandValidator } from "@crustjs/validate/effect";
+import * as Schema from "effect/Schema";
 
-The root entrypoint `@crustjs/validate` exports shared types used by all providers:
+arg("port", Schema.Number);
 
-| Type                                 | Description                                                                             |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `ValidatedContext<ArgsOut, FlagsOut>` | Extended command context with validated args, flags, and `input` (pre-validation values) |
-| `ValidationIssue`                    | Normalized issue with `message` and dot-path `path` string                              |
+// After — wrap once, import from the root
+import { arg, flag, commandValidator } from "@crustjs/validate";
+import * as Schema from "effect/Schema";
 
-### Standard Entrypoint (`@crustjs/validate/standard`)
+arg("port", Schema.standardSchemaV1(Schema.Number));
+```
 
-The `@crustjs/validate/standard` entrypoint provides prompt and store adapters that work with any [Standard Schema v1](https://github.com/standard-schema/standard-schema) library — no command middleware. Use it when you want a provider-agnostic import, don't need `commandValidator`, or are using a schema library other than Zod or Effect (e.g. Valibot, ArkType).
+**Other Standard Schema libraries** (Valibot, ArkType, Sury, …):
 
-| Export                   | Kind     | Description                                                      |
-| ------------------------ | -------- | ---------------------------------------------------------------- |
-| `promptValidator`        | function | Convert a Standard Schema into a prompt validate function        |
-| `parsePromptValue`       | function | Parse a prompt answer through a schema (async)                   |
-| `parsePromptValueSync`   | function | Parse a prompt answer through a schema (sync)                    |
-| `field`                  | function | Convert a Standard Schema into an async field validator          |
-| `fieldSync`              | function | Convert a Standard Schema into a sync field validator            |
-| `StandardSchema`         | type     | Standard Schema v1-compatible schema type alias                  |
-| `InferInput<S>`          | type     | Infer input type from a Standard Schema                          |
-| `InferOutput<S>`         | type     | Infer output type from a Standard Schema                         |
-| `ValidationResult<T>`    | type     | Discriminated result: `{ ok, value }` or `{ ok: false, issues }` |
-| `PromptErrorStrategy`    | type     | Error rendering: `"first"` or `"all"`                            |
-| `PromptValidatorOptions` | type     | Options for `promptValidator`                                    |
+```ts
+// Before
+import { promptValidator, field } from "@crustjs/validate/standard";
 
-## When to Use
+// After
+import { promptValidator, field } from "@crustjs/validate";
+```
 
-Use `@crustjs/validate/zod` when:
+### Behaviour intentionally removed in 0.1.0
 
-- You want schemas as the single source of truth for parsing, validation, help text, and types
-- You need transforms or coercion (e.g., parsing a string into a `Date`)
-- You want fully inferred handler types without manual annotation
+The `arg()` / `flag()` introspection-conflict checks no longer fire.
+Specifically, none of these throw any more — explicit options always
+win silently:
 
-Use `@crustjs/validate/effect` when:
+- `explicit type "X" conflicts with schema-inferred type "Y"`
+- `explicit required: true conflicts with schema that accepts undefined`
+- `explicit required: false conflicts with schema that does not accept undefined`
 
-- You already use Effect and want schema-driven command validation
-- You want Effect-style schema composition and parse errors
+This simplifies the model: introspection fills in fields you didn't
+specify; everything you did specify wins.
 
-Use `@crustjs/validate/standard` when:
+## Constraints
 
-- You only need prompt or store validation (not command middleware)
-- You use a Standard Schema library other than Zod or Effect (e.g. Valibot, ArkType)
-- You want a provider-agnostic adapter
+- **Effect peer-dep floor: `^3.14.0`.** Earlier Effect versions shipped
+  opaque `standardSchemaV1` wrappers without a `.ast` property, so
+  introspection of pre-wrapped Effect schemas would fail. Either upgrade
+  to Effect ≥ 3.14 or stay on the deprecated `@crustjs/validate/effect`
+  subpath, which auto-wraps internally and is kept until 1.0.0.
 
-Use `@crustjs/core` directly when:
+## See also
 
-- You don't need runtime schema validation
-- You want zero additional dependencies
+- [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema)
+- [`@crustjs/core`](/docs/modules/core)
+- [`@crustjs/store`](/docs/modules/store)
+- [`@crustjs/prompts`](/docs/modules/prompts)

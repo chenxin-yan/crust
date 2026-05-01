@@ -1,12 +1,12 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type { ValidationIssue } from "../types.ts";
-import { formatPath } from "../validation.ts";
 import type {
 	StandardSchema,
 	ValidationFailure,
+	ValidationIssue,
 	ValidationResult,
 	ValidationSuccess,
 } from "./types.ts";
+import { formatPath } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type guard — detect Standard Schema v1 objects at runtime
@@ -19,7 +19,15 @@ import type {
  * at least `version: 1` and a `validate` function.
  */
 export function isStandardSchema(value: unknown): value is StandardSchema {
-	if (typeof value !== "object" || value === null) return false;
+	// Standard Schema v1 spec only requires the `~standard` shape; the host
+	// value may be an object (Zod, Valibot) or a function (Effect's wrapper
+	// extends a callable class). Accept both.
+	if (
+		(typeof value !== "object" || value === null) &&
+		typeof value !== "function"
+	) {
+		return false;
+	}
 	const candidate = value as Record<string, unknown>;
 	const props = candidate["~standard"];
 	if (typeof props !== "object" || props === null) return false;

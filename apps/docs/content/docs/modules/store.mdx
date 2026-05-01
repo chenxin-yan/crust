@@ -60,15 +60,21 @@ No explicit generics needed — types are inferred from your `fields` definition
 
 `@crustjs/store` provides four path helpers for different storage intents. Use the one that matches what you're persisting:
 
-| Helper      | Intent                     | Example Use Case                        |
-| ----------- | -------------------------- | --------------------------------------- |
-| `configDir` | User preferences & config  | Theme, editor settings, API keys        |
-| `dataDir`   | Important app data         | Local databases, downloaded resources   |
-| `stateDir`  | Runtime state              | Window positions, scroll offsets, undo  |
-| `cacheDir`  | Regenerable cached data    | HTTP caches, compiled assets            |
+| Helper      | Intent                    | Example Use Case                       |
+| ----------- | ------------------------- | -------------------------------------- |
+| `configDir` | User preferences & config | Theme, editor settings, API keys       |
+| `dataDir`   | Important app data        | Local databases, downloaded resources  |
+| `stateDir`  | Runtime state             | Window positions, scroll offsets, undo |
+| `cacheDir`  | Regenerable cached data   | HTTP caches, compiled assets           |
 
 ```ts title="src/stores.ts"
-import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/store";
+import {
+  createStore,
+  configDir,
+  dataDir,
+  stateDir,
+  cacheDir,
+} from "@crustjs/store";
 
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
@@ -110,12 +116,12 @@ const cache = createStore({
 
 All four helpers follow XDG conventions on Linux and macOS, and Windows-native conventions on Windows:
 
-| Helper      | Linux / macOS                       | Windows                                     | Env Override         |
-| ----------- | ----------------------------------- | ------------------------------------------- | -------------------- |
-| `configDir` | `~/.config/<app>`                   | `%APPDATA%\<app>`                           | `$XDG_CONFIG_HOME`   |
-| `dataDir`   | `~/.local/share/<app>`              | `%LOCALAPPDATA%\<app>\Data`                 | `$XDG_DATA_HOME`     |
-| `stateDir`  | `~/.local/state/<app>`              | `%LOCALAPPDATA%\<app>\State`                | `$XDG_STATE_HOME`    |
-| `cacheDir`  | `~/.cache/<app>`                    | `%LOCALAPPDATA%\<app>\Cache`                | `$XDG_CACHE_HOME`    |
+| Helper      | Linux / macOS          | Windows                      | Env Override       |
+| ----------- | ---------------------- | ---------------------------- | ------------------ |
+| `configDir` | `~/.config/<app>`      | `%APPDATA%\<app>`            | `$XDG_CONFIG_HOME` |
+| `dataDir`   | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data`  | `$XDG_DATA_HOME`   |
+| `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `$XDG_STATE_HOME`  |
+| `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `$XDG_CACHE_HOME`  |
 
 <Callout>
   macOS uses XDG conventions (same as Linux) for a unified Unix mental model,
@@ -169,12 +175,12 @@ const store = createStore(options);
 
 #### Parameters
 
-| Option         | Type                       | Required | Description                                                       |
-| -------------- | -------------------------- | -------- | ----------------------------------------------------------------- |
-| `dirPath`      | `string`                   | Yes      | Absolute directory path where the JSON file is stored.            |
-| `name`         | `string`                   | No       | Store name used as filename (default `"config"` → `config.json`). |
-| `fields`       | `FieldsDef`                | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
-| `pruneUnknown` | `boolean`                  | No       | Drop unknown persisted keys on read (default `true`).             |
+| Option         | Type        | Required | Description                                                                                  |
+| -------------- | ----------- | -------- | -------------------------------------------------------------------------------------------- |
+| `dirPath`      | `string`    | Yes      | Absolute directory path where the JSON file is stored.                                       |
+| `name`         | `string`    | No       | Store name used as filename (default `"config"` → `config.json`).                            |
+| `fields`       | `FieldsDef` | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
+| `pruneUnknown` | `boolean`   | No       | Drop unknown persisted keys on read (default `true`).                                        |
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
 
@@ -303,7 +309,7 @@ await store.write({ port: 0, host: "localhost" });
 For schema-driven validation, use `field()` from `@crustjs/validate` to create a per-field validator from a Zod, Effect, or any Standard Schema-compatible schema:
 
 ```ts
-import { field } from "@crustjs/validate/zod";
+import { field } from "@crustjs/validate";
 import { z } from "zod";
 
 const store = createStore({
@@ -323,18 +329,18 @@ const store = createStore({
 
 Store field validators are validation-only. If you use schema transforms/coercions in `field()` / `fieldSync()`, transformed outputs are not written back into store state.
 
-For synchronous validation, use `fieldSync()` from the appropriate `@crustjs/validate` entrypoint.
+For synchronous validation, use `fieldSync()` from `@crustjs/validate`. Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()`/`fieldSync()`.
 
 ## Error Handling
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                          |
-| ------------ | ------------------------------------------------------- | -------------------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`              |
-| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`              |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`           |
-| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }`         |
+| Code         | When                                                    | Details                 |
+| ------------ | ------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
+| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
+| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }` |
 
 ### Catching Errors
 
@@ -401,29 +407,29 @@ if (err instanceof CrustStoreError) {
 
 ### Functions
 
-| Function      | Description                                              |
-| ------------- | -------------------------------------------------------- |
-| `createStore` | Create a typed async store backed by JSON                |
-| `configDir`   | Resolve platform-standard config directory for an app    |
-| `dataDir`     | Resolve platform-standard data directory for an app      |
-| `stateDir`    | Resolve platform-standard state directory for an app     |
-| `cacheDir`    | Resolve platform-standard cache directory for an app     |
+| Function      | Description                                           |
+| ------------- | ----------------------------------------------------- |
+| `createStore` | Create a typed async store backed by JSON             |
+| `configDir`   | Resolve platform-standard config directory for an app |
+| `dataDir`     | Resolve platform-standard data directory for an app   |
+| `stateDir`    | Resolve platform-standard state directory for an app  |
+| `cacheDir`    | Resolve platform-standard cache directory for an app  |
 
 ### Types
 
-| Type                      | Description                                                                 |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `CreateStoreOptions`      | Options object for `createStore()`.                                         |
-| `Store`                   | Store instance with `read`, `write`, `update`, `patch`, `reset`.            |
-| `StoreUpdater`            | Updater function type `(current: T) => T`.                                  |
-| `FieldDef`                | Single field definition with `type`, optional `default`, and optional `validate`. |
-| `FieldsDef`               | Record of field names to `FieldDef` definitions.                            |
-| `InferStoreConfig`        | Inferred store state type from a `FieldsDef` definition.                    |
-| `StoreValidatorIssue`     | Issue object with `{ message: string, path: string }`.                      |
-| `ValidationErrorDetails`  | Details for `VALIDATION` errors: `{ operation, issues }`.                   |
-| `StoreErrorCode`          | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.         |
-| `PlatformEnv`             | Injectable platform environment for testing path helpers.                   |
-| `CrustStoreError`         | Typed error class with `code`, `details`, and `cause`.                      |
+| Type                     | Description                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `CreateStoreOptions`     | Options object for `createStore()`.                                               |
+| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                  |
+| `StoreUpdater`           | Updater function type `(current: T) => T`.                                        |
+| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`. |
+| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                  |
+| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                          |
+| `StoreValidatorIssue`    | Issue object with `{ message: string, path: string }`.                            |
+| `ValidationErrorDetails` | Details for `VALIDATION` errors: `{ operation, issues }`.                         |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.                |
+| `PlatformEnv`            | Injectable platform environment for testing path helpers.                         |
+| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                            |
 
 ## Design
 

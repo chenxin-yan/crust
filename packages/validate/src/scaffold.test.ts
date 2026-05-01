@@ -4,9 +4,36 @@ describe("@crustjs/validate scaffold", () => {
 	it("root entrypoint is importable", async () => {
 		const mod = await import("./index.ts");
 		expect(mod).toBeDefined();
-		// Root barrel exports only type-only re-exports (ValidatedContext, ValidationIssue),
-		// which are erased at runtime — no runtime value exports expected.
-		expect(Object.keys(mod)).toEqual([]);
+		// Root barrel is the single entry point (Standard Schema-first).
+		expect(typeof mod.arg).toBe("function");
+		expect(typeof mod.flag).toBe("function");
+		expect(typeof mod.commandValidator).toBe("function");
+		expect(typeof mod.promptValidator).toBe("function");
+		expect(typeof mod.parsePromptValue).toBe("function");
+		expect(typeof mod.parsePromptValueSync).toBe("function");
+		expect(typeof mod.field).toBe("function");
+		expect(typeof mod.fieldSync).toBe("function");
+		expect(typeof mod.isStandardSchema).toBe("function");
+		expect(typeof mod.validateStandard).toBe("function");
+		expect(typeof mod.validateStandardSync).toBe("function");
+	});
+
+	it("root entrypoint exports exactly the documented API surface", async () => {
+		const mod = await import("./index.ts");
+		const exports = Object.keys(mod).sort();
+		expect(exports).toEqual([
+			"arg",
+			"commandValidator",
+			"field",
+			"fieldSync",
+			"flag",
+			"isStandardSchema",
+			"parsePromptValue",
+			"parsePromptValueSync",
+			"promptValidator",
+			"validateStandard",
+			"validateStandardSync",
+		]);
 	});
 
 	it("standard entrypoint is importable", async () => {
