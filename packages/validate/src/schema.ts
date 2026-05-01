@@ -114,7 +114,7 @@ export function arg<
 		const vendor = schema["~standard"].vendor;
 		throw new CrustError(
 			"DEFINITION",
-			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options, or — if this is an Effect schema — import from "@crustjs/validate/effect" instead.`,
+			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
 		);
 	}
 
@@ -153,8 +153,7 @@ export function arg<
  * `type:` explicitly for other Standard Schema vendors.
  *
  * **Effect users**: wrap your schema with `Schema.standardSchemaV1(...)`
- * before passing it here, or use the deprecated `@crustjs/validate/effect`
- * subpath which auto-wraps raw Effect schemas.
+ * before passing it here.
  *
  * @param schema - Any Standard Schema v1 object
  * @param options - Optional flag metadata
@@ -196,7 +195,7 @@ export function flag<
 		const vendor = schema["~standard"].vendor;
 		throw new CrustError(
 			"DEFINITION",
-			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options, or — if this is an Effect schema — import from "@crustjs/validate/effect" instead.`,
+			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
 		);
 	}
 

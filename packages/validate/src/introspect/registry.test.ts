@@ -157,6 +157,40 @@ describe("inferOptions — vendor dispatch", () => {
 			const result = inferOptions(fake, "arg", 'arg "x"');
 			expect(result).toEqual({});
 		});
+
+		it("terminates on factory-style Suspend that allocates a fresh AST per call", () => {
+			// Mutually recursive schemas can return a freshly-allocated AST
+			// from the `Suspend.f()` thunk, so identity-based cycle detection
+			// never fires. The depth cap must bound the walk.
+			const makeSelfReferentialSuspend = () => {
+				const ast = {
+					_tag: "Suspend",
+					annotations: {},
+					// Each call returns a new node — not the same identity —
+					// pointing back at another fresh Suspend, ad infinitum.
+					f: () => makeSelfReferentialSuspend(),
+				};
+				return ast;
+			};
+			const fake: StandardSchema & { ast: unknown } = {
+				"~standard": {
+					version: 1,
+					vendor: "effect",
+					validate: () => ({ value: undefined }),
+				},
+				ast: makeSelfReferentialSuspend(),
+			};
+
+			const start = Date.now();
+			const result = inferOptions(fake, "arg", 'arg "x"');
+			const elapsed = Date.now() - start;
+
+			// Should terminate in well under a second; the depth cap (1024)
+			// keeps it bounded even though identity-based cycle detection
+			// never fires. No `type` is inferable from the synthetic graph.
+			expect(elapsed).toBeLessThan(500);
+			expect(result.type).toBeUndefined();
+		});
 	});
 
 	// ─── Unknown vendor ────────────────────────────────────────────────────

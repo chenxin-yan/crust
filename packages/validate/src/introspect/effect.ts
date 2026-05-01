@@ -78,17 +78,19 @@ function getAst(schema: StandardSchema): AST | undefined {
 // AST unwrapping — walk to the effective encoded input
 // ────────────────────────────────────────────────────────────────────────────
 
+// Hard ceiling on AST-walk depth. Effect's `Suspend` node holds a thunk
+// `f()` that may allocate a fresh AST on every call (a valid pattern for
+// mutually recursive schemas), so identity-based cycle detection cannot
+// catch it. A depth cap is the only reliable bound: any non-pathological
+// schema terminates well below this, and pathological ones bail to `{}`
+// rather than spinning forever.
+const MAX_AST_WALK_DEPTH = 1024;
+
 /** Unwrap wrappers until the effective encoded input AST is reached. */
 function unwrapInputAst(ast: AST): AST {
 	let current = ast;
-	const seen = new Set<AST>();
 
-	for (;;) {
-		if (seen.has(current)) {
-			return current;
-		}
-		seen.add(current);
-
+	for (let depth = 0; depth < MAX_AST_WALK_DEPTH; depth++) {
 		if (current._tag === "Refinement") {
 			current = current.from;
 			continue;
@@ -106,6 +108,8 @@ function unwrapInputAst(ast: AST): AST {
 
 		return current;
 	}
+
+	return current;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -279,16 +283,9 @@ function acceptsUndefined(ast: AST): boolean {
  * description annotation.
  */
 function resolveDescriptionFromAst(ast: AST): string | undefined {
-	const seen = new Set<AST>();
-
 	let current: AST = ast;
 
-	for (;;) {
-		if (seen.has(current)) {
-			return undefined;
-		}
-		seen.add(current);
-
+	for (let depth = 0; depth < MAX_AST_WALK_DEPTH; depth++) {
 		const annotated = readDescriptionAnnotation(current);
 		if (annotated !== undefined) {
 			return annotated;
@@ -326,6 +323,8 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
 
 		return undefined;
 	}
+
+	return undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

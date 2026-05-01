@@ -60,7 +60,7 @@
 		"@crustjs/plugins": "workspace:*",
 		"@crustjs/store": "workspace:*",
 		"bunup": "catalog:",
-		"effect": "^3.19.0",
+		"effect": "3.14.2",
 		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
