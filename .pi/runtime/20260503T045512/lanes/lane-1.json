@@ -1,0 +1,31 @@
+{
+  "batchId": "20260503T045512",
+  "laneNumber": 1,
+  "laneId": "lane-1",
+  "repoId": "default",
+  "taskId": "TP-016",
+  "segmentId": "TP-016::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-cyan-lane-1-worker",
+    "status": "exited",
+    "elapsedMs": 2188067,
+    "toolCalls": 168,
+    "contextPct": 17.827,
+    "costUsd": 12.990547500000005,
+    "lastTool": "manage_todo_list: write",
+    "inputTokens": 174,
+    "outputTokens": 76938,
+    "cacheReadTokens": 19764530,
+    "cacheWriteTokens": 189434
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 9: Documentation & Delivery",
+    "checked": 52,
+    "total": 52,
+    "iteration": 1,
+    "reviews": 13
+  },
+  "updatedAt": 1777800701300
+}

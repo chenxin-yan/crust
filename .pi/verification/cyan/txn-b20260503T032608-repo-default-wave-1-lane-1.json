@@ -1,0 +1,16 @@
+{
+  "opId": "cyan",
+  "batchId": "20260503T032608",
+  "waveIndex": 1,
+  "laneNumber": 1,
+  "repoId": null,
+  "baseHEAD": "67e36a826606fe90bba02d4d655f35a287131352",
+  "laneHEAD": "789281ebabc18958d371d01ebdd99e2b55d01d4c",
+  "mergedHEAD": "58a68b3ac7318ce0084ab041f3e89156c553725f",
+  "status": "committed",
+  "rollbackAttempted": false,
+  "rollbackResult": null,
+  "recoveryCommands": [],
+  "startedAt": "2026-05-03T07:36:24.651Z",
+  "completedAt": "2026-05-03T07:37:14.700Z"
+}

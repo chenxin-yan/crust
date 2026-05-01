@@ -1,0 +1,40 @@
+{
+  "batchId": "20260503T032608",
+  "updatedAt": 1777793835183,
+  "agents": {
+    "orch-cyan-lane-1-worker": {
+      "batchId": "20260503T032608",
+      "agentId": "orch-cyan-lane-1-worker",
+      "role": "worker",
+      "laneNumber": 1,
+      "taskId": "TP-008",
+      "repoId": "default",
+      "pid": 934465,
+      "parentPid": 934402,
+      "startedAt": 1777793169230,
+      "status": "exited",
+      "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1",
+      "packet": {
+        "promptPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1/taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/PROMPT.md",
+        "statusPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1/taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/STATUS.md",
+        "donePath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1/taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/.DONE",
+        "reviewsDir": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1/taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/.reviews",
+        "taskFolder": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1/taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean"
+      }
+    },
+    "orch-cyan-merge-1": {
+      "batchId": "20260503T032608",
+      "agentId": "orch-cyan-merge-1",
+      "role": "merger",
+      "laneNumber": null,
+      "taskId": null,
+      "repoId": "default",
+      "pid": 945255,
+      "parentPid": 934402,
+      "startedAt": 1777793784665,
+      "status": "killed",
+      "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/merge",
+      "packet": null
+    }
+  }
+}

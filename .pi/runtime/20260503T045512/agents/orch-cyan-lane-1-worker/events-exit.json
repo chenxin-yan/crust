@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 174,
+    "output": 76938,
+    "cacheRead": 19764530,
+    "cacheWrite": 189434
+  },
+  "cost": 12.990547500000005,
+  "toolCalls": 168,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 2188,
+  "lastToolCall": "manage_todo_list: write",
+  "error": null,
+  "contextUsage": {
+    "tokens": 178270,
+    "contextWindow": 1000000,
+    "percent": 17.827
+  }
+}

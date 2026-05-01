@@ -1,0 +1,3 @@
+delivered: PR #118 (2026-05-07) — feat(validate)!: align public API — drop legacy helpers, lock 8-function surface
+follow-up: PR #1678945 — docs: clean up validate docs
+recorded:  2026-05-07 by supervisor (manual feat/* PR pattern)

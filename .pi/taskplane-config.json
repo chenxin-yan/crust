@@ -1,0 +1,122 @@
+{
+  "configVersion": 1,
+  "taskRunner": {
+    "project": {
+      "name": "crust",
+      "description": "TypeScript-first, Bun-native CLI framework with composable modules. Turborepo monorepo of published packages (@crustjs/*) plus the docs site."
+    },
+    "paths": {
+      "tasks": "taskplane-tasks"
+    },
+    "testing": {
+      "commands": {
+        "lint": "bun run check",
+        "types": "bun run check:types",
+        "test": "bun run test",
+        "build": "bun run build",
+        "all": "bun run check && bun run check:types && bun run test"
+      }
+    },
+    "standards": {
+      "docs": ["AGENTS.md", "CONTRIBUTING.md"],
+      "rules": [
+        "ESM only — every package is `\"type\": \"module\"`. No CommonJS.",
+        "Use Bun APIs whenever they exist (`bun:test`, `Bun.file`, `Bun.spawn`, etc.) before reaching for Node equivalents.",
+        "Indentation: tabs. Strings: double quotes. Biome enforces both.",
+        "Tests use `bun:test` (`import { describe, expect, it } from \"bun:test\"`). Unit tests are co-located as `src/foo.test.ts`. Integration / smoke tests live in package `tests/`.",
+        "Do NOT manually edit `CHANGELOG.md` files. Use `bunx changeset` to record user-visible changes to published packages.",
+        "Always run `bun run check` and `bun run check:types` before declaring a step complete or task done.",
+        "Keep public API surface intentional — changes to exports of `@crustjs/*` packages must be deliberate and reflected in a changeset.",
+        "Avoid unrelated refactors inside a task — keep changes minimal and scoped to the file list in PROMPT.md."
+      ]
+    },
+    "standardsOverrides": {},
+    "worker": {
+      "model": "",
+      "tools": "read,write,edit,bash,grep,find,ls",
+      "thinking": "off"
+    },
+    "reviewer": {
+      "model": "",
+      "tools": "read,bash,grep,find,ls",
+      "thinking": "on"
+    },
+    "context": {
+      "workerContextWindow": 200000,
+      "warnPercent": 70,
+      "killPercent": 85,
+      "maxWorkerIterations": 20,
+      "maxReviewCycles": 2,
+      "noProgressLimit": 3
+    },
+    "taskAreas": {
+      "general": {
+        "path": "taskplane-tasks",
+        "prefix": "TP",
+        "context": "taskplane-tasks/CONTEXT.md"
+      }
+    },
+    "referenceDocs": {
+      "agents": "AGENTS.md",
+      "contributing": "CONTRIBUTING.md"
+    },
+    "neverLoad": [
+      "bun.lock",
+      "node_modules/**",
+      ".turbo/**",
+      "**/dist/**"
+    ],
+    "selfDocTargets": {
+      "techDebt": "taskplane-tasks/CONTEXT.md#tech-debt--known-issues"
+    },
+    "protectedDocs": [
+      "CHANGELOG.md",
+      "**/CHANGELOG.md",
+      "LICENSE"
+    ]
+  },
+  "orchestrator": {
+    "orchestrator": {
+      "maxLanes": 2,
+      "worktreeLocation": "subdirectory",
+      "worktreePrefix": ".worktrees",
+      "batchIdFormat": "timestamp",
+      "spawnMode": "subprocess",
+      "operatorId": ""
+    },
+    "dependencies": {
+      "source": "prompt",
+      "cache": true
+    },
+    "assignment": {
+      "strategy": "affinity-first",
+      "sizeWeights": { "S": 1, "M": 2, "L": 4 }
+    },
+    "preWarm": {
+      "autoDetect": false,
+      "commands": {
+        "install": "bun install"
+      },
+      "always": ["install"]
+    },
+    "merge": {
+      "model": "",
+      "tools": "read,write,edit,bash,grep,find,ls",
+      "verify": [
+        "bun install --frozen-lockfile",
+        "bun run check",
+        "bun run check:types",
+        "bun run test"
+      ],
+      "order": "fewest-files-first",
+      "timeoutMinutes": 15
+    },
+    "supervisor": {
+      "model": "",
+      "autonomy": "supervised"
+    },
+    "integration": {
+      "defaultMode": "pr"
+    }
+  }
+}

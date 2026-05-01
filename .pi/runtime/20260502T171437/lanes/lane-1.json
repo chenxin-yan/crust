@@ -1,0 +1,31 @@
+{
+  "batchId": "20260502T171437",
+  "laneNumber": 1,
+  "laneId": "lane-1",
+  "repoId": "default",
+  "taskId": "TP-006",
+  "segmentId": "TP-006::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-cyan-lane-1-worker",
+    "status": "exited",
+    "elapsedMs": 846336,
+    "toolCalls": 115,
+    "contextPct": 17.262,
+    "costUsd": 9.191050249999998,
+    "lastTool": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1 && git log --oneline -10",
+    "inputTokens": 121,
+    "outputTokens": 47894,
+    "cacheReadTokens": 13780053,
+    "cacheWriteTokens": 176491
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 8: Documentation & Delivery",
+    "checked": 42,
+    "total": 42,
+    "iteration": 1,
+    "reviews": 1
+  },
+  "updatedAt": 1777757324538
+}

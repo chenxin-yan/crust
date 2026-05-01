@@ -1,0 +1,2 @@
+delivered: PR #117 (2026-05-07) — feat(prompts): polymorphic validate slot using Standard Schema
+recorded:  2026-05-07 by supervisor (manual feat/* PR pattern bypasses orch integration which normally writes this marker)

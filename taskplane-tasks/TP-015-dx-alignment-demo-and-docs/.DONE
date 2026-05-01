@@ -1,0 +1,3 @@
+delivered: PR #118 (2026-05-07) — feat(validate)!: align public API + follow-up commit 1678945 (docs: clean up validate docs)
+disposition: TASK_OBSOLETE — every Step 1 deliverable was completed by PR #118 before TP-015 became unblocked
+recorded:  2026-05-07 by supervisor (post-PR #118 staleness audit; see .pi/supervisor/scout-reports/post-pr118-tp015.md)

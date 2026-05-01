@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 94,
+    "output": 26472,
+    "cacheRead": 6280984,
+    "cacheWrite": 100259
+  },
+  "cost": 4.429380750000001,
+  "toolCalls": 88,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 611,
+  "lastToolCall": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1 && test -f taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/.task-wrap-up && echo WRAP_UP || echo \"no wrap-up signal\"; git log --oneline -10",
+  "error": null,
+  "contextUsage": {
+    "tokens": 95012,
+    "contextWindow": 1000000,
+    "percent": 9.5012
+  }
+}

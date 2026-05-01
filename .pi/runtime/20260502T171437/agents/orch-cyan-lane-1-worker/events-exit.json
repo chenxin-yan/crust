@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 121,
+    "output": 47894,
+    "cacheRead": 13780053,
+    "cacheWrite": 176491
+  },
+  "cost": 9.191050249999998,
+  "toolCalls": 115,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 846,
+  "lastToolCall": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1 && git log --oneline -10",
+  "error": null,
+  "contextUsage": {
+    "tokens": 172620,
+    "contextWindow": 1000000,
+    "percent": 17.262
+  }
+}

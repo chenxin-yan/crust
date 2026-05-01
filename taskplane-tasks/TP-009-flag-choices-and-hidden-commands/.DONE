@@ -1,0 +1,3 @@
+delivered: PR #120 (2026-05-09) — feat(core, plugins): choices on flags/args + hidden on commands (TP-009)
+batch:     20260508T235710 (single lane, 9m 11s task / 9m 52s total, $4.24)
+recorded:  2026-05-09 by supervisor (manual feat/* PR pattern)

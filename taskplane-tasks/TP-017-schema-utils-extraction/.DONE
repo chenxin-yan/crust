@@ -1,0 +1,3 @@
+delivered: PR #123 (2026-05-09) — feat(schema-utils): new package; extract Standard Schema introspection from validate (TP-017)
+batch:     20260509T054112 (single lane, 11m 56s, $5.98)
+recorded:  2026-05-09 by supervisor (manual feat/* PR pattern, sleep-shift autonomy)

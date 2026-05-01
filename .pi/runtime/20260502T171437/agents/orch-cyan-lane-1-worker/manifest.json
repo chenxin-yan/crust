@@ -1,0 +1,20 @@
+{
+  "batchId": "20260502T171437",
+  "agentId": "orch-cyan-lane-1-worker",
+  "role": "worker",
+  "laneNumber": 1,
+  "taskId": "TP-006",
+  "repoId": "default",
+  "pid": 477023,
+  "parentPid": 476957,
+  "startedAt": 1777756478193,
+  "status": "exited",
+  "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1",
+  "packet": {
+    "promptPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1/taskplane-tasks/TP-006-skills-optional-agents-default/PROMPT.md",
+    "statusPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1/taskplane-tasks/TP-006-skills-optional-agents-default/STATUS.md",
+    "donePath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1/taskplane-tasks/TP-006-skills-optional-agents-default/.DONE",
+    "reviewsDir": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1/taskplane-tasks/TP-006-skills-optional-agents-default/.reviews",
+    "taskFolder": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260502T171437/lane-1/taskplane-tasks/TP-006-skills-optional-agents-default"
+  }
+}
