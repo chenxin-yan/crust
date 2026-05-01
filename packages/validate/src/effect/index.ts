@@ -101,73 +101,41 @@ type ResolveEffectValueType<S> =
 		? PrimitiveToValueType<StripUndefined<I>>
 		: ValueType;
 
-// Branded def shapes that pin the runtime `type` literal to the value-type
-// derived from the raw Effect schema. These mirror the legacy
-// `EffectArgDef`/`EffectFlagDef` interfaces from <0.1.0 so existing Effect
-// builders keep type-checking unchanged.
-//
 // Effect's `Schema.standardSchemaV1(s)` returns `StandardSchemaV1<I, A>`
-// (input = encoded type `I`, output = parsed type `A`). We mirror that
-// mapping here so `InferValidatedArgs` / `InferValidatedFlags` see the
-// schema's output type instead of `unknown`.
-
+// (input = encoded type `I`, output = parsed type `A`). Map raw Effect
+// schemas to that Standard Schema view so `InferValidatedArgs` /
+// `InferValidatedFlags` see the schema's output type instead of `unknown`.
 type EffectAsStandardSchema<S> =
 	S extends schema.Schema<infer A, infer I, infer _R>
 		? StandardSchema<I, A>
 		: StandardSchema;
 
-type EffectArgShim<
-	Name extends string,
-	S extends schema.Schema.AnyNoContext,
-	Variadic extends true | undefined,
-> = ArgDef<
-	Name,
-	EffectAsStandardSchema<S>,
-	Variadic,
-	ResolveEffectValueType<S>
->;
-
-type EffectFlagShim<
-	S extends schema.Schema.AnyNoContext,
-	Short extends string | undefined,
-	Aliases extends readonly string[] | undefined,
-	Inherit extends true | undefined,
-> = FlagDef<
-	EffectAsStandardSchema<S>,
-	Short,
-	Aliases,
-	Inherit,
-	ResolveEffectValueType<S>
->;
-
-// ── Legacy type aliases (pre-0.1.0) ─────────────────────────────────────────
-// Older consumer code imported `EffectArgDef` / `EffectFlagDef` as the
-// return types of the Effect-flavoured `arg()` / `flag()`. The runtime
-// brand changed (from `[EFFECT_SCHEMA]` to `[VALIDATED_SCHEMA]`), but the
-// Crust-facing shape did not, so we alias both names to the unified
-// `ArgDef` / `FlagDef`. Anyone reflecting the old `EFFECT_SCHEMA` symbol
-// must migrate; everyone else keeps compiling.
-
 /**
- * @deprecated Since 0.1.0 — alias for `ArgDef` from `@crustjs/validate`.
- * Will be removed in 1.0.0.
+ * @deprecated Since 0.1.0 — the return type of the legacy Effect-flavoured
+ * `arg()`. Will be removed in 1.0.0; switch to `ArgDef` from
+ * `@crustjs/validate` and wrap raw Effect schemas with
+ * `Schema.standardSchemaV1(...)`.
  */
 export type EffectArgDef<
 	Name extends string = string,
-	S extends StandardSchema = StandardSchema,
+	S extends schema.Schema.AnyNoContext = schema.Schema.AnyNoContext,
 	Variadic extends true | undefined = true | undefined,
-> = ArgDef<Name, S, Variadic>;
+	Type extends ValueType = ResolveEffectValueType<S>,
+> = ArgDef<Name, EffectAsStandardSchema<S>, Variadic, Type>;
 
 /**
- * @deprecated Since 0.1.0 — alias for `FlagDef` from `@crustjs/validate`.
- * Will be removed in 1.0.0.
+ * @deprecated Since 0.1.0 — the return type of the legacy Effect-flavoured
+ * `flag()`. Will be removed in 1.0.0; switch to `FlagDef` from
+ * `@crustjs/validate` and wrap raw Effect schemas with
+ * `Schema.standardSchemaV1(...)`.
  */
 export type EffectFlagDef<
-	S extends StandardSchema = StandardSchema,
+	S extends schema.Schema.AnyNoContext = schema.Schema.AnyNoContext,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Inherit extends true | undefined = true | undefined,
-> = FlagDef<S, Short, Aliases, Inherit>;
+	Type extends ValueType = ResolveEffectValueType<S>,
+> = FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit, Type>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Auto-wrap shim — accept raw Effect schemas
@@ -205,12 +173,12 @@ export function arg<
 	name: Name,
 	schemaArg: S,
 	options?: ArgOptions & { variadic?: Variadic },
-): EffectArgShim<Name, S, Variadic> {
+): EffectArgDef<Name, S, Variadic> {
 	return rootArg(
 		name,
 		ensureStandardSchema(schemaArg),
 		options,
-	) as unknown as EffectArgShim<Name, S, Variadic>;
+	) as unknown as EffectArgDef<Name, S, Variadic>;
 }
 
 /**
@@ -235,11 +203,11 @@ export function flag<
 		aliases?: Aliases;
 		inherit?: Inherit;
 	},
-): EffectFlagShim<S, Short, Aliases, Inherit> {
+): EffectFlagDef<S, Short, Aliases, Inherit> {
 	return rootFlag(
 		ensureStandardSchema(schemaArg),
 		options,
-	) as unknown as EffectFlagShim<S, Short, Aliases, Inherit>;
+	) as unknown as EffectFlagDef<S, Short, Aliases, Inherit>;
 }
 
 /**

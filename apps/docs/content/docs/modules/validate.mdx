@@ -106,12 +106,13 @@ The package itself does **not** export these helpers — keeping the
 public surface vendor-neutral lets every Standard Schema library land on
 the same code path.
 
-<Callout type="warn" title="Effect ≥ 3.14 required">
-  Effect 3.14 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
-  registry walks. Earlier Effect versions ship opaque wrappers and the registry
-  cannot introspect them — supply `type:` (and `required:` / `description:`)
-  explicitly via the second argument, or stay on the deprecated
-  `@crustjs/validate/effect` subpath which auto-wraps internally.
+<Callout type="warn" title="Effect ≥ 3.14.2 required">
+  Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
+  registry walks. On 3.14.0 and 3.14.1 the wrapper is a plain object and the
+  registry cannot introspect it — supply `type:` (and `required:` /
+  `description:`) explicitly via the second argument. The deprecated
+  `@crustjs/validate/effect` subpath calls `standardSchemaV1` internally and is
+  subject to the same floor.
 </Callout>
 
 ## Quick start — other Standard Schema vendors

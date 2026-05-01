@@ -39,36 +39,39 @@ export type {
 } from "../index.ts";
 
 import type { ArgDef, FlagDef } from "../index.ts";
+import type { ResolveValueType } from "../schema-types.ts";
 import type { StandardSchema } from "../types.ts";
 
 // ── Legacy type aliases (pre-0.1.0) ─────────────────────────────────────────
-// Older consumer code imported `ZodArgDef` / `ZodFlagDef` as the return types
-// of the Zod-flavoured `arg()` / `flag()`. The runtime brand changed (from
-// `[ZOD_SCHEMA]` to `[VALIDATED_SCHEMA]`), but the Crust-facing shape did
-// not, so we alias both names to the unified `ArgDef` / `FlagDef`. Anyone
-// reflecting the old `ZOD_SCHEMA` symbol must migrate; everyone else keeps
-// compiling.
+// Zod 4 schemas implement Standard Schema natively, so the unified `ArgDef`
+// / `FlagDef` shape carries them directly. The runtime brand changed (from
+// `[ZOD_SCHEMA]` to `[VALIDATED_SCHEMA]`); anyone reflecting the old symbol
+// must migrate, everyone else keeps compiling.
 
 /**
- * @deprecated Since 0.1.0 — alias for `ArgDef` from `@crustjs/validate`.
- * Will be removed in 1.0.0.
+ * @deprecated Since 0.1.0 — the return type of the legacy Zod-flavoured
+ * `arg()`. Will be removed in 1.0.0; switch to `ArgDef` from
+ * `@crustjs/validate`.
  */
 export type ZodArgDef<
 	Name extends string = string,
 	Schema extends StandardSchema = StandardSchema,
 	Variadic extends true | undefined = true | undefined,
-> = ArgDef<Name, Schema, Variadic>;
+	Type extends "string" | "number" | "boolean" = ResolveValueType<Schema>,
+> = ArgDef<Name, Schema, Variadic, Type>;
 
 /**
- * @deprecated Since 0.1.0 — alias for `FlagDef` from `@crustjs/validate`.
- * Will be removed in 1.0.0.
+ * @deprecated Since 0.1.0 — the return type of the legacy Zod-flavoured
+ * `flag()`. Will be removed in 1.0.0; switch to `FlagDef` from
+ * `@crustjs/validate`.
  */
 export type ZodFlagDef<
 	Schema extends StandardSchema = StandardSchema,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Inherit extends true | undefined = true | undefined,
-> = FlagDef<Schema, Short, Aliases, Inherit>;
+	Type extends "string" | "number" | "boolean" = ResolveValueType<Schema>,
+> = FlagDef<Schema, Short, Aliases, Inherit, Type>;
 /**
  * @deprecated Since 0.1.0 — import from `@crustjs/validate` directly.
  * Will be removed in 1.0.0.

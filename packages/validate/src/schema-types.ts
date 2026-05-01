@@ -102,9 +102,9 @@ type ResolveArrayElementType<S> = PrimitiveToValueType<
 >;
 
 /**
- * Crust single-value `FlagDef` carrying a hidden Standard Schema.
+ * Common shape for both single- and multi-value flag defs.
  */
-interface FlagSingleDef$<
+interface FlagDefBase$<
 	S extends StandardSchema,
 	Short extends string | undefined,
 	Aliases extends readonly string[] | undefined,
@@ -112,28 +112,6 @@ interface FlagSingleDef$<
 	Type extends ValueType,
 > {
 	readonly type: Type;
-	readonly description?: string;
-	readonly required?: true;
-	readonly inherit: Inherit;
-	readonly short: Short extends string ? Short : undefined;
-	readonly aliases: Aliases extends readonly string[] ? Aliases : undefined;
-	readonly [VALIDATED_SCHEMA]: S;
-}
-
-/**
- * Crust multi-value `FlagDef` (array schema) carrying a hidden Standard
- * Schema. Pinned `multiple: true` so it satisfies core's discriminated
- * `FlagDef` union (`StringMultiFlagDef` etc.).
- */
-interface FlagMultiDef$<
-	S extends StandardSchema,
-	Short extends string | undefined,
-	Aliases extends readonly string[] | undefined,
-	Inherit extends true | undefined,
-	Type extends ValueType,
-> {
-	readonly type: Type;
-	readonly multiple: true;
 	readonly description?: string;
 	readonly required?: true;
 	readonly inherit: Inherit;
@@ -146,9 +124,8 @@ interface FlagMultiDef$<
  * Crust `FlagDef` carrying a hidden Standard Schema.
  *
  * Array-typed schemas (e.g. `z.array(z.string())`,
- * `Schema.Array(Schema.String)`) resolve to the multi-value variant with
- * `multiple: true` so they discriminate against core's `StringMultiFlagDef`
- * etc.; everything else resolves to the single-value variant.
+ * `Schema.Array(Schema.String)`) pin `multiple: true` so they discriminate
+ * against core's `StringMultiFlagDef` etc.; scalar schemas omit it.
  *
  * The optional 5th `Type` generic exists so the deprecated `/effect`
  * subpath shim can pin the CLI value-type literal when its schema generic
@@ -163,10 +140,8 @@ export type FlagDef$<
 	Type extends ValueType = IsArrayInput<S> extends true
 		? ResolveArrayElementType<S>
 		: ResolveValueType<S>,
-> =
-	IsArrayInput<S> extends true
-		? FlagMultiDef$<S, Short, Aliases, Inherit, Type>
-		: FlagSingleDef$<S, Short, Aliases, Inherit, Type>;
+> = FlagDefBase$<S, Short, Aliases, Inherit, Type> &
+	(IsArrayInput<S> extends true ? { readonly multiple: true } : unknown);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public option types for arg() / flag()

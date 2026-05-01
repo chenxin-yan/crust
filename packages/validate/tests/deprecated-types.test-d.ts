@@ -1,30 +1,47 @@
-// Type-only test: deprecated subpaths must continue to export legacy type
-// aliases (ZodArgDef, ZodFlagDef, EffectArgDef, EffectFlagDef) so existing
-// consumer code that imports them as types keeps compiling.
-//
-// Verifies blocker #2 fix.
+// Type-only test: the deprecated subpaths must continue to export legacy
+// type aliases (ZodArgDef, ZodFlagDef, EffectArgDef, EffectFlagDef) with
+// their pre-0.1.0 generic surface, so existing consumer code that imports
+// them as types keeps compiling.
 
 import * as schema from "effect/Schema";
 import { z } from "zod";
-import type { EffectArgDef, EffectFlagDef } from "../src/effect/index.ts";
-import { arg as argRoot, flag as flagRoot } from "../src/index.ts";
-import type { ZodArgDef, ZodFlagDef } from "../src/zod/index.ts";
+import {
+	type EffectArgDef,
+	type EffectFlagDef,
+	arg as effectArg,
+	flag as effectFlag,
+} from "../src/effect/index.ts";
+import {
+	type ZodArgDef,
+	type ZodFlagDef,
+	arg as zodArg,
+	flag as zodFlag,
+} from "../src/zod/index.ts";
 
-// 1) Zod aliases — accept the same generic shape origin/main accepted.
-const zodArgValue = argRoot("name", z.string());
-const _zodArgAssign: ZodArgDef<"name", z.ZodString> = zodArgValue as never;
-void _zodArgAssign;
+// Zod 4 schemas natively implement Standard Schema, so `/zod` re-exports
+// the root `arg`/`flag`. Their return types must satisfy the legacy aliases
+// in both 3-generic and 4-generic forms.
+const zArg = zodArg("port", z.number());
+zArg satisfies ZodArgDef<"port", z.ZodNumber>;
+zArg satisfies ZodArgDef<"port", z.ZodNumber, undefined, "number">;
 
-const zodFlagValue = flagRoot(z.boolean(), { short: "v" });
-const _zodFlagAssign: ZodFlagDef = zodFlagValue as never;
-void _zodFlagAssign;
+const zFlag = zodFlag(z.boolean(), { short: "v" });
+zFlag satisfies ZodFlagDef<z.ZodBoolean, "v">;
+zFlag satisfies ZodFlagDef<z.ZodBoolean, "v", undefined, undefined, "boolean">;
 
-// 2) Effect aliases — accept the same generic shape origin/main accepted.
-const effectSchema = schema.standardSchemaV1(schema.String);
-const effectArgValue = argRoot("host", effectSchema);
-const _effectArgAssign: EffectArgDef = effectArgValue as never;
-void _effectArgAssign;
+// `/effect` accepts raw Effect schemas via its auto-wrap shim. Their return
+// types must satisfy the legacy aliases parameterised with the raw schema
+// (not with `StandardSchema`), preserving the pre-0.1.0 generic shape.
+const eArg = effectArg("host", schema.String);
+eArg satisfies EffectArgDef<"host", typeof schema.String>;
+eArg satisfies EffectArgDef<"host", typeof schema.String, undefined, "string">;
 
-const effectFlagValue = flagRoot(effectSchema);
-const _effectFlagAssign: EffectFlagDef = effectFlagValue as never;
-void _effectFlagAssign;
+const eFlag = effectFlag(schema.Number, { short: "p" });
+eFlag satisfies EffectFlagDef<typeof schema.Number, "p">;
+eFlag satisfies EffectFlagDef<
+	typeof schema.Number,
+	"p",
+	undefined,
+	undefined,
+	"number"
+>;

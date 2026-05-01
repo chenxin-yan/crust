@@ -337,7 +337,7 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
  * `Schema.standardSchemaV1()`.
  *
  * Reads `.ast` off the wrapper. If the wrapper does not expose `.ast`
- * (Effect < 3.14 or hand-rolled wrapper), returns `{}`.
+ * (Effect < 3.14.2 or hand-rolled wrapper), returns `{}`.
  *
  * Throws `CrustError("DEFINITION")` for structural issues that signal
  * definite user mistakes (e.g. tuple schemas with fixed elements, array

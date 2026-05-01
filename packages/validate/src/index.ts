@@ -3,8 +3,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 //
 // Library-agnostic at the public boundary. Auto-introspection for Zod and
-// Effect (via `Schema.standardSchemaV1(...)` wrappers, requires Effect ≥ 3.14)
-// is handled internally via vendor dispatch.
+// Effect (via `Schema.standardSchemaV1(...)` wrappers, requires Effect ≥
+// 3.14.2) is handled internally via vendor dispatch.
 //
 // Effect users must wrap raw schemas before passing them here. The
 // `@crustjs/validate/effect` deprecated alias preserves the auto-wrap shim

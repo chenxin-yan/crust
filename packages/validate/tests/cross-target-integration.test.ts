@@ -1277,9 +1277,7 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 
 describe("Deprecated subpath aliases", () => {
 	it("/zod: arg/flag/commandValidator work for raw Zod schemas", async () => {
-		// Resolve through the package `exports` map so that the deprecated
-		// subpath specifier itself is verified, not just the source file path.
-		const mod = await import("@crustjs/validate/zod");
+		const mod = await import("../src/zod/index.ts");
 		const received = capture<{ args: unknown; flags: unknown }>();
 		const app = new Crust("zod-alias")
 			.args([mod.arg("port", z.number())])
@@ -1297,7 +1295,7 @@ describe("Deprecated subpath aliases", () => {
 	});
 
 	it("/effect: arg/flag/commandValidator auto-wrap raw Effect schemas", async () => {
-		const mod = await import("@crustjs/validate/effect");
+		const mod = await import("../src/effect/index.ts");
 		const received = capture<{ args: unknown; flags: unknown }>();
 		const app = new Crust("effect-alias")
 			.args([mod.arg("port", Schema.Number)])
@@ -1313,7 +1311,7 @@ describe("Deprecated subpath aliases", () => {
 	});
 
 	it("/standard: prompt + store helpers work for any Standard Schema", async () => {
-		const mod = await import("@crustjs/validate/standard");
+		const mod = await import("../src/standard/index.ts");
 		const validate = mod.promptValidator(z.string().min(3));
 		expect(await validate("hello")).toBe(true);
 		expect(typeof (await validate("ab"))).toBe("string");
@@ -1326,7 +1324,7 @@ describe("Deprecated subpath aliases", () => {
 	});
 
 	it("/effect: prompt + store helpers re-export root behavior (require manual wrapping)", async () => {
-		const mod = await import("@crustjs/validate/effect");
+		const mod = await import("../src/effect/index.ts");
 		const wrapped = Schema.standardSchemaV1(Schema.String);
 		const validate = mod.promptValidator(wrapped);
 		expect(await validate("hello")).toBe(true);

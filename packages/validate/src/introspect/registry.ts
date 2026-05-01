@@ -38,7 +38,8 @@ export interface InferredOptions {
  *
  * - `"zod"` → reads internal `_zod.def.*` (Zod 4 schemas are Standard Schemas natively).
  * - `"effect"` → walks `.ast` exposed on the `Schema.standardSchemaV1(...)` wrapper
- *   (Effect ≥ 3.14, [PR #4648](https://github.com/Effect-TS/effect/pull/4648)).
+ *   (Effect ≥ 3.14.2; the wrapper extends `Schema.make(schema.ast)` from that
+ *   release — see [PR #4648](https://github.com/Effect-TS/effect/pull/4648)).
  * - any other vendor → returns `{}`. Caller must rely on user-supplied options.
  *
  * @param schema - Standard Schema v1 object
