@@ -77,14 +77,39 @@ export interface ArgDef$<
 }
 
 /**
- * Crust `FlagDef` carrying a hidden Standard Schema.
+ * Detect array-shaped Standard Schema inputs. Used by `FlagDef$` to
+ * select the multi-value variant (`multiple: true`) so that
+ * `flag(z.array(z.string()))` satisfies core's discriminated `FlagDef`.
  */
-export interface FlagDef$<
-	S extends StandardSchema = StandardSchema,
-	Short extends string | undefined = string | undefined,
-	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
-	Inherit extends true | undefined = true | undefined,
-	Type extends ValueType = ResolveValueType<S>,
+type IsArrayInput<S> =
+	S extends StandardSchema<infer In, infer _Out>
+		? StripUndefined<In> extends readonly unknown[]
+			? true
+			: false
+		: false;
+
+/** Element type of an array Standard Schema input, or `never`. */
+type ArrayElementInput<S> =
+	S extends StandardSchema<infer In, infer _Out>
+		? StripUndefined<In> extends readonly (infer E)[]
+			? E
+			: never
+		: never;
+
+/** ValueType resolution for an array Standard Schema (uses element type). */
+type ResolveArrayElementType<S> = PrimitiveToValueType<
+	StripUndefined<ArrayElementInput<S>>
+>;
+
+/**
+ * Crust single-value `FlagDef` carrying a hidden Standard Schema.
+ */
+interface FlagSingleDef$<
+	S extends StandardSchema,
+	Short extends string | undefined,
+	Aliases extends readonly string[] | undefined,
+	Inherit extends true | undefined,
+	Type extends ValueType,
 > {
 	readonly type: Type;
 	readonly description?: string;
@@ -94,6 +119,54 @@ export interface FlagDef$<
 	readonly aliases: Aliases extends readonly string[] ? Aliases : undefined;
 	readonly [VALIDATED_SCHEMA]: S;
 }
+
+/**
+ * Crust multi-value `FlagDef` (array schema) carrying a hidden Standard
+ * Schema. Pinned `multiple: true` so it satisfies core's discriminated
+ * `FlagDef` union (`StringMultiFlagDef` etc.).
+ */
+interface FlagMultiDef$<
+	S extends StandardSchema,
+	Short extends string | undefined,
+	Aliases extends readonly string[] | undefined,
+	Inherit extends true | undefined,
+	Type extends ValueType,
+> {
+	readonly type: Type;
+	readonly multiple: true;
+	readonly description?: string;
+	readonly required?: true;
+	readonly inherit: Inherit;
+	readonly short: Short extends string ? Short : undefined;
+	readonly aliases: Aliases extends readonly string[] ? Aliases : undefined;
+	readonly [VALIDATED_SCHEMA]: S;
+}
+
+/**
+ * Crust `FlagDef` carrying a hidden Standard Schema.
+ *
+ * Array-typed schemas (e.g. `z.array(z.string())`,
+ * `Schema.Array(Schema.String)`) resolve to the multi-value variant with
+ * `multiple: true` so they discriminate against core's `StringMultiFlagDef`
+ * etc.; everything else resolves to the single-value variant.
+ *
+ * The optional 5th `Type` generic exists so the deprecated `/effect`
+ * subpath shim can pin the CLI value-type literal when its schema generic
+ * collapses to the broad `StandardSchema`. End-user call sites should
+ * leave it on its default.
+ */
+export type FlagDef$<
+	S extends StandardSchema = StandardSchema,
+	Short extends string | undefined = string | undefined,
+	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
+	Inherit extends true | undefined = true | undefined,
+	Type extends ValueType = IsArrayInput<S> extends true
+		? ResolveArrayElementType<S>
+		: ResolveValueType<S>,
+> =
+	IsArrayInput<S> extends true
+		? FlagMultiDef$<S, Short, Aliases, Inherit, Type>
+		: FlagSingleDef$<S, Short, Aliases, Inherit, Type>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public option types for arg() / flag()

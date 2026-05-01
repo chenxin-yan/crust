@@ -37,6 +37,38 @@ export type {
 	PromptErrorStrategy,
 	PromptValidatorOptions,
 } from "../index.ts";
+
+import type { ArgDef, FlagDef } from "../index.ts";
+import type { StandardSchema } from "../types.ts";
+
+// ── Legacy type aliases (pre-0.1.0) ─────────────────────────────────────────
+// Older consumer code imported `ZodArgDef` / `ZodFlagDef` as the return types
+// of the Zod-flavoured `arg()` / `flag()`. The runtime brand changed (from
+// `[ZOD_SCHEMA]` to `[VALIDATED_SCHEMA]`), but the Crust-facing shape did
+// not, so we alias both names to the unified `ArgDef` / `FlagDef`. Anyone
+// reflecting the old `ZOD_SCHEMA` symbol must migrate; everyone else keeps
+// compiling.
+
+/**
+ * @deprecated Since 0.1.0 — alias for `ArgDef` from `@crustjs/validate`.
+ * Will be removed in 1.0.0.
+ */
+export type ZodArgDef<
+	Name extends string = string,
+	Schema extends StandardSchema = StandardSchema,
+	Variadic extends true | undefined = true | undefined,
+> = ArgDef<Name, Schema, Variadic>;
+
+/**
+ * @deprecated Since 0.1.0 — alias for `FlagDef` from `@crustjs/validate`.
+ * Will be removed in 1.0.0.
+ */
+export type ZodFlagDef<
+	Schema extends StandardSchema = StandardSchema,
+	Short extends string | undefined = string | undefined,
+	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
+	Inherit extends true | undefined = true | undefined,
+> = FlagDef<Schema, Short, Aliases, Inherit>;
 /**
  * @deprecated Since 0.1.0 — import from `@crustjs/validate` directly.
  * Will be removed in 1.0.0.

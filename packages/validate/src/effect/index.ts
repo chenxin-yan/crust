@@ -105,12 +105,27 @@ type ResolveEffectValueType<S> =
 // derived from the raw Effect schema. These mirror the legacy
 // `EffectArgDef`/`EffectFlagDef` interfaces from <0.1.0 so existing Effect
 // builders keep type-checking unchanged.
+//
+// Effect's `Schema.standardSchemaV1(s)` returns `StandardSchemaV1<I, A>`
+// (input = encoded type `I`, output = parsed type `A`). We mirror that
+// mapping here so `InferValidatedArgs` / `InferValidatedFlags` see the
+// schema's output type instead of `unknown`.
+
+type EffectAsStandardSchema<S> =
+	S extends schema.Schema<infer A, infer I, infer _R>
+		? StandardSchema<I, A>
+		: StandardSchema;
 
 type EffectArgShim<
 	Name extends string,
 	S extends schema.Schema.AnyNoContext,
 	Variadic extends true | undefined,
-> = ArgDef<Name, StandardSchema, Variadic, ResolveEffectValueType<S>>;
+> = ArgDef<
+	Name,
+	EffectAsStandardSchema<S>,
+	Variadic,
+	ResolveEffectValueType<S>
+>;
 
 type EffectFlagShim<
 	S extends schema.Schema.AnyNoContext,
@@ -118,12 +133,41 @@ type EffectFlagShim<
 	Aliases extends readonly string[] | undefined,
 	Inherit extends true | undefined,
 > = FlagDef<
-	S extends schema.Schema.AnyNoContext ? StandardSchema : never,
+	EffectAsStandardSchema<S>,
 	Short,
 	Aliases,
 	Inherit,
 	ResolveEffectValueType<S>
 >;
+
+// ── Legacy type aliases (pre-0.1.0) ─────────────────────────────────────────
+// Older consumer code imported `EffectArgDef` / `EffectFlagDef` as the
+// return types of the Effect-flavoured `arg()` / `flag()`. The runtime
+// brand changed (from `[EFFECT_SCHEMA]` to `[VALIDATED_SCHEMA]`), but the
+// Crust-facing shape did not, so we alias both names to the unified
+// `ArgDef` / `FlagDef`. Anyone reflecting the old `EFFECT_SCHEMA` symbol
+// must migrate; everyone else keeps compiling.
+
+/**
+ * @deprecated Since 0.1.0 — alias for `ArgDef` from `@crustjs/validate`.
+ * Will be removed in 1.0.0.
+ */
+export type EffectArgDef<
+	Name extends string = string,
+	S extends StandardSchema = StandardSchema,
+	Variadic extends true | undefined = true | undefined,
+> = ArgDef<Name, S, Variadic>;
+
+/**
+ * @deprecated Since 0.1.0 — alias for `FlagDef` from `@crustjs/validate`.
+ * Will be removed in 1.0.0.
+ */
+export type EffectFlagDef<
+	S extends StandardSchema = StandardSchema,
+	Short extends string | undefined = string | undefined,
+	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
+	Inherit extends true | undefined = true | undefined,
+> = FlagDef<S, Short, Aliases, Inherit>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Auto-wrap shim — accept raw Effect schemas

@@ -304,6 +304,89 @@ for (const fx of [zodFixtures, effectFixtures]) {
 			expect(received.value?.args).toEqual({ name: "ALICE" });
 		});
 
+		it("applies schema transforms on flags (sync)", async () => {
+			const received = capture<{ flags: unknown }>();
+
+			const app = new Crust("build")
+				.flags({ port: flag(fx.stringToNumber(), { short: "p" }) })
+				.run(
+					commandValidator(({ flags }) => {
+						received.set({ flags });
+					}),
+				);
+
+			await app.execute({ argv: ["-p", "8080"] });
+
+			expect(received.value?.flags).toEqual({ port: 8080 });
+		});
+
+		it("applies async schema transforms on flags", async () => {
+			const received = capture<{ flags: unknown }>();
+
+			const app = new Crust("build")
+				.flags({ port: flag(fx.asyncStringToNumber(), { short: "p" }) })
+				.run(
+					commandValidator(({ flags }) => {
+						received.set({ flags });
+					}),
+				);
+
+			await app.execute({ argv: ["-p", "443"] });
+
+			expect(received.value?.flags).toEqual({ port: 443 });
+		});
+
+		it("applies default + transform on flags (default value flows through transform)", async () => {
+			const received = capture<{ flags: unknown }>();
+
+			const app = new Crust("build")
+				.flags({
+					count: flag(fx.stringPlus1Transform(10), { short: "c" }),
+				})
+				.run(
+					commandValidator(({ flags }) => {
+						received.set({ flags });
+					}),
+				);
+
+			await app.execute({ argv: [] });
+
+			// Default 10 → transform adds 1 → 11.
+			expect(received.value?.flags).toEqual({ count: 11 });
+		});
+
+		it("preRun/postRun see raw parser context; commandValidator handler sees validated values", async () => {
+			const phases: Array<{
+				phase: "pre" | "run" | "post";
+				name: unknown;
+			}> = [];
+
+			const app = new Crust("hooks")
+				.args([arg("name", fx.upperTransform())])
+				.preRun(({ args }) => {
+					phases.push({ phase: "pre", name: args.name });
+				})
+				.run(
+					commandValidator(({ args }) => {
+						phases.push({ phase: "run", name: args.name });
+					}),
+				)
+				.postRun(({ args }) => {
+					phases.push({ phase: "post", name: args.name });
+				});
+
+			await app.execute({ argv: ["alice"] });
+
+			// preRun/postRun receive the raw parsed value ("alice"); only the
+			// commandValidator-wrapped handler sees the schema-transformed value
+			// ("ALICE").
+			expect(phases).toEqual([
+				{ phase: "pre", name: "alice" },
+				{ phase: "run", name: "ALICE" },
+				{ phase: "post", name: "alice" },
+			]);
+		});
+
 		it("supports async transforms", async () => {
 			const received = capture<{ args: unknown; flags: unknown }>();
 
@@ -409,6 +492,12 @@ for (const fx of [zodFixtures, effectFixtures]) {
 			const flags = received.value?.flags as Record<string, unknown>;
 			expect(flags.help).toBe(false);
 			expect("verbose" in flags).toBe(true);
+			// Vendor-specific shape: Zod's `.default(false)` resolves to `false`;
+			// Effect's `Schema.UndefinedOr(...)` resolves to `undefined`. Either
+			// way, the validated value must NOT spuriously become a different
+			// non-default truthy value.
+			const expectedVerbose = fx.name === "zod" ? false : undefined;
+			expect(flags.verbose).toBe(expectedVerbose);
 		});
 	});
 
@@ -441,6 +530,22 @@ for (const fx of [zodFixtures, effectFixtures]) {
 		it("explicit required: false on required schema wins silently", () => {
 			const a = arg("port", fx.num(), { required: false });
 			expect(a.required).toBeUndefined();
+		});
+
+		// flag() parity for the three removed conflict checks
+		it("flag(): explicit type that disagrees with inferred wins silently", () => {
+			const f = flag(fx.num(), { type: "string" });
+			expect(f.type as string).toBe("string");
+		});
+
+		it("flag(): explicit required: true on optional schema wins silently", () => {
+			const f = flag(fx.numOptional(), { required: true });
+			expect(f.required).toBe(true);
+		});
+
+		it("flag(): explicit required: false on required schema wins silently", () => {
+			const f = flag(fx.num(), { required: false });
+			expect(f.required).toBeUndefined();
 		});
 	});
 
@@ -786,5 +891,58 @@ describe("unknown vendor (Valibot/ArkType/etc.) requires explicit type", () => {
 		} catch (error) {
 			expect((error as Error).message).toContain('vendor: "valibot"');
 		}
+	});
+
+	it("end-to-end: unknown-vendor schema validates, transforms, and rejects through commandValidator", async () => {
+		// Hand-rolled Standard Schema with a transform: the encoded input is a
+		// string, the parsed output is a number with +1 applied.
+		const stringToNumberPlusOne: StandardSchema<string, number> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot",
+				validate: (value) => {
+					if (typeof value !== "string") {
+						return { issues: [{ message: "Expected string input" }] };
+					}
+					const n = Number(value);
+					if (Number.isNaN(n)) {
+						return { issues: [{ message: "Not a valid number" }] };
+					}
+					return { value: n + 1 };
+				},
+			},
+		};
+
+		const received = capture<{ args: unknown }>();
+
+		const app = new Crust("unknown-vendor")
+			.args([arg("port", stringToNumberPlusOne, { type: "string" })])
+			.run(
+				commandValidator(({ args }) => {
+					received.set({ args });
+				}),
+			);
+
+		// Success: transform fires — "42" → 43.
+		await app.execute({ argv: ["42"] });
+		expect(received.value?.args).toEqual({ port: 43 });
+
+		// Failure: schema rejects non-numeric input through CrustError(VALIDATION).
+		const node = app._node;
+		const parsed = parseArgs(node, ["abc"]);
+		let caught: unknown;
+		try {
+			await node.run?.({
+				args: parsed.args,
+				flags: parsed.flags,
+				rawArgs: parsed.rawArgs,
+				command: node,
+			});
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(CrustError);
+		expect((caught as CrustError).is("VALIDATION")).toBe(true);
+		expect((caught as CrustError).message).toContain("args.port");
 	});
 });

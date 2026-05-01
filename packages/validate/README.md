@@ -28,7 +28,9 @@ adapters so that:
   Standard Schema v1 directly — no wrapping required).
 - **Effect schemas** are introspected through their wrapper. You wrap once
   with `Schema.standardSchemaV1(...)`, and the registry walks the
-  underlying AST. This requires `effect ≥ 3.14`.
+  underlying AST. This requires `effect ≥ 3.14.2` (the version that
+  exposed `.ast` on `Schema.standardSchemaV1(...)` wrappers; `3.14.0` and
+  `3.14.1` returned a plain object without it).
 - **Other vendors** (Valibot, ArkType, Sury, …) work too, but you supply
   CLI metadata explicitly via the second argument to `arg()` / `flag()`.
 
@@ -292,11 +294,13 @@ specify; everything you did specify wins.
 
 ## Constraints
 
-- **Effect peer-dep floor: `^3.14.0`.** Earlier Effect versions shipped
-  opaque `standardSchemaV1` wrappers without a `.ast` property, so
-  introspection of pre-wrapped Effect schemas would fail. Either upgrade
-  to Effect ≥ 3.14 or stay on the deprecated `@crustjs/validate/effect`
-  subpath, which auto-wraps internally and is kept until 1.0.0.
+- **Effect peer-dep floor: `^3.14.2`.** Effect 3.14.0 and 3.14.1 shipped
+  `standardSchemaV1` wrappers as plain objects with no `.ast`, so
+  introspection of pre-wrapped Effect schemas falls through to `{}`.
+  Effect 3.14.2 made the wrapper extend `Schema.make(schema.ast)`, which
+  is what the introspection registry walks. The deprecated
+  `@crustjs/validate/effect` subpath calls `standardSchemaV1` internally
+  and is therefore subject to the same floor.
 
 ## See also
 

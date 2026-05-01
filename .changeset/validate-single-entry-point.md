@@ -60,14 +60,24 @@ path. The new root API requires you to wrap with
 `Schema.standardSchemaV1(...)` yourself (or use the 5-line
 `earg`/`eflag` recipe from the README).
 
-## Effect peer-dep floor: `^3.14.0`
+Legacy type aliases `ZodArgDef`, `ZodFlagDef`, `EffectArgDef`, and
+`EffectFlagDef` continue to be exported from `/zod` and `/effect` as
+`@deprecated` re-aliases of the unified `ArgDef` / `FlagDef`. Code that
+imports those names as types keeps compiling on the deprecated
+subpaths until 1.0.0. Anyone reflecting on the legacy `ZOD_SCHEMA` /
+`EFFECT_SCHEMA` runtime symbols must migrate to the new
+`VALIDATED_SCHEMA` brand.
+
+## Effect peer-dep floor: `^3.14.2`
 
 The introspection registry walks `.ast` off
-`Schema.standardSchemaV1(...)` wrappers, which Effect 3.14 made
-[available via PR #4648](https://github.com/Effect-TS/effect/pull/4648).
-Older Effect versions either upgrade or stay on the deprecated
-`@crustjs/validate/effect` subpath which auto-wraps internally and
-doesn't depend on `.ast`.
+`Schema.standardSchemaV1(...)` wrappers. PR #4648 (released in Effect
+3.14.0) added `standardSchemaV1` itself, but the wrapper kept returning
+a plain object; only Effect 3.14.2 made it extend
+`Schema.make(schema.ast)`, which exposes `.ast`. Effect 3.14.0 and
+3.14.1 silently fall through to `{}` introspection, so the peer-dep
+floor is `^3.14.2`. The deprecated `@crustjs/validate/effect` subpath
+calls `standardSchemaV1` internally and is subject to the same floor.
 
 ## Behaviour intentionally removed
 

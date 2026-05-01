@@ -10,10 +10,42 @@
 // return `{}` and let the caller fall back to user-supplied options.
 
 import { CrustError } from "@crustjs/core";
-import { isSome } from "effect/Option";
 import type { AST } from "effect/SchemaAST";
-import { getDescriptionAnnotation } from "effect/SchemaAST";
 import type { StandardSchema } from "../types.ts";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duck-typed access to Effect AST internals
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `effect` is an *optional* peer dependency. Importing anything from
+// `effect/*` at runtime in this file would break Zod-only / Standard-Schema-
+// only consumers because the import chain `index.ts` → `schema.ts` →
+// `introspect/registry.ts` → `introspect/effect.ts` is unconditional.
+//
+// To stay zero-runtime-cost when `effect` is absent we duck-type the two
+// pieces of Effect's API we need:
+//
+// 1. `getDescriptionAnnotation(ast)` — reads
+//    `ast.annotations[Symbol.for("effect/annotation/Description")]`. We do
+//    that read directly.
+// 2. `isSome(option)` — just checks `option._tag === "Some"`. We inline that
+//    too.
+//
+// Both shapes have been stable since Effect 3.x; the pure-data fallback is
+// equally compatible with 3.14.2 (the documented floor for `.ast`) and
+// every later 3.x release.
+
+/** Stable since Effect 3.x; see effect/SchemaAST.ts → `DescriptionAnnotationId`. */
+const DESCRIPTION_ANNOTATION_KEY = Symbol.for("effect/annotation/Description");
+
+function readDescriptionAnnotation(ast: AST): string | undefined {
+	const annotations = (ast as unknown as { annotations?: unknown }).annotations;
+	if (!annotations || typeof annotations !== "object") return undefined;
+	const raw = (annotations as Record<symbol, unknown>)[
+		DESCRIPTION_ANNOTATION_KEY
+	];
+	return typeof raw === "string" ? raw : undefined;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result type
@@ -257,9 +289,9 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
 		}
 		seen.add(current);
 
-		const annotated = getDescriptionAnnotation(current);
-		if (isSome(annotated) && typeof annotated.value === "string") {
-			return annotated.value;
+		const annotated = readDescriptionAnnotation(current);
+		if (annotated !== undefined) {
+			return annotated;
 		}
 
 		if (current._tag === "Transformation") {
