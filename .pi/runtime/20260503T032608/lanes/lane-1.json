@@ -1,0 +1,31 @@
+{
+  "batchId": "20260503T032608",
+  "laneNumber": 1,
+  "laneId": "lane-1",
+  "repoId": "default",
+  "taskId": "TP-008",
+  "segmentId": "TP-008::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-cyan-lane-1-worker",
+    "status": "exited",
+    "elapsedMs": 611198,
+    "toolCalls": 88,
+    "contextPct": 9.5012,
+    "costUsd": 4.429380750000001,
+    "lastTool": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T032608/lane-1 && test -f taskplane-tasks/TP-008-rename-autocomplete-to-did-you-mean/.task-wrap-up && echo WRAP_UP || echo \"no wrap-up signal\"; git log --oneline -10",
+    "inputTokens": 94,
+    "outputTokens": 26472,
+    "cacheReadTokens": 6280984,
+    "cacheWriteTokens": 100259
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 4: Documentation & Delivery",
+    "checked": 22,
+    "total": 22,
+    "iteration": 1,
+    "reviews": 3
+  },
+  "updatedAt": 1777793780438
+}

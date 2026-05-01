@@ -1,0 +1,22 @@
+{
+  "exitCode": 143,
+  "exitSignal": null,
+  "tokens": {
+    "input": 14,
+    "output": 1655,
+    "cacheRead": 204476,
+    "cacheWrite": 31190
+  },
+  "cost": 0.33862050000000005,
+  "toolCalls": 9,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 33,
+  "lastToolCall": "write: /home/cyan/dev/github.com/chenxin-yan/crust/.pi/merge-result-w1-lane1-cyan-20260502T171437.json",
+  "error": null,
+  "contextUsage": {
+    "tokens": 26226,
+    "contextWindow": 1000000,
+    "percent": 2.6226
+  }
+}

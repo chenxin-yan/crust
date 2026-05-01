@@ -1,0 +1,14 @@
+{
+  "batchId": "20260430T233452",
+  "agentId": "orch-cyan-merge-1",
+  "role": "merger",
+  "laneNumber": null,
+  "taskId": null,
+  "repoId": "default",
+  "pid": 1045224,
+  "parentPid": 1010888,
+  "startedAt": 1777609160037,
+  "status": "killed",
+  "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/merge",
+  "packet": null
+}

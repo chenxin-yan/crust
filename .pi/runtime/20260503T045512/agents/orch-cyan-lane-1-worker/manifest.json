@@ -1,0 +1,20 @@
+{
+  "batchId": "20260503T045512",
+  "agentId": "orch-cyan-lane-1-worker",
+  "role": "worker",
+  "laneNumber": 1,
+  "taskId": "TP-016",
+  "repoId": "default",
+  "pid": 995620,
+  "parentPid": 995550,
+  "startedAt": 1777798513222,
+  "status": "exited",
+  "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1",
+  "packet": {
+    "promptPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1/taskplane-tasks/TP-016-command-aliases/PROMPT.md",
+    "statusPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1/taskplane-tasks/TP-016-command-aliases/STATUS.md",
+    "donePath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1/taskplane-tasks/TP-016-command-aliases/.DONE",
+    "reviewsDir": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1/taskplane-tasks/TP-016-command-aliases/.reviews",
+    "taskFolder": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260503T045512/lane-1/taskplane-tasks/TP-016-command-aliases"
+  }
+}

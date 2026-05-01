@@ -1,0 +1,40 @@
+{
+  "batchId": "20260430T233452",
+  "updatedAt": 1777609242502,
+  "agents": {
+    "orch-cyan-lane-1-worker": {
+      "batchId": "20260430T233452",
+      "agentId": "orch-cyan-lane-1-worker",
+      "role": "worker",
+      "laneNumber": 1,
+      "taskId": "TP-007",
+      "repoId": "default",
+      "pid": 1044004,
+      "parentPid": 1010888,
+      "startedAt": 1777609047363,
+      "status": "exited",
+      "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1",
+      "packet": {
+        "promptPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1/taskplane-tasks/TP-007-validate-standard-schema-only/PROMPT.md",
+        "statusPath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1/taskplane-tasks/TP-007-validate-standard-schema-only/STATUS.md",
+        "donePath": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1/taskplane-tasks/TP-007-validate-standard-schema-only/.DONE",
+        "reviewsDir": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1/taskplane-tasks/TP-007-validate-standard-schema-only/.reviews",
+        "taskFolder": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1/taskplane-tasks/TP-007-validate-standard-schema-only"
+      }
+    },
+    "orch-cyan-merge-1": {
+      "batchId": "20260430T233452",
+      "agentId": "orch-cyan-merge-1",
+      "role": "merger",
+      "laneNumber": null,
+      "taskId": null,
+      "repoId": "default",
+      "pid": 1045224,
+      "parentPid": 1010888,
+      "startedAt": 1777609160037,
+      "status": "killed",
+      "cwd": "/home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/merge",
+      "packet": null
+    }
+  }
+}

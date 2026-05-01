@@ -1,0 +1,21 @@
+{
+  "batchId": "20260503T045512",
+  "mergeNumber": 1,
+  "sessionName": "orch-cyan-merge-1",
+  "waveIndex": 1,
+  "status": "failed",
+  "agent": {
+    "agentId": "orch-cyan-merge-1",
+    "status": "crashed",
+    "elapsedMs": 56622,
+    "toolCalls": 13,
+    "contextPct": 3.2226,
+    "costUsd": 0.4578962500000001,
+    "lastTool": "write: /home/cyan/dev/github.com/chenxin-yan/crust/.pi/merge-result-w1-lane1-cyan-20260503T045512.json",
+    "inputTokens": 18,
+    "outputTokens": 3112,
+    "cacheReadTokens": 341925,
+    "cacheWriteTokens": 33447
+  },
+  "updatedAt": 1777801661863
+}

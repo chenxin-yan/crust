@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 16,
+    "output": 6680,
+    "cacheRead": 646419,
+    "cacheWrite": 51851
+  },
+  "cost": 0.81435825,
+  "toolCalls": 13,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 109,
+  "lastToolCall": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1 && grep -c \"^- \\[ \\]\" taskplane-tasks/TP-007-validate-standard-schema-only/STATUS.md && echo \"unchecked boxes ^^^\" && git status",
+  "error": null,
+  "contextUsage": {
+    "tokens": 70833,
+    "contextWindow": 1000000,
+    "percent": 7.0832999999999995
+  }
+}

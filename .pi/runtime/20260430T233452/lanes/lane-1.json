@@ -1,0 +1,31 @@
+{
+  "batchId": "20260430T233452",
+  "laneNumber": 1,
+  "laneId": "lane-1",
+  "repoId": "default",
+  "taskId": "TP-007",
+  "segmentId": "TP-007::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-cyan-lane-1-worker",
+    "status": "exited",
+    "elapsedMs": 109232,
+    "toolCalls": 13,
+    "contextPct": 7.0832999999999995,
+    "costUsd": 0.81435825,
+    "lastTool": "bash: cd /home/cyan/dev/github.com/chenxin-yan/crust/.worktrees/cyan-20260430T233452/lane-1 && grep -c \"^- \\[ \\]\" taskplane-tasks/TP-007-validate-standard-schema-only/STATUS.md && echo \"unchecked boxes ^^^\" && git status",
+    "inputTokens": 16,
+    "outputTokens": 6680,
+    "cacheReadTokens": 646419,
+    "cacheWriteTokens": 51851
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 15: Documentation & Delivery",
+    "checked": 88,
+    "total": 88,
+    "iteration": 2,
+    "reviews": 3
+  },
+  "updatedAt": 1777609156624
+}
