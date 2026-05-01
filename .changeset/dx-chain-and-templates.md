@@ -22,7 +22,7 @@ simultaneously a function, a chain root, and an `AnsiPair`.
   ```
 - **`fg` / `bg` chain methods and chain-root form**:
   ```ts
-  style.bold.fg("#ff8800")("warning");          // extension
+  style.bold.fg("#ff8800")("warning"); // extension
   style.fg("rebeccapurple").italic("emphasis"); // chain root (1-arg)
   ```
 - **Optional `depth` parameter on standalone `fg` / `bg`**:
@@ -47,6 +47,14 @@ simultaneously a function, a chain root, and an `AnsiPair`.
 - **`style.link` validates URLs even when hyperlinks are disabled**:
   invalid URLs throw `TypeError` regardless of TTY / mode, so callers
   can't smuggle malformed URLs through non-TTY paths.
+- **`setGlobalColorMode("never")` now disables all ANSI emission**
+  (colors, modifiers, AND hyperlinks) for the runtime facade and
+  top-level helpers — matching `createStyle({ mode: "never" })` and the
+  `ColorMode` docstring. Previously it preserved modifiers and
+  hyperlinks via `NO_COLOR`-style semantics, which contradicted the
+  typed `"never"` meaning. To suppress only colors while keeping
+  modifiers + hyperlinks, set the `NO_COLOR` environment variable and
+  leave the global mode at `"auto"`.
 
 ### Improved
 

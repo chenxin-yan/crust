@@ -131,10 +131,12 @@ export function resolveColorDepth(
 		if (isTrueColorTerm(term)) {
 			return "truecolor";
 		}
-		if (term === "dumb") {
+		// Case-insensitive to match `isTrueColorTerm` and the `256color`
+		// check below: `TERM=DUMB` / `TERM=Dumb` should also disable color.
+		const lower = term.toLowerCase();
+		if (lower === "dumb") {
 			return "none";
 		}
-		const lower = term.toLowerCase();
 		if (lower.includes("256color")) {
 			return "256";
 		}

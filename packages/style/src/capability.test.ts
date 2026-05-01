@@ -279,6 +279,21 @@ describe("resolveColorDepth", () => {
 			).toBe("none");
 		});
 
+		it.each([
+			"DUMB",
+			"Dumb",
+			"dUmB",
+		])('TTY + TERM=%s (case-insensitive) → "none"', (term) => {
+			expect(
+				resolveColorDepth("auto", {
+					isTTY: true,
+					noColor: undefined,
+					colorTerm: undefined,
+					term,
+				}),
+			).toBe("none");
+		});
+
 		it('TTY + no env vars → "16"', () => {
 			expect(
 				resolveColorDepth("auto", {
@@ -904,7 +919,11 @@ describe("runtime-aware default exports", () => {
 		expect(style.colorsEnabled).toBe(true);
 	});
 
-	it("lets the global color override force colors off without disabling modifiers", () => {
+	it('global color override "never" disables all ANSI (colors and modifiers)', () => {
+		// Matches `createStyle({ mode: "never" })` and the ColorMode
+		// docstring. For color-only suppression (modifiers preserved), use
+		// `NO_COLOR=1` in the environment with the global mode left at
+		// `"auto"`.
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
@@ -912,7 +931,8 @@ describe("runtime-aware default exports", () => {
 		setGlobalColorMode("never");
 
 		expect(red("text")).toBe("text");
-		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(bold("text")).toBe("text");
+		expect(style.enabled).toBe(false);
 		expect(style.colorsEnabled).toBe(false);
 	});
 });

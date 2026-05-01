@@ -407,6 +407,13 @@ let globalColorMode: ColorMode | undefined;
  * Use this when callers want a single runtime knob (e.g. CLI
  * `--color`/`--no-color` flags) that affects every standalone import.
  *
+ * `"never"` suppresses **all** ANSI emission (colors, modifiers, and
+ * hyperlinks) for the runtime facade and top-level helpers — matching
+ * `createStyle({ mode: "never" })` and the {@link ColorMode} contract.
+ * To preserve modifiers under no-color.org semantics, set the
+ * `NO_COLOR` environment variable instead and leave the global mode at
+ * `"auto"`.
+ *
  * @param mode - `"auto"`, `"always"`, `"never"`, or `undefined` to clear.
  *
  * @example
@@ -414,7 +421,7 @@ let globalColorMode: ColorMode | undefined;
  * import { setGlobalColorMode, red } from "@crustjs/style";
  *
  * setGlobalColorMode("never");
- * red("plain text");           // "plain text"
+ * red("plain text");           // "plain text" (no ANSI)
  *
  * setGlobalColorMode("always");
  * red("forced color");         // includes ANSI even off-TTY
@@ -448,8 +455,11 @@ export function getGlobalColorMode(): ColorMode | undefined {
 
 // Cache key must include every input the resolved instance depends on:
 // `globalColorMode`, `stdout.isTTY`, `NO_COLOR`, `COLORTERM`, `TERM`.
-// `"never"` maps to `auto` + `noColor: "1"` so modifiers survive while
-// colors are suppressed (no-color.org semantics).
+// `"never"` maps directly to `mode: "never"` so the runtime facade
+// matches `createStyle({ mode: "never" })` and the `ColorMode` docstring
+// (no ANSI at all — colors, modifiers, and hyperlinks all suppressed).
+// no-color.org semantics (color off, modifiers preserved) are still
+// honored in `auto` mode through the `NO_COLOR` env var.
 const runtimeStyleCache = new Map<string, StyleInstance>();
 
 function buildRuntimeStyle(): StyleInstance {
@@ -457,10 +467,7 @@ function buildRuntimeStyle(): StyleInstance {
 		return createStyle({ mode: "always" });
 	}
 	if (globalColorMode === "never") {
-		return createStyle({
-			mode: "auto",
-			overrides: { isTTY: true, noColor: "1" },
-		});
+		return createStyle({ mode: "never" });
 	}
 	return createStyle({ mode: "auto" });
 }

@@ -64,6 +64,13 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
  * pack into a 3-bit base color, then add 60 for bright when the max
  * channel rounds up. Call sites add `+10` for backgrounds.
  *
+ * TODO(bun#22161): drop this helper and use `Bun.color(input, "ansi-16")`
+ * once https://github.com/oven-sh/bun/issues/22161 is fixed. Bun's
+ * `"ansi-16"` path currently packs the palette index as a single ASCII
+ * byte instead of decimal digits (e.g. index 9 → literal TAB),
+ * producing malformed sequences like `"\x1b[38;5;\tm"`. Reproduced on
+ * Bun 1.3.11.
+ *
  * @internal
  */
 function rgbToAnsi16Param(r: number, g: number, b: number): number {
@@ -86,8 +93,8 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 
 /**
  * Foreground SGR open sequence at `depth`. `truecolor` / `256` use
- * `Bun.color()`; `16` uses {@link rgbToAnsi16Param} because
- * `Bun.color(_, "ansi-16")` is malformed in current Bun (oven-sh/bun#22161).
+ * `Bun.color()`; `16` uses {@link rgbToAnsi16Param} — see the TODO
+ * there for why we don't call `Bun.color(_, "ansi-16")`.
  *
  * @internal
  */
