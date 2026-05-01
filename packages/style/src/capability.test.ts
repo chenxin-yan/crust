@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as codes from "./ansiCodes.ts";
-import {
-	resolveColorCapability,
-	resolveColorDepth,
-	resolveTrueColorCapability,
-} from "./capability.ts";
+import { resolveColorDepth } from "./capability.ts";
 import {
 	createStyle,
 	getGlobalColorMode,
@@ -33,105 +29,6 @@ function restoreRuntimeEnv() {
 
 beforeEach(restoreRuntimeEnv);
 afterEach(restoreRuntimeEnv);
-
-// ────────────────────────────────────────────────────────────────────────────
-// resolveColorCapability — mode resolution
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveColorCapability", () => {
-	describe("always mode", () => {
-		it("returns true regardless of overrides", () => {
-			expect(resolveColorCapability("always")).toBe(true);
-		});
-
-		it("returns true even when TTY is false", () => {
-			expect(
-				resolveColorCapability("always", { isTTY: false, noColor: undefined }),
-			).toBe(true);
-		});
-
-		it("returns true even when NO_COLOR is set", () => {
-			expect(
-				resolveColorCapability("always", { isTTY: false, noColor: "1" }),
-			).toBe(true);
-		});
-	});
-
-	describe("never mode", () => {
-		it("returns false regardless of overrides", () => {
-			expect(resolveColorCapability("never")).toBe(false);
-		});
-
-		it("returns false even when TTY is true", () => {
-			expect(
-				resolveColorCapability("never", { isTTY: true, noColor: undefined }),
-			).toBe(false);
-		});
-
-		it("returns false even when environment supports color", () => {
-			expect(resolveColorCapability("never", { isTTY: true })).toBe(false);
-		});
-	});
-
-	describe("auto mode", () => {
-		it("returns true when TTY and NO_COLOR not set", () => {
-			expect(
-				resolveColorCapability("auto", { isTTY: true, noColor: undefined }),
-			).toBe(true);
-		});
-
-		it("returns false when not a TTY", () => {
-			expect(
-				resolveColorCapability("auto", { isTTY: false, noColor: undefined }),
-			).toBe(false);
-		});
-
-		it("returns false when NO_COLOR is set to non-empty string", () => {
-			expect(
-				resolveColorCapability("auto", { isTTY: true, noColor: "1" }),
-			).toBe(false);
-		});
-
-		it("returns true when NO_COLOR is empty string (per no-color.org)", () => {
-			expect(resolveColorCapability("auto", { isTTY: true, noColor: "" })).toBe(
-				true,
-			);
-		});
-
-		it("returns false when both non-TTY and NO_COLOR set", () => {
-			expect(
-				resolveColorCapability("auto", { isTTY: false, noColor: "true" }),
-			).toBe(false);
-		});
-
-		it("returns false when TTY is not provided (defaults to false)", () => {
-			expect(resolveColorCapability("auto", { noColor: undefined })).toBe(
-				false,
-			);
-		});
-
-		it("accepts term / colorTerm overrides for full env isolation", () => {
-			// Regression: overrides type once excluded `term` / `colorTerm`,
-			// so callers couldn't isolate from `TERM=dumb` in the ambient env.
-			expect(
-				resolveColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					term: "dumb",
-					colorTerm: undefined,
-				}),
-			).toBe(false);
-			expect(
-				resolveColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					term: "xterm-256color",
-					colorTerm: undefined,
-				}),
-			).toBe(true);
-		});
-	});
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveColorDepth — depth-tier resolution
@@ -315,152 +212,38 @@ describe("resolveColorDepth", () => {
 				}),
 			).toBe("truecolor");
 		});
-	});
-});
 
-// ────────────────────────────────────────────────────────────────────────────
-// resolveTrueColorCapability — truecolor capability detection
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveTrueColorCapability", () => {
-	describe("always mode", () => {
-		it("returns true regardless of overrides", () => {
-			expect(resolveTrueColorCapability("always")).toBe(true);
-		});
-
-		it("returns true even without truecolor env vars", () => {
+		it('TTY + TERM=xterm-24bit → "truecolor"', () => {
 			expect(
-				resolveTrueColorCapability("always", {
-					isTTY: false,
-					noColor: "1",
-					colorTerm: undefined,
-					term: undefined,
-				}),
-			).toBe(true);
-		});
-	});
-
-	describe("never mode", () => {
-		it("returns false regardless of overrides", () => {
-			expect(resolveTrueColorCapability("never")).toBe(false);
-		});
-
-		it("returns false even with truecolor env vars", () => {
-			expect(
-				resolveTrueColorCapability("never", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "truecolor",
-				}),
-			).toBe(false);
-		});
-	});
-
-	describe("auto mode", () => {
-		it("returns true when TTY + COLORTERM=truecolor", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "truecolor",
-				}),
-			).toBe(true);
-		});
-
-		it("returns true when TTY + COLORTERM=24bit", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "24bit",
-				}),
-			).toBe(true);
-		});
-
-		it("returns true when TTY + TERM contains truecolor", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-truecolor",
-				}),
-			).toBe(true);
-		});
-
-		it("returns true when TTY + TERM contains 24bit", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
+				resolveColorDepth("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
 					term: "xterm-24bit",
 				}),
-			).toBe(true);
+			).toBe("truecolor");
 		});
 
-		it("returns true when TTY + TERM contains -direct", () => {
+		it('TTY + TERM=xterm-256color-direct → "truecolor" (`-direct` suffix wins over `256color`)', () => {
 			expect(
-				resolveTrueColorCapability("auto", {
+				resolveColorDepth("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
 					term: "xterm-256color-direct",
 				}),
-			).toBe(true);
+			).toBe("truecolor");
 		});
 
-		it("returns false when not a TTY", () => {
+		it('TTY + TERM=xterm-TRUECOLOR → "truecolor" (case-insensitive)', () => {
 			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: false,
-					noColor: undefined,
-					colorTerm: "truecolor",
-				}),
-			).toBe(false);
-		});
-
-		it("returns false when NO_COLOR is set", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: "1",
-					colorTerm: "truecolor",
-				}),
-			).toBe(false);
-		});
-
-		it("returns false when TTY but no truecolor env vars", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: undefined,
-					term: "xterm-256color",
-				}),
-			).toBe(false);
-		});
-
-		it("returns false when TTY but COLORTERM is something else", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
-					isTTY: true,
-					noColor: undefined,
-					colorTerm: "256color",
-					term: undefined,
-				}),
-			).toBe(false);
-		});
-
-		it("TERM check is case-insensitive", () => {
-			expect(
-				resolveTrueColorCapability("auto", {
+				resolveColorDepth("auto", {
 					isTTY: true,
 					noColor: undefined,
 					colorTerm: undefined,
 					term: "xterm-TRUECOLOR",
 				}),
-			).toBe(true);
+			).toBe("truecolor");
 		});
 	});
 });
@@ -919,11 +702,7 @@ describe("runtime-aware default exports", () => {
 		expect(style.colorsEnabled).toBe(true);
 	});
 
-	it('global color override "never" disables all ANSI (colors and modifiers)', () => {
-		// Matches `createStyle({ mode: "never" })` and the ColorMode
-		// docstring. For color-only suppression (modifiers preserved), use
-		// `NO_COLOR=1` in the environment with the global mode left at
-		// `"auto"`.
+	it("lets the global color override force colors off without disabling modifiers", () => {
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
@@ -931,8 +710,7 @@ describe("runtime-aware default exports", () => {
 		setGlobalColorMode("never");
 
 		expect(red("text")).toBe("text");
-		expect(bold("text")).toBe("text");
-		expect(style.enabled).toBe(false);
+		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
 		expect(style.colorsEnabled).toBe(false);
 	});
 });

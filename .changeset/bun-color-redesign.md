@@ -14,7 +14,7 @@ removed in v1.0.0.
 
 - `fg(text, input)` / `bg(text, input)` — apply a foreground or
   background color from anything `Bun.color()` accepts. Output adapts to
-  the resolved `ColorDepth` (see *Fallback* below).
+  the resolved `ColorDepth` (see _Fallback_ below).
 - `fgCode(input)` / `bgCode(input)` — deterministic `AnsiPair` factories
   for composition. Always emit `ansi-16m`; runtime capability gating
   happens at apply time.
@@ -34,21 +34,21 @@ and error contracts (`RangeError` for out-of-range RGB, `TypeError` for
 malformed hex). They emit `@deprecated` JSDoc warnings in IDEs and
 `tsc`, and will be removed in v1.0.0. Migrate at your leisure.
 
-| Deprecated | Replacement |
-| --- | --- |
-| `rgb(text, r, g, b)` | `fg(text, [r, g, b])` |
-| `bgRgb(text, r, g, b)` | `bg(text, [r, g, b])` |
-| `hex(text, "#rrggbb")` | `fg(text, "#rrggbb")` |
-| `bgHex(text, "#rrggbb")` | `bg(text, "#rrggbb")` |
-| `rgbCode(r, g, b)` | `fgCode([r, g, b])` |
-| `bgRgbCode(r, g, b)` | `bgCode([r, g, b])` |
-| `hexCode("#rrggbb")` | `fgCode("#rrggbb")` |
-| `bgHexCode("#rrggbb")` | `bgCode("#rrggbb")` |
-| `parseHex("#rrggbb")` | Pass the hex string directly to `fg` / `bg` / `fgCode` / `bgCode` |
-| `style.rgb(text, r, g, b)` | `style.fg(text, [r, g, b])` |
-| `style.bgRgb(text, r, g, b)` | `style.bg(text, [r, g, b])` |
-| `style.hex(text, "#rrggbb")` | `style.fg(text, "#rrggbb")` |
-| `style.bgHex(text, "#rrggbb")` | `style.bg(text, "#rrggbb")` |
+| Deprecated                     | Replacement                                                       |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `rgb(text, r, g, b)`           | `fg(text, [r, g, b])`                                             |
+| `bgRgb(text, r, g, b)`         | `bg(text, [r, g, b])`                                             |
+| `hex(text, "#rrggbb")`         | `fg(text, "#rrggbb")`                                             |
+| `bgHex(text, "#rrggbb")`       | `bg(text, "#rrggbb")`                                             |
+| `rgbCode(r, g, b)`             | `fgCode([r, g, b])`                                               |
+| `bgRgbCode(r, g, b)`           | `bgCode([r, g, b])`                                               |
+| `hexCode("#rrggbb")`           | `fgCode("#rrggbb")`                                               |
+| `bgHexCode("#rrggbb")`         | `bgCode("#rrggbb")`                                               |
+| `parseHex("#rrggbb")`          | Pass the hex string directly to `fg` / `bg` / `fgCode` / `bgCode` |
+| `style.rgb(text, r, g, b)`     | `style.fg(text, [r, g, b])`                                       |
+| `style.bgRgb(text, r, g, b)`   | `style.bg(text, [r, g, b])`                                       |
+| `style.hex(text, "#rrggbb")`   | `style.fg(text, "#rrggbb")`                                       |
+| `style.bgHex(text, "#rrggbb")` | `style.bg(text, "#rrggbb")`                                       |
 
 ### Input surface
 
@@ -68,12 +68,12 @@ understands:
 
 Dynamic colors now resolve at runtime against the terminal's color depth:
 
-| Resolved depth | Detection (in `"auto"` mode) |
-| --- | --- |
-| `"truecolor"` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
-| `"256"` | `TERM` contains `256color` |
-| `"16"` | Any other TTY value |
-| `"none"` | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
+| Resolved depth | Detection (in `"auto"` mode)                                                             |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `"truecolor"`  | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"`        | `TERM` contains `256color`                                                               |
+| `"16"`         | Any other TTY value                                                                      |
+| `"none"`       | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
 
 - Standalone `fg` / `bg` resolve depth on every call through the runtime
   `style` facade, so `setGlobalColorMode("never")`, `NO_COLOR=1`, and
@@ -92,7 +92,21 @@ Dynamic colors now resolve at runtime against the terminal's color depth:
 - Truecolor escape bytes from `fg` / `fgCode` for the same input are
   byte-identical to the deprecated helpers (e.g. `fg("x", [0, 128, 255])`
   produces the exact same sequence as `rgb("x", 0, 128, 255)`).
-- `resolveColorCapability` and `resolveTrueColorCapability` keep their
-  signatures; they are now thin wrappers over `resolveColorDepth`.
 - `trueColorEnabled` is retained on `StyleInstance` and equals
   `colorDepth === "truecolor"`.
+
+### Public API removed
+
+- `resolveColorCapability(mode, overrides?)` and
+  `resolveTrueColorCapability(mode, overrides?)` have been removed in
+  favor of `resolveColorDepth(mode, overrides?)`. They were thin
+  wrappers over the depth resolver:
+  - `resolveColorCapability(...)` → `resolveColorDepth(...) !== "none"`
+  - `resolveTrueColorCapability(...)` → `resolveColorDepth(...) === "truecolor"`
+    Migrating: replace each call with the equivalent comparison. The
+    depth tier carries strictly more information — e.g.
+    `resolveTrueColorCapability(...) === false` previously hid whether
+    the terminal supported `"256"` or `"16"` color; the depth value
+    surfaces that distinction directly. The instance properties
+    `style.colorsEnabled` and `style.trueColorEnabled` remain available
+    for already-resolved styles.

@@ -98,13 +98,14 @@ describe("runtime link export", () => {
 		}
 	});
 
-	it('suppresses hyperlinks when global color mode is "never"', () => {
-		// `setGlobalColorMode("never")` matches `createStyle({ mode: "never" })`:
-		// no ANSI of any kind — colors, modifiers, AND hyperlinks. NO_COLOR
-		// (env var) is the knob for color-only suppression.
+	it('still emits hyperlinks when global color mode is "never"', () => {
+		// Runtime facade `"never"` follows no-color.org: colors off,
+		// modifiers + hyperlinks survive.
 		setGlobalColorMode("never");
 		try {
-			expect(link("Crust", "https://crustjs.com")).toBe("Crust");
+			expect(link("Crust", "https://crustjs.com")).toBe(
+				"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
+			);
 		} finally {
 			setGlobalColorMode(undefined);
 		}

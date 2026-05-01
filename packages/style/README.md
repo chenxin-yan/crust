@@ -131,9 +131,9 @@ captured references re-resolve the active color mode on every call:
 import { setGlobalColorMode, style, bold } from "@crustjs/style";
 
 setGlobalColorMode("always");
-const myBold = style.bold; // forwarder, dynamic
+const myBold = style.bold;          // forwarder, dynamic
 setGlobalColorMode("never");
-myBold("x"); // honors the new mode
+myBold("x");                        // honors the new mode
 ```
 
 **Sub-chain captures snapshot.** `const myBoldRed = style.bold.red`
@@ -141,8 +141,8 @@ locks to the chainable resolved at access time. To stay dynamic, capture
 the leaf forwarder and chain at the call site:
 
 ```ts
-const fmt = style.bold; // dynamic forwarder
-fmt.red("x"); // re-resolves on every chain access
+const fmt = style.bold;             // dynamic forwarder
+fmt.red("x");                       // re-resolves on every chain access
 ```
 
 This matches chalk and ansis.
@@ -152,25 +152,14 @@ This matches chalk and ansis.
 Wrap text in terminal hyperlink escape sequences:
 
 ```ts
-import {
-  createStyle,
-  linkCode,
-  composeStyles,
-  applyStyle,
-  underlineCode,
-} from "@crustjs/style";
+import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
 
 console.log(s.link("Crust docs", "https://crustjs.com"));
-console.log(
-  s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }),
-);
+console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
 
-const underlinedLink = composeStyles(
-  linkCode("https://crustjs.com"),
-  underlineCode,
-);
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
 console.log(applyStyle("Visit Crust", underlinedLink));
 ```
 
@@ -195,7 +184,7 @@ console.log(fg("royal", "rebeccapurple"));
 
 // rgb() / hsl() strings
 console.log(fg("ocean", "rgb(0, 128, 255)"));
-console.log(bg("sun", "hsl(45, 100%, 50%)"));
+console.log(bg("sun",   "hsl(45, 100%, 50%)"));
 
 // Numeric literal
 console.log(fg("red", 0xff0000));
@@ -232,13 +221,7 @@ Nullish text (`fg(undefined, "#f00")`, `bold(null)`, etc.) returns `""` defensiv
 Create reusable `AnsiPair` objects for composition:
 
 ```ts
-import {
-  fgCode,
-  bgCode,
-  applyStyle,
-  composeStyles,
-  boldCode,
-} from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
 
 const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
@@ -271,16 +254,16 @@ The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory va
 
 `fg` / `bg` are capability-aware: the resolved color depth determines which `Bun.color()` format is emitted on every call. The standalone exports re-resolve on every call, while instances created with `createStyle()` capture the depth at construction time.
 
-| Resolved depth | Output                                                                    | Detection (in `"auto"` mode)                                                             |
-| -------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `"truecolor"`  | `Bun.color(input, "ansi-16m")`                                            | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
-| `"256"`        | `Bun.color(input, "ansi-256")`                                            | `TERM` contains `256color`                                                               |
-| `"16"`         | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value                                                                      |
-| `"none"`       | `text` returned unchanged                                                 | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
-
-Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables. Disable color emission entirely with `setGlobalColorMode("never")` or by setting `NO_COLOR=1`. Force truecolor with `setGlobalColorMode("always")` or `mode: "always"` on `createStyle()`.
+| Resolved depth | Output | Detection (in `"auto"` mode) |
+| --- | --- | --- |
+| `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
+| `"16"` | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value |
+| `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
 
 The `"16"` row uses an in-package quantizer (same algorithm as `ansi-styles` / `chalk`) pending an upstream Bun fix ([oven-sh/bun#22161](https://github.com/oven-sh/bun/issues/22161)).
+
+Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables. Disable color emission entirely with `setGlobalColorMode("never")` or by setting `NO_COLOR=1`. Force truecolor with `setGlobalColorMode("always")` or `mode: "always"` on `createStyle()`.
 
 Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly, or read `style.colorDepth` / `instance.colorDepth` for the live value:
 
@@ -288,7 +271,7 @@ Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly,
 import { resolveColorDepth, style } from "@crustjs/style";
 
 resolveColorDepth("auto"); // "truecolor" | "256" | "16" | "none"
-style.colorDepth; // depth currently used by the runtime style
+style.colorDepth;          // depth currently used by the runtime style
 ```
 
 Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at every depth — including `"none"` — so user bugs are not silently masked when colors are off.
@@ -338,12 +321,9 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Disable all ANSI output (colors, modifiers, hyperlinks)
+// Disable colors but keep bold / italic / underline / hyperlinks (no-color.org)
 setGlobalColorMode("never");
-console.log(style.bold.red("bold, but no red")); // plain text
-
-// To suppress colors only (preserving modifiers + hyperlinks per
-// no-color.org), set NO_COLOR=1 in the environment instead.
+console.log(style.bold.red("bold, but no red"));
 
 // Revert to auto (respect TTY + NO_COLOR)
 setGlobalColorMode(undefined);
@@ -397,8 +377,8 @@ wrapText("a long line of styled text", 20);
 wrapText("force break mode", 10, { wordBreak: false });
 
 // ANSI-safe padding and alignment
-padStart("42", 6); // "    42"
-padEnd("name", 10); // "name      "
+padStart("42", 6);   // "    42"
+padEnd("name", 10);  // "name      "
 center("title", 20); // "       title        "
 ```
 
@@ -462,11 +442,7 @@ import { defaultTheme } from "@crustjs/style";
 console.log(defaultTheme.heading1("Getting Started"));
 console.log(defaultTheme.strong("important"));
 console.log(defaultTheme.inlineCode("npm install"));
-console.log(
-  defaultTheme.linkText("docs") +
-    " " +
-    defaultTheme.linkUrl("https://crustjs.com"),
-);
+console.log(defaultTheme.linkText("docs") + " " + defaultTheme.linkUrl("https://crustjs.com"));
 ```
 
 The markdown theme styles how links look, but it does not create OSC 8 hyperlinks by itself. When your renderer has both the label and destination URL, use `style.link()` or `linkCode()` to emit a clickable link.
@@ -491,16 +467,16 @@ const theme = createMarkdownTheme({
 
 The `MarkdownTheme` interface covers 30 GFM slots:
 
-| Category    | Slots                                                             |
-| ----------- | ----------------------------------------------------------------- |
-| Headings    | `heading1` through `heading6`                                     |
-| Text        | `text`, `emphasis`, `strong`, `strongEmphasis`, `strikethrough`   |
-| Code        | `inlineCode`, `codeFence`, `codeInfo`, `codeText`                 |
-| Links       | `linkText`, `linkUrl`, `autolink`                                 |
-| Lists       | `listMarker`, `orderedListMarker`, `taskChecked`, `taskUnchecked` |
-| Blockquotes | `blockquoteMarker`, `blockquoteText`                              |
-| Tables      | `tableHeader`, `tableCell`, `tableBorder`                         |
-| Other       | `thematicBreak`, `imageAltText`, `imageUrl`                       |
+| Category | Slots |
+| --- | --- |
+| Headings | `heading1` through `heading6` |
+| Text | `text`, `emphasis`, `strong`, `strongEmphasis`, `strikethrough` |
+| Code | `inlineCode`, `codeFence`, `codeInfo`, `codeText` |
+| Links | `linkText`, `linkUrl`, `autolink` |
+| Lists | `listMarker`, `orderedListMarker`, `taskChecked`, `taskUnchecked` |
+| Blockquotes | `blockquoteMarker`, `blockquoteText` |
+| Tables | `tableHeader`, `tableCell`, `tableBorder` |
+| Other | `thematicBreak`, `imageAltText`, `imageUrl` |
 
 Theme slots are parser-agnostic `string => string` functions. Markdown parsing and AST handling belong to a separate consumer package — `@crustjs/style` provides the presentation layer only.
 

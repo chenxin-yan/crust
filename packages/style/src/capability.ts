@@ -50,6 +50,21 @@ function isTrueColorTerm(term: string): boolean {
 	);
 }
 
+// Single source of truth for truecolor detection: covers both the
+// `COLORTERM` exact-match heuristic and the `TERM` substring heuristic.
+function detectsTruecolor(
+	colorTerm: string | undefined,
+	term: string | undefined,
+): boolean {
+	if (colorTerm !== undefined) {
+		const lower = colorTerm.toLowerCase();
+		if (lower === "truecolor" || lower === "24bit") {
+			return true;
+		}
+	}
+	return term !== undefined && isTrueColorTerm(term);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
@@ -59,8 +74,7 @@ function isTrueColorTerm(term: string): boolean {
  *
  * Resolution rules:
  * - `"never"` → `"none"`.
- * - `"always"` → `"truecolor"` (consistent with
- *   {@link resolveTrueColorCapability}`("always")`).
+ * - `"always"` → `"truecolor"`.
  * - `"auto"`:
  *   1. Not a TTY OR `NO_COLOR` set non-empty → `"none"`.
  *   2. `COLORTERM` is `"truecolor"` or `"24bit"` (case-insensitive) →
@@ -119,18 +133,12 @@ export function resolveColorDepth(
 	}
 
 	const colorTerm = readColorTerm(overrides);
-	if (colorTerm !== undefined) {
-		const lower = colorTerm.toLowerCase();
-		if (lower === "truecolor" || lower === "24bit") {
-			return "truecolor";
-		}
+	const term = readTerm(overrides);
+	if (detectsTruecolor(colorTerm, term)) {
+		return "truecolor";
 	}
 
-	const term = readTerm(overrides);
 	if (term !== undefined) {
-		if (isTrueColorTerm(term)) {
-			return "truecolor";
-		}
 		// Case-insensitive to match `isTrueColorTerm` and the `256color`
 		// check below: `TERM=DUMB` / `TERM=Dumb` should also disable color.
 		const lower = term.toLowerCase();
@@ -143,51 +151,6 @@ export function resolveColorDepth(
 	}
 
 	return "16";
-}
-
-/**
- * Resolve whether ANSI color codes should be emitted.
- *
- * Equivalent to `resolveColorDepth(mode, overrides) !== "none"`.
- *
- * Resolution rules:
- * - `"always"` → `true` regardless of environment.
- * - `"never"` → `false` regardless of environment.
- * - `"auto"` → `true` only when stdout is a TTY **and** the `NO_COLOR`
- *   environment variable is not present with a non-empty value, per the
- *   [NO_COLOR convention](https://no-color.org/). `TERM=dumb` also disables
- *   color emission.
- *
- * The `overrides` parameter allows deterministic testing by injecting
- * capability inputs instead of reading from the runtime environment.
- * Because this delegates to {@link resolveColorDepth}, callers should
- * also pass `term` / `colorTerm` when they need full env isolation —
- * `TERM=dumb` in the ambient environment otherwise forces `"none"`.
- *
- * @param mode - The color emission mode.
- * @param overrides - Optional overrides for TTY, NO_COLOR, TERM, and
- * COLORTERM detection.
- * @returns `true` if ANSI codes should be emitted, `false` otherwise.
- *
- * @example
- * ```ts
- * resolveColorCapability("auto"); // true if TTY and NO_COLOR not set
- * resolveColorCapability("always"); // true
- * resolveColorCapability("never"); // false
- * resolveColorCapability("auto", { isTTY: true, noColor: undefined }); // env-dependent
- * resolveColorCapability("auto", {
- *   isTTY: true,
- *   noColor: undefined,
- *   term: "xterm-256color",
- *   colorTerm: undefined,
- * }); // true, deterministic
- * ```
- */
-export function resolveColorCapability(
-	mode: ColorMode,
-	overrides?: CapabilityOverrides & TrueColorOverrides,
-): boolean {
-	return resolveColorDepth(mode, overrides) !== "none";
 }
 
 /**
@@ -237,41 +200,4 @@ export function resolveHyperlinkCapability(
 	}
 
 	return readTTY(overrides);
-}
-
-/**
- * Resolve whether the terminal supports truecolor (24-bit) ANSI sequences.
- *
- * Equivalent to `resolveColorDepth(mode, overrides) === "truecolor"`.
- *
- * Detection heuristics (checked in order):
- * 1. `COLORTERM` environment variable is `"truecolor"` or `"24bit"`.
- * 2. `TERM` environment variable contains `"24bit"`, `"truecolor"`, or `"-direct"`.
- *
- * In `"always"` mode, returns `true` unconditionally.
- * In `"never"` mode, returns `false` unconditionally.
- * In `"auto"` mode, requires base color to be enabled **and** truecolor
- * to be detected.
- *
- * @param mode - The color emission mode.
- * @param overrides - Optional overrides for deterministic testing.
- * @returns `true` if truecolor sequences should be emitted.
- *
- * @example
- * ```ts
- * resolveTrueColorCapability("auto"); // true if TTY + truecolor env detected
- * resolveTrueColorCapability("always"); // true
- * resolveTrueColorCapability("never"); // false
- * resolveTrueColorCapability("auto", {
- *   isTTY: true,
- *   noColor: undefined,
- *   colorTerm: "truecolor",
- * }); // true
- * ```
- */
-export function resolveTrueColorCapability(
-	mode: ColorMode,
-	overrides?: CapabilityOverrides & TrueColorOverrides,
-): boolean {
-	return resolveColorDepth(mode, overrides) === "truecolor";
 }

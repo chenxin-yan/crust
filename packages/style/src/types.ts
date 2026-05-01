@@ -47,16 +47,28 @@ export type ColorInput =
 /**
  * Color emission mode for the style engine.
  *
- * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR` is
- *   not set (or is empty). Non-color modifiers (bold, italic, etc.) are always
- *   emitted in `"auto"` mode regardless of TTY or `NO_COLOR`.
+ * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR`
+ *   is not set (or is empty). Non-color modifiers (bold, italic, etc.) are
+ *   always emitted in `"auto"` mode regardless of TTY or `NO_COLOR`.
  * - `"always"` — Always emit ANSI codes regardless of terminal detection.
- * - `"never"` — Never emit ANSI codes; return plain text.
+ * - `"never"` — Disable ANSI emission. Behavior depends on the surface:
+ *     - On `createStyle({ mode: "never" })`: every form of ANSI is
+ *       suppressed (colors, modifiers, hyperlinks). The instance returns
+ *       plain text.
+ *     - On the runtime facade and top-level helpers via
+ *       {@link setGlobalColorMode}: follows [no-color.org](https://no-color.org/)
+ *       semantics — colors are suppressed, but non-color modifiers and
+ *       hyperlinks continue to emit. This matches the conventional
+ *       meaning of a `--no-color` flag while keeping `bold` / `italic`
+ *       / `link` usable.
  *
  * @example
  * ```ts
- * const style = createStyle({ mode: "never" });
- * style.bold("text"); // "text" (no ANSI codes)
+ * createStyle({ mode: "never" }).bold("text");  // "text" (no ANSI)
+ *
+ * setGlobalColorMode("never");
+ * style.red("text");                            // "text" (color off)
+ * style.bold("text");                           // "\x1b[1mtext\x1b[22m"
  * ```
  */
 export type ColorMode = "auto" | "always" | "never";
@@ -97,7 +109,7 @@ export interface CapabilityOverrides {
  * Truecolor capability overrides for deterministic testing.
  *
  * These override environment variable checks used by
- * {@link resolveTrueColorCapability} to detect 24-bit color support.
+ * {@link resolveColorDepth} to detect 24-bit color support.
  */
 export interface TrueColorOverrides {
 	/** Override `process.env.COLORTERM`. */

@@ -295,17 +295,16 @@ describe("setGlobalColorMode — capture semantics", () => {
 		setGlobalColorMode("always");
 		const captured = bold;
 		setGlobalColorMode("never");
-		// `"never"` disables all ANSI (matches createStyle({ mode: "never" }))
-		expect(captured("x")).toBe("x");
+		// Runtime facade `"never"` follows no-color.org: bold survives.
+		expect(captured("x")).toBe("\x1b[1mx\x1b[22m");
 	});
 
 	it("`style.bold` (forwarder) re-resolves after mode flip", () => {
 		setGlobalColorMode("always");
 		const captured = style.bold;
 		setGlobalColorMode("never");
-		// `"never"` suppresses all ANSI — the forwarder resolves the current
-		// runtime style which has modifiers + colors both off.
-		expect(captured.red("x")).toBe("x");
+		// `captured.red("x")`: bold (modifier) stays, red (color) is dropped.
+		expect(captured.red("x")).toBe("\x1b[1mx\x1b[22m");
 	});
 
 	it("sub-chain capture (`style.bold.red`) snapshots at access time", () => {

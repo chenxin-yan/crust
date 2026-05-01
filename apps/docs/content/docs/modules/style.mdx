@@ -90,11 +90,9 @@ The string branch uses [`LiteralUnion`](https://github.com/sindresorhus/type-fes
 
 ### Capability Detection
 
-| Export                                         | Description                                                                             |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `resolveColorCapability(mode, overrides?)`     | Resolve whether colors should be emitted                                                |
-| `resolveTrueColorCapability(mode, overrides?)` | Resolve whether truecolor (24-bit) sequences should be emitted                          |
-| `resolveColorDepth(mode, overrides?)`          | Resolve the [`ColorDepth`](#colordepth) tier (`"truecolor" \| "256" \| "16" \| "none"`) |
+| Export                                | Description                                                                                                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `resolveColorDepth(mode, overrides?)` | Resolve the [`ColorDepth`](#colordepth) tier (`"truecolor" \| "256" \| "16" \| "none"`). Compare against `"none"` for a yes/no "is color enabled" check, or `"truecolor"` to gate 24-bit output. |
 
 ### Text Utilities
 
@@ -202,13 +200,9 @@ import { getGlobalColorMode, setGlobalColorMode, style } from "@crustjs/style";
 setGlobalColorMode("always");
 console.log(style.red("always red"));
 
-// Disable all ANSI output (colors, modifiers, hyperlinks)
+// Disable colors but keep bold / italic / underline / hyperlinks (no-color.org)
 setGlobalColorMode("never");
-console.log(style.bold.red("bold, but no red")); // "bold, but no red"
-
-// To suppress only colors while keeping modifiers + hyperlinks,
-// set NO_COLOR=1 in the environment instead (no-color.org semantics).
-console.log(style.bold("still bold"));
+console.log(style.bold.red("bold, but no red"));
 
 // Revert to auto (respect TTY + NO_COLOR)
 setGlobalColorMode(undefined);
@@ -362,9 +356,9 @@ In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format
 | `"16"`         | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value                                                                      |
 | `"none"`       | `text` returned unchanged                                                 | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
 
-Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables are introduced. Disable color emission entirely with `setGlobalColorMode("never")` or `NO_COLOR=1`; force truecolor with `setGlobalColorMode("always")`.
-
 The `"16"` row uses an in-package quantizer (same algorithm as `ansi-styles` / `chalk`) pending an upstream Bun fix ([oven-sh/bun#22161](https://github.com/oven-sh/bun/issues/22161)).
+
+Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM` conventions — no new environment variables are introduced. Disable color emission entirely with `setGlobalColorMode("never")` or `NO_COLOR=1`; force truecolor with `setGlobalColorMode("always")`.
 
 Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly, or read `style.colorDepth` / `instance.colorDepth`:
 

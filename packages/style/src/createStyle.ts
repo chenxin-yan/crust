@@ -407,21 +407,23 @@ let globalColorMode: ColorMode | undefined;
  * Use this when callers want a single runtime knob (e.g. CLI
  * `--color`/`--no-color` flags) that affects every standalone import.
  *
- * `"never"` suppresses **all** ANSI emission (colors, modifiers, and
- * hyperlinks) for the runtime facade and top-level helpers — matching
- * `createStyle({ mode: "never" })` and the {@link ColorMode} contract.
- * To preserve modifiers under no-color.org semantics, set the
- * `NO_COLOR` environment variable instead and leave the global mode at
- * `"auto"`.
+ * `"never"` on the runtime facade follows [no-color.org](https://no-color.org/)
+ * semantics: colors are suppressed, but non-color modifiers (`bold`,
+ * `italic`, etc.) and hyperlinks continue to emit. This intentionally
+ * diverges from `createStyle({ mode: "never" })`, which disables all
+ * ANSI output — see {@link ColorMode} for the full contract. To
+ * suppress every form of ANSI on the runtime facade as well, prefer
+ * `createStyle({ mode: "never" })` for the relevant code path.
  *
  * @param mode - `"auto"`, `"always"`, `"never"`, or `undefined` to clear.
  *
  * @example
  * ```ts
- * import { setGlobalColorMode, red } from "@crustjs/style";
+ * import { setGlobalColorMode, red, bold } from "@crustjs/style";
  *
  * setGlobalColorMode("never");
- * red("plain text");           // "plain text" (no ANSI)
+ * red("plain text");           // "plain text" (color off)
+ * bold("still bold");          // "\x1b[1mstill bold\x1b[22m" (modifier kept)
  *
  * setGlobalColorMode("always");
  * red("forced color");         // includes ANSI even off-TTY
@@ -455,11 +457,11 @@ export function getGlobalColorMode(): ColorMode | undefined {
 
 // Cache key must include every input the resolved instance depends on:
 // `globalColorMode`, `stdout.isTTY`, `NO_COLOR`, `COLORTERM`, `TERM`.
-// `"never"` maps directly to `mode: "never"` so the runtime facade
-// matches `createStyle({ mode: "never" })` and the `ColorMode` docstring
-// (no ANSI at all — colors, modifiers, and hyperlinks all suppressed).
-// no-color.org semantics (color off, modifiers preserved) are still
-// honored in `auto` mode through the `NO_COLOR` env var.
+// `"never"` follows no-color.org semantics for the runtime facade:
+// colors are suppressed but non-color modifiers (bold/italic/...) and
+// hyperlinks survive. This intentionally diverges from
+// `createStyle({ mode: "never" })` (which suppresses all ANSI). See the
+// `ColorMode` and `setGlobalColorMode` JSDocs for the rationale.
 const runtimeStyleCache = new Map<string, StyleInstance>();
 
 function buildRuntimeStyle(): StyleInstance {
@@ -467,7 +469,10 @@ function buildRuntimeStyle(): StyleInstance {
 		return createStyle({ mode: "always" });
 	}
 	if (globalColorMode === "never") {
-		return createStyle({ mode: "never" });
+		return createStyle({
+			mode: "auto",
+			overrides: { isTTY: true, noColor: "1" },
+		});
 	}
 	return createStyle({ mode: "auto" });
 }

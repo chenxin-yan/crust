@@ -59,11 +59,7 @@ export type {
 export { orderedList, taskList, unorderedList } from "./blocks/lists.ts";
 export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
-export {
-	resolveColorCapability,
-	resolveColorDepth,
-	resolveTrueColorCapability,
-} from "./capability.ts";
+export { resolveColorDepth } from "./capability.ts";
 // Style primitives — Dynamic colors (depth-aware) powered by `Bun.color()`
 export { bgCode, fgCode } from "./color.ts";
 export {
