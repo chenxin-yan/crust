@@ -282,50 +282,49 @@ function acceptsUndefined(ast: AST): boolean {
  * annotation. This function walks through those layers to find the first
  * description annotation.
  */
-function resolveDescriptionFromAst(ast: AST, depth = 0): string | undefined {
-	if (depth >= MAX_AST_WALK_DEPTH) {
-		return undefined;
-	}
+function resolveDescriptionFromAst(ast: AST): string | undefined {
+	// Iterative DFS with a single shared step budget. Union members are pushed
+	// onto the stack rather than explored via recursion, so deeply nested or
+	// widely branching union trees cannot exceed `MAX_AST_WALK_DEPTH` total
+	// node visits — mirroring the iterative discipline of `unwrapInputAst` and
+	// `acceptsUndefined`.
+	const stack: AST[] = [ast];
 
-	let current: AST = ast;
+	for (let steps = 0; steps < MAX_AST_WALK_DEPTH; steps++) {
+		const current = stack.pop();
+		if (current === undefined) {
+			return undefined;
+		}
 
-	for (let i = depth; i < MAX_AST_WALK_DEPTH; i++) {
 		const annotated = readDescriptionAnnotation(current);
 		if (annotated !== undefined) {
 			return annotated;
 		}
 
-		if (current._tag === "Transformation") {
-			current = current.from;
-			continue;
-		}
-
-		if (current._tag === "Refinement") {
-			current = current.from;
+		if (current._tag === "Transformation" || current._tag === "Refinement") {
+			stack.push(current.from);
 			continue;
 		}
 
 		if (current._tag === "Suspend") {
-			current = current.f();
+			stack.push(current.f());
 			continue;
 		}
 
 		// Unwrap unions — find description on non-undefined members
-		// (handles patterns like Schema.UndefinedOr(Schema.String.annotations({...})))
+		// (handles patterns like Schema.UndefinedOr(Schema.String.annotations({...}))).
+		// Push in reverse so the first non-undefined member is popped first,
+		// preserving the original left-to-right search order.
 		if (current._tag === "Union") {
-			for (const member of current.types) {
-				if (member._tag === "UndefinedKeyword") {
-					continue;
-				}
-				const desc = resolveDescriptionFromAst(member, i + 1);
-				if (desc !== undefined) {
-					return desc;
+			for (let i = current.types.length - 1; i >= 0; i--) {
+				const member = current.types[i];
+				if (member !== undefined && member._tag !== "UndefinedKeyword") {
+					stack.push(member);
 				}
 			}
-			return undefined;
 		}
 
-		return undefined;
+		// Unknown wrapper — cannot drill further on this branch.
 	}
 
 	return undefined;

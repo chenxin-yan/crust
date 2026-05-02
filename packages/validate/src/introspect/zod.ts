@@ -1,10 +1,19 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Zod introspection — duck-types Zod 4 internals via `_zod.def.*`
+// Zod introspection — duck-types Zod 4 schemas via top-level runtime fields
 // ────────────────────────────────────────────────────────────────────────────
 //
 // Zod 4 schemas are themselves Standard Schemas (they expose `~standard`
 // natively). We therefore read directly off the schema; no adapter shim is
 // required between the Standard Schema wrapper and the internal Zod API.
+//
+// We intentionally avoid `_zod.def.*` (Zod's true private internals) and
+// instead rely on the stable top-level runtime surface that Zod 4 exposes
+// on every schema instance:
+//   • `type`         — discriminator string ("string", "optional", "pipe", …)
+//   • `unwrap()`     — present on optional/nullable/default/etc. wrappers
+//   • `in`           — input schema for `pipe`/`transform`
+//   • `values`       — populated for `enum`/`literal`
+//   • `description`  — set via `.describe("…")`
 
 import type { StandardSchema } from "../types.ts";
 

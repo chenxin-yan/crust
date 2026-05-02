@@ -259,13 +259,17 @@ type AllArgsHaveSchema<A extends ArgsDef> = A extends readonly [
 
 type AllFlagsHaveSchema<F extends FlagsDef> = string extends keyof F
 	? true
-	: {
-				[K in keyof F]: F[K] extends { readonly [VALIDATED_SCHEMA]: unknown }
-					? true
-					: false;
-			}[keyof F] extends true
-		? true
-		: false;
+	: keyof F extends never
+		? true // vacuously true for empty flags (`flags: {}`)
+		: {
+					[K in keyof F]: F[K] extends {
+						readonly [VALIDATED_SCHEMA]: unknown;
+					}
+						? true
+						: false;
+				}[keyof F] extends true
+			? true
+			: false;
 
 /**
  * Resolves to `true` only when every arg and flag carries `[VALIDATED_SCHEMA]`.
