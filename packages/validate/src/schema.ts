@@ -211,15 +211,16 @@ export function flag<
 	const aliases: string[] | undefined = options?.aliases
 		? [...options.aliases]
 		: undefined;
+	const inherit: true | undefined = options?.inherit ? true : undefined;
 
 	const def = {
 		type: resolvedType,
 		...(multiple && { multiple: true as const }),
 		short,
 		aliases,
+		inherit,
 		...(description !== undefined && { description }),
 		...(resolvedRequired && { required: true as const }),
-		...(options?.inherit && { inherit: true as const }),
 		[VALIDATED_SCHEMA]: schema,
 	};
 
