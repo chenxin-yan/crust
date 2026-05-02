@@ -1,7 +1,21 @@
+import { CrustError } from "@crustjs/core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { renderBulletList, throwValidationError } from "../validation.ts";
 import type { InferOutput, StandardSchema } from "./types.ts";
-import { validateStandard, validateStandardSync } from "./validate.ts";
+import {
+	isStandardSchema,
+	validateStandard,
+	validateStandardSync,
+} from "./validate.ts";
+import { renderBulletList, throwValidationError } from "./validation.ts";
+
+function assertStandardSchema(value: unknown, label: string): void {
+	if (!isStandardSchema(value)) {
+		throw new CrustError(
+			"DEFINITION",
+			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
+		);
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompt error rendering strategies
@@ -54,7 +68,7 @@ export interface PromptValidatorOptions {
  * @example
  * ```ts
  * import { z } from "zod";
- * import { promptValidator } from "@crustjs/validate/standard";
+ * import { promptValidator } from "@crustjs/validate";
  * import { input } from "@crustjs/prompts";
  *
  * const name = await input({
@@ -76,6 +90,7 @@ export function promptValidator<S extends StandardSchema>(
 	schema: S,
 	options?: PromptValidatorOptions,
 ): (value: StandardSchemaV1.InferInput<S>) => Promise<true | string> {
+	assertStandardSchema(schema, "promptValidator()");
 	const errorStrategy = options?.errorStrategy ?? "first";
 
 	return async (value: StandardSchemaV1.InferInput<S>) => {
@@ -113,7 +128,7 @@ export function promptValidator<S extends StandardSchema>(
  * @example
  * ```ts
  * import { z } from "zod";
- * import { parsePromptValue } from "@crustjs/validate/standard";
+ * import { parsePromptValue } from "@crustjs/validate";
  * import { input } from "@crustjs/prompts";
  *
  * const raw = await input({ message: "Enter port" });
@@ -125,6 +140,7 @@ export async function parsePromptValue<S extends StandardSchema>(
 	schema: S,
 	value: StandardSchemaV1.InferInput<S>,
 ): Promise<InferOutput<S>> {
+	assertStandardSchema(schema, "parsePromptValue()");
 	const result = await validateStandard(schema, value);
 
 	if (result.ok) {
@@ -154,7 +170,7 @@ export async function parsePromptValue<S extends StandardSchema>(
  * @example
  * ```ts
  * import { z } from "zod";
- * import { parsePromptValueSync } from "@crustjs/validate/standard";
+ * import { parsePromptValueSync } from "@crustjs/validate";
  *
  * const port = parsePromptValueSync(z.coerce.number().int().positive(), "8080");
  * // port is typed as `number`
@@ -164,6 +180,7 @@ export function parsePromptValueSync<S extends StandardSchema>(
 	schema: S,
 	value: StandardSchemaV1.InferInput<S>,
 ): InferOutput<S> {
+	assertStandardSchema(schema, "parsePromptValueSync()");
 	const result = validateStandardSync(schema, value);
 
 	if (result.ok) {

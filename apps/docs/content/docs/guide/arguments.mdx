@@ -120,6 +120,8 @@ my-cli /output file1.txt file2.txt file3.txt
 
 Variadic arguments with `required: true` error when no values are provided. Without `required`, an empty array is returned.
 
+The inferred TypeScript type is always `T[]` — never `T[] | undefined` — regardless of `required`. The `required` flag only controls whether an empty array fails validation; it does not change the runtime shape or the inferred type.
+
 ## The `--` Separator
 
 Arguments after `--` are collected into `rawArgs` and **not** processed as positional arguments or flags:
