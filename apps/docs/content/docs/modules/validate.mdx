@@ -144,6 +144,39 @@ If you forget to supply `type:` for an unknown vendor, `arg()` / `flag()`
 throws a `CrustError("DEFINITION")` that names the failing arg/flag and
 the detected `vendor`.
 
+Unknown-vendor schemas have no introspection available, so the second
+argument is the full source of CLI metadata:
+
+- **`type`** is required — pick `"string" | "number" | "boolean"`.
+- **`required`** defaults to `true`. Optionality cannot be inferred from
+  the schema; pass `required: false` for optional args/flags.
+- **`description`** is taken verbatim from `options.description`.
+- **`variadic: true`** on `arg()` declares a variadic positional that
+  collects remaining inputs into an array.
+- **`multiple: true`** on `flag()` declares a multi-value flag that
+  collects repeated occurrences into an array.
+
+```ts
+import { arg, flag } from "@crustjs/validate";
+import * as v from "valibot";
+
+arg("files", v.array(v.string()), {
+  type: "string",
+  variadic: true,
+});
+
+flag(v.array(v.string()), {
+  type: "string",
+  multiple: true,
+  short: "I",
+  description: "Include path (repeatable)",
+});
+```
+
+For Zod and Effect, explicit options still win silently over anything
+the registry inferred — `type`, `required`, `description`, `multiple`,
+and `variadic` are full overrides everywhere.
+
 ## Command validation
 
 `commandValidator(handler)` returns a `run` function for the Crust

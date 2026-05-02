@@ -893,6 +893,46 @@ describe("unknown vendor (Valibot/ArkType/etc.) requires explicit type", () => {
 		}
 	});
 
+	it("declares a multi-value flag via explicit { multiple: true }", () => {
+		const f = flag(fakeStringSchema, { type: "string", multiple: true });
+		expect(f.type).toBe("string");
+		expect((f as { multiple?: boolean }).multiple).toBe(true);
+	});
+
+	it("declares a variadic arg via explicit { variadic: true }", () => {
+		const a = arg("files", fakeStringSchema, {
+			type: "string",
+			variadic: true,
+		});
+		expect(a.type).toBe("string");
+		expect(a.variadic).toBe(true);
+	});
+
+	it("defaults required to true because optionality cannot be inferred", () => {
+		const a = arg("name", fakeStringSchema, { type: "string" });
+		expect(a.required).toBe(true);
+		const f = flag(fakeStringSchema, { type: "string" });
+		expect(f.required).toBe(true);
+	});
+
+	it("explicit { required: false } overrides the unknown-vendor default silently", () => {
+		const a = arg("name", fakeStringSchema, {
+			type: "string",
+			required: false,
+		});
+		expect(a.required).toBeUndefined();
+		const f = flag(fakeStringSchema, { type: "string", required: false });
+		expect(f.required).toBeUndefined();
+	});
+
+	it("explicit description on unknown-vendor flag passes through", () => {
+		const f = flag(fakeStringSchema, {
+			type: "string",
+			description: "explicit desc",
+		});
+		expect(f.description).toBe("explicit desc");
+	});
+
 	it("end-to-end: unknown-vendor schema validates, transforms, and rejects through commandValidator", async () => {
 		// Hand-rolled Standard Schema with a transform: the encoded input is a
 		// string, the parsed output is a number with +1 applied.

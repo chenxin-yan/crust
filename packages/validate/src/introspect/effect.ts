@@ -282,10 +282,14 @@ function acceptsUndefined(ast: AST): boolean {
  * annotation. This function walks through those layers to find the first
  * description annotation.
  */
-function resolveDescriptionFromAst(ast: AST): string | undefined {
+function resolveDescriptionFromAst(ast: AST, depth = 0): string | undefined {
+	if (depth >= MAX_AST_WALK_DEPTH) {
+		return undefined;
+	}
+
 	let current: AST = ast;
 
-	for (let depth = 0; depth < MAX_AST_WALK_DEPTH; depth++) {
+	for (let i = depth; i < MAX_AST_WALK_DEPTH; i++) {
 		const annotated = readDescriptionAnnotation(current);
 		if (annotated !== undefined) {
 			return annotated;
@@ -313,7 +317,7 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
 				if (member._tag === "UndefinedKeyword") {
 					continue;
 				}
-				const desc = resolveDescriptionFromAst(member);
+				const desc = resolveDescriptionFromAst(member, i + 1);
 				if (desc !== undefined) {
 					return desc;
 				}

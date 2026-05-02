@@ -187,19 +187,19 @@ export function flag<
 		);
 	}
 
-	const label = "flag";
+	const schemaVendor = schema["~standard"]?.vendor ?? "unknown";
+	const label = `flag (vendor: "${schemaVendor}")`;
 	const inferred = inferOptions(schema, "flag", label);
 
 	const resolvedType = options?.type ?? inferred.type;
 	if (!resolvedType) {
-		const vendor = schema["~standard"].vendor;
 		throw new CrustError(
 			"DEFINITION",
-			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
+			`${label}: unable to infer CLI type from schema. Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
 		);
 	}
 
-	const multiple = inferred.multiple === true;
+	const multiple = options?.multiple === true || inferred.multiple === true;
 
 	const description = options?.description ?? inferred.description;
 

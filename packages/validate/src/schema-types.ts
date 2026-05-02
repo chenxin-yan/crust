@@ -165,6 +165,12 @@ export interface ArgOptions {
 
 /**
  * Optional CLI metadata passed to `flag()`.
+ *
+ * Every field is optional. When automatic introspection covers a field
+ * (`type`, `description`, `required`, `multiple`), explicit values
+ * override it silently. For schemas with unknown vendors (e.g. Valibot,
+ * ArkType), `type` MUST be supplied explicitly because no inference is
+ * available; use `multiple: true` to declare a multi-value flag.
  */
 export interface FlagOptions {
 	type?: "string" | "number" | "boolean";
@@ -173,6 +179,8 @@ export interface FlagOptions {
 	short?: string;
 	aliases?: readonly string[];
 	inherit?: true;
+	/** Mark this flag as multi-value (collects repeated occurrences into an array). */
+	multiple?: true;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
