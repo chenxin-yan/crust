@@ -24,14 +24,10 @@
 // arg("port", Schema.standardSchemaV1(Schema.Number));
 // ```
 //
-// Or define the 5-line user-space helpers from the README:
-//
-// ```ts
-// const earg: typeof arg = (name, schema, options) =>
-//   arg(name, Schema.standardSchemaV1(schema as never), options);
-// const eflag: typeof flag = (schema, options) =>
-//   flag(Schema.standardSchemaV1(schema as never), options);
-// ```
+// Or copy the type-precise `earg`/`eflag` recipe from the README. The
+// short `as never` form loses Effect output types in handlers; the
+// generic shape preserves them. See `packages/validate/README.md` for
+// the full snippet.
 //
 // This subpath will be removed in `@crustjs/validate@1.0.0`.
 

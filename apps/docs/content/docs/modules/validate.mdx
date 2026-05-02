@@ -85,21 +85,75 @@ const serve = new Crust("serve")
 ```
 
 If the boilerplate gets noisy, drop these two helpers into your project
-and use them as 1:1 replacements for `arg`/`flag`:
+and use them as 1:1 replacements for `arg`/`flag`. They wrap each raw
+Effect schema with `Schema.standardSchemaV1(...)` and project the
+schema's `A`/`I` onto Standard Schema so handler types stay precise:
 
 ```ts
-import { arg, flag } from "@crustjs/validate";
+import {
+  arg,
+  flag,
+  type ArgDef,
+  type ArgOptions,
+  type FlagDef,
+  type FlagOptions,
+} from "@crustjs/validate";
+import type { StandardSchema } from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
-export const earg: typeof arg = (name, schema, options) =>
-  arg(name, Schema.standardSchemaV1(schema as never), options);
-export const eflag: typeof flag = (schema, options) =>
-  flag(Schema.standardSchemaV1(schema as never), options);
+type EffectAsStandardSchema<S> = S extends Schema.Schema<infer A, infer I>
+  ? StandardSchema<I, A>
+  : StandardSchema;
+
+export const earg = <
+  Name extends string,
+  S extends Schema.Schema.AnyNoContext,
+  const Variadic extends true | undefined = undefined,
+>(
+  name: Name,
+  schema: S,
+  options?: ArgOptions & { variadic?: Variadic },
+) =>
+  arg(
+    name,
+    Schema.standardSchemaV1(
+      schema as Parameters<typeof Schema.standardSchemaV1>[0],
+    ),
+    options,
+  ) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
+
+export const eflag = <
+  S extends Schema.Schema.AnyNoContext,
+  const Short extends string | undefined = undefined,
+  const Aliases extends readonly string[] | undefined = undefined,
+  const Inherit extends true | undefined = undefined,
+>(
+  schema: S,
+  options?: FlagOptions & {
+    short?: Short;
+    aliases?: Aliases;
+    inherit?: Inherit;
+  },
+) =>
+  flag(
+    Schema.standardSchemaV1(
+      schema as Parameters<typeof Schema.standardSchemaV1>[0],
+    ),
+    options,
+  ) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
 ```
 
-The package itself does **not** export these helpers — keeping the
-public surface vendor-neutral lets every Standard Schema library land on
-the same code path.
+With these helpers, `commandValidator(({ args, flags }) => { ... })`
+sees `args.<name>` and `flags.<name>` typed as the schema's parsed `A`,
+not `unknown` or `never`.
+
+If you prefer not to maintain the wrapper, the deprecated
+`@crustjs/validate/effect` subpath ships the same shim pre-built and
+remains supported until 1.0.0.
+
+The root package itself does **not** export these helpers — keeping the
+public surface vendor-neutral lets every Standard Schema library land
+on the same code path.
 
 <Callout type="warn" title="Effect ≥ 3.14.2 required">
   Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
