@@ -147,7 +147,10 @@ argument is the full source of CLI metadata:
   the schema; pass `required: false` for optional args/flags.
 - **`description`** is taken verbatim from `options.description`.
 - **`variadic: true`** on `arg()` declares a variadic positional that
-  collects remaining inputs into an array.
+  collects remaining inputs into an array. The inferred TypeScript type is
+  always `T[]` — a possibly-empty array, never `T[] | undefined`. Combining
+  `variadic: true` with `required: true` only makes validation fail on an
+  empty array; the inferred type is still `T[]`.
 - **`multiple: true`** on `flag()` declares a multi-value flag that
   collects repeated occurrences into an array.
 

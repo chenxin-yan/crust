@@ -204,6 +204,9 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 | `{ type: "number" }` | `number \| undefined` |
 | `{ type: "number", default: 3000 }` | `number` |
 | `{ type: "string", variadic: true }` | `string[]` |
+| `{ type: "string", variadic: true, required: true }` | `string[]` |
+
+Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
 
 ### `InferFlags<F>`
 

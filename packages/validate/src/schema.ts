@@ -54,6 +54,11 @@ function validateArgArrayShape(
  * ArkType, Sury, etc.), supply `type:` (and optionally `required:`,
  * `description:`) via `options`.
  *
+ * **Variadic args**: when `{ variadic: true }` is set, the inferred TypeScript
+ * type is always `T[]` — a possibly-empty array, never `T[] | undefined`. The
+ * `required` option only controls whether validation fails on an empty array;
+ * it does not change the runtime shape or the inferred type.
+ *
  * **Effect users**: wrap your raw Effect schema with
  * `Schema.standardSchemaV1(...)` before passing it here. The deprecated
  * `@crustjs/validate/effect` subpath continues to accept raw Effect schemas

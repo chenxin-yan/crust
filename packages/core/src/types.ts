@@ -30,9 +30,21 @@ interface ArgDefBase {
 	name: string;
 	/** Human-readable description for help text */
 	description?: string;
-	/** When `true`, the parser throws if the argument is not provided */
+	/**
+	 * When `true`, the parser throws if the argument is not provided.
+	 *
+	 * For variadic args, this means the array cannot be empty — the runtime
+	 * value is still `T[]`, just rejected when it has length 0.
+	 */
 	required?: true;
-	/** When `true`, collects all remaining positional values into an array */
+	/**
+	 * When `true`, collects all remaining positional values into an array.
+	 *
+	 * The inferred TypeScript type is always `T[]` — never `T[] | undefined` —
+	 * regardless of `required` or `default`. `required` only controls whether
+	 * an empty array fails validation; it does not change the runtime shape
+	 * or the inferred type.
+	 */
 	variadic?: true;
 }
 
@@ -483,9 +495,14 @@ export type EffectiveFlags<
 /**
  * Infer the resolved type for a single ArgDef:
  *
- * - **variadic** → `primitive[]`
+ * - **variadic** → `primitive[]` (always an array, never `undefined`,
+ *   regardless of `required` or `default`)
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
+ *
+ * The variadic branch is checked first and takes precedence. Combining
+ * `variadic: true` with `required: true` keeps the inferred type as `T[]`;
+ * `required` only gates empty-array validation, not the type.
  */
 type InferArgValue<A extends ArgDef> =
 	// Variadic always produces an array

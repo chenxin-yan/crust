@@ -71,7 +71,12 @@ export interface ArgDef$<
 	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
-	/** Non-optional for type-level variadic-args validation in core. */
+	/**
+	 * Non-optional for type-level variadic-args validation in core.
+	 *
+	 * When `true`, the inferred TypeScript type for this arg is always `T[]`,
+	 * regardless of `required`.
+	 */
 	readonly variadic: Variadic;
 	readonly [VALIDATED_SCHEMA]: S;
 }
@@ -159,7 +164,13 @@ export interface ArgOptions {
 	type?: "string" | "number" | "boolean";
 	description?: string;
 	required?: boolean;
-	/** Mark this arg as variadic (collects remaining positionals into an array). */
+	/**
+	 * Mark this arg as variadic (collects remaining positionals into an array).
+	 *
+	 * The inferred TypeScript type is always `T[]` — never `T[] | undefined` —
+	 * regardless of `required`. `required` only controls whether an empty array
+	 * fails validation; it does not change the type.
+	 */
 	variadic?: true;
 }
 
