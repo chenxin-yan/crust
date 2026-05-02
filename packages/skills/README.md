@@ -82,18 +82,21 @@ Generated bundles are written once to a canonical store (`.crust/skills` for pro
 ### Programmatic Auto-Install
 
 For full control over first-time installation, use the exported primitives
-directly in your own setup logic:
+directly in your own setup logic. `generateSkill`, `skillStatus`, and
+`uninstallSkill` accept an optional `agents` field; when omitted, all three
+default to the union of `getUniversalAgents()` and
+`await detectInstalledAgents()`. Omitting `agents` performs filesystem I/O to
+probe `PATH` for installed agent CLIs.
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import { detectInstalledAgents, generateSkill, skillStatus } from "@crustjs/skills";
+import { generateSkill, skillStatus } from "@crustjs/skills";
 
 const app = defineCommand({
   meta: { name: "my-cli", description: "My CLI" },
   async run() {
-    // Detect agents and install skills if not yet present
-    const agents = await detectInstalledAgents();
-    const status = await skillStatus({ name: "my-cli", agents, scope: "global" });
+    // Status defaults to universal + detected additional agents.
+    const status = await skillStatus({ name: "my-cli", scope: "global" });
 
     const notInstalled = status.agents
       .filter((a) => !a.installed)
@@ -112,6 +115,10 @@ const app = defineCommand({
 
 runMain(app);
 ```
+
+For fine-grained control, `getUniversalAgents()` and
+`detectInstalledAgents()` remain exported so callers can compose the same
+list the default produces (or any subset of it).
 
 #### Troubleshooting
 

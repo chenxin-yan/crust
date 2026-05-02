@@ -285,8 +285,19 @@ export interface GenerateOptions {
 	command: CommandNode;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
-	/** Agent targets to install skills for */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to install skills for.
+	 *
+	 * When omitted, defaults to
+	 * `[...getUniversalAgents(), ...await detectInstalledAgents()]` — the union
+	 * of always-included universal agents and additional agents detected on
+	 * the current machine. Pass an explicit array (including the empty array)
+	 * to override.
+	 *
+	 * **Note:** Omitting this field performs filesystem I/O via
+	 * `detectInstalledAgents()` to probe `PATH` for installed agent CLIs.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation strategy for agent output paths.
 	 *
@@ -362,8 +373,19 @@ export interface GenerateResult {
 export interface UninstallOptions {
 	/** Skill name to uninstall */
 	name: string;
-	/** Agent targets to uninstall from */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to uninstall from.
+	 *
+	 * When omitted, defaults to
+	 * `[...getUniversalAgents(), ...await detectInstalledAgents()]` — the union
+	 * of always-included universal agents and additional agents detected on
+	 * the current machine. Pass an explicit array (including the empty array)
+	 * to override.
+	 *
+	 * **Note:** Omitting this field performs filesystem I/O via
+	 * `detectInstalledAgents()` to probe `PATH` for installed agent CLIs.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation scope to uninstall from.
 	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.
@@ -390,8 +412,19 @@ export interface UninstallResult {
 export interface StatusOptions {
 	/** Skill name to check */
 	name: string;
-	/** Agent targets to check */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to check.
+	 *
+	 * When omitted, defaults to
+	 * `[...getUniversalAgents(), ...await detectInstalledAgents()]` — the union
+	 * of always-included universal agents and additional agents detected on
+	 * the current machine. Pass an explicit array (including the empty array)
+	 * to override.
+	 *
+	 * **Note:** Omitting this field performs filesystem I/O via
+	 * `detectInstalledAgents()` to probe `PATH` for installed agent CLIs.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation scope to check.
 	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.

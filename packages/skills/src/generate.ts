@@ -14,6 +14,8 @@ import {
 import { dirname, join } from "node:path";
 import {
 	ALL_AGENTS,
+	detectInstalledAgents,
+	getUniversalAgents,
 	resolveAgentPath,
 	resolveCanonicalSkillPath,
 } from "./agents.ts";
@@ -22,6 +24,7 @@ import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type {
 	AgentResult,
+	AgentTarget,
 	GenerateOptions,
 	GenerateResult,
 	InstallStatus,
@@ -37,6 +40,26 @@ import type {
 import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
 
 const DEFAULT_INSTALL_MODE: SkillInstallMode = "auto";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Default agent resolution
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the agent list for the public entrypoints when the caller omits
+ * `agents`. Returning the union of universal agents and detected additional
+ * agents matches the previous “manual” call-site recipe shown in docs.
+ *
+ * `provided !== undefined` is checked instead of truthiness so that an
+ * explicit empty array (`agents: []`) continues to mean “do nothing” — only
+ * a missing/undefined field triggers the default.
+ */
+async function resolveAgents(
+	provided: AgentTarget[] | undefined,
+): Promise<AgentTarget[]> {
+	if (provided !== undefined) return provided;
+	return [...getUniversalAgents(), ...(await detectInstalledAgents())];
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Naming — resolveSkillName and validation
@@ -125,12 +148,12 @@ export async function generateSkill(
 	const {
 		command,
 		meta,
-		agents,
 		scope = "global",
 		clean = true,
 		force = false,
 		installMode = DEFAULT_INSTALL_MODE,
 	} = options;
+	const agents = await resolveAgents(options.agents);
 
 	// Resolve the canonical current name — do not mutate the caller's meta object
 	const resolvedName = resolveSkillName(meta.name);
@@ -315,7 +338,8 @@ export async function generateSkill(
 export async function uninstallSkill(
 	options: UninstallOptions,
 ): Promise<UninstallResult> {
-	const { name, agents, scope = "global" } = options;
+	const { name, scope = "global" } = options;
+	const agents = await resolveAgents(options.agents);
 	const resolvedName = resolveSkillName(name);
 	const legacyResolvedName = resolveLegacySkillName(name);
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
@@ -411,7 +435,8 @@ export async function uninstallSkill(
 export async function skillStatus(
 	options: StatusOptions,
 ): Promise<StatusResult> {
-	const { name, agents, scope = "global" } = options;
+	const { name, scope = "global" } = options;
+	const agents = await resolveAgents(options.agents);
 	const resolvedName = resolveSkillName(name);
 	const legacyResolvedName = resolveLegacySkillName(name);
 	const results: StatusResult["agents"] = [];

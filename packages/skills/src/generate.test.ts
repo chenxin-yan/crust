@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+	chmod,
 	lstat,
 	mkdir,
 	readdir,
@@ -7,10 +8,11 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
 
+import { getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	generateSkill,
@@ -92,6 +94,35 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 	} finally {
 		process.cwd = original;
 	}
+}
+
+/**
+ * Overrides `process.env.PATH` for the duration of a callback.
+ *
+ * Used to deterministically control what `detectInstalledAgents()` returns
+ * when the public entrypoints fall back to their default agent resolution.
+ * Tests pass a directory that contains zero or more fake executables.
+ */
+async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
+	const original = process.env.PATH;
+	process.env.PATH = dirs.join(delimiter);
+	try {
+		return await fn();
+	} finally {
+		if (original === undefined) delete process.env.PATH;
+		else process.env.PATH = original;
+	}
+}
+
+/**
+ * Creates a fake POSIX executable at `dir/name`. Used to make
+ * `detectInstalledAgents()` (which probes PATH non-executingly) return a
+ * deterministic agent list during default-resolution tests.
+ */
+async function makeFakeExecutable(dir: string, name: string): Promise<void> {
+	const filePath = join(dir, name);
+	await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf-8");
+	await chmod(filePath, 0o755);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1538,5 +1569,227 @@ describe("skillStatus", () => {
 		expect(status.agents[0]?.outputDir).toBe(
 			join(tmpDir, ".claude", "skills", "my-cli"),
 		);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Default agent resolution — omitted `agents` triggers universal + detected
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("default agent resolution", () => {
+	/**
+	 * `getUniversalAgents()` is fixed at module-load time, so we capture it
+	 * once and reuse for assertions about the default-resolution shape.
+	 */
+	const universalAgents = getUniversalAgents();
+
+	describe("generateSkill", () => {
+		it("defaults to universal + detected when `agents` is omitted", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			// `claude-code` is detected when `claude` is on PATH.
+			await makeFakeExecutable(pathDir, "claude");
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						scope: "project",
+					}),
+				),
+			);
+
+			const targets = new Set(result.agents.map((a) => a.agent));
+			// Every universal agent is included...
+			for (const universal of universalAgents) {
+				expect(targets.has(universal)).toBe(true);
+			}
+			// ...plus the detected additional agent.
+			expect(targets.has("claude-code")).toBe(true);
+			expect(result.agents.length).toBe(universalAgents.length + 1);
+		});
+
+		it("falls back to universal-only when nothing is detected", async () => {
+			const pathDir = join(tmpDir, "empty-bin");
+			await mkdir(pathDir, { recursive: true });
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						scope: "project",
+					}),
+				),
+			);
+
+			const targets = new Set(result.agents.map((a) => a.agent));
+			expect(result.agents.length).toBe(universalAgents.length);
+			for (const universal of universalAgents) {
+				expect(targets.has(universal)).toBe(true);
+			}
+		});
+
+		it("treats `agents: []` as no-op (does not trigger default)", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			await makeFakeExecutable(pathDir, "claude");
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: [],
+						scope: "project",
+					}),
+				),
+			);
+
+			expect(result.agents).toEqual([]);
+		});
+
+		it("honors an explicit `agents` list (default not triggered)", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			// Add many fake agents to PATH — explicit list must still win.
+			await makeFakeExecutable(pathDir, "claude");
+			await makeFakeExecutable(pathDir, "windsurf");
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				),
+			);
+
+			expect(result.agents).toHaveLength(1);
+			expect(result.agents[0]?.agent).toBe("claude-code");
+		});
+	});
+
+	describe("uninstallSkill", () => {
+		it("defaults to universal + detected when `agents` is omitted", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			await makeFakeExecutable(pathDir, "claude");
+
+			// Install with explicit list, then uninstall using the default.
+			await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code", "opencode"],
+						scope: "project",
+					}),
+				),
+			);
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					uninstallSkill({
+						name: "my-cli",
+						scope: "project",
+					}),
+				),
+			);
+
+			const targets = new Set(result.agents.map((a) => a.agent));
+			for (const universal of universalAgents) {
+				expect(targets.has(universal)).toBe(true);
+			}
+			expect(targets.has("claude-code")).toBe(true);
+			expect(result.agents.length).toBe(universalAgents.length + 1);
+		});
+
+		it("treats `agents: []` as no-op (does not trigger default)", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			await makeFakeExecutable(pathDir, "claude");
+
+			const result = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					uninstallSkill({
+						name: "my-cli",
+						agents: [],
+						scope: "project",
+					}),
+				),
+			);
+
+			expect(result.agents).toEqual([]);
+		});
+	});
+
+	describe("skillStatus", () => {
+		it("defaults to universal + detected when `agents` is omitted", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			await makeFakeExecutable(pathDir, "claude");
+
+			const status = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					skillStatus({
+						name: "my-cli",
+						scope: "project",
+					}),
+				),
+			);
+
+			const targets = new Set(status.agents.map((a) => a.agent));
+			for (const universal of universalAgents) {
+				expect(targets.has(universal)).toBe(true);
+			}
+			expect(targets.has("claude-code")).toBe(true);
+			expect(status.agents.length).toBe(universalAgents.length + 1);
+			// Nothing was installed, so all entries report `installed: false`.
+			for (const entry of status.agents) {
+				expect(entry.installed).toBe(false);
+			}
+		});
+
+		it("treats `agents: []` as no-op (does not trigger default)", async () => {
+			const pathDir = join(tmpDir, "fake-bin");
+			await mkdir(pathDir, { recursive: true });
+			await makeFakeExecutable(pathDir, "claude");
+
+			const status = await withCwd(tmpDir, () =>
+				withPath([pathDir], () =>
+					skillStatus({
+						name: "my-cli",
+						agents: [],
+						scope: "project",
+					}),
+				),
+			);
+
+			expect(status.agents).toEqual([]);
+		});
 	});
 });
