@@ -11,11 +11,6 @@ Valibot, ArkType, Sury, or anything else — and the package introspects what
 it can (Zod and Effect natively, via vendor dispatch), then validates
 arguments, flags, prompts, and store fields against your schema.
 
-Earlier versions shipped `/zod`, `/effect`, and `/standard` subpath
-exports. In **0.1.0** the public API consolidates around the spec: one
-root entry, one `arg()`, one `flag()`, one `commandValidator()`. The old
-subpaths still work for the entire 0.x cycle and are removed in 1.0.0.
-
 ## Install
 
 ```sh
@@ -246,76 +241,9 @@ All failures normalize to `CrustError("VALIDATION")` with:
   issues with dot-paths (`args[0].port`, `flags.verbose`, …).
 - `error.cause` — the same array of issues.
 
-## Migration: 0.0.x → 0.1.0
-
-The change is a deprecation, not a breaking change. Existing imports
-keep working through 1.0.0.
-
-**Zod (recommended migration):**
-
-```ts
-// Before (still works, but TSDoc marks the import as @deprecated)
-import { arg, flag, commandValidator } from "@crustjs/validate/zod";
-
-// After
-import { arg, flag, commandValidator } from "@crustjs/validate";
-```
-
-Zod 4 schemas are Standard Schemas natively, so no other code changes
-are needed.
-
-**Effect (recommended migration):**
-
-```ts
-// Before — raw Effect schemas accepted directly
-import { arg, flag, commandValidator } from "@crustjs/validate/effect";
-import * as Schema from "effect/Schema";
-
-arg("port", Schema.Number);
-
-// After — wrap once, import from the root
-import { arg, flag, commandValidator } from "@crustjs/validate";
-import * as Schema from "effect/Schema";
-
-arg("port", Schema.standardSchemaV1(Schema.Number));
-```
-
-**Other Standard Schema libraries** (Valibot, ArkType, Sury, …):
-
-```ts
-// Before
-import { promptValidator, field } from "@crustjs/validate/standard";
-
-// After
-import { promptValidator, field } from "@crustjs/validate";
-```
-
-### Behaviour intentionally removed in 0.1.0
-
-The `arg()` / `flag()` introspection-conflict checks no longer fire.
-Specifically, none of these throw any more — explicit options always
-win silently:
-
-- `explicit type "X" conflicts with schema-inferred type "Y"`
-- `explicit required: true conflicts with schema that accepts undefined`
-- `explicit required: false conflicts with schema that does not accept undefined`
-
-This simplifies the model: introspection fills in fields you didn't
-specify; everything you did specify wins.
-
-## Constraints
-
-- **Effect peer-dep floor: `^3.14.2`.** Effect 3.14.0 and 3.14.1 shipped
-  `standardSchemaV1` wrappers as plain objects with no `.ast`, so
-  introspection of pre-wrapped Effect schemas falls through to `{}`.
-  Effect 3.14.2 made the wrapper extend `Schema.make(schema.ast)`, which
-  is what the introspection registry walks. The deprecated
-  `@crustjs/validate/effect` subpath calls `standardSchemaV1` internally
-  and is therefore subject to the same floor.
-
 ## See also
 
 - [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema)
-- [`@crustjs/core`](/docs/modules/core)
-- [`@crustjs/store`](/docs/modules/store)
-- [`@crustjs/prompts`](/docs/modules/prompts)
+- [`@crustjs/core`](/docs/modules/core) — the CLI framework itself
+- [`@crustjs/store`](/docs/modules/store#schema-based-validation) — `field` / `fieldSync` integration for typed JSON persistence
+- [`@crustjs/prompts`](/docs/modules/prompts) — `promptValidator` integration for interactive prompts

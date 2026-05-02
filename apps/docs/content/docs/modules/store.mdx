@@ -306,7 +306,7 @@ await store.write({ port: 0, host: "localhost" });
 
 ### Schema-Based Validation
 
-For schema-driven validation, use `field()` from `@crustjs/validate` to create a per-field validator from a Zod, Effect, or any Standard Schema-compatible schema:
+For schema-driven validation, use [`field()`](/docs/modules/validate#store-field-validation) from `@crustjs/validate` to create a per-field validator from a Zod, Effect, or any Standard Schema-compatible schema:
 
 ```ts
 import { field } from "@crustjs/validate";
@@ -329,7 +329,15 @@ const store = createStore({
 
 Store field validators are validation-only. If you use schema transforms/coercions in `field()` / `fieldSync()`, transformed outputs are not written back into store state.
 
-For synchronous validation, use `fieldSync()` from `@crustjs/validate`. Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()`/`fieldSync()`.
+For the full field validator contract, including `fieldSync()` and async patterns, see [Store field validation in `@crustjs/validate`](/docs/modules/validate#store-field-validation). Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()` / `fieldSync()`.
+
+<Callout type="warn" title="Effect ≥ 3.14.2 required">
+  Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
+  validate registry walks for introspection. On Effect 3.14.0 / 3.14.1 the
+  wrapper has no `.ast` and field-validator introspection silently fails. See
+  [`@crustjs/validate` Effect setup](/docs/modules/validate#quick-start--effect)
+  for the floor and a workaround.
+</Callout>
 
 ## Error Handling
 

@@ -319,7 +319,7 @@ Add per-field validation to enforce config integrity on every read, write, updat
 
 ### Using `@crustjs/validate`
 
-The easiest way to add validation is with field adapters from `@crustjs/validate`:
+The easiest way to add validation is with [field adapters](https://crustjs.com/docs/modules/validate#store-field-validation) from `@crustjs/validate`:
 
 ```ts
 import { z } from "zod";
@@ -347,7 +347,9 @@ const config = await store.read();
 // → throws if persisted config is invalid
 ```
 
-`fieldSync()` is also available for synchronous schemas.
+`fieldSync()` is also available for synchronous schemas. For the full field
+validator contract — sync vs async, error normalization, and prompt-side
+integration — see [`@crustjs/validate` Store field validation](https://crustjs.com/docs/modules/validate#store-field-validation).
 
 For Effect schemas, wrap with `Schema.standardSchemaV1()`:
 
@@ -366,6 +368,13 @@ const store = createStore({
   },
 });
 ```
+
+> **Effect ≥ 3.14.2 required.** Effect 3.14.2 made `standardSchemaV1(...)`
+> wrappers expose `.ast`, which is what the validate registry walks. On
+> Effect 3.14.0 / 3.14.1 the wrapper is a plain object and introspection
+> silently fails. See
+> [`@crustjs/validate` Effect setup](https://crustjs.com/docs/modules/validate#quick-start--effect)
+> for the floor and a workaround.
 
 ### Custom validators
 
