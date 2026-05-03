@@ -15,7 +15,7 @@ bun add @crustjs/plugins
 | `helpPlugin()` | Adds `--help` / `-h` flag and auto-generates help text |
 | `noColorPlugin()` | Adds `--color` / `--no-color` and controls runtime color output |
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
-| `autoCompletePlugin(options?)` | Shell autocompletion support |
+| `didYouMeanPlugin(options?)` | Suggests corrections for mistyped subcommands via Levenshtein matching |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
 
 ## Usage
@@ -25,7 +25,7 @@ import { defineCommand, runMain } from "@crustjs/core";
 import {
   helpPlugin,
   versionPlugin,
-  autoCompletePlugin,
+  didYouMeanPlugin,
 } from "@crustjs/plugins";
 
 const main = defineCommand({
@@ -38,7 +38,7 @@ const main = defineCommand({
 runMain(main, {
   plugins: [
     versionPlugin("1.0.0"),
-    autoCompletePlugin(),
+    didYouMeanPlugin(),
     helpPlugin(),
   ],
 });

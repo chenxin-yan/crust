@@ -19,7 +19,7 @@
 		"plugin",
 		"help",
 		"version",
-		"autocomplete",
+		"did-you-mean",
 		"man",
 		"bun",
 		"typescript"

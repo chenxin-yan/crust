@@ -2,7 +2,7 @@ import type { CrustPlugin } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
 import { renderHelp } from "./help.ts";
 
-export interface AutoCompletePluginOptions {
+export interface DidYouMeanPluginOptions {
 	mode?: "error" | "help";
 }
 
@@ -56,13 +56,13 @@ function findSuggestions(input: string, candidates: string[]): string[] {
 	return suggestions.map((suggestion) => suggestion.name);
 }
 
-export function autoCompletePlugin(
-	options: AutoCompletePluginOptions = {},
+export function didYouMeanPlugin(
+	options: DidYouMeanPluginOptions = {},
 ): CrustPlugin {
 	const mode = options.mode ?? "error";
 
 	return {
-		name: "autocomplete",
+		name: "did-you-mean",
 		async middleware(_context, next) {
 			try {
 				await next();

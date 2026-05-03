@@ -2,7 +2,7 @@
 
 import { Crust } from "@crustjs/core";
 import {
-	autoCompletePlugin,
+	didYouMeanPlugin,
 	helpPlugin,
 	updateNotifierPlugin,
 	versionPlugin,
@@ -30,7 +30,7 @@ export const crustApp = new Crust("crust")
 			packageName: pkg.name,
 		}),
 	)
-	.use(autoCompletePlugin({ mode: "help" }))
+	.use(didYouMeanPlugin({ mode: "help" }))
 	.use(helpPlugin())
 	.command(buildCommand)
 	.command(publishCommand);

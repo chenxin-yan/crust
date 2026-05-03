@@ -20,7 +20,7 @@ bun add @crustjs/plugins
 | [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
 | [`noColorPlugin()`](/docs/modules/plugins/no-color)               | Adds `--color` / `--no-color` runtime color control      |
 | [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
-| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands            |
+| [`didYouMeanPlugin()`](/docs/modules/plugins/did-you-mean)        | Suggests corrections for mistyped subcommands            |
 | [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
 
 ### Utilities
@@ -34,7 +34,7 @@ bun add @crustjs/plugins
 | Type                          | Description                                       |
 | ----------------------------- | ------------------------------------------------- |
 | `VersionValue`                | `string \| (() => string)` — version plugin input |
-| `AutoCompletePluginOptions`   | Options for the autocomplete plugin               |
+| `DidYouMeanPluginOptions`     | Options for the did-you-mean plugin               |
 | `UpdateNotifierPluginOptions` | Options for the update notifier plugin            |
 | `UpdateNotifierCacheConfig`   | Cache configuration for update notifier           |
 | `UpdateNotifierCacheAdapter`  | Cache adapter interface for update notifier       |
@@ -50,7 +50,7 @@ import {
   helpPlugin,
   noColorPlugin,
   versionPlugin,
-  autoCompletePlugin,
+  didYouMeanPlugin,
   updateNotifierPlugin,
 } from "@crustjs/plugins";
 import { Crust } from "@crustjs/core";
@@ -59,7 +59,7 @@ const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
   .use(noColorPlugin())
   .use(versionPlugin("1.0.0"))
-  .use(autoCompletePlugin({ mode: "help" }))
+  .use(didYouMeanPlugin({ mode: "help" }))
   .use(helpPlugin())
   .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: "1.0.0" }))
   .run(() => {
