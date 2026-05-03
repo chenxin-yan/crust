@@ -218,10 +218,9 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			// `.It Nm <name> (alias1, alias2)` keeps the canonical name marked up
 			// as a name macro while letting aliases ride along as plain text.
 			// Parens and commas are not mdoc macros, so no escaping is needed.
-			const aliases = sub.meta.aliases;
-			const aliasSuffix =
-				aliases && aliases.length > 0 ? ` (${aliases.join(", ")})` : "";
-			lines.push(`.It Nm ${subName}${aliasSuffix}`);
+			// Reuse `formatSubcommandLabel` so the rendered label stays in sync
+			// with the column-width calculation in `longestSubcommandWidth`.
+			lines.push(`.It Nm ${formatSubcommandLabel(subName, sub.meta.aliases)}`);
 			const desc = sub.meta.description?.trim() || "";
 			if (desc) {
 				lines.push(desc.split("\n").map(escapeMdocBodyLine).join("\n"));

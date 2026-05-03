@@ -100,7 +100,7 @@ export function validateIncomingAliases(
 	for (const [siblingName, sibling] of Object.entries(existing)) {
 		const siblingAliases = sibling.meta.aliases;
 
-		// 4) Incoming canonical name vs. an existing sibling's alias.
+		// 3) Incoming canonical name vs. an existing sibling's alias.
 		if (siblingAliases?.includes(canonicalName)) {
 			throw new CrustError(
 				"DEFINITION",
@@ -111,14 +111,14 @@ export function validateIncomingAliases(
 		if (!aliases) continue;
 
 		for (const alias of aliases) {
-			// 5a) Incoming alias vs. existing sibling's canonical name.
+			// 4a) Incoming alias vs. existing sibling's canonical name.
 			if (alias === siblingName) {
 				throw new CrustError(
 					"DEFINITION",
 					`Subcommand "${subjectLabel}" alias "${alias}" collides with sibling canonical name "${siblingName}"`,
 				);
 			}
-			// 5b) Incoming alias vs. existing sibling's alias.
+			// 4b) Incoming alias vs. existing sibling's alias.
 			if (siblingAliases?.includes(alias)) {
 				throw new CrustError(
 					"DEFINITION",
