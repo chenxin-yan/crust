@@ -3,24 +3,7 @@ title: Did You Mean
 description: Suggest corrections when users mistype subcommand names.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 The `didYouMeanPlugin` catches `COMMAND_NOT_FOUND` errors and provides "Did you mean?" suggestions based on Levenshtein distance. It does **not** provide shell tab-completion.
-
-<Callout title="Migration from `autoCompletePlugin`">
-  This plugin was previously named `autoCompletePlugin`. The old export is kept
-  as a deprecated alias and will be **removed in 1.0.0**. Update your imports:
-
-  ```ts
-  // Before
-  import { autoCompletePlugin } from "@crustjs/plugins";
-
-  // After
-  import { didYouMeanPlugin } from "@crustjs/plugins";
-  ```
-
-  Behavior is unchanged — only the name is different.
-</Callout>
 
 ## Usage
 
