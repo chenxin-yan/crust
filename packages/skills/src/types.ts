@@ -285,8 +285,19 @@ export interface GenerateOptions {
 	command: CommandNode;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
-	/** Agent targets to install skills for */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to install skills for.
+	 *
+	 * When omitted (or explicitly `undefined`), defaults to
+	 * `[...getUniversalAgents(), ...await detectInstalledAgents()]` — the union
+	 * of always-included universal agents and additional agents whose CLI is
+	 * detected on `PATH`. Pass an explicit array to override; `agents: []`
+	 * is treated as a no-op (no install performed).
+	 *
+	 * **Note:** Omitting this field performs filesystem I/O via
+	 * `detectInstalledAgents()` to probe `PATH` for installed agent CLIs.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation strategy for agent output paths.
 	 *
@@ -362,8 +373,19 @@ export interface GenerateResult {
 export interface UninstallOptions {
 	/** Skill name to uninstall */
 	name: string;
-	/** Agent targets to uninstall from */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to uninstall from.
+	 *
+	 * When omitted (or explicitly `undefined`), defaults to every supported
+	 * agent so the uninstall sweep covers any path that may hold an install,
+	 * regardless of what is on the current machine's `PATH`. Pass an explicit
+	 * array to scope the uninstall; `agents: []` is treated as a no-op (no
+	 * paths are touched).
+	 *
+	 * Default resolution does not perform `PATH` I/O — the entrypoint already
+	 * stats each per-agent path during the sweep.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation scope to uninstall from.
 	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.
@@ -390,8 +412,19 @@ export interface UninstallResult {
 export interface StatusOptions {
 	/** Skill name to check */
 	name: string;
-	/** Agent targets to check */
-	agents: AgentTarget[];
+	/**
+	 * Agent targets to check.
+	 *
+	 * When omitted (or explicitly `undefined`), defaults to every supported
+	 * agent so the status sweep reports an entry for any path that may hold
+	 * an install, regardless of what is on the current machine's `PATH`. Pass
+	 * an explicit array to scope the check; `agents: []` is treated as a no-op
+	 * (returns an empty result).
+	 *
+	 * Default resolution does not perform `PATH` I/O — the entrypoint already
+	 * stats each per-agent path during the sweep.
+	 */
+	agents?: AgentTarget[];
 	/**
 	 * Installation scope to check.
 	 * When `process.cwd()` is the home directory, `"project"` is treated as `"global"`.

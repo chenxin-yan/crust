@@ -215,51 +215,66 @@ isValidSkillName("My_CLI"); // false
 
 For custom workflows, the package also exports lower-level functions:
 
+### Default targets — omit `agents` for the common case
+
+`generateSkill`, `uninstallSkill`, and `skillStatus` accept an optional
+`agents` field. The default differs by entrypoint so install behavior tracks
+what is actually on the current machine, while uninstall and status sweep
+every known path:
+
+| Entrypoint                    | Default when `agents` is omitted                                | `PATH` I/O? |
+| ----------------------------- | --------------------------------------------------------------- | ----------- |
+| `generateSkill`               | Universal agents + additional agents detected on `PATH`         | Yes         |
+| `uninstallSkill`, `skillStatus` | Every supported agent (exhaustive sweep of all known paths)   | No          |
+
+In all three, passing `agents: []` is treated as a no-op (no install,
+uninstall, or status entries). An explicit array always overrides the
+default.
+
+```ts
+import { generateSkill, skillStatus, uninstallSkill } from "@crustjs/skills";
+
+// Install — universal + agents whose CLI is on PATH.
+const result = await generateSkill({
+  command: rootCommand,
+  meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
+  scope: "global", // or "project"
+});
+
+// Status — reports an entry for every supported agent. Most read
+// `installed: false` on a typical machine; that is expected.
+const status = await skillStatus({ name: "my-cli" });
+
+// Uninstall — sweeps every known agent path and removes any Crust-managed
+// install regardless of whether its CLI is currently on PATH.
+const removed = await uninstallSkill({ name: "my-cli" });
+```
+
+### Explicit targets — override the default
+
+For full control, pass `agents` explicitly. `getUniversalAgents()`,
+`getAdditionalAgents()`, and `detectInstalledAgents()` remain exported so
+callers can compose any subset:
+
 ```ts
 import {
   detectInstalledAgents,
   generateSkill,
-  uninstallSkill,
-  skillStatus,
+  getUniversalAgents,
   isValidSkillName,
 } from "@crustjs/skills";
 
-// Validate a skill name
+// Validate a skill name.
 isValidSkillName("my-cli"); // true
 
-// Detect which agents are installed
-const agents = await detectInstalledAgents();
-// Additional detected agents only (universal is handled separately)
+// Compose the same list `generateSkill` would build by default.
+const universal = getUniversalAgents();
+const additional = await detectInstalledAgents();
 
-const universalAgents = [
-  "amp",
-  "cline",
-  "codex",
-  "cursor",
-  "gemini-cli",
-  "github-copilot",
-  "kimi-cli",
-  "opencode",
-  "replit",
-] as const;
-
-// Install skills
-const result = await generateSkill({
+await generateSkill({
   command: rootCommand,
   meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
-  agents: [...universalAgents, ...agents],
-  scope: "global", // or "project"
-});
-
-// Check status
-const status = await skillStatus({
-  name: "my-cli",
-  agents,
-});
-
-// Uninstall
-const removed = await uninstallSkill({
-  name: "my-cli",
-  agents,
+  agents: [...universal, ...additional], // explicit form
+  scope: "global",
 });
 ```

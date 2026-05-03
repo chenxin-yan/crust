@@ -2,7 +2,7 @@
 
 Generate distributable AI agent skills from [Crust](https://crustjs.com) command definitions.
 
-Instead of hand-maintaining skill files for AI coding agents, generate them from your `defineCommand` metadata. The output is a portable skill bundle that developers can download and install into their own agent environments (OpenCode, Claude Code, etc.).
+Instead of hand-maintaining skill files for AI coding agents, generate them from your Crust command metadata. The output is a portable skill bundle that developers can download and install into their own agent environments (OpenCode, Claude Code, etc.).
 
 ## Install
 
@@ -41,22 +41,15 @@ for (const agent of result.agents) {
 
 ### Runtime Plugin (`autoUpdate`)
 
-`skillPlugin()` is a runtime plugin. Register it in `runMain(..., { plugins })`.
-Do not put a `plugins` field inside `defineCommand(...)`.
+Register `skillPlugin()` on your `Crust` builder with `.use()`:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { skillPlugin } from "@crustjs/skills";
 
-const app = defineCommand({
-  meta: { name: "my-cli", description: "My CLI" },
-  run() {
-    console.log("hello");
-  },
-});
-
-runMain(app, {
-  plugins: [
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
     skillPlugin({
       version: "1.0.0",
       instructions: `
@@ -71,8 +64,12 @@ Prefer readonly commands before mutating project state.
       // defaultScope: "global" | "project" — skip scope prompt when set
       // installMode: "auto" | "symlink" | "copy" (default: "auto")
     }),
-  ],
-});
+  )
+  .run(() => {
+    console.log("hello");
+  });
+
+await app.execute();
 ```
 
 The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. If the current working directory is the home directory, `project` scope is normalized to `global` so installs, updates, and status checks use the global skill locations. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
@@ -81,43 +78,52 @@ Generated bundles are written once to a canonical store (`.crust/skills` for pro
 
 ### Programmatic Auto-Install
 
-For full control over first-time installation, use the exported primitives
-directly in your own setup logic:
+For full control over first-time installation, call `generateSkill()`
+directly from your handler. With `agents` omitted, it installs into every
+universal agent plus every additional agent whose CLI is on `PATH`, and
+returns `up-to-date` for targets that already match the current version —
+so the same call is safe to run on every invocation. Pass `agents: []` to
+opt out, or an explicit array to scope the install.
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
-import { detectInstalledAgents, generateSkill, skillStatus } from "@crustjs/skills";
+import { Crust } from "@crustjs/core";
+import { generateSkill } from "@crustjs/skills";
 
-const app = defineCommand({
-  meta: { name: "my-cli", description: "My CLI" },
-  async run() {
-    // Detect agents and install skills if not yet present
-    const agents = await detectInstalledAgents();
-    const status = await skillStatus({ name: "my-cli", agents, scope: "global" });
+export const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .run(async (ctx) => {
+    // Defaults to universal + agents detected on PATH. Idempotent: targets
+    // that already match the current version are returned as `up-to-date`.
+    const result = await generateSkill({
+      command: ctx.command,
+      meta: {
+        name: ctx.command.meta.name,
+        description: ctx.command.meta.description ?? "",
+        version: "1.0.0",
+      },
+      scope: "global",
+    });
 
-    const notInstalled = status.agents
-      .filter((a) => !a.installed)
-      .map((a) => a.agent);
-
-    if (notInstalled.length > 0) {
-      await generateSkill({
-        command: app,
-        meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
-        agents: notInstalled,
-        scope: "global",
-      });
+    const changed = result.agents.filter((a) => a.status !== "up-to-date");
+    if (changed.length > 0) {
+      console.log(`Installed or updated skills for ${changed.length} target(s).`);
     }
-  },
-});
+  });
 
-runMain(app);
+if (import.meta.main) {
+  await app.execute();
+}
 ```
+
+`getUniversalAgents()`, `getAdditionalAgents()`, and
+`detectInstalledAgents()` remain exported for callers that want to compose
+their own agent list.
 
 #### Troubleshooting
 
 If auto-update does not appear to work:
 
-- Ensure plugin is passed to `runMain(..., { plugins: [...] })`.
+- Ensure `skillPlugin(...)` is registered on the `Crust` builder via `.use()`.
 - Ensure at least one supported agent is detected. Auto-update checks both project and global install paths, with home-directory `project` scope treated as `global`.
 - Check for existing conflicting skill directories without `crust.json`.
 
@@ -126,19 +132,18 @@ If auto-update does not appear to work:
 To avoid side effects when your command module is imported for generation, guard runtime code with `import.meta.main`:
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-// Export the command object — used by skill generation
-export const rootCommand = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run({ args }) {
+// Export the command — used by skill generation.
+export const rootCommand = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .run(({ args }) => {
     console.log("Hello from my-cli!");
-  },
-});
+  });
 
-// Only run when executed directly — not when imported for generation
+// Only execute when run directly — not when imported for generation.
 if (import.meta.main) {
-  runMain(rootCommand);
+  await rootCommand.execute();
 }
 ```
 
@@ -189,7 +194,7 @@ Read command docs before suggesting exact flags.
   .command(deploy);
 ```
 
-This pattern lets `crust skills generate` import the command definition without triggering `runMain`.
+This pattern lets `crust skills generate` import the command definition without triggering `app.execute()`.
 
 ## CLI Usage
 

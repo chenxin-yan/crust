@@ -14,6 +14,8 @@ import {
 import { dirname, join } from "node:path";
 import {
 	ALL_AGENTS,
+	detectInstalledAgents,
+	getUniversalAgents,
 	resolveAgentPath,
 	resolveCanonicalSkillPath,
 } from "./agents.ts";
@@ -22,6 +24,7 @@ import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type {
 	AgentResult,
+	AgentTarget,
 	GenerateOptions,
 	GenerateResult,
 	InstallStatus,
@@ -37,6 +40,55 @@ import type {
 import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
 
 const DEFAULT_INSTALL_MODE: SkillInstallMode = "auto";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Default agent resolution
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the agent list for `generateSkill` when the caller omits `agents`.
+ *
+ * Returns the union of universal agents and additional agents whose CLI is
+ * detected on `PATH`. This matches the previous “manual” call-site recipe
+ * shown in docs and keeps install behavior driven by what's actually
+ * available on the current machine.
+ *
+ * `provided !== undefined` is checked instead of truthiness so that an
+ * explicit empty array (`agents: []`) continues to mean “do nothing” — only
+ * a missing/undefined field triggers the default.
+ *
+ * **Note:** Triggering the default performs filesystem I/O via
+ * `detectInstalledAgents()` to probe `PATH`.
+ */
+async function resolveGenerateAgents(
+	provided: AgentTarget[] | undefined,
+): Promise<AgentTarget[]> {
+	if (provided !== undefined) return provided;
+	return [...getUniversalAgents(), ...(await detectInstalledAgents())];
+}
+
+/**
+ * Resolves the agent list for `uninstallSkill` and `skillStatus` when the
+ * caller omits `agents`.
+ *
+ * Returns every supported agent so the operation can sweep all known install
+ * paths regardless of what is currently on `PATH`. This avoids cross-machine
+ * drift (an additional agent installed on machine A would otherwise be
+ * skipped on machine B if its CLI is not present), and matches how
+ * canonical-store cleanup already iterates `ALL_AGENTS`.
+ *
+ * No filesystem I/O is performed during resolution — the entrypoints already
+ * stat each per-agent path.
+ *
+ * `provided !== undefined` is checked instead of truthiness so that an
+ * explicit empty array (`agents: []`) continues to mean “do nothing”.
+ */
+function resolveAllAgentTargets(
+	provided: AgentTarget[] | undefined,
+): AgentTarget[] {
+	if (provided !== undefined) return provided;
+	return [...ALL_AGENTS];
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Naming — resolveSkillName and validation
@@ -125,12 +177,12 @@ export async function generateSkill(
 	const {
 		command,
 		meta,
-		agents,
 		scope = "global",
 		clean = true,
 		force = false,
 		installMode = DEFAULT_INSTALL_MODE,
 	} = options;
+	const agents = await resolveGenerateAgents(options.agents);
 
 	// Resolve the canonical current name — do not mutate the caller's meta object
 	const resolvedName = resolveSkillName(meta.name);
@@ -315,7 +367,8 @@ export async function generateSkill(
 export async function uninstallSkill(
 	options: UninstallOptions,
 ): Promise<UninstallResult> {
-	const { name, agents, scope = "global" } = options;
+	const { name, scope = "global" } = options;
+	const agents = resolveAllAgentTargets(options.agents);
 	const resolvedName = resolveSkillName(name);
 	const legacyResolvedName = resolveLegacySkillName(name);
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
@@ -411,7 +464,8 @@ export async function uninstallSkill(
 export async function skillStatus(
 	options: StatusOptions,
 ): Promise<StatusResult> {
-	const { name, agents, scope = "global" } = options;
+	const { name, scope = "global" } = options;
+	const agents = resolveAllAgentTargets(options.agents);
 	const resolvedName = resolveSkillName(name);
 	const legacyResolvedName = resolveLegacySkillName(name);
 	const results: StatusResult["agents"] = [];
