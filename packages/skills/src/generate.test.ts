@@ -115,11 +115,25 @@ async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Creates a fake POSIX executable at `dir/name`. Used to make
- * `detectInstalledAgents()` (which probes PATH non-executingly) return a
- * deterministic agent list during default-resolution tests.
+ * Creates a fake executable at `dir/name` that `detectInstalledAgents()`
+ * will discover via its non-executing PATH probe. The probe is
+ * platform-specific (see `isCommandOnPath` in `agents.ts`):
+ *
+ * - POSIX: checks `dir/name` with `X_OK`, so we write a shebang script
+ *   and `chmod 0o755`.
+ * - Windows: checks `dir/name + ext` for each `PATHEXT` entry (default
+ *   `.EXE;.CMD;.BAT;.COM`), so we write `dir/name.cmd`. `X_OK` collapses
+ *   to `R_OK` on Windows, so no `chmod` is needed.
  */
 async function makeFakeExecutable(dir: string, name: string): Promise<void> {
+	if (process.platform === "win32") {
+		await writeFile(
+			join(dir, `${name}.cmd`),
+			"@echo off\r\nexit /b 0\r\n",
+			"utf-8",
+		);
+		return;
+	}
 	const filePath = join(dir, name);
 	await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf-8");
 	await chmod(filePath, 0o755);

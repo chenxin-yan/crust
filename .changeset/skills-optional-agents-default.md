@@ -1,5 +1,5 @@
 ---
-"@crustjs/skills": minor
+"@crustjs/skills": patch
 ---
 
 # Make `agents` optional on `generateSkill`, `uninstallSkill`, and `skillStatus`
@@ -9,7 +9,7 @@ The `agents` field on `GenerateOptions`, `UninstallOptions`, and
 to:
 
 ```ts
-[...getUniversalAgents(), ...await detectInstalledAgents()]
+[...getUniversalAgents(), ...(await detectInstalledAgents())];
 ```
 
 — the union of always-included universal agents and additional agents
