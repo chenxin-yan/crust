@@ -596,6 +596,29 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/**
+	 * Alternative names that resolve to the same command.
+	 *
+	 * Each entry is a sibling-level alternative for `name`. For example,
+	 * `meta: { name: "issue", aliases: ["issues", "i"] }` makes `cli issue`,
+	 * `cli issues`, and `cli i` all route to the same command node.
+	 *
+	 * **Conflict policy.** Alias strings must not collide with this command's
+	 * own canonical `name`, with any sibling's `name`, or with any sibling's
+	 * own alias. Collisions throw a `CrustError("DEFINITION", …)` at
+	 * registration time (or during `validateCommandTree` for plugin-installed
+	 * subcommands). Each alias must also be a non-empty string with no
+	 * whitespace and must not start with `-`.
+	 *
+	 * **Display contract.** Help output renders the canonical name with
+	 * aliases inline as `name (a, b, c)`. The canonical `name` is what
+	 * appears in `commandPath`, error messages, and suggestions from
+	 * `didYouMeanPlugin` — it does not depend on which alias the user typed.
+	 *
+	 * @example
+	 * meta: { name: "issue", aliases: ["issues", "i"] }
+	 */
+	aliases?: readonly string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

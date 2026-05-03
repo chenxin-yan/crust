@@ -120,10 +120,28 @@ function longestFlagWidth(flags: FlagsDef): string {
 	return `${max}n`;
 }
 
+/**
+ * Render the canonical subcommand name plus any aliases inline:
+ *   `name`                       — no aliases
+ *   `name (alias1, alias2)`      — one or more aliases
+ *
+ * Matches the inline format used by `helpPlugin.formatCommandsSection`.
+ * Used for both the `.It Nm` line in SUBCOMMANDS and the column-width
+ * calculation so alignment stays consistent.
+ */
+function formatSubcommandLabel(
+	name: string,
+	aliases: readonly string[] | undefined,
+): string {
+	if (!aliases || aliases.length === 0) return name;
+	return `${name} (${aliases.join(", ")})`;
+}
+
 function longestSubcommandWidth(command: CommandNode): string {
 	let max = 8;
-	for (const name of Object.keys(command.subCommands)) {
-		max = Math.max(max, name.length);
+	for (const [name, sub] of Object.entries(command.subCommands)) {
+		const label = formatSubcommandLabel(name, sub.meta.aliases);
+		max = Math.max(max, label.length);
 	}
 	return `${max}n`;
 }
@@ -197,7 +215,13 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		for (const subName of subNames.sort()) {
 			const sub = root.subCommands[subName];
 			if (!sub) continue;
-			lines.push(`.It Nm ${subName}`);
+			// `.It Nm <name> (alias1, alias2)` keeps the canonical name marked up
+			// as a name macro while letting aliases ride along as plain text.
+			// Parens and commas are not mdoc macros, so no escaping is needed.
+			const aliases = sub.meta.aliases;
+			const aliasSuffix =
+				aliases && aliases.length > 0 ? ` (${aliases.join(", ")})` : "";
+			lines.push(`.It Nm ${subName}${aliasSuffix}`);
 			const desc = sub.meta.description?.trim() || "";
 			if (desc) {
 				lines.push(desc.split("\n").map(escapeMdocBodyLine).join("\n"));

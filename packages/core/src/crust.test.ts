@@ -2563,3 +2563,106 @@ describe("Crust.prepareCommandTree", () => {
 		expect(b.root.meta.name).toBe("cli");
 	});
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// .command() aliases (TP-016)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .command() aliases", () => {
+	it("plumbs aliases from meta() into the registered subcommand node", () => {
+		const app = new Crust("cli").command("issue", (cmd) =>
+			cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+		);
+		expect(app._node.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
+	});
+
+	it("registers without error when no sibling collides", () => {
+		expect(() =>
+			new Crust("cli")
+				.command("issue", (cmd) =>
+					cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+				)
+				.command("version", (cmd) => cmd.run(() => {})),
+		).not.toThrow();
+	});
+
+	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
+		const app = new Crust("cli").command("build", (cmd) => cmd.run(() => {}));
+		expect(() =>
+			app.command("compile", (cmd) =>
+				cmd.meta({ aliases: ["build"] }).run(() => {}),
+			),
+		).toThrow(/collides with sibling canonical name "build"/);
+	});
+
+	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
+		const app = new Crust("cli").command("issue", (cmd) =>
+			cmd.meta({ aliases: ["i"] }).run(() => {}),
+		);
+		expect(() =>
+			app.command("info", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {})),
+		).toThrow(/collides with alias of sibling "issue"/);
+	});
+
+	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
+		const app = new Crust("cli").command("issue", (cmd) =>
+			cmd.meta({ aliases: ["i"] }).run(() => {}),
+		);
+		// Now try to register a *new* command whose canonical name == existing alias.
+		expect(() => app.command("i", (cmd) => cmd.run(() => {}))).toThrow(
+			/canonical name "i" collides with alias of sibling "issue"/,
+		);
+	});
+
+	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
+		expect(() =>
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: ["i", "i"] }).run(() => {}),
+			),
+		).toThrow(/lists alias "i" more than once/);
+	});
+
+	it("throws DEFINITION on an alias equal to its own canonical name", () => {
+		expect(() =>
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issue"] }).run(() => {}),
+			),
+		).toThrow(/must not equal its own canonical name/);
+	});
+
+	it("throws DEFINITION on an empty alias", () => {
+		expect(() =>
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: [""] }).run(() => {}),
+			),
+		).toThrow(/must be a non-empty string/);
+	});
+
+	it("throws DEFINITION on an alias containing whitespace", () => {
+		expect(() =>
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: ["my issue"] }).run(() => {}),
+			),
+		).toThrow(/must not contain whitespace/);
+	});
+
+	it("throws DEFINITION on an alias starting with '-'", () => {
+		expect(() =>
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: ["-i"] }).run(() => {}),
+			),
+		).toThrow(/must not start with "-"/);
+	});
+
+	it("applies the same checks on the .command(builder) path", () => {
+		const issue = new Crust("issue").meta({ aliases: ["i"] }).run(() => {});
+		const conflicting = new Crust("info")
+			.meta({ aliases: ["i"] })
+			.run(() => {});
+
+		const app = new Crust("cli").command(issue);
+		expect(() => app.command(conflicting)).toThrow(
+			/collides with alias of sibling "issue"/,
+		);
+	});
+});

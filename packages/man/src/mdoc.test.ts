@@ -66,4 +66,35 @@ describe("renderManPageMdoc", () => {
 			}
 		}
 	});
+
+	it("renders subcommand aliases inline next to the canonical name (TP-016)", async () => {
+		const app = new Crust("demo")
+			.meta({ description: "Demo CLI for alias tests." })
+			.command(
+				new Crust("issue")
+					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
+					.run(() => {}),
+			)
+			.command(
+				new Crust("version")
+					.meta({ description: "Show version" })
+					.run(() => {}),
+			);
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".Sh SUBCOMMANDS");
+		// Aliases inline alongside the canonical name on the .It Nm line.
+		expect(mdoc).toContain(".It Nm issue (issues, i)");
+		// A command without aliases keeps the original (unparenthesised) form.
+		expect(mdoc).toContain(".It Nm version");
+		expect(mdoc).not.toContain(".It Nm version (");
+		// Column width must accommodate the longer label — sanity-check that
+		// the `.Bl -tag -width` directive uses a width >= the inline label.
+		const widthMatch = mdoc.match(/\.Bl -tag -width (\d+)n/);
+		expect(widthMatch).not.toBeNull();
+		const width = Number(widthMatch?.[1]);
+		expect(width).toBeGreaterThanOrEqual("issue (issues, i)".length);
+	});
 });

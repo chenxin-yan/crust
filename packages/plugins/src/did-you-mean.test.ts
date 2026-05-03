@@ -74,4 +74,59 @@ describe("didYouMeanPlugin", () => {
 		const c: AutoCompletePluginOptions = b;
 		expect(c.mode).toBe("help");
 	});
+
+	// ──────────────────────────────────────────────────────────────────────────────
+	// alias-aware suggestions (TP-016)
+	// ──────────────────────────────────────────────────────────────────────────────
+
+	it("suggests the canonical name when the input matches an alias", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			)
+			.command("version", (cmd) => cmd.run(() => {}));
+
+		// "issuess" is closest to the alias "issues" (distance 1) than to
+		// "issue" (distance 2). The plugin must report the canonical name
+		// regardless of which spelling triggered the match.
+		await app.execute({ argv: ["issuess"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Unknown command "issuess"');
+		expect(stderr).toContain('Did you mean "issue"?');
+		expect(stderr).not.toContain('Did you mean "issues"?');
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			);
+
+		await app.execute({ argv: ["isue"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Did you mean "issue"?');
+	});
+
+	it("deduplicates suggestions when an alias and its canonical both match", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin({ mode: "help" }))
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues"] }).run(() => {}),
+			);
+
+		// Both the canonical "issue" and the alias "issues" are within
+		// Levenshtein distance 3 of "issuee". The first suggestion line
+		// must contain only one mention of "issue" (canonical) and never
+		// the alias.
+		await app.execute({ argv: ["issuee"] });
+
+		const stdout = stdoutChunks.join("\n");
+		expect(stdout).toContain('Unknown command "issuee". Did you mean "issue"?');
+		expect(stdout).not.toContain('Did you mean "issues"');
+	});
 });

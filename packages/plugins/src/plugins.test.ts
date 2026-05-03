@@ -467,4 +467,62 @@ describe("built-in plugins", () => {
 		expect(getStderr()).toContain('Did you mean "build"?');
 		expect(process.exitCode).toBe(1);
 	});
+
+	// ──────────────────────────────────────────────────────────────────────────────
+	// helpPlugin alias rendering (TP-016)
+	// ──────────────────────────────────────────────────────────────────────────────
+
+	it("renderHelp renders aliases inline next to the canonical command name", () => {
+		const command = new Crust("app").command("issue", (cmd) =>
+			cmd
+				.meta({
+					description: "Manage issues",
+					aliases: ["issues", "i"],
+				})
+				.run(() => {}),
+		)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("issue (issues, i)");
+		expect(plain).toContain("Manage issues");
+	});
+
+	it("renderHelp renders unchanged for a command without aliases", () => {
+		const command = new Crust("app").command("build", (cmd) =>
+			cmd.meta({ description: "Build the project" }).run(() => {}),
+		)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("build");
+		// No parens means no aliases were rendered.
+		expect(plain).not.toMatch(/build\s*\(/);
+	});
+
+	it("renderHelp keeps description column aligned when aliases overflow the column", () => {
+		const command = new Crust("app")
+			.command("issue", (cmd) =>
+				cmd
+					.meta({
+						description: "Manage issues",
+						aliases: ["issues", "i"],
+					})
+					.run(() => {}),
+			)
+			.command("build", (cmd) =>
+				cmd.meta({ description: "Build the project" }).run(() => {}),
+			)._node;
+
+		const lines = stripAnsi(renderHelp(command)).split("\n");
+		const issueLine = lines.find((line) => line.includes("issue (issues, i)"));
+		const buildLine = lines.find((line) =>
+			line.match(/^\s+build\s+Build the project$/),
+		);
+
+		expect(issueLine).toBeDefined();
+		expect(buildLine).toBeDefined();
+		// Description still appears on the same line, just after the overflowing label.
+		expect(issueLine).toContain("Manage issues");
+	});
 });

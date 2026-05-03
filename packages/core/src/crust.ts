@@ -24,6 +24,7 @@ import type {
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
+import { validateIncomingAliases } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -701,6 +702,16 @@ export class Crust<
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
 
+			// Eager alias collision detection (TP-016). Mirrors commander v12:
+			// fail at registration time rather than risk silent shadowing at
+			// resolve time. Also catches the reverse-order case where a previously
+			// registered sibling reserved an alias that equals this command's name.
+			validateIncomingAliases(
+				{ canonicalName: name, aliases: configuredChild._node.meta.aliases },
+				this._node.subCommands,
+				name,
+			);
+
 			// Extract the internal node from the configured child and register it
 			// Clone the node to avoid mutating the original builder's _node
 			const childNode = {
@@ -736,6 +747,13 @@ export class Crust<
 				`Subcommand "${name}" is already registered`,
 			);
 		}
+
+		// Eager alias collision detection (TP-016) for the pre-built builder path.
+		validateIncomingAliases(
+			{ canonicalName: name, aliases: builder._node.meta.aliases },
+			this._node.subCommands,
+			name,
+		);
 
 		// Clone the node to avoid mutating the original builder's _node
 		const childNode = {

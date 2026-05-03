@@ -1,4 +1,4 @@
-import type { CrustPlugin } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
 import { renderHelp } from "./help.ts";
 
@@ -33,7 +33,43 @@ function levenshtein(a: string, b: string): number {
 	return row[bLen] as number;
 }
 
-function findSuggestions(input: string, candidates: string[]): string[] {
+/**
+ * Build an alias→canonical lookup table from a parent command's `subCommands`
+ * map. Canonical names map to themselves so callers can resolve any candidate
+ * with a single `aliasMap.get(candidate)` call.
+ */
+function buildAliasMap(
+	subCommands: Record<string, CommandNode>,
+): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const [name, node] of Object.entries(subCommands)) {
+		map.set(name, name);
+		const aliases = node.meta.aliases;
+		if (aliases) {
+			for (const alias of aliases) {
+				// If a misconfigured tree somehow has an alias collision, the
+				// first occurrence wins. Registration-time validation should
+				// have already rejected this, but the resolver also prefers
+				// canonical names (router.ts), so we mirror that here.
+				if (!map.has(alias)) map.set(alias, name);
+			}
+		}
+	}
+	return map;
+}
+
+/**
+ * Find candidate suggestions for `input` and return the **canonical** names
+ * of the matched candidates (mapping aliases back via `aliasMap`). Order:
+ * by ascending Levenshtein distance, then by name. Duplicates that arise
+ * from an alias and its canonical both falling under the threshold are
+ * collapsed (the first occurrence — i.e. the closer match — wins).
+ */
+function findSuggestions(
+	input: string,
+	candidates: string[],
+	aliasMap: Map<string, string>,
+): string[] {
 	const suggestions: { name: string; distance: number }[] = [];
 
 	for (const candidate of candidates) {
@@ -53,7 +89,19 @@ function findSuggestions(input: string, candidates: string[]): string[] {
 		return a.name.localeCompare(b.name);
 	});
 
-	return suggestions.map((suggestion) => suggestion.name);
+	// Map every match back to its canonical name and dedupe while preserving
+	// the (distance, name) order. Reporting canonicals only avoids
+	// suggesting two strings that resolve to the same command (which would
+	// be confusing) and matches the contract documented on `CommandMeta.aliases`.
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const { name } of suggestions) {
+		const canonical = aliasMap.get(name) ?? name;
+		if (seen.has(canonical)) continue;
+		seen.add(canonical);
+		out.push(canonical);
+	}
+	return out;
 }
 
 export function didYouMeanPlugin(
@@ -72,7 +120,12 @@ export function didYouMeanPlugin(
 				if (!error.is("COMMAND_NOT_FOUND")) throw error;
 
 				const details = error.details;
-				const suggestions = findSuggestions(details.input, details.available);
+				const aliasMap = buildAliasMap(details.parentCommand.subCommands);
+				const suggestions = findSuggestions(
+					details.input,
+					details.available,
+					aliasMap,
+				);
 
 				let message = `Unknown command "${details.input}".`;
 				if (suggestions.length > 0) {

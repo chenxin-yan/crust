@@ -117,6 +117,29 @@ function formatArgsSection(command: CommandNode): string[] {
 	return lines;
 }
 
+/**
+ * Render the canonical command name with any aliases inline. The canonical
+ * name is styled green; the `(a, b)` suffix is rendered in the default
+ * colour so the canonical spelling stands out at a glance.
+ *
+ * `name`                       — no aliases
+ * `name (alias1, alias2)`      — one or more aliases
+ *
+ * `padEnd` (from `@crustjs/style`) is ANSI-aware: it pads against the
+ * *visible* width so styling codes don't throw column alignment off. If the
+ * combined label exceeds `COMMAND_COLUMN_WIDTH`, padEnd is a no-op and the
+ * label overflows the column rather than truncating — truncating aliases
+ * would hide which alternative names exist, defeating the point.
+ */
+function formatCommandLabel(
+	name: string,
+	aliases: readonly string[] | undefined,
+): string {
+	const styledName = green(name);
+	if (!aliases || aliases.length === 0) return styledName;
+	return `${styledName} (${aliases.join(", ")})`;
+}
+
 function formatCommandsSection(command: CommandNode): string[] {
 	if (Object.keys(command.subCommands).length === 0) {
 		return [];
@@ -124,7 +147,8 @@ function formatCommandsSection(command: CommandNode): string[] {
 
 	const lines = [bold(cyan("COMMANDS:"))];
 	for (const [name, subCommand] of Object.entries(command.subCommands)) {
-		const rendered = `${padEnd(green(name), COMMAND_COLUMN_WIDTH, " ")} `;
+		const label = formatCommandLabel(name, subCommand.meta.aliases);
+		const rendered = `${padEnd(label, COMMAND_COLUMN_WIDTH, " ")} `;
 		lines.push(`  ${rendered}${subCommand.meta.description ?? ""}`.trimEnd());
 	}
 

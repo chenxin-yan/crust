@@ -79,7 +79,8 @@ The plugin uses Levenshtein distance to find similar commands:
 
 1. **Prefix matches** — If the input is a prefix of a command (or vice versa), it's considered a match with distance 0
 2. **Fuzzy matches** — Commands within a Levenshtein distance of 3 are included
-3. **Sorting** — Results are sorted by distance (closest first), then alphabetically
+3. **Alias-aware** — Aliases declared via [`meta.aliases`](/docs/api/types#commandmeta) are matched as candidates, but every match is mapped back to its canonical name before being reported. So a typo of an alias (`issuess` for `issues`) suggests the canonical (`issue`), and a candidate that matches both an alias and its canonical is deduplicated.
+4. **Sorting** — Results are sorted by distance (closest first), then alphabetically
 
 Only the top suggestion appears in the "Did you mean?" message. All available commands are listed separately (in error mode).
 
