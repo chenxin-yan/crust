@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust, type CrustPlugin } from "@crustjs/core";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
-import { autoCompletePlugin } from "./autocomplete.ts";
+import { didYouMeanPlugin } from "./did-you-mean.ts";
 import { helpPlugin, renderHelp } from "./help.ts";
 import { noColorPlugin } from "./no-color.ts";
 import { versionPlugin } from "./version.ts";
@@ -456,9 +456,9 @@ describe("built-in plugins", () => {
 		expect(getStdout()).toContain("app v3.5.0");
 	});
 
-	it("autocomplete plugin handles command not found in error mode", async () => {
+	it("didYouMean plugin handles command not found in error mode", async () => {
 		const app = new Crust("app")
-			.use(autoCompletePlugin())
+			.use(didYouMeanPlugin())
 			.command("build", (cmd) => cmd.run(() => {}));
 
 		await app.execute({ argv: ["buld"] });

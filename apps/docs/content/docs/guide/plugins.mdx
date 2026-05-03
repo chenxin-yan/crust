@@ -16,13 +16,13 @@ import { Crust } from "@crustjs/core";
 import {
   helpPlugin,
   versionPlugin,
-  autoCompletePlugin,
+  didYouMeanPlugin,
 } from "@crustjs/plugins";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
   .use(versionPlugin("1.0.0"))
-  .use(autoCompletePlugin({ mode: "help" }))
+  .use(didYouMeanPlugin({ mode: "help" }))
   .use(helpPlugin())
   .run(() => {
     console.log("Running!");
@@ -37,7 +37,7 @@ Crust ships with these official plugins:
 | ----------------------------------------------------------------- | ----------------------------------------------------------- |
 | [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text           |
 | [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to the root command                 |
-| [`autoCompletePlugin()`](/docs/modules/plugins/autocomplete)      | Suggests corrections for mistyped subcommands               |
+| [`didYouMeanPlugin()`](/docs/modules/plugins/did-you-mean)        | Suggests corrections for mistyped subcommands               |
 | [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays an update notice |
 
 ## Plugin Order
@@ -47,11 +47,11 @@ Plugins execute in the order they're registered. Each middleware wraps the next 
 ```ts
 new Crust("my-cli")
   .use(versionPlugin("1.0.0")) // Runs first, can intercept early
-  .use(autoCompletePlugin())   // Runs second, catches routing errors
+  .use(didYouMeanPlugin())     // Runs second, catches routing errors
   .use(helpPlugin())           // Runs third, handles --help
 ```
 
-A typical order is: **version** -> **autocomplete** -> **help**.
+A typical order is: **version** -> **did-you-mean** -> **help**.
 
 ## Plugin Lifecycle
 
@@ -211,7 +211,7 @@ interface MiddlewareContext {
 }
 ```
 
-`route` and `input` may be `null` if routing or parsing failed — the error is re-thrown inside the middleware chain, allowing error-handling plugins (like autocomplete) to catch it.
+`route` and `input` may be `null` if routing or parsing failed — the error is re-thrown inside the middleware chain, allowing error-handling plugins (like `didYouMeanPlugin`) to catch it.
 
 ## Plugin Collection
 

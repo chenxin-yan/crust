@@ -1,20 +1,35 @@
 ---
-title: Autocomplete
+title: Did You Mean
 description: Suggest corrections when users mistype subcommand names.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The autocomplete plugin catches `COMMAND_NOT_FOUND` errors and provides "Did you mean?" suggestions based on Levenshtein distance.
+The `didYouMeanPlugin` catches `COMMAND_NOT_FOUND` errors and provides "Did you mean?" suggestions based on Levenshtein distance. It does **not** provide shell tab-completion.
+
+<Callout title="Migration from `autoCompletePlugin`">
+  This plugin was previously named `autoCompletePlugin`. The old export is kept
+  as a deprecated alias and will be **removed in 1.0.0**. Update your imports:
+
+  ```ts
+  // Before
+  import { autoCompletePlugin } from "@crustjs/plugins";
+
+  // After
+  import { didYouMeanPlugin } from "@crustjs/plugins";
+  ```
+
+  Behavior is unchanged — only the name is different.
+</Callout>
 
 ## Usage
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { autoCompletePlugin } from "@crustjs/plugins";
+import { didYouMeanPlugin } from "@crustjs/plugins";
 
 const main = new Crust("my-cli")
-  .use(autoCompletePlugin())
+  .use(didYouMeanPlugin())
   .run(() => { /* ... */ });
 
 await main.execute();
@@ -34,9 +49,9 @@ Available commands: build, dev, deploy
 Prints the error to stderr and sets exit code to 1:
 
 ```ts
-autoCompletePlugin()
+didYouMeanPlugin()
 // or
-autoCompletePlugin({ mode: "error" })
+didYouMeanPlugin({ mode: "error" })
 ```
 
 Output (to stderr):
@@ -52,7 +67,7 @@ Available commands: build, dev, deploy
 Prints the suggestion and the parent command's help text to stdout:
 
 ```ts
-autoCompletePlugin({ mode: "help" })
+didYouMeanPlugin({ mode: "help" })
 ```
 
 Output (to stdout):
@@ -87,12 +102,12 @@ Only the top suggestion appears in the "Did you mean?" message. All available co
 
 ## Plugin Order
 
-The autocomplete plugin wraps the middleware chain in a try/catch. Place it **before** the help plugin so it can catch routing errors:
+The `didYouMeanPlugin` wraps the middleware chain in a try/catch. Place it **before** the help plugin so it can catch routing errors:
 
 ```ts
 new Crust("my-cli")
   .use(versionPlugin("1.0.0"))
-  .use(autoCompletePlugin({ mode: "help" }))
+  .use(didYouMeanPlugin({ mode: "help" }))
   .use(helpPlugin())
 ```
 
@@ -103,9 +118,9 @@ The plugin only handles `COMMAND_NOT_FOUND` errors. All other errors are re-thro
 ## Type
 
 ```ts
-interface AutoCompletePluginOptions {
+interface DidYouMeanPluginOptions {
   mode?: "error" | "help";  // Default: "error"
 }
 
-function autoCompletePlugin(options?: AutoCompletePluginOptions): CrustPlugin;
+function didYouMeanPlugin(options?: DidYouMeanPluginOptions): CrustPlugin;
 ```
