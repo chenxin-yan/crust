@@ -5,24 +5,30 @@
 # Make `agents` optional on `generateSkill`, `uninstallSkill`, and `skillStatus`
 
 The `agents` field on `GenerateOptions`, `UninstallOptions`, and
-`StatusOptions` is now optional. When omitted, all three entrypoints default
-to:
+`StatusOptions` is now optional. The default differs by entrypoint so
+install behavior tracks the current machine, while uninstall and status
+sweep every known path:
 
-```ts
-[...getUniversalAgents(), ...(await detectInstalledAgents())];
-```
+| Entrypoint                      | Default when `agents` is omitted                          | `PATH` I/O? |
+| ------------------------------- | --------------------------------------------------------- | ----------- |
+| `generateSkill`                 | `[...getUniversalAgents(), ...await detectInstalledAgents()]` | Yes      |
+| `uninstallSkill`, `skillStatus` | Every supported agent (exhaustive sweep of all known paths)   | No       |
 
-— the union of always-included universal agents and additional agents
-detected on the current machine.
+In all three, `agents: []` is treated as a no-op (no install, uninstall, or
+status entries). An explicit array always overrides the default.
 
-**Behavior change.** Omitting `agents` performs filesystem I/O via
-`detectInstalledAgents()` to probe `PATH` for installed agent CLIs.
-Previously these functions did no I/O for agent resolution because the
-caller always supplied the list. Pass an explicit array (including the
-empty array, which still means “do nothing”) to skip the probe.
+**Behavior change.** Existing callers that pass an explicit `agents` array
+keep their current behavior. Callers that omit `agents` (or pass
+`agents: undefined`, which is common from object spread) now trigger the
+defaults above:
 
-**Migration.** Existing callers continue to work without modification — this
-is a purely additive change. New code can drop the manual composition:
+- `generateSkill` performs filesystem I/O via `detectInstalledAgents()` to
+  probe `PATH` for installed agent CLIs.
+- `uninstallSkill` and `skillStatus` do not probe `PATH`; they iterate the
+  full agent registry and stat each per-agent path, which can return a
+  larger result set than before (one entry per supported agent).
+
+**Migration.**
 
 ```ts
 // Before — manual composition of universals + detected agents
@@ -39,5 +45,11 @@ await generateSkill({
 await generateSkill({ command, meta, scope: "global" });
 ```
 
-`getUniversalAgents()` and `detectInstalledAgents()` remain exported for
-callers who want fine-grained control.
+`getUniversalAgents()`, `getAdditionalAgents()`, and
+`detectInstalledAgents()` remain exported for callers who want fine-grained
+control.
+
+**Bug fix.** `detectInstalledAgents()` no longer reports a command as
+installed when the matching `PATH` entry is an executable directory rather
+than a file. The probe now requires the entry to be a regular file (or
+symlink to one) before checking the `X_OK` bit.

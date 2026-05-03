@@ -12,7 +12,7 @@ import { delimiter, join } from "node:path";
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
 
-import { getUniversalAgents } from "./agents.ts";
+import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	generateSkill,
@@ -97,20 +97,30 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Overrides `process.env.PATH` for the duration of a callback.
+ * Overrides `process.env.PATH` for the duration of a callback. Also
+ * normalizes `process.env.PATHEXT` to `".CMD"` on Windows so the probe in
+ * `isCommandOnPath` looks for the same extension that
+ * {@link makeFakeExecutable} writes (`name.cmd`), regardless of the host's
+ * `PATHEXT` value.
  *
  * Used to deterministically control what `detectInstalledAgents()` returns
  * when the public entrypoints fall back to their default agent resolution.
  * Tests pass a directory that contains zero or more fake executables.
  */
 async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
-	const original = process.env.PATH;
+	const originalPath = process.env.PATH;
+	const originalPathExt = process.env.PATHEXT;
 	process.env.PATH = dirs.join(delimiter);
+	if (process.platform === "win32") {
+		process.env.PATHEXT = ".CMD";
+	}
 	try {
 		return await fn();
 	} finally {
-		if (original === undefined) delete process.env.PATH;
-		else process.env.PATH = original;
+		if (originalPath === undefined) delete process.env.PATH;
+		else process.env.PATH = originalPath;
+		if (originalPathExt === undefined) delete process.env.PATHEXT;
+		else process.env.PATHEXT = originalPathExt;
 	}
 }
 
@@ -121,9 +131,10 @@ async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
  *
  * - POSIX: checks `dir/name` with `X_OK`, so we write a shebang script
  *   and `chmod 0o755`.
- * - Windows: checks `dir/name + ext` for each `PATHEXT` entry (default
- *   `.EXE;.CMD;.BAT;.COM`), so we write `dir/name.cmd`. `X_OK` collapses
- *   to `R_OK` on Windows, so no `chmod` is needed.
+ * - Windows: checks `dir/name + ext` for each `PATHEXT` entry. Tests rely on
+ *   {@link withPath} forcing `PATHEXT=".CMD"`, so this helper writes
+ *   `dir/name.cmd`. `X_OK` collapses to `R_OK` on Windows, so no `chmod`
+ *   is needed.
  */
 async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 	if (process.platform === "win32") {
@@ -1587,15 +1598,20 @@ describe("skillStatus", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Default agent resolution — omitted `agents` triggers universal + detected
+// Default agent resolution — omitted `agents` triggers per-entrypoint default
+//
+// `generateSkill`           → universal + PATH-detected additional agents
+// `uninstallSkill` / status → exhaustive sweep over ALL_AGENTS (no PATH I/O)
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("default agent resolution", () => {
 	/**
-	 * `getUniversalAgents()` is fixed at module-load time, so we capture it
-	 * once and reuse for assertions about the default-resolution shape.
+	 * `getUniversalAgents()` and `ALL_AGENTS` are fixed at module-load time, so
+	 * we capture them once and reuse for assertions about the default-resolution
+	 * shape.
 	 */
 	const universalAgents = getUniversalAgents();
+	const allAgentsCount = ALL_AGENTS.length;
 
 	describe("generateSkill", () => {
 		it("defaults to universal + detected when `agents` is omitted", async () => {
@@ -1704,57 +1720,59 @@ describe("default agent resolution", () => {
 	});
 
 	describe("uninstallSkill", () => {
-		it("defaults to universal + detected when `agents` is omitted", async () => {
-			const pathDir = join(tmpDir, "fake-bin");
-			await mkdir(pathDir, { recursive: true });
-			await makeFakeExecutable(pathDir, "claude");
-
-			// Install with explicit list, then uninstall using the default.
+		/**
+		 * Default uninstall now sweeps every supported agent path with no PATH
+		 * I/O, so the install side uses an explicit list and the uninstall side
+		 * does not need a controlled PATH.
+		 */
+		it("defaults to all supported agents when `agents` is omitted", async () => {
+			// Install only `claude-code` (additional) — universal agents share
+			// `.agents/skills/<name>`, so they are intentionally not in the install
+			// list to keep the universal path empty for the uninstall assertions.
 			await withCwd(tmpDir, () =>
-				withPath([pathDir], () =>
-					generateSkill({
-						command: simpleCommand(),
-						meta: {
-							name: "my-cli",
-							description: "Test",
-							version: "1.0.0",
-						},
-						agents: ["claude-code", "opencode"],
-						scope: "project",
-					}),
-				),
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
 			);
 
 			const result = await withCwd(tmpDir, () =>
-				withPath([pathDir], () =>
-					uninstallSkill({
-						name: "my-cli",
-						scope: "project",
-					}),
-				),
+				uninstallSkill({
+					name: "my-cli",
+					scope: "project",
+				}),
 			);
 
-			const targets = new Set(result.agents.map((a) => a.agent));
-			for (const universal of universalAgents) {
-				expect(targets.has(universal)).toBe(true);
+			expect(result.agents).toHaveLength(allAgentsCount);
+
+			const byAgent = new Map(result.agents.map((a) => [a.agent, a]));
+			for (const agent of ALL_AGENTS) {
+				expect(byAgent.has(agent)).toBe(true);
 			}
-			expect(targets.has("claude-code")).toBe(true);
-			expect(result.agents.length).toBe(universalAgents.length + 1);
+			// Installed additional → removed.
+			expect(byAgent.get("claude-code")?.status).toBe("removed");
+			// Unrelated additional → not-found (filesystem-only sweep, no PATH probe).
+			expect(byAgent.get("windsurf")?.status).toBe("not-found");
+			// Universals share `.agents/skills/<name>` — that path was never written,
+			// so every universal entry reports not-found.
+			for (const universal of universalAgents) {
+				expect(byAgent.get(universal)?.status).toBe("not-found");
+			}
 		});
 
 		it("treats `agents: []` as no-op (does not trigger default)", async () => {
-			const pathDir = join(tmpDir, "fake-bin");
-			await mkdir(pathDir, { recursive: true });
-			await makeFakeExecutable(pathDir, "claude");
-
 			const result = await withCwd(tmpDir, () =>
-				withPath([pathDir], () =>
-					uninstallSkill({
-						name: "my-cli",
-						agents: [],
-						scope: "project",
-					}),
-				),
+				uninstallSkill({
+					name: "my-cli",
+					agents: [],
+					scope: "project",
+				}),
 			);
 
 			expect(result.agents).toEqual([]);
@@ -1762,45 +1780,48 @@ describe("default agent resolution", () => {
 	});
 
 	describe("skillStatus", () => {
-		it("defaults to universal + detected when `agents` is omitted", async () => {
-			const pathDir = join(tmpDir, "fake-bin");
-			await mkdir(pathDir, { recursive: true });
-			await makeFakeExecutable(pathDir, "claude");
-
-			const status = await withCwd(tmpDir, () =>
-				withPath([pathDir], () =>
-					skillStatus({
+		it("defaults to all supported agents when `agents` is omitted", async () => {
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
 						name: "my-cli",
-						scope: "project",
-					}),
-				),
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
 			);
 
-			const targets = new Set(status.agents.map((a) => a.agent));
-			for (const universal of universalAgents) {
-				expect(targets.has(universal)).toBe(true);
+			const status = await withCwd(tmpDir, () =>
+				skillStatus({
+					name: "my-cli",
+					scope: "project",
+				}),
+			);
+
+			expect(status.agents).toHaveLength(allAgentsCount);
+
+			const byAgent = new Map(status.agents.map((a) => [a.agent, a]));
+			for (const agent of ALL_AGENTS) {
+				expect(byAgent.has(agent)).toBe(true);
 			}
-			expect(targets.has("claude-code")).toBe(true);
-			expect(status.agents.length).toBe(universalAgents.length + 1);
-			// Nothing was installed, so all entries report `installed: false`.
-			for (const entry of status.agents) {
-				expect(entry.installed).toBe(false);
+			expect(byAgent.get("claude-code")?.installed).toBe(true);
+			expect(byAgent.get("windsurf")?.installed).toBe(false);
+			// No universal agent path was written.
+			for (const universal of universalAgents) {
+				expect(byAgent.get(universal)?.installed).toBe(false);
 			}
 		});
 
 		it("treats `agents: []` as no-op (does not trigger default)", async () => {
-			const pathDir = join(tmpDir, "fake-bin");
-			await mkdir(pathDir, { recursive: true });
-			await makeFakeExecutable(pathDir, "claude");
-
 			const status = await withCwd(tmpDir, () =>
-				withPath([pathDir], () =>
-					skillStatus({
-						name: "my-cli",
-						agents: [],
-						scope: "project",
-					}),
-				),
+				skillStatus({
+					name: "my-cli",
+					agents: [],
+					scope: "project",
+				}),
 			);
 
 			expect(status.agents).toEqual([]);

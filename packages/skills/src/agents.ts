@@ -2,7 +2,7 @@
 // Agent path resolution and detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { AgentClass, AgentTarget, Scope } from "./types.ts";
@@ -457,6 +457,11 @@ function isCommandOnPath(command: string): boolean {
 
 function isExecutable(filePath: string): boolean {
 	try {
+		// `accessSync(X_OK)` returns success for executable directories on POSIX,
+		// so verify the entry is a regular file (or symlink to one) before
+		// reporting the command as installed. `statSync` follows symlinks, so
+		// symlinked binaries are still detected.
+		if (!statSync(filePath).isFile()) return false;
 		accessSync(filePath, constants.X_OK);
 		return true;
 	} catch {

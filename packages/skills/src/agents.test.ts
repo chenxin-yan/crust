@@ -152,6 +152,7 @@ describe("detectInstalledAgents", () => {
 describe("PATH-based detection (default commandChecker)", () => {
 	let tmpDir: string;
 	let originalPath: string | undefined;
+	let originalPathExt: string | undefined;
 
 	beforeEach(() => {
 		tmpDir = join(
@@ -160,11 +161,17 @@ describe("PATH-based detection (default commandChecker)", () => {
 		);
 		mkdirSync(tmpDir, { recursive: true });
 		originalPath = process.env.PATH;
+		originalPathExt = process.env.PATHEXT;
 	});
 
 	afterEach(() => {
 		if (originalPath !== undefined) {
 			process.env.PATH = originalPath;
+		}
+		if (originalPathExt === undefined) {
+			delete process.env.PATHEXT;
+		} else {
+			process.env.PATHEXT = originalPathExt;
 		}
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
@@ -197,6 +204,27 @@ describe("PATH-based detection (default commandChecker)", () => {
 		chmodSync(fakeBin, 0o644); // readable but not executable
 
 		process.env.PATH = tmpDir; // only our temp dir, so no real `claude` can be found
+
+		const result = await detectInstalledAgents();
+		expect(result).not.toContain("claude-code");
+	});
+
+	it("does not detect a directory named like a command", async () => {
+		// Regression: `accessSync(X_OK)` returns success for executable directories,
+		// so the probe must additionally check that the entry is a file. The
+		// platform shape of the entry name (`claude` vs `claude.CMD`) is chosen
+		// so the probe sees this directory at all.
+		const dirName = process.platform === "win32" ? "claude.CMD" : "claude";
+		const fakeDir = join(tmpDir, dirName);
+		mkdirSync(fakeDir, { recursive: true });
+		if (process.platform !== "win32") {
+			chmodSync(fakeDir, 0o755);
+		}
+		if (process.platform === "win32") {
+			process.env.PATHEXT = ".CMD";
+		}
+
+		process.env.PATH = tmpDir;
 
 		const result = await detectInstalledAgents();
 		expect(result).not.toContain("claude-code");
