@@ -25,26 +25,6 @@ export interface CommandRoute {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build the flat list of available subcommand identifiers (canonical names
- * followed by each canonical name's aliases, preserving sibling insertion
- * order). Used for `COMMAND_NOT_FOUND.details.available` so that
- * `didYouMeanPlugin` can match against alias spellings too.
- */
-function collectAvailableNames(
-	subCommands: Record<string, CommandNode>,
-): string[] {
-	const names: string[] = [];
-	for (const [name, node] of Object.entries(subCommands)) {
-		names.push(name);
-		const aliases = node.meta.aliases;
-		if (aliases) {
-			for (const alias of aliases) names.push(alias);
-		}
-	}
-	return names;
-}
-
-/**
  * Find a sibling whose `meta.aliases` contains the given candidate. Returns
  * the canonical sibling key and node when matched, otherwise `null`.
  *
@@ -82,8 +62,8 @@ function findAliasMatch(
  * 4. If no match and the current command has NO `run()`, it signals the caller
  *    should show help (the `showHelp` flag is set in the result)
  * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
- *    `details.available` lists canonical names AND aliases (each canonical
- *    name immediately followed by its aliases, in sibling insertion order)
+ *    `details.available` lists the canonical sibling names (aliases are
+ *    discoverable via `details.parentCommand.subCommands[name].meta.aliases`)
  *
  * Implementation: linear scan over siblings on miss. Command trees are small
  * and resolution runs once per invocation, so the cost is negligible compared
@@ -144,15 +124,15 @@ export function resolveCommand(
 		}
 
 		// Parent has no run() — this is an unknown subcommand error.
-		// `details.available` includes aliases so didYouMeanPlugin can match
-		// against alias spellings; canonical names appear first per sibling.
-		const available = collectAvailableNames(subCommands);
+		// `details.available` lists canonical sibling names only; consumers
+		// that want alias-aware matching (e.g. didYouMeanPlugin) read aliases
+		// directly from `details.parentCommand.subCommands`.
 		throw new CrustError(
 			"COMMAND_NOT_FOUND",
 			`Unknown command "${candidate}".`,
 			{
 				input: candidate,
-				available,
+				available: Object.keys(subCommands),
 				commandPath: [...path],
 				parentCommand: current,
 			},

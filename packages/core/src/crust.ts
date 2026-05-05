@@ -187,6 +187,22 @@ function createSetupActions(warnings?: string[]): SetupActions {
 				);
 				return;
 			}
+			// Mirror `.command()`'s eager alias collision detection (TP-016) but
+			// downgrade to a warning + skip, consistent with how this action
+			// already handles canonical-name collisions for plugin authors.
+			try {
+				validateIncomingAliases(
+					{ canonicalName: name, aliases: subCommand.meta.aliases },
+					parent.subCommands,
+					name,
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				warnings?.push(
+					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped: ${message}`,
+				);
+				return;
+			}
 			applyInheritedFlagsToSubtree(subCommand, parent.effectiveFlags);
 			(parent.subCommands as Record<string, unknown>)[name] = subCommand;
 		},
@@ -413,14 +429,20 @@ export class Crust<
 	 * Set metadata (description, usage) for this command.
 	 *
 	 * The command name is already set by the builder source (constructor,
-	 * `.sub()`, or the child builder passed into `.command(name, cb)`), so
-	 * only `description` and `usage` can be provided here.
+	 * `.sub()`, or the child builder passed into `.command(name, cb)`).
+	 * Provide `description`, `usage`, and/or `aliases` here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
 	 * is not mutated.
 	 *
-	 * @param meta - Metadata fields to set (description, usage)
+	 * @param meta - Metadata fields to set (description, usage, aliases)
 	 * @returns A new `Crust` instance with updated metadata
+	 * @example
+	 * ```ts
+	 * .command("issue", (cmd) =>
+	 *   cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+	 * )
+	 * ```
 	 */
 	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {
 		return this._clone({

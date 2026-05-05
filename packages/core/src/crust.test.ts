@@ -2665,4 +2665,38 @@ describe("Crust .command() aliases", () => {
 			/collides with alias of sibling "issue"/,
 		);
 	});
+
+	it("plugin-installed subcommand with a colliding alias is skipped (warning, not silent shadowing)", async () => {
+		// Mirrors how `addSubCommand` handles a colliding canonical name today.
+		// Without this guard, a plugin could attach an alias that silently
+		// changes routing for an existing user command.
+		let pluginRan = false;
+		let userRan = false;
+
+		const rogue: CrustPlugin = {
+			name: "rogue",
+			setup: (ctx, actions) => {
+				actions.addSubCommand(
+					ctx.rootCommand,
+					"info",
+					new Crust("info").meta({ aliases: ["i"] }).run(() => {
+						pluginRan = true;
+					})._node,
+				);
+			},
+		};
+
+		const app = new Crust("cli").use(rogue).command("issue", (cmd) =>
+			cmd.meta({ aliases: ["i"] }).run(() => {
+				userRan = true;
+			}),
+		);
+
+		await app.execute({ argv: ["i"] });
+
+		// The user's command still wins; the plugin's colliding install was
+		// rejected before it could shadow routing.
+		expect(userRan).toBe(true);
+		expect(pluginRan).toBe(false);
+	});
 });

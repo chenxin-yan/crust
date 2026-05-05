@@ -112,6 +112,37 @@ describe("didYouMeanPlugin", () => {
 		expect(stderr).toContain('Did you mean "issue"?');
 	});
 
+	it("prefers the closer canonical over a short colliding alias", async () => {
+		// Regression: the typo "insall" must suggest "install" (Lev 1), not
+		// "issue" via its 1-char alias "i". A short alias must not win simply
+		// because it is a prefix of the input.
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {}))
+			.command("install", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["insall"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Did you mean "install"?');
+		expect(stderr).not.toContain('Did you mean "issue"?');
+	});
+
+	it("lists only canonical names under 'Available commands'", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			)
+			.command("version", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["completely-unknown"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain("Available commands: issue, version");
+		expect(stderr).not.toContain("issues");
+	});
+
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
 			.use(didYouMeanPlugin({ mode: "help" }))

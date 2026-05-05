@@ -65,6 +65,9 @@ This means subcommand names are consumed before flag parsing, so `my-cli build -
 A command can declare alternative names — short or long forms that resolve to the same command node — via the `aliases` field on `meta()`:
 
 ```ts
+import { Crust } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
+
 const main = new Crust("my-cli")
   .use(helpPlugin())
   .command("issue", (cmd) =>
