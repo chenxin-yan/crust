@@ -513,17 +513,17 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("## How to Use This Skill");
 			expect(content).toContain("## Command Reference");
 			expect(content).toContain(
-				"Use this table to locate the command file you need.",
+				"You should use this table to locate the command file you need.",
 			);
-			expect(content).toContain("Find the command that best matches");
+			expect(content).toContain("You must find the command that best matches");
 			expect(content).toContain(
-				"Check the `Type` column before suggesting execution",
-			);
-			expect(content).toContain(
-				"Before answering a command-specific question or suggesting a command, read that command's file",
+				"You must check the `Type` column before suggesting execution",
 			);
 			expect(content).toContain(
-				"Treat the command file as the source of truth",
+				"You must read a command's file before answering a command-specific question or suggesting that command",
+			);
+			expect(content).toContain(
+				"You must treat the command file as the source of truth",
 			);
 			expect(content).toContain("say it is not documented instead of guessing");
 		});
@@ -537,7 +537,7 @@ describe("E2E: skill generation", () => {
 
 			const content = await readText(join(agent.outputDir, "SKILL.md"));
 			expect(content).toContain(
-				"Use this skill when you need accurate help with `deploy-cli` commands",
+				"You should use this skill when you need accurate help with `deploy-cli` commands",
 			);
 		});
 
