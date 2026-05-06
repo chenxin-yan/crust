@@ -210,7 +210,7 @@ To publish via npm with automatic platform detection, add the `package` and `pub
 }
 ```
 
-The `package` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with-package) for details.
+The `package` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with---package) for details.
 
 If you need public build-time constants, `crust build` can read `PUBLIC_*` values from Bun's cwd env by default, or you can pass `--env-file` for explicit env files. See [Environment Variables](/docs/guide/environment) for the full runtime-vs-build-time model.
 
