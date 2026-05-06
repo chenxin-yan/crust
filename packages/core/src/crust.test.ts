@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Crust, type CrustCommandContext } from "./crust.ts";
+import {
+	Crust,
+	type CrustCommandContext,
+	VALIDATION_FORCE_EXIT_ENV,
+	VALIDATION_MODE_ENV,
+} from "./crust.ts";
 import { CrustError } from "./errors.ts";
 import type { CrustPlugin } from "./plugins.ts";
 import type {
@@ -2064,6 +2069,101 @@ describe("Crust .execute()", () => {
 		expect((receivedCommand as { meta: { name: string } }).meta.name).toBe(
 			"test",
 		);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// .execute() — build-time validation mode
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust .execute() validation mode", () => {
+	// `process.exit` would terminate the bun test runner if it ever fires
+	// during these tests — stub it so we can observe the call instead, and
+	// fail loudly if anything tries to exit when it should not.
+	const originalExit = process.exit;
+	let exitCalls: Array<number | undefined>;
+
+	beforeEach(() => {
+		exitCalls = [];
+		// Force a clean numeric baseline. `process.exitCode = undefined` is a
+		// no-op on Bun, so the validation-failure tests below would otherwise
+		// leak `exitCode = 1` into sibling tests — and into the test runner's
+		// own exit status, making `bun test` exit 1 even when every test passes.
+		process.exitCode = 0;
+		process.exit = ((code?: number) => {
+			exitCalls.push(code);
+			// Throw instead of exiting so the test can see the call.
+			throw new Error(
+				`process.exit(${code ?? "undefined"}) was called during validation`,
+			);
+		}) as typeof process.exit;
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		process.exitCode = 0;
+		delete process.env[VALIDATION_MODE_ENV];
+		delete process.env[VALIDATION_FORCE_EXIT_ENV];
+	});
+
+	it("does not call process.exit when only VALIDATION_MODE_ENV is set", async () => {
+		process.env[VALIDATION_MODE_ENV] = "1";
+		delete process.env[VALIDATION_FORCE_EXIT_ENV];
+
+		let handlerRan = false;
+		const app = new Crust("in-process-validation").run(() => {
+			handlerRan = true;
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(exitCalls).toEqual([]);
+		// Validation runs *instead of* the handler.
+		expect(handlerRan).toBe(false);
+		// Successful validation leaves exitCode at the baseline (0).
+		expect(process.exitCode).toBe(0);
+	});
+
+	it("sets process.exitCode = 1 on validation failure without exiting in-process", async () => {
+		process.env[VALIDATION_MODE_ENV] = "1";
+		delete process.env[VALIDATION_FORCE_EXIT_ENV];
+
+		// Inject a no-prefixed effective flag post-hoc — the builder rejects
+		// these at compile time, but `validateCommandTree` is the runtime
+		// guard and is what validation mode invokes.
+		const app = new Crust("cli").run(() => {});
+		app._node.effectiveFlags["no-verbose"] = { type: "boolean" };
+
+		await app.execute({ argv: [] });
+
+		expect(exitCalls).toEqual([]);
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("force-exits when VALIDATION_FORCE_EXIT_ENV is also set (build subprocess path)", async () => {
+		process.env[VALIDATION_MODE_ENV] = "1";
+		process.env[VALIDATION_FORCE_EXIT_ENV] = "1";
+
+		const app = new Crust("build-subprocess").run(() => {});
+
+		// Stubbed process.exit throws; the rejection confirms it fired.
+		await expect(app.execute({ argv: [] })).rejects.toThrow(
+			"process.exit(0) was called",
+		);
+		expect(exitCalls).toEqual([0]);
+	});
+
+	it("force-exits with code 1 on validation failure when both envs are set", async () => {
+		process.env[VALIDATION_MODE_ENV] = "1";
+		process.env[VALIDATION_FORCE_EXIT_ENV] = "1";
+
+		const app = new Crust("cli").run(() => {});
+		app._node.effectiveFlags["no-verbose"] = { type: "boolean" };
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow(
+			"process.exit(1) was called",
+		);
+		expect(exitCalls).toEqual([1]);
 	});
 });
 

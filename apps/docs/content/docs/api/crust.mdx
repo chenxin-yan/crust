@@ -340,10 +340,18 @@ function computeEffectiveFlags(inherited: FlagsDef, local: FlagsDef): FlagsDef;
 
 ### `VALIDATION_MODE_ENV`
 
-The environment variable name (`"CRUST_INTERNAL_VALIDATE_ONLY"`) used by `crust build` to trigger build-time validation mode.
+Env var name (`"CRUST_INTERNAL_VALIDATE_ONLY"`) used by `crust build` to trigger build-time validation mode. When set without the force-exit companion below, `.execute()` runs the validation pipeline, surfaces errors via stderr and `process.exitCode`, then returns to the caller.
 
 ```ts
 const VALIDATION_MODE_ENV: string;
+```
+
+### `VALIDATION_FORCE_EXIT_ENV`
+
+Companion env (`"CRUST_INTERNAL_VALIDATE_FORCE_EXIT"`) that makes validation mode call `process.exit(process.exitCode ?? 0)` at the end of the validation branch. `crust build` sets it only in its validation subprocess, so entrypoint code after `await app.execute()` is skipped during the pre-compile check; in-process callers (tests, embedders) leave it unset and `.execute()` returns normally.
+
+```ts
+const VALIDATION_FORCE_EXIT_ENV: string;
 ```
 
 For user-facing env behavior, see [Environment Variables](/docs/guide/environment) and [Building & Distribution](/docs/guide/build).

@@ -1,6 +1,10 @@
 // Crust builder API
 export type { CrustCommandContext } from "./crust.ts";
-export { Crust, VALIDATION_MODE_ENV } from "./crust.ts";
+export {
+	Crust,
+	VALIDATION_FORCE_EXIT_ENV,
+	VALIDATION_MODE_ENV,
+} from "./crust.ts";
 // Errors
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";

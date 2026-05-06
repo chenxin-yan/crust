@@ -1,6 +1,10 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import {
+	Crust,
+	VALIDATION_FORCE_EXIT_ENV,
+	VALIDATION_MODE_ENV,
+} from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 import { resolveBaseName } from "../utils/binary-name.ts";
 import { generateManPageFromEntry } from "../utils/generate-man.ts";
@@ -519,9 +523,12 @@ export async function execBuild(
 
 /**
  * Validate CLI entry by spawning the entry file as a subprocess with
- * `CRUST_INTERNAL_VALIDATE_ONLY=1`. This ensures module resolution runs
- * in the user's project context (their node_modules), not inside the
- * compiled `crust` binary.
+ * `CRUST_INTERNAL_VALIDATE_ONLY=1` and `CRUST_INTERNAL_VALIDATE_FORCE_EXIT=1`.
+ * The first triggers `.execute()`'s validation pipeline; the second makes it
+ * `process.exit()` after validation so any user code after `await app.execute()`
+ * is skipped during the build check. Spawning as a subprocess (rather than
+ * running validation in-process) ensures module resolution uses the user's
+ * project context, not the compiled `crust` binary's bundle.
  *
  * Uses `process.execPath` (the current binary) with `BUN_BE_BUN=1` so
  * that compiled standalone executables act as the full Bun runtime and
@@ -540,6 +547,8 @@ export async function validateEntrypoint(
 			env: {
 				...process.env,
 				[VALIDATION_MODE_ENV]: "1",
+				// Stop after validation; entrypoint code after `execute()` must not run.
+				[VALIDATION_FORCE_EXIT_ENV]: "1",
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
