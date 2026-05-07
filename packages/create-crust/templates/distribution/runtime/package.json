@@ -17,11 +17,11 @@
 		"check:types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@crustjs/core": "latest",
-		"@crustjs/plugins": "latest"
+		"@crustjs/core": "^{{crustCoreVersion}}",
+		"@crustjs/plugins": "^{{crustPluginsVersion}}"
 	},
 	"devDependencies": {
-		"@crustjs/crust": "latest",
+		"@crustjs/crust": "^{{crustCliVersion}}",
 		"@types/bun": "latest",
 		"typescript": "^6"
 	}

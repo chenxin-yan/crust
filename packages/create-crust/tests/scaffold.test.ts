@@ -2,8 +2,23 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { scaffold } from "@crustjs/create";
+import corePackage from "../../core/package.json";
+import crustPackage from "../../crust/package.json";
+import pluginsPackage from "../../plugins/package.json";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
+const TEMPLATE_VERSION_CONTEXT = {
+	crustCoreVersion: corePackage.version,
+	crustPluginsVersion: pluginsPackage.version,
+	crustCliVersion: crustPackage.version,
+} satisfies Record<string, string>;
+const EXPECTED_CRUST_DEPENDENCIES = {
+	"@crustjs/core": `^${corePackage.version}`,
+	"@crustjs/plugins": `^${pluginsPackage.version}`,
+};
+const EXPECTED_CRUST_DEV_DEPENDENCIES = {
+	"@crustjs/crust": `^${crustPackage.version}`,
+};
 
 type TemplateStyle = "minimal" | "modular";
 type DistributionMode = "binary" | "runtime";
@@ -23,18 +38,19 @@ async function scaffoldProject(
 	const style = options?.style ?? "minimal";
 	const distribution = options?.distribution ?? "binary";
 	const conflict = options?.conflict ?? "overwrite";
+	const scaffoldContext = { ...context, ...TEMPLATE_VERSION_CONTEXT };
 
 	await scaffold({
 		template: "templates/base",
 		dest,
-		context,
+		context: scaffoldContext,
 		conflict,
 	});
 
 	await scaffold({
 		template: style === "minimal" ? "templates/minimal" : "templates/modular",
 		dest,
-		context,
+		context: scaffoldContext,
 		conflict: "overwrite",
 	});
 
@@ -44,7 +60,7 @@ async function scaffoldProject(
 				? "templates/distribution/binary"
 				: "templates/distribution/runtime",
 		dest,
-		context,
+		context: scaffoldContext,
 		conflict: "overwrite",
 	});
 }
@@ -110,9 +126,8 @@ describe("scaffold", () => {
 		expect(pkg.bin).toEqual({ "my-awesome-cli": "dist/cli" });
 		expect(pkg.dependencies).toBeUndefined();
 		expect(pkg.devDependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/crust": "latest",
-			"@crustjs/plugins": "latest",
+			...EXPECTED_CRUST_DEPENDENCIES,
+			...EXPECTED_CRUST_DEV_DEPENDENCIES,
 			"@types/bun": "latest",
 			typescript: "^6",
 		});
@@ -139,12 +154,9 @@ describe("scaffold", () => {
 
 		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
 		expect(pkg.files).toEqual(["dist"]);
-		expect(pkg.dependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/plugins": "latest",
-		});
+		expect(pkg.dependencies).toEqual(EXPECTED_CRUST_DEPENDENCIES);
 		expect(pkg.devDependencies).toEqual({
-			"@crustjs/crust": "latest",
+			...EXPECTED_CRUST_DEV_DEPENDENCIES,
 			"@types/bun": "latest",
 			typescript: "^6",
 		});
@@ -284,10 +296,7 @@ describe("scaffold", () => {
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
 		);
 		expect(pkg.bin["modular-runtime-cli"]).toBe("dist/cli.js");
-		expect(pkg.dependencies).toEqual({
-			"@crustjs/core": "latest",
-			"@crustjs/plugins": "latest",
-		});
+		expect(pkg.dependencies).toEqual(EXPECTED_CRUST_DEPENDENCIES);
 	});
 
 	it("creates project in nested directory (creates parent dirs)", async () => {

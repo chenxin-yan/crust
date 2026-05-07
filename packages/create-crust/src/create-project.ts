@@ -1,4 +1,7 @@
 import { runSteps, scaffold } from "@crustjs/create";
+import corePackage from "../../core/package.json";
+import crustPackage from "../../crust/package.json";
+import pluginsPackage from "../../plugins/package.json";
 
 export type TemplateStyle = "minimal" | "modular";
 export type DistributionMode = "binary" | "runtime";
@@ -11,6 +14,12 @@ export interface CreateCrustProjectOptions {
 	readonly installDeps: boolean;
 	readonly initGit: boolean;
 }
+
+const CRUST_TEMPLATE_VERSION_CONTEXT = {
+	crustCoreVersion: corePackage.version,
+	crustPluginsVersion: pluginsPackage.version,
+	crustCliVersion: crustPackage.version,
+} satisfies Record<string, string>;
 
 /**
  * Scaffold project files only (no install or git-init).
@@ -28,25 +37,25 @@ export async function scaffoldCrustProject(
 		distributionMode === "binary"
 			? "templates/distribution/binary"
 			: "templates/distribution/runtime";
+	const context = { name, ...CRUST_TEMPLATE_VERSION_CONTEXT };
 
 	await scaffold({
 		template: "templates/base",
 		dest: resolvedDir,
-		context: { name },
-		conflict: "overwrite",
+		context,
 	});
 
 	await scaffold({
 		template: styleTemplatePath,
 		dest: resolvedDir,
-		context: { name },
+		context,
 		conflict: "overwrite",
 	});
 
 	await scaffold({
 		template: distributionTemplatePath,
 		dest: resolvedDir,
-		context: { name },
+		context,
 		conflict: "overwrite",
 	});
 }
