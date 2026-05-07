@@ -48,11 +48,26 @@ Metadata describing a command:
 
 ```ts
 interface CommandMeta {
-  name: string;          // Command name (required)
-  description?: string;  // Help text description
-  usage?: string;        // Custom usage string
+  name: string;                  // Command name (required)
+  description?: string;          // Help text description
+  usage?: string;                // Custom usage string
+  aliases?: readonly string[];   // Alternative names
 }
 ```
+
+#### `aliases`
+
+Alternative names that resolve to the same command. Type: `readonly string[]`. Default: `undefined`.
+
+```ts
+meta: { name: "issue", aliases: ["issues", "i"] }
+```
+
+With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same command node.
+
+**Conflict policy.** Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Each alias must be a non-empty string with no whitespace and must not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time. Plugin-installed subcommands (via the `addCommand` setup action) are validated when registered too: a colliding alias is skipped with a warning, mirroring how a colliding canonical name is handled today. `prepareCommandTree()` re-runs the same check against the final tree.
+
+**Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
 
 ## Argument Types
 

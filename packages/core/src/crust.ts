@@ -24,6 +24,7 @@ import type {
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
+import { validateIncomingAliases } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -183,6 +184,22 @@ function createSetupActions(warnings?: string[]): SetupActions {
 			if (parent.subCommands[name]) {
 				warnings?.push(
 					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped (already exists)`,
+				);
+				return;
+			}
+			// Mirror `.command()`'s eager alias collision detection (TP-016) but
+			// downgrade to a warning + skip, consistent with how this action
+			// already handles canonical-name collisions for plugin authors.
+			try {
+				validateIncomingAliases(
+					{ canonicalName: name, aliases: subCommand.meta.aliases },
+					parent.subCommands,
+					name,
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				warnings?.push(
+					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped: ${message}`,
 				);
 				return;
 			}
@@ -412,14 +429,20 @@ export class Crust<
 	 * Set metadata (description, usage) for this command.
 	 *
 	 * The command name is already set by the builder source (constructor,
-	 * `.sub()`, or the child builder passed into `.command(name, cb)`), so
-	 * only `description` and `usage` can be provided here.
+	 * `.sub()`, or the child builder passed into `.command(name, cb)`).
+	 * Provide `description`, `usage`, and/or `aliases` here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
 	 * is not mutated.
 	 *
-	 * @param meta - Metadata fields to set (description, usage)
+	 * @param meta - Metadata fields to set (description, usage, aliases)
 	 * @returns A new `Crust` instance with updated metadata
+	 * @example
+	 * ```ts
+	 * .command("issue", (cmd) =>
+	 *   cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+	 * )
+	 * ```
 	 */
 	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
@@ -701,6 +724,16 @@ export class Crust<
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
 
+			// Eager alias collision detection (TP-016). Mirrors commander v12:
+			// fail at registration time rather than risk silent shadowing at
+			// resolve time. Also catches the reverse-order case where a previously
+			// registered sibling reserved an alias that equals this command's name.
+			validateIncomingAliases(
+				{ canonicalName: name, aliases: configuredChild._node.meta.aliases },
+				this._node.subCommands,
+				name,
+			);
+
 			// Extract the internal node from the configured child and register it
 			// Clone the node to avoid mutating the original builder's _node
 			const childNode = {
@@ -736,6 +769,13 @@ export class Crust<
 				`Subcommand "${name}" is already registered`,
 			);
 		}
+
+		// Eager alias collision detection (TP-016) for the pre-built builder path.
+		validateIncomingAliases(
+			{ canonicalName: name, aliases: builder._node.meta.aliases },
+			this._node.subCommands,
+			name,
+		);
 
 		// Clone the node to avoid mutating the original builder's _node
 		const childNode = {

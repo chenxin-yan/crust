@@ -53,13 +53,16 @@ USAGE:
   my-cli <command> [options]
 
 COMMANDS:
-  build      Build the project
-  dev        Start dev server
+  build               Build the project
+  issue (issues, i)   Manage issues
+  dev                 Start dev server
 
 OPTIONS:
   -h, --help, --no-help          Show help
   -v, --version, --no-version    Show version number
 ```
+
+When a command declares [`aliases`](/docs/api/types#commandmeta), they are rendered inline next to the canonical name as `name (alias1, alias2)`. The canonical name is what appears in the path, in error messages, and in `didYouMeanPlugin` suggestions.
 
 The help text includes these sections (when applicable):
 

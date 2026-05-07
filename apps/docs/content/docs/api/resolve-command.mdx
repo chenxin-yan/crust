@@ -40,7 +40,7 @@ The error includes structured details:
 ```ts
 interface CommandNotFoundErrorDetails {
   input: string;              // The unknown subcommand name
-  available: string[];         // Valid subcommand names
+  available: string[];         // Canonical sibling names (aliases live on parentCommand.subCommands)
   commandPath: string[];       // Path to the parent command
   parentCommand: CommandNode;  // The parent command node
 }
@@ -52,9 +52,10 @@ interface CommandNotFoundErrorDetails {
 2. Take the first token from `argv`
 3. If it starts with `-`, stop (it's a flag, not a subcommand)
 4. If it matches a subcommand key, recurse into that subcommand
-5. If no match and the current command has `run()`, stop (token is a positional arg)
-6. If no match and the current command has no `run()`, throw `COMMAND_NOT_FOUND`
-7. Repeat until no more subcommand matches
+5. If it matches a sibling's `meta.aliases` entry, recurse into that sibling and record its **canonical** name in `commandPath`
+6. If no match and the current command has `run()`, stop (token is a positional arg)
+7. If no match and the current command has no `run()`, throw `COMMAND_NOT_FOUND`
+8. Repeat until no more subcommand matches
 
 ## Examples
 
@@ -81,6 +82,20 @@ const route = resolveCommand(app._node, ["create", "component", "Button"]);
 // route.command.meta.name === "component"
 // route.argv === ["Button"]
 // route.commandPath === ["my-cli", "create", "component"]
+```
+
+### Aliases
+
+If a sibling declares `meta.aliases`, the resolver matches them after the canonical name. `commandPath` always records the canonical name regardless of which spelling the user typed.
+
+```ts
+const app = new Crust("my-cli")
+  .command("issue", (cmd) =>
+    cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+  );
+
+resolveCommand(app._node, ["i"]).commandPath;
+// ["my-cli", "issue"] — canonical, not the alias the user typed
 ```
 
 ### No Subcommand Match

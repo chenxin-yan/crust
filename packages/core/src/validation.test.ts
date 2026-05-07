@@ -272,3 +272,74 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(root)).not.toThrow();
 	});
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// validateCommandTree — alias collisions (TP-016)
+//
+// Catches plugin-installed subcommands that bypass `.command()` (where
+// collision detection runs eagerly).
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("validateCommandTree — alias collisions", () => {
+	function makeRunnable(name: string, aliases?: readonly string[]) {
+		const node = createCommandNode(name);
+		if (aliases) node.meta.aliases = aliases;
+		node.run = () => {};
+		return node;
+	}
+
+	it("accepts a tree with non-colliding aliases", () => {
+		const root = createCommandNode("app");
+		root.subCommands = {
+			issue: makeRunnable("issue", ["issues", "i"]),
+			version: makeRunnable("version", ["v"]),
+		};
+		expect(() => validateCommandTree(root)).not.toThrow();
+	});
+
+	it("detects an alias colliding with a sibling's canonical name", () => {
+		const root = createCommandNode("app");
+		// Simulate a plugin that installed both subcommands directly.
+		root.subCommands = {
+			build: makeRunnable("build"),
+			compile: makeRunnable("compile", ["build"]),
+		};
+		expect(() => validateCommandTree(root)).toThrow(
+			/collides with sibling canonical name "build"/,
+		);
+	});
+
+	it("detects an alias colliding with another sibling's alias", () => {
+		const root = createCommandNode("app");
+		root.subCommands = {
+			issue: makeRunnable("issue", ["i"]),
+			info: makeRunnable("info", ["i"]),
+		};
+		expect(() => validateCommandTree(root)).toThrow(
+			/collides with alias of sibling "issue"/,
+		);
+	});
+
+	it("detects shape-invalid aliases (whitespace)", () => {
+		const root = createCommandNode("app");
+		root.subCommands = {
+			issue: makeRunnable("issue", ["my issue"]),
+		};
+		expect(() => validateCommandTree(root)).toThrow(
+			/must not contain whitespace/,
+		);
+	});
+
+	it("walks into nested subtrees", () => {
+		const leafA = makeRunnable("create", ["new"]);
+		const leafB = makeRunnable("clone", ["new"]);
+		const issue = createCommandNode("issue");
+		issue.subCommands = { create: leafA, clone: leafB };
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		expect(() => validateCommandTree(root)).toThrow(
+			/collides with alias of sibling "create"/,
+		);
+	});
+});

@@ -60,6 +60,60 @@ When Crust receives `argv`, it walks the subcommand tree **before** parsing flag
 
 This means subcommand names are consumed before flag parsing, so `my-cli build --minify` first resolves `build`, then parses `--minify` against the build command's flags. See the [resolveCommand() reference](/docs/api/resolve-command#resolution-algorithm) for the detailed step-by-step algorithm.
 
+## Aliases
+
+A command can declare alternative names — short or long forms that resolve to the same command node — via the `aliases` field on `meta()`:
+
+```ts
+import { Crust } from "@crustjs/core";
+import { helpPlugin } from "@crustjs/plugins";
+
+const main = new Crust("my-cli")
+  .use(helpPlugin())
+  .command("issue", (cmd) =>
+    cmd
+      .meta({ description: "Manage issues", aliases: ["issues", "i"] })
+      .command("list", (sub) =>
+        sub.meta({ description: "List open issues" }).run(() => {
+          console.log("open issues…");
+        }),
+      ),
+  );
+
+await main.execute();
+```
+
+All three of the following invoke the same command:
+
+```sh
+my-cli issue list
+my-cli issues list   # via alias "issues"
+my-cli i list        # via alias "i"
+```
+
+The canonical name is what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — the alias the user typed is not preserved. Help renders the canonical name with aliases inline:
+
+```text
+COMMANDS:
+  issue (issues, i)   Manage issues
+```
+
+### Conflict policy
+
+Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. They must also be non-empty, contain no whitespace, and not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time:
+
+```ts
+// ❌ Throws: alias "i" collides with sibling canonical name "i"
+new Crust("my-cli")
+  .command("i", (cmd) => cmd.run(() => {}))
+  .command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {}));
+//                                                  ^^^
+// CrustError: Subcommand "issue" alias "i" collides with sibling
+// canonical name "i"
+```
+
+The same check runs during `prepareCommandTree()` for plugin-installed subcommands, so plugins can't sneak conflicting aliases past the policy.
+
 ## Nested Subcommands
 
 Subcommands can be nested arbitrarily deep:
@@ -197,12 +251,14 @@ When a user types an unknown subcommand on a container command (no `.run()`), Cr
 
 ```ts
 {
-  input: "buld",              // What the user typed
-  available: ["build", "dev"], // Valid subcommands
-  commandPath: ["my-cli"],     // Path to the parent
-  parentCommand: main,         // The parent command node
+  input: "buld",                       // What the user typed
+  available: ["build", "dev"],          // Valid subcommands + aliases
+  commandPath: ["my-cli"],              // Path to the parent
+  parentCommand: main,                  // The parent command node
 }
 ```
+
+If any sibling defines aliases, `available` is a flat list of canonical names followed by each canonical's aliases (in sibling insertion order). For example, `issue` with `aliases: ["issues", "i"]` and `version` produces `available: ["issue", "issues", "i", "version"]`. `didYouMeanPlugin` uses this list to match against alias spellings but always reports the canonical name as its suggestion.
 
 The [Did You Mean Plugin](/docs/modules/plugins/did-you-mean) catches these errors and provides "Did you mean?" suggestions.
 

@@ -25,6 +25,29 @@ export interface CommandRoute {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Find a sibling whose `meta.aliases` contains the given candidate. Returns
+ * the canonical sibling key and node when matched, otherwise `null`.
+ *
+ * Resolution intentionally records the **canonical** key on the
+ * `CommandRoute.commandPath`, never the alias the user typed. This is
+ * load-bearing: error messages, help titles, and downstream plugins read
+ * `commandPath` and assume canonical names.
+ */
+function findAliasMatch(
+	subCommands: Record<string, CommandNode>,
+	candidate: string,
+): { canonicalName: string; node: CommandNode } | null {
+	for (const [name, node] of Object.entries(subCommands)) {
+		const aliases = node.meta.aliases;
+		if (!aliases) continue;
+		if (aliases.includes(candidate)) {
+			return { canonicalName: name, node };
+		}
+	}
+	return null;
+}
+
+/**
  * Resolve a command from an argv array by walking the subcommand tree.
  *
  * Subcommand matching happens BEFORE flag parsing, so:
@@ -33,10 +56,19 @@ export interface CommandRoute {
  *
  * Resolution rules:
  * 1. If `argv[0]` matches a subcommand key, recurse into that subcommand
- * 2. If no match and the current command has `run()`, return it (args passed to parser)
- * 3. If no match and the current command has NO `run()`, it signals the caller
+ * 2. If `argv[0]` matches a sibling's `meta.aliases` entry, recurse into
+ *    that sibling and record the **canonical** name in `commandPath`
+ * 3. If no match and the current command has `run()`, return it (args passed to parser)
+ * 4. If no match and the current command has NO `run()`, it signals the caller
  *    should show help (the `showHelp` flag is set in the result)
- * 4. Unknown subcommands produce a structured COMMAND_NOT_FOUND error
+ * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
+ *    `details.available` lists the canonical sibling names (aliases are
+ *    discoverable via `details.parentCommand.subCommands[name].meta.aliases`)
+ *
+ * Implementation: linear scan over siblings on miss. Command trees are small
+ * and resolution runs once per invocation, so the cost is negligible compared
+ * to building/freezing a parallel alias→canonical map. The scan does NOT
+ * mutate `CommandNode`.
  *
  * @param command - The root command to resolve from
  * @param argv - The argv array to resolve against
@@ -66,10 +98,21 @@ export function resolveCommand(
 			break;
 		}
 
-		// Check if it matches a known subcommand
+		// Check if it matches a known subcommand by canonical name
 		if (candidate in subCommands && subCommands[candidate]) {
 			current = subCommands[candidate];
 			path.push(candidate);
+			routedArgv = routedArgv.slice(1);
+			continue;
+		}
+
+		// Otherwise scan siblings for an alias match. We record the canonical
+		// sibling key on the path, NOT the alias the user typed — downstream
+		// help/plugins assume `commandPath` only ever contains canonical names.
+		const aliasMatch = findAliasMatch(subCommands, candidate);
+		if (aliasMatch) {
+			current = aliasMatch.node;
+			path.push(aliasMatch.canonicalName);
 			routedArgv = routedArgv.slice(1);
 			continue;
 		}
@@ -80,14 +123,16 @@ export function resolveCommand(
 			break;
 		}
 
-		// Parent has no run() — this is an unknown subcommand error
-		const available = Object.keys(subCommands);
+		// Parent has no run() — this is an unknown subcommand error.
+		// `details.available` lists canonical sibling names only; consumers
+		// that want alias-aware matching (e.g. didYouMeanPlugin) read aliases
+		// directly from `details.parentCommand.subCommands`.
 		throw new CrustError(
 			"COMMAND_NOT_FOUND",
 			`Unknown command "${candidate}".`,
 			{
 				input: candidate,
-				available,
+				available: Object.keys(subCommands),
 				commandPath: [...path],
 				parentCommand: current,
 			},

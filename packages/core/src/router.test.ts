@@ -717,3 +717,123 @@ describe("resolveCommand — CommandNode tree", () => {
 		});
 	});
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveCommand — alias resolution (TP-016)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("resolveCommand — aliases", () => {
+	function makeChild(name: string, aliases?: readonly string[]): CommandNode {
+		const node = createCommandNode(name);
+		if (aliases) node.meta.aliases = aliases;
+		node.run = () => {
+			/* noop */
+		};
+		return node;
+	}
+
+	it("resolves a single alias to the canonical node", () => {
+		const issue = makeChild("issue", ["i"]);
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		const result = resolveCommand(root, ["i"]);
+		expect(result.command).toBe(issue);
+		expect(result.commandPath).toEqual(["app", "issue"]);
+	});
+
+	it("resolves multiple aliases on the same node", () => {
+		const issue = makeChild("issue", ["issues", "i", "iss"]);
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		expect(resolveCommand(root, ["issue"]).command).toBe(issue);
+		expect(resolveCommand(root, ["issues"]).command).toBe(issue);
+		expect(resolveCommand(root, ["i"]).command).toBe(issue);
+		expect(resolveCommand(root, ["iss"]).command).toBe(issue);
+	});
+
+	it("resolves aliases at nested depths", () => {
+		const leaf = makeChild("create", ["new", "add"]);
+		const issue = makeChild("issue", ["i"]);
+		issue.subCommands = { create: leaf };
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		const result = resolveCommand(root, ["i", "new"]);
+		expect(result.command).toBe(leaf);
+		expect(result.commandPath).toEqual(["app", "issue", "create"]);
+	});
+
+	it("records the canonical name in commandPath even when an alias was typed", () => {
+		const issue = makeChild("issue", ["i", "issues"]);
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		expect(resolveCommand(root, ["i"]).commandPath).toEqual(["app", "issue"]);
+		expect(resolveCommand(root, ["issues"]).commandPath).toEqual([
+			"app",
+			"issue",
+		]);
+	});
+
+	it("reports only canonical names in COMMAND_NOT_FOUND details.available", () => {
+		const issue = makeChild("issue", ["issues", "i"]);
+		const pull = makeChild("pull-request", ["pr"]);
+		const version = makeChild("version");
+		const root = createCommandNode("app");
+		root.subCommands = { issue, "pull-request": pull, version };
+
+		let caught: unknown;
+		try {
+			resolveCommand(root, ["isue"]);
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeInstanceOf(CrustError);
+		if (!(caught instanceof CrustError) || !caught.is("COMMAND_NOT_FOUND")) {
+			throw new Error("expected COMMAND_NOT_FOUND");
+		}
+		// `available` lists canonical sibling names in insertion order. Aliases
+		// stay reachable via `details.parentCommand.subCommands[name].meta.aliases`
+		// for consumers (e.g. didYouMeanPlugin) that want alias-aware matching.
+		expect(caught.details.available).toEqual([
+			"issue",
+			"pull-request",
+			"version",
+		]);
+		expect(
+			caught.details.parentCommand.subCommands.issue?.meta.aliases,
+		).toEqual(["issues", "i"]);
+	});
+
+	it("prefers a canonical name over an alias when both could match", () => {
+		// Pathological: a sibling's alias happens to equal another sibling's canonical name.
+		// Registration-time validation should already reject this in user code (Step 3),
+		// but if a node is constructed directly bypassing the builder, the resolver MUST
+		// pick the canonical sibling first to keep behavior deterministic.
+		const foo = makeChild("foo");
+		const bar = makeChild("bar", ["foo"]);
+		const root = createCommandNode("app");
+		root.subCommands = { foo, bar };
+
+		const result = resolveCommand(root, ["foo"]);
+		expect(result.command).toBe(foo);
+		expect(result.commandPath).toEqual(["app", "foo"]);
+	});
+
+	it("does not match when the alias starts with a dash", () => {
+		// Even if a sibling somehow registered an alias starting with '-' (which Step 3
+		// will reject), the resolver short-circuits flag-shaped tokens before alias scan.
+		const issue = makeChild("issue");
+		const root = createCommandNode("app");
+		root.run = () => {
+			/* noop so unknown tokens fall through */
+		};
+		root.subCommands = { issue };
+
+		const result = resolveCommand(root, ["--help"]);
+		expect(result.command).toBe(root);
+		expect(result.argv).toEqual(["--help"]);
+	});
+});

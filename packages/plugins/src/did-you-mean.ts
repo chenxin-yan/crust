@@ -1,4 +1,4 @@
-import type { CrustPlugin } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
 import { renderHelp } from "./help.ts";
 
@@ -33,27 +33,53 @@ function levenshtein(a: string, b: string): number {
 	return row[bLen] as number;
 }
 
-function findSuggestions(input: string, candidates: string[]): string[] {
-	const suggestions: { name: string; distance: number }[] = [];
+/**
+ * Find canonical-name suggestions for `input` by matching against every
+ * sibling's canonical name **and** any aliases declared on each sibling.
+ *
+ * Matched aliases are mapped back to their canonical, so suggestions only
+ * ever report canonical names — mirroring `router.ts`, which records
+ * canonicals on `commandPath`. When both a canonical and its alias score
+ * within threshold, the better score wins for that command (a short alias
+ * cannot lose to a more-distant canonical, and vice-versa).
+ *
+ * The matching is limited to: (a) `candidate.startsWith(input)` (a
+ * forward-completion hint, useful when the user typed a prefix) and
+ * (b) Levenshtein distance ≤ 3. The reverse `input.startsWith(candidate)`
+ * shortcut is intentionally omitted: with aliases in the candidate set,
+ * any 1–2 char alias would falsely match every typo as distance 0.
+ */
+function findSuggestions(
+	input: string,
+	subCommands: Record<string, CommandNode>,
+): string[] {
+	const best = new Map<string, number>();
 
-	for (const candidate of candidates) {
-		if (candidate.startsWith(input) || input.startsWith(candidate)) {
-			suggestions.push({ name: candidate, distance: 0 });
-			continue;
-		}
+	const score = (text: string): number | null => {
+		if (text.startsWith(input)) return 0;
+		const d = levenshtein(input, text);
+		return d <= 3 ? d : null;
+	};
 
-		const distance = levenshtein(input, candidate);
-		if (distance <= 3) {
-			suggestions.push({ name: candidate, distance });
+	const record = (canonical: string, distance: number) => {
+		const prev = best.get(canonical);
+		if (prev === undefined || distance < prev) best.set(canonical, distance);
+	};
+
+	for (const [name, node] of Object.entries(subCommands)) {
+		const d = score(name);
+		if (d !== null) record(name, d);
+		for (const alias of node.meta.aliases ?? []) {
+			const da = score(alias);
+			if (da !== null) record(name, da);
 		}
 	}
 
-	suggestions.sort((a, b) => {
-		if (a.distance !== b.distance) return a.distance - b.distance;
-		return a.name.localeCompare(b.name);
-	});
-
-	return suggestions.map((suggestion) => suggestion.name);
+	return [...best.entries()]
+		.sort(([aName, aDist], [bName, bDist]) =>
+			aDist !== bDist ? aDist - bDist : aName.localeCompare(bName),
+		)
+		.map(([name]) => name);
 }
 
 export function didYouMeanPlugin(
@@ -72,7 +98,10 @@ export function didYouMeanPlugin(
 				if (!error.is("COMMAND_NOT_FOUND")) throw error;
 
 				const details = error.details;
-				const suggestions = findSuggestions(details.input, details.available);
+				const suggestions = findSuggestions(
+					details.input,
+					details.parentCommand.subCommands,
+				);
 
 				let message = `Unknown command "${details.input}".`;
 				if (suggestions.length > 0) {

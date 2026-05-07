@@ -74,4 +74,90 @@ describe("didYouMeanPlugin", () => {
 		const c: AutoCompletePluginOptions = b;
 		expect(c.mode).toBe("help");
 	});
+
+	// ──────────────────────────────────────────────────────────────────────────────
+	// alias-aware suggestions (TP-016)
+	// ──────────────────────────────────────────────────────────────────────────────
+
+	it("suggests the canonical name when the input matches an alias", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			)
+			.command("version", (cmd) => cmd.run(() => {}));
+
+		// "issuess" is closest to the alias "issues" (distance 1) than to
+		// "issue" (distance 2). The plugin must report the canonical name
+		// regardless of which spelling triggered the match.
+		await app.execute({ argv: ["issuess"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Unknown command "issuess"');
+		expect(stderr).toContain('Did you mean "issue"?');
+		expect(stderr).not.toContain('Did you mean "issues"?');
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			);
+
+		await app.execute({ argv: ["isue"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Did you mean "issue"?');
+	});
+
+	it("prefers the closer canonical over a short colliding alias", async () => {
+		// Regression: the typo "insall" must suggest "install" (Lev 1), not
+		// "issue" via its 1-char alias "i". A short alias must not win simply
+		// because it is a prefix of the input.
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {}))
+			.command("install", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["insall"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Did you mean "install"?');
+		expect(stderr).not.toContain('Did you mean "issue"?');
+	});
+
+	it("lists only canonical names under 'Available commands'", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+			)
+			.command("version", (cmd) => cmd.run(() => {}));
+
+		await app.execute({ argv: ["completely-unknown"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain("Available commands: issue, version");
+		expect(stderr).not.toContain("issues");
+	});
+
+	it("deduplicates suggestions when an alias and its canonical both match", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin({ mode: "help" }))
+			.command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issues"] }).run(() => {}),
+			);
+
+		// Both the canonical "issue" and the alias "issues" are within
+		// Levenshtein distance 3 of "issuee". The first suggestion line
+		// must contain only one mention of "issue" (canonical) and never
+		// the alias.
+		await app.execute({ argv: ["issuee"] });
+
+		const stdout = stdoutChunks.join("\n");
+		expect(stdout).toContain('Unknown command "issuee". Did you mean "issue"?');
+		expect(stdout).not.toContain('Did you mean "issues"');
+	});
 });

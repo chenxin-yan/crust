@@ -489,6 +489,19 @@ describe("CommandMeta interface", () => {
 		const meta: CommandMeta = { name: "serve" };
 		expect(meta.name).toBe("serve");
 	});
+
+	it("accepts a readonly aliases array", () => {
+		const meta: CommandMeta = {
+			name: "issue",
+			aliases: ["issues", "i"] as const,
+		};
+		expect(meta.aliases).toEqual(["issues", "i"]);
+	});
+
+	it("accepts an empty aliases array", () => {
+		const meta: CommandMeta = { name: "serve", aliases: [] };
+		expect(meta.aliases).toEqual([]);
+	});
 });
 
 // NOTE: Command, AnyCommand, CommandDef, and CommandContext interfaces have
