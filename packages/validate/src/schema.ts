@@ -60,9 +60,7 @@ function validateArgArrayShape(
  * it does not change the runtime shape or the inferred type.
  *
  * **Effect users**: wrap your raw Effect schema with
- * `Schema.standardSchemaV1(...)` before passing it here. The deprecated
- * `@crustjs/validate/effect` subpath continues to accept raw Effect schemas
- * via an internal auto-wrap shim until 1.0.0.
+ * `Schema.standardSchemaV1(...)` before passing it here.
  *
  * @param name - Positional arg name used in parser output and help text
  * @param schema - Any Standard Schema v1 object (Zod schemas natively;

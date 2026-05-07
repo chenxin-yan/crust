@@ -306,7 +306,10 @@ await store.write({ port: 0, host: "localhost" });
 
 ### Schema-Based Validation
 
-For schema-driven validation, use [`field()`](/docs/modules/validate#store-field-validation) from `@crustjs/validate` to create a per-field validator from a Zod, Effect, or any Standard Schema-compatible schema:
+For schema-driven validation, use [`field()`](/docs/modules/validate#store-field-validation)
+from `@crustjs/validate`. The factory builds a complete `FieldDef` from a
+schema — type, default, description, and the per-field validator are
+all derived in one call:
 
 ```ts
 import { field } from "@crustjs/validate";
@@ -315,11 +318,7 @@ import { z } from "zod";
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: {
-      type: "string",
-      default: "light",
-      validate: field(z.enum(["light", "dark"])),
-    },
+    theme: field(z.enum(["light", "dark"]).default("light")),
     verbose: { type: "boolean", default: false },
   },
 });
@@ -327,9 +326,12 @@ const store = createStore({
 
 `validate` is called on `read`, `write`, `update`, and `patch` — never on `reset`. If a validator throws, the operation is aborted and a `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
 
-Store field validators are validation-only. If you use schema transforms/coercions in `field()` / `fieldSync()`, transformed outputs are not written back into store state.
+Store field validators are validation-only. Schema transforms/coercions in the schema passed to `field()` are not written back into store state.
 
-For the full field validator contract, including `fieldSync()` and async patterns, see [Store field validation in `@crustjs/validate`](/docs/modules/validate#store-field-validation). Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()` / `fieldSync()`.
+For more on the `field()` factory — including the runtime-vs-type-level
+behavior of schema-derived defaults — see
+[Store field validation in `@crustjs/validate`](/docs/modules/validate#store-field-validation).
+Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()`.
 
 <Callout type="warn" title="Effect ≥ 3.14.2 required">
   Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the

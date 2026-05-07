@@ -1,298 +1,264 @@
 import { describe, expect, it } from "bun:test";
-import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { field, fieldSync } from "./store.ts";
+import { CrustError } from "@crustjs/core";
+import * as Schema from "effect/Schema";
+import { z } from "zod";
+import { field } from "./store.ts";
 import type { StandardSchema } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Test helpers — minimal Standard Schema implementations
+// field(schema, opts?) — runtime FieldDef factory
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Create a sync schema that always succeeds with the input value. */
-function passthroughSchema<T = unknown>(): StandardSchema<T, T> {
-	return {
-		"~standard": {
-			version: 1,
-			vendor: "test",
-			validate: (value) => ({ value: value as T }),
-		},
-	};
-}
-
-/** Create a sync schema that always fails with the given issues. */
-function failingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
-	return {
-		"~standard": {
-			version: 1,
-			vendor: "test",
-			validate: () => ({ issues }),
-		},
-	};
-}
-
-/** Create an async schema that succeeds after a tick. */
-function asyncPassthroughSchema<T = unknown>(): StandardSchema<T, T> {
-	return {
-		"~standard": {
-			version: 1,
-			vendor: "test",
-			validate: async (value) => ({ value: value as T }),
-		},
-	};
-}
-
-/** Create an async schema that fails after a tick. */
-function asyncFailingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
-	return {
-		"~standard": {
-			version: 1,
-			vendor: "test",
-			validate: async () => ({ issues }),
-		},
-	};
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// field (async)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("field", () => {
-	describe("valid values", () => {
-		it("does not throw for a passthrough schema", async () => {
-			const validate = field(passthroughSchema());
-			await expect(validate("hello")).resolves.toBeUndefined();
-		});
-
-		it("does not throw for async passthrough schema", async () => {
-			const validate = field(asyncPassthroughSchema());
-			await expect(validate(42)).resolves.toBeUndefined();
-		});
-
-		it("does not throw for various value types", async () => {
-			const validate = field(passthroughSchema());
-			await expect(validate(true)).resolves.toBeUndefined();
-			await expect(validate(0)).resolves.toBeUndefined();
-			await expect(validate("")).resolves.toBeUndefined();
-		});
+describe("field() — runtime shape", () => {
+	it("infers type=string for z.string()", () => {
+		const def = field(z.string());
+		expect(def.type).toBe("string");
+		expect("array" in def && (def as { array?: unknown }).array).toBe(false);
+		expect(typeof def.validate).toBe("function");
 	});
 
-	describe("invalid values", () => {
-		it("throws Error with message from a single issue", async () => {
-			const validate = field(
-				failingSchema([{ message: "Expected string", path: [] }]),
-			);
-			await expect(validate(123)).rejects.toThrow("Expected string");
-		});
-
-		it("throws Error with path-prefixed message for nested paths", async () => {
-			const validate = field(
-				failingSchema([{ message: "Too short", path: ["host"] }]),
-			);
-			await expect(validate({})).rejects.toThrow("host: Too short");
-		});
-
-		it("joins multiple issues with semicolons", async () => {
-			const validate = field(
-				failingSchema([
-					{ message: "Required", path: ["a"] },
-					{ message: "Invalid", path: ["b"] },
-				]),
-			);
-			try {
-				await validate({});
-				expect.unreachable("Should have thrown");
-			} catch (err) {
-				expect(err).toBeInstanceOf(Error);
-				expect((err as Error).message).toBe("a: Required; b: Invalid");
-			}
-		});
-
-		it("handles root-level issues (empty path)", async () => {
-			const validate = field(failingSchema([{ message: "Invalid value" }]));
-			await expect(validate("bad")).rejects.toThrow("Invalid value");
-		});
-
-		it("works with async failing schemas", async () => {
-			const validate = field(
-				asyncFailingSchema([{ message: "Expected number", path: [] }]),
-			);
-			await expect(validate("abc")).rejects.toThrow("Expected number");
-		});
-
-		it("normalizes PathSegment object paths", async () => {
-			const validate = field(
-				failingSchema([
-					{ message: "Required", path: [{ key: "config" }, { key: "name" }] },
-				]),
-			);
-			await expect(validate({})).rejects.toThrow("config.name: Required");
-		});
-
-		it("normalizes array index paths to bracket notation", async () => {
-			const validate = field(
-				failingSchema([{ message: "Invalid", path: ["items", 0] }]),
-			);
-			await expect(validate({})).rejects.toThrow("items[0]: Invalid");
-		});
+	it("infers type=number for z.number()", () => {
+		const def = field(z.number());
+		expect(def.type).toBe("number");
 	});
 
-	describe("edge cases", () => {
-		it("handles null input", async () => {
-			const validate = field(failingSchema([{ message: "Expected object" }]));
-			await expect(validate(null)).rejects.toThrow("Expected object");
-		});
+	it("infers type=boolean for z.boolean()", () => {
+		const def = field(z.boolean());
+		expect(def.type).toBe("boolean");
+	});
 
-		it("handles undefined input", async () => {
-			const validate = field(failingSchema([{ message: "Expected object" }]));
-			await expect(validate(undefined)).rejects.toThrow("Expected object");
-		});
+	it("infers array=true for z.array(z.string())", () => {
+		const def = field(z.array(z.string()).default([]));
+		expect(def.type).toBe("string");
+		expect((def as { array?: unknown }).array).toBe(true);
+		expect((def as { default?: unknown }).default).toEqual([]);
+	});
 
-		it("returns the same validator function for successive calls", async () => {
-			const schema = passthroughSchema();
-			const validate = field(schema);
+	it("opts.default overrides schema default", () => {
+		const def = field(z.string().default("x"), { default: "y" });
+		expect((def as { default?: unknown }).default).toBe("y");
+	});
 
-			await expect(validate("a")).resolves.toBeUndefined();
-			await expect(validate("b")).resolves.toBeUndefined();
+	it("opts.description overrides inferred description", () => {
+		const def = field(z.string().describe("from schema"), {
+			description: "from opts",
 		});
+		expect(def.description).toBe("from opts");
+	});
 
-		it("handles schema with empty issues array — still throws", async () => {
-			const validate = field(failingSchema([]));
-			// Empty issues array means failure, but no messages — throws with empty message
-			await expect(validate({})).rejects.toThrow();
-		});
+	it("opts.type overrides inferred type", () => {
+		const def = field(z.string(), { type: "number" });
+		expect((def as { type: string }).type).toBe("number");
+	});
+
+	it("inferred description is preserved when opts.description is omitted", () => {
+		const def = field(z.string().describe("Theme"));
+		expect(def.description).toBe("Theme");
+	});
+
+	it("throws CrustError DEFINITION when type cannot be inferred and opts.type is missing", () => {
+		// Custom Standard Schema with unknown vendor — no type inference.
+		const opaque: StandardSchema<unknown, unknown> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot-fake",
+				validate: (v) => ({ value: v }),
+			},
+		};
+		expect(() => field(opaque)).toThrow(CrustError);
+	});
+
+	it("accepts explicit type for unknown-vendor schemas", () => {
+		const opaque: StandardSchema<unknown, unknown> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot-fake",
+				validate: (v) => ({ value: v }),
+			},
+		};
+		const def = field(opaque, { type: "string" });
+		expect(def.type).toBe("string");
+	});
+
+	it("throws DEFINITION error for non-Standard-Schema input", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: testing runtime guard
+		expect(() => field({} as any)).toThrow(CrustError);
+	});
+});
+
+describe("field() — validate adapter", () => {
+	it("returns a validate function that resolves on valid input", async () => {
+		const def = field(z.string());
+		await expect(def.validate("hello")).resolves.toBeUndefined();
+	});
+
+	it("returns a validate function that rejects on invalid input", async () => {
+		const def = field(z.string());
+		await expect(def.validate(123)).rejects.toThrow(Error);
+	});
+
+	it("validate error messages use schema's normalized issue messages", async () => {
+		const def = field(z.string().min(5, "Too short"));
+		try {
+			await def.validate("ab");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(Error);
+			expect((err as Error).message).toContain("Too short");
+		}
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// fieldSync
+// Default extraction — vendor-aware + sync fallback behavior
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("fieldSync", () => {
-	describe("valid values", () => {
-		it("does not throw for a passthrough schema", () => {
-			const validate = fieldSync(passthroughSchema());
-			expect(validate("hello")).toBeUndefined();
-		});
-
-		it("does not throw for various value types", () => {
-			const validate = fieldSync(passthroughSchema());
-			expect(validate(42)).toBeUndefined();
-			expect(validate(true)).toBeUndefined();
-			expect(validate("")).toBeUndefined();
-		});
+describe("default extraction — Zod", () => {
+	it("z.string().default('x') extracts 'x'", () => {
+		const def = field(z.string().default("x"));
+		expect((def as { default?: unknown }).default).toBe("x");
 	});
 
-	describe("invalid values", () => {
-		it("throws Error with message from a single issue", () => {
-			const validate = fieldSync(
-				failingSchema([{ message: "Expected string", path: ["theme"] }]),
-			);
-			expect(() => validate(123)).toThrow("theme: Expected string");
-		});
-
-		it("joins multiple issues with semicolons", () => {
-			const validate = fieldSync(
-				failingSchema([
-					{ message: "Bad host", path: ["db", "host"] },
-					{ message: "Bad port", path: ["ports", 0] },
-				]),
-			);
-			expect(() => validate({})).toThrow(
-				"db.host: Bad host; ports[0]: Bad port",
-			);
-		});
-
-		it("handles root-level issues", () => {
-			const validate = fieldSync(failingSchema([{ message: "Invalid" }]));
-			expect(() => validate({})).toThrow("Invalid");
-		});
+	it("z.boolean().default(false) extracts false (falsy default)", () => {
+		const def = field(z.boolean().default(false));
+		expect((def as { default?: unknown }).default).toBe(false);
 	});
 
-	describe("async schema rejection", () => {
-		it("throws TypeError when schema returns a Promise", () => {
-			const validate = fieldSync(asyncPassthroughSchema());
-
-			expect(() => validate({})).toThrow(TypeError);
-			expect(() => validate({})).toThrow(
-				/Schema returned a Promise from validate/,
-			);
-		});
+	it("z.number().default(0) extracts 0 (falsy default)", () => {
+		const def = field(z.number().default(0));
+		expect((def as { default?: unknown }).default).toBe(0);
 	});
 
-	describe("edge cases", () => {
-		it("handles successive calls with different inputs", () => {
-			const validate = fieldSync(passthroughSchema());
+	it("z.string().default('') extracts '' (falsy default)", () => {
+		const def = field(z.string().default(""));
+		expect((def as { default?: unknown }).default).toBe("");
+	});
 
-			expect(validate("x")).toBeUndefined();
-			expect(validate("y")).toBeUndefined();
+	it("z.string() (no default) omits the default key", () => {
+		const def = field(z.string());
+		expect("default" in def).toBe(false);
+	});
+
+	it("z.array(z.string()).default([]) extracts []", () => {
+		const def = field(z.array(z.string()).default([]));
+		expect((def as { default?: unknown }).default).toEqual([]);
+	});
+
+	it("nested .default() under .optional() is recovered", () => {
+		// z.string().default("x").optional() — the default still injects.
+		const def = field(z.string().default("x").optional());
+		expect((def as { default?: unknown }).default).toBe("x");
+	});
+
+	it("async-only schema falls back to { ok: false } silently — no default key", () => {
+		// Schema whose `~standard.validate` returns a Promise — sync fallback
+		// must abort. We construct one that mimics this behavior; the schema
+		// has no .default(), so the vendor-aware path also returns false.
+		const asyncOnly: StandardSchema<unknown, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot-fake",
+				validate: async (v) => ({ value: String(v) }),
+			},
+		};
+		const def = field(asyncOnly, { type: "string" });
+		expect("default" in def).toBe(false);
+	});
+});
+
+describe("default extraction — Effect", () => {
+	it("Schema.String.annotations({ default: 'x' }) extracts 'x' (vendor-aware AST annotation read)", () => {
+		const schema = Schema.standardSchemaV1(
+			Schema.String.annotations({ default: "x" }),
+		);
+		const def = field(schema);
+		// Vendor-aware AST read finds the default annotation directly.
+		expect((def as { default?: unknown }).default).toBe("x");
+	});
+
+	it("Schema.String (no default) omits the default key", () => {
+		const schema = Schema.standardSchemaV1(Schema.String);
+		const def = field(schema);
+		expect("default" in def).toBe(false);
+	});
+
+	it("thunk default that throws — no default key (parity with validate(undefined) catch)", () => {
+		// Mirrors a real-world pattern: a default factory that reads env/state
+		// at definition time and throws when it's missing. The throw must be
+		// recovered the same way the vendor-neutral `validate(undefined)`
+		// fallback recovers throws — silently — so `field()` either falls
+		// through to opts or omits the default key.
+		// `Schema.String.annotations({ default })` types `default` as `string`,
+		// but Effect itself stores the annotation untyped on the AST and
+		// `optionalWith({ default: () => x })` writes a thunk through that
+		// same channel — the failure mode this test covers. Cast to bypass the
+		// per-schema-narrowed surface and exercise the runtime path.
+		const annotated = Schema.String.annotations({
+			default: (() => {
+				throw new Error("factory boom");
+			}) as unknown as string,
 		});
+		const schema = Schema.standardSchemaV1(annotated);
+		expect(() => field(schema)).not.toThrow();
+		const def = field(schema);
+		expect("default" in def).toBe(false);
+	});
+});
+
+describe("default extraction — vendor-neutral fallback", () => {
+	it("custom schema returning value for undefined input — extracts that value", () => {
+		// Mimics Valibot's `v.optional(v.string(), 'x')` behavior: validate(undefined)
+		// returns the default value synchronously.
+		const schemaWithDefault: StandardSchema<string | undefined, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot-fake",
+				validate: (v) => ({ value: (v === undefined ? "x" : v) as string }),
+			},
+		};
+		const def = field(schemaWithDefault, { type: "string" });
+		expect((def as { default?: unknown }).default).toBe("x");
+	});
+
+	it("custom schema rejecting undefined input — no default", () => {
+		const schemaRejecting: StandardSchema<string, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "valibot-fake",
+				validate: (v) => {
+					if (v === undefined) {
+						return { issues: [{ message: "Required" }] };
+					}
+					return { value: v as string };
+				},
+			},
+		};
+		const def = field(schemaRejecting, { type: "string" });
+		expect("default" in def).toBe(false);
+	});
+
+	it("schema with async validate(undefined) — no default (sync-only)", () => {
+		const asyncOnly: StandardSchema<unknown, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "unknown",
+				validate: async (v) => ({ value: String(v) }),
+			},
+		};
+		const def = field(asyncOnly, { type: "string" });
+		expect("default" in def).toBe(false);
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Field validate contract compatibility — structural match with @crustjs/store
+// Type-level smoke tests via assignment (compile-time only)
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("field validate contract compatibility", () => {
-	it("async validator returns a function with (value) => Promise<void> signature", async () => {
-		const validate = field(passthroughSchema());
-
-		expect(typeof validate).toBe("function");
-		const result = validate("hello");
-		expect(result).toBeInstanceOf(Promise);
-		await expect(result).resolves.toBeUndefined();
-	});
-
-	it("sync validator returns a function with (value) => void signature", () => {
-		const validate = fieldSync(passthroughSchema());
-
-		expect(typeof validate).toBe("function");
-		const result = validate("hello");
-		// Sync — not a Promise
-		expect(result).toBeUndefined();
-	});
-
-	it("async validator throws Error (not result object) on failure", async () => {
-		const validate = field(
-			failingSchema([{ message: "Bad", path: ["theme"] }]),
-		);
-
-		try {
-			await validate({});
-			expect.unreachable("Should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(Error);
-			expect((err as Error).message).toBe("theme: Bad");
-		}
-	});
-
-	it("sync validator throws Error (not result object) on failure", () => {
-		const validate = fieldSync(
-			failingSchema([{ message: "Bad", path: ["theme"] }]),
-		);
-
-		try {
-			validate({});
-			expect.unreachable("Should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(Error);
-			expect((err as Error).message).toBe("theme: Bad");
-		}
-	});
-
-	it("returned function is assignable to (value: V) => void | Promise<void>", async () => {
-		// This test verifies structural compatibility with FieldDef.validate
-		const asyncValidate: (value: unknown) => void | Promise<void> = field(
-			passthroughSchema(),
-		);
-		const syncValidate: (value: unknown) => void | Promise<void> = fieldSync(
-			passthroughSchema(),
-		);
-
-		await asyncValidate("test");
-		syncValidate("test");
+describe("field() — type-level integration with FieldDef", () => {
+	it("returns a value structurally compatible with store FieldDef.validate", async () => {
+		const def = field(z.string());
+		// Structural check: validate signature aligns with FieldDef.validate
+		const validate: (value: unknown) => void | Promise<void> = def.validate;
+		await validate("hello");
 	});
 });

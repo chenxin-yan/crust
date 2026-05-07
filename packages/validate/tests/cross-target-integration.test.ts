@@ -21,22 +21,82 @@ import { CrustStoreError, createStore } from "@crustjs/store";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
 
-// All targets now import from the unified root entry point. The deprecated
-// `/zod`, `/effect`, and `/standard` subpath barrels are exercised separately
-// in the "Deprecated subpath aliases" describe block at the end of this file.
+// All targets import from the unified root entry point. The deprecated
+// `/zod`, `/effect`, and `/standard` subpath barrels were removed in 0.2.0.
 import {
 	arg,
 	commandValidator,
-	field,
-	fieldSync,
 	flag,
-	parsePromptValue,
-	parsePromptValueSync,
-	promptValidator,
+	parseValue,
 	validateStandard,
 	validateStandardSync,
 } from "../src/index.ts";
 import type { StandardSchema } from "../src/types.ts";
+import { throwValidationError } from "../src/validation.ts";
+
+// ── Test-only shims preserving the legacy field / promptValidator shapes ──
+// These mirror the pre-0.2.0 ergonomics so the existing cross-target
+// behavioral assertions remain meaningful. The new public surface is the
+// `field(schema, opts?)` factory in `makeFieldDef`.
+
+/** Async per-field validator: throws Error on failure (mirrors old `field`). */
+function field<S extends StandardSchema>(
+	schema: S,
+): (value: unknown) => Promise<void> {
+	return async (value: unknown) => {
+		const result = await validateStandard(schema, value);
+		if (!result.ok) {
+			const messages = result.issues.map((i) =>
+				i.path ? `${i.path}: ${i.message}` : i.message,
+			);
+			throw new Error(messages.join("; "));
+		}
+	};
+}
+/** Sync per-field validator (mirrors old `fieldSync`). */
+function fieldSync<S extends StandardSchema>(
+	schema: S,
+): (value: unknown) => void {
+	return (value: unknown) => {
+		const result = validateStandardSync(schema, value);
+		if (!result.ok) {
+			const messages = result.issues.map((i) =>
+				i.path ? `${i.path}: ${i.message}` : i.message,
+			);
+			throw new Error(messages.join("; "));
+		}
+	};
+}
+/** Prompt validator (mirrors old `promptValidator`). */
+function promptValidator<S extends StandardSchema>(
+	schema: S,
+	options?: { errorStrategy?: "first" | "all" },
+): (value: unknown) => Promise<true | string> {
+	const strategy = options?.errorStrategy ?? "first";
+	return async (value: unknown) => {
+		const result = await validateStandard(schema, value);
+		if (result.ok) return true;
+		if (result.issues.length === 0) return "Validation failed";
+		if (strategy === "first") {
+			const issue = result.issues[0] as (typeof result.issues)[number];
+			return issue.path ? `${issue.path}: ${issue.message}` : issue.message;
+		}
+		const lines = result.issues.map((i) =>
+			i.path ? `  - ${i.path}: ${i.message}` : `  - ${i.message}`,
+		);
+		return `Validation failed\n${lines.join("\n")}`;
+	};
+}
+const parsePromptValue = parseValue;
+/** Sync mirror of the old parsePromptValueSync helper. */
+function parsePromptValueSync<S extends StandardSchema>(
+	schema: S,
+	value: unknown,
+): unknown {
+	const result = validateStandardSync(schema, value as never);
+	if (result.ok) return result.value;
+	return throwValidationError(result.issues, "Validation failed");
+}
 
 // ── Effect helpers (mirror the README user-space `earg`/`eflag` recipe) ────
 // These exist because the new root API requires Effect schemas to be wrapped
@@ -1065,7 +1125,7 @@ describe("sync and async parity", () => {
 		const asyncValue = await parsePromptValue(schema, validInput);
 		const syncValue = parsePromptValueSync(schema, validInput);
 
-		expect(asyncValue).toEqual(syncValue);
+		expect(asyncValue).toEqual(syncValue as typeof asyncValue);
 	});
 
 	it("parsePromptValue and parsePromptValueSync throw matching errors on failure", async () => {
@@ -1267,69 +1327,3 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 8. Deprecated subpath aliases — kept until 1.0.0
-// ────────────────────────────────────────────────────────────────────────────
-//
-// These tests exercise the `/zod`, `/effect`, and `/standard` barrels to
-// confirm they continue to work for pre-0.1.0 imports. The `/effect` barrel
-// retains its auto-wrap shim so raw Effect schemas keep working without
-// `Schema.standardSchemaV1(...)`.
-
-describe("Deprecated subpath aliases", () => {
-	it("/zod: arg/flag/commandValidator work for raw Zod schemas", async () => {
-		const mod = await import("../src/zod/index.ts");
-		const received = capture<{ args: unknown; flags: unknown }>();
-		const app = new Crust("zod-alias")
-			.args([mod.arg("port", z.number())])
-			.flags({ verbose: mod.flag(z.boolean().default(false), { short: "v" }) })
-			.run(
-				mod.commandValidator(({ args, flags }) => {
-					received.set({ args, flags });
-				}),
-			);
-		await app.execute({ argv: ["8080", "-v"] });
-		expect(received.value).toEqual({
-			args: { port: 8080 },
-			flags: { verbose: true },
-		});
-	});
-
-	it("/effect: arg/flag/commandValidator auto-wrap raw Effect schemas", async () => {
-		const mod = await import("../src/effect/index.ts");
-		const received = capture<{ args: unknown; flags: unknown }>();
-		const app = new Crust("effect-alias")
-			.args([mod.arg("port", Schema.Number)])
-			.flags({ verbose: mod.flag(Schema.UndefinedOr(Schema.Boolean)) })
-			.run(
-				mod.commandValidator(({ args, flags }) => {
-					received.set({ args, flags });
-				}),
-			);
-		await app.execute({ argv: ["8080", "--verbose"] });
-		expect(received.value?.args).toEqual({ port: 8080 });
-		expect(received.value?.flags).toEqual({ verbose: true });
-	});
-
-	it("/standard: prompt + store helpers work for any Standard Schema", async () => {
-		const mod = await import("../src/standard/index.ts");
-		const validate = mod.promptValidator(z.string().min(3));
-		expect(await validate("hello")).toBe(true);
-		expect(typeof (await validate("ab"))).toBe("string");
-
-		const fieldValidate = mod.field(z.boolean());
-		await expect(fieldValidate(true)).resolves.toBeUndefined();
-		await expect(
-			fieldValidate("not-bool" as unknown as boolean),
-		).rejects.toThrow();
-	});
-
-	it("/effect: prompt + store helpers re-export root behavior (require manual wrapping)", async () => {
-		const mod = await import("../src/effect/index.ts");
-		const wrapped = Schema.standardSchemaV1(Schema.String);
-		const validate = mod.promptValidator(wrapped);
-		expect(await validate("hello")).toBe(true);
-
-		const fieldValidate = mod.field(wrapped);
-		await expect(fieldValidate("hello")).resolves.toBeUndefined();
-	});
-});

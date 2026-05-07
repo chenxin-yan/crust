@@ -2,7 +2,42 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust } from "@crustjs/core";
 import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import * as Schema from "effect/Schema";
-import { arg, commandValidator, flag } from "../src/effect/index.ts";
+import {
+	commandValidator,
+	arg as rootArg,
+	flag as rootFlag,
+} from "../src/index.ts";
+import type { ArgOptions, FlagOptions } from "../src/schema-types.ts";
+import type { StandardSchema } from "../src/types.ts";
+
+// Wrap raw Effect schemas via `Schema.standardSchemaV1(...)` once per call —
+// the previously deprecated `/effect` subpath shim was removed in 0.2.0.
+function toStandard<A, I>(s: Schema.Schema<A, I, never>): StandardSchema<I, A> {
+	return Schema.standardSchemaV1(s) as unknown as StandardSchema<I, A>;
+}
+function arg<Name extends string, A, I>(
+	name: Name,
+	schema: Schema.Schema<A, I, never>,
+	options?: Omit<ArgOptions, "variadic">,
+) {
+	return rootArg(name, toStandard(schema), options);
+}
+function flag<
+	A,
+	I,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
+>(
+	schema: Schema.Schema<A, I, never>,
+	options?: FlagOptions & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
+) {
+	return rootFlag(toStandard(schema), options);
+}
 
 let stdoutChunks: string[];
 let originalLog: typeof console.log;
