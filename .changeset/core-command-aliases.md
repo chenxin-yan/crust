@@ -1,5 +1,5 @@
 ---
-"@crustjs/core": minor
+"@crustjs/core": patch
 ---
 
 Add `aliases` to `CommandMeta`.

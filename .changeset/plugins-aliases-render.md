@@ -1,5 +1,5 @@
 ---
-"@crustjs/plugins": minor
+"@crustjs/plugins": patch
 ---
 
 `helpPlugin` and `didYouMeanPlugin` are alias-aware.

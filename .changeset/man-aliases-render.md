@@ -1,5 +1,5 @@
 ---
-"@crustjs/man": minor
+"@crustjs/man": patch
 ---
 
 `mdoc` includes command aliases in the SUBCOMMANDS section.
