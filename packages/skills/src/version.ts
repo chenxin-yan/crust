@@ -4,7 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { InstallStatus } from "./types.ts";
+import type { InstallStatus, SkillKind } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -21,7 +21,67 @@ export const CRUST_MANIFEST = "crust.json";
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Manifest record extracted from a skill directory's `crust.json`.
+ *
+ * Returned by {@link readInstalledManifest}. Contains the fields that drive
+ * conflict detection and version comparison in the install pipeline.
+ */
+export interface InstalledSkillManifest {
+	/** Installed version string */
+	readonly version: string;
+	/**
+	 * Origin of the installed bundle.
+	 *
+	 * Legacy `crust.json` files (written before the `kind` field existed) are
+	 * normalized to `"generated"` for backward compatibility. New installs
+	 * always emit `kind` explicitly.
+	 */
+	readonly kind: SkillKind;
+}
+
+/**
+ * Reads the installed manifest from a skill directory's `crust.json`.
+ *
+ * Returns the version string and the bundle kind. If `crust.json` exists but
+ * has no `kind` field (legacy installs written before TP-003), the kind is
+ * defaulted to `"generated"`.
+ *
+ * @param dir - Absolute path to the skill directory
+ * @returns The installed manifest, or `null` if the file is missing/malformed/lacks a version
+ */
+export async function readInstalledManifest(
+	dir: string,
+): Promise<InstalledSkillManifest | null> {
+	try {
+		const raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
+		const parsed: unknown = JSON.parse(raw);
+
+		if (
+			typeof parsed !== "object" ||
+			parsed === null ||
+			!("version" in parsed) ||
+			typeof (parsed as Record<string, unknown>).version !== "string"
+		) {
+			return null;
+		}
+
+		const version = (parsed as Record<string, unknown>).version as string;
+		const rawKind = (parsed as Record<string, unknown>).kind;
+		// Backward-compat default: legacy crust.json files lack the `kind` field.
+		const kind: SkillKind =
+			rawKind === "bundle" || rawKind === "generated" ? rawKind : "generated";
+
+		return { version, kind };
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Reads the installed version from a skill directory's `crust.json`.
+ *
+ * Thin wrapper around {@link readInstalledManifest} retained for backward
+ * compatibility with existing call sites that only need the version string.
  *
  * @param dir - Absolute path to the skill directory
  * @returns The version string if found, or `null` if the file is missing or malformed
@@ -29,23 +89,8 @@ export const CRUST_MANIFEST = "crust.json";
 export async function readInstalledVersion(
 	dir: string,
 ): Promise<string | null> {
-	try {
-		const raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
-		const parsed: unknown = JSON.parse(raw);
-
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			"version" in parsed &&
-			typeof (parsed as Record<string, unknown>).version === "string"
-		) {
-			return (parsed as Record<string, unknown>).version as string;
-		}
-
-		return null;
-	} catch {
-		return null;
-	}
+	const manifest = await readInstalledManifest(dir);
+	return manifest?.version ?? null;
 }
 
 /** Result from {@link checkVersion} containing the status and installed version. */

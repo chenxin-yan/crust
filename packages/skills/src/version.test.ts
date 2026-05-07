@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
 	CRUST_MANIFEST,
 	checkVersion,
+	readInstalledManifest,
 	readInstalledVersion,
 } from "./version.ts";
 
@@ -78,6 +79,82 @@ describe("readInstalledVersion", () => {
 	it("returns null for nonexistent directory", async () => {
 		const version = await readInstalledVersion("/nonexistent/path/xyz");
 		expect(version).toBeNull();
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// readInstalledManifest
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("readInstalledManifest", () => {
+	it("reads version + kind from new-format crust.json", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({
+				name: "test",
+				description: "test",
+				version: "1.2.3",
+				kind: "bundle",
+			}),
+		);
+
+		const manifest = await readInstalledManifest(tmpDir);
+		expect(manifest).toEqual({ version: "1.2.3", kind: "bundle" });
+	});
+
+	it("defaults missing kind to 'generated' (legacy crust.json)", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.2.3" }),
+		);
+
+		const manifest = await readInstalledManifest(tmpDir);
+		expect(manifest).toEqual({ version: "1.2.3", kind: "generated" });
+	});
+
+	it("defaults unrecognized kind to 'generated'", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.2.3", kind: "weird" }),
+		);
+
+		const manifest = await readInstalledManifest(tmpDir);
+		expect(manifest).toEqual({ version: "1.2.3", kind: "generated" });
+	});
+
+	it("returns null when crust.json does not exist", async () => {
+		expect(await readInstalledManifest(tmpDir)).toBeNull();
+	});
+
+	it("returns null when crust.json is malformed JSON", async () => {
+		await writeFile(join(tmpDir, CRUST_MANIFEST), "not json {{{");
+		expect(await readInstalledManifest(tmpDir)).toBeNull();
+	});
+
+	it("returns null when crust.json has no version field", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test" }),
+		);
+		expect(await readInstalledManifest(tmpDir)).toBeNull();
+	});
+
+	it("reads kind: 'bundle' verbatim", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "bundle" }),
+		);
+		const manifest = await readInstalledManifest(tmpDir);
+		expect(manifest?.kind).toBe("bundle");
+	});
+
+	it("reads kind: 'generated' verbatim", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "generated" }),
+		);
+		const manifest = await readInstalledManifest(tmpDir);
+		expect(manifest?.kind).toBe("generated");
 	});
 });
 

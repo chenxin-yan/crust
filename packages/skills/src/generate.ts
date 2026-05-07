@@ -31,13 +31,18 @@ import type {
 	RenderedFile,
 	Scope,
 	SkillInstallMode,
+	SkillKind,
 	SkillMeta,
 	StatusOptions,
 	StatusResult,
 	UninstallOptions,
 	UninstallResult,
 } from "./types.ts";
-import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
+import {
+	CRUST_MANIFEST,
+	readInstalledManifest,
+	readInstalledVersion,
+} from "./version.ts";
 
 const DEFAULT_INSTALL_MODE: SkillInstallMode = "auto";
 
@@ -197,8 +202,7 @@ export async function generateSkill(
 		);
 	}
 
-	const primaryAgent = agents[0];
-	if (!primaryAgent) {
+	if (agents.length === 0) {
 		return { agents: [] };
 	}
 
@@ -210,16 +214,100 @@ export async function generateSkill(
 	// Build manifest and render files once (shared across all agents)
 	const manifest = buildManifest(command);
 	const renderedFiles = renderSkill(manifest, resolvedMeta);
-	const metadataFiles = renderDistributionMetadata(resolvedMeta);
 
-	// Combine and sort for deterministic output
-	const allFiles = [...renderedFiles, ...metadataFiles].sort((a, b) =>
+	return installRenderedSkill({
+		files: renderedFiles,
+		meta: resolvedMeta,
+		agents,
+		scope,
+		clean,
+		force,
+		installMode,
+		kind: "generated",
+		legacyResolvedName,
+	});
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal install core — shared by generateSkill and installSkillBundle
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Internal options object for {@link installRenderedSkill}.
+ *
+ * Carries the resolved metadata, pre-rendered file list (without
+ * `crust.json` — the install core appends it based on `kind`), and the
+ * options that survive defaults expansion.
+ */
+interface InstallRenderedSkillOptions {
+	/** Caller-rendered files (SKILL.md + supporting markdown / bundle files) */
+	readonly files: readonly RenderedFile[];
+	/** Resolved skill metadata (name already canonicalized + validated) */
+	readonly meta: SkillMeta;
+	/** Resolved agent list (already defaults-expanded; may be empty no-op) */
+	readonly agents: AgentTarget[];
+	readonly scope: Scope;
+	readonly clean: boolean;
+	readonly force: boolean;
+	readonly installMode: SkillInstallMode;
+	/** Origin of the bundle being installed */
+	readonly kind: SkillKind;
+	/**
+	 * Legacy resolved name to sweep alongside `meta.name`.
+	 *
+	 * Pass `meta.name` (i.e. "same as current") to disable the legacy sweep —
+	 * bundle installs do not carry the `use-*` migration history.
+	 */
+	readonly legacyResolvedName: string;
+}
+
+/**
+ * The shared install pipeline used by both {@link generateSkill} and
+ * `installSkillBundle`.
+ *
+ * Performs:
+ * - Append `crust.json` (with the supplied `kind`) to the file list and sort
+ * - Group agent targets by output directory
+ * - Inspect existing install state (current + legacy paths)
+ * - Conflict detection (no `crust.json` OR kind mismatch; `force: true` bypasses)
+ * - Write canonical bundle once when content changed
+ * - Fan out to per-agent paths via the configured install mode
+ * - Compute per-agent {@link InstallStatus}
+ * - Sweep the legacy canonical when nothing else uses it
+ *
+ * The function does **not** validate the meta name — callers must do that
+ * before invoking the core.
+ */
+async function installRenderedSkill(
+	options: InstallRenderedSkillOptions,
+): Promise<GenerateResult> {
+	const {
+		files,
+		meta,
+		agents,
+		scope,
+		clean,
+		force,
+		installMode,
+		kind,
+		legacyResolvedName,
+	} = options;
+
+	const primaryAgent = agents[0];
+	if (!primaryAgent) {
+		return { agents: [] };
+	}
+
+	// Append crust.json (kind-aware) and sort for deterministic output
+	const metadataFiles = renderDistributionMetadata(meta, kind);
+	const allFiles: RenderedFile[] = [...files, ...metadataFiles].sort((a, b) =>
 		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
 	);
 	const allFilePaths = allFiles.map((file) => file.path);
+
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, resolvedMeta.name);
+		const outputDir = resolveAgentPath(agent, scope, meta.name);
 		const existing = groups.get(outputDir);
 		if (existing) {
 			existing.push(agent);
@@ -228,10 +316,7 @@ export async function generateSkill(
 		}
 	}
 
-	const canonicalOutputDir = resolveCanonicalSkillPath(
-		scope,
-		resolvedMeta.name,
-	);
+	const canonicalOutputDir = resolveCanonicalSkillPath(scope, meta.name);
 	const legacyCanonicalOutputDir = resolveCanonicalSkillPath(
 		scope,
 		legacyResolvedName,
@@ -257,21 +342,37 @@ export async function generateSkill(
 			}),
 		);
 	}
-	const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
+	const canonicalManifest = await readInstalledManifest(canonicalOutputDir);
+	const canonicalVersion = canonicalManifest?.version ?? null;
 	const canonicalExists = (
 		await inspectInstallPath(canonicalOutputDir, canonicalOutputDir)
 	).exists;
-	if (canonicalExists && canonicalVersion === null && !force) {
+	if (canonicalExists && canonicalManifest === null && !force) {
 		throw new SkillConflictError({
 			agent: primaryAgent,
 			outputDir: canonicalOutputDir,
 		});
 	}
+	if (canonicalManifest !== null && canonicalManifest.kind !== kind && !force) {
+		throw new SkillConflictError({
+			agent: primaryAgent,
+			outputDir: canonicalOutputDir,
+			kindMismatch: {
+				existing: canonicalManifest.kind,
+				attempted: kind,
+			},
+		});
+	}
 
 	// Compared against the pre-write snapshot. When true, all agents in the
 	// loop below report "updated" (even symlinks with `pathChanged = false`)
-	// because the canonical content they point to has changed.
-	const canonicalChanged = canonicalVersion !== resolvedMeta.version;
+	// because the canonical content they point to has changed. A kind change
+	// (e.g. force-overwriting a generated skill with a bundle) also counts as
+	// a content change so writes always happen.
+	const canonicalKindChanged =
+		canonicalManifest !== null && canonicalManifest.kind !== kind;
+	const canonicalChanged =
+		canonicalVersion !== meta.version || canonicalKindChanged;
 	if (canonicalChanged) {
 		if (clean) {
 			await cleanDirectory(canonicalOutputDir);
@@ -312,13 +413,13 @@ export async function generateSkill(
 			installMode,
 			inspection: state.current.inspection,
 			installedVersion: state.preferredVersion,
-			currentVersion: resolvedMeta.version,
+			currentVersion: meta.version,
 		});
 		const legacyRemoved = await removeLegacyManagedPath(state);
 
 		const status = computeInstallStatus({
 			installedVersion: state.preferredVersion,
-			currentVersion: resolvedMeta.version,
+			currentVersion: meta.version,
 			canonicalChanged,
 			pathChanged:
 				pathChanged || legacyRemoved || state.preferredOutputDir !== outputDir,
@@ -338,7 +439,7 @@ export async function generateSkill(
 		}
 	}
 
-	{
+	if (legacyResolvedName !== meta.name) {
 		const legacyCanonicalVersion = await readInstalledVersion(
 			legacyCanonicalOutputDir,
 		);
@@ -353,6 +454,9 @@ export async function generateSkill(
 
 	return { agents: results };
 }
+
+export type { InstallRenderedSkillOptions };
+export { installRenderedSkill };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public API — uninstallSkill
@@ -899,15 +1003,19 @@ async function hasAnyInstalledAgentPath(
  * version information for subsequent version checks and serves as an
  * ownership marker for conflict detection.
  *
- * @param manifest - The canonical manifest tree
  * @param meta - Skill metadata
+ * @param kind - The {@link SkillKind} that produced this bundle
  * @returns Array containing the crust.json rendered file
  */
-function renderDistributionMetadata(meta: SkillMeta): RenderedFile[] {
+function renderDistributionMetadata(
+	meta: SkillMeta,
+	kind: SkillKind,
+): RenderedFile[] {
 	const obj: Record<string, unknown> = {
 		name: meta.name,
 		description: meta.description,
 		version: meta.version,
+		kind,
 	};
 
 	return [

@@ -853,6 +853,145 @@ describe("generateSkill", () => {
 			);
 			expect(content.endsWith("\n")).toBe(true);
 		});
+
+		it("emits kind: 'generated' for generateSkill output", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.kind).toBe("generated");
+		});
+
+		it("updates a legacy crust.json (no kind) cleanly", async () => {
+			// Pre-install with v1.0.0
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			// Strip `kind` from canonical crust.json to simulate a pre-TP-003 install
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			const legacyManifest = JSON.parse(
+				await readText(join(canonicalDir, CRUST_MANIFEST)),
+			);
+			delete legacyManifest.kind;
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify(legacyManifest, null, "\t")}\n`,
+			);
+
+			// Re-install with v2.0.0 — must succeed and emit kind: 'generated'
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.version).toBe("2.0.0");
+			expect(manifest.kind).toBe("generated");
+		});
+
+		it("throws SkillConflictError with kindMismatch when existing kind is 'bundle'", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify({ name: "my-cli", description: "x", version: "1.0.0", kind: "bundle" }, null, "\t")}\n`,
+			);
+
+			const attempt = withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			let caught: SkillConflictError | undefined;
+			try {
+				await attempt;
+			} catch (err) {
+				if (err instanceof SkillConflictError) {
+					caught = err;
+				} else {
+					throw err;
+				}
+			}
+			expect(caught).toBeInstanceOf(SkillConflictError);
+			expect(caught?.details.kindMismatch).toEqual({
+				existing: "bundle",
+				attempted: "generated",
+			});
+			expect(caught?.message).toContain('"bundle"');
+			expect(caught?.message).toContain('"generated"');
+		});
+
+		it("force: true bypasses kindMismatch and overwrites kind", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify({ name: "my-cli", description: "x", version: "1.0.0", kind: "bundle" }, null, "\t")}\n`,
+			);
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					force: true,
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.kind).toBe("generated");
+			expect(manifest.version).toBe("2.0.0");
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
