@@ -32,11 +32,14 @@ async function parseShortCircuit<Output>(
 	value: string,
 ): Promise<Output> {
 	const result = await schema["~standard"].validate(value);
-	if (result.issues) {
+	// Per spec, success is signalled by `issues === undefined`; an empty
+	// `issues: []` from a non-conformant schema would have no issue to surface,
+	// so we treat it as success rather than throwing a phantom error.
+	if (result.issues?.length) {
 		const message = result.issues[0]?.message || "Validation failed";
 		throw new Error(`initial value rejected by schema: ${message}`);
 	}
-	return result.value;
+	return (result as { value: Output }).value;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -687,6 +687,31 @@ describe("password — schema short-circuit", () => {
 			}),
 		).rejects.toThrow(/initial value rejected by schema/);
 	});
+
+	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
+		// Spec only marks `issues === undefined` as success, but a malformed
+		// schema returning an empty array has no actual issue to surface —
+		// guarding on `?.length` prevents a phantom rejection of the
+		// short-circuit `initial` value.
+		const emptyIssuesSchema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({
+					value: value as string,
+					issues: [] as const,
+				}),
+			},
+		};
+
+		const result = await password({
+			message: "Word?",
+			initial: "ok",
+			validate: emptyIssuesSchema,
+		});
+
+		expect(result).toBe("ok");
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
