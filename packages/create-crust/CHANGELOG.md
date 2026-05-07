@@ -1,5 +1,17 @@
 # create-crust
 
+## 0.0.29
+
+### Patch Changes
+
+- 173960e: Use bundled package versions for scaffolded `@crustjs/*` dependency ranges instead of `latest`.
+- Updated dependencies [f1baa45]
+- Updated dependencies [67f815a]
+- Updated dependencies [9db2613]
+  - @crustjs/core@0.0.17
+  - @crustjs/prompts@0.1.0
+  - @crustjs/progress@0.0.4
+
 ## 0.0.28
 
 ### Patch Changes
