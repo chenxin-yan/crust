@@ -2,17 +2,45 @@
 // Password — Masked text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
-import type {
-	PartialPromptTheme,
-	PromptTheme,
-	ValidateFn,
+import {
+	isStandardSchema,
+	type PartialPromptTheme,
+	type PromptTheme,
+	type PromptValidate,
+	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Schema parsing helper
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run a Standard Schema against a short-circuit `initial` value and return
+ * the parsed output. Throws on schema rejection so the `Promise<Output>`
+ * overload contract holds. Note: only the schema's issue message surfaces in
+ * the thrown error — the original masked value never appears in the error.
+ */
+async function parseShortCircuit<Output>(
+	schema: StandardSchemaV1<unknown, Output>,
+	value: string,
+): Promise<Output> {
+	const result = await schema["~standard"].validate(value);
+	// Per spec, success is signalled by `issues === undefined`; an empty
+	// `issues: []` from a non-conformant schema would have no issue to surface,
+	// so we treat it as success rather than throwing a phantom error.
+	if (result.issues?.length) {
+		const message = result.issues[0]?.message || "Validation failed";
+		throw new Error(`initial value rejected by schema: ${message}`);
+	}
+	return (result as { value: Output }).value;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -20,6 +48,11 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 /**
  * Options for the {@link password} prompt.
+ *
+ * The `validate` slot is polymorphic: it accepts either a classic
+ * {@link ValidateFn} (returning `true` or an error string) or a
+ * {@link StandardSchemaV1} schema. When a schema is supplied, the prompt
+ * resolves to the schema's transformed `Output` type instead of `string`.
  *
  * @example
  * ```ts
@@ -29,13 +62,16 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * });
  * ```
  */
-export interface PasswordOptions {
+export interface PasswordOptions<Output = string> {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
 	/** Character used to mask the input (default: `"*"`) */
 	readonly mask?: string;
-	/** Validation function — return `true` for valid, or a string error message */
-	readonly validate?: ValidateFn<string>;
+	/**
+	 * Validation: either a function returning `true | string` or a
+	 * Standard Schema v1 object whose parsed output replaces the raw input.
+	 */
+	readonly validate?: PromptValidate<Output>;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
 	/** Per-prompt theme overrides */
@@ -56,23 +92,38 @@ interface PasswordState {
 // Keypress handler — reuses input's text-editing logic
 // ────────────────────────────────────────────────────────────────────────────
 
-function createHandleKey(
-	validate: ValidateFn<string> | undefined,
+function createHandleKey<Output>(
+	validate: PromptValidate<Output> | undefined,
 ): (
 	key: KeypressEvent,
 	state: PasswordState,
 ) =>
 	| PasswordState
-	| SubmitResult<string>
-	| Promise<PasswordState | SubmitResult<string>> {
+	| SubmitResult<Output | string>
+	| Promise<PasswordState | SubmitResult<Output | string>> {
 	return async (key, state) => {
 		// Enter — submit
 		if (key.name === "return") {
 			if (validate) {
-				const result = await validate(state.value);
-				if (result !== true) {
-					return { ...state, error: result };
+				if (isStandardSchema(validate)) {
+					// `issues?.length` (rather than just `issues`) defends against
+					// non-conformant schemas returning `{ issues: [] }`, which has
+					// no actual issue to surface and should pass through.
+					const result = await validate["~standard"].validate(state.value);
+					if (result.issues?.length) {
+						return {
+							...state,
+							error: result.issues[0]?.message || "Validation failed",
+						};
+					}
+					return submit((result as { value: Output }).value);
 				}
+
+				const fnResult = await (validate as ValidateFn<string>)(state.value);
+				if (fnResult !== true) {
+					return { ...state, error: fnResult };
+				}
+				return submit(state.value);
 			}
 
 			return submit(state.value);
@@ -125,9 +176,9 @@ function renderPassword(
 	return output;
 }
 
-function renderSubmitted(
+function renderSubmitted<Output>(
 	_state: PasswordState,
-	_value: string,
+	_value: Output,
 	theme: PromptTheme,
 	message: string | undefined,
 	mask: string,
@@ -156,8 +207,15 @@ function renderSubmitted(
  * If `initial` is provided, the prompt is skipped and the value is returned
  * immediately — useful for prefilling from CLI flags.
  *
+ * The `validate` slot is **polymorphic**:
+ * - When omitted or given a `ValidateFn<string>`, the prompt resolves to the
+ *   raw `string` input.
+ * - When given a Standard Schema v1 object, the schema parses the raw input
+ *   on submit; the prompt resolves to the schema's transformed `Output` type.
+ *
  * @param options - Password prompt configuration
- * @returns The user's entered password
+ * @returns The user's entered password, or the schema-parsed output when a
+ *          Standard Schema is supplied as `validate`.
  * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` is provided
  *
  * @example
@@ -177,9 +235,31 @@ function renderSubmitted(
  * });
  * ```
  */
-export async function password(options: PasswordOptions): Promise<string> {
-	// Short-circuit: return initial value immediately without rendering
+export function password<Output>(
+	options: PasswordOptions<Output> & {
+		readonly validate: StandardSchemaV1<unknown, Output>;
+	},
+): Promise<Output>;
+export function password(
+	options?: Omit<PasswordOptions<string>, "validate"> & {
+		readonly validate?: ValidateFn<string>;
+	},
+): Promise<string>;
+export function password<Output>(
+	options: PasswordOptions<Output>,
+): Promise<Output | string>;
+export async function password<Output>(
+	options: PasswordOptions<Output> = {},
+): Promise<Output | string> {
+	// Short-circuit: return initial value immediately without rendering.
+	// When `validate` is a Standard Schema we MUST parse the short-circuit
+	// value through it so the `Promise<Output>` overload stays sound — a raw
+	// string would otherwise leak where the caller is statically promised the
+	// schema's transformed output type.
 	if (options.initial !== undefined) {
+		if (isStandardSchema(options.validate)) {
+			return parseShortCircuit(options.validate, options.initial);
+		}
 		return options.initial;
 	}
 
@@ -192,11 +272,11 @@ export async function password(options: PasswordOptions): Promise<string> {
 		error: null,
 	};
 
-	return runPrompt<PasswordState, string>({
+	return runPrompt<PasswordState, Output | string>({
 		initialState,
 		theme,
 		render: (state, t) => renderPassword(state, t, options.message, mask),
-		handleKey: createHandleKey(options.validate),
+		handleKey: createHandleKey<Output>(options.validate),
 		renderSubmitted: (state, value, t) =>
 			renderSubmitted(state, value, t, options.message, mask),
 	});

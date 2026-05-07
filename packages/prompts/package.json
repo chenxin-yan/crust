@@ -43,11 +43,13 @@
 	},
 	"dependencies": {
 		"@crustjs/progress": "workspace:*",
-		"@crustjs/style": "workspace:*"
+		"@crustjs/style": "workspace:*",
+		"@standard-schema/spec": "^1.1.0"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"bunup": "catalog:"
+		"bunup": "catalog:",
+		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
 		"typescript": "catalog:"

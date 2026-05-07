@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { StyleFn } from "@crustjs/style";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -106,3 +107,53 @@ export type ValidateResult = true | string;
 export type ValidateFn<T> = (
 	value: T,
 ) => ValidateResult | Promise<ValidateResult>;
+
+/**
+ * Polymorphic validate slot for text-input prompts.
+ *
+ * Accepts either:
+ * - a {@link ValidateFn} (returns `true` for valid or a string error), or
+ * - a {@link StandardSchemaV1} schema (e.g. Zod, Valibot, Effect Schema)
+ *   that parses the raw `string` input into a transformed `Output`.
+ *
+ * When a schema is supplied, the prompt resolves to the schema's transformed
+ * output type instead of the raw `string`.
+ *
+ * @internal Surfaced via the `validate` slot on `InputOptions` /
+ * `PasswordOptions`; not re-exported from the package root because callers
+ * can derive it from those option types when needed.
+ */
+export type PromptValidate<Output> =
+	| ValidateFn<string>
+	| StandardSchemaV1<unknown, Output>;
+
+/**
+ * Type guard: discriminate the polymorphic `validate` slot.
+ *
+ * Accepts both plain object schemas and callable schema instances (the
+ * Standard Schema spec only requires the `~standard` property; some vendors
+ * expose schemas as callable function-objects). Also asserts that
+ * `~standard.validate` is itself a function so a malformed value cannot slip
+ * through and crash later inside the prompt.
+ *
+ * @internal Used only by `input()` and `password()` to dispatch between the
+ * function-validator and Standard Schema branches.
+ */
+export function isStandardSchema<Output>(
+	value: PromptValidate<Output> | undefined,
+): value is StandardSchemaV1<unknown, Output> {
+	if (value === undefined || value === null) return false;
+	const t = typeof value;
+	if (t !== "object" && t !== "function") return false;
+	const std = (
+		value as {
+			"~standard"?: { version?: unknown; validate?: unknown };
+		}
+	)["~standard"];
+	return (
+		!!std &&
+		typeof std === "object" &&
+		std.version === 1 &&
+		typeof std.validate === "function"
+	);
+}
