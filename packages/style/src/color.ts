@@ -7,7 +7,12 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { applyStyle } from "./styleEngine.ts";
-import type { ColorDepth, ColorInput } from "./types.ts";
+import type {
+	CheckedColorInput,
+	ColorDepth,
+	ColorInput,
+	ColorInputCandidate,
+} from "./types.ts";
 
 export type { ColorInput } from "./types.ts";
 
@@ -152,8 +157,10 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * fgCode({ r: 255, g: 0, b: 0 });
  * ```
  */
-export function fgCode(input: ColorInput): AnsiPair {
-	return { open: fgOpen(input, "truecolor"), close: FG_CLOSE };
+export function fgCode<const T extends ColorInputCandidate>(
+	input: CheckedColorInput<T>,
+): AnsiPair {
+	return { open: fgOpen(input as ColorInput, "truecolor"), close: FG_CLOSE };
 }
 
 /**
@@ -190,8 +197,10 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * bgCode("hsl(120, 100%, 50%)");
  * ```
  */
-export function bgCode(input: ColorInput): AnsiPair {
-	return { open: bgOpen(input, "truecolor"), close: BG_CLOSE };
+export function bgCode<const T extends ColorInputCandidate>(
+	input: CheckedColorInput<T>,
+): AnsiPair {
+	return { open: bgOpen(input as ColorInput, "truecolor"), close: BG_CLOSE };
 }
 
 /**
@@ -229,21 +238,22 @@ export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * fg("256-only", "#ff0000", "256"); // \x1b[38;5;196m...
  * ```
  */
-export function fg(
+export function fg<const T extends ColorInputCandidate>(
 	text: string,
-	input: ColorInput,
+	input: CheckedColorInput<T>,
 	depth: ColorDepth = "truecolor",
 ): string {
+	const broadInput = input as ColorInput;
 	// Validate the color BEFORE the empty-string short-circuit so callers
 	// get TypeError on bad input regardless of `text`. Otherwise
 	// `fg("", "definitely-not-a-color")` would silently return "" and mask
 	// the bug. The validation walk is cheap (Bun.color call) and the
 	// non-empty path needs the parsed open sequence anyway.
 	if (depth === "none") {
-		fgOpen(input, "truecolor"); // validate, do not emit
+		fgOpen(broadInput, "truecolor"); // validate, do not emit
 		return text === "" ? "" : text;
 	}
-	const open = fgOpen(input, depth);
+	const open = fgOpen(broadInput, depth);
 	if (text === "") return "";
 	return applyStyle(text, { open, close: FG_CLOSE });
 }
@@ -259,17 +269,18 @@ export function fg(
  * bg("info", "hsl(210, 100%, 50%)");
  * ```
  */
-export function bg(
+export function bg<const T extends ColorInputCandidate>(
 	text: string,
-	input: ColorInput,
+	input: CheckedColorInput<T>,
 	depth: ColorDepth = "truecolor",
 ): string {
+	const broadInput = input as ColorInput;
 	// See `fg` above — validate before short-circuiting on empty `text`.
 	if (depth === "none") {
-		fgOpen(input, "truecolor");
+		fgOpen(broadInput, "truecolor");
 		return text === "" ? "" : text;
 	}
-	const open = bgOpen(input, depth);
+	const open = bgOpen(broadInput, depth);
 	if (text === "") return "";
 	return applyStyle(text, { open, close: BG_CLOSE });
 }

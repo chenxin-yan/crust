@@ -210,9 +210,34 @@ type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
 type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowgreen";
 ```
 
-**Editor autocomplete.** Typing `fg("text", "…")` surfaces all 148 CSS named colors plus `#` as completions. Other strings that `Bun.color()` accepts — `rgb()`, `hsl()`, `lab()`, `oklch()`, etc. — still type-check via the `string` fallback (`LiteralUnion` from [type-fest's pattern](https://github.com/sindresorhus/type-fest/blob/main/source/literal-union.d.ts)).
+**Editor autocomplete.** Typing `fg("text", "…")` surfaces all 148 CSS named colors plus `#` as completions.
 
-Invalid inputs raise `TypeError` (`Invalid color input: ...`). The color is validated **before** any empty-text short-circuit, so `fg("", "definitely-not-a-color")` still throws — callers can't silently mask bugs by passing empty strings.
+**Strict inline literals.** Inline string literals are checked against a `StrictColorString` subset — named CSS colors, `#rrggbb`/`#rgb`/`#rrggbbaa` hex, and `rgb()` / `rgba()` / `hsl()` / `hsla()` / `hwb()` / `lab()` / `lch()` / `oklab()` / `oklch()` / `color()` / `color-mix()` function-notation strings. Typos like `fg("x", "rebbecapurple")` and unrecognized literals like `fg("x", "not-a-color")` fail at compile time.
+
+```ts
+fg("ok",  "rebeccapurple");        // ✅ valid named color
+fg("ok",  "#ff0000");              // ✅ valid hex
+fg("ok",  "oklch(60% 0.2 240)");   // ✅ valid CSS function
+fg("bad", "rebbecapurple");        // ❌ compile error
+fg("bad", "ff0000");               // ❌ missing `#`
+```
+
+Dynamic values (`string`, `ColorString`, `ColorInput`) keep flowing through unchanged — e.g. theme tokens loaded from JSON or `process.env`. Template-literal types validate the *shape* only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and throw `TypeError` at runtime via `Bun.color()`. Invalid inputs raise `TypeError` (`Invalid color input: ...`); validation runs **before** any empty-text short-circuit, so `fg("", c as string)` still throws on bad colors.
+
+**Building your own strict wrappers.** To relay the same strict checking through a wrapper, parameterise it with `CheckedColorInput<T>`:
+
+```ts
+import { fg, type CheckedColorInput, type ColorInputCandidate } from "@crustjs/style";
+
+function paint<const T extends ColorInputCandidate>(input: CheckedColorInput<T>) {
+  return fg("x", input);
+}
+
+paint("rebeccapurple"); // ✅
+paint("rebbecapurple"); // ❌ compile error
+```
+
+A naive wrapper like `<T extends NamedColor>(c: T) => fg("x", c)` will not compile because `T` is generic at the call site — use the `CheckedColorInput<T>` pattern above, or widen the wrapper parameter to `string` / `ColorInput`.
 
 Nullish text (`fg(undefined, "#f00")`, `bold(null)`, etc.) returns `""` defensively. JS callers that bypass TypeScript types still get safe output.
 

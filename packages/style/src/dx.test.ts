@@ -137,7 +137,9 @@ describe("fg/bg as chain methods", () => {
 	});
 
 	it("invalid input still throws via the chain root", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => always.fg("definitely-not-a-color")).toThrow(TypeError);
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => always.bold.fg("nope")).toThrow(TypeError);
 	});
 });
@@ -179,20 +181,24 @@ describe("Defensive nullish handling", () => {
 
 describe("Error messages — locked via snapshots", () => {
 	it("fg invalid input echoes the bad value", () => {
-		expect(() => fg("hello", "definitely-not-a-color")).toThrow(
-			'Invalid color input: "definitely-not-a-color"',
-		);
+		expect(() =>
+			// @ts-expect-error — runtime contract test: invalid inline literal
+			fg("hello", "definitely-not-a-color"),
+		).toThrow('Invalid color input: "definitely-not-a-color"');
 	});
 
 	it("fg with empty text + invalid input still throws (no silent mask)", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("", "garbage")).toThrow('Invalid color input: "garbage"');
 	});
 
 	it("bg invalid input echoes the bad value", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("hi", "nope")).toThrow('Invalid color input: "nope"');
 	});
 
 	it("fgCode invalid input echoes the bad value", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fgCode("bogus")).toThrow('Invalid color input: "bogus"');
 	});
 

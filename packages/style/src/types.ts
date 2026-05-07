@@ -36,6 +36,14 @@ export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
  * - `number` — packed `0xRRGGBB` (24-bit, no alpha).
  * - `[r, g, b]` / `[r, g, b, a]` — channel tuples (0–255).
  * - `{ r, g, b, a? }` — channel objects (0–255; `a` defaults to 255).
+ *
+ * `ColorInput` is the broad runtime/dynamic type used for variable
+ * annotations (e.g. `const c: ColorInput = loadFromJson()`). Inline
+ * string literals passed directly to `fg` / `bg` / `fgCode` / `bgCode`
+ * are checked against the stricter {@link CheckedColorInput} — typos
+ * such as `fg("x", "rebbecapurple")` fail at compile time, while
+ * dynamic `string` / {@link ColorString} / `ColorInput` values continue
+ * to flow through unchanged.
  */
 export type ColorInput =
 	| ColorString
@@ -43,6 +51,79 @@ export type ColorInput =
 	| readonly [r: number, g: number, b: number]
 	| readonly [r: number, g: number, b: number, a: number]
 	| { r: number; g: number; b: number; a?: number };
+
+/**
+ * CSS color-function string forms recognized at the type level.
+ *
+ * Used by {@link StrictColorString} to validate inline color literals
+ * passed to `fg` / `bg` / `fgCode` / `bgCode`. Template-literal types
+ * can only check the broad `function(...)` shape; the actual argument
+ * grammar (numeric ranges, separators, etc.) is validated at runtime by
+ * `Bun.color()`.
+ */
+export type CssColorFunctionString =
+	| `rgb(${string})`
+	| `rgba(${string})`
+	| `hsl(${string})`
+	| `hsla(${string})`
+	| `hwb(${string})`
+	| `lab(${string})`
+	| `lch(${string})`
+	| `oklab(${string})`
+	| `oklch(${string})`
+	| `color(${string})`
+	| `color-mix(${string})`;
+
+/**
+ * Strict subset of {@link ColorString} used to validate inline string
+ * literals at compile time. Accepts named CSS colors, `#rrggbb` /
+ * `#rgb` / `#rrggbbaa` hex literals, and {@link CssColorFunctionString}
+ * function-notation strings. Anything else (typos, theme tokens, raw
+ * variable references) must reach `fg` / `bg` through a widened
+ * `string` / {@link ColorString} / {@link ColorInput} value.
+ */
+export type StrictColorString =
+	| NamedColor
+	| `#${string}`
+	| CssColorFunctionString;
+
+/**
+ * Non-string branches of {@link ColorInput} (numbers, channel tuples,
+ * channel objects). Derived from `ColorInput` so the two stay aligned
+ * automatically.
+ */
+export type NonStringColorInput = Exclude<ColorInput, string>;
+
+/**
+ * Generic constraint accepted by the strict `fg` / `bg` / `fgCode` /
+ * `bgCode` signatures. Any string or non-string `ColorInput` shape is
+ * eligible — narrow inline string literals are validated by
+ * {@link CheckedColorInput}.
+ */
+export type ColorInputCandidate = string | NonStringColorInput;
+
+/**
+ * Conditional helper that rejects invalid inline string literals while
+ * preserving:
+ *
+ * - widened `string` values (e.g. `let c: string = load()`),
+ * - inline literals matching {@link StrictColorString},
+ * - all non-string {@link ColorInput} branches.
+ *
+ * Resolves to `never` for inline string literals that don't match
+ * `StrictColorString`, which produces a TypeScript error at the call
+ * site instead of silently passing through to `Bun.color()` and
+ * throwing at runtime.
+ */
+export type CheckedColorInput<T> = T extends string
+	? string extends T
+		? T
+		: T extends StrictColorString
+			? T
+			: never
+	: T extends NonStringColorInput
+		? T
+		: never;
 
 /**
  * Color emission mode for the style engine.
@@ -199,18 +280,26 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 * Append a depth-aware foreground color to the chain. The resulting
 	 * chainable can be called or chained further like any other.
 	 *
+	 * Inline string literals are checked against {@link StrictColorString};
+	 * widened `string` / {@link ColorString} / {@link ColorInput} values
+	 * still flow through unchanged.
+	 *
 	 * @example
 	 * ```ts
 	 * style.bold.fg("#ff8800")("warning");
 	 * style.fg("rebeccapurple").italic`accent ${value}`;
 	 * ```
 	 */
-	fg(input: ColorInput): ChainableStyleFn;
+	fg<const T extends ColorInputCandidate>(
+		input: CheckedColorInput<T>,
+	): ChainableStyleFn;
 	/**
 	 * Append a depth-aware background color to the chain. Mirrors
 	 * {@link ChainableStyleFn.fg}.
 	 */
-	bg(input: ColorInput): ChainableStyleFn;
+	bg<const T extends ColorInputCandidate>(
+		input: CheckedColorInput<T>,
+	): ChainableStyleFn;
 }
 
 /**
@@ -267,6 +356,10 @@ export interface StyleInstance extends StyleMethodMap {
 	 * - `fg(input)` — returns a {@link ChainableStyleFn} pre-bound with the
 	 *   color, ready to be called or chained further.
 	 *
+	 * Inline string literals are validated against {@link StrictColorString};
+	 * widened dynamic strings (`string` / {@link ColorString} /
+	 * {@link ColorInput}) continue to type-check.
+	 *
 	 * @example
 	 * ```ts
 	 * style.fg("warning", "#ff8800");           // direct
@@ -274,8 +367,13 @@ export interface StyleInstance extends StyleMethodMap {
 	 * ```
 	 */
 	readonly fg: {
-		(input: ColorInput): ChainableStyleFn;
-		(text: string, input: ColorInput): string;
+		<const T extends ColorInputCandidate>(
+			input: CheckedColorInput<T>,
+		): ChainableStyleFn;
+		<const T extends ColorInputCandidate>(
+			text: string,
+			input: CheckedColorInput<T>,
+		): string;
 	};
 
 	/**
@@ -284,8 +382,13 @@ export interface StyleInstance extends StyleMethodMap {
 	 * chain-root forms.
 	 */
 	readonly bg: {
-		(input: ColorInput): ChainableStyleFn;
-		(text: string, input: ColorInput): string;
+		<const T extends ColorInputCandidate>(
+			input: CheckedColorInput<T>,
+		): ChainableStyleFn;
+		<const T extends ColorInputCandidate>(
+			text: string,
+			input: CheckedColorInput<T>,
+		): string;
 	};
 
 	// ── Deprecated dynamic-color helpers ───────────────────────────────

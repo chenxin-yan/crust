@@ -57,10 +57,12 @@ describe("fgCode", () => {
 	});
 
 	it("throws TypeError for unrecognized strings", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fgCode("not-a-color")).toThrow(TypeError);
 	});
 
 	it("throws TypeError with quoted input embedded in message", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fgCode("bogus")).toThrow('Invalid color input: "bogus"');
 	});
 
@@ -93,6 +95,7 @@ describe("bgCode", () => {
 	});
 
 	it("throws TypeError for unrecognized strings", () => {
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bgCode("nope")).toThrow(TypeError);
 	});
 });
@@ -132,7 +135,9 @@ describe("fg", () => {
 		// Empty text used to silently short-circuit before the color was
 		// validated. Now both empty- and non-empty-text callers get the
 		// same TypeError.
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("hello", "definitely-not-a-color")).toThrow(TypeError);
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 
@@ -162,7 +167,9 @@ describe("bg", () => {
 		// Empty text used to silently short-circuit before color
 		// validation, so `bg("", "definitely-not-a-color")` returned "".
 		// Now both empty- and non-empty-text callers get TypeError.
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("hi", "definitely-not-a-color")).toThrow(TypeError);
+		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 
@@ -320,9 +327,10 @@ describe("fg — depth fallback", () => {
 	});
 
 	it('depth="none" still validates input and throws on invalid colors', () => {
-		expect(() => fg("hello", "definitely-not-a-color", "none")).toThrow(
-			TypeError,
-		);
+		expect(() =>
+			// @ts-expect-error — runtime contract test: invalid inline literal
+			fg("hello", "definitely-not-a-color", "none"),
+		).toThrow(TypeError);
 	});
 
 	it("empty text returns '' at every depth (after validation)", () => {
@@ -334,6 +342,7 @@ describe("fg — depth fallback", () => {
 
 	it("empty text + invalid color still throws at every depth", () => {
 		for (const depth of ["truecolor", "256", "16", "none"] as const) {
+			// @ts-expect-error — runtime contract test: invalid inline literal
 			expect(() => fg("", "definitely-not-a-color", depth)).toThrow();
 		}
 	});
@@ -384,8 +393,9 @@ describe("bg — depth fallback", () => {
 
 	it('depth="none" returns text unchanged but validates input', () => {
 		expect(bg("hello", "#ff0000", "none")).toBe("hello");
-		expect(() => bg("hello", "definitely-not-a-color", "none")).toThrow(
-			TypeError,
-		);
+		expect(() =>
+			// @ts-expect-error — runtime contract test: invalid inline literal
+			bg("hello", "definitely-not-a-color", "none"),
+		).toThrow(TypeError);
 	});
 });

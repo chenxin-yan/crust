@@ -68,11 +68,42 @@ type ColorInput =
   | readonly [r: number, g: number, b: number, a: number]
   | { r: number; g: number; b: number; a?: number };
 
-type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+type ColorString = NamedColor | `#${string}` | (string & {});
 type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowgreen";
 ```
 
-The string branch uses [`LiteralUnion`](https://github.com/sindresorhus/type-fest/blob/main/source/literal-union.d.ts) so editors autocomplete the 148 CSS [named colors](https://drafts.csswg.org/css-color/#named-colors) and the `#` hex prefix while still accepting any other string Bun's CSS parser understands (`rgb()`, `hsl()`, `lab()`, `oklch()`, …). `LiteralUnion` and `NamedColor` are both re-exported from `@crustjs/style` if you need them in your own helpers.
+The string branch uses the standard `string & {}` autocomplete pattern so editors complete the 148 CSS [named colors](https://drafts.csswg.org/css-color/#named-colors) and the `#` hex prefix while still accepting any other string Bun's CSS parser understands (`rgb()`, `hsl()`, `lab()`, `oklch()`, …). `NamedColor` is re-exported from `@crustjs/style` if you need it in your own helpers.
+
+#### Strict inline literals
+
+`fg`, `bg`, `fgCode`, and `bgCode` (plus their `style.fg` / `style.bg` / chain `.fg` / `.bg` counterparts) check inline string literals against a stricter `StrictColorString` subset — named CSS colors, `#rrggbb` / `#rgb` / `#rrggbbaa` hex, and CSS color-function notation (`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()`, `color-mix()`). Typos and arbitrary literals fail at compile time:
+
+```ts
+fg("ok",  "rebeccapurple");      // ✅ valid named color
+fg("ok",  "#ff0000");            // ✅ valid hex
+fg("ok",  "oklch(60% 0.2 240)"); // ✅ valid CSS function
+fg("bad", "rebbecapurple");      // ❌ compile error
+fg("bad", "not-a-color");        // ❌ compile error
+```
+
+Dynamic `string` / `ColorString` / `ColorInput` values keep flowing through unchanged for theme tokens loaded from JSON, environment variables, or arbitrary user input — the strict check only fires on inline literals. Template-literal types validate the *shape* only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and raise `TypeError` at runtime via `Bun.color()`. The helper types `StrictColorString`, `CssColorFunctionString`, `NonStringColorInput`, `ColorInputCandidate`, and `CheckedColorInput<T>` are exported from `@crustjs/style` for users who want to build their own strict wrappers.
+
+##### Building your own strict wrappers
+
+To relay the same strict checking through a wrapper, parameterise it with `CheckedColorInput<T>`:
+
+```ts
+import { fg, type CheckedColorInput, type ColorInputCandidate } from "@crustjs/style";
+
+function paint<const T extends ColorInputCandidate>(input: CheckedColorInput<T>) {
+  return fg("x", input);
+}
+
+paint("rebeccapurple"); // ✅
+paint("rebbecapurple"); // ❌ compile error
+```
+
+A naive wrapper like `<T extends NamedColor>(c: T) => fg("x", c)` will not compile because `T` is generic at the call site — use the `CheckedColorInput<T>` pattern above, or widen the wrapper parameter to `string` / `ColorInput`.
 
 ### Hyperlinks (OSC 8)
 
@@ -120,11 +151,10 @@ The string branch uses [`LiteralUnion`](https://github.com/sindresorhus/type-fes
 
 ### Markdown Theme
 
-| Export                             | Description                                 |
-| ---------------------------------- | ------------------------------------------- |
-| `defaultTheme`                     | Default auto-mode markdown theme            |
-| `createMarkdownTheme(options?)`    | Create a theme with optional overrides      |
-| `buildDefaultMarkdownTheme(style)` | Build a default theme from a style instance |
+| Export                          | Description                            |
+| ------------------------------- | -------------------------------------- |
+| `defaultTheme`                  | Default auto-mode markdown theme       |
+| `createMarkdownTheme(options?)` | Create a theme with optional overrides |
 
 ### Types
 
@@ -370,7 +400,7 @@ style.colorDepth; // depth currently used by the runtime style
 ```
 
 <Callout type="info">
-Invalid color inputs (e.g. `fg("hello", "not-a-color")`) raise `TypeError` (`Invalid color input: ...`) at every depth — including `"none"` — and **regardless of whether `text` is empty**. `fg("", "garbage")` still throws, so callers can't silently mask bugs.
+Invalid inline color literals (e.g. `fg("hello", "not-a-color")`) are caught at **compile time** under TypeScript via the strict inline-literal check above. Inputs that bypass the type check — dynamic strings, JS callers, or `as string` casts — still raise `TypeError` (`Invalid color input: ...`) at every depth (including `"none"`) and **regardless of whether `text` is empty**. `fg("", c as string)` with a bogus color still throws, so callers can't silently mask bugs.
 
 Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensively. This protects JS callers that bypass TypeScript types from crashes.
 

@@ -8,8 +8,10 @@
 // fail this file at compile time.
 
 import { describe, expect, it } from "bun:test";
-import { fg } from "./color.ts";
+import { bgCode, bg as colorBg, fg as colorFg, fgCode } from "./color.ts";
+import { createStyle } from "./createStyle.ts";
 import type { ColorInput, ColorString, NamedColor } from "./index.ts";
+import { bg, fg } from "./runtimeExports.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-only assertions (compile-time)
@@ -111,22 +113,124 @@ describe("ColorInput — invalid shapes are rejected by the compiler", () => {
 
 		expect(() => {
 			// @ts-expect-error — boolean is not a ColorInput
-			fg("x", true, "truecolor");
+			colorFg("x", true, "truecolor");
 		}).toThrow(TypeError);
 
 		expect(() => {
 			// @ts-expect-error — null is not a ColorInput
-			fg("x", null, "truecolor");
+			colorFg("x", null, "truecolor");
 		}).toThrow(TypeError);
 
 		expect(() => {
 			// @ts-expect-error — bare object without r/g/b is not a ColorInput
-			fg("x", { hex: "#ff0000" }, "truecolor");
+			colorFg("x", { hex: "#ff0000" }, "truecolor");
 		}).toThrow(TypeError);
 
 		expect(() => {
 			// @ts-expect-error — 2-tuple is not a valid channel set
-			fg("x", [255, 0], "truecolor");
+			colorFg("x", [255, 0], "truecolor");
 		}).toThrow(); // Bun throws a plain Error here, not a TypeError
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Strict inline-literal checking — typos in inline string literals at
+// `fg` / `bg` / `fgCode` / `bgCode` / `style.fg` / `style.bg` /
+// `chain.fg` / `chain.bg` call sites must fail at compile time. Dynamic
+// `string` / `ColorString` / `ColorInput` values must keep type-checking.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("ColorInput — inline string literals are checked at the call site", () => {
+	it("rejects invalid inline literals across every public call site", () => {
+		const s = createStyle({ mode: "never" });
+
+		expect(() => {
+			// @ts-expect-error — typo on a NamedColor
+			fg("x", "rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — arbitrary inline literal
+			bg("x", "not-a-color");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — missing `#` prefix on hex-like literal
+			fg("x", "ff0000");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on direct color.fg
+			colorFg("x", "rebbecapurple", "truecolor");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on direct color.bg
+			colorBg("x", "rebbecapurple", "truecolor");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on fgCode pair factory
+			fgCode("rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on bgCode pair factory
+			bgCode("not-a-color");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on instance.fg direct form
+			s.fg("x", "rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on instance.fg chain-root form
+			s.fg("rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on instance.bg direct form
+			s.bg("x", "rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on instance.bg chain-root form
+			s.bg("rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on chainable .fg
+			s.bold.fg("rebbecapurple");
+		}).toThrow(TypeError);
+
+		expect(() => {
+			// @ts-expect-error — typo on chainable .bg
+			s.bold.bg("rebbecapurple");
+		}).toThrow(TypeError);
+	});
+
+	it("accepts dynamic strings that flow through unchanged", () => {
+		const dynamicStr: string = "rgb(0, 128, 255)";
+		const dynamicColorStr: ColorString = "hsl(45, 100%, 50%)";
+		const dynamicAny: ColorInput = "#ff0000";
+		expect(fg("x", dynamicStr)).not.toBe("");
+		expect(bg("x", dynamicColorStr)).not.toBe("");
+		expect(fg("x", dynamicAny)).not.toBe("");
+	});
+
+	it("accepts every valid inline-literal shape", () => {
+		expect(fg("x", "rebeccapurple")).not.toBe("");
+		expect(fg("x", "#ff0000")).not.toBe("");
+		expect(fg("x", "#f00")).not.toBe("");
+		expect(fg("x", "rgb(0, 128, 255)")).not.toBe("");
+		expect(fg("x", "hsl(45, 100%, 50%)")).not.toBe("");
+		expect(fg("x", "oklch(60% 0.2 240)")).not.toBe("");
+		expect(fg("x", "lab(50% 30 -20)")).not.toBe("");
+		expect(fg("x", [255, 127, 80])).not.toBe("");
+		expect(fg("x", [255, 127, 80, 128])).not.toBe("");
+		expect(fg("x", { r: 1, g: 2, b: 3 })).not.toBe("");
+		expect(fg("x", { r: 1, g: 2, b: 3, a: 4 })).not.toBe("");
+		expect(fg("x", 0xff0000)).not.toBe("");
 	});
 });

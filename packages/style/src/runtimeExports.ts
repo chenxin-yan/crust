@@ -10,7 +10,13 @@
 import { bg as directBg, fg as directFg } from "./color.ts";
 import { createForwardingChainable, style } from "./createStyle.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { ChainableStyleFn, ColorDepth, ColorInput } from "./types.ts";
+import type {
+	ChainableStyleFn,
+	CheckedColorInput,
+	ColorDepth,
+	ColorInput,
+	ColorInputCandidate,
+} from "./types.ts";
 
 // Top-level chainables share the `createForwardingChainable` helper used
 // by the runtime `style` facade in `createStyle.ts`. Every call and
@@ -116,14 +122,15 @@ export function link(
  * fg("deterministic", "#ff8800", "256"); // force 256-color
  * ```
  */
-export function fg(
+export function fg<const T extends ColorInputCandidate>(
 	text: string,
-	input: ColorInput,
+	input: CheckedColorInput<T>,
 	depth?: ColorDepth,
 ): string {
+	const broadInput = input as ColorInput;
 	return depth === undefined
-		? style.fg(text, input)
-		: directFg(text, input, depth);
+		? style.fg(text, broadInput)
+		: directFg(text, broadInput, depth);
 }
 
 /**
@@ -136,14 +143,15 @@ export function fg(
  * bg("info", "hsl(210, 100%, 50%)", "16"); // force 16-color fallback
  * ```
  */
-export function bg(
+export function bg<const T extends ColorInputCandidate>(
 	text: string,
-	input: ColorInput,
+	input: CheckedColorInput<T>,
 	depth?: ColorDepth,
 ): string {
+	const broadInput = input as ColorInput;
 	return depth === undefined
-		? style.bg(text, input)
-		: directBg(text, input, depth);
+		? style.bg(text, broadInput)
+		: directBg(text, broadInput, depth);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

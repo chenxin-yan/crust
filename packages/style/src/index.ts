@@ -43,7 +43,6 @@ export {
 	magenta as magentaCode,
 	red as redCode,
 	// Modifiers
-	reset,
 	strikethrough as strikethroughCode,
 	underline as underlineCode,
 	white as whiteCode,
@@ -79,7 +78,7 @@ export {
 } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
-export type { LiteralUnion, NamedColor } from "./namedColors.ts";
+export type { NamedColor } from "./namedColors.ts";
 export {
 	bg,
 	// Background
@@ -151,14 +150,18 @@ export type {
 	PartialMarkdownTheme,
 	ThemeSlotFn,
 } from "./theme/markdownTheme.ts";
-export { buildDefaultMarkdownTheme } from "./theme/markdownTheme.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
+	CheckedColorInput,
 	ColorDepth,
 	ColorInput,
+	ColorInputCandidate,
 	ColorMode,
 	ColorString,
+	CssColorFunctionString,
+	NonStringColorInput,
+	StrictColorString,
 	StyleFn,
 	StyleInstance,
 	StyleOptions,

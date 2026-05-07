@@ -163,16 +163,13 @@ export type PartialMarkdownTheme = Partial<MarkdownTheme>;
  * / `never`). When colors are disabled the slots return the input unchanged
  * (identity functions), preserving textual structure and readability.
  *
+ * Public consumers should prefer {@link createMarkdownTheme} (which accepts
+ * `StyleOptions` and produces an equivalent instance internally). This
+ * helper is kept for in-package composition.
+ *
  * @param s - The style instance to derive theme functions from.
  * @returns A frozen {@link MarkdownTheme} with readable default styles.
- *
- * @example
- * ```ts
- * import { buildDefaultMarkdownTheme, createStyle } from "@crustjs/style";
- *
- * const theme = buildDefaultMarkdownTheme(createStyle({ mode: "always" }));
- * console.log(theme.heading1("Title")); // bold + underlined
- * ```
+ * @internal
  */
 export function buildDefaultMarkdownTheme(s: StyleInstance): MarkdownTheme {
 	const theme: MarkdownTheme = {
