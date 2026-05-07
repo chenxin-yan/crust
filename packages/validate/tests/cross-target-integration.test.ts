@@ -27,7 +27,6 @@ import {
 	arg,
 	commandValidator,
 	flag,
-	field as makeFieldDef,
 	parseValue,
 	validateStandard,
 	validateStandardSync,
@@ -137,10 +136,6 @@ const effectCommandValidator = commandValidator;
 const effectFieldValidator = field;
 const effectPromptValidator = promptValidator;
 const effectParsePromptValue = parsePromptValue;
-// Suppress unused-binding lint when assertions don't reference the alias.
-void effectPromptValidator;
-void effectParsePromptValue;
-void makeFieldDef;
 const zodArg = arg;
 const zodFlag = flag;
 const zodCommandValidator = commandValidator;

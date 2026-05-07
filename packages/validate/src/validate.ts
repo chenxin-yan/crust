@@ -1,3 +1,4 @@
+import { CrustError } from "@crustjs/core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
 	StandardSchema,
@@ -33,6 +34,20 @@ export function isStandardSchema(value: unknown): value is StandardSchema {
 	if (typeof props !== "object" || props === null) return false;
 	const p = props as Record<string, unknown>;
 	return p.version === 1 && typeof p.validate === "function";
+}
+
+/**
+ * Throw `CrustError("DEFINITION")` if `value` is not a Standard Schema v1
+ * object. Used at API boundaries (`field()`, `parseValue()`, …) to fail
+ * fast on misuse with a label naming the offending call site.
+ */
+export function assertStandardSchema(value: unknown, label: string): void {
+	if (!isStandardSchema(value)) {
+		throw new CrustError(
+			"DEFINITION",
+			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
+		);
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────

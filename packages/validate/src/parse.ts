@@ -6,20 +6,10 @@
 // `CrustError("VALIDATION")` with all normalized issues attached as
 // `details.issues`.
 
-import { CrustError } from "@crustjs/core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { InferOutput, StandardSchema } from "./types.ts";
-import { isStandardSchema, validateStandard } from "./validate.ts";
+import { assertStandardSchema, validateStandard } from "./validate.ts";
 import { throwValidationError } from "./validation.ts";
-
-function assertStandardSchema(value: unknown, label: string): void {
-	if (!isStandardSchema(value)) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
-		);
-	}
-}
 
 /**
  * Validate `value` against `schema` and return the transformed output.

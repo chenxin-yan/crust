@@ -34,33 +34,6 @@ describe("field() — runtime shape", () => {
 		expect((def as { default?: unknown }).default).toEqual([]);
 	});
 
-	it("auto-derives default from z.string().default('x')", () => {
-		const def = field(z.string().default("x"));
-		expect(def.type).toBe("string");
-		expect((def as { default?: unknown }).default).toBe("x");
-	});
-
-	it("preserves falsy default false for z.boolean().default(false)", () => {
-		const def = field(z.boolean().default(false));
-		expect(def.type).toBe("boolean");
-		expect((def as { default?: unknown }).default).toBe(false);
-	});
-
-	it("preserves falsy default 0 for z.number().default(0)", () => {
-		const def = field(z.number().default(0));
-		expect((def as { default?: unknown }).default).toBe(0);
-	});
-
-	it("preserves falsy default '' for z.string().default('')", () => {
-		const def = field(z.string().default(""));
-		expect((def as { default?: unknown }).default).toBe("");
-	});
-
-	it("omits default key when schema has no default", () => {
-		const def = field(z.string());
-		expect("default" in def).toBe(false);
-	});
-
 	it("opts.default overrides schema default", () => {
 		const def = field(z.string().default("x"), { default: "y" });
 		expect((def as { default?: unknown }).default).toBe("y");
@@ -137,7 +110,7 @@ describe("field() — validate adapter", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Default extraction matrix (Step 2 acceptance)
+// Default extraction — vendor-aware + sync fallback behavior
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("default extraction — Zod", () => {
@@ -149,6 +122,16 @@ describe("default extraction — Zod", () => {
 	it("z.boolean().default(false) extracts false (falsy default)", () => {
 		const def = field(z.boolean().default(false));
 		expect((def as { default?: unknown }).default).toBe(false);
+	});
+
+	it("z.number().default(0) extracts 0 (falsy default)", () => {
+		const def = field(z.number().default(0));
+		expect((def as { default?: unknown }).default).toBe(0);
+	});
+
+	it("z.string().default('') extracts '' (falsy default)", () => {
+		const def = field(z.string().default(""));
+		expect((def as { default?: unknown }).default).toBe("");
 	});
 
 	it("z.string() (no default) omits the default key", () => {

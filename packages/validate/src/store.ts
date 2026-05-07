@@ -12,16 +12,7 @@ import { CrustError } from "@crustjs/core";
 import { extractDefault, inferOptions } from "./introspect/registry.ts";
 import type { FieldOptions } from "./schema-types.ts";
 import type { InferOutput, StandardSchema } from "./types.ts";
-import { isStandardSchema, normalizeStandardIssues } from "./validate.ts";
-
-function assertStandardSchema(value: unknown, label: string): void {
-	if (!isStandardSchema(value)) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
-		);
-	}
-}
+import { assertStandardSchema, normalizeStandardIssues } from "./validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Schema → field validate adapter
@@ -226,17 +217,10 @@ export function field<S extends StandardSchema>(
 	// Resolve default: explicit opts wins; otherwise sync vendor-aware
 	// extraction with `validate(undefined)` fallback. Falsy defaults are
 	// preserved \u2014 we never use `=== undefined` as a sentinel.
-	let resolvedDefault: { has: true; value: unknown } | { has: false } = {
-		has: false,
-	};
-	if (opts && "default" in opts && opts.default !== undefined) {
-		resolvedDefault = { has: true, value: opts.default };
-	} else {
-		const extracted = extractDefault(schema);
-		if (extracted.ok) {
-			resolvedDefault = { has: true, value: extracted.value };
-		}
-	}
+	const resolvedDefault =
+		opts && "default" in opts && opts.default !== undefined
+			? ({ ok: true, value: opts.default } as const)
+			: extractDefault(schema);
 
 	const validate = makeValidator(schema);
 
@@ -250,7 +234,7 @@ export function field<S extends StandardSchema>(
 	if (description !== undefined) {
 		def.description = description;
 	}
-	if (resolvedDefault.has) {
+	if (resolvedDefault.ok) {
 		def.default = resolvedDefault.value;
 	}
 

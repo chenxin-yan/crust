@@ -127,7 +127,13 @@ export function extractDefault(schema: StandardSchema): ExtractedDefault {
 			return { ok: true, value: result.value };
 		}
 	} catch {
-		// Some schemas may throw on `undefined` input — silent fallback.
+		// Catches any thrown Error from `validate(undefined)`. Standard Schema
+		// v1 does not constrain what `validate` may throw, and some
+		// implementations (e.g. Zod's `z.never()`, refinements that throw on
+		// nullish input, custom adapters) prefer throwing over returning
+		// issues. Recovery: treat any throw as "no recoverable default" —
+		// equivalent to issues being reported — and let `field()` either
+		// fall through to opts or omit the default key.
 	}
 	return { ok: false };
 }

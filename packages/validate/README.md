@@ -108,24 +108,65 @@ If you use Effect heavily and want shorter call sites, drop these
 helpers into your own project:
 
 ```ts
-import { arg, flag, type ArgDef, type FlagDef, type StandardSchema } from "@crustjs/validate";
+import {
+  arg,
+  flag,
+  type ArgDef,
+  type ArgOptions,
+  type FlagDef,
+  type FlagOptions,
+  type StandardSchema,
+} from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
 type EffectAsStandardSchema<S> = S extends Schema.Schema<infer A, infer I>
   ? StandardSchema<I, A>
   : StandardSchema;
 
-export const earg = <Name extends string, S extends Schema.Schema.AnyNoContext>(
+export const earg = <
+  Name extends string,
+  S extends Schema.Schema.AnyNoContext,
+  const Variadic extends true | undefined = undefined,
+>(
   name: Name,
   schema: S,
-  options?: Parameters<typeof arg>[2],
-) => arg(name, Schema.standardSchemaV1(schema as never), options) as unknown as ArgDef<Name, EffectAsStandardSchema<S>>;
+  options?: ArgOptions & { variadic?: Variadic },
+) =>
+  arg(
+    name,
+    Schema.standardSchemaV1(
+      schema as Parameters<typeof Schema.standardSchemaV1>[0],
+    ),
+    options,
+  ) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
 
-export const eflag = <S extends Schema.Schema.AnyNoContext>(
+export const eflag = <
+  S extends Schema.Schema.AnyNoContext,
+  const Short extends string | undefined = undefined,
+  const Aliases extends readonly string[] | undefined = undefined,
+  const Inherit extends true | undefined = undefined,
+>(
   schema: S,
-  options?: Parameters<typeof flag>[1],
-) => flag(Schema.standardSchemaV1(schema as never), options) as unknown as FlagDef<EffectAsStandardSchema<S>>;
+  options?: FlagOptions & {
+    short?: Short;
+    aliases?: Aliases;
+    inherit?: Inherit;
+  },
+) =>
+  flag(
+    Schema.standardSchemaV1(
+      schema as Parameters<typeof Schema.standardSchemaV1>[0],
+    ),
+    options,
+  ) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
 ```
+
+> The cast `schema as Parameters<typeof Schema.standardSchemaV1>[0]` is
+> needed because `Schema.standardSchemaV1` is overloaded; everything else
+> is structural. The forwarded `Variadic` / `Short` / `Aliases` /
+> `Inherit` generics keep narrowed types reaching the handler signature.
+> A type-level test for this recipe lives in
+> `packages/validate/tests/effect-helper-recipe.test-d.ts`.
 
 ## Quick start — other Standard Schema vendors
 

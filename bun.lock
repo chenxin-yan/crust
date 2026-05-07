@@ -209,7 +209,7 @@
     },
     "packages/validate": {
       "name": "@crustjs/validate",
-      "version": "0.2.0",
+      "version": "0.0.15",
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
       },
