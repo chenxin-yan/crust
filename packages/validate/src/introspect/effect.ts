@@ -61,8 +61,20 @@ function readDefaultAnnotation(
 	// Effect stores defaults as either a value or a thunk (e.g. via
 	// `optionalWith({ default: () => x })`). Unwrap thunks so callers always
 	// see the resolved default value.
-	const value = typeof raw === "function" ? (raw as () => unknown)() : raw;
-	return { found: true, value };
+	if (typeof raw !== "function") {
+		return { found: true, value: raw };
+	}
+	// The thunk runs at definition time during `field()` introspection;
+	// a factory that throws (e.g. reading `process.env.FOO` before it's
+	// set) lands here. Recovery: treat any throw as "no recoverable
+	// default" — mirrors the vendor-neutral `validate(undefined)` catch
+	// in `extractDefault` so behavior is consistent across vendors.
+	// `field()` then falls through to opts or omits the default key.
+	try {
+		return { found: true, value: (raw as () => unknown)() };
+	} catch {
+		return { found: false };
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
