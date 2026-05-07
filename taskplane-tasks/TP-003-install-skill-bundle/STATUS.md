@@ -1,7 +1,23 @@
 # TP-003: `installSkillBundle()` primitive — Status
 
-**Current Step:** Not Started
-**Status:** 🔵 Ready for Execution
+**Current Step:** ✅ Delivered (PR #119, opened 2026-05-07)
+**Status:** ✅ Complete (awaiting review/merge)
+
+> **Note (supervisor):** Delivered via PR #119 against `main` as
+> `feat(skills): installSkillBundle — install pre-authored skill folders`.
+> Batch `20260507T032410` (single lane, 14m 27s task / 15m 6s total, $6.96)
+> produced the orch branch; manual PR recovery (feat/* off origin/main)
+> carried 19 user-visible files; 882 lines of worker scratchpad noise
+> excluded.
+>
+> Closes #110.
+>
+> Verification gate: `bun run check` 281/0, `bun run check:types --force`
+> 21/21 (no cache), `packages/skills` 297/2skip/0fail, all 10 packages
+> 2,283 pass total.
+>
+> Tech debt deferred per Step 8: TP-005 (resolveSourceDir dedup), TP-004
+> (skillPlugin customSkills integration), bundle scaffolding command.
 **Last Updated:** 2026-04-29
 **Review Level:** 2
 **Review Counter:** 0
