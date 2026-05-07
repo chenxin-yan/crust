@@ -146,6 +146,21 @@ export type Scope = "global" | "project";
 /** Installation strategy for agent skill output paths. */
 export type SkillInstallMode = "auto" | "symlink" | "copy";
 
+/**
+ * Origin of an installed skill bundle.
+ *
+ * Recorded in `crust.json` as the top-level `kind` field so Crust can detect
+ * when a generated and a hand-authored bundle would collide on the same name.
+ *
+ * - `"generated"` — produced by {@link generateSkill} from a Crust command tree.
+ * - `"bundle"` — installed by {@link installSkillBundle} from a hand-authored
+ *   directory containing a `SKILL.md` and supporting files.
+ *
+ * Legacy `crust.json` files (written before this field existed) are read as
+ * `"generated"` for backward compatibility.
+ */
+export type SkillKind = "generated" | "bundle";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
 // ────────────────────────────────────────────────────────────────────────────
@@ -332,6 +347,87 @@ export interface GenerateOptions {
 	 */
 	force?: boolean;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bundle install options — input for installSkillBundle
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Top-level options for installing a hand-authored skill bundle.
+ *
+ * Unlike {@link GenerateOptions}, the bundle entrypoint does not render
+ * `SKILL.md` from a command tree — it copies a directory the caller has
+ * already authored. The bundle author owns the `SKILL.md` frontmatter; Crust
+ * only writes a fresh `crust.json` alongside the bundle for ownership and
+ * version tracking.
+ *
+ * @example
+ * ```ts
+ * import { installSkillBundle } from "@crustjs/skills";
+ *
+ * await installSkillBundle({
+ *   meta: {
+ *     name: "funnel-builder",
+ *     description: "Build a sales funnel",
+ *     version: "1.0.0",
+ *   },
+ *   sourceDir: "skills/funnel-builder",
+ *   agents: ["claude-code"],
+ * });
+ * ```
+ */
+export interface InstallSkillBundleOptions {
+	/** Skill metadata for the installed bundle */
+	meta: SkillMeta;
+	/**
+	 * Source directory containing the bundle to install.
+	 *
+	 * Resolution rules (mirror `@crustjs/create`'s `scaffold({ template })`):
+	 * - `URL` — must use `file:` protocol; resolved via `fileURLToPath()`.
+	 * - Absolute string path — used as-is via `path.resolve()`.
+	 * - Relative string path — resolved from the nearest `package.json`
+	 *   directory walking up from `process.argv[1]`. Throws if `process.argv[1]`
+	 *   is unset or no `package.json` is found.
+	 *
+	 * The directory must contain a `SKILL.md` at its root.
+	 */
+	sourceDir: string | URL;
+	/**
+	 * Agent targets to install the bundle for.
+	 *
+	 * Required — unlike {@link GenerateOptions.agents}, the bundle entrypoint
+	 * does not auto-detect agents. Pass `[]` for a no-op (no install performed).
+	 */
+	agents: AgentTarget[];
+	/**
+	 * Installation strategy for agent output paths.
+	 * @default "auto"
+	 */
+	installMode?: SkillInstallMode;
+	/**
+	 * Installation scope — global (home directory) or project (cwd).
+	 * @default "global"
+	 */
+	scope?: Scope;
+	/**
+	 * When `true`, removes the existing skill directory before writing.
+	 * @default true
+	 */
+	clean?: boolean;
+	/**
+	 * When `true`, overwrite an existing skill directory even if it conflicts
+	 * (no `crust.json`, or a `crust.json` whose `kind` differs from `"bundle"`).
+	 * @default false
+	 */
+	force?: boolean;
+}
+
+/**
+ * Result returned by `installSkillBundle` after writing files to disk.
+ *
+ * Type alias of {@link GenerateResult} — the per-agent shape is identical.
+ */
+export type InstallSkillBundleResult = GenerateResult;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Generation result — returned from generateSkill

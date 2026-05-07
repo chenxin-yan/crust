@@ -12,7 +12,9 @@ export {
 } from "./agents.ts";
 export type { SkillCommandAnnotations } from "./annotations.ts";
 export { annotate } from "./annotations.ts";
-export type { SkillConflictDetails } from "./errors.ts";
+// Bundle install
+export { installSkillBundle } from "./bundle.ts";
+export type { SkillConflictDetails, SkillKindMismatch } from "./errors.ts";
 // Errors
 export { SkillConflictError } from "./errors.ts";
 
@@ -35,9 +37,12 @@ export type {
 	AgentTarget,
 	GenerateOptions,
 	GenerateResult,
+	InstallSkillBundleOptions,
+	InstallSkillBundleResult,
 	InstallStatus,
 	Scope,
 	SkillInstallMode,
+	SkillKind,
 	SkillMeta,
 	SkillPluginOptions,
 	StatusOptions,
