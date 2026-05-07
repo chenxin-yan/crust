@@ -278,3 +278,48 @@ await generateSkill({
   scope: "global",
 });
 ```
+
+## Installing Hand-Authored Bundles
+
+`generateSkill()` produces a skill bundle from a Crust command tree.
+`installSkillBundle()` is the dual entrypoint for **hand-authored** bundles —
+use it when you have a directory containing `SKILL.md` and supporting files
+that should flow through the same canonical-store + agent fan-out plumbing.
+
+```ts
+import { installSkillBundle } from "@crustjs/skills";
+
+await installSkillBundle({
+  meta: {
+    name: "funnel-builder",
+    description: "Build a sales funnel",
+    version: "1.0.0",
+  },
+  // Resolved relative to the nearest package.json walking up from
+  // process.argv[1]. You may also pass an absolute path or a file: URL.
+  sourceDir: "skills/funnel-builder",
+  agents: ["claude-code", "opencode"],
+});
+```
+
+Crust copies the bundle's `SKILL.md` and supporting files verbatim — the
+SKILL.md frontmatter is owned by the bundle author. The following entries
+are excluded **at the bundle root only** (subdirectory dotfiles are kept):
+
+- `node_modules/`, `.git/`, `.DS_Store`
+- A pre-existing `crust.json` (Crust regenerates it)
+- Any dotfile at the root (e.g. `.editorconfig`, `.gitignore`)
+
+### `kind` field on `crust.json`
+
+Every installed bundle records its origin in `crust.json` as a `kind`
+field — `"generated"` for `generateSkill()` output, `"bundle"` for
+`installSkillBundle()`. Crust uses this to detect cross-kind collisions:
+attempting to install a bundle on top of a generated skill (or vice versa)
+at the same name throws a `SkillConflictError` whose `details.kindMismatch`
+carries `{ existing, attempted }`. Uninstall the existing skill first or
+pass `force: true` to overwrite.
+
+Legacy `crust.json` files written before this field existed are read as
+`kind: "generated"` so existing generated installs continue to update
+cleanly without a migration step.
