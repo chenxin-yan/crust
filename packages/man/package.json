@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/man",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "Generate mdoc(7) manual pages from Crust CLI definitions",
 	"type": "module",
 	"license": "MIT",

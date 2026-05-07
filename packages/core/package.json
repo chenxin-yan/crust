@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/core",
-	"version": "0.0.16",
+	"version": "0.0.17",
 	"description": "Core library for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
