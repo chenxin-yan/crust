@@ -81,7 +81,7 @@ const name = await input({
 | `placeholder` | `string`             | —       | Placeholder text shown when input is empty    |
 | `default`     | `string`             | —       | Value used when the user submits empty input  |
 | `initial`     | `string`             | —       | Skip prompt and return this value immediately |
-| `validate`    | `PromptValidate<Output>` | —   | Function (returns `true` or error string) **or** Standard Schema |
+| `validate`    | `ValidateFn<string>` \| Standard Schema v1 | — | Function (returns `true` or error string) **or** Standard Schema (resolves to its transformed `Output`) |
 | `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
 
 See [Schema validation](#schema-validation) for the schema shape and typed return values.
@@ -102,7 +102,7 @@ const secret = await password({
 | `message`  | `string`             | —       | Prompt message                                |
 | `mask`     | `string`             | `"*"`   | Character used to mask the input              |
 | `initial`  | `string`             | —       | Skip prompt and return this value immediately |
-| `validate` | `PromptValidate<Output>` | —   | Function (returns `true` or error string) **or** Standard Schema |
+| `validate` | `ValidateFn<string>` \| Standard Schema v1 | — | Function (returns `true` or error string) **or** Standard Schema (resolves to its transformed `Output`) |
 | `theme`    | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
 
 ## Schema validation
@@ -112,7 +112,9 @@ The `validate` slot on `input()` and `password()` is **polymorphic**:
 - a `(value: string) => true | string | Promise<true | string>` validator, or
 - any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
 
-When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection, and resolves to the schema's transformed `Output` type on success. There is no second-pass parse step.
+When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success. There is no second-pass parse step.
+
+`initial` and non-TTY `default` are also parsed through the schema before being returned, so the `Promise<Output>` contract holds across every short-circuit path. A value the schema rejects throws.
 
 ```ts
 import { input } from "@crustjs/prompts";
@@ -122,7 +124,7 @@ const port = await input({
   message: "Port?",
   validate: z.coerce.number().int().min(1).max(65535),
 });
-//    ^? Promise<number>
+//    ^? number
 ```
 
 ```ts
@@ -134,7 +136,7 @@ const Email = Schema.standardSchemaV1(
 );
 
 const email = await input({ message: "Email?", validate: Email });
-//    ^? Promise<string>
+//    ^? string
 ```
 
 For command-level argument and flag validation against the same schemas, see [`@crustjs/validate`](/docs/modules/validate).
@@ -440,7 +442,6 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | --------------------- | ------------------------------------------------ |
 | `InputOptions<Output>`        | Options for `input()` (generic over schema output)       |
 | `PasswordOptions<Output>`     | Options for `password()` (generic over schema output)    |
-| `PromptValidate<Output>`      | Polymorphic validator union: `ValidateFn<string>` or `StandardSchemaV1<unknown, Output>` |
 | `ConfirmOptions`      | Options for `confirm()`                          |
 | `SelectOptions<T>`    | Options for `select()`                           |
 | `MultiselectOptions<T>` | Options for `multiselect()`                    |

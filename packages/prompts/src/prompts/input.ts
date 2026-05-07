@@ -18,6 +18,32 @@ import {
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Schema parsing helper
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run a Standard Schema against a short-circuit value (`initial` / non-TTY
+ * `default`) and return the parsed output. Throws on schema rejection so the
+ * `Promise<Output>` overload contract holds — short-circuiting can never
+ * silently return a raw `string` where the type promises a transformed value.
+ */
+async function parseShortCircuit<Output>(
+	schema: StandardSchemaV1<unknown, Output>,
+	value: string,
+	source: "initial" | "default",
+): Promise<Output> {
+	const result = await schema["~standard"].validate(value);
+	// Per spec, success is signalled by `issues === undefined`; an empty
+	// `issues: []` from a non-conformant schema would have no issue to surface,
+	// so we treat it as success rather than displaying a phantom error.
+	if (result.issues?.length) {
+		const message = result.issues[0]?.message || "Validation failed";
+		throw new Error(`${source} value rejected by schema: ${message}`);
+	}
+	return (result as { value: Output }).value;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -107,14 +133,17 @@ function createHandleKey<Output>(
 				if (isStandardSchema(validate)) {
 					// Schema path — parse, render first issue on failure,
 					// submit the schema's transformed output on success.
+					// `issues?.length` (rather than just `issues`) defends against
+					// non-conformant schemas returning `{ issues: [] }`, which has
+					// no actual issue to surface and should pass through.
 					const result = await validate["~standard"].validate(submitValue);
-					if (result.issues) {
+					if (result.issues?.length) {
 						return {
 							...state,
 							error: result.issues[0]?.message || "Validation failed",
 						};
 					}
-					return submit(result.value as Output);
+					return submit((result as { value: Output }).value);
 				}
 
 				// Function path — preserved unchanged.
@@ -257,16 +286,30 @@ export function input(
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;
+export function input<Output>(
+	options: InputOptions<Output>,
+): Promise<Output | string>;
 export async function input<Output>(
 	options: InputOptions<Output> = {},
 ): Promise<Output | string> {
-	// Short-circuit: return initial value immediately without rendering
+	// Short-circuit: return initial value immediately without rendering.
+	// When `validate` is a Standard Schema we MUST parse the short-circuit
+	// value through it so the `Promise<Output>` overload stays sound — a raw
+	// string would otherwise leak where the caller is statically promised the
+	// schema's transformed output type.
 	if (options.initial !== undefined) {
+		if (isStandardSchema(options.validate)) {
+			return parseShortCircuit(options.validate, options.initial, "initial");
+		}
 		return options.initial;
 	}
 
-	// Non-interactive fallback: return default value when stdin is not a TTY
+	// Non-interactive fallback: return default value when stdin is not a TTY.
+	// Same schema-soundness rule as above.
 	if (!isTTY() && options.default !== undefined) {
+		if (isStandardSchema(options.validate)) {
+			return parseShortCircuit(options.validate, options.default, "default");
+		}
 		return options.default;
 	}
 

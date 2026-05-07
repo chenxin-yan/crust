@@ -118,27 +118,42 @@ export type ValidateFn<T> = (
  *
  * When a schema is supplied, the prompt resolves to the schema's transformed
  * output type instead of the raw `string`.
+ *
+ * @internal Surfaced via the `validate` slot on `InputOptions` /
+ * `PasswordOptions`; not re-exported from the package root because callers
+ * can derive it from those option types when needed.
  */
 export type PromptValidate<Output> =
 	| ValidateFn<string>
 	| StandardSchemaV1<unknown, Output>;
 
 /**
- * Type guard: is `value` a Standard Schema v1 object?
+ * Type guard: discriminate the polymorphic `validate` slot.
  *
- * Discriminates the polymorphic `validate` slot at runtime by checking for the
- * `~standard` property with `version === 1`. This lets `input()` / `password()`
- * accept either a `ValidateFn<string>` or a Standard Schema without depending
- * on any specific schema library.
+ * Accepts both plain object schemas and callable schema instances (the
+ * Standard Schema spec only requires the `~standard` property; some vendors
+ * expose schemas as callable function-objects). Also asserts that
+ * `~standard.validate` is itself a function so a malformed value cannot slip
+ * through and crash later inside the prompt.
+ *
+ * @internal Used only by `input()` and `password()` to dispatch between the
+ * function-validator and Standard Schema branches.
  */
-export function isStandardSchema(
-	value: unknown,
-): value is StandardSchemaV1<unknown, unknown> {
+export function isStandardSchema<Output>(
+	value: PromptValidate<Output> | undefined,
+): value is StandardSchemaV1<unknown, Output> {
+	if (value === undefined || value === null) return false;
+	const t = typeof value;
+	if (t !== "object" && t !== "function") return false;
+	const std = (
+		value as {
+			"~standard"?: { version?: unknown; validate?: unknown };
+		}
+	)["~standard"];
 	return (
-		typeof value === "object" &&
-		value !== null &&
-		"~standard" in value &&
-		(value as { "~standard"?: { version?: unknown } })["~standard"]?.version ===
-			1
+		!!std &&
+		typeof std === "object" &&
+		std.version === 1 &&
+		typeof std.validate === "function"
 	);
 }

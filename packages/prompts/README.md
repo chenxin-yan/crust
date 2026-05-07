@@ -27,7 +27,7 @@ const secret = await password({
 });
 ```
 
-Pass `initial` to skip interactivity (useful for prefilling from CLI flags or in CI). When stdin is not a TTY, `default` is returned automatically when set; otherwise a `NonInteractiveError` is thrown.
+Pass `initial` to skip interactivity (useful for prefilling from CLI flags or in CI). For prompts that support a `default` (`input`, `confirm`, `multiselect`, `filter`), the default is also returned automatically when stdin is not a TTY; otherwise a `NonInteractiveError` is thrown.
 
 ## Schema validation
 
@@ -36,7 +36,7 @@ The `validate` slot on `input()` and `password()` is **polymorphic**:
 - a `(value: string) => true | string | Promise<true | string>` validator, or
 - any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
 
-When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection, and resolves to the schema's transformed `Output` type on success — no second-pass parse step.
+When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success — no second-pass parse step. `initial` and non-TTY `default` are parsed through the schema as well, so the `Promise<Output>` contract holds for every code path; a value the schema rejects throws.
 
 ```ts
 import { input } from "@crustjs/prompts";
@@ -46,7 +46,7 @@ const port = await input({
   message: "Port?",
   validate: z.coerce.number().int().min(1).max(65535),
 });
-//    ^? Promise<number>
+//    ^? number
 ```
 
 ```ts
@@ -58,7 +58,7 @@ const Email = Schema.standardSchemaV1(
 );
 
 const email = await input({ message: "Email?", validate: Email });
-//    ^? Promise<string>
+//    ^? string
 ```
 
 For command-level argument and flag validation against the same schemas, see [`@crustjs/validate`](https://crustjs.com/docs/modules/validate).

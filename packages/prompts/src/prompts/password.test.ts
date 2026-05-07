@@ -580,4 +580,196 @@ describe("password — schema validation", () => {
 		expect(result).toBe(4242);
 		expect(typeof result).toBe("number");
 	});
+
+	it("awaits async schema validation", async () => {
+		const asyncSchema = z.string().refine(
+			async (v) => {
+				await new Promise((r) => setTimeout(r, 5));
+				return v === "open-sesame";
+			},
+			{ message: "wrong passphrase" },
+		);
+
+		const promise = password({
+			message: "Passphrase?",
+			validate: asyncSchema,
+		});
+
+		await tick();
+		for (const ch of "wrong") {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+		await tick(20);
+
+		expect(stderrOutput).toContain("wrong passphrase");
+
+		// Clear and type the correct value.
+		for (let i = 0; i < 5; i++) {
+			pressKey("", { name: "backspace" });
+			await tick();
+		}
+		for (const ch of "open-sesame") {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+		await tick(20);
+
+		const result = await promise;
+		expect(result).toBe("open-sesame");
+	});
+
+	it("falls back to 'Validation failed' when issue message is empty", async () => {
+		const emptyMessageSchema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => {
+					if (value === "good") return { value: value as string };
+					return { issues: [{ message: "" }] };
+				},
+			},
+		};
+
+		const promise = password({
+			message: "Word?",
+			validate: emptyMessageSchema,
+		});
+
+		await tick();
+		pressKey("x");
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("Validation failed");
+
+		pressKey("", { name: "backspace" });
+		await tick();
+		for (const ch of "good") {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("good");
+	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Schema short-circuit (initial) soundness
+// ────────────────────────────────────────────────────────────────────────────
+//
+// When `validate` is a Standard Schema, `initial` must flow through it.
+// Otherwise the `Promise<Output>` overload silently leaks a raw `string`.
+
+describe("password — schema short-circuit", () => {
+	it("parses `initial` through the schema and returns transformed output", async () => {
+		const result = await password({
+			message: "PIN?",
+			initial: "4242",
+			validate: z.coerce.number().int(),
+		});
+
+		expect(result).toBe(4242);
+		expect(typeof result).toBe("number");
+	});
+
+	it("throws when `initial` is rejected by the schema", async () => {
+		await expect(
+			password({
+				message: "PIN?",
+				initial: "abc",
+				validate: z.coerce.number().int(),
+			}),
+		).rejects.toThrow(/initial value rejected by schema/);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Secrecy — raw value never appears in rendered output
+// ────────────────────────────────────────────────────────────────────────────
+//
+// The masking comment in the rendering test only said the raw value
+// shouldn't appear; it never asserted that. Tighten across the schema
+// rejection and submission paths so a regression is loud.
+
+describe("password — secrecy", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	// A unique, unlikely-to-appear-in-prompt-chrome marker so any leak fails
+	// the assertion deterministically.
+	const SECRET = "hunter2-XYZ";
+
+	it("never renders the raw value while typing or after submission", async () => {
+		const promise = password({ message: "Password?" });
+
+		await tick();
+		for (const ch of SECRET) {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+		await promise;
+
+		expect(stderrOutput).not.toContain(SECRET);
+	});
+
+	it("never renders the raw value when schema validation rejects", async () => {
+		const promise = password({
+			message: "Password?",
+			validate: z.string().min(64, "too short"),
+		});
+
+		await tick();
+		for (const ch of SECRET) {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("too short");
+		expect(stderrOutput).not.toContain(SECRET);
+
+		// Resolve the prompt cleanly with a long-enough valid value.
+		for (let i = 0; i < SECRET.length; i++) {
+			pressKey("", { name: "backspace" });
+			await tick();
+		}
+		for (const ch of "x".repeat(64)) {
+			pressKey(ch);
+			await tick();
+		}
+		pressKey("", { name: "return" });
+		await promise;
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+async function _passwordTypeInferenceTests() {
+	// Schema overload — resolves to the schema's transformed Output.
+	const pin = await password({
+		message: "?",
+		validate: z.coerce.number(),
+	});
+	const _pinIsNumber: number = pin;
+
+	// Function-validator overload — resolves to string.
+	const secret = await password({
+		message: "?",
+		validate: (v) => v.length >= 8 || "too short",
+	});
+	const _secretIsString: string = secret;
+
+	// No validate — resolves to string.
+	const raw = await password({ message: "?" });
+	const _rawIsString: string = raw;
+}

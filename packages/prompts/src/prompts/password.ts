@@ -18,6 +18,28 @@ import {
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Schema parsing helper
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run a Standard Schema against a short-circuit `initial` value and return
+ * the parsed output. Throws on schema rejection so the `Promise<Output>`
+ * overload contract holds. Note: only the schema's issue message surfaces in
+ * the thrown error — the original masked value never appears in the error.
+ */
+async function parseShortCircuit<Output>(
+	schema: StandardSchemaV1<unknown, Output>,
+	value: string,
+): Promise<Output> {
+	const result = await schema["~standard"].validate(value);
+	if (result.issues) {
+		const message = result.issues[0]?.message || "Validation failed";
+		throw new Error(`initial value rejected by schema: ${message}`);
+	}
+	return result.value;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -81,14 +103,17 @@ function createHandleKey<Output>(
 		if (key.name === "return") {
 			if (validate) {
 				if (isStandardSchema(validate)) {
+					// `issues?.length` (rather than just `issues`) defends against
+					// non-conformant schemas returning `{ issues: [] }`, which has
+					// no actual issue to surface and should pass through.
 					const result = await validate["~standard"].validate(state.value);
-					if (result.issues) {
+					if (result.issues?.length) {
 						return {
 							...state,
 							error: result.issues[0]?.message || "Validation failed",
 						};
 					}
-					return submit(result.value as Output);
+					return submit((result as { value: Output }).value);
 				}
 
 				const fnResult = await (validate as ValidateFn<string>)(state.value);
@@ -217,11 +242,21 @@ export function password(
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;
+export function password<Output>(
+	options: PasswordOptions<Output>,
+): Promise<Output | string>;
 export async function password<Output>(
 	options: PasswordOptions<Output> = {},
 ): Promise<Output | string> {
-	// Short-circuit: return initial value immediately without rendering
+	// Short-circuit: return initial value immediately without rendering.
+	// When `validate` is a Standard Schema we MUST parse the short-circuit
+	// value through it so the `Promise<Output>` overload stays sound — a raw
+	// string would otherwise leak where the caller is statically promised the
+	// schema's transformed output type.
 	if (options.initial !== undefined) {
+		if (isStandardSchema(options.validate)) {
+			return parseShortCircuit(options.validate, options.initial);
+		}
 		return options.initial;
 	}
 

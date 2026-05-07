@@ -752,6 +752,65 @@ describe("input — schema validation", () => {
 		expect(result).toBe("ok");
 	});
 
+	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
+		// Spec only marks `issues === undefined` as success, but a malformed
+		// schema returning an empty array has no actual issue to surface —
+		// guarding on `?.length` prevents a phantom "Validation failed" error.
+		const emptyIssuesSchema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({
+					value: value as string,
+					issues: [] as const,
+				}),
+			},
+		};
+
+		const promise = input({ message: "Word?", validate: emptyIssuesSchema });
+
+		await tick();
+		pressKey("o");
+		await tick();
+		pressKey("k");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("ok");
+		expect(stderrOutput).not.toContain("Validation failed");
+	});
+
+	it("surfaces zod's built-in issue message (no custom .message override)", async () => {
+		// Sanity check that a real zod issue message reaches the renderer — we
+		// derive the expected text from the same schema instead of asserting a
+		// hard-coded string, so this can't accidentally pass when zod's default
+		// messages change.
+		const schema = z.string().min(3);
+		const expectedMessage =
+			schema.safeParse("a").error?.issues[0]?.message ?? "";
+		expect(expectedMessage).not.toBe("");
+
+		const promise = input({ message: "Code?", validate: schema });
+
+		await tick();
+		pressKey("a");
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain(expectedMessage);
+
+		pressKey("b");
+		await tick();
+		pressKey("c");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("abc");
+	});
+
 	it("awaits async schema validation", async () => {
 		const asyncSchema = z.string().refine(
 			async (v) => {
@@ -790,3 +849,170 @@ describe("input — schema validation", () => {
 		expect(result).toBe("yes");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Schema short-circuit (initial / non-TTY default) soundness
+// ────────────────────────────────────────────────────────────────────────────
+//
+// When `validate` is a Standard Schema, `initial` and non-TTY `default` must
+// flow through the schema before being returned. Otherwise the
+// `Promise<Output>` overload silently leaks a raw `string`.
+
+describe("input — schema short-circuit", () => {
+	it("parses `initial` through the schema and returns the transformed output", async () => {
+		const result = await input({
+			message: "Port?",
+			initial: "8080",
+			validate: z.coerce.number().int(),
+		});
+
+		expect(result).toBe(8080);
+		expect(typeof result).toBe("number");
+	});
+
+	it("throws when `initial` is rejected by the schema", async () => {
+		await expect(
+			input({
+				message: "Port?",
+				initial: "not-a-number",
+				validate: z.coerce.number().int(),
+			}),
+		).rejects.toThrow(/initial value rejected by schema/);
+	});
+
+	it("parses non-TTY `default` through the schema and returns transformed output", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		try {
+			const result = await input({
+				message: "Port?",
+				default: "3000",
+				validate: z.coerce.number().int(),
+			});
+
+			expect(result).toBe(3000);
+			expect(typeof result).toBe("number");
+		} finally {
+			Object.defineProperty(process.stdin, "isTTY", {
+				value: originalIsTTY,
+				writable: true,
+				configurable: true,
+			});
+		}
+	});
+
+	it("throws when non-TTY `default` is rejected by the schema", async () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			writable: true,
+			configurable: true,
+		});
+
+		try {
+			await expect(
+				input({
+					message: "Port?",
+					default: "abc",
+					validate: z.coerce.number().int(),
+				}),
+			).rejects.toThrow(/default value rejected by schema/);
+		} finally {
+			Object.defineProperty(process.stdin, "isTTY", {
+				value: originalIsTTY,
+				writable: true,
+				configurable: true,
+			});
+		}
+	});
+});
+
+describe("input — schema + interactive default", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("runs schema against the default value when user submits empty", async () => {
+		const promise = input({
+			message: "Port?",
+			default: "4000",
+			validate: z.coerce.number().int(),
+		});
+
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe(4000);
+		expect(typeof result).toBe("number");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Callable Standard Schema dispatch
+// ────────────────────────────────────────────────────────────────────────────
+//
+// The Standard Schema spec only requires the `~standard` property; some
+// vendors (e.g. Effect Schema's `Schema.standardSchemaV1`) expose schemas as
+// callable function-objects. Our guard must accept both shapes.
+
+describe("input — callable Standard Schema", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("dispatches a callable schema through the schema branch", async () => {
+		// Build a callable function that also has a `~standard` property.
+		const callable = Object.assign((_value: unknown) => undefined, {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => {
+					if (typeof value === "string" && value.length > 0) {
+						return { value: `[${value}]` };
+					}
+					return { issues: [{ message: "empty" }] };
+				},
+			},
+		});
+
+		const promise = input({ message: "Word?", validate: callable });
+
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+		expect(stderrOutput).toContain("empty");
+
+		pressKey("a");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("[a]");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+async function _inputTypeInferenceTests() {
+	// Schema overload — resolves to the schema's transformed Output.
+	const port = await input({
+		message: "?",
+		validate: z.coerce.number(),
+	});
+	const _portIsNumber: number = port;
+
+	// Function-validator overload — resolves to string.
+	const name = await input({
+		message: "?",
+		validate: (v) => v.length > 0 || "required",
+	});
+	const _nameIsString: string = name;
+
+	// No validate — resolves to string.
+	const raw = await input({ message: "?" });
+	const _rawIsString: string = raw;
+}
