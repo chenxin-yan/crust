@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { z } from "zod";
 import { password } from "./password.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -503,5 +504,80 @@ describe("password — non-TTY", () => {
 		});
 
 		expect(result).toBe("secret123");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Standard Schema validation (TP-013)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("password — schema validation", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("resolves to string when a string schema accepts the input", async () => {
+		const promise = password({
+			message: "Password?",
+			validate: z.string().min(3),
+		});
+
+		await tick();
+		pressKey("a");
+		await tick();
+		pressKey("b");
+		await tick();
+		pressKey("c");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("abc");
+		expect(typeof result).toBe("string");
+	});
+
+	it("renders the first issue's message and waits for retry on failure", async () => {
+		const promise = password({
+			message: "Password?",
+			validate: z.string().min(3, "Too short"),
+		});
+
+		await tick();
+		pressKey("a");
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("Too short");
+
+		pressKey("b");
+		await tick();
+		pressKey("c");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("abc");
+	});
+
+	it("resolves to the schema's transformed output (number from coerce)", async () => {
+		const promise = password({
+			message: "PIN?",
+			validate: z.coerce.number().int().min(1000),
+		});
+
+		await tick();
+		pressKey("4");
+		await tick();
+		pressKey("2");
+		await tick();
+		pressKey("4");
+		await tick();
+		pressKey("2");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe(4242);
+		expect(typeof result).toBe("number");
 	});
 });

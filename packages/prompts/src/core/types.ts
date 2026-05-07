@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { StyleFn } from "@crustjs/style";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -106,3 +107,38 @@ export type ValidateResult = true | string;
 export type ValidateFn<T> = (
 	value: T,
 ) => ValidateResult | Promise<ValidateResult>;
+
+/**
+ * Polymorphic validate slot for text-input prompts.
+ *
+ * Accepts either:
+ * - a {@link ValidateFn} (returns `true` for valid or a string error), or
+ * - a {@link StandardSchemaV1} schema (e.g. Zod, Valibot, Effect Schema)
+ *   that parses the raw `string` input into a transformed `Output`.
+ *
+ * When a schema is supplied, the prompt resolves to the schema's transformed
+ * output type instead of the raw `string`.
+ */
+export type PromptValidate<Output> =
+	| ValidateFn<string>
+	| StandardSchemaV1<unknown, Output>;
+
+/**
+ * Type guard: is `value` a Standard Schema v1 object?
+ *
+ * Discriminates the polymorphic `validate` slot at runtime by checking for the
+ * `~standard` property with `version === 1`. This lets `input()` / `password()`
+ * accept either a `ValidateFn<string>` or a Standard Schema without depending
+ * on any specific schema library.
+ */
+export function isStandardSchema(
+	value: unknown,
+): value is StandardSchemaV1<unknown, unknown> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"~standard" in value &&
+		(value as { "~standard"?: { version?: unknown } })["~standard"]?.version ===
+			1
+	);
+}

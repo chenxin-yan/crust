@@ -11,9 +11,11 @@ export type {
 	Choice,
 	PartialPromptTheme,
 	PromptTheme,
+	PromptValidate,
 	ValidateFn,
 	ValidateResult,
 } from "./core/types.ts";
+export { isStandardSchema } from "./core/types.ts";
 export type { NormalizedChoice } from "./core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

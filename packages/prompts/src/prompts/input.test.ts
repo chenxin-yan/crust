@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { z } from "zod";
 import { input } from "./input.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -637,5 +638,155 @@ describe("input — non-TTY", () => {
 		});
 
 		expect(result).toBe("from-flag");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Standard Schema validation (TP-013)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("input — schema validation", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("resolves to string when a string schema accepts the input", async () => {
+		const promise = input({
+			message: "Name?",
+			validate: z.string().min(3),
+		});
+
+		await tick();
+		pressKey("A");
+		await tick();
+		pressKey("l");
+		await tick();
+		pressKey("i");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("Ali");
+		expect(typeof result).toBe("string");
+	});
+
+	it("resolves to the schema's transformed output (number from coerce)", async () => {
+		const promise = input({
+			message: "Port?",
+			validate: z.coerce.number().int().min(1),
+		});
+
+		await tick();
+		pressKey("4");
+		await tick();
+		pressKey("2");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe(42);
+		expect(typeof result).toBe("number");
+	});
+
+	it("renders the first issue's message and waits for retry on failure", async () => {
+		const promise = input({
+			message: "Name?",
+			validate: z.string().min(3, "Too short"),
+		});
+
+		await tick();
+		pressKey("A");
+		await tick();
+		// Submit too-short value
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("Too short");
+
+		// Add more characters and retry
+		pressKey("l");
+		await tick();
+		pressKey("i");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("Ali");
+	});
+
+	it("falls back to 'Validation failed' when issue message is empty", async () => {
+		// Custom Standard Schema that returns an empty-message issue.
+		const emptyMessageSchema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => {
+					if (value === "ok") return { value: value as string };
+					return { issues: [{ message: "" }] };
+				},
+			},
+		};
+
+		const promise = input({
+			message: "Word?",
+			validate: emptyMessageSchema,
+		});
+
+		await tick();
+		pressKey("x");
+		await tick();
+		pressKey("", { name: "return" });
+		await tick();
+
+		expect(stderrOutput).toContain("Validation failed");
+
+		// Clear field, type valid value, submit
+		pressKey("", { name: "backspace" });
+		await tick();
+		pressKey("o");
+		await tick();
+		pressKey("k");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("ok");
+	});
+
+	it("awaits async schema validation", async () => {
+		const asyncSchema = z.string().refine(
+			async (v) => {
+				await new Promise((r) => setTimeout(r, 5));
+				return v === "yes";
+			},
+			{ message: "must be yes" },
+		);
+
+		const promise = input({ message: "Confirm?", validate: asyncSchema });
+
+		await tick();
+		pressKey("n");
+		await tick();
+		pressKey("o");
+		await tick();
+		pressKey("", { name: "return" });
+		await tick(20);
+
+		expect(stderrOutput).toContain("must be yes");
+
+		// Clear and type valid value
+		pressKey("", { name: "backspace" });
+		await tick();
+		pressKey("", { name: "backspace" });
+		await tick();
+		pressKey("y");
+		await tick();
+		pressKey("e");
+		await tick();
+		pressKey("s");
+		await tick();
+		pressKey("", { name: "return" });
+
+		const result = await promise;
+		expect(result).toBe("yes");
 	});
 });
