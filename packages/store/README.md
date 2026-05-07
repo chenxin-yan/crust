@@ -319,7 +319,10 @@ Add per-field validation to enforce config integrity on every read, write, updat
 
 ### Using `@crustjs/validate`
 
-The easiest way to add validation is with [field adapters](https://crustjs.com/docs/modules/validate#store-field-validation) from `@crustjs/validate`:
+The easiest way to add validation is with [`field()`](https://crustjs.com/docs/modules/validate#store-field-validation)
+from `@crustjs/validate`. The factory builds a complete `FieldDef` from a
+schema — type, default, description, and the per-field validator are
+all derived in one call:
 
 ```ts
 import { z } from "zod";
@@ -329,11 +332,7 @@ import { createStore, configDir } from "@crustjs/store";
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: {
-      type: "string",
-      default: "light",
-      validate: field(z.enum(["light", "dark"])),
-    },
+    theme: field(z.enum(["light", "dark"]).default("light")),
     verbose: { type: "boolean", default: false },
   },
 });
@@ -347,11 +346,7 @@ const config = await store.read();
 // → throws if persisted config is invalid
 ```
 
-`fieldSync()` is also available for synchronous schemas. For the full field
-validator contract — sync vs async, error normalization, and prompt-side
-integration — see [`@crustjs/validate` Store field validation](https://crustjs.com/docs/modules/validate#store-field-validation).
-
-For Effect schemas, wrap with `Schema.standardSchemaV1()`:
+For Effect schemas, wrap once with `Schema.standardSchemaV1()`:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -360,11 +355,7 @@ import { field } from "@crustjs/validate";
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: {
-      type: "string",
-      default: "light",
-      validate: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
-    },
+    theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
   },
 });
 ```

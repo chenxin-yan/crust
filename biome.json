@@ -7,7 +7,15 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!**/dist", "!!.turbo"]
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!.turbo",
+			"!!**/.pi-lens",
+			"!!.pi",
+			"!!.worktrees",
+			"!!taskplane-tasks/dependencies.json"
+		]
 	},
 	"formatter": {
 		"enabled": true,

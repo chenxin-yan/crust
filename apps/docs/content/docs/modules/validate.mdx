@@ -20,6 +20,25 @@ bun add zod      # Zod 4 schemas are Standard Schemas natively
 bun add effect   # wrap once with Schema.standardSchemaV1(...)
 ```
 
+## Locked public surface
+
+The package exports exactly **eight** functions from a single root entry:
+
+| Function | Purpose |
+| --- | --- |
+| `arg(name, schema, opts?)` | Define a positional argument |
+| `flag(schema, opts?)` | Define a flag |
+| `commandValidator(handler)` | Wrap a Crust handler with full schema validation |
+| `field(schema, opts?)` | Build a `@crustjs/store` field definition |
+| `parseValue(schema, value)` | Validate + return typed output (throws on failure) |
+| `validateStandard(schema, value)` | Async low-level primitive (returns a result) |
+| `validateStandardSync(schema, value)` | Sync low-level primitive (throws on async schemas) |
+| `isStandardSchema(value)` | Runtime type guard for Standard Schema v1 |
+
+Every helper accepts any Standard Schema v1 object. Vendor introspection
+(Zod, Effect) auto-derives metadata where possible; explicit options
+always win silently.
+
 ## Quick start — Zod
 
 ```ts
@@ -36,9 +55,7 @@ const serve = new Crust("serve")
   .flags({
     verbose: flag(
       z.boolean().default(false).describe("Enable verbose logging"),
-      {
-        short: "v",
-      },
+      { short: "v" },
     ),
   })
   .run(
@@ -55,8 +72,9 @@ needed.
 ## Quick start — Effect
 
 Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
-passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
-registry walks to recover the same metadata Zod gives natively.
+passing them to `arg()` / `flag()` / `field()`. The wrapper exposes
+`.ast`, which the registry walks to recover the same metadata Zod gives
+natively.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -84,91 +102,40 @@ const serve = new Crust("serve")
   );
 ```
 
-If the boilerplate gets noisy, drop these two helpers into your project
-and use them as 1:1 replacements for `arg`/`flag`. They wrap each raw
-Effect schema with `Schema.standardSchemaV1(...)` and project the
-schema's `A`/`I` onto Standard Schema so handler types stay precise:
+If the boilerplate gets noisy, drop these helpers into your project for
+1:1 replacements:
 
 ```ts
-import {
-  arg,
-  flag,
-  type ArgDef,
-  type ArgOptions,
-  type FlagDef,
-  type FlagOptions,
-} from "@crustjs/validate";
-import type { StandardSchema } from "@crustjs/validate";
+import { arg, flag, type ArgDef, type FlagDef, type StandardSchema } from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
 type EffectAsStandardSchema<S> = S extends Schema.Schema<infer A, infer I>
   ? StandardSchema<I, A>
   : StandardSchema;
 
-export const earg = <
-  Name extends string,
-  S extends Schema.Schema.AnyNoContext,
-  const Variadic extends true | undefined = undefined,
->(
+export const earg = <Name extends string, S extends Schema.Schema.AnyNoContext>(
   name: Name,
   schema: S,
-  options?: ArgOptions & { variadic?: Variadic },
-) =>
-  arg(
-    name,
-    Schema.standardSchemaV1(
-      schema as Parameters<typeof Schema.standardSchemaV1>[0],
-    ),
-    options,
-  ) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
+  options?: Parameters<typeof arg>[2],
+) => arg(name, Schema.standardSchemaV1(schema as never), options) as unknown as ArgDef<Name, EffectAsStandardSchema<S>>;
 
-export const eflag = <
-  S extends Schema.Schema.AnyNoContext,
-  const Short extends string | undefined = undefined,
-  const Aliases extends readonly string[] | undefined = undefined,
-  const Inherit extends true | undefined = undefined,
->(
+export const eflag = <S extends Schema.Schema.AnyNoContext>(
   schema: S,
-  options?: FlagOptions & {
-    short?: Short;
-    aliases?: Aliases;
-    inherit?: Inherit;
-  },
-) =>
-  flag(
-    Schema.standardSchemaV1(
-      schema as Parameters<typeof Schema.standardSchemaV1>[0],
-    ),
-    options,
-  ) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
+  options?: Parameters<typeof flag>[1],
+) => flag(Schema.standardSchemaV1(schema as never), options) as unknown as FlagDef<EffectAsStandardSchema<S>>;
 ```
-
-With these helpers, `commandValidator(({ args, flags }) => { ... })`
-sees `args.<name>` and `flags.<name>` typed as the schema's parsed `A`,
-not `unknown` or `never`.
-
-If you prefer not to maintain the wrapper, the deprecated
-`@crustjs/validate/effect` subpath ships the same shim pre-built and
-remains supported until 1.0.0.
-
-The root package itself does **not** export these helpers — keeping the
-public surface vendor-neutral lets every Standard Schema library land
-on the same code path.
 
 <Callout type="warn" title="Effect ≥ 3.14.2 required">
   Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
   registry walks. On 3.14.0 and 3.14.1 the wrapper is a plain object and the
-  registry cannot introspect it — supply `type:` (and `required:` /
-  `description:`) explicitly via the second argument. The deprecated
-  `@crustjs/validate/effect` subpath calls `standardSchemaV1` internally and is
-  subject to the same floor.
+  registry cannot introspect it — supply `type:` / `description:` explicitly via
+  the second argument.
 </Callout>
 
 ## Quick start — other Standard Schema vendors
 
-For any other library implementing the spec (Valibot, ArkType, Sury,
-…), supply CLI metadata explicitly. The schema still drives validation;
-you just hand-craft the parser hint:
+For any other library implementing the spec, supply CLI metadata
+explicitly:
 
 ```ts
 import { arg, commandValidator } from "@crustjs/validate";
@@ -189,45 +156,12 @@ new Crust("hi")
   );
 ```
 
-If you forget to supply `type:` for an unknown vendor, `arg()` / `flag()`
-throws a `CrustError("DEFINITION")` that names the failing arg/flag and
-the detected `vendor`.
-
-Unknown-vendor schemas have no introspection available, so the second
-argument is the full source of CLI metadata:
-
-- **`type`** is required — pick `"string" | "number" | "boolean"`.
-- **`required`** defaults to `true`. Optionality cannot be inferred from
-  the schema; pass `required: false` for optional args/flags.
-- **`description`** is taken verbatim from `options.description`.
-- **`variadic: true`** on `arg()` declares a variadic positional that
-  collects remaining inputs into an array. The inferred TypeScript type is
-  always `T[]` — a possibly-empty array, never `T[] | undefined`. Combining
-  `variadic: true` with `required: true` only makes validation fail on an
-  empty array; the inferred type is still `T[]`.
-- **`multiple: true`** on `flag()` declares a multi-value flag that
-  collects repeated occurrences into an array.
-
-```ts
-import { arg, flag } from "@crustjs/validate";
-import * as v from "valibot";
-
-arg("files", v.array(v.string()), {
-  type: "string",
-  variadic: true,
-});
-
-flag(v.array(v.string()), {
-  type: "string",
-  multiple: true,
-  short: "I",
-  description: "Include path (repeatable)",
-});
-```
+If `type:` is missing for an unknown vendor, `arg()` / `flag()` /
+`field()` throws a `CrustError("DEFINITION")` naming the failing
+definition.
 
 For Zod and Effect, explicit options still win silently over anything
-the registry inferred — `type`, `required`, `description`, `multiple`,
-and `variadic` are full overrides everywhere.
+the registry inferred — every key is a full override.
 
 ## Command validation
 
@@ -237,57 +171,75 @@ builder that:
 1. Reads the Standard Schema attached to each `arg()` / `flag()` definition.
 2. Validates parsed CLI input against every schema (handles sync and
    `Promise`-returning `~standard.validate` transparently).
-3. Calls `handler` with `ValidatedContext` containing the transformed
+3. Calls `handler` with a `ValidatedContext` containing the transformed
    values, or throws `CrustError("VALIDATION")` with normalized issues.
 
 **Strict mode**: every `arg`/`flag` must come from this package's `arg()`
 / `flag()` helpers. Mixing in a plain core def causes the handler
 parameter to resolve to `never` at compile time.
 
-## Prompt validation
+## Prompt integration
+
+`@crustjs/prompts` accepts any Standard Schema directly via its
+polymorphic `validate:` slot — no validator helper is required:
 
 ```ts
-import { promptValidator, parsePromptValue } from "@crustjs/validate";
+import { input } from "@crustjs/prompts";
 import { z } from "zod";
 
-const validate = promptValidator(z.email("Enter a valid email"));
-//   ^? (input: unknown) => Promise<true | string>
-
-const value = await parsePromptValue(z.email(), userInput);
-//    ^? string  (throws CrustError("VALIDATION") on failure)
+const email = await input({
+  message: "Enter your email",
+  validate: z.email("Enter a valid email"),
+});
 ```
 
-`promptValidator(schema, { errorStrategy })` accepts:
+For non-prompt code that wants a typed value back from any input
+(coerced, transformed, or refined), use `parseValue`:
 
-- `errorStrategy: "first"` (default) — single first-issue message
-- `errorStrategy: "all"` — multi-line bullet list with every issue
+```ts
+import { parseValue } from "@crustjs/validate";
+import { z } from "zod";
+
+const port = await parseValue(z.coerce.number().int().positive(), "8080");
+// port is typed as `number`
+```
+
+`parseValue` throws `CrustError("VALIDATION")` with all issues in
+`error.details.issues` on failure.
 
 ## Store field validation
 
+`field(schema, opts?)` returns a `FieldDef` value that structurally fits
+`@crustjs/store`'s discriminated union — store has zero runtime
+dependency on validate. Introspection auto-derives `type`, `default`,
+`array`, and `description`; pass `opts` to override silently.
+
 ```ts
 import { configDir, createStore } from "@crustjs/store";
-import { field, fieldSync } from "@crustjs/validate";
+import { field } from "@crustjs/validate";
 import { z } from "zod";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: {
-      type: "string",
-      default: "light",
-      validate: field(z.enum(["light", "dark"])),
-    },
-    port: {
-      type: "number",
-      default: 3000,
-      validate: fieldSync(z.number().int().min(1)),
-    },
+    theme: field(z.enum(["light", "dark"]).default("light")),
+    port: field(z.number().int().min(1).default(3000)),
+    tags: field(z.array(z.string()).default([])),
   },
 });
 ```
 
-`field(schema)` is async-safe; `fieldSync(schema)` throws if the schema
-returns a `Promise`.
+### Schema-derived defaults and TypeScript
+
+Standard Schema v1 has no spec-portable type-level access to schema
+defaults. As a result:
+
+- `field(z.string().default("x"))` populates `default: "x"` at runtime,
+  but the inferred config type is `string | undefined` (NOT narrowed).
+- `field(z.string(), { default: "x" })` populates `default: "x"` AND
+  narrows the inferred config type to `string`.
+
+For tight typing of default-bearing fields, prefer the explicit form.
 
 ## Validation errors
 
@@ -298,9 +250,64 @@ All failures normalize to `CrustError("VALIDATION")` with:
   issues with dot-paths (`args[0].port`, `flags.verbose`, …).
 - `error.cause` — the same array of issues.
 
+## Migrating from 0.1.x
+
+`@crustjs/validate` 0.2.0 removes the deprecated subpath barrels and
+trims the public surface to the locked 8-function root.
+
+**Subpath removal (breaking):**
+
+```ts
+// 0.1.x
+import { arg, flag, commandValidator } from "@crustjs/validate/zod";
+import { promptValidator, field } from "@crustjs/validate/standard";
+import { arg, flag } from "@crustjs/validate/effect"; // auto-wrapped raw Effect
+
+// 0.2.0
+import { arg, flag, commandValidator, field } from "@crustjs/validate";
+// Effect users wrap once with Schema.standardSchemaV1(...) — see Quick start.
+```
+
+The `effect` peer dependency was removed; install `effect` yourself at
+your preferred version (≥ 3.14.2 to keep introspection working).
+
+**Helper renames and removals:**
+
+| 0.1.x | 0.2.0 |
+| --- | --- |
+| `parsePromptValue(schema, v)` | `parseValue(schema, v)` |
+| `parsePromptValueSync(schema, v)` | use `validateStandardSync(schema, v)` and check `result.ok` |
+| `promptValidator(schema)` | pass `schema` directly to `input({ validate: schema })` |
+| `field(schema)` (validator-only) | `field(schema)` now returns a full `FieldDef` |
+| `fieldSync(schema)` | use `field(schema)` (the resulting `validate` is async) |
+
+The `errorStrategy` option on `promptValidator` is gone everywhere. Prompts
+render the first issue inline; `parseValue` throws with all issues in
+`error.details.issues`. There is no toggle.
+
+**`field()` shape change (breaking):**
+
+```ts
+// 0.1.x — schema repeated, validator-only field()
+fields: {
+  theme: {
+    type: "string",
+    default: "light",
+    validate: field(z.enum(["light", "dark"])),
+  },
+}
+
+// 0.2.0 — single source of truth
+fields: {
+  theme: field(z.enum(["light", "dark"]).default("light")),
+}
+```
+
 ## See also
 
 - [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema)
 - [`@crustjs/core`](/docs/modules/core) — the CLI framework itself
-- [`@crustjs/store`](/docs/modules/store#schema-based-validation) — `field` / `fieldSync` integration for typed JSON persistence
-- [`@crustjs/prompts`](/docs/modules/prompts) — `promptValidator` integration for interactive prompts
+- [`@crustjs/store`](/docs/modules/store) — config storage that consumes
+  this package's `field()` factory
+- [`@crustjs/prompts`](/docs/modules/prompts) — prompts accept Standard
+  Schemas directly via `validate:`

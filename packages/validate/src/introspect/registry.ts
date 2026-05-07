@@ -7,8 +7,8 @@
 // users supply CLI metadata explicitly via options.
 
 import type { StandardSchema } from "../types.ts";
-import { inferFromEffect } from "./effect.ts";
-import { inferFromZod } from "./zod.ts";
+import { extractEffectDefault, inferFromEffect } from "./effect.ts";
+import { extractZodDefault, inferFromZod } from "./zod.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Inferred-options shape
@@ -48,7 +48,7 @@ export interface InferredOptions {
  */
 export function inferOptions(
 	schema: StandardSchema,
-	kind: "arg" | "flag",
+	kind: "arg" | "flag" | "field",
 	label: string,
 ): InferredOptions {
 	const vendor = schema["~standard"]?.vendor;
@@ -65,4 +65,69 @@ export function inferOptions(
 	// `kind` is currently unused but accepted for future per-kind adapters.
 	void kind;
 	return {};
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Default extraction — vendor-aware with sync `validate(undefined)` fallback
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Result of attempting to recover a default value from a Standard Schema.
+ *
+ * Falsy defaults (`false`, `0`, `""`, `null`) are valid — callers must
+ * discriminate on `ok`, never on `value`.
+ */
+export type ExtractedDefault =
+	| { readonly ok: true; readonly value: unknown }
+	| { readonly ok: false };
+
+/**
+ * Best-effort SYNCHRONOUS extraction of a default value from any Standard
+ * Schema. Used by `field(schema, opts?)` to auto-derive `default` when the
+ * caller did not supply it explicitly.
+ *
+ * Strategy:
+ *   1. Vendor-aware (sync) — Zod walks `def`/runtime fields for a
+ *      `ZodDefault` node; Effect inspects `AST.getDefaultAnnotation`.
+ *   2. Vendor-neutral fallback — call
+ *      `schema['~standard'].validate(undefined)`. If the result is a
+ *      `Promise`, return `{ ok: false }` (cannot wait synchronously). If
+ *      the result is sync and reports no `issues`, return
+ *      `{ ok: true, value: result.value }`.
+ *
+ * Falsy defaults are preserved — `{ ok: true, value: false }` is a valid
+ * outcome. Callers must never use `value === undefined` as a sentinel.
+ */
+export function extractDefault(schema: StandardSchema): ExtractedDefault {
+	const vendor = schema["~standard"]?.vendor;
+
+	if (vendor === "zod") {
+		const zodResult = extractZodDefault(schema);
+		if (zodResult.ok) {
+			return zodResult;
+		}
+	} else if (vendor === "effect") {
+		const effectResult = extractEffectDefault(schema);
+		if (effectResult.ok) {
+			return effectResult;
+		}
+	}
+
+	// Vendor-neutral sync fallback — ask the schema what it does with
+	// `undefined`. Many spec-compliant schemas (Valibot, ArkType, and Zod
+	// schemas with `.default(…)`) return the default value here; for
+	// Effect schemas using only `.annotations({ default })` the validate
+	// returns issues instead, in which case we report `{ ok: false }`.
+	try {
+		const result = schema["~standard"].validate(undefined);
+		if (result instanceof Promise) {
+			return { ok: false };
+		}
+		if (!result.issues) {
+			return { ok: true, value: result.value };
+		}
+	} catch {
+		// Some schemas may throw on `undefined` input — silent fallback.
+	}
+	return { ok: false };
 }

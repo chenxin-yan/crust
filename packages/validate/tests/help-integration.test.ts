@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Crust } from "@crustjs/core";
 import { helpPlugin, renderHelp } from "@crustjs/plugins";
 import { z } from "zod";
-import { arg, commandValidator, flag } from "../src/zod/index.ts";
+import { arg, commandValidator, flag } from "../src/index.ts";
 
 let stdoutChunks: string[];
 let originalLog: typeof console.log;

@@ -283,6 +283,86 @@ function resolveZodDescription(schema: unknown): string | undefined {
  * Recognises array schemas — when detected, returns `multiple: true` plus
  * the inner element's primitive type.
  */
+// ─────────────────────────────────────────────────────────────────────────
+// Default extraction — walk wrappers for a `ZodDefault` node and read
+// `defaultValue` (Zod 4 stores the value directly; v3 stored a thunk).
+// ─────────────────────────────────────────────────────────────────────────
+
+interface ZodDefaultLike {
+	type?: unknown;
+	def?: { defaultValue?: unknown };
+	unwrap?: () => unknown;
+}
+
+/**
+ * Best-effort SYNCHRONOUS extraction of a Zod default value.
+ *
+ * Walks through `pipe`/`transform`/`optional`/`nullable`/`readonly`/`catch`
+ * wrappers looking for the first `ZodDefault`-shaped node; returns its
+ * `def.defaultValue`. Returns `{ ok: false }` when no default node is
+ * found.
+ */
+export function extractZodDefault(
+	schema: unknown,
+): { ok: true; value: unknown } | { ok: false } {
+	let current: unknown = schema;
+	const seen = new Set<unknown>();
+
+	for (let depth = 0; depth < 1024; depth++) {
+		if (current === undefined || current === null || seen.has(current)) {
+			return { ok: false };
+		}
+		seen.add(current);
+
+		if (typeof current !== "object" && typeof current !== "function") {
+			return { ok: false };
+		}
+
+		const node = current as ZodDefaultLike;
+		const type = typeof node.type === "string" ? node.type : undefined;
+
+		if (type === "default" || type === "prefault") {
+			const def = node.def;
+			if (def && "defaultValue" in def) {
+				const raw = def.defaultValue;
+				// Zod 4 stores the value directly; Zod 3 stored a thunk. Support
+				// both forms for robustness against pre-release builds.
+				const value =
+					typeof raw === "function" ? (raw as () => unknown)() : raw;
+				return { ok: true, value };
+			}
+			return { ok: false };
+		}
+
+		if (
+			type === "optional" ||
+			type === "nullable" ||
+			type === "readonly" ||
+			type === "nonoptional" ||
+			type === "catch"
+		) {
+			if (typeof node.unwrap !== "function") {
+				return { ok: false };
+			}
+			current = node.unwrap();
+			continue;
+		}
+
+		if (type === "pipe" || type === "transform") {
+			const input = (node as { in?: unknown }).in;
+			if (input === undefined) {
+				return { ok: false };
+			}
+			current = input;
+			continue;
+		}
+
+		return { ok: false };
+	}
+
+	return { ok: false };
+}
+
 export function inferFromZod(schema: StandardSchema): ZodInferResult {
 	const result: ZodInferResult = {};
 

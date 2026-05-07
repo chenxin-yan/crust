@@ -38,6 +38,9 @@ import type { StandardSchema } from "../types.ts";
 /** Stable since Effect 3.x; see effect/SchemaAST.ts → `DescriptionAnnotationId`. */
 const DESCRIPTION_ANNOTATION_KEY = Symbol.for("effect/annotation/Description");
 
+/** Stable since Effect 3.x; see effect/SchemaAST.ts → `DefaultAnnotationId`. */
+const DEFAULT_ANNOTATION_KEY = Symbol.for("effect/annotation/Default");
+
 function readDescriptionAnnotation(ast: AST): string | undefined {
 	const annotations = (ast as unknown as { annotations?: unknown }).annotations;
 	if (!annotations || typeof annotations !== "object") return undefined;
@@ -45,6 +48,21 @@ function readDescriptionAnnotation(ast: AST): string | undefined {
 		DESCRIPTION_ANNOTATION_KEY
 	];
 	return typeof raw === "string" ? raw : undefined;
+}
+
+function readDefaultAnnotation(
+	ast: AST,
+): { found: true; value: unknown } | { found: false } {
+	const annotations = (ast as unknown as { annotations?: unknown }).annotations;
+	if (!annotations || typeof annotations !== "object") return { found: false };
+	const rec = annotations as Record<symbol, unknown>;
+	if (!(DEFAULT_ANNOTATION_KEY in rec)) return { found: false };
+	const raw = rec[DEFAULT_ANNOTATION_KEY];
+	// Effect stores defaults as either a value or a thunk (e.g. via
+	// `optionalWith({ default: () => x })`). Unwrap thunks so callers always
+	// see the resolved default value.
+	const value = typeof raw === "function" ? (raw as () => unknown)() : raw;
+	return { found: true, value };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -345,6 +363,38 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
  * definite user mistakes (e.g. tuple schemas with fixed elements, array
  * elements that are not primitives).
  */
+// ─────────────────────────────────────────────────────────────────────────
+// Default extraction — read AST.DefaultAnnotation
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Best-effort SYNCHRONOUS extraction of an Effect schema's default.
+ *
+ * Reads the `effect/annotation/Default` annotation off the wrapper's AST.
+ * This recovers defaults supplied via `Schema.annotations({ default })`
+ * (a top-level annotation). For `Schema.optionalWith(s, { default })` used
+ * inside a struct, the default lives on a property signature transformation
+ * and is recoverable by the registry's vendor-neutral `validate(undefined)`
+ * fallback at runtime.
+ *
+ * Returns `{ ok: false }` when the schema does not expose `.ast`, or has no
+ * default annotation — the registry then falls through to the sync
+ * `validate(undefined)` fallback.
+ */
+export function extractEffectDefault(
+	schema: StandardSchema,
+): { ok: true; value: unknown } | { ok: false } {
+	const ast = getAst(schema);
+	if (!ast) {
+		return { ok: false };
+	}
+	const found = readDefaultAnnotation(ast);
+	if (found.found) {
+		return { ok: true, value: found.value };
+	}
+	return { ok: false };
+}
+
 export function inferFromEffect(
 	schema: StandardSchema,
 	label: string,

@@ -194,6 +194,38 @@ export interface FlagOptions {
 	multiple?: true;
 }
 
+/**
+ * Optional store-field metadata passed to `field()`.
+ *
+ * Every key is optional. When automatic introspection covers a field
+ * (`type`, `description`, `default`, `array`), explicit values override
+ * the introspection silently. For schemas with unknown vendors (e.g.
+ * Valibot, ArkType), `type` MUST be supplied explicitly because no
+ * inference is available.
+ *
+ * No `validate` key — validation flows exclusively through the schema.
+ * If extra checks are needed, refine the schema with `.refine(...)`
+ * (Zod), `Schema.filter(...)` (Effect), etc.
+ *
+ * @typeParam T - The schema's output value type. Used to type-tighten the
+ *               `default` key when the user wants a non-`undefined` field.
+ */
+export interface FieldOptions<T = unknown> {
+	type?: "string" | "number" | "boolean";
+	description?: string;
+	/**
+	 * Default value for this field when the persisted state does not contain
+	 * a value for it. Passing `default` explicitly here narrows the inferred
+	 * config type from `T | undefined` to `T`. Schema-derived defaults
+	 * (e.g. `z.string().default("x")`) populate the runtime default but do
+	 * NOT narrow the TypeScript type — pass it explicitly here for tight
+	 * typing.
+	 */
+	default?: T;
+	/** Mark this field as an array (collects values into an array). */
+	array?: true;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Output-type inference from branded defs
 // ────────────────────────────────────────────────────────────────────────────
