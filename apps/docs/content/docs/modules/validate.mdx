@@ -20,25 +20,6 @@ bun add zod      # Zod 4 schemas are Standard Schemas natively
 bun add effect   # wrap once with Schema.standardSchemaV1(...)
 ```
 
-## Locked public surface
-
-The package exports exactly **eight** functions from a single root entry:
-
-| Function | Purpose |
-| --- | --- |
-| `arg(name, schema, opts?)` | Define a positional argument |
-| `flag(schema, opts?)` | Define a flag |
-| `commandValidator(handler)` | Wrap a Crust handler with full schema validation |
-| `field(schema, opts?)` | Build a `@crustjs/store` field definition |
-| `parseValue(schema, value)` | Validate + return typed output (throws on failure) |
-| `validateStandard(schema, value)` | Async low-level primitive (returns a result) |
-| `validateStandardSync(schema, value)` | Sync low-level primitive (throws on async schemas) |
-| `isStandardSchema(value)` | Runtime type guard for Standard Schema v1 |
-
-Every helper accepts any Standard Schema v1 object. Vendor introspection
-(Zod, Effect) auto-derives metadata where possible; explicit options
-always win silently.
-
 ## Quick start — Zod
 
 ```ts
@@ -117,9 +98,10 @@ import {
 } from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
-type EffectAsStandardSchema<S> = S extends Schema.Schema<infer A, infer I>
-  ? StandardSchema<I, A>
-  : StandardSchema;
+type EffectAsStandardSchema<S> =
+  S extends Schema.Schema<infer A, infer I>
+    ? StandardSchema<I, A>
+    : StandardSchema;
 
 export const earg = <
   Name extends string,
@@ -311,13 +293,13 @@ your preferred version (≥ 3.14.2 to keep introspection working).
 
 **Helper renames and removals:**
 
-| 0.1.x | 0.2.0 |
-| --- | --- |
-| `parsePromptValue(schema, v)` | `parseValue(schema, v)` |
+| 0.1.x                             | 0.2.0                                                       |
+| --------------------------------- | ----------------------------------------------------------- |
+| `parsePromptValue(schema, v)`     | `parseValue(schema, v)`                                     |
 | `parsePromptValueSync(schema, v)` | use `validateStandardSync(schema, v)` and check `result.ok` |
-| `promptValidator(schema)` | pass `schema` directly to `input({ validate: schema })` |
-| `field(schema)` (validator-only) | `field(schema)` now returns a full `FieldDef` |
-| `fieldSync(schema)` | use `field(schema)` (the resulting `validate` is async) |
+| `promptValidator(schema)`         | pass `schema` directly to `input({ validate: schema })`     |
+| `field(schema)` (validator-only)  | `field(schema)` now returns a full `FieldDef`               |
+| `fieldSync(schema)`               | use `field(schema)` (the resulting `validate` is async)     |
 
 The `errorStrategy` option on `promptValidator` is gone everywhere. Prompts
 render the first issue inline; `parseValue` throws with all issues in
