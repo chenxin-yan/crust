@@ -44,10 +44,15 @@ export interface InstalledSkillManifest {
  *
  * Returns the version string and the bundle kind. If `crust.json` exists but
  * has no `kind` field (legacy installs written before TP-003), the kind is
- * defaulted to `"generated"`.
+ * defaulted to `"generated"` for backward compatibility.
+ *
+ * If `kind` is **present** but holds an unrecognized value (e.g. a hand-edit
+ * typo like `"bundel"`), the manifest is treated as malformed and `null` is
+ * returned. This prevents accidental cross-kind installs from slipping past
+ * the conflict guard via a typo.
  *
  * @param dir - Absolute path to the skill directory
- * @returns The installed manifest, or `null` if the file is missing/malformed/lacks a version
+ * @returns The installed manifest, or `null` if the file is missing/malformed/lacks a version/has an unrecognized kind
  */
 export async function readInstalledManifest(
 	dir: string,
@@ -67,9 +72,20 @@ export async function readInstalledManifest(
 
 		const version = (parsed as Record<string, unknown>).version as string;
 		const rawKind = (parsed as Record<string, unknown>).kind;
-		// Backward-compat default: legacy crust.json files lack the `kind` field.
-		const kind: SkillKind =
-			rawKind === "bundle" || rawKind === "generated" ? rawKind : "generated";
+
+		let kind: SkillKind;
+		if (rawKind === undefined) {
+			// Backward-compat: legacy crust.json files written before TP-003 lack
+			// the `kind` field; treat them as generated.
+			kind = "generated";
+		} else if (rawKind === "bundle" || rawKind === "generated") {
+			kind = rawKind;
+		} else {
+			// `kind` is present but unrecognized — treat the manifest as malformed
+			// so the install pipeline raises a clear conflict instead of silently
+			// coercing to `generated`.
+			return null;
+		}
 
 		return { version, kind };
 	} catch {

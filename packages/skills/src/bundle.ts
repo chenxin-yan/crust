@@ -134,17 +134,26 @@ export function resolveBundleSourceDir(sourceDir: string | URL): string {
  * leading YAML frontmatter block (between the first two `---` lines).
  *
  * Returns the first matched value, or `null` if absent (no frontmatter,
- * malformed frontmatter, or `name` not present in the first 50 lines). The
- * scan is deliberately tolerant: missing frontmatter is treated as "no
- * declared name" rather than an error.
+ * malformed frontmatter, or `name` not present in the first 50 lines of the
+ * frontmatter block). The scan is deliberately tolerant: missing frontmatter
+ * is treated as "no declared name" rather than an error.
  *
- * Quoted values (`"..."` or `'...'`) have a single matching pair of quotes
- * stripped; everything else is taken verbatim and trimmed. Multi-line scalars,
- * arrays, anchors, etc. are not parsed — bundle authors who declare `name`
- * via complex YAML must keep it as a simple scalar.
+ * Strictness rules (chosen to avoid false positives from nested keys):
+ * - Only **unindented** top-level lines (`/^name\s*:\s*.../`) are matched, so
+ *   a nested block like `metadata:\n  name: other` is ignored.
+ * - The opening fence must be `---` (after stripping a UTF-8 BOM and skipping
+ *   blank lines); the closing fence is `---` with optional trailing whitespace.
+ * - An unquoted value's trailing `# comment` is stripped (a quoted value keeps
+ *   `#` verbatim).
+ * - Quoted values (`"..."` or `'...'`) have a single matching pair of quotes
+ *   stripped; everything else is taken verbatim and trimmed. Multi-line
+ *   scalars, arrays, anchors, etc. are not parsed — bundle authors who
+ *   declare `name` via complex YAML must keep it as a simple scalar.
  */
 function probeFrontmatterName(content: string): string | null {
-	const lines = content.split(/\r?\n/, 51);
+	// Strip a leading UTF-8 BOM so the opening fence still matches.
+	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
+	const lines = normalized.split(/\r?\n/, 51);
 
 	// Find the opening `---` (skipping blank lines).
 	let cursor = 0;
@@ -157,18 +166,27 @@ function probeFrontmatterName(content: string): string | null {
 	for (let i = cursor; i < limit; i++) {
 		const line = lines[i];
 		if (line === undefined) break;
-		if (line === "---") return null; // closed without a `name:` key
+		// Closing fence is `---` with optional trailing whitespace.
+		if (/^---\s*$/.test(line)) return null;
 
-		const m = line.match(/^\s*name\s*:\s*(.+?)\s*$/);
+		// Top-level only: no leading whitespace, so nested `  name:` is ignored.
+		const m = line.match(/^name\s*:\s*(.*?)\s*$/);
 		if (!m) continue;
 
-		let value = (m[1] ?? "").trim();
-		// Strip a single matching pair of surrounding quotes.
-		if (
+		let value = m[1] ?? "";
+		const quoted =
 			(value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-			(value.startsWith("'") && value.endsWith("'") && value.length >= 2)
-		) {
+			(value.startsWith("'") && value.endsWith("'") && value.length >= 2);
+		if (quoted) {
 			value = value.slice(1, -1);
+		} else {
+			// Strip an unquoted trailing `# comment`. YAML requires whitespace
+			// before `#` for it to start a comment; treat `#` at column 0 of the
+			// remainder (i.e. the value is empty) the same way.
+			const commentIdx = value.search(/(^|\s)#/);
+			if (commentIdx !== -1) {
+				value = value.slice(0, commentIdx).trimEnd();
+			}
 		}
 		return value;
 	}
@@ -214,11 +232,17 @@ interface CollectedFile {
  *
  * Excluded directories at the root are never recursed into. Subdirectory
  * dotfiles are included.
+ *
+ * Cycle protection: directories are tracked by their canonical realpath in
+ * `visitedDirs` so symlinks like `loop -> .` or `a/back -> ..` (which all
+ * pass the inside-root guard) cannot drive unbounded recursion. The first
+ * occurrence is walked; further occurrences are silently skipped.
  */
 async function collectBundleEntries(
 	dir: string,
 	canonicalRoot: string,
 	relPrefix: string,
+	visitedDirs: Set<string>,
 ): Promise<CollectedFile[]> {
 	const entries = await readdir(dir, { withFileTypes: true });
 	const isRoot = relPrefix === "";
@@ -240,8 +264,18 @@ async function collectBundleEntries(
 		// followed correctly (after the inside-root guard above).
 		const realStat = await stat(realPath);
 		if (realStat.isDirectory()) {
+			if (visitedDirs.has(realPath)) {
+				// Already walked (cycle or a second symlink to the same target).
+				continue;
+			}
+			visitedDirs.add(realPath);
 			collected.push(
-				...(await collectBundleEntries(absPath, canonicalRoot, relPath)),
+				...(await collectBundleEntries(
+					absPath,
+					canonicalRoot,
+					relPath,
+					visitedDirs,
+				)),
 			);
 		} else if (realStat.isFile()) {
 			collected.push({ relPath, absPath });
@@ -294,10 +328,14 @@ export async function loadBundleFiles(
 		);
 	}
 
+	// Seed the visited set with the canonical root itself so a child symlink
+	// pointing back to root (e.g. `loop -> .`) is rejected on first descent.
+	const visitedDirs = new Set<string>([canonicalRoot]);
 	const collected = await collectBundleEntries(
 		canonicalRoot,
 		canonicalRoot,
 		"",
+		visitedDirs,
 	);
 
 	// Verify SKILL.md presence at the root.

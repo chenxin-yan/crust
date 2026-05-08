@@ -161,13 +161,54 @@ describe("loadBundleFiles", () => {
 		expect(paths).toContain("subdir/.config");
 	});
 
-	it("excludes node_modules/, .git/, root dotfiles, and stale crust.json", async () => {
+	it("excludes node_modules/, root dotfiles, and stale crust.json from the static fixture", async () => {
 		const files = await loadBundleFiles(FIXTURE_DIR, META);
 		const paths = files.map((f) => f.path);
 		expect(paths.some((p) => p.startsWith("node_modules/"))).toBe(false);
-		expect(paths.some((p) => p.startsWith(".git"))).toBe(false);
 		expect(paths.includes(".gitignore")).toBe(false);
 		expect(paths.includes(CRUST_MANIFEST)).toBe(false);
+	});
+
+	it("excludes a real .git/ directory at the bundle root", async () => {
+		// Build a temp bundle with an actual .git/ subdirectory — the static
+		// fixture only has .gitignore, so an assertion against it would not
+		// prove the recursive walker skips a .git/ tree.
+		const dir = join(tmpDir, "with-git-dir");
+		await mkdir(join(dir, ".git", "objects"), { recursive: true });
+		await writeFile(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+		await writeFile(join(dir, ".git", "config"), "[core]\n");
+		await writeFile(
+			join(dir, ".git", "objects", "pack-stub"),
+			"should-not-be-walked",
+		);
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: x\n---\n",
+		);
+
+		const files = await loadBundleFiles(dir, META);
+		const paths = files.map((f) => f.path);
+		expect(paths.some((p) => p.startsWith(".git/") || p === ".git")).toBe(
+			false,
+		);
+		expect(paths).toContain("SKILL.md");
+	});
+
+	it("survives an internal directory symlink cycle without unbounded recursion", async () => {
+		// `loop -> .` is a directory symlink that resolves inside the bundle
+		// root, so the path-traversal guard accepts it. Without cycle detection
+		// the walker would recurse into loop/loop/... until ELOOP/path-length.
+		const dir = join(tmpDir, "with-cycle");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: x\n---\n",
+		);
+		await symlink(".", join(dir, "loop"));
+
+		const files = await loadBundleFiles(dir, META);
+		const paths = files.map((f) => f.path).sort();
+		expect(paths).toEqual(["SKILL.md"]);
 	});
 
 	it("throws a clear error when SKILL.md is missing", async () => {
@@ -214,6 +255,64 @@ describe("loadBundleFiles", () => {
 		await writeFile(
 			join(dir, "SKILL.md"),
 			"---\ndescription: x\n---\n# Bundle\n",
+		);
+		const files = await loadBundleFiles(dir, META);
+		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+	});
+
+	it("strips a leading UTF-8 BOM before locating the opening fence", async () => {
+		const dir = join(tmpDir, "bom");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"\uFEFF---\nname: funnel-builder\ndescription: x\n---\n",
+		);
+		const files = await loadBundleFiles(dir, META);
+		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+	});
+
+	it("strips a trailing `# comment` from an unquoted frontmatter name", async () => {
+		const dir = join(tmpDir, "name-with-comment");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder # canonical name\ndescription: x\n---\n",
+		);
+		const files = await loadBundleFiles(dir, META);
+		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+	});
+
+	it("ignores nested `name:` keys (only top-level / unindented matches)", async () => {
+		// A nested key under `metadata:` must not be mistaken for the top-level
+		// name — otherwise a bundle without a real top-level `name` would be
+		// rejected because the indented value did not match meta.name.
+		const dir = join(tmpDir, "nested-name");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\ndescription: x\nmetadata:\n  name: other-name\n---\n",
+		);
+		const files = await loadBundleFiles(dir, META);
+		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+	});
+
+	it("tolerates a closing fence with trailing whitespace", async () => {
+		const dir = join(tmpDir, "fence-trailing-ws");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\ndescription: x\n--- \n# Bundle\n",
+		);
+		const files = await loadBundleFiles(dir, META);
+		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+	});
+
+	it("handles CRLF line endings", async () => {
+		const dir = join(tmpDir, "crlf");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\r\nname: funnel-builder\r\ndescription: x\r\n---\r\n",
 		);
 		const files = await loadBundleFiles(dir, META);
 		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
@@ -409,6 +508,64 @@ describe("installSkillBundle", () => {
 
 		const canonicalDir = join(tmpDir, ".crust", "skills", "funnel-builder");
 		const manifest = await readInstalledManifest(canonicalDir);
+		expect(manifest).toEqual({ version: "2.0.0", kind: "bundle" });
+	});
+
+	it("agent-path-only kind mismatch: throws even when canonical is absent", async () => {
+		// Pre-seed only the agent path with a mismatched `crust.json`. The
+		// canonical store does not exist, so the canonical-side guard cannot
+		// fire — the agent-path guard must catch this. (Reproduces the hole
+		// the reviewers flagged.)
+		const agentDir = join(tmpDir, ".claude", "skills", "funnel-builder");
+		await mkdir(agentDir, { recursive: true });
+		await writeFile(
+			join(agentDir, CRUST_MANIFEST),
+			`${JSON.stringify({ name: "funnel-builder", description: "x", version: "1.0.0", kind: "generated" }, null, "\t")}\n`,
+		);
+
+		let caught: SkillConflictError | undefined;
+		try {
+			await withCwd(tmpDir, () =>
+				installSkillBundle({
+					meta: META,
+					sourceDir: FIXTURE_DIR,
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "copy",
+				}),
+			);
+		} catch (err) {
+			if (err instanceof SkillConflictError) caught = err;
+			else throw err;
+		}
+		expect(caught).toBeInstanceOf(SkillConflictError);
+		expect(caught?.details.kindMismatch).toEqual({
+			existing: "generated",
+			attempted: "bundle",
+		});
+	});
+
+	it("agent-path-only kind mismatch: force overwrites the agent copy", async () => {
+		const agentDir = join(tmpDir, ".claude", "skills", "funnel-builder");
+		await mkdir(agentDir, { recursive: true });
+		await writeFile(
+			join(agentDir, CRUST_MANIFEST),
+			`${JSON.stringify({ name: "funnel-builder", description: "x", version: "1.0.0", kind: "generated" }, null, "\t")}\n`,
+		);
+
+		const result = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				meta: { ...META, version: "2.0.0" },
+				sourceDir: FIXTURE_DIR,
+				agents: ["claude-code"],
+				scope: "project",
+				installMode: "copy",
+				force: true,
+			}),
+		);
+		expect(result.agents).toHaveLength(1);
+
+		const manifest = await readInstalledManifest(agentDir);
 		expect(manifest).toEqual({ version: "2.0.0", kind: "bundle" });
 	});
 

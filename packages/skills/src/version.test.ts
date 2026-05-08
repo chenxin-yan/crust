@@ -112,14 +112,16 @@ describe("readInstalledManifest", () => {
 		expect(manifest).toEqual({ version: "1.2.3", kind: "generated" });
 	});
 
-	it("defaults unrecognized kind to 'generated'", async () => {
+	it("returns null when kind is present but unrecognized (typo guard)", async () => {
+		// A hand-edit typo (e.g. "bundel") must not be silently coerced to
+		// "generated" — that would let cross-kind installs bypass the conflict
+		// guard. Treat the manifest as malformed so the install pipeline raises.
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.2.3", kind: "weird" }),
 		);
 
-		const manifest = await readInstalledManifest(tmpDir);
-		expect(manifest).toEqual({ version: "1.2.3", kind: "generated" });
+		expect(await readInstalledManifest(tmpDir)).toBeNull();
 	});
 
 	it("returns null when crust.json does not exist", async () => {

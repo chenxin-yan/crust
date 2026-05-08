@@ -302,13 +302,23 @@ await installSkillBundle({
 });
 ```
 
-Crust copies the bundle's `SKILL.md` and supporting files verbatim — the
-SKILL.md frontmatter is owned by the bundle author. The following entries
-are excluded **at the bundle root only** (subdirectory dotfiles are kept):
+Crust copies the bundle's `SKILL.md` and supporting files as **UTF-8 text** —
+binary files are not supported and will be corrupted on round-trip. The
+SKILL.md frontmatter is owned by the bundle author; Crust does not rewrite
+it, but it runs a lightweight `name:` consistency probe and rejects the
+install if the declared `name` does not match `meta.name`. Bundles that omit
+`name:` from frontmatter skip the probe.
 
-- `node_modules/`, `.git/`, `.DS_Store`
+Bundle content changes do not propagate without a `meta.version` bump —
+identical-version reinstalls report `up-to-date` and leave the canonical
+store untouched.
+
+The following entries are excluded **at the bundle root only**
+(subdirectory dotfiles are kept):
+
+- `node_modules/`, `.DS_Store`
+- Any dotfile at the root (e.g. `.git/`, `.editorconfig`, `.gitignore`)
 - A pre-existing `crust.json` (Crust regenerates it)
-- Any dotfile at the root (e.g. `.editorconfig`, `.gitignore`)
 
 ### `kind` field on `crust.json`
 

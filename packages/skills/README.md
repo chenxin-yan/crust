@@ -463,15 +463,26 @@ await installSkillBundle({
 
 ### What gets copied
 
-The bundle's `SKILL.md` plus every supporting file is copied verbatim into
-the canonical Crust store. Crust does **not** parse or rewrite the SKILL.md
-frontmatter — the bundle author owns it.
+The bundle's `SKILL.md` plus every supporting file is copied as **UTF-8 text**
+into the canonical Crust store — markdown, configs, scripts, etc. The bundle
+author owns the SKILL.md frontmatter; Crust does not rewrite it. As a guard
+against silent name drift, Crust runs a lightweight `name:` consistency probe
+on the frontmatter and rejects the install if the declared `name` does not
+match `meta.name`. Bundles that omit `name:` from frontmatter skip the probe.
+
+Binary files are not currently supported — the install pipeline reads and
+writes every file with UTF-8 encoding, so binary assets will be corrupted on
+round-trip. Open an issue if you need binary support.
+
+Bundle content changes do not propagate without a `meta.version` bump:
+identical-version reinstalls report `up-to-date` and leave the canonical
+store untouched. Bump `version` whenever the bundle contents change.
 
 Exclusions at the bundle root only:
 
-- `node_modules/`, `.git/`, `.DS_Store`
+- `node_modules/`, `.DS_Store`
+- Any dotfile at the root (e.g. `.git/`, `.editorconfig`, `.gitignore`)
 - Any pre-existing `crust.json` (Crust regenerates it)
-- Any dotfile at the root (e.g. `.editorconfig`, `.gitignore`)
 
 Dotfiles inside subdirectories **are** copied.
 

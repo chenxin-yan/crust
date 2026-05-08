@@ -6,10 +6,13 @@
 
 New `installSkillBundle(options)` entrypoint installs a directory containing
 `SKILL.md` and supporting files through the same canonical-store + agent
-fan-out pipeline used by `generateSkill()`. Bundle authors own the
-`SKILL.md` frontmatter — Crust copies the directory verbatim (with root-only
-exclusions for `node_modules/`, `.git/`, `.DS_Store`, dotfiles, and any
-stale `crust.json`) and writes a fresh `crust.json` for ownership tracking.
+fan-out pipeline used by `generateSkill()`. Files are copied as **UTF-8
+text** (binary files are not supported); bundle authors own the SKILL.md
+frontmatter — Crust does not rewrite it, but it runs a lightweight `name:`
+consistency probe and rejects the install if the declared `name` does not
+match `meta.name`. Root-only exclusions: `node_modules/`, `.DS_Store`, root
+dotfiles (`.git/`, `.editorconfig`, etc.), and any stale `crust.json`. Crust
+then writes a fresh `crust.json` for ownership tracking.
 
 ```ts
 import { installSkillBundle } from "@crustjs/skills";

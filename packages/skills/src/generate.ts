@@ -40,6 +40,7 @@ import type {
 } from "./types.ts";
 import {
 	CRUST_MANIFEST,
+	type InstalledSkillManifest,
 	readInstalledManifest,
 	readInstalledVersion,
 } from "./version.ts";
@@ -405,6 +406,29 @@ async function installRenderedSkill(
 			});
 		}
 
+		// Per-agent kind-mismatch guard.
+		//
+		// The canonical store check above only catches conflicts when the
+		// canonical `crust.json` exists with the wrong kind. An agent path can
+		// independently hold a `crust.json` with a different kind — e.g. when a
+		// previous install's canonical was deleted manually but the agent copy
+		// remained. Reject those without `force` so the public collision
+		// contract holds end-to-end (not just at the canonical store).
+		if (
+			state.current.manifest !== null &&
+			state.current.manifest.kind !== kind &&
+			!force
+		) {
+			throw new SkillConflictError({
+				agent: groupedPrimaryAgent,
+				outputDir,
+				kindMismatch: {
+					existing: state.current.manifest.kind,
+					attempted: kind,
+				},
+			});
+		}
+
 		const pathChanged = await ensureAgentInstallPath({
 			outputDir,
 			canonicalOutputDir,
@@ -629,6 +653,8 @@ interface InstallPathInspection {
 interface ManagedPathState {
 	readonly outputDir: string;
 	readonly version: string | null;
+	/** Full manifest from `crust.json`, or `null` if absent/malformed/symlink-only. */
+	readonly manifest: InstalledSkillManifest | null;
 	readonly inspection: InstallPathInspection;
 	readonly isCrustManaged: boolean;
 }
@@ -855,10 +881,11 @@ async function inspectManagedPath(
 	outputDir: string,
 	canonicalOutputDir: string,
 ): Promise<ManagedPathState> {
-	const [version, inspection] = await Promise.all([
-		readInstalledVersion(outputDir),
+	const [manifest, inspection] = await Promise.all([
+		readInstalledManifest(outputDir),
 		inspectInstallPath(outputDir, canonicalOutputDir),
 	]);
+	const version = manifest?.version ?? null;
 	const isCrustManaged =
 		version !== null ||
 		(inspection.exists && inspection.isSymlink && inspection.pointsToCanonical);
@@ -866,6 +893,7 @@ async function inspectManagedPath(
 	return {
 		outputDir,
 		version,
+		manifest,
 		inspection,
 		isCrustManaged,
 	};

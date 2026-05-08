@@ -358,8 +358,17 @@ export interface GenerateOptions {
  * Unlike {@link GenerateOptions}, the bundle entrypoint does not render
  * `SKILL.md` from a command tree — it copies a directory the caller has
  * already authored. The bundle author owns the `SKILL.md` frontmatter; Crust
- * only writes a fresh `crust.json` alongside the bundle for ownership and
+ * does not rewrite it, but it runs a lightweight `name:` consistency probe
+ * and rejects the install if the declared `name` does not match `meta.name`.
+ * Crust writes a fresh `crust.json` alongside the bundle for ownership and
  * version tracking.
+ *
+ * Files are copied as **UTF-8 text** — binary supporting files are not
+ * supported and will be corrupted on round-trip.
+ *
+ * Bundle content changes do not propagate without a `meta.version` bump:
+ * identical-version reinstalls report `up-to-date` and leave the canonical
+ * store untouched. Bump `version` whenever the bundle contents change.
  *
  * @example
  * ```ts
