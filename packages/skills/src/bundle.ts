@@ -2,7 +2,7 @@
 // Bundle install — installs a hand-authored skill directory as a Crust skill
 // ────────────────────────────────────────────────────────────────────────────
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -145,6 +145,13 @@ interface BundleFrontmatter {
  * but `loadBundleFiles` is left agnostic so unit tests can exercise the parser
  * directly.
  *
+ * **`metadata.version` is intentionally not read.** The Agent Skills spec
+ * lets bundles declare a version under `metadata.version`, but Crust treats
+ * the `version` option passed to `installSkillBundle()` as the sole source
+ * of truth for `crust.json` and update detection. The unindented-only
+ * matching rule below already excludes nested `metadata.*` keys; this is
+ * deliberate, not an oversight.
+ *
  * Strictness rules (chosen to avoid false positives from nested keys and to
  * keep the parser dependency-free):
  * - Only **unindented** top-level lines are matched, so a nested block like
@@ -208,40 +215,6 @@ function parseFrontmatterScalar(raw: string): string {
 	// marker is the value.
 	const commentIdx = raw.search(/(^|\s)#/);
 	return commentIdx === -1 ? raw : raw.slice(0, commentIdx).trimEnd();
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal — version fallback from the consuming package.json
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Reads the `version` field from the nearest `package.json` walking up from
- * `process.argv[1]`. Used as the default for {@link InstallSkillBundleOptions.version}
- * so most callers never need to plumb the bundle version manually — it tracks
- * the consuming package's release.
- *
- * Returns `null` when `process.argv[1]` is unset, no `package.json` is found,
- * or the manifest has no string `version` field. Other read/parse failures
- * also collapse to `null`; the caller surfaces a clear actionable error.
- */
-function readNearestPackageVersion(): string | null {
-	const entrypoint = process.argv[1];
-	if (!entrypoint) return null;
-
-	const packageRoot = findNearestPackageRoot(resolve(entrypoint));
-	if (!packageRoot) return null;
-
-	try {
-		const raw = readFileSync(join(packageRoot, "package.json"), "utf-8");
-		const parsed = JSON.parse(raw) as unknown;
-		if (parsed && typeof parsed === "object" && "version" in parsed) {
-			const v = (parsed as { version: unknown }).version;
-			return typeof v === "string" ? v : null;
-		}
-		return null;
-	} catch {
-		return null;
-	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -453,9 +426,8 @@ export async function loadBundleFiles(
  *
  * The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
  * `description`; both are required and read by Crust without rewriting the
- * file. The bundle's `version` defaults to the consuming package's
- * `package.json` `version`; pass `version` explicitly to override (e.g. when
- * one package publishes multiple bundles with independent versions).
+ * file. The caller supplies `version` explicitly — typically wired to the
+ * consuming package's `package.json` `version`.
  *
  * Bundles and generated skills cannot share a name unless the existing
  * install is removed first. To overwrite a kind-mismatched install, pass
@@ -466,26 +438,19 @@ export async function loadBundleFiles(
  * @throws {SkillConflictError} If the canonical store exists with a different
  *   kind or with no `crust.json` (and `force` is not set).
  * @throws {Error} If `SKILL.md` is missing, its frontmatter lacks `name:` or
- *   `description:`, the declared `name` is not a valid skill name, no
- *   `version` can be resolved, the source directory escapes itself via
- *   symlink, or `sourceDir` cannot be resolved.
+ *   `description:`, the declared `name` is not a valid skill name, the
+ *   source directory escapes itself via symlink, or `sourceDir` cannot be
+ *   resolved.
  *
  * @example
  * ```ts
  * import { installSkillBundle } from "@crustjs/skills";
+ * import pkg from "./package.json" with { type: "json" };
  *
- * // Common case — name + description from SKILL.md frontmatter,
- * // version from the consuming package's package.json.
  * await installSkillBundle({
  *   sourceDir: "skills/funnel-builder",
  *   agents: ["claude-code"],
- * });
- *
- * // Multi-bundle package: pin the version explicitly.
- * await installSkillBundle({
- *   sourceDir: "skills/funnel-builder",
- *   agents: ["claude-code"],
- *   version: "2.0.0",
+ *   version: pkg.version,
  * });
  * ```
  */
@@ -516,19 +481,10 @@ export async function installSkillBundle(
 		);
 	}
 
-	const resolvedVersion = version ?? readNearestPackageVersion();
-	if (!resolvedVersion) {
-		throw new Error(
-			`Could not resolve a version for skill "${resolvedName}". ` +
-				`Pass \`version\` to installSkillBundle, or run from a package whose ` +
-				`package.json declares a string \`version\` field.`,
-		);
-	}
-
 	const meta: SkillMeta = {
 		name: resolvedName,
 		description: frontmatter.description,
-		version: resolvedVersion,
+		version,
 	};
 
 	return installRenderedSkill({

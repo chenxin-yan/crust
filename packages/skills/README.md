@@ -384,13 +384,30 @@ skills/my-cli/
 
 ## Conflict Detection
 
-Each skill directory contains a `crust.json` file that acts as an ownership marker. If `generateSkill()` encounters an existing directory without `crust.json`, it throws a `SkillConflictError` to prevent overwriting skills created manually or by other tools.
+Each Crust-managed skill directory contains a `crust.json` file that acts
+as an ownership marker. Both `generateSkill()` and `installSkillBundle()`
+refuse to overwrite a target directory in three cases:
 
-### Uninstall Cleanup
+1. **No `crust.json`** — the directory exists but was not created by Crust
+   (e.g. manually authored or installed by another tool).
+2. **Kind mismatch** — `crust.json` records a different
+   [`kind`](#kind-field-on-crustjson) than the install attempt (e.g. an
+   existing `generated` skill collides with an incoming `bundle`).
+3. **Malformed manifest** — `crust.json` is present but cannot be
+   interpreted (invalid JSON, top-level non-object, missing `version`, or
+   an unrecognized `kind` value such as a hand-edit typo).
 
-When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
+All three throw `SkillConflictError`. Pass `force: true` to overwrite, or
+uninstall the existing skill first.
 
-Pass `force: true` to overwrite, or handle the error:
+`SkillConflictError.details` carries optional discriminators:
+
+- `details.kindMismatch?: { existing, attempted }` — set on kind mismatch.
+- `details.manifestMalformed?: { reason, rawKind? }` — set on malformed
+  `crust.json`. `reason` is one of `"parse-error"`, `"not-an-object"`,
+  `"missing-version"`, or `"unknown-kind"`. `rawKind` is populated only
+  when `reason === "unknown-kind"`.
+- Neither field set — the original "directory exists with no `crust.json`" case.
 
 ```ts
 import { generateSkill, SkillConflictError } from "@crustjs/skills";
@@ -398,12 +415,30 @@ import { generateSkill, SkillConflictError } from "@crustjs/skills";
 try {
   await generateSkill({ command, meta, agents });
 } catch (err) {
-  if (err instanceof SkillConflictError) {
-    console.error(`Conflict: ${err.details.outputDir}`);
-    // err.details.agent — the agent where the conflict occurred
+  if (!(err instanceof SkillConflictError)) throw err;
+
+  if (err.details.kindMismatch) {
+    const { existing, attempted } = err.details.kindMismatch;
+    console.error(
+      `Cannot install ${attempted} skill at ${err.details.outputDir} — ` +
+        `existing skill was installed as ${existing}.`,
+    );
+  } else if (err.details.manifestMalformed) {
+    console.error(
+      `crust.json at ${err.details.outputDir} is malformed: ` +
+        `${err.details.manifestMalformed.reason}.`,
+    );
+  } else {
+    console.error(
+      `${err.details.outputDir} exists but was not created by Crust.`,
+    );
   }
 }
 ```
+
+### Uninstall Cleanup
+
+When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
 
 ## Installing Generated Skills
 
@@ -447,12 +482,14 @@ Use `installSkillBundle()` when:
 
 ```ts
 import { installSkillBundle } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
 
 await installSkillBundle({
   // Resolved relative to the nearest package.json walking up from
   // process.argv[1]. You can also pass an absolute string or a file: URL.
   sourceDir: "skills/funnel-builder",
   agents: ["claude-code", "opencode"],
+  version: pkg.version,
 });
 ```
 
@@ -469,11 +506,10 @@ description: Build a sales funnel
 ---
 ```
 
-The bundle's `version` defaults to the `version` field of the nearest
-`package.json` walking up from `process.argv[1]` (the same `package.json`
-used to resolve a relative `sourceDir`). Pass `version` explicitly when one
-package publishes multiple bundles with independent versions, or when the
-consuming package has no `version` of its own:
+`version` is supplied by the caller and recorded in `crust.json`. Wiring
+it to the consuming package's `package.json` `version` (as in the example
+above) is the typical pattern; pass any string explicitly when one package
+publishes multiple bundles with independent versions:
 
 ```ts
 await installSkillBundle({
@@ -483,8 +519,23 @@ await installSkillBundle({
 });
 ```
 
-If neither an explicit `version` nor a resolvable `package.json` `version`
-is available, the install throws a clear actionable error.
+> **Note:** `metadata.version` declared inside the bundle's SKILL.md
+> frontmatter is **not** read — the `version` option is the sole source of
+> truth for `crust.json` and update detection. If you keep a
+> `metadata.version` in your SKILL.md for Agent Skills spec compliance,
+> keep it in sync with the value you pass here.
+
+### Options
+
+| Option        | Type                                | Default     | Description                                                                                                       |
+| ------------- | ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `sourceDir`   | `string \| URL`                     | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.          |
+| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                            |
+| `version`     | `string`                            | — required | Recorded in `crust.json` and compared on subsequent installs.                                |
+| `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
+| `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
+| `clean`       | `boolean`                           | `true`      | Remove the existing skill directory before writing.                                                               |
+| `force`       | `boolean`                           | `false`     | Overwrite a conflicting directory (no `crust.json`, kind mismatch, or malformed manifest) instead of throwing.    |
 
 ### What gets copied
 
@@ -495,8 +546,8 @@ will be corrupted on round-trip. Open an issue if you need binary support.
 
 Bundle content changes do not propagate without a `version` bump:
 identical-version reinstalls report `up-to-date` and leave the canonical
-store untouched. Bump the consuming package's `package.json` `version` (or
-pass an explicit `version`) whenever the bundle contents change.
+store untouched. Pass a fresh `version` (typically wired to the consuming
+package's `package.json` `version`) whenever the bundle contents change.
 
 Exclusions at the bundle root only:
 
@@ -511,9 +562,10 @@ Dotfiles inside subdirectories **are** copied.
 Two gotchas trip up bundle authors who publish to npm:
 
 1. **Include the bundle directory in the published tarball.** Add the path
-   to your `package.json` `files` array (or rely on `.npmignore` to ship
-   it). Local installs work even when the directory is gitignored from the
-   tarball, but consumers will hit a missing-`SKILL.md` error.
+   to your `package.json` `files` array and verify with `npm pack --dry-run`
+   before publishing. Local installs work even when the directory would be
+   excluded from the tarball, but consumers will hit a missing-`SKILL.md`
+   error.
 
    ```json
    {
@@ -522,8 +574,6 @@ Two gotchas trip up bundle authors who publish to npm:
      "files": ["dist", "skills"]
    }
    ```
-
-   Verify with `npm pack --dry-run` before publishing.
 
 2. **Consumers point at the published path with `import.meta.resolve`.**
    Relative `sourceDir` resolution walks up from the consumer's

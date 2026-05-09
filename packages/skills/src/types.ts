@@ -367,18 +367,20 @@ export interface GenerateOptions {
  *
  * Bundle content changes do not propagate without a `version` bump:
  * identical-version reinstalls report `up-to-date` and leave the canonical
- * store untouched. Bump the consuming package's `package.json` `version`
- * (or pass an explicit `version` here) whenever the bundle contents change.
+ * store untouched. Pass a fresh `version` whenever the bundle contents
+ * change (e.g. wire it to the consuming package's `package.json` `version`).
  *
  * @example
  * ```ts
  * import { installSkillBundle } from "@crustjs/skills";
+ * import pkg from "./package.json" with { type: "json" };
  *
- * // Common case — SKILL.md frontmatter supplies name + description,
- * // package.json supplies version.
+ * // SKILL.md frontmatter supplies name + description; the caller passes
+ * // the version explicitly (typically wired to package.json).
  * await installSkillBundle({
  *   sourceDir: "skills/funnel-builder",
  *   agents: ["claude-code"],
+ *   version: pkg.version,
  * });
  * ```
  */
@@ -408,16 +410,13 @@ export interface InstallSkillBundleOptions {
 	 * Version string recorded for this install and compared on subsequent
 	 * installs to decide between `installed` / `updated` / `up-to-date`.
 	 *
-	 * Defaults to the `version` field of the nearest `package.json` walking up
-	 * from `process.argv[1]` (the same `package.json` used to resolve a
-	 * relative `sourceDir`). Pass an explicit value when one package publishes
-	 * multiple bundles with independent versions, or when the consuming package
-	 * has no `version` (e.g. an unpublished workspace root).
-	 *
-	 * Throws if neither this option nor a resolvable `package.json` `version`
-	 * is available.
+	 * Required. Typically wired to the consuming package's `package.json`
+	 * `version` (e.g. via `import pkg from "./package.json" with { type:
+	 * "json" }`). Identical-version reinstalls report `up-to-date` and skip
+	 * the canonical-store rewrite, so bump this whenever bundle contents
+	 * change.
 	 */
-	version?: string;
+	version: string;
 	/**
 	 * Installation strategy for agent output paths.
 	 * @default "auto"
