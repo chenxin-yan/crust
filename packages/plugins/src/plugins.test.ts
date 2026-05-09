@@ -525,4 +525,99 @@ describe("built-in plugins", () => {
 		// Description still appears on the same line, just after the overflowing label.
 		expect(issueLine).toContain("Manage issues");
 	});
+
+	// ──────────────────────────────────────────────────────────────────────
+	// helpPlugin hidden subcommand filtering (TP-009)
+	// ──────────────────────────────────────────────────────────────────────
+
+	it("renderHelp omits subcommands marked meta.hidden: true", () => {
+		const command = new Crust("app")
+			.command("build", (cmd) =>
+				cmd.meta({ description: "Build the project" }).run(() => {}),
+			)
+			.command("__complete", (cmd) =>
+				cmd
+					.meta({
+						description: "Internal completion entrypoint",
+						hidden: true,
+					})
+					.run(() => {}),
+			)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("build");
+		expect(plain).not.toContain("__complete");
+		expect(plain).not.toContain("Internal completion entrypoint");
+	});
+
+	it("renderHelp omits the COMMANDS section when every subcommand is hidden", () => {
+		const command = new Crust("app")
+			.command("__complete", (cmd) =>
+				cmd.meta({ hidden: true, description: "Internal" }).run(() => {}),
+			)
+			.run(() => {})._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).not.toContain("COMMANDS:");
+		expect(plain).not.toContain("__complete");
+	});
+
+	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no run handler", () => {
+		// Regression: formatUsage previously counted hidden subcommands when
+		// deciding whether to emit `<command>`, producing the incoherent
+		// `USAGE: app <command>` with no COMMANDS section below it.
+		const command = new Crust("app").command("__complete", (cmd) =>
+			cmd.meta({ hidden: true, description: "Internal" }).run(() => {}),
+		)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("USAGE:");
+		expect(plain).not.toMatch(/USAGE:\s+app\s+<command>/);
+		expect(plain).not.toContain("COMMANDS:");
+		expect(plain).not.toContain("__complete");
+	});
+
+	it("renderHelp hidden filtering composes with alias rendering", () => {
+		// A hidden subcommand with aliases should be entirely absent. A visible
+		// subcommand with aliases should still render `name (a, b)`.
+		const command = new Crust("app")
+			.command("issue", (cmd) =>
+				cmd
+					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
+					.run(() => {}),
+			)
+			.command("__complete", (cmd) =>
+				cmd
+					.meta({
+						description: "Internal",
+						aliases: ["__c"],
+						hidden: true,
+					})
+					.run(() => {}),
+			)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("issue (issues, i)");
+		expect(plain).toContain("Manage issues");
+		expect(plain).not.toContain("__complete");
+		expect(plain).not.toContain("__c");
+	});
+
+	it("hidden subcommands remain invocable by direct name", async () => {
+		let didRun = false;
+		const app = new Crust("app")
+			.use(helpPlugin())
+			.command("build", (cmd) =>
+				cmd.meta({ description: "Build the project" }).run(() => {}),
+			)
+			.command("__complete", (cmd) =>
+				cmd.meta({ hidden: true, description: "Internal" }).run(() => {
+					didRun = true;
+				}),
+			);
+
+		await app.execute({ argv: ["__complete"] });
+		expect(didRun).toBe(true);
+	});
 });

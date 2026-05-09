@@ -114,6 +114,24 @@ new Crust("my-cli")
 
 The same check runs during `prepareCommandTree()` for plugin-installed subcommands, so plugins can't sneak conflicting aliases past the policy.
 
+## Hidden Commands
+
+Set `hidden: true` on a subcommand's `meta()` to omit it from the default `--help` listing:
+
+```ts
+const app = new Crust("my-cli")
+  .command("build", (cmd) =>
+    cmd.meta({ description: "Build the project" }).run(() => {}),
+  )
+  .command("__complete", (cmd) =>
+    cmd
+      .meta({ hidden: true, description: "Internal completion entrypoint" })
+      .run(() => {}),
+  );
+```
+
+`hidden` affects help rendering only — the command remains directly invocable by name, alias resolution still works, and `didYouMeanPlugin` still suggests it. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion plugins. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
+
 ## Nested Subcommands
 
 Subcommands can be nested arbitrarily deep:

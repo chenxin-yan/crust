@@ -53,6 +53,23 @@ interface StringArgDef extends ArgDefBase {
 	type: "string";
 	/** Default string value when the argument is not provided */
 	default?: string;
+	/**
+	 * Static enum of valid values for this argument.
+	 *
+	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
+	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
+	 * and may be consumed by future opt-in validation. It is **NOT** enforced
+	 * at parse time in this version: passing a value outside `choices` does
+	 * not throw, the value is still parsed as a string and delivered to your
+	 * `run` handler. Validate explicitly inside your handler if you need
+	 * runtime rejection today.
+	 *
+	 * Only available on string-typed args; not supported on number/boolean.
+	 *
+	 * @example
+	 * { name: "target", type: "string", choices: ["browser", "bun", "node"] }
+	 */
+	choices?: readonly string[];
 }
 
 /** A positional argument whose value is a number */
@@ -120,6 +137,23 @@ interface StringFlagDef extends SingleFlagBase {
 	type: "string";
 	/** Default string value */
 	default?: string;
+	/**
+	 * Static enum of valid values for this flag.
+	 *
+	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
+	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
+	 * and may be consumed by future opt-in validation. It is **NOT** enforced
+	 * at parse time in this version: passing a value outside `choices` does
+	 * not throw, the value is still parsed as a string and delivered to your
+	 * `run` handler. Validate explicitly inside your handler if you need
+	 * runtime rejection today.
+	 *
+	 * Only available on string-typed flags; not supported on number/boolean.
+	 *
+	 * @example
+	 * { type: "string", choices: ["browser", "bun", "node"] }
+	 */
+	choices?: readonly string[];
 }
 
 /** A single-value number flag */
@@ -151,6 +185,23 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	type: "string";
 	/** Default string array value */
 	default?: string[];
+	/**
+	 * Static enum of valid values for each occurrence of this flag.
+	 *
+	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
+	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
+	 * and may be consumed by future opt-in validation. It is **NOT** enforced
+	 * at parse time in this version: passing a value outside `choices` does
+	 * not throw, the value is still parsed as a string and collected into the
+	 * array. Validate explicitly inside your handler if you need runtime
+	 * rejection today.
+	 *
+	 * Only available on string-typed multi-flags; not supported on number/boolean.
+	 *
+	 * @example
+	 * { type: "string", multiple: true, choices: ["unit", "integration"] }
+	 */
+	choices?: readonly string[];
 }
 
 /** A multi-value number flag (collects repeated values into an array) */
@@ -619,6 +670,28 @@ export interface CommandMeta {
 	 * meta: { name: "issue", aliases: ["issues", "i"] }
 	 */
 	aliases?: readonly string[];
+	/**
+	 * When `true`, omit this command from any tooling that enumerates the
+	 * command tree for users — help output, generated man pages, skill
+	 * descriptors, completion candidate lists, and similar surfaces.
+	 *
+	 * The command is **only hidden from listings**: it stays fully invocable
+	 * by name (or alias), routing is unchanged, and it can still surface
+	 * through tooling that looks up specific commands rather than
+	 * enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
+	 *
+	 * Intended for internal/runtime commands like a `__complete` shell-
+	 * completion entrypoint. Marking a user-facing command `hidden` is
+	 * supported but unusual.
+	 *
+	 * Tooling contract: any renderer or generator that walks `subCommands`
+	 * to produce a user-facing listing should skip nodes where
+	 * `meta.hidden === true`.
+	 *
+	 * @example
+	 * meta: { name: "__complete", hidden: true, description: "Internal" }
+	 */
+	hidden?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
