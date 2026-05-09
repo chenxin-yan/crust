@@ -384,13 +384,30 @@ skills/my-cli/
 
 ## Conflict Detection
 
-Each skill directory contains a `crust.json` file that acts as an ownership marker. If `generateSkill()` encounters an existing directory without `crust.json`, it throws a `SkillConflictError` to prevent overwriting skills created manually or by other tools.
+Each Crust-managed skill directory contains a `crust.json` file that acts
+as an ownership marker. Both `generateSkill()` and `installSkillBundle()`
+refuse to overwrite a target directory in three cases:
 
-### Uninstall Cleanup
+1. **No `crust.json`** — the directory exists but was not created by Crust
+   (e.g. manually authored or installed by another tool).
+2. **Kind mismatch** — `crust.json` records a different
+   [`kind`](#kind-field-on-crustjson) than the install attempt (e.g. an
+   existing `generated` skill collides with an incoming `bundle`).
+3. **Malformed manifest** — `crust.json` is present but cannot be
+   interpreted (invalid JSON, top-level non-object, missing `version`, or
+   an unrecognized `kind` value such as a hand-edit typo).
 
-When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
+All three throw `SkillConflictError`. Pass `force: true` to overwrite, or
+uninstall the existing skill first.
 
-Pass `force: true` to overwrite, or handle the error:
+`SkillConflictError.details` carries optional discriminators:
+
+- `details.kindMismatch?: { existing, attempted }` — set on kind mismatch.
+- `details.manifestMalformed?: { reason, rawKind? }` — set on malformed
+  `crust.json`. `reason` is one of `"parse-error"`, `"not-an-object"`,
+  `"missing-version"`, or `"unknown-kind"`. `rawKind` is populated only
+  when `reason === "unknown-kind"`.
+- Neither field set — the original "directory exists with no `crust.json`" case.
 
 ```ts
 import { generateSkill, SkillConflictError } from "@crustjs/skills";
@@ -398,12 +415,30 @@ import { generateSkill, SkillConflictError } from "@crustjs/skills";
 try {
   await generateSkill({ command, meta, agents });
 } catch (err) {
-  if (err instanceof SkillConflictError) {
-    console.error(`Conflict: ${err.details.outputDir}`);
-    // err.details.agent — the agent where the conflict occurred
+  if (!(err instanceof SkillConflictError)) throw err;
+
+  if (err.details.kindMismatch) {
+    const { existing, attempted } = err.details.kindMismatch;
+    console.error(
+      `Cannot install ${attempted} skill at ${err.details.outputDir} — ` +
+        `existing skill was installed as ${existing}.`,
+    );
+  } else if (err.details.manifestMalformed) {
+    console.error(
+      `crust.json at ${err.details.outputDir} is malformed: ` +
+        `${err.details.manifestMalformed.reason}.`,
+    );
+  } else {
+    console.error(
+      `${err.details.outputDir} exists but was not created by Crust.`,
+    );
   }
 }
 ```
+
+### Uninstall Cleanup
+
+When `uninstallSkill()` removes agent install paths, it also checks whether any other agent paths still reference the skill. If no agent installs remain, the canonical store entry (`.crust/skills/<skill>` or `~/.crust/skills/<skill>`) is automatically removed.
 
 ## Installing Generated Skills
 
@@ -428,6 +463,153 @@ cp -r skills/my-cli/ .claude/skills/my-cli/
 ```
 
 The agent will discover the skill from `SKILL.md` and load command documentation on demand from the `commands/` directory.
+
+## Installing Hand-Authored Bundles
+
+`generateSkill()` produces a skill bundle from a Crust command tree.
+`installSkillBundle()` is the dual entrypoint for **hand-authored** bundles —
+use it when you have a directory containing `SKILL.md` and any supporting
+files that you want to install through the same canonical-store + agent
+fan-out pipeline.
+
+Use `installSkillBundle()` when:
+
+- You ship a published CLI package that bundles authored skill directories
+  alongside generated ones.
+- The skill's `SKILL.md` is hand-curated (or produced by your own renderer)
+  and Crust just needs to handle install plumbing — canonical storage,
+  symlink/copy fan-out, version tracking, and conflict detection.
+
+```ts
+import { installSkillBundle } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
+
+await installSkillBundle({
+  // Resolved relative to the nearest package.json walking up from
+  // process.argv[1]. You can also pass an absolute string or a file: URL.
+  sourceDir: "skills/funnel-builder",
+  agents: ["claude-code", "opencode"],
+  version: pkg.version,
+});
+```
+
+### Where `name`, `description`, and `version` come from
+
+The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
+`description` — Crust reads them but never rewrites the file. Both fields
+are required:
+
+```yaml
+---
+name: funnel-builder
+description: Build a sales funnel
+---
+```
+
+`version` is supplied by the caller and recorded in `crust.json`. Wiring
+it to the consuming package's `package.json` `version` (as in the example
+above) is the typical pattern; pass any string explicitly when one package
+publishes multiple bundles with independent versions:
+
+```ts
+await installSkillBundle({
+  sourceDir: "skills/funnel-builder",
+  agents: ["claude-code"],
+  version: "2.0.0",
+});
+```
+
+> **Note:** `metadata.version` declared inside the bundle's SKILL.md
+> frontmatter is **not** read — the `version` option is the sole source of
+> truth for `crust.json` and update detection. If you keep a
+> `metadata.version` in your SKILL.md for Agent Skills spec compliance,
+> keep it in sync with the value you pass here.
+
+### Options
+
+| Option        | Type                                | Default     | Description                                                                                                       |
+| ------------- | ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `sourceDir`   | `string \| URL`                     | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.          |
+| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                            |
+| `version`     | `string`                            | — required | Recorded in `crust.json` and compared on subsequent installs.                                |
+| `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
+| `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
+| `clean`       | `boolean`                           | `true`      | Remove the existing skill directory before writing.                                                               |
+| `force`       | `boolean`                           | `false`     | Overwrite a conflicting directory (no `crust.json`, kind mismatch, or malformed manifest) instead of throwing.    |
+
+### What gets copied
+
+The bundle's `SKILL.md` plus every supporting file is copied into the
+canonical Crust store — markdown, configs, scripts, etc. Files are read and
+written as UTF-8, so binary supporting files are not currently supported and
+will be corrupted on round-trip. Open an issue if you need binary support.
+
+Bundle content changes do not propagate without a `version` bump:
+identical-version reinstalls report `up-to-date` and leave the canonical
+store untouched. Pass a fresh `version` (typically wired to the consuming
+package's `package.json` `version`) whenever the bundle contents change.
+
+Exclusions at the bundle root only:
+
+- `node_modules/`, `.DS_Store`
+- Any dotfile at the root (e.g. `.git/`, `.editorconfig`, `.gitignore`)
+- Any pre-existing `crust.json` (Crust regenerates it)
+
+Dotfiles inside subdirectories **are** copied.
+
+### Publishing a bundle to npm
+
+Two gotchas trip up bundle authors who publish to npm:
+
+1. **Include the bundle directory in the published tarball.** Add the path
+   to your `package.json` `files` array and verify with `npm pack --dry-run`
+   before publishing. Local installs work even when the directory would be
+   excluded from the tarball, but consumers will hit a missing-`SKILL.md`
+   error.
+
+   ```json
+   {
+     "name": "acme-skills",
+     "version": "1.0.0",
+     "files": ["dist", "skills"]
+   }
+   ```
+
+2. **Consumers point at the published path with `import.meta.resolve`.**
+   Relative `sourceDir` resolution walks up from the consumer's
+   `process.argv[1]`, so it lands in the consumer's package — not yours.
+   Consumers should use a `file:` URL via `import.meta.resolve`:
+
+   ```ts
+   import skillsPkg from "acme-skills/package.json" with { type: "json" };
+
+   await installSkillBundle({
+     sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
+     agents: ["claude-code"],
+     version: skillsPkg.version,
+   });
+   ```
+
+   For this to work, the bundle directory must be reachable from your
+   package's `exports` (or accessible as a subpath of the package root).
+   Bundle authors who want explicit subpath access can declare it in
+   `package.json` `exports`.
+
+### `kind` field on `crust.json`
+
+Every installed bundle records its origin in `crust.json` as a `kind`
+field: `"generated"` for `generateSkill()` output, `"bundle"` for
+`installSkillBundle()`. This prevents accidental cross-overwrites:
+
+- Trying to install a bundle on top of a generated skill (or vice versa) at
+  the same name throws a `SkillConflictError` whose `details.kindMismatch`
+  carries `{ existing, attempted }`.
+- To proceed anyway, uninstall the existing skill first or pass
+  `force: true`.
+
+Legacy `crust.json` files written before this field existed are read as
+`kind: "generated"` for backward compatibility — generated installs continue
+to update cleanly with no migration step.
 
 ## Documentation
 

@@ -853,6 +853,145 @@ describe("generateSkill", () => {
 			);
 			expect(content.endsWith("\n")).toBe(true);
 		});
+
+		it("emits kind: 'generated' for generateSkill output", async () => {
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.kind).toBe("generated");
+		});
+
+		it("updates a legacy crust.json (no kind) cleanly", async () => {
+			// Pre-install with v1.0.0
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			// Strip `kind` from canonical crust.json to simulate a pre-TP-003 install
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			const legacyManifest = JSON.parse(
+				await readText(join(canonicalDir, CRUST_MANIFEST)),
+			);
+			delete legacyManifest.kind;
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify(legacyManifest, null, "\t")}\n`,
+			);
+
+			// Re-install with v2.0.0 — must succeed and emit kind: 'generated'
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.version).toBe("2.0.0");
+			expect(manifest.kind).toBe("generated");
+		});
+
+		it("throws SkillConflictError with kindMismatch when existing kind is 'bundle'", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify({ name: "my-cli", description: "x", version: "1.0.0", kind: "bundle" }, null, "\t")}\n`,
+			);
+
+			const attempt = withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			);
+
+			let caught: SkillConflictError | undefined;
+			try {
+				await attempt;
+			} catch (err) {
+				if (err instanceof SkillConflictError) {
+					caught = err;
+				} else {
+					throw err;
+				}
+			}
+			expect(caught).toBeInstanceOf(SkillConflictError);
+			expect(caught?.details.kindMismatch).toEqual({
+				existing: "bundle",
+				attempted: "generated",
+			});
+			expect(caught?.message).toContain('"bundle"');
+			expect(caught?.message).toContain('"generated"');
+		});
+
+		it("force: true bypasses kindMismatch and overwrites kind", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				`${JSON.stringify({ name: "my-cli", description: "x", version: "1.0.0", kind: "bundle" }, null, "\t")}\n`,
+			);
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Test",
+						version: "2.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					force: true,
+				}),
+			);
+
+			const content = await readText(
+				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
+			);
+			const manifest = JSON.parse(content);
+			expect(manifest.kind).toBe("generated");
+			expect(manifest.version).toBe("2.0.0");
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
@@ -1222,6 +1361,96 @@ describe("generateSkill", () => {
 				expect(err).toBeInstanceOf(SkillConflictError);
 				const conflict = err as SkillConflictError;
 				expect(conflict.details.outputDir).toBe(canonicalDir);
+				// Without crust.json the message should report the absent-manifest case.
+				expect(conflict.details.manifestMalformed).toBeUndefined();
+				expect(conflict.message).toContain("no crust.json found");
+			}
+		});
+
+		it("throws SkillConflictError with manifestMalformed when canonical crust.json has unrecognized kind", async () => {
+			// Regression: previously, crust.json with an unknown `kind` (typo or
+			// forward-compatible value) collapsed to the same "no crust.json
+			// found" error as a missing manifest, misleading users into deleting
+			// a Crust-owned directory.
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(join(canonicalDir, "SKILL.md"), "# Crust-owned");
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				JSON.stringify({
+					name: "my-cli",
+					description: "Test",
+					version: "0.9.0",
+					kind: "bundel",
+				}),
+			);
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.outputDir).toBe(canonicalDir);
+				expect(conflict.details.manifestMalformed).toEqual({
+					reason: "unknown-kind",
+					rawKind: "bundel",
+				});
+				expect(conflict.message).toContain("unrecognized kind");
+				expect(conflict.message).toContain("bundel");
+				expect(conflict.message).not.toContain("no crust.json found");
+			}
+		});
+
+		it("throws SkillConflictError with manifestMalformed when agent path crust.json has unrecognized kind", async () => {
+			// Same regression but at the per-agent guard: a stale agent copy
+			// with an unknown kind must surface the malformed details, not the
+			// generic "not created by Crust" message.
+			const skillDir = join(tmpDir, ".claude", "skills", "my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "# Crust-owned");
+			await writeFile(
+				join(skillDir, CRUST_MANIFEST),
+				JSON.stringify({
+					name: "my-cli",
+					description: "Test",
+					version: "0.9.0",
+					kind: "bundel",
+				}),
+			);
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.manifestMalformed).toEqual({
+					reason: "unknown-kind",
+					rawKind: "bundel",
+				});
 			}
 		});
 

@@ -47,6 +47,12 @@ describe("@crustjs/skills exports", () => {
 		expect(typeof mod.SkillConflictError).toBe("function");
 	});
 
+	it("exports installSkillBundle function", async () => {
+		const mod = await import("./index.ts");
+		expect(mod.installSkillBundle).toBeDefined();
+		expect(typeof mod.installSkillBundle).toBe("function");
+	});
+
 	it("exports all expected function symbols", async () => {
 		const mod = await import("./index.ts");
 		const exportedKeys = Object.keys(mod).sort();
@@ -58,6 +64,7 @@ describe("@crustjs/skills exports", () => {
 				"generateSkill",
 				"getAdditionalAgents",
 				"getUniversalAgents",
+				"installSkillBundle",
 				"isValidSkillName",
 				"isUniversalAgent",
 				"resolveCanonicalSkillPath",

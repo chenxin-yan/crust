@@ -146,6 +146,21 @@ export type Scope = "global" | "project";
 /** Installation strategy for agent skill output paths. */
 export type SkillInstallMode = "auto" | "symlink" | "copy";
 
+/**
+ * Origin of an installed skill bundle.
+ *
+ * Recorded in `crust.json` as the top-level `kind` field so Crust can detect
+ * when a generated and a hand-authored bundle would collide on the same name.
+ *
+ * - `"generated"` — produced by {@link generateSkill} from a Crust command tree.
+ * - `"bundle"` — installed by {@link installSkillBundle} from a hand-authored
+ *   directory containing a `SKILL.md` and supporting files.
+ *
+ * Legacy `crust.json` files (written before this field existed) are read as
+ * `"generated"` for backward compatibility.
+ */
+export type SkillKind = "generated" | "bundle";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
 // ────────────────────────────────────────────────────────────────────────────
@@ -332,6 +347,105 @@ export interface GenerateOptions {
 	 */
 	force?: boolean;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bundle install options — input for installSkillBundle
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Top-level options for installing a hand-authored skill bundle.
+ *
+ * Unlike {@link GenerateOptions}, the bundle entrypoint does not render
+ * `SKILL.md` from a command tree — it copies a directory the caller has
+ * already authored. The bundle's `SKILL.md` frontmatter is the source of
+ * truth for `name` and `description`; Crust reads them but does not rewrite
+ * the file. A fresh `crust.json` is written alongside the bundle for
+ * ownership and version tracking.
+ *
+ * Files are copied as **UTF-8 text** — binary supporting files are not
+ * supported and will be corrupted on round-trip.
+ *
+ * Bundle content changes do not propagate without a `version` bump:
+ * identical-version reinstalls report `up-to-date` and leave the canonical
+ * store untouched. Pass a fresh `version` whenever the bundle contents
+ * change (e.g. wire it to the consuming package's `package.json` `version`).
+ *
+ * @example
+ * ```ts
+ * import { installSkillBundle } from "@crustjs/skills";
+ * import pkg from "./package.json" with { type: "json" };
+ *
+ * // SKILL.md frontmatter supplies name + description; the caller passes
+ * // the version explicitly (typically wired to package.json).
+ * await installSkillBundle({
+ *   sourceDir: "skills/funnel-builder",
+ *   agents: ["claude-code"],
+ *   version: pkg.version,
+ * });
+ * ```
+ */
+export interface InstallSkillBundleOptions {
+	/**
+	 * Source directory containing the bundle to install.
+	 *
+	 * Resolution rules (mirror `@crustjs/create`'s `scaffold({ template })`):
+	 * - `URL` — must use `file:` protocol; resolved via `fileURLToPath()`.
+	 * - Absolute string path — used as-is via `path.resolve()`.
+	 * - Relative string path — resolved from the nearest `package.json`
+	 *   directory walking up from `process.argv[1]`. Throws if `process.argv[1]`
+	 *   is unset or no `package.json` is found.
+	 *
+	 * The directory must contain a `SKILL.md` whose YAML frontmatter declares
+	 * top-level `name:` and `description:` fields.
+	 */
+	sourceDir: string | URL;
+	/**
+	 * Agent targets to install the bundle for.
+	 *
+	 * Required — unlike {@link GenerateOptions.agents}, the bundle entrypoint
+	 * does not auto-detect agents. Pass `[]` for a no-op (no install performed).
+	 */
+	agents: AgentTarget[];
+	/**
+	 * Version string recorded for this install and compared on subsequent
+	 * installs to decide between `installed` / `updated` / `up-to-date`.
+	 *
+	 * Required. Typically wired to the consuming package's `package.json`
+	 * `version` (e.g. via `import pkg from "./package.json" with { type:
+	 * "json" }`). Identical-version reinstalls report `up-to-date` and skip
+	 * the canonical-store rewrite, so bump this whenever bundle contents
+	 * change.
+	 */
+	version: string;
+	/**
+	 * Installation strategy for agent output paths.
+	 * @default "auto"
+	 */
+	installMode?: SkillInstallMode;
+	/**
+	 * Installation scope — global (home directory) or project (cwd).
+	 * @default "global"
+	 */
+	scope?: Scope;
+	/**
+	 * When `true`, removes the existing skill directory before writing.
+	 * @default true
+	 */
+	clean?: boolean;
+	/**
+	 * When `true`, overwrite an existing skill directory even if it conflicts
+	 * (no `crust.json`, or a `crust.json` whose `kind` differs from `"bundle"`).
+	 * @default false
+	 */
+	force?: boolean;
+}
+
+/**
+ * Result returned by `installSkillBundle` after writing files to disk.
+ *
+ * Type alias of {@link GenerateResult} — the per-agent shape is identical.
+ */
+export type InstallSkillBundleResult = GenerateResult;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Generation result — returned from generateSkill

@@ -4,7 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { InstallStatus } from "./types.ts";
+import type { InstallStatus, SkillKind } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -21,7 +21,146 @@ export const CRUST_MANIFEST = "crust.json";
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Manifest record extracted from a skill directory's `crust.json`.
+ *
+ * Returned by {@link readInstalledManifest}. Contains the fields that drive
+ * conflict detection and version comparison in the install pipeline.
+ */
+export interface InstalledSkillManifest {
+	/** Installed version string */
+	readonly version: string;
+	/**
+	 * Origin of the installed bundle.
+	 *
+	 * Legacy `crust.json` files (written before the `kind` field existed) are
+	 * normalized to `"generated"` for backward compatibility. New installs
+	 * always emit `kind` explicitly.
+	 */
+	readonly kind: SkillKind;
+}
+
+/**
+ * Why an installed manifest could not be interpreted.
+ *
+ * - `parse-error`: `crust.json` is present but is not valid JSON.
+ * - `not-an-object`: top-level JSON value is not an object.
+ * - `missing-version`: `version` field is absent or not a string.
+ * - `unknown-kind`: `kind` is present but is neither `"bundle"` nor `"generated"` —
+ *   typically a hand-edit typo or a forward-compatible value emitted by a
+ *   newer Crust release.
+ */
+export type InstalledManifestMalformedReason =
+	| "parse-error"
+	| "not-an-object"
+	| "missing-version"
+	| "unknown-kind";
+
+/**
+ * Discriminated result of inspecting a skill directory's `crust.json`.
+ *
+ * Returned by {@link inspectInstalledManifest}. Distinguishes "no manifest at
+ * all" from "manifest exists but is invalid" so callers (notably the install
+ * pipeline) can emit precise diagnostics — instead of misreporting an unknown
+ * `kind` value as "no crust.json found".
+ */
+export type InstalledManifestStatus =
+	| { readonly status: "ok"; readonly manifest: InstalledSkillManifest }
+	| { readonly status: "absent" }
+	| {
+			readonly status: "malformed";
+			readonly reason: InstalledManifestMalformedReason;
+			/** Raw `kind` value when `reason === "unknown-kind"`. */
+			readonly rawKind?: string;
+	  };
+
+/**
+ * Inspects `crust.json` in `dir` and returns a discriminated result.
+ *
+ * Unlike {@link readInstalledManifest} (which collapses every failure to
+ * `null`), this preserves the failure mode so callers can differentiate a
+ * genuinely absent manifest from one that exists but is malformed —
+ * including the typo / forward-compatible `kind` case where the previous
+ * collapse would have produced a misleading "no crust.json found" error.
+ *
+ * Legacy `crust.json` files (written before TP-003) lack the `kind` field;
+ * those are normalized to `"generated"` and reported as `status: "ok"`.
+ */
+export async function inspectInstalledManifest(
+	dir: string,
+): Promise<InstalledManifestStatus> {
+	let raw: string;
+	try {
+		raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
+	} catch {
+		return { status: "absent" };
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return { status: "malformed", reason: "parse-error" };
+	}
+
+	if (typeof parsed !== "object" || parsed === null) {
+		return { status: "malformed", reason: "not-an-object" };
+	}
+
+	const record = parsed as Record<string, unknown>;
+	if (typeof record.version !== "string") {
+		return { status: "malformed", reason: "missing-version" };
+	}
+
+	const version = record.version;
+	const rawKind = record.kind;
+
+	if (rawKind === undefined) {
+		// Backward-compat: legacy crust.json files written before TP-003 lack
+		// the `kind` field; treat them as generated.
+		return { status: "ok", manifest: { version, kind: "generated" } };
+	}
+	if (rawKind === "bundle" || rawKind === "generated") {
+		return { status: "ok", manifest: { version, kind: rawKind } };
+	}
+
+	// `kind` is present but unrecognized — surface it so the install pipeline
+	// can emit a useful error ("unrecognized kind 'bundel'") instead of
+	// pretending crust.json is absent or silently coercing to `generated`.
+	return {
+		status: "malformed",
+		reason: "unknown-kind",
+		rawKind: typeof rawKind === "string" ? rawKind : JSON.stringify(rawKind),
+	};
+}
+
+/**
+ * Reads the installed manifest from a skill directory's `crust.json`.
+ *
+ * Returns the version string and the bundle kind. If `crust.json` exists but
+ * has no `kind` field (legacy installs written before TP-003), the kind is
+ * defaulted to `"generated"` for backward compatibility.
+ *
+ * If `kind` is **present** but holds an unrecognized value (e.g. a hand-edit
+ * typo like `"bundel"`), the manifest is treated as malformed and `null` is
+ * returned. This prevents accidental cross-kind installs from slipping past
+ * the conflict guard via a typo. Callers that need to distinguish "absent"
+ * from "malformed" should use {@link inspectInstalledManifest} instead.
+ *
+ * @param dir - Absolute path to the skill directory
+ * @returns The installed manifest, or `null` if the file is missing/malformed/lacks a version/has an unrecognized kind
+ */
+export async function readInstalledManifest(
+	dir: string,
+): Promise<InstalledSkillManifest | null> {
+	const result = await inspectInstalledManifest(dir);
+	return result.status === "ok" ? result.manifest : null;
+}
+
+/**
  * Reads the installed version from a skill directory's `crust.json`.
+ *
+ * Thin wrapper around {@link readInstalledManifest} retained for backward
+ * compatibility with existing call sites that only need the version string.
  *
  * @param dir - Absolute path to the skill directory
  * @returns The version string if found, or `null` if the file is missing or malformed
@@ -29,23 +168,8 @@ export const CRUST_MANIFEST = "crust.json";
 export async function readInstalledVersion(
 	dir: string,
 ): Promise<string | null> {
-	try {
-		const raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
-		const parsed: unknown = JSON.parse(raw);
-
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			"version" in parsed &&
-			typeof (parsed as Record<string, unknown>).version === "string"
-		) {
-			return (parsed as Record<string, unknown>).version as string;
-		}
-
-		return null;
-	} catch {
-		return null;
-	}
+	const manifest = await readInstalledManifest(dir);
+	return manifest?.version ?? null;
 }
 
 /** Result from {@link checkVersion} containing the status and installed version. */
