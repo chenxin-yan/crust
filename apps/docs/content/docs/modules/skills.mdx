@@ -46,16 +46,11 @@ This gives you:
 
 ```ts
 interface SkillPluginOptions {
-  /** Skill version — compared against the installed crust.json */
-  version: string;
-  /** Default installation scope for interactive commands. When omitted, prompts for scope. */
-  defaultScope?: "global" | "project";
-  /** Auto-update skills when version is outdated. @default true */
-  autoUpdate?: boolean;
-  /** Register interactive skill subcommand with a custom name. @default "skill" */
-  command?: string;
-  /** Additional top-level instructions rendered into SKILL.md. */
-  instructions?: string | string[];
+  version: string;                       // required — compared against installed crust.json
+  defaultScope?: "global" | "project";   // skip the interactive scope prompt
+  autoUpdate?: boolean;                  // default: true
+  command?: string;                      // default: "skill"
+  instructions?: string | string[];      // extra top-level SKILL.md content
 }
 ```
 
@@ -67,16 +62,6 @@ Scope resolution for the interactive command and `skill update`:
 
 When the current working directory is the home directory, `project` scope is normalized to `global`. In that case, installs, updates, and status checks all use the global skill locations and update output reports `(global)`.
 
-### Agent Auto-Detection
-
-`detectInstalledAgents()` probes CLI binaries for additional agents (for example `claude --version`, `windsurf --version`).
-
-- Universal agents are not gated by detection and are always available through the **Universal** option.
-- Additional agents are detected by command availability.
-- In the interactive command, an additional agent is also shown if the skill is already installed at that agent path, even when command detection fails.
-
-Detection is used for additional-agent discovery only.
-
 ### Supported Agents
 
 `@crustjs/skills` supports the same broad ecosystem as Vercel Skills.
@@ -85,9 +70,9 @@ Universal group (single prompt option, shared path):
 
 - `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
 
-Additional agents:
-
-- `adal`, `antigravity`, `augment`, `claude-code`, `codebuddy`, `command-code`, `continue`, `cortex`, `crush`, `droid`, `goose`, `iflow-cli`, `junie`, `kilo`, `kiro-cli`, `kode`, `mcpjam`, `mistral-vibe`, `mux`, `neovate`, `openclaw`, `openhands`, `pi`, `pochi`, `qoder`, `qwen-code`, `roo`, `trae`, `trae-cn`, `windsurf`, `zencoder`
+Additional agents: 30+ agents detected on `PATH` via `<agent> --version`
+(`claude-code`, `windsurf`, `pi`, `roo`, `goose`, `continue`, etc.). See
+the `AgentTarget` union exported from `@crustjs/skills` for the full list.
 
 Path model:
 
@@ -167,25 +152,16 @@ try {
   await generateSkill({ command, meta, agents });
 } catch (err) {
   if (!(err instanceof SkillConflictError)) throw err;
+  const { outputDir, kindMismatch, manifestMalformed } = err.details;
 
-  if (err.details.kindMismatch) {
-    const { existing, attempted } = err.details.kindMismatch;
-    console.error(
-      `Cannot install ${attempted} skill at ${err.details.outputDir} — ` +
-        `existing skill was installed as ${existing}.`,
-    );
-  } else if (err.details.manifestMalformed) {
-    console.error(
-      `crust.json at ${err.details.outputDir} is malformed: ` +
-        `${err.details.manifestMalformed.reason}.`,
-    );
+  if (kindMismatch) {
+    console.error(`${outputDir}: existing ${kindMismatch.existing} blocks ${kindMismatch.attempted} install`);
+  } else if (manifestMalformed) {
+    console.error(`${outputDir}: malformed crust.json (${manifestMalformed.reason})`);
   } else {
-    console.error(
-      `${err.details.outputDir} exists but was not created by Crust.`,
-    );
+    console.error(`${outputDir}: not created by Crust`);
   }
 
-  // Opt in to overwriting the conflicting directory.
   await generateSkill({ command, meta, agents, force: true });
 }
 ```
@@ -380,10 +356,6 @@ consuming package's `package.json` `version` is the typical pattern.
 
 Crust copies the bundle's `SKILL.md` and supporting files as UTF-8 text —
 binary files are not supported and will be corrupted on round-trip.
-
-Bundle content changes do not propagate without a `version` bump —
-identical-version reinstalls report `up-to-date` and leave the canonical
-store untouched.
 
 The following entries are excluded **at the bundle root only**
 (subdirectory dotfiles are kept):
