@@ -1,4 +1,4 @@
-import { CrustError } from "@crustjs/core";
+import { normalizeStandardIssues as normalizeStandardIssuesImpl } from "@crustjs/schema-utils";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
 	StandardSchema,
@@ -7,110 +7,21 @@ import type {
 	ValidationResult,
 	ValidationSuccess,
 } from "./types.ts";
-import { formatPath } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Type guard — detect Standard Schema v1 objects at runtime
+// Re-exports — assertions and issue normalization helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Check whether `value` conforms to the Standard Schema v1 interface.
- *
- * A valid Standard Schema object has a `"~standard"` property containing
- * at least `version: 1` and a `validate` function.
- */
-export function isStandardSchema(value: unknown): value is StandardSchema {
-	// Standard Schema v1 spec only requires the `~standard` shape; the host
-	// value may be an object (Zod, Valibot) or a function (Effect's wrapper
-	// extends a callable class). Accept both.
-	if (
-		(typeof value !== "object" || value === null) &&
-		typeof value !== "function"
-	) {
-		return false;
-	}
-	const candidate = value as Record<string, unknown>;
-	const props = candidate["~standard"];
-	if (typeof props !== "object" || props === null) return false;
-	const p = props as Record<string, unknown>;
-	return p.version === 1 && typeof p.validate === "function";
-}
-
-/**
- * Throw `CrustError("DEFINITION")` if `value` is not a Standard Schema v1
- * object. Used at API boundaries (`field()`, `parseValue()`, …) to fail
- * fast on misuse with a label naming the offending call site.
- */
-export function assertStandardSchema(value: unknown, label: string): void {
-	if (!isStandardSchema(value)) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
-		);
-	}
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Path normalization — Standard Schema issue paths → PropertyKey[]
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolve a single Standard Schema path segment to a `PropertyKey`.
- *
- * Standard Schema paths contain either bare `PropertyKey` values or
- * `{ key: PropertyKey }` segment objects. This function normalizes both
- * forms to plain `PropertyKey`.
- */
-function resolvePathSegment(
-	segment: PropertyKey | StandardSchemaV1.PathSegment,
-): PropertyKey {
-	if (typeof segment === "object" && segment !== null && "key" in segment) {
-		return segment.key;
-	}
-	return segment as PropertyKey;
-}
-
-/**
- * Normalize a Standard Schema issue path to an array of `PropertyKey`.
- *
- * Handles:
- * - `undefined` → empty array (root-level issue)
- * - Bare `PropertyKey` segments
- * - `{ key: PropertyKey }` segment objects
- */
-export function normalizeStandardPath(
-	path: ReadonlyArray<PropertyKey | StandardSchemaV1.PathSegment> | undefined,
-): PropertyKey[] {
-	if (!path) return [];
-	return path.map(resolvePathSegment);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Issue normalization — Standard Schema issues → ValidationIssue[]
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Normalize Standard Schema issues into canonical `ValidationIssue` objects.
- *
- * Applies an optional prefix (e.g. `["flags", "verbose"]`) to each issue
- * path, then formats to the dot-path string used by `@crustjs/validate`.
- *
- * @param issues — Raw Standard Schema issues from a failed validation
- * @param prefix — Optional path segments prepended to each issue path
- */
-export function normalizeStandardIssues(
-	issues: ReadonlyArray<StandardSchemaV1.Issue>,
-	prefix: readonly PropertyKey[] = [],
-): ValidationIssue[] {
-	return issues.map((issue) => {
-		const resolvedPath = normalizeStandardPath(issue.path);
-		const fullPath = [...prefix, ...resolvedPath];
-		return {
-			message: issue.message,
-			path: formatPath(fullPath),
-		};
-	});
-}
+//
+// These helpers physically live in `@crustjs/schema-utils` (TP-017). They
+// are re-exported here so internal validate-package callers (`store.ts`,
+// `parse.ts`, `middleware.ts`, `schema.ts`) keep their existing imports
+// pointing at `./validate.ts` without churn.
+export {
+	assertStandardSchema,
+	isStandardSchema,
+	normalizeStandardIssues,
+	normalizeStandardPath,
+} from "@crustjs/schema-utils";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result constructors — convenience builders for ValidationResult
@@ -154,7 +65,7 @@ export async function validateStandard<S extends StandardSchema>(
 		return success(result.value as StandardSchemaV1.InferOutput<S>);
 	}
 
-	return failure(normalizeStandardIssues(result.issues, prefix));
+	return failure(normalizeStandardIssuesImpl(result.issues, prefix));
 }
 
 /**
@@ -187,5 +98,5 @@ export function validateStandardSync<S extends StandardSchema>(
 		return success(result.value as StandardSchemaV1.InferOutput<S>);
 	}
 
-	return failure(normalizeStandardIssues(result.issues, prefix));
+	return failure(normalizeStandardIssuesImpl(result.issues, prefix));
 }

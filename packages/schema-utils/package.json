@@ -1,25 +1,26 @@
 {
-	"name": "@crustjs/validate",
-	"version": "0.0.15",
-	"description": "Validation helpers for the Crust CLI framework",
+	"name": "@crustjs/schema-utils",
+	"version": "0.0.1",
+	"description": "Vendor-aware Standard Schema introspection helpers shared by @crustjs/validate and @crustjs/store",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/validate"
+		"directory": "packages/schema-utils"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
 		"url": "https://github.com/chenxin-yan/crust/issues"
 	},
 	"keywords": [
-		"cli",
-		"validation",
 		"standard-schema",
-		"effect",
+		"schema",
+		"introspection",
 		"zod",
+		"effect",
+		"cli",
 		"bun",
 		"typescript"
 	],
@@ -45,8 +46,6 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
-		"@crustjs/plugins": "workspace:*",
-		"@crustjs/store": "workspace:*",
 		"bunup": "catalog:",
 		"effect": "3.14.2",
 		"zod": "^4.0.0"
@@ -56,7 +55,6 @@
 		"typescript": "catalog:"
 	},
 	"dependencies": {
-		"@crustjs/schema-utils": "workspace:*",
 		"@standard-schema/spec": "^1.1.0"
 	}
 }

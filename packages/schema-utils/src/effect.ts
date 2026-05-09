@@ -11,7 +11,7 @@
 
 import { CrustError } from "@crustjs/core";
 import type { AST } from "effect/SchemaAST";
-import type { StandardSchema } from "../types.ts";
+import type { StandardSchema } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Duck-typed access to Effect AST internals

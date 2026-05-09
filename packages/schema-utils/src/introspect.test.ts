@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
-import type { StandardSchema } from "../types.ts";
-import { inferOptions } from "./registry.ts";
+import { inferOptions } from "./introspect.ts";
+import type { StandardSchema } from "./types.ts";
 
 describe("inferOptions — vendor dispatch", () => {
 	// ─── Zod ───────────────────────────────────────────────────────────────

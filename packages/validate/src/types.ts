@@ -1,23 +1,21 @@
 import type { CommandNode } from "@crustjs/core";
-import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Normalized validation issue — internal canonical form
+// Re-exports — Standard Schema type aliases + normalized validation issue
 // ────────────────────────────────────────────────────────────────────────────
+//
+// `StandardSchema`, `InferInput`, `InferOutput`, and `ValidationIssue` are
+// owned by `@crustjs/schema-utils` (TP-017). Re-exported here so the locked
+// TP-014 root export surface of `@crustjs/validate` continues to publish them
+// from a single import path.
+export type {
+	InferInput,
+	InferOutput,
+	StandardSchema,
+	ValidationIssue,
+} from "@crustjs/schema-utils";
 
-/**
- * A normalized validation issue used internally across both entrypoints.
- *
- * Provider issues may use path arrays. This type normalizes them to a
- * flat string-based dot-path for consistent rendering
- * and programmatic consumption.
- */
-export interface ValidationIssue {
-	/** Human-readable error message for this issue. */
-	readonly message: string;
-	/** Dot-path string describing the location of the issue (e.g. `"flags.verbose"`, `"args[0]"`). Empty string for root-level issues. */
-	readonly path: string;
-}
+import type { ValidationIssue } from "@crustjs/schema-utils";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validated context — shared across all providers
@@ -47,29 +45,6 @@ export interface ValidatedContext<ArgsOut, FlagsOut> {
 		flags: Record<string, unknown>;
 	};
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Standard Schema type aliases
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * A Standard Schema-compatible schema object.
- *
- * Any schema library implementing the Standard Schema v1 spec
- * (Zod, Effect, Valibot, ArkType, etc.) produces objects matching this type.
- */
-export type StandardSchema<Input = unknown, Output = Input> = StandardSchemaV1<
-	Input,
-	Output
->;
-
-/** Infer the input type accepted by a Standard Schema. */
-export type InferInput<S extends StandardSchema> =
-	StandardSchemaV1.InferInput<S>;
-
-/** Infer the output type produced by a Standard Schema on success. */
-export type InferOutput<S extends StandardSchema> =
-	StandardSchemaV1.InferOutput<S>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation result — provider-agnostic success/failure discriminated union

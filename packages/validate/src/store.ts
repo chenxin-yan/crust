@@ -9,7 +9,7 @@
 // dep on validate.
 
 import { CrustError } from "@crustjs/core";
-import { extractDefault, inferOptions } from "./introspect/registry.ts";
+import { extractDefault, inferOptions } from "@crustjs/schema-utils";
 import type { FieldOptions } from "./schema-types.ts";
 import type { InferOutput, StandardSchema } from "./types.ts";
 import { assertStandardSchema, normalizeStandardIssues } from "./validate.ts";

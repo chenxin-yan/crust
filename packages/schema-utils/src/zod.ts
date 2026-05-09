@@ -15,7 +15,7 @@
 //   • `values`       — populated for `enum`/`literal`
 //   • `description`  — set via `.describe("…")`
 
-import type { StandardSchema } from "../types.ts";
+import type { StandardSchema } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result type — partial because not every property is always inferable
