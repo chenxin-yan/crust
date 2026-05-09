@@ -451,6 +451,14 @@ async function installRenderedSkill(
 			inspection: state.current.inspection,
 			installedVersion: state.preferredVersion,
 			currentVersion: meta.version,
+			// Per-output-path kind. Compared with the target `kind` so a
+			// `force` kind switch at the same version still rewrites copy-mode
+			// agent paths (the version-only `needsWrite` check would otherwise
+			// leave a stale per-agent `crust.json`, trapping the next non-force
+			// call in `SkillConflictError`). Symlink mode is unaffected because
+			// `canonicalChanged` already triggered a canonical rewrite above.
+			installedKind: state.current.manifest?.kind ?? null,
+			currentKind: kind,
 		});
 		const legacyRemoved = await removeLegacyManagedPath(state);
 
@@ -688,6 +696,8 @@ interface EnsureAgentInstallPathOptions {
 	readonly inspection: InstallPathInspection;
 	readonly installedVersion: string | null;
 	readonly currentVersion: string;
+	readonly installedKind: SkillKind | null;
+	readonly currentKind: SkillKind;
 }
 
 interface ComputeInstallStatusOptions {
@@ -750,6 +760,8 @@ async function ensureAgentInstallPath(
 		inspection,
 		installedVersion,
 		currentVersion,
+		installedKind,
+		currentKind,
 	} = options;
 
 	if (installMode === "copy") {
@@ -760,6 +772,8 @@ async function ensureAgentInstallPath(
 			inspection,
 			installedVersion,
 			currentVersion,
+			installedKind,
+			currentKind,
 		});
 	}
 
@@ -789,6 +803,8 @@ async function ensureAgentInstallPath(
 			inspection: fallbackInspection,
 			installedVersion,
 			currentVersion,
+			installedKind,
+			currentKind,
 		});
 	}
 }
@@ -800,6 +816,8 @@ interface EnsureCopyInstallPathOptions {
 	readonly inspection: InstallPathInspection;
 	readonly installedVersion: string | null;
 	readonly currentVersion: string;
+	readonly installedKind: SkillKind | null;
+	readonly currentKind: SkillKind;
 }
 
 async function ensureCopyInstallPath(
@@ -812,12 +830,22 @@ async function ensureCopyInstallPath(
 		inspection,
 		installedVersion,
 		currentVersion,
+		installedKind,
+		currentKind,
 	} = options;
 
+	// `installedKind !== currentKind` covers force-kind-switch at the same
+	// version: without it the version-only check below would skip the rewrite
+	// and the per-agent `crust.json` would retain the previous kind. The check
+	// is per output path (not derived from `canonicalChanged`) so partial
+	// states — e.g. a stale agent copy left behind by an earlier bug, or one
+	// agent fresh while another is stale — are repaired on the next `force`.
+	const kindChanged = installedKind !== null && installedKind !== currentKind;
 	const needsWrite =
 		!inspection.exists ||
 		inspection.isSymlink ||
-		installedVersion !== currentVersion;
+		installedVersion !== currentVersion ||
+		kindChanged;
 	if (!needsWrite) {
 		return false;
 	}

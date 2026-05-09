@@ -627,6 +627,61 @@ describe("installSkillBundle", () => {
 		expect(manifest).toEqual({ version: "2.0.0", kind: "bundle" });
 	});
 
+	it("copy-mode force-kind-switch at same version rewrites per-agent crust.json", async () => {
+		// Regression: previously `ensureCopyInstallPath` decided whether to
+		// rewrite solely on version equality, so a `force` kind switch at the
+		// same version updated the canonical store but left every per-agent
+		// copy with the stale kind — trapping the next non-force install in a
+		// `SkillConflictError`. Cover both the rewrite and the follow-up call.
+		const cmd = new Crust("funnel-builder")._node;
+		Object.assign(cmd.meta, { name: "funnel-builder", description: "x" });
+		await withCwd(tmpDir, () =>
+			generateSkill({
+				command: cmd,
+				meta: META,
+				agents: ["claude-code"],
+				scope: "project",
+				installMode: "copy",
+			}),
+		);
+
+		const agentDir = join(tmpDir, ".claude", "skills", "funnel-builder");
+		expect(await readInstalledManifest(agentDir)).toEqual({
+			version: BUNDLE_VERSION,
+			kind: "generated",
+		});
+
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "copy",
+				force: true,
+			}),
+		);
+
+		expect(await readInstalledManifest(agentDir)).toEqual({
+			version: BUNDLE_VERSION,
+			kind: "bundle",
+		});
+
+		// A follow-up non-force install of the same kind/version must be a
+		// no-op, not a `SkillConflictError`.
+		const followUp = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "copy",
+			}),
+		);
+		expect(followUp.agents).toHaveLength(1);
+		expect(followUp.agents[0]?.status).toBe("up-to-date");
+	});
+
 	it("reverse mismatch: bundle -> generateSkill without force throws", async () => {
 		await withCwd(tmpDir, () =>
 			installSkillBundle({
