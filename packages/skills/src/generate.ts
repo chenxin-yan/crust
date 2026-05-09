@@ -19,6 +19,7 @@ import {
 	resolveAgentPath,
 	resolveCanonicalSkillPath,
 } from "./agents.ts";
+import type { SkillManifestMalformed } from "./errors.ts";
 import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -40,7 +41,9 @@ import type {
 } from "./types.ts";
 import {
 	CRUST_MANIFEST,
+	type InstalledManifestStatus,
 	type InstalledSkillManifest,
+	inspectInstalledManifest,
 	readInstalledManifest,
 	readInstalledVersion,
 } from "./version.ts";
@@ -343,7 +346,10 @@ async function installRenderedSkill(
 			}),
 		);
 	}
-	const canonicalManifest = await readInstalledManifest(canonicalOutputDir);
+	const canonicalInspection =
+		await inspectInstalledManifest(canonicalOutputDir);
+	const canonicalManifest =
+		canonicalInspection.status === "ok" ? canonicalInspection.manifest : null;
 	const canonicalVersion = canonicalManifest?.version ?? null;
 	const canonicalExists = (
 		await inspectInstallPath(canonicalOutputDir, canonicalOutputDir)
@@ -352,6 +358,7 @@ async function installRenderedSkill(
 		throw new SkillConflictError({
 			agent: primaryAgent,
 			outputDir: canonicalOutputDir,
+			manifestMalformed: malformedDetails(canonicalInspection),
 		});
 	}
 	if (canonicalManifest !== null && canonicalManifest.kind !== kind && !force) {
@@ -400,9 +407,15 @@ async function installRenderedSkill(
 			!state.current.isCrustManaged &&
 			!force
 		) {
+			// Re-inspect crust.json on the failure path so the error can
+			// distinguish "absent" from "present but malformed" (e.g. an
+			// unrecognized kind) instead of always reporting "no crust.json
+			// found". One extra read on the cold path is acceptable.
+			const inspection = await inspectInstalledManifest(outputDir);
 			throw new SkillConflictError({
 				agent: groupedPrimaryAgent,
 				outputDir,
+				manifestMalformed: malformedDetails(inspection),
 			});
 		}
 
@@ -682,6 +695,26 @@ interface ComputeInstallStatusOptions {
 	readonly currentVersion: string;
 	readonly canonicalChanged: boolean;
 	readonly pathChanged: boolean;
+}
+
+/**
+ * Translates an {@link InstalledManifestStatus} into the
+ * `manifestMalformed` shape carried by {@link SkillConflictError}.
+ *
+ * Returns `undefined` for `"ok"` and `"absent"` results so the conflict
+ * error keeps its original "no crust.json found" message in those cases;
+ * returns a populated descriptor only when `crust.json` is present but
+ * unparseable / has an unrecognized `kind`.
+ */
+function malformedDetails(
+	inspection: InstalledManifestStatus,
+): SkillManifestMalformed | undefined {
+	if (inspection.status !== "malformed") {
+		return undefined;
+	}
+	return inspection.rawKind !== undefined
+		? { reason: inspection.reason, rawKind: inspection.rawKind }
+		: { reason: inspection.reason };
 }
 
 function computeInstallStatus(

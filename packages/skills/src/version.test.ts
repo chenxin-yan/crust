@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
 	CRUST_MANIFEST,
 	checkVersion,
+	inspectInstalledManifest,
 	readInstalledManifest,
 	readInstalledVersion,
 } from "./version.ts";
@@ -163,6 +164,85 @@ describe("readInstalledManifest", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // checkVersion
 // ────────────────────────────────────────────────────────────────────────────
+
+describe("inspectInstalledManifest", () => {
+	it("returns status: 'absent' when crust.json does not exist", async () => {
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({ status: "absent" });
+	});
+
+	it("returns status: 'absent' for a nonexistent directory", async () => {
+		const result = await inspectInstalledManifest("/nonexistent/path/xyz");
+		expect(result).toEqual({ status: "absent" });
+	});
+
+	it("returns status: 'malformed' with reason 'parse-error' for invalid JSON", async () => {
+		await writeFile(join(tmpDir, CRUST_MANIFEST), "not json {{{");
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({ status: "malformed", reason: "parse-error" });
+	});
+
+	it("returns status: 'malformed' with reason 'missing-version' when version is absent", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test" }),
+		);
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({ status: "malformed", reason: "missing-version" });
+	});
+
+	it("returns status: 'malformed' with reason 'unknown-kind' and the raw value", async () => {
+		// A typo like 'bundel' must surface the raw value so the install
+		// pipeline can emit a useful error instead of "no crust.json found".
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "bundel" }),
+		);
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({
+			status: "malformed",
+			reason: "unknown-kind",
+			rawKind: "bundel",
+		});
+	});
+
+	it("stringifies non-string kind values for the unknown-kind rawKind", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: 42 }),
+		);
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({
+			status: "malformed",
+			reason: "unknown-kind",
+			rawKind: "42",
+		});
+	});
+
+	it("returns status: 'ok' with normalized kind for legacy crust.json", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.2.3" }),
+		);
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({
+			status: "ok",
+			manifest: { version: "1.2.3", kind: "generated" },
+		});
+	});
+
+	it("returns status: 'ok' for a well-formed bundle manifest", async () => {
+		await writeFile(
+			join(tmpDir, CRUST_MANIFEST),
+			JSON.stringify({ name: "test", version: "1.2.3", kind: "bundle" }),
+		);
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({
+			status: "ok",
+			manifest: { version: "1.2.3", kind: "bundle" },
+		});
+	});
+});
 
 describe("checkVersion", () => {
 	it("returns 'installed' with null version when no crust.json exists", async () => {

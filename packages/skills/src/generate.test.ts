@@ -1361,6 +1361,96 @@ describe("generateSkill", () => {
 				expect(err).toBeInstanceOf(SkillConflictError);
 				const conflict = err as SkillConflictError;
 				expect(conflict.details.outputDir).toBe(canonicalDir);
+				// Without crust.json the message should report the absent-manifest case.
+				expect(conflict.details.manifestMalformed).toBeUndefined();
+				expect(conflict.message).toContain("no crust.json found");
+			}
+		});
+
+		it("throws SkillConflictError with manifestMalformed when canonical crust.json has unrecognized kind", async () => {
+			// Regression: previously, crust.json with an unknown `kind` (typo or
+			// forward-compatible value) collapsed to the same "no crust.json
+			// found" error as a missing manifest, misleading users into deleting
+			// a Crust-owned directory.
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(join(canonicalDir, "SKILL.md"), "# Crust-owned");
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				JSON.stringify({
+					name: "my-cli",
+					description: "Test",
+					version: "0.9.0",
+					kind: "bundel",
+				}),
+			);
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.outputDir).toBe(canonicalDir);
+				expect(conflict.details.manifestMalformed).toEqual({
+					reason: "unknown-kind",
+					rawKind: "bundel",
+				});
+				expect(conflict.message).toContain("unrecognized kind");
+				expect(conflict.message).toContain("bundel");
+				expect(conflict.message).not.toContain("no crust.json found");
+			}
+		});
+
+		it("throws SkillConflictError with manifestMalformed when agent path crust.json has unrecognized kind", async () => {
+			// Same regression but at the per-agent guard: a stale agent copy
+			// with an unknown kind must surface the malformed details, not the
+			// generic "not created by Crust" message.
+			const skillDir = join(tmpDir, ".claude", "skills", "my-cli");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "# Crust-owned");
+			await writeFile(
+				join(skillDir, CRUST_MANIFEST),
+				JSON.stringify({
+					name: "my-cli",
+					description: "Test",
+					version: "0.9.0",
+					kind: "bundel",
+				}),
+			);
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.manifestMalformed).toEqual({
+					reason: "unknown-kind",
+					rawKind: "bundel",
+				});
 			}
 		});
 

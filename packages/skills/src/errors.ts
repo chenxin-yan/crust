@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AgentTarget, SkillKind } from "./types.ts";
+import type { InstalledManifestMalformedReason } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // SkillConflictError
@@ -24,6 +25,24 @@ export interface SkillKindMismatch {
 	attempted: SkillKind;
 }
 
+/**
+ * Describes a malformed `crust.json` discovered at the conflicting skill
+ * directory.
+ *
+ * Set on {@link SkillConflictDetails.manifestMalformed} when the directory
+ * contains a `crust.json` that exists but cannot be interpreted — e.g. it is
+ * not valid JSON, lacks a `version`, or has an unrecognized `kind` value
+ * (a hand-edit typo like `"bundel"`, or a forward-compatible value emitted by
+ * a newer Crust release). Distinct from a missing `crust.json`, which keeps
+ * the original "not created by Crust" semantics.
+ */
+export interface SkillManifestMalformed {
+	/** Why the manifest could not be interpreted. */
+	reason: InstalledManifestMalformedReason;
+	/** Raw `kind` value when `reason === "unknown-kind"`. */
+	rawKind?: string;
+}
+
 /** Details about the conflict between an existing skill and an incoming one. */
 export interface SkillConflictDetails {
 	/** The agent where the conflict was detected */
@@ -37,6 +56,13 @@ export interface SkillConflictDetails {
 	 * Absent for "no-crust.json" conflicts (the original case).
 	 */
 	kindMismatch?: SkillKindMismatch;
+	/**
+	 * Set when `crust.json` is present at the conflicting directory but cannot
+	 * be interpreted (invalid JSON, missing version, unrecognized `kind`,
+	 * etc.). Lets the error message distinguish a Crust-owned-but-broken
+	 * manifest from a directory that simply was never managed by Crust.
+	 */
+	manifestMalformed?: SkillManifestMalformed;
 }
 
 /**
@@ -78,17 +104,54 @@ export class SkillConflictError extends Error {
 	readonly details: SkillConflictDetails;
 
 	constructor(details: SkillConflictDetails) {
-		const message = details.kindMismatch
-			? `Skill conflict for agent "${details.agent}": ` +
-				`directory "${details.outputDir}" was installed as a ` +
-				`"${details.kindMismatch.existing}" skill but ` +
-				`"${details.kindMismatch.attempted}" was attempted. ` +
-				`Use force: true to overwrite, or uninstall the existing skill first.`
-			: `Skill conflict for agent "${details.agent}": ` +
-				`directory "${details.outputDir}" already exists but was not created by Crust ` +
-				`(no crust.json found). Delete or rename the conflicting skill to resolve.`;
-
-		super(message);
+		super(buildSkillConflictMessage(details));
 		this.details = details;
 	}
+}
+
+function buildSkillConflictMessage(details: SkillConflictDetails): string {
+	const prefix = `Skill conflict for agent "${details.agent}": directory "${details.outputDir}"`;
+
+	if (details.kindMismatch) {
+		return (
+			`${prefix} was installed as a "${details.kindMismatch.existing}" skill but ` +
+			`"${details.kindMismatch.attempted}" was attempted. ` +
+			`Use force: true to overwrite, or uninstall the existing skill first.`
+		);
+	}
+
+	if (details.manifestMalformed) {
+		const { reason, rawKind } = details.manifestMalformed;
+		switch (reason) {
+			case "unknown-kind": {
+				const raw = rawKind ?? "<unknown>";
+				return (
+					`${prefix} was created by Crust but its crust.json declares an ` +
+					`unrecognized kind "${raw}" — likely a hand-edit typo or a ` +
+					`crust.json written by a newer Crust release. Fix the kind ` +
+					`field, upgrade Crust, or pass force: true to overwrite.`
+				);
+			}
+			case "parse-error":
+				return (
+					`${prefix} contains a crust.json that is not valid JSON. ` +
+					`Repair the file, or pass force: true to overwrite the directory.`
+				);
+			case "not-an-object":
+				return (
+					`${prefix} contains a crust.json whose top-level value is not a JSON object. ` +
+					`Repair the file, or pass force: true to overwrite the directory.`
+				);
+			case "missing-version":
+				return (
+					`${prefix} contains a crust.json with no "version" string. ` +
+					`Repair the file, or pass force: true to overwrite the directory.`
+				);
+		}
+	}
+
+	return (
+		`${prefix} already exists but was not created by Crust ` +
+		`(no crust.json found). Delete or rename the conflicting skill to resolve.`
+	);
 }
