@@ -475,20 +475,23 @@ describe("FlagDef toggle fields", () => {
 // ───────────────────────────────────────────────────────────────────────
 
 describe("FlagDef choices field", () => {
-	it("accepts choices on a single-value string flag", () => {
+	it("accepts choices on a single-value string flag (no `as const` required)", () => {
+		// Plain array literal — `readonly string[]` accepts `string[]`, so
+		// users do not need to write `as const`. Regression guard for the
+		// documented zero-friction shape.
 		const flag: FlagDef = {
 			type: "string",
-			choices: ["browser", "bun", "node"] as const,
+			choices: ["browser", "bun", "node"],
 		};
 		expect(flag.type).toBe("string");
 		expect(flag.choices).toEqual(["browser", "bun", "node"]);
 	});
 
-	it("accepts choices on a multi-value string flag", () => {
+	it("accepts choices on a multi-value string flag (no `as const` required)", () => {
 		const flag: FlagDef = {
 			type: "string",
 			multiple: true,
-			choices: ["unit", "integration"] as const,
+			choices: ["unit", "integration"],
 		};
 		expect(flag.multiple).toBe(true);
 		expect(flag.choices).toEqual(["unit", "integration"]);
@@ -526,11 +529,11 @@ describe("FlagDef choices field", () => {
 });
 
 describe("ArgDef choices field", () => {
-	it("accepts choices on a string positional arg", () => {
+	it("accepts choices on a string positional arg (no `as const` required)", () => {
 		const arg: ArgDef = {
 			name: "target",
 			type: "string",
-			choices: ["browser", "bun", "node"] as const,
+			choices: ["browser", "bun", "node"],
 		};
 		expect(arg.type).toBe("string");
 		expect(arg.choices).toEqual(["browser", "bun", "node"]);

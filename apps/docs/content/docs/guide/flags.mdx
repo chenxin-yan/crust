@@ -178,12 +178,12 @@ Use `choices` on a string flag to declare a static enum of valid values:
   target: {
     type: "string",
     description: "Target runtime",
-    choices: ["browser", "bun", "node"] as const,
+    choices: ["browser", "bun", "node"],
   },
   suites: {
     type: "string",
     multiple: true,
-    choices: ["unit", "integration"] as const,
+    choices: ["unit", "integration"],
   },
 })
 ```

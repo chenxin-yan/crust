@@ -72,15 +72,17 @@ With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same
 
 #### `hidden`
 
-When `true`, the command is omitted from the default `--help` listing. Type: `boolean`. Default: `false`.
+When `true`, the command is omitted from any tooling that enumerates the command tree for users — help output, generated man pages, skill descriptors, completion candidate lists, and similar surfaces. Type: `boolean`. Default: `false`.
 
 ```ts
 meta: { name: "__complete", hidden: true, description: "Internal completion entrypoint" }
 ```
 
-`hidden` affects help rendering only. The command remains directly invocable by name and is unaffected by routing, alias resolution, or `didYouMeanPlugin` suggestions — typing the canonical name (or any alias) still routes to it. Filtering is performed by `helpPlugin.formatCommandsSection`; custom help renderers are expected to respect this field too.
+The command is **only hidden from listings**: it stays fully invocable by name (or alias), routing is unchanged, and it can still surface through tooling that looks up specific commands rather than enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
 
-`hidden` is intended for internal/runtime commands such as the `__complete` entrypoint used by shell-completion plugins. Marking a user-facing subcommand as `hidden` is supported but unusual.
+**Tooling contract.** Any renderer or generator that walks `subCommands` to produce a user-facing listing should skip nodes where `meta.hidden === true`. The default `helpPlugin` follows this contract today; first-party generators (man pages, skill descriptors, completion) and any custom renderers should too.
+
+Intended for internal/runtime commands such as a `__complete` entrypoint used by shell-completion tooling. Marking a user-facing subcommand as `hidden` is supported but unusual.
 
 ## Argument Types
 
@@ -113,7 +115,7 @@ A static enum of valid values for the argument. Type: `readonly string[]`. Defau
 
 ```ts
 args: [
-  { name: "target", type: "string", choices: ["browser", "bun", "node"] as const },
+  { name: "target", type: "string", choices: ["browser", "bun", "node"] },
 ] as const
 ```
 
@@ -193,8 +195,8 @@ A static enum of valid values for the flag. Type: `readonly string[]`. Default: 
 
 ```ts
 flags: {
-  target: { type: "string", choices: ["browser", "bun", "node"] as const },
-  suites: { type: "string", multiple: true, choices: ["unit", "integration"] as const },
+  target: { type: "string", choices: ["browser", "bun", "node"] },
+  suites: { type: "string", multiple: true, choices: ["unit", "integration"] },
 }
 ```
 

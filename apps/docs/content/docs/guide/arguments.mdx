@@ -129,7 +129,7 @@ Use `choices` on a string positional argument to declare a static enum of valid 
 ```ts
 const cmd = new Crust("deploy")
   .args([
-    { name: "target", type: "string", choices: ["browser", "bun", "node"] as const },
+    { name: "target", type: "string", choices: ["browser", "bun", "node"] },
   ] as const)
   .run(({ args }) => {
     args.target; // string

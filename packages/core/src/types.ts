@@ -67,7 +67,7 @@ interface StringArgDef extends ArgDefBase {
 	 * Only available on string-typed args; not supported on number/boolean.
 	 *
 	 * @example
-	 * { name: "target", type: "string", choices: ["browser", "bun", "node"] as const }
+	 * { name: "target", type: "string", choices: ["browser", "bun", "node"] }
 	 */
 	choices?: readonly string[];
 }
@@ -151,7 +151,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 * Only available on string-typed flags; not supported on number/boolean.
 	 *
 	 * @example
-	 * { type: "string", choices: ["browser", "bun", "node"] as const }
+	 * { type: "string", choices: ["browser", "bun", "node"] }
 	 */
 	choices?: readonly string[];
 }
@@ -199,7 +199,7 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * Only available on string-typed multi-flags; not supported on number/boolean.
 	 *
 	 * @example
-	 * { type: "string", multiple: true, choices: ["unit", "integration"] as const }
+	 * { type: "string", multiple: true, choices: ["unit", "integration"] }
 	 */
 	choices?: readonly string[];
 }
@@ -671,17 +671,22 @@ export interface CommandMeta {
 	 */
 	aliases?: readonly string[];
 	/**
-	 * When `true`, omit this command from default `--help` output.
+	 * When `true`, omit this command from any tooling that enumerates the
+	 * command tree for users — help output, generated man pages, skill
+	 * descriptors, completion candidate lists, and similar surfaces.
 	 *
-	 * Used for internal/runtime commands like `__complete` (shell completion)
-	 * that should not pollute the user-facing help listing. The command
-	 * remains directly invocable by name and is unaffected by routing,
-	 * subcommand resolution, alias matching, or `didYouMean` suggestions —
-	 * `hidden` affects help rendering only.
+	 * The command is **only hidden from listings**: it stays fully invocable
+	 * by name (or alias), routing is unchanged, and it can still surface
+	 * through tooling that looks up specific commands rather than
+	 * enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
 	 *
-	 * Filtering is performed by `helpPlugin.formatCommandsSection` (and any
-	 * help renderer that opts in); custom help renderers should respect this
-	 * field by default.
+	 * Intended for internal/runtime commands like a `__complete` shell-
+	 * completion entrypoint. Marking a user-facing command `hidden` is
+	 * supported but unusual.
+	 *
+	 * Tooling contract: any renderer or generator that walks `subCommands`
+	 * to produce a user-facing listing should skip nodes where
+	 * `meta.hidden === true`.
 	 *
 	 * @example
 	 * meta: { name: "__complete", hidden: true, description: "Internal" }
