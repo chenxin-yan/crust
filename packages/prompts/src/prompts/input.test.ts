@@ -80,6 +80,25 @@ function tick(ms = 10): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Poll `stderrOutput` until it contains `needle`, or throw after `timeout`
+ * ms. Use this instead of a fixed `tick(N)` whenever the assertion depends
+ * on async work that may take a variable amount of time on slower runners
+ * (notably async schema validation, which has its own internal delays).
+ */
+async function waitForStderr(needle: string, timeout = 500): Promise<void> {
+	const start = Date.now();
+	while (!stderrOutput.includes(needle)) {
+		if (Date.now() - start > timeout) {
+			throw new Error(
+				`stderr never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
+					`Got: ${JSON.stringify(stderrOutput)}`,
+			);
+		}
+		await tick(5);
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value short-circuit
 // ────────────────────────────────────────────────────────────────────────────
@@ -828,7 +847,7 @@ describe("input — schema validation", () => {
 		pressKey("o");
 		await tick();
 		pressKey("", { name: "return" });
-		await tick(20);
+		await waitForStderr("must be yes");
 
 		expect(stderrOutput).toContain("must be yes");
 
