@@ -357,37 +357,32 @@ export interface GenerateOptions {
  *
  * Unlike {@link GenerateOptions}, the bundle entrypoint does not render
  * `SKILL.md` from a command tree — it copies a directory the caller has
- * already authored. The bundle author owns the `SKILL.md` frontmatter; Crust
- * does not rewrite it, but it runs a lightweight `name:` consistency probe
- * and rejects the install if the declared `name` does not match `meta.name`.
- * Crust writes a fresh `crust.json` alongside the bundle for ownership and
- * version tracking.
+ * already authored. The bundle's `SKILL.md` frontmatter is the source of
+ * truth for `name` and `description`; Crust reads them but does not rewrite
+ * the file. A fresh `crust.json` is written alongside the bundle for
+ * ownership and version tracking.
  *
  * Files are copied as **UTF-8 text** — binary supporting files are not
  * supported and will be corrupted on round-trip.
  *
- * Bundle content changes do not propagate without a `meta.version` bump:
+ * Bundle content changes do not propagate without a `version` bump:
  * identical-version reinstalls report `up-to-date` and leave the canonical
- * store untouched. Bump `version` whenever the bundle contents change.
+ * store untouched. Bump the consuming package's `package.json` `version`
+ * (or pass an explicit `version` here) whenever the bundle contents change.
  *
  * @example
  * ```ts
  * import { installSkillBundle } from "@crustjs/skills";
  *
+ * // Common case — SKILL.md frontmatter supplies name + description,
+ * // package.json supplies version.
  * await installSkillBundle({
- *   meta: {
- *     name: "funnel-builder",
- *     description: "Build a sales funnel",
- *     version: "1.0.0",
- *   },
  *   sourceDir: "skills/funnel-builder",
  *   agents: ["claude-code"],
  * });
  * ```
  */
 export interface InstallSkillBundleOptions {
-	/** Skill metadata for the installed bundle */
-	meta: SkillMeta;
 	/**
 	 * Source directory containing the bundle to install.
 	 *
@@ -398,7 +393,8 @@ export interface InstallSkillBundleOptions {
 	 *   directory walking up from `process.argv[1]`. Throws if `process.argv[1]`
 	 *   is unset or no `package.json` is found.
 	 *
-	 * The directory must contain a `SKILL.md` at its root.
+	 * The directory must contain a `SKILL.md` whose YAML frontmatter declares
+	 * top-level `name:` and `description:` fields.
 	 */
 	sourceDir: string | URL;
 	/**
@@ -408,6 +404,20 @@ export interface InstallSkillBundleOptions {
 	 * does not auto-detect agents. Pass `[]` for a no-op (no install performed).
 	 */
 	agents: AgentTarget[];
+	/**
+	 * Version string recorded for this install and compared on subsequent
+	 * installs to decide between `installed` / `updated` / `up-to-date`.
+	 *
+	 * Defaults to the `version` field of the nearest `package.json` walking up
+	 * from `process.argv[1]` (the same `package.json` used to resolve a
+	 * relative `sourceDir`). Pass an explicit value when one package publishes
+	 * multiple bundles with independent versions, or when the consuming package
+	 * has no `version` (e.g. an unpublished workspace root).
+	 *
+	 * Throws if neither this option nor a resolvable `package.json` `version`
+	 * is available.
+	 */
+	version?: string;
 	/**
 	 * Installation strategy for agent output paths.
 	 * @default "auto"

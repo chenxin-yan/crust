@@ -88,11 +88,18 @@ async function listFiles(dir: string, prefix = ""): Promise<string[]> {
 	return out.sort();
 }
 
+/**
+ * Static fixture meta. Bundle authors no longer pass this to
+ * `installSkillBundle` (frontmatter + version supersede it), but it remains
+ * useful for `generateSkill` calls in cross-kind tests.
+ */
 const META: SkillMeta = {
 	name: "funnel-builder",
 	description: "Build a sales funnel",
 	version: "1.0.0",
 };
+
+const BUNDLE_VERSION = "1.0.0";
 
 // ────────────────────────────────────────────────────────────────────────────
 // resolveBundleSourceDir
@@ -152,7 +159,7 @@ describe("resolveBundleSourceDir", () => {
 
 describe("loadBundleFiles", () => {
 	it("loads SKILL.md, top-level supporting files, and nested files", async () => {
-		const files = await loadBundleFiles(FIXTURE_DIR, META);
+		const { files } = await loadBundleFiles(FIXTURE_DIR);
 		const paths = files.map((f) => f.path).sort();
 		expect(paths).toContain("SKILL.md");
 		expect(paths).toContain("playbook.md");
@@ -162,7 +169,7 @@ describe("loadBundleFiles", () => {
 	});
 
 	it("excludes node_modules/, root dotfiles, and stale crust.json from the static fixture", async () => {
-		const files = await loadBundleFiles(FIXTURE_DIR, META);
+		const { files } = await loadBundleFiles(FIXTURE_DIR);
 		const paths = files.map((f) => f.path);
 		expect(paths.some((p) => p.startsWith("node_modules/"))).toBe(false);
 		expect(paths.includes(".gitignore")).toBe(false);
@@ -183,10 +190,10 @@ describe("loadBundleFiles", () => {
 		);
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\ndescription: x\n---\n",
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
 
-		const files = await loadBundleFiles(dir, META);
+		const { files } = await loadBundleFiles(dir);
 		const paths = files.map((f) => f.path);
 		expect(paths.some((p) => p.startsWith(".git/") || p === ".git")).toBe(
 			false,
@@ -202,11 +209,11 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\ndescription: x\n---\n",
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
 		await symlink(".", join(dir, "loop"));
 
-		const files = await loadBundleFiles(dir, META);
+		const { files } = await loadBundleFiles(dir);
 		const paths = files.map((f) => f.path).sort();
 		expect(paths).toEqual(["SKILL.md"]);
 	});
@@ -215,49 +222,63 @@ describe("loadBundleFiles", () => {
 		const dir = join(tmpDir, "no-skill-md");
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "playbook.md"), "# Playbook\n");
-		await expect(loadBundleFiles(dir, META)).rejects.toThrow(/SKILL\.md/);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/SKILL\.md/);
 	});
 
-	it("throws when frontmatter name does not match meta.name", async () => {
-		const dir = join(tmpDir, "name-mismatch");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\nname: other-name\ndescription: x\n---\n",
-		);
-		await expect(loadBundleFiles(dir, META)).rejects.toThrow(
-			/does not match meta\.name/,
-		);
+	it("returns the frontmatter name and description verbatim", async () => {
+		const { frontmatter } = await loadBundleFiles(FIXTURE_DIR);
+		expect(frontmatter).toEqual({
+			name: "funnel-builder",
+			description: "Build a sales funnel",
+		});
 	});
 
-	it("accepts a quoted matching frontmatter name", async () => {
-		const dir = join(tmpDir, "name-quoted");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: "funnel-builder"\ndescription: x\n---\n',
-		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
-	});
-
-	it("accepts SKILL.md with no frontmatter (probe is silent)", async () => {
+	it("rejects SKILL.md with no frontmatter at all", async () => {
 		const dir = join(tmpDir, "no-frontmatter");
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), "# Bundle\nNo frontmatter\n");
-		const files = await loadBundleFiles(dir, META);
-		expect(files).toHaveLength(1);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
 	});
 
-	it("accepts SKILL.md with frontmatter but no name field", async () => {
+	it("rejects frontmatter with no top-level name field", async () => {
 		const dir = join(tmpDir, "no-name-key");
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\ndescription: x\n---\n# Bundle\n",
+			"---\ndescription: Build a sales funnel\n---\n# Bundle\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
+	});
+
+	it("rejects frontmatter with no top-level description field", async () => {
+		const dir = join(tmpDir, "no-description-key");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder\n---\n# Bundle\n",
+		);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
+	});
+
+	it("rejects empty frontmatter values", async () => {
+		const dir = join(tmpDir, "empty-values");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			'---\nname: ""\ndescription: ""\n---\n',
+		);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
+	});
+
+	it("accepts a quoted frontmatter name", async () => {
+		const dir = join(tmpDir, "name-quoted");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			'---\nname: "funnel-builder"\ndescription: Build a sales funnel\n---\n',
+		);
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
 	it("strips a leading UTF-8 BOM before locating the opening fence", async () => {
@@ -265,35 +286,37 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"\uFEFF---\nname: funnel-builder\ndescription: x\n---\n",
+			"\uFEFF---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
-	it("strips a trailing `# comment` from an unquoted frontmatter name", async () => {
+	it("strips a trailing `# comment` from an unquoted frontmatter value", async () => {
 		const dir = join(tmpDir, "name-with-comment");
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder # canonical name\ndescription: x\n---\n",
+			"---\nname: funnel-builder # canonical name\ndescription: Build a sales funnel # one-liner\n---\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter).toEqual({
+			name: "funnel-builder",
+			description: "Build a sales funnel",
+		});
 	});
 
 	it("ignores nested `name:` keys (only top-level / unindented matches)", async () => {
 		// A nested key under `metadata:` must not be mistaken for the top-level
-		// name — otherwise a bundle without a real top-level `name` would be
-		// rejected because the indented value did not match meta.name.
+		// name — without a real top-level `name`, the load must fail rather
+		// than silently picking up the indented value.
 		const dir = join(tmpDir, "nested-name");
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\ndescription: x\nmetadata:\n  name: other-name\n---\n",
+			"---\ndescription: Build a sales funnel\nmetadata:\n  name: other-name\n---\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
 	});
 
 	it("tolerates a closing fence with trailing whitespace", async () => {
@@ -301,10 +324,10 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\ndescription: x\n--- \n# Bundle\n",
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n--- \n# Bundle\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
 	it("handles CRLF line endings", async () => {
@@ -312,10 +335,13 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\r\nname: funnel-builder\r\ndescription: x\r\n---\r\n",
+			"---\r\nname: funnel-builder\r\ndescription: Build a sales funnel\r\n---\r\n",
 		);
-		const files = await loadBundleFiles(dir, META);
-		expect(files.find((f) => f.path === "SKILL.md")).toBeDefined();
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter).toEqual({
+			name: "funnel-builder",
+			description: "Build a sales funnel",
+		});
 	});
 
 	it("rejects a path-traversal symlink that escapes the bundle root", async () => {
@@ -326,19 +352,17 @@ describe("loadBundleFiles", () => {
 		await writeFile(join(outside, "secret.txt"), "should not be readable");
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\ndescription: x\n---\n",
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
 		await symlink(outside, join(dir, "escape"));
 
-		await expect(loadBundleFiles(dir, META)).rejects.toThrow(/path traversal/i);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/path traversal/i);
 	});
 
 	it("throws when the resolved path is not a directory", async () => {
 		const filePath = join(tmpDir, "not-a-dir");
 		await writeFile(filePath, "x");
-		await expect(loadBundleFiles(filePath, META)).rejects.toThrow(
-			/not a directory/i,
-		);
+		await expect(loadBundleFiles(filePath)).rejects.toThrow(/not a directory/i);
 	});
 });
 
@@ -350,10 +374,10 @@ describe("installSkillBundle", () => {
 	it("fresh install writes canonical bundle and fans out to agents", async () => {
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: BUNDLE_VERSION,
 			}),
 		);
 
@@ -385,24 +409,25 @@ describe("installSkillBundle", () => {
 			await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"),
 		);
 		expect(written.name).toBe("funnel-builder");
+		expect(written.description).toBe("Build a sales funnel");
 		expect(written.version).toBe("1.0.0");
 	});
 
 	it("update path: bumping version reports 'updated' with previousVersion", async () => {
 		await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: "1.0.0",
 			}),
 		);
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: { ...META, version: "2.0.0" },
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: "2.0.0",
 			}),
 		);
 		const agent = result.agents[0] as AgentResult;
@@ -413,18 +438,18 @@ describe("installSkillBundle", () => {
 	it("up-to-date path: same version reports 'up-to-date'", async () => {
 		await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: BUNDLE_VERSION,
 			}),
 		);
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: BUNDLE_VERSION,
 			}),
 		);
 		const agent = result.agents[0] as AgentResult;
@@ -434,16 +459,88 @@ describe("installSkillBundle", () => {
 	it("agents: [] is a no-op", async () => {
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: [],
 				scope: "project",
+				version: BUNDLE_VERSION,
 			}),
 		);
 		expect(result.agents).toHaveLength(0);
 		// No canonical directory created.
 		const canonicalDir = join(tmpDir, ".crust", "skills", "funnel-builder");
 		await expect(stat(canonicalDir)).rejects.toThrow();
+	});
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Version resolution
+	// ────────────────────────────────────────────────────────────────────────
+
+	it("falls back to the consuming package's package.json version when none is passed", async () => {
+		// Build a fake consuming package whose package.json declares a known
+		// version, then point process.argv[1] at it so the walk-up resolves
+		// to its package.json.
+		const pkgRoot = join(tmpDir, "consumer-pkg");
+		await mkdir(pkgRoot, { recursive: true });
+		await writeFile(
+			join(pkgRoot, "package.json"),
+			JSON.stringify({ name: "acme", version: "3.4.5" }, null, "\t"),
+		);
+		const fakeEntry = join(pkgRoot, "dist", "main.js");
+
+		const result = await withArgv1(fakeEntry, () =>
+			withCwd(tmpDir, () =>
+				installSkillBundle({
+					sourceDir: FIXTURE_DIR,
+					agents: ["claude-code"],
+					scope: "project",
+				}),
+			),
+		);
+		expect(result.agents).toHaveLength(1);
+
+		const canonicalDir = join(tmpDir, ".crust", "skills", "funnel-builder");
+		const manifest = await readInstalledManifest(canonicalDir);
+		expect(manifest?.version).toBe("3.4.5");
+	});
+
+	it("prefers an explicit version over the package.json fallback", async () => {
+		const pkgRoot = join(tmpDir, "consumer-pkg");
+		await mkdir(pkgRoot, { recursive: true });
+		await writeFile(
+			join(pkgRoot, "package.json"),
+			JSON.stringify({ name: "acme", version: "3.4.5" }, null, "\t"),
+		);
+		const fakeEntry = join(pkgRoot, "dist", "main.js");
+
+		await withArgv1(fakeEntry, () =>
+			withCwd(tmpDir, () =>
+				installSkillBundle({
+					sourceDir: FIXTURE_DIR,
+					agents: ["claude-code"],
+					scope: "project",
+					version: "9.9.9",
+				}),
+			),
+		);
+
+		const canonicalDir = join(tmpDir, ".crust", "skills", "funnel-builder");
+		const manifest = await readInstalledManifest(canonicalDir);
+		expect(manifest?.version).toBe("9.9.9");
+	});
+
+	it("throws when no version is passed and no resolvable package.json version is available", async () => {
+		// Point argv[1] somewhere with no package.json walking up.
+		await expect(
+			withArgv1("/tmp/no-pkg-here.js", () =>
+				withCwd(tmpDir, () =>
+					installSkillBundle({
+						sourceDir: FIXTURE_DIR,
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				),
+			),
+		).rejects.toThrow(/Could not resolve a version/);
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
@@ -466,10 +563,10 @@ describe("installSkillBundle", () => {
 		try {
 			await withCwd(tmpDir, () =>
 				installSkillBundle({
-					meta: META,
 					sourceDir: FIXTURE_DIR,
 					agents: ["claude-code"],
 					scope: "project",
+					version: BUNDLE_VERSION,
 				}),
 			);
 		} catch (err) {
@@ -497,10 +594,10 @@ describe("installSkillBundle", () => {
 
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: { ...META, version: "2.0.0" },
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: "2.0.0",
 				force: true,
 			}),
 		);
@@ -514,8 +611,7 @@ describe("installSkillBundle", () => {
 	it("agent-path-only kind mismatch: throws even when canonical is absent", async () => {
 		// Pre-seed only the agent path with a mismatched `crust.json`. The
 		// canonical store does not exist, so the canonical-side guard cannot
-		// fire — the agent-path guard must catch this. (Reproduces the hole
-		// the reviewers flagged.)
+		// fire — the agent-path guard must catch this.
 		const agentDir = join(tmpDir, ".claude", "skills", "funnel-builder");
 		await mkdir(agentDir, { recursive: true });
 		await writeFile(
@@ -527,10 +623,10 @@ describe("installSkillBundle", () => {
 		try {
 			await withCwd(tmpDir, () =>
 				installSkillBundle({
-					meta: META,
 					sourceDir: FIXTURE_DIR,
 					agents: ["claude-code"],
 					scope: "project",
+					version: BUNDLE_VERSION,
 					installMode: "copy",
 				}),
 			);
@@ -555,10 +651,10 @@ describe("installSkillBundle", () => {
 
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: { ...META, version: "2.0.0" },
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: "2.0.0",
 				installMode: "copy",
 				force: true,
 			}),
@@ -572,10 +668,10 @@ describe("installSkillBundle", () => {
 	it("reverse mismatch: bundle -> generateSkill without force throws", async () => {
 		await withCwd(tmpDir, () =>
 			installSkillBundle({
-				meta: META,
 				sourceDir: FIXTURE_DIR,
 				agents: ["claude-code"],
 				scope: "project",
+				version: BUNDLE_VERSION,
 			}),
 		);
 
@@ -612,42 +708,29 @@ describe("installSkillBundle", () => {
 		await expect(
 			withCwd(tmpDir, () =>
 				installSkillBundle({
-					meta: META,
 					sourceDir: dir,
 					agents: ["claude-code"],
 					scope: "project",
+					version: BUNDLE_VERSION,
 				}),
 			),
 		).rejects.toThrow(/SKILL\.md/);
 	});
 
-	it("propagates frontmatter name mismatch from loadBundleFiles", async () => {
-		const dir = join(tmpDir, "name-mismatch");
+	it("rejects an invalid skill name declared in frontmatter", async () => {
+		const dir = join(tmpDir, "invalid-name");
 		await mkdir(dir, { recursive: true });
 		await writeFile(
 			join(dir, "SKILL.md"),
-			"---\nname: other-name\ndescription: x\n---\n",
+			"---\nname: Funnel-Builder\ndescription: Build a sales funnel\n---\n",
 		);
 		await expect(
 			withCwd(tmpDir, () =>
 				installSkillBundle({
-					meta: META,
 					sourceDir: dir,
 					agents: ["claude-code"],
 					scope: "project",
-				}),
-			),
-		).rejects.toThrow(/does not match meta\.name/);
-	});
-
-	it("rejects an invalid meta.name", async () => {
-		await expect(
-			withCwd(tmpDir, () =>
-				installSkillBundle({
-					meta: { ...META, name: "Funnel-Builder" }, // uppercase invalid
-					sourceDir: FIXTURE_DIR,
-					agents: ["claude-code"],
-					scope: "project",
+					version: BUNDLE_VERSION,
 				}),
 			),
 		).rejects.toThrow(/Invalid skill name/);
@@ -661,10 +744,10 @@ describe("installSkillBundle", () => {
 		it(`installMode "${installMode}" round-trips`, async () => {
 			const result = await withCwd(tmpDir, () =>
 				installSkillBundle({
-					meta: META,
 					sourceDir: FIXTURE_DIR,
 					agents: ["claude-code"],
 					scope: "project",
+					version: BUNDLE_VERSION,
 					installMode,
 				}),
 			);

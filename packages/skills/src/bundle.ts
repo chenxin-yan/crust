@@ -2,7 +2,7 @@
 // Bundle install — installs a hand-authored skill directory as a Crust skill
 // ────────────────────────────────────────────────────────────────────────────
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,69 +129,112 @@ export function resolveBundleSourceDir(sourceDir: string | URL): string {
 // Internal — frontmatter probe
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Top-level scalar fields the bundle install pipeline cares about. */
+interface BundleFrontmatter {
+	name: string | null;
+	description: string | null;
+}
+
 /**
- * Lightweight scan of a SKILL.md head for a top-level `name:` key inside the
- * leading YAML frontmatter block (between the first two `---` lines).
+ * Lightweight scan of a SKILL.md head for top-level `name:` and `description:`
+ * keys inside the leading YAML frontmatter block (between the first two `---`
+ * lines).
  *
- * Returns the first matched value, or `null` if absent (no frontmatter,
- * malformed frontmatter, or `name` not present in the first 50 lines of the
- * frontmatter block). The scan is deliberately tolerant: missing frontmatter
- * is treated as "no declared name" rather than an error.
+ * Returns whichever fields were found; missing fields are reported as `null`.
+ * Callers decide whether absence is fatal. Hand-authored bundles require both,
+ * but `loadBundleFiles` is left agnostic so unit tests can exercise the parser
+ * directly.
  *
- * Strictness rules (chosen to avoid false positives from nested keys):
- * - Only **unindented** top-level lines (`/^name\s*:\s*.../`) are matched, so
- *   a nested block like `metadata:\n  name: other` is ignored.
+ * Strictness rules (chosen to avoid false positives from nested keys and to
+ * keep the parser dependency-free):
+ * - Only **unindented** top-level lines are matched, so a nested block like
+ *   `metadata:\n  name: other` is ignored.
  * - The opening fence must be `---` (after stripping a UTF-8 BOM and skipping
  *   blank lines); the closing fence is `---` with optional trailing whitespace.
  * - An unquoted value's trailing `# comment` is stripped (a quoted value keeps
  *   `#` verbatim).
  * - Quoted values (`"..."` or `'...'`) have a single matching pair of quotes
  *   stripped; everything else is taken verbatim and trimmed. Multi-line
- *   scalars, arrays, anchors, etc. are not parsed — bundle authors who
- *   declare `name` via complex YAML must keep it as a simple scalar.
+ *   scalars, arrays, anchors, etc. are not parsed — bundle authors must keep
+ *   `name` and `description` as simple single-line scalars.
+ * - First occurrence wins for each key.
  */
-function probeFrontmatterName(content: string): string | null {
-	// Strip a leading UTF-8 BOM so the opening fence still matches.
+function probeFrontmatter(content: string): BundleFrontmatter {
+	const result: BundleFrontmatter = { name: null, description: null };
 	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
 	const lines = normalized.split(/\r?\n/, 51);
 
-	// Find the opening `---` (skipping blank lines).
 	let cursor = 0;
 	while (cursor < lines.length && lines[cursor]?.trim() === "") cursor++;
-	if (cursor >= lines.length || lines[cursor] !== "---") return null;
-
+	if (cursor >= lines.length || lines[cursor] !== "---") return result;
 	cursor++; // step past the opening fence
 
 	const limit = Math.min(50, lines.length);
 	for (let i = cursor; i < limit; i++) {
 		const line = lines[i];
 		if (line === undefined) break;
-		// Closing fence is `---` with optional trailing whitespace.
-		if (/^---\s*$/.test(line)) return null;
+		if (/^---\s*$/.test(line)) break;
 
-		// Top-level only: no leading whitespace, so nested `  name:` is ignored.
-		const m = line.match(/^name\s*:\s*(.*?)\s*$/);
+		const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*?)\s*$/);
 		if (!m) continue;
-
-		let value = m[1] ?? "";
-		const quoted =
-			(value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-			(value.startsWith("'") && value.endsWith("'") && value.length >= 2);
-		if (quoted) {
-			value = value.slice(1, -1);
-		} else {
-			// Strip an unquoted trailing `# comment`. YAML requires whitespace
-			// before `#` for it to start a comment; treat `#` at column 0 of the
-			// remainder (i.e. the value is empty) the same way.
-			const commentIdx = value.search(/(^|\s)#/);
-			if (commentIdx !== -1) {
-				value = value.slice(0, commentIdx).trimEnd();
-			}
-		}
-		return value;
+		const key = m[1];
+		if (key !== "name" && key !== "description") continue;
+		if (result[key] !== null) continue; // first wins
+		result[key] = parseFrontmatterScalar(m[2] ?? "");
 	}
 
-	return null;
+	return result;
+}
+
+/**
+ * Strips quotes (or an unquoted trailing `# comment`) from a frontmatter
+ * scalar value the parser captured. Mirrors the limited YAML rules called out
+ * in {@link probeFrontmatter}'s docstring.
+ */
+function parseFrontmatterScalar(raw: string): string {
+	const quoted =
+		(raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) ||
+		(raw.startsWith("'") && raw.endsWith("'") && raw.length >= 2);
+	if (quoted) return raw.slice(1, -1);
+
+	// YAML treats `#` as a comment only when preceded by whitespace (or at the
+	// start of the remainder). Anything before such a marker is the value.
+	const commentIdx = raw.search(/(^|\s)#/);
+	return commentIdx === -1 ? raw : raw.slice(0, commentIdx).trimEnd();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal — version fallback from the consuming package.json
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the `version` field from the nearest `package.json` walking up from
+ * `process.argv[1]`. Used as the default for {@link InstallSkillBundleOptions.version}
+ * so most callers never need to plumb the bundle version manually — it tracks
+ * the consuming package's release.
+ *
+ * Returns `null` when `process.argv[1]` is unset, no `package.json` is found,
+ * or the manifest has no string `version` field. Other read/parse failures
+ * also collapse to `null`; the caller surfaces a clear actionable error.
+ */
+function readNearestPackageVersion(): string | null {
+	const entrypoint = process.argv[1];
+	if (!entrypoint) return null;
+
+	const packageRoot = findNearestPackageRoot(resolve(entrypoint));
+	if (!packageRoot) return null;
+
+	try {
+		const raw = readFileSync(join(packageRoot, "package.json"), "utf-8");
+		const parsed = JSON.parse(raw) as unknown;
+		if (parsed && typeof parsed === "object" && "version" in parsed) {
+			const v = (parsed as { version: unknown }).version;
+			return typeof v === "string" ? v : null;
+		}
+		return null;
+	} catch {
+		return null;
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -290,9 +333,18 @@ async function collectBundleEntries(
 // loadBundleFiles
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Result of loading a hand-authored bundle: files plus parsed frontmatter. */
+export interface LoadedBundle {
+	readonly files: readonly RenderedFile[];
+	readonly frontmatter: {
+		readonly name: string;
+		readonly description: string;
+	};
+}
+
 /**
- * Loads the contents of a hand-authored skill bundle into a {@link RenderedFile}
- * array suitable for the shared install pipeline.
+ * Loads the contents of a hand-authored skill bundle and extracts the
+ * `name`/`description` it declares in its `SKILL.md` frontmatter.
  *
  * Steps:
  * 1. Resolve `sourceDir` (URL / absolute / relative-from-package-root).
@@ -300,15 +352,17 @@ async function collectBundleEntries(
  * 3. Recursively walk, applying root-only exclusions and a per-entry
  *    path-traversal guard against the canonical root.
  * 4. Verify `SKILL.md` exists at the bundle root.
- * 5. Run a lightweight frontmatter `name:` probe; reject on mismatch with
- *    `meta.name`.
+ * 5. Probe the frontmatter for `name:` and `description:` — both are required.
+ *
+ * The returned `frontmatter` becomes the source of truth for the install
+ * pipeline (written into `crust.json` and used to derive output paths). Crust
+ * does not rewrite `SKILL.md`; the bundle author owns it.
  *
  * @internal Exported for unit testing.
  */
 export async function loadBundleFiles(
 	sourceDir: string | URL,
-	meta: SkillMeta,
-): Promise<RenderedFile[]> {
+): Promise<LoadedBundle> {
 	const resolved = resolveBundleSourceDir(sourceDir);
 
 	let canonicalRoot: string;
@@ -338,7 +392,6 @@ export async function loadBundleFiles(
 		visitedDirs,
 	);
 
-	// Verify SKILL.md presence at the root.
 	const skillMd = collected.find((f) => f.relPath === SKILL_MD);
 	if (!skillMd) {
 		throw new Error(
@@ -347,7 +400,6 @@ export async function loadBundleFiles(
 		);
 	}
 
-	// Read all files concurrently into RenderedFile records.
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
 			path: entry.relPath,
@@ -355,17 +407,28 @@ export async function loadBundleFiles(
 		})),
 	);
 
-	// Run the lightweight frontmatter `name:` probe on SKILL.md.
 	const skillContent = files.find((f) => f.path === SKILL_MD)?.content ?? "";
-	const declaredName = probeFrontmatterName(skillContent);
-	if (declaredName !== null && declaredName !== meta.name) {
+	const probed = probeFrontmatter(skillContent);
+
+	if (probed.name === null || probed.name === "") {
 		throw new Error(
-			`Bundle SKILL.md frontmatter name "${declaredName}" does not match meta.name "${meta.name}". ` +
-				`Update one of them so they agree, or remove the \`name:\` field from the frontmatter.`,
+			`Bundle SKILL.md is missing a top-level \`name:\` field in its YAML frontmatter ` +
+				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
+				`Add \`name: <skill-name>\` to the frontmatter block.`,
+		);
+	}
+	if (probed.description === null || probed.description === "") {
+		throw new Error(
+			`Bundle SKILL.md is missing a top-level \`description:\` field in its YAML frontmatter ` +
+				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
+				`Add \`description: <one-line summary>\` to the frontmatter block.`,
 		);
 	}
 
-	return files;
+	return {
+		files,
+		frontmatter: { name: probed.name, description: probed.description },
+	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -381,6 +444,12 @@ export async function loadBundleFiles(
  * and a path-traversal guard) and writes a fresh `crust.json` recording
  * `kind: "bundle"`.
  *
+ * The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
+ * `description`; both are required and read by Crust without rewriting the
+ * file. The bundle's `version` defaults to the consuming package's
+ * `package.json` `version`; pass `version` explicitly to override (e.g. when
+ * one package publishes multiple bundles with independent versions).
+ *
  * Bundles and generated skills cannot share a name unless the existing
  * install is removed first. To overwrite a kind-mismatched install, pass
  * `force: true`.
@@ -389,22 +458,27 @@ export async function loadBundleFiles(
  * @returns Per-agent install results
  * @throws {SkillConflictError} If the canonical store exists with a different
  *   kind or with no `crust.json` (and `force` is not set).
- * @throws {Error} If `meta.name` is invalid, `SKILL.md` is missing, the
- *   frontmatter `name:` mismatches `meta.name`, the source directory escapes
- *   itself via symlink, or `sourceDir` cannot be resolved.
+ * @throws {Error} If `SKILL.md` is missing, its frontmatter lacks `name:` or
+ *   `description:`, the declared `name` is not a valid skill name, no
+ *   `version` can be resolved, the source directory escapes itself via
+ *   symlink, or `sourceDir` cannot be resolved.
  *
  * @example
  * ```ts
  * import { installSkillBundle } from "@crustjs/skills";
  *
+ * // Common case — name + description from SKILL.md frontmatter,
+ * // version from the consuming package's package.json.
  * await installSkillBundle({
- *   meta: {
- *     name: "funnel-builder",
- *     description: "Build a sales funnel",
- *     version: "1.0.0",
- *   },
  *   sourceDir: "skills/funnel-builder",
  *   agents: ["claude-code"],
+ * });
+ *
+ * // Multi-bundle package: pin the version explicitly.
+ * await installSkillBundle({
+ *   sourceDir: "skills/funnel-builder",
+ *   agents: ["claude-code"],
+ *   version: "2.0.0",
  * });
  * ```
  */
@@ -412,34 +486,47 @@ export async function installSkillBundle(
 	options: InstallSkillBundleOptions,
 ): Promise<InstallSkillBundleResult> {
 	const {
-		meta,
 		sourceDir,
 		agents,
+		version,
 		scope = "global",
 		clean = true,
 		force = false,
 		installMode = "auto",
 	} = options;
 
-	// Resolve the canonical current name — do not mutate the caller's meta object.
-	const resolvedName = resolveSkillName(meta.name);
-	if (!isValidSkillName(resolvedName)) {
-		throw new Error(
-			`Invalid skill name "${resolvedName}": must be 1–64 lowercase ` +
-				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
-		);
-	}
-
 	if (agents.length === 0) {
 		return { agents: [] };
 	}
 
-	const resolvedMeta: SkillMeta = { ...meta, name: resolvedName };
-	const files = await loadBundleFiles(sourceDir, resolvedMeta);
+	const { files, frontmatter } = await loadBundleFiles(sourceDir);
+
+	const resolvedName = resolveSkillName(frontmatter.name);
+	if (!isValidSkillName(resolvedName)) {
+		throw new Error(
+			`Invalid skill name "${resolvedName}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
+				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
+		);
+	}
+
+	const resolvedVersion = version ?? readNearestPackageVersion();
+	if (!resolvedVersion) {
+		throw new Error(
+			`Could not resolve a version for skill "${resolvedName}". ` +
+				`Pass \`version\` to installSkillBundle, or run from a package whose ` +
+				`package.json declares a string \`version\` field.`,
+		);
+	}
+
+	const meta: SkillMeta = {
+		name: resolvedName,
+		description: frontmatter.description,
+		version: resolvedVersion,
+	};
 
 	return installRenderedSkill({
-		files,
-		meta: resolvedMeta,
+		files: [...files],
+		meta,
 		agents,
 		scope,
 		clean,

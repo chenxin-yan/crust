@@ -449,11 +449,6 @@ Use `installSkillBundle()` when:
 import { installSkillBundle } from "@crustjs/skills";
 
 await installSkillBundle({
-  meta: {
-    name: "funnel-builder",
-    description: "Build a sales funnel",
-    version: "1.0.0",
-  },
   // Resolved relative to the nearest package.json walking up from
   // process.argv[1]. You can also pass an absolute string or a file: URL.
   sourceDir: "skills/funnel-builder",
@@ -461,22 +456,47 @@ await installSkillBundle({
 });
 ```
 
+### Where `name`, `description`, and `version` come from
+
+The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
+`description` — Crust reads them but never rewrites the file. Both fields
+are required:
+
+```yaml
+---
+name: funnel-builder
+description: Build a sales funnel
+---
+```
+
+The bundle's `version` defaults to the `version` field of the nearest
+`package.json` walking up from `process.argv[1]` (the same `package.json`
+used to resolve a relative `sourceDir`). Pass `version` explicitly when one
+package publishes multiple bundles with independent versions, or when the
+consuming package has no `version` of its own:
+
+```ts
+await installSkillBundle({
+  sourceDir: "skills/funnel-builder",
+  agents: ["claude-code"],
+  version: "2.0.0",
+});
+```
+
+If neither an explicit `version` nor a resolvable `package.json` `version`
+is available, the install throws a clear actionable error.
+
 ### What gets copied
 
-The bundle's `SKILL.md` plus every supporting file is copied as **UTF-8 text**
-into the canonical Crust store — markdown, configs, scripts, etc. The bundle
-author owns the SKILL.md frontmatter; Crust does not rewrite it. As a guard
-against silent name drift, Crust runs a lightweight `name:` consistency probe
-on the frontmatter and rejects the install if the declared `name` does not
-match `meta.name`. Bundles that omit `name:` from frontmatter skip the probe.
+The bundle's `SKILL.md` plus every supporting file is copied into the
+canonical Crust store — markdown, configs, scripts, etc. Files are read and
+written as UTF-8, so binary supporting files are not currently supported and
+will be corrupted on round-trip. Open an issue if you need binary support.
 
-Binary files are not currently supported — the install pipeline reads and
-writes every file with UTF-8 encoding, so binary assets will be corrupted on
-round-trip. Open an issue if you need binary support.
-
-Bundle content changes do not propagate without a `meta.version` bump:
+Bundle content changes do not propagate without a `version` bump:
 identical-version reinstalls report `up-to-date` and leave the canonical
-store untouched. Bump `version` whenever the bundle contents change.
+store untouched. Bump the consuming package's `package.json` `version` (or
+pass an explicit `version`) whenever the bundle contents change.
 
 Exclusions at the bundle root only:
 
@@ -486,9 +506,45 @@ Exclusions at the bundle root only:
 
 Dotfiles inside subdirectories **are** copied.
 
+### Publishing a bundle to npm
+
+Two gotchas trip up bundle authors who publish to npm:
+
+1. **Include the bundle directory in the published tarball.** Add the path
+   to your `package.json` `files` array (or rely on `.npmignore` to ship
+   it). Local installs work even when the directory is gitignored from the
+   tarball, but consumers will hit a missing-`SKILL.md` error.
+
+   ```json
+   {
+     "name": "acme-skills",
+     "version": "1.0.0",
+     "files": ["dist", "skills"]
+   }
+   ```
+
+   Verify with `npm pack --dry-run` before publishing.
+
+2. **Consumers point at the published path with `import.meta.resolve`.**
+   Relative `sourceDir` resolution walks up from the consumer's
+   `process.argv[1]`, so it lands in the consumer's package — not yours.
+   Consumers should use a `file:` URL via `import.meta.resolve`:
+
+   ```ts
+   await installSkillBundle({
+     sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
+     agents: ["claude-code"],
+   });
+   ```
+
+   For this to work, the bundle directory must be reachable from your
+   package's `exports` (or accessible as a subpath of the package root).
+   Bundle authors who want explicit subpath access can declare it in
+   `package.json` `exports`.
+
 ### `kind` field on `crust.json`
 
-Every installed bundle now records its origin in `crust.json` as a `kind`
+Every installed bundle records its origin in `crust.json` as a `kind`
 field: `"generated"` for `generateSkill()` output, `"bundle"` for
 `installSkillBundle()`. This prevents accidental cross-overwrites:
 
