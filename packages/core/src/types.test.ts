@@ -470,6 +470,93 @@ describe("FlagDef toggle fields", () => {
 	});
 });
 
+// ───────────────────────────────────────────────────────────────────────
+// `choices` field — string-only on FlagDef and ArgDef (TP-009)
+// ───────────────────────────────────────────────────────────────────────
+
+describe("FlagDef choices field", () => {
+	it("accepts choices on a single-value string flag", () => {
+		const flag: FlagDef = {
+			type: "string",
+			choices: ["browser", "bun", "node"] as const,
+		};
+		expect(flag.type).toBe("string");
+		expect(flag.choices).toEqual(["browser", "bun", "node"]);
+	});
+
+	it("accepts choices on a multi-value string flag", () => {
+		const flag: FlagDef = {
+			type: "string",
+			multiple: true,
+			choices: ["unit", "integration"] as const,
+		};
+		expect(flag.multiple).toBe(true);
+		expect(flag.choices).toEqual(["unit", "integration"]);
+	});
+
+	it("rejects choices on a boolean flag", () => {
+		// @ts-expect-error — `choices` is only supported on string-typed flags
+		const _bad1: FlagDef = { type: "boolean", choices: ["a", "b"] };
+
+		const _bad2: FlagDef = {
+			type: "boolean",
+			multiple: true,
+			// @ts-expect-error — `choices` is only supported on string-typed flags
+			choices: ["a", "b"],
+		};
+
+		expect(_bad1.type).toBe("boolean");
+		expect(_bad2.type).toBe("boolean");
+	});
+
+	it("rejects choices on a number flag", () => {
+		// @ts-expect-error — `choices` is only supported on string-typed flags
+		const _bad1: FlagDef = { type: "number", choices: ["a", "b"] };
+
+		const _bad2: FlagDef = {
+			type: "number",
+			multiple: true,
+			// @ts-expect-error — `choices` is only supported on string-typed flags
+			choices: ["a", "b"],
+		};
+
+		expect(_bad1.type).toBe("number");
+		expect(_bad2.type).toBe("number");
+	});
+});
+
+describe("ArgDef choices field", () => {
+	it("accepts choices on a string positional arg", () => {
+		const arg: ArgDef = {
+			name: "target",
+			type: "string",
+			choices: ["browser", "bun", "node"] as const,
+		};
+		expect(arg.type).toBe("string");
+		expect(arg.choices).toEqual(["browser", "bun", "node"]);
+	});
+
+	it("rejects choices on a boolean positional arg", () => {
+		const _bad: ArgDef = {
+			name: "flag",
+			type: "boolean",
+			// @ts-expect-error — `choices` is only supported on string-typed args
+			choices: ["a", "b"],
+		};
+		expect(_bad.type).toBe("boolean");
+	});
+
+	it("rejects choices on a number positional arg", () => {
+		const _bad: ArgDef = {
+			name: "port",
+			type: "number",
+			// @ts-expect-error — `choices` is only supported on string-typed args
+			choices: ["a", "b"],
+		};
+		expect(_bad.type).toBe("number");
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // CommandMeta / Command tests
 // ────────────────────────────────────────────────────────────────────────────
@@ -501,6 +588,30 @@ describe("CommandMeta interface", () => {
 	it("accepts an empty aliases array", () => {
 		const meta: CommandMeta = { name: "serve", aliases: [] };
 		expect(meta.aliases).toEqual([]);
+	});
+
+	it("accepts hidden: true (TP-009)", () => {
+		const meta: CommandMeta = {
+			name: "__complete",
+			hidden: true,
+			description: "Internal completion entrypoint",
+		};
+		expect(meta.hidden).toBe(true);
+	});
+
+	it("accepts hidden: false explicitly (TP-009)", () => {
+		const meta: CommandMeta = { name: "serve", hidden: false };
+		expect(meta.hidden).toBe(false);
+	});
+
+	it("composes hidden with aliases (TP-009)", () => {
+		const meta: CommandMeta = {
+			name: "__complete",
+			aliases: ["__c"] as const,
+			hidden: true,
+		};
+		expect(meta.hidden).toBe(true);
+		expect(meta.aliases).toEqual(["__c"]);
 	});
 });
 

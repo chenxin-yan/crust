@@ -141,12 +141,21 @@ function formatCommandLabel(
 }
 
 function formatCommandsSection(command: CommandNode): string[] {
-	if (Object.keys(command.subCommands).length === 0) {
+	// Filter out subcommands marked `meta.hidden: true` (TP-009). Hidden
+	// commands remain resolvable by direct invocation — routing in
+	// `packages/core/src/router.ts` does not consult `meta.hidden`. Filtering
+	// happens after `Object.entries` so insertion order is preserved for the
+	// surviving entries.
+	const visibleEntries = Object.entries(command.subCommands).filter(
+		([, subCommand]) => subCommand.meta.hidden !== true,
+	);
+
+	if (visibleEntries.length === 0) {
 		return [];
 	}
 
 	const lines = [bold(cyan("COMMANDS:"))];
-	for (const [name, subCommand] of Object.entries(command.subCommands)) {
+	for (const [name, subCommand] of visibleEntries) {
 		const label = formatCommandLabel(name, subCommand.meta.aliases);
 		const rendered = `${padEnd(label, COMMAND_COLUMN_WIDTH, " ")} `;
 		lines.push(`  ${rendered}${subCommand.meta.description ?? ""}`.trimEnd());

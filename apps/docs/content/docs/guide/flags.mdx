@@ -169,6 +169,27 @@ You can also provide a default array:
 })
 ```
 
+## Choices
+
+Use `choices` on a string flag to declare a static enum of valid values:
+
+```ts
+.flags({
+  target: {
+    type: "string",
+    description: "Target runtime",
+    choices: ["browser", "bun", "node"] as const,
+  },
+  suites: {
+    type: "string",
+    multiple: true,
+    choices: ["unit", "integration"] as const,
+  },
+})
+```
+
+`choices` is currently a **hint for tooling** (consumed by shell-completion plugins to emit value candidates) and is **not enforced at parse time** — passing a value outside `choices` does not throw. Validate in your handler if you need runtime rejection. `choices` is only available on string-typed flags; using it on number or boolean flags is a compile-time error. See the [API reference](/docs/api/types#flagdef) for details.
+
 ## Flag Inheritance
 
 Set `inherit: true` on a flag to make it available to subcommands:

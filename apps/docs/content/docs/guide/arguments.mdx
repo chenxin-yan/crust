@@ -122,6 +122,22 @@ Variadic arguments with `required: true` error when no values are provided. With
 
 The inferred TypeScript type is always `T[]` — never `T[] | undefined` — regardless of `required`. The `required` flag only controls whether an empty array fails validation; it does not change the runtime shape or the inferred type.
 
+## Choices
+
+Use `choices` on a string positional argument to declare a static enum of valid values:
+
+```ts
+const cmd = new Crust("deploy")
+  .args([
+    { name: "target", type: "string", choices: ["browser", "bun", "node"] as const },
+  ] as const)
+  .run(({ args }) => {
+    args.target; // string
+  });
+```
+
+`choices` is currently a **hint for tooling** (consumed by shell-completion plugins) and is **not enforced at parse time** — passing a value outside `choices` does not throw. Validate in your handler if you need runtime rejection. `choices` is only available on string-typed args; using it on number or boolean args is a compile-time error. See the [API reference](/docs/api/types#argdef) for details.
+
 ## The `--` Separator
 
 Arguments after `--` are collected into `rawArgs` and **not** processed as positional arguments or flags:

@@ -52,6 +52,7 @@ interface CommandMeta {
   description?: string;          // Help text description
   usage?: string;                // Custom usage string
   aliases?: readonly string[];   // Alternative names
+  hidden?: boolean;              // Omit from default --help output
 }
 ```
 
@@ -69,6 +70,18 @@ With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same
 
 **Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
 
+#### `hidden`
+
+When `true`, the command is omitted from the default `--help` listing. Type: `boolean`. Default: `false`.
+
+```ts
+meta: { name: "__complete", hidden: true, description: "Internal completion entrypoint" }
+```
+
+`hidden` affects help rendering only. The command remains directly invocable by name and is unaffected by routing, alias resolution, or `didYouMeanPlugin` suggestions — typing the canonical name (or any alias) still routes to it. Filtering is performed by `helpPlugin.formatCommandsSection`; custom help renderers are expected to respect this field too.
+
+`hidden` is intended for internal/runtime commands such as the `__complete` entrypoint used by shell-completion plugins. Marking a user-facing subcommand as `hidden` is supported but unusual.
+
 ## Argument Types
 
 ### `ArgDef`
@@ -82,16 +95,29 @@ type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
 Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
 
 ```ts
-// String variant (Number and Boolean follow the same shape)
+// String variant (Number and Boolean follow the same shape, minus `choices`)
 interface StringArgDef {
-  name: string;          // Argument name
-  type: "string";        // Type discriminant
-  description?: string;  // Help text
-  default?: string;      // Default value (type-safe)
-  required?: true;       // Error if missing
-  variadic?: true;       // Collect remaining into array
+  name: string;                  // Argument name
+  type: "string";                // Type discriminant
+  description?: string;          // Help text
+  default?: string;              // Default value (type-safe)
+  required?: true;               // Error if missing
+  variadic?: true;               // Collect remaining into array
+  choices?: readonly string[];   // Static enum of valid values (string only)
 }
 ```
+
+#### `choices` (string args only)
+
+A static enum of valid values for the argument. Type: `readonly string[]`. Default: `undefined`. Only available on string-typed args (`StringArgDef`); not supported on number or boolean variants.
+
+```ts
+args: [
+  { name: "target", type: "string", choices: ["browser", "bun", "node"] as const },
+] as const
+```
+
+**Currently a hint for tooling — not enforced at parse time.** Shell-completion plugins consume `choices` to emit value candidates, and a future opt-in validation hook may consume it too. The parser does not reject values outside `choices` in this version: a value like `--target=deno` is still parsed as a string and delivered to your handler. Validate explicitly inside your handler if you need runtime rejection today.
 
 ### `ArgsDef`
 
@@ -118,26 +144,28 @@ Single-value variants use `multiple?: never` (field absent); multi-value variant
 ```ts
 // Single-value string flag
 interface StringFlagDef {
-  type: "string";              // Type discriminant
-  description?: string;        // Help text
-  default?: string;            // Default value (type-safe)
-  required?: true;             // Error if missing
-  short?: string;              // Single-character short form (-x)
-  aliases?: string[];          // Additional aliases (single-char or long)
-  multiple?: never;            // Absent for single-value flags
-  inherit?: true;              // Inherited by subcommands
+  type: "string";                // Type discriminant
+  description?: string;          // Help text
+  default?: string;              // Default value (type-safe)
+  required?: true;               // Error if missing
+  short?: string;                // Single-character short form (-x)
+  aliases?: string[];            // Additional aliases (single-char or long)
+  multiple?: never;              // Absent for single-value flags
+  inherit?: true;                // Inherited by subcommands
+  choices?: readonly string[];   // Static enum of valid values (string only)
 }
 
 // Multi-value string flag
 interface StringMultiFlagDef {
-  type: "string";              // Type discriminant
-  description?: string;        // Help text
-  default?: string[];          // Default array value (type-safe)
-  required?: true;             // Error if missing
-  short?: string;              // Single-character short form (-x)
-  aliases?: string[];          // Additional aliases (single-char or long)
-  multiple: true;              // Collect repeated values into array
-  inherit?: true;              // Inherited by subcommands
+  type: "string";                // Type discriminant
+  description?: string;          // Help text
+  default?: string[];            // Default array value (type-safe)
+  required?: true;               // Error if missing
+  short?: string;                // Single-character short form (-x)
+  aliases?: string[];            // Additional aliases (single-char or long)
+  multiple: true;                // Collect repeated values into array
+  inherit?: true;                // Inherited by subcommands
+  choices?: readonly string[];   // Static enum of valid values (string only)
 }
 // Number variants follow the same pattern.
 // Boolean variants additionally support `noNegate`:
@@ -158,6 +186,19 @@ interface BooleanFlagDef {
 Boolean toggle fields (`required`, `multiple`, `inherit`, `noNegate`) only accept `true` — passing `false` is a type error.
 
 `noNegate` is exclusive to boolean flag types. Setting it on a string or number flag is a compile-time error.
+
+#### `choices` (string flags only)
+
+A static enum of valid values for the flag. Type: `readonly string[]`. Default: `undefined`. Only available on string-typed flags (`StringFlagDef` and `StringMultiFlagDef`); not supported on number or boolean variants.
+
+```ts
+flags: {
+  target: { type: "string", choices: ["browser", "bun", "node"] as const },
+  suites: { type: "string", multiple: true, choices: ["unit", "integration"] as const },
+}
+```
+
+**Currently a hint for tooling — not enforced at parse time.** Shell-completion plugins consume `choices` to emit value candidates after `--flag=` or `--flag <TAB>`, and a future opt-in validation hook may consume it too. The parser does not reject values outside `choices` in this version: passing `--target=deno` still produces `target: "deno"` in your parsed flags. Validate explicitly inside your handler if you need runtime rejection today.
 
 ### `FlagsDef`
 
