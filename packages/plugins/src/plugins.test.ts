@@ -563,6 +563,21 @@ describe("built-in plugins", () => {
 		expect(plain).not.toContain("__complete");
 	});
 
+	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no run handler", () => {
+		// Regression: formatUsage previously counted hidden subcommands when
+		// deciding whether to emit `<command>`, producing the incoherent
+		// `USAGE: app <command>` with no COMMANDS section below it.
+		const command = new Crust("app").command("__complete", (cmd) =>
+			cmd.meta({ hidden: true, description: "Internal" }).run(() => {}),
+		)._node;
+
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("USAGE:");
+		expect(plain).not.toMatch(/USAGE:\s+app\s+<command>/);
+		expect(plain).not.toContain("COMMANDS:");
+		expect(plain).not.toContain("__complete");
+	});
+
 	it("renderHelp hidden filtering composes with alias rendering", () => {
 		// A hidden subcommand with aliases should be entirely absent. A visible
 		// subcommand with aliases should still render `name (a, b)`.

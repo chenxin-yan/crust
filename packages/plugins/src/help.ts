@@ -56,7 +56,10 @@ function formatUsage(
 
 	const usageParts: string[] = [green(path.join(" "))];
 
-	if (Object.keys(command.subCommands).length > 0 && !command.run) {
+	const hasVisibleSubCommands = Object.values(command.subCommands).some(
+		(sub) => sub.meta.hidden !== true,
+	);
+	if (hasVisibleSubCommands && !command.run) {
 		usageParts.push(cyan("<command>"));
 	}
 

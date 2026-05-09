@@ -1,5 +1,5 @@
 ---
-"@crustjs/core": minor
+"@crustjs/core": patch
 ---
 
 Add `choices` to `FlagDef`/`ArgDef` and `hidden` to `CommandMeta`.
