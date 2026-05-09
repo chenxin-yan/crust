@@ -4,6 +4,11 @@ import {
 	didYouMeanPlugin,
 } from "./did-you-mean.ts";
 
+export type {
+	CompletionPluginOptions,
+	CompletionShell,
+} from "./completion/index.ts";
+export { completionPlugin } from "./completion/index.ts";
 export type { DidYouMeanPluginOptions } from "./did-you-mean.ts";
 export { didYouMeanPlugin } from "./did-you-mean.ts";
 

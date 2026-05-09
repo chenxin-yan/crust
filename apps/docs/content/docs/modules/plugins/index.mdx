@@ -22,6 +22,7 @@ bun add @crustjs/plugins
 | [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
 | [`didYouMeanPlugin()`](/docs/modules/plugins/did-you-mean)        | Suggests corrections for mistyped subcommands            |
 | [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
+| [`completionPlugin()`](/docs/modules/plugins/completion)          | Generates bash/zsh/fish tab-completion scripts           |
 
 ### Utilities
 
@@ -40,6 +41,8 @@ bun add @crustjs/plugins
 | `UpdateNotifierCacheAdapter`  | Cache adapter interface for update notifier       |
 | `UpdateNotifierPackageManager` | Package manager union for update notifier        |
 | `UpdateNotifierInstallScope`  | Install scope union for update notifier           |
+| `CompletionPluginOptions`     | Options for the completion plugin                 |
+| `CompletionShell`             | `"bash" \| "zsh" \| "fish"` shell union           |
 
 Manual pages are provided by [`@crustjs/man`](/docs/modules/man) (build-time mdoc), not by this package.
 

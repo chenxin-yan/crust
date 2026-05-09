@@ -17,6 +17,7 @@ bun add @crustjs/plugins
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
 | `didYouMeanPlugin(options?)` | Suggests corrections for mistyped subcommands via Levenshtein matching |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
+| `completionPlugin(options?)` | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts |
 
 ## Usage
 
