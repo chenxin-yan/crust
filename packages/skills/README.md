@@ -76,6 +76,66 @@ The plugin automatically updates already-installed skills when the version chang
 
 Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
+#### Hand-authored bundles via `customSkills`
+
+The plugin can also manage **hand-authored** skill bundles alongside the
+auto-generated command-reference skill. Pass an array of
+`CustomSkillConfig` entries via `customSkills`; each entry is reconciled
+through the same lifecycle as the main skill.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
+    skillPlugin({
+      version: pkg.version,
+      customSkills: [
+        {
+          name: "funnel-builder",
+          // Resolved against the nearest package.json walking up from
+          // process.argv[1] — same rules as installSkillBundle().
+          sourceDir: "skills/funnel-builder",
+          version: pkg.version,
+        },
+      ],
+    }),
+  )
+  .run(() => {});
+
+await app.execute();
+```
+
+- **`name`** must satisfy `isValidSkillName` (1–64 lowercase alphanumeric
+  characters and hyphens, no leading/trailing/consecutive hyphens), must
+  be unique within the array, and must not collide with the main skill's
+  name. The bundle's `SKILL.md` frontmatter must declare a matching
+  `name:` field — it is the source of truth at install time.
+- **`sourceDir`** accepts a `URL` (`file:` protocol), an absolute path, or
+  a relative string resolved from the nearest `package.json`. Resolution
+  errors surface at install time, not at plugin setup.
+- **`version`** is required and typically wired to the consuming package's
+  `package.json` `version`. Identical-version reinstalls are skipped, so
+  bump this whenever the bundle contents change.
+- **`scope`** and **`installMode`** are optional per-entry overrides;
+  unset values inherit from the plugin's `defaultScope` / `installMode`.
+
+The interactive `skill` command shows one multiselect prompt per skill in
+order: the main auto-generated skill first, then each `customSkills`
+entry with its name in the prompt header (e.g. `"Select agents to install
+skills for [funnel-builder]"`). Each prompt is independent — selecting
+or deselecting agents reconciles only that skill's installs. `skill
+--all` skips every prompt and installs every skill for the full agent
+set; `skill update` updates outdated installs across main + every bundle.
+
+Auto-update on plugin startup is per-skill: only outdated installs are
+rewritten, and a single bundle's failure (e.g. missing `sourceDir`) does
+not abort the others. Pass `autoUpdate: false` to disable startup auto-
+update for both the main skill and all bundles.
+
 ### Programmatic Auto-Install
 
 For full control over first-time installation, call `generateSkill()`

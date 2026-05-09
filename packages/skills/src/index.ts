@@ -39,6 +39,7 @@ export type {
 	AgentClass,
 	AgentResult,
 	AgentTarget,
+	CustomSkillConfig,
 	GenerateOptions,
 	GenerateResult,
 	InstallSkillBundleOptions,

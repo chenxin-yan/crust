@@ -51,6 +51,7 @@ interface SkillPluginOptions {
   autoUpdate?: boolean; // default: true
   command?: string; // default: "skill"
   instructions?: string | string[]; // extra top-level SKILL.md content
+  customSkills?: CustomSkillConfig[]; // hand-authored bundles, default: []
 }
 ```
 
@@ -103,6 +104,60 @@ The user toggles options on or off and the system reconciles the desired state:
 ```sh
 my-cli skill
 ```
+
+### Hand-authored bundles via `customSkills`
+
+The plugin can manage hand-authored skill bundles alongside the auto-
+generated command-reference skill. Each entry is reconciled through the
+same lifecycle: auto-update on version change, surfaced in the
+interactive `skill` subcommand multiselect (one prompt per bundle, in
+array order, after the main-skill prompt), supports uninstall via the
+same toggle UX, and respects `autoUpdate: false` and `--all`.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
+    skillPlugin({
+      version: pkg.version,
+      customSkills: [
+        {
+          name: "funnel-builder",
+          sourceDir: "skills/funnel-builder",
+          version: pkg.version,
+        },
+      ],
+    }),
+  )
+  .run(() => {});
+```
+
+The `CustomSkillConfig` shape:
+
+```ts
+interface CustomSkillConfig {
+  name: string;                          // unique; must match SKILL.md frontmatter
+  sourceDir: string | URL;               // file:// URL, absolute path, or bare relative
+  version: string;                       // typically pkg.version
+  scope?: "global" | "project";          // overrides plugin defaultScope
+  installMode?: "auto" | "symlink" | "copy";
+}
+```
+
+Resolution rules for `sourceDir` mirror
+[`installSkillBundle()`](#installing-hand-authored-bundles): URL with
+`file:` protocol, absolute path, or a bare relative string resolved from
+the nearest `package.json` walking up from `process.argv[1]`. Resolution
+errors surface at install time, not at plugin setup.
+
+Bundles share the canonical `.crust/skills` store with the main skill
+and inherit `defaultScope` / `installMode` resolution unless overridden
+per-entry. When `customSkills` is omitted or empty, plugin behavior is
+byte-identical to today.
 
 ## Conflict Detection
 

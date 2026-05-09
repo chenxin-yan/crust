@@ -562,6 +562,101 @@ export interface StatusResult {
 // Plugin option types
 // ────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// Custom skill bundle configuration
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Configuration for a single hand-authored skill bundle managed by
+ * {@link skillPlugin} alongside the auto-generated command-reference skill.
+ *
+ * Each entry is reconciled through the same plugin lifecycle as the main
+ * skill — auto-update on version change, surfaced in the interactive `skill`
+ * subcommand multiselect, supports uninstall via the same toggle UX, and
+ * respects `autoUpdate: false` and `--all` non-interactive mode. Bundles
+ * inherit `defaultScope` and `installMode` from the plugin unless overridden
+ * per-entry.
+ *
+ * The bundle's `SKILL.md` frontmatter remains the source of truth for the
+ * display `name` and `description` (validated by {@link installSkillBundle}
+ * at install time). The duplicated `name` field on this config is what the
+ * plugin uses for cheap collision-detection, status lookups, and uninstall
+ * paths without having to read the bundle's frontmatter at plugin setup.
+ *
+ * @example
+ * ```ts
+ * import { skillPlugin } from "@crustjs/skills";
+ * import pkg from "./package.json" with { type: "json" };
+ *
+ * skillPlugin({
+ *   version: pkg.version,
+ *   customSkills: [
+ *     {
+ *       name: "funnel-builder",
+ *       sourceDir: "skills/funnel-builder",
+ *       version: pkg.version,
+ *     },
+ *   ],
+ * });
+ * ```
+ */
+export interface CustomSkillConfig {
+	/**
+	 * Skill name used by the plugin for collision detection, status lookups,
+	 * and uninstall paths.
+	 *
+	 * Must satisfy `isValidSkillName` (1–64 lowercase alphanumeric characters
+	 * and hyphens, no leading/trailing/consecutive hyphens), must be unique
+	 * within the `customSkills` array, and must not collide with the main
+	 * skill's name (derived from the root command's `meta`).
+	 *
+	 * The bundle's `SKILL.md` frontmatter must declare a matching `name:`
+	 * field; {@link installSkillBundle} validates this at install time.
+	 */
+	name: string;
+	/**
+	 * Source directory containing the bundle to install.
+	 *
+	 * Resolution rules (mirror {@link InstallSkillBundleOptions.sourceDir}):
+	 * - `URL` — must use `file:` protocol; resolved via `fileURLToPath()`.
+	 * - Absolute string path — resolved via `path.resolve()`.
+	 * - Relative string path — resolved against the nearest `package.json`
+	 *   directory walking up from `process.argv[1]`.
+	 *
+	 * The canonical form for plugin authors is the bare relative string
+	 * (e.g. `"skills/funnel-builder"`), mirroring `@crustjs/create`'s
+	 * `scaffold({ template })` ergonomics. Resolution-time errors are
+	 * deferred until the install runs.
+	 */
+	sourceDir: string | URL;
+	/**
+	 * Version string recorded for this install and compared on subsequent
+	 * installs to drive auto-update.
+	 *
+	 * Required. Typically wired to the consuming package's `package.json`
+	 * `version` (e.g. via `import pkg from "./package.json" with { type:
+	 * "json" }`). Identical-version reinstalls report `up-to-date` and skip
+	 * the canonical-store rewrite, so bump this whenever bundle contents
+	 * change.
+	 */
+	version: string;
+	/**
+	 * Installation scope override.
+	 *
+	 * When omitted, the bundle inherits {@link SkillPluginOptions.defaultScope}
+	 * resolution: explicit `--scope` flag wins, else `defaultScope`, else
+	 * the interactive scope prompt (or `"global"` in non-interactive mode).
+	 */
+	scope?: Scope;
+	/**
+	 * Installation strategy override.
+	 *
+	 * When omitted, inherits {@link SkillPluginOptions.installMode} (default
+	 * `"auto"`).
+	 */
+	installMode?: SkillInstallMode;
+}
+
 /**
  * Options for the skill plugin.
  *
@@ -637,6 +732,42 @@ export interface SkillPluginOptions {
 	 * @default false
 	 */
 	disableModelInvocation?: boolean;
+	/**
+	 * Hand-authored skill bundles to manage alongside the auto-generated
+	 * command-reference skill.
+	 *
+	 * Each entry is reconciled through the same plugin lifecycle as the main
+	 * skill — auto-update on version change, surfaced in the interactive
+	 * `skill` subcommand multiselect (one prompt per bundle, in array order,
+	 * after the main-skill prompt), supports uninstall via the same toggle
+	 * UX, and respects `autoUpdate: false` and `--all` non-interactive mode.
+	 *
+	 * Bundles share the canonical `.crust/skills` store with the main skill
+	 * via {@link installSkillBundle} and inherit `defaultScope` /
+	 * `installMode` resolution unless overridden per-entry.
+	 *
+	 * Each entry's `version` drives auto-update detection (compared against
+	 * the recorded `crust.json` version) — typically wired to the consuming
+	 * package's `package.json` `version`.
+	 *
+	 * Setup-time validation enforces:
+	 * - Each `name` satisfies `isValidSkillName`.
+	 * - No `name` collides with the main skill's name.
+	 * - All `name` values are unique within the array.
+	 * - Each `version` is a non-empty string.
+	 * - Each `sourceDir` is a `string` or `URL`.
+	 *
+	 * `sourceDir` resolution-time errors (non-`file:` URL, missing source
+	 * directory, missing `SKILL.md`, etc.) defer to the underlying
+	 * `installSkillBundle` invocation and surface there with descriptive
+	 * messages.
+	 *
+	 * When omitted or empty, plugin behavior is byte-identical to running
+	 * without the option — only the auto-generated main skill is managed.
+	 *
+	 * @default []
+	 */
+	customSkills?: CustomSkillConfig[];
 	/**
 	 * Register an interactive skill management subcommand on the root command.
 	 *
