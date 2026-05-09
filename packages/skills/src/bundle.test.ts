@@ -292,6 +292,31 @@ describe("loadBundleFiles", () => {
 		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
+	it("strips a trailing `# comment` after a quoted frontmatter value", async () => {
+		const dir = join(tmpDir, "name-quoted-with-comment");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			'---\nname: "funnel-builder" # canonical name\ndescription: "Build a sales funnel" # one-liner\n---\n',
+		);
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter).toEqual({
+			name: "funnel-builder",
+			description: "Build a sales funnel",
+		});
+	});
+
+	it("keeps `#` verbatim when it appears inside a quoted scalar", async () => {
+		const dir = join(tmpDir, "desc-with-hash");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			'---\nname: funnel-builder\ndescription: "Tag #1 funnel builder"\n---\n',
+		);
+		const { frontmatter } = await loadBundleFiles(dir);
+		expect(frontmatter.description).toBe("Tag #1 funnel builder");
+	});
+
 	it("strips a trailing `# comment` from an unquoted frontmatter value", async () => {
 		const dir = join(tmpDir, "name-with-comment");
 		await mkdir(dir, { recursive: true });

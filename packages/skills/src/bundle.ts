@@ -192,13 +192,20 @@ function probeFrontmatter(content: string): BundleFrontmatter {
  * in {@link probeFrontmatter}'s docstring.
  */
 function parseFrontmatterScalar(raw: string): string {
-	const quoted =
-		(raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) ||
-		(raw.startsWith("'") && raw.endsWith("'") && raw.length >= 2);
-	if (quoted) return raw.slice(1, -1);
+	// Quoted form: locate the matching closing quote, return its interior, and
+	// discard anything after it (whitespace + optional `# comment`). This keeps
+	// `#` verbatim when it appears *inside* the quotes, while still stripping
+	// a trailing inline comment that follows the closing quote.
+	const first = raw[0];
+	if (first === '"' || first === "'") {
+		const close = raw.indexOf(first, 1);
+		if (close !== -1) return raw.slice(1, close);
+		// Unbalanced quote — fall through and treat as an unquoted scalar.
+	}
 
-	// YAML treats `#` as a comment only when preceded by whitespace (or at the
-	// start of the remainder). Anything before such a marker is the value.
+	// Unquoted form: YAML treats `#` as a comment only when preceded by
+	// whitespace (or at the start of the remainder). Anything before such a
+	// marker is the value.
 	const commentIdx = raw.search(/(^|\s)#/);
 	return commentIdx === -1 ? raw : raw.slice(0, commentIdx).trimEnd();
 }
