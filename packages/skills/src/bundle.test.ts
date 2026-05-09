@@ -168,37 +168,52 @@ describe("loadBundleFiles", () => {
 		expect(paths).toContain("subdir/.config");
 	});
 
-	it("excludes node_modules/, root dotfiles, and stale crust.json from the static fixture", async () => {
-		const { files } = await loadBundleFiles(FIXTURE_DIR);
-		const paths = files.map((f) => f.path);
-		expect(paths.some((p) => p.startsWith("node_modules/"))).toBe(false);
-		expect(paths.includes(".gitignore")).toBe(false);
-		expect(paths.includes(CRUST_MANIFEST)).toBe(false);
-	});
-
-	it("excludes a real .git/ directory at the bundle root", async () => {
-		// Build a temp bundle with an actual .git/ subdirectory — the static
-		// fixture only has .gitignore, so an assertion against it would not
-		// prove the recursive walker skips a .git/ tree.
-		const dir = join(tmpDir, "with-git-dir");
+	it("copies root-level authored content as-is (dotfiles, node_modules, etc. are NOT filtered)", async () => {
+		// Bundle authors own `sourceDir` cleanliness. The walker copies what's
+		// there — including root dotfiles like `.env.example` or `.tool-versions`
+		// that may be intentional skill content. The only reserved root filename
+		// is `crust.json`, covered by its own test below.
+		const dir = join(tmpDir, "as-is");
+		await mkdir(join(dir, "node_modules", "left-pad"), { recursive: true });
+		await writeFile(
+			join(dir, "node_modules", "left-pad", "index.js"),
+			"module.exports = () => {};\n",
+		);
+		await writeFile(join(dir, ".env.example"), "FOO=bar\n");
+		await writeFile(join(dir, ".tool-versions"), "node 22\n");
+		await writeFile(join(dir, ".DS_Store"), "\0noise");
 		await mkdir(join(dir, ".git", "objects"), { recursive: true });
 		await writeFile(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
-		await writeFile(join(dir, ".git", "config"), "[core]\n");
-		await writeFile(
-			join(dir, ".git", "objects", "pack-stub"),
-			"should-not-be-walked",
-		);
 		await writeFile(
 			join(dir, "SKILL.md"),
 			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
 		);
 
 		const { files } = await loadBundleFiles(dir);
-		const paths = files.map((f) => f.path);
-		expect(paths.some((p) => p.startsWith(".git/") || p === ".git")).toBe(
-			false,
-		);
+		const paths = files.map((f) => f.path).sort();
 		expect(paths).toContain("SKILL.md");
+		expect(paths).toContain("node_modules/left-pad/index.js");
+		expect(paths).toContain(".env.example");
+		expect(paths).toContain(".tool-versions");
+		expect(paths).toContain(".DS_Store");
+		expect(paths).toContain(".git/HEAD");
+	});
+
+	it("throws when the bundle source contains a reserved `crust.json` at the root", async () => {
+		const dir = join(tmpDir, "with-source-crust-json");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
+		);
+		await writeFile(
+			join(dir, CRUST_MANIFEST),
+			`${JSON.stringify({ name: "funnel-builder", version: "0.0.0" }, null, "\t")}\n`,
+		);
+
+		await expect(loadBundleFiles(dir)).rejects.toThrow(
+			/reserved file "crust\.json"/,
+		);
 	});
 
 	it("survives an internal directory symlink cycle without unbounded recursion", async () => {
@@ -420,16 +435,10 @@ describe("installSkillBundle", () => {
 		expect(files).toContain("subdir/.config");
 		expect(files).toContain(CRUST_MANIFEST);
 
-		// Excluded files are NOT present.
-		expect(files.some((p) => p.startsWith("node_modules/"))).toBe(false);
-		expect(files.some((p) => p.startsWith(".git"))).toBe(false);
-		expect(files.includes(".gitignore")).toBe(false);
-
-		// crust.json carries kind: "bundle"
+		// crust.json carries kind: "bundle" and is regenerated from SkillMeta.
 		const manifest = await readInstalledManifest(canonicalDir);
 		expect(manifest).toEqual({ version: "1.0.0", kind: "bundle" });
 
-		// Stale crust.json from the source fixture was NOT copied.
 		const written = JSON.parse(
 			await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"),
 		);

@@ -17,6 +17,7 @@ import type {
 	RenderedFile,
 	SkillMeta,
 } from "./types.ts";
+import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -24,28 +25,6 @@ import type {
 
 /** Filename of the entrypoint markdown file required at the bundle root. */
 const SKILL_MD = "SKILL.md";
-
-/**
- * Names excluded at the bundle root only.
- *
- * Subdirectory dotfiles **are** copied — only the immediate children of the
- * bundle root are filtered. The `crust.json` exclusion guarantees Crust never
- * copies a stale manifest; the install pipeline regenerates it.
- *
- * Note: any root entry whose name starts with `.` is also excluded by a
- * separate rule (see {@link isRootDotfile}). This list covers the explicit
- * non-dotfile cases.
- */
-const ROOT_EXCLUDED_NAMES = new Set<string>([
-	"node_modules",
-	"crust.json",
-	".DS_Store", // listed for clarity; .DS_Store is also caught by the dotfile rule
-]);
-
-/** Returns true for any root entry whose name starts with `.`. */
-function isRootDotfile(name: string): boolean {
-	return name.startsWith(".");
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — sourceDir resolution
@@ -250,11 +229,14 @@ interface CollectedFile {
 }
 
 /**
- * Recursively collects file paths under `dir`, applying root-only exclusions
- * and rejecting any entry that escapes `canonicalRoot` via symlink.
+ * Recursively collects file paths under `dir`, rejecting any entry that
+ * escapes `canonicalRoot` via symlink.
  *
- * Excluded directories at the root are never recursed into. Subdirectory
- * dotfiles are included.
+ * Bundle contents are copied as authored — no implicit name-based filtering.
+ * Bundle authors are responsible for keeping `sourceDir` clean (no
+ * `node_modules/`, `.git/`, editor cruft, etc.). The single reserved
+ * filename is `crust.json` at the bundle root, enforced separately by
+ * {@link loadBundleFiles}.
  *
  * Cycle protection: directories are tracked by their canonical realpath in
  * `visitedDirs` so symlinks like `loop -> .` or `a/back -> ..` (which all
@@ -268,15 +250,10 @@ async function collectBundleEntries(
 	visitedDirs: Set<string>,
 ): Promise<CollectedFile[]> {
 	const entries = await readdir(dir, { withFileTypes: true });
-	const isRoot = relPrefix === "";
 	const collected: CollectedFile[] = [];
 
 	for (const entry of entries) {
 		const name = entry.name;
-		if (isRoot && (ROOT_EXCLUDED_NAMES.has(name) || isRootDotfile(name))) {
-			continue;
-		}
-
 		const absPath = join(dir, name);
 		const relPath = relPrefix === "" ? name : `${relPrefix}/${name}`;
 
@@ -329,10 +306,11 @@ export interface LoadedBundle {
  * Steps:
  * 1. Resolve `sourceDir` (URL / absolute / relative-from-package-root).
  * 2. `realpath` the resolved path; reject if not a directory.
- * 3. Recursively walk, applying root-only exclusions and a per-entry
- *    path-traversal guard against the canonical root.
+ * 3. Recursively walk, applying a per-entry path-traversal guard against the
+ *    canonical root and a directory-cycle guard.
  * 4. Verify `SKILL.md` exists at the bundle root.
- * 5. Probe the frontmatter for `name:` and `description:` — both are required.
+ * 5. Reject a source-root `crust.json` (reserved — Crust regenerates it).
+ * 6. Probe the frontmatter for `name:` and `description:` — both are required.
  *
  * The returned `frontmatter` becomes the source of truth for the install
  * pipeline (written into `crust.json` and used to derive output paths). Crust
@@ -380,6 +358,13 @@ export async function loadBundleFiles(
 		);
 	}
 
+	if (collected.some((f) => f.relPath === CRUST_MANIFEST)) {
+		throw new Error(
+			`Bundle source at "${canonicalRoot}" contains a reserved file "${CRUST_MANIFEST}" at the root. ` +
+				`Crust regenerates this file during installation; remove it from your bundle source.`,
+		);
+	}
+
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
 			path: entry.relPath,
@@ -420,9 +405,11 @@ export async function loadBundleFiles(
  * agent-fan-out pipeline used by {@link generateSkill}.
  *
  * Unlike `generateSkill`, this entrypoint does not render any markdown — it
- * copies the directory at `sourceDir` (after applying root-only exclusions
- * and a path-traversal guard) and writes a fresh `crust.json` recording
- * `kind: "bundle"`.
+ * copies the directory at `sourceDir` as authored (subject to a
+ * path-traversal guard against symlink escapes and a cycle guard) and
+ * writes a fresh `crust.json` recording `kind: "bundle"`. Bundle authors
+ * are responsible for keeping `sourceDir` clean — `crust.json` at the
+ * bundle root is reserved and will throw if present in the source.
  *
  * The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
  * `description`; both are required and read by Crust without rewriting the

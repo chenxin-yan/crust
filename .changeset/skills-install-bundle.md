@@ -11,10 +11,13 @@ frontmatter is the source of truth for `name` and `description` — both are
 required, and Crust reads them without rewriting the file. `version` is a
 required option (typically wired to the consuming package's `package.json`
 `version`) recorded in `crust.json` for update detection. Files are copied
-as UTF-8 text (binary supporting files are not supported). Root-only
-exclusions: `node_modules/`, `.DS_Store`, root dotfiles (`.git/`,
-`.editorconfig`, etc.), and any stale `crust.json`. Crust then writes a
-fresh `crust.json` for ownership tracking.
+as UTF-8 text (binary supporting files are not supported). Bundle contents
+are copied as authored — there is no implicit name-based filtering of
+`node_modules/`, dotfiles, etc.; bundle authors are responsible for
+pointing `sourceDir` at a clean directory. `crust.json` at the bundle
+root is reserved: if found in the source, the call throws so the conflict
+surfaces immediately. Crust then writes a fresh `crust.json` for
+ownership tracking. Symlinks that escape the bundle root are rejected.
 
 ```ts
 import { installSkillBundle } from "@crustjs/skills";
