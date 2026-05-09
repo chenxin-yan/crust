@@ -581,9 +581,12 @@ Two gotchas trip up bundle authors who publish to npm:
    Consumers should use a `file:` URL via `import.meta.resolve`:
 
    ```ts
+   import skillsPkg from "acme-skills/package.json" with { type: "json" };
+
    await installSkillBundle({
      sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
      agents: ["claude-code"],
+     version: skillsPkg.version,
    });
    ```
 
