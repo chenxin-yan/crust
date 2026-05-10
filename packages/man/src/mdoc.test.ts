@@ -97,4 +97,123 @@ describe("renderManPageMdoc", () => {
 		const width = Number(widthMatch?.[1]);
 		expect(width).toBeGreaterThanOrEqual("issue (issues, i)".length);
 	});
+
+	it("omits `meta.hidden: true` subcommands from the SUBCOMMANDS section", async () => {
+		// Mirrors the helpPlugin contract: hidden commands stay invocable
+		// but never appear in published man pages.
+		const app = new Crust("demo")
+			.meta({ description: "Demo." })
+			.command(
+				new Crust("build")
+					.meta({ description: "Build the project" })
+					.run(() => {}),
+			)
+			.command(
+				new Crust("__complete")
+					.meta({ description: "Internal completion entrypoint", hidden: true })
+					.run(() => {}),
+			);
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".It Nm build");
+		expect(mdoc).not.toContain("__complete");
+	});
+
+	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
+		const app = new Crust("demo")
+			.command(
+				new Crust("__complete")
+					.meta({ hidden: true, description: "Internal" })
+					.run(() => {}),
+			)
+			.run(() => {});
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).not.toContain(".Sh SUBCOMMANDS");
+		expect(mdoc).not.toContain("__complete");
+	});
+
+	it("renders flag `choices` as `[choices: ...]` after the description", async () => {
+		const app = new Crust("demo")
+			.meta({ description: "Demo." })
+			.flags({
+				target: {
+					type: "string",
+					choices: ["browser", "bun", "node"],
+					description: "Build target",
+				},
+			})
+			.run(() => {});
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".It Sy --target");
+		expect(mdoc).toContain("Build target [choices: browser, bun, node]");
+	});
+
+	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
+		const app = new Crust("demo")
+			.meta({ description: "Demo." })
+			.args([
+				{
+					name: "env",
+					type: "string",
+					required: true,
+					choices: ["dev", "staging", "prod"],
+					description: "Target environment",
+				},
+			])
+			.run(() => {});
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".Sh ARGUMENTS");
+		expect(mdoc).toContain(".It Ql <env>");
+		expect(mdoc).toContain("Target environment [choices: dev, staging, prod]");
+	});
+
+	it("includes long flag aliases (`def.aliases`) alongside the canonical spelling", async () => {
+		const app = new Crust("demo")
+			.meta({ description: "Demo." })
+			.flags({
+				output: {
+					type: "string",
+					short: "o",
+					aliases: ["out"],
+					description: "Where to write",
+				},
+			})
+			.run(() => {});
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		// Both the canonical `--output` and the alias `--out` appear in the
+		// label, comma-separated, after the short flag.
+		expect(mdoc).toContain(".It Sy -o, --output, --out");
+	});
+
+	it("includes `--no-` negation for every long-form spelling of a boolean flag", async () => {
+		const app = new Crust("demo")
+			.flags({
+				color: {
+					type: "boolean",
+					aliases: ["colour"],
+					description: "Use colour",
+				},
+			})
+			.run(() => {});
+
+		const { root } = await app.prepareCommandTree();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		// Canonical + alias + both negations, in declaration order.
+		expect(mdoc).toContain(".It Sy --color, --colour, --no-color, --no-colour");
+	});
 });

@@ -144,6 +144,84 @@ describe("renderFish", () => {
 		expect(helpLine).toContain("-s 'h'");
 	});
 
+	it("emits per-slot positional choice rules gated on `__<ident>_path_at_arg`", () => {
+		// Each fixed-slot positional choice should produce one rule per
+		// candidate value, conditioned on the new per-arg-index helper.
+		// Variadic-with-choices positionals use the `*<N>` spec.
+		const spec: CompletionSpec = {
+			root: {
+				name: "mp",
+				flags: [],
+				args: [],
+				subCommands: [
+					{
+						name: "two",
+						flags: [],
+						args: [
+							{
+								name: "first",
+								type: "string",
+								required: true,
+								variadic: false,
+								choices: ["alpha", "beta"],
+							},
+							{
+								name: "second",
+								type: "string",
+								required: true,
+								variadic: false,
+								choices: ["gamma", "delta"],
+							},
+						],
+						subCommands: [],
+					},
+					{
+						name: "vary",
+						flags: [],
+						args: [
+							{
+								name: "items",
+								type: "string",
+								required: false,
+								variadic: true,
+								choices: ["a", "b"],
+							},
+						],
+						subCommands: [],
+					},
+				],
+			},
+		};
+		const script = renderFish(spec, "mp", "1.0.0");
+
+		// The per-arg-index helper is emitted exactly once.
+		expect(script).toContain("function __mp_path_at_arg");
+
+		// Slot 0 of `two` -> exact spec `0`; one rule per choice value.
+		expect(script).toContain("-n '__mp_path_at_arg \\'two\\' \\'0\\' \\'\\''");
+		expect(
+			script
+				.split("\n")
+				.filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'0\\'")).length,
+		).toBe(2); // one rule per choice value
+
+		// Slot 1 of `two` -> exact spec `1`.
+		expect(
+			script
+				.split("\n")
+				.filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'1\\'")).length,
+		).toBe(2);
+
+		// `vary`'s variadic arg lives at index 0 and is declared variadic
+		// -> spec is `*0` (matches every slot >= 0).
+		expect(
+			script
+				.split("\n")
+				.filter((l) => l.includes("__mp_path_at_arg \\'vary\\' \\'*0\\'"))
+				.length,
+		).toBe(2);
+	});
+
 	it("escapes single quotes in descriptions", () => {
 		const spec: CompletionSpec = {
 			root: {

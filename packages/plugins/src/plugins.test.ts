@@ -620,4 +620,70 @@ describe("built-in plugins", () => {
 		await app.execute({ argv: ["__complete"] });
 		expect(didRun).toBe(true);
 	});
+
+	it("renderHelp surfaces flag `choices` as a `[choices: ...]` suffix", () => {
+		// The choices list is declared on the flag definition (TP-009);
+		// `helpPlugin` must surface it so users can discover the valid
+		// values from `--help` without resorting to shell completion or
+		// reading the source.
+		const command = new Crust("app")
+			.meta({ description: "Build artifact" })
+			.flags({
+				target: {
+					type: "string",
+					choices: ["browser", "bun", "node"],
+					description: "Build target",
+				},
+			})
+			.run(() => {})._node;
+		const plain = stripAnsi(renderHelp(command));
+		expect(plain).toContain("--target");
+		expect(plain).toContain("Build target");
+		expect(plain).toContain("[choices: browser, bun, node]");
+	});
+
+	it("renderHelp surfaces positional-arg `choices` in the ARGS section", () => {
+		const command = new Crust("app")
+			.meta({ description: "Deploy to an env" })
+			.args([
+				{
+					name: "env",
+					type: "string",
+					required: true,
+					choices: ["dev", "staging", "prod"],
+					description: "Target environment",
+				},
+			])
+			.run(() => {})._node;
+		const plain = stripAnsi(renderHelp(command));
+		// The ARGS section heading is the marker the rest of the
+		// assertions hang off; without it the test would silently miss
+		// rendering bugs that drop the section entirely.
+		expect(plain).toContain("ARGS:");
+		expect(plain).toContain("<env>");
+		expect(plain).toContain("[choices: dev, staging, prod]");
+	});
+
+	it("renderHelp composes `[default: ...]` and `[choices: ...]` when both are present", () => {
+		const command = new Crust("app")
+			.flags({
+				target: {
+					type: "string",
+					choices: ["a", "b"],
+					default: "a",
+					description: "Build target",
+				},
+			})
+			.run(() => {})._node;
+		const plain = stripAnsi(renderHelp(command));
+		// Both suffixes appear on the same flag line, in this order, so the
+		// `[default: ...]` reads before `[choices: ...]`.
+		const targetLine = plain.split("\n").find((l) => l.includes("--target"));
+		expect(targetLine).toBeDefined();
+		expect(targetLine).toContain('[default: "a"]');
+		expect(targetLine).toContain("[choices: a, b]");
+		expect((targetLine as string).indexOf("[default:")).toBeLessThan(
+			(targetLine as string).indexOf("[choices:"),
+		);
+	});
 });

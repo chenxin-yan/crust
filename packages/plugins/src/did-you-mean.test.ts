@@ -160,4 +160,57 @@ describe("didYouMeanPlugin", () => {
 		expect(stdout).toContain('Unknown command "issuee". Did you mean "issue"?');
 		expect(stdout).not.toContain('Did you mean "issues"');
 	});
+
+	it("never suggests a `meta.hidden: true` command, even on a close match", async () => {
+		// `__complete` is the textbook hidden-command scenario: it's a
+		// real, invocable command but should not surface in user-facing
+		// error output. A close typo of it must not produce a suggestion.
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("build", (cmd) => cmd.run(() => {}))
+			.command("__complete", (cmd) => cmd.meta({ hidden: true }).run(() => {}));
+
+		// Typo distance(__complet -> __complete) = 1, well within the
+		// threshold. Distance(__complet -> build) is > 3, so without the
+		// hidden filter the only suggestion would be `__complete`.
+		await app.execute({ argv: ["__complet"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Unknown command "__complet"');
+		expect(stderr).not.toContain("__complete");
+	});
+
+	it("never suggests a hidden command via one of its aliases", async () => {
+		// Hidden filtering must apply to alias matches too, not just the
+		// canonical name. If a hidden command has an alias that's close to
+		// the typo, it still must not leak.
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("build", (cmd) => cmd.run(() => {}))
+			.command("__complete", (cmd) =>
+				cmd.meta({ hidden: true, aliases: ["__comp"] }).run(() => {}),
+			);
+
+		await app.execute({ argv: ["__cmp"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Unknown command "__cmp"');
+		expect(stderr).not.toContain("__complete");
+		expect(stderr).not.toContain("__comp");
+	});
+
+	it("omits hidden commands from the 'Available commands' fallback list", async () => {
+		const app = new Crust("app")
+			.use(didYouMeanPlugin())
+			.command("build", (cmd) => cmd.run(() => {}))
+			.command("test", (cmd) => cmd.run(() => {}))
+			.command("__complete", (cmd) => cmd.meta({ hidden: true }).run(() => {}));
+
+		// No close match — we want the "Available commands" line.
+		await app.execute({ argv: ["zzzzz"] });
+
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain("Available commands: build, test");
+		expect(stderr).not.toContain("__complete");
+	});
 });

@@ -195,30 +195,66 @@ function collectChoiceCases(
 	}
 }
 
-interface ArgChoiceCase {
-	/** `<cmd_path>` of the command whose first positional has choices. */
-	key: string;
-	/** Bash-quoted, space-joined value list. */
-	values: string;
+/**
+ * Per-command summary of positional-argument choices. Built once per
+ * command and consumed by the runtime walker to map a `(cmd_path,
+ * pos_idx)` pair to a candidate list.
+ *
+ * `bySlot` lists *fixed-slot* arguments with choices, in declaration
+ * order. `variadicFrom` is set when the command ends in a variadic
+ * positional that has choices — the choice list then applies to every
+ * slot from `variadicFrom` onwards.
+ */
+interface ArgChoiceEntry {
+	/** Command path key (e.g. `""`, `"build"`, `"remote:add"`). */
+	cmdPath: string;
+	/**
+	 * Fixed-slot positional choices. Index N's choice list is at `bySlot[N]`
+	 * when defined; gaps (no choices) are `undefined`. The array length is
+	 * the number of declared *non-variadic* positionals.
+	 */
+	bySlot: ReadonlyArray<string | undefined>;
+	/** Slot index from which `variadicValues` applies, or `undefined`. */
+	variadicFrom?: number;
+	/** Bash-quoted, space-joined value list for the variadic tail. */
+	variadicValues?: string;
 }
 
 /**
- * Collect, per command, the *first* positional argument's choice list (if
- * any). Bash's `compgen -W` model is best at offering one set of
- * candidates at a time; we surface positional choices for the first slot
- * and fall through to file completion for further slots.
+ * Collect per-command positional choice entries, recursively. Returns
+ * one {@link ArgChoiceEntry} per command that has at least one positional
+ * arg with a `choices` list (variadic or otherwise). Commands with no
+ * positional choices are omitted so the rendered case-block stays
+ * tight.
  */
 function collectArgChoiceCases(
 	cmdPath: string,
 	node: CompletionCommand,
-	out: ArgChoiceCase[],
+	out: ArgChoiceEntry[],
 ): void {
-	const firstArg: CompletionArg | undefined = node.args[0];
-	if (firstArg !== undefined && firstArg.choices !== undefined) {
-		out.push({
-			key: cmdPath,
-			values: firstArg.choices.join(" "),
-		});
+	const bySlot: Array<string | undefined> = [];
+	let variadicFrom: number | undefined;
+	let variadicValues: string | undefined;
+	let hasAny = false;
+	node.args.forEach((arg: CompletionArg, idx: number) => {
+		if (arg.variadic) {
+			if (arg.choices !== undefined) {
+				variadicFrom = idx;
+				// Validated bare values — see comment in `collectChoiceCases`.
+				variadicValues = arg.choices.join(" ");
+				hasAny = true;
+			}
+			return;
+		}
+		if (arg.choices !== undefined) {
+			bySlot[idx] = arg.choices.join(" ");
+			hasAny = true;
+		} else {
+			bySlot[idx] = undefined;
+		}
+	});
+	if (hasAny) {
+		out.push({ cmdPath, bySlot, variadicFrom, variadicValues });
 	}
 	for (const sub of node.subCommands) {
 		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
@@ -277,8 +313,8 @@ export function renderBash(
 	const choiceCases: ChoiceCase[] = [];
 	collectChoiceCases("", spec.root, choiceCases);
 
-	const argChoiceCases: ArgChoiceCase[] = [];
-	collectArgChoiceCases("", spec.root, argChoiceCases);
+	const argChoiceEntries: ArgChoiceEntry[] = [];
+	collectArgChoiceCases("", spec.root, argChoiceEntries);
 
 	const lines: string[] = [];
 
@@ -435,21 +471,89 @@ export function renderBash(
 	lines.push('\tif [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
-	if (argChoiceCases.length > 0) {
-		// Try the resolved command's positional-choice list first; if it
-		// returns nothing, fall through to the subcommand list.
+	if (argChoiceEntries.length > 0) {
+		// Count completed positional tokens between the resolved command
+		// path and the cursor. Token classes we *skip*:
+		//  - `--`                  (end-of-options terminator)
+		//  - `--name=value`        (single token, value is inlined)
+		//  - bare flags `-*`       (and the next token if the flag takes a value)
+		// What remains is positional values. `pos_idx` is the slot the
+		// cursor is currently filling (0 for the first positional slot).
+		lines.push("\t\tlocal pos_idx=0");
+		lines.push("\t\tlocal _pidx_j=$i");
+		lines.push("\t\tlocal _pidx_skip_next=0");
+		lines.push("\t\twhile (( _pidx_j < cword )); do");
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+		lines.push('\t\t\tlocal _pidx_w="${words[$_pidx_j]}"');
+		lines.push("\t\t\tif (( _pidx_skip_next )); then");
+		lines.push("\t\t\t\t_pidx_skip_next=0");
+		lines.push("\t\t\t\t((_pidx_j++)); continue");
+		lines.push("\t\t\tfi");
+		lines.push('\t\t\tif [[ "$_pidx_w" == "--" ]]; then');
+		lines.push("\t\t\t\t((_pidx_j++)); continue");
+		lines.push("\t\t\tfi");
+		lines.push('\t\t\tif [[ "$_pidx_w" == --*=* ]]; then');
+		lines.push("\t\t\t\t((_pidx_j++)); continue");
+		lines.push("\t\t\tfi");
+		lines.push('\t\t\tif [[ "$_pidx_w" == -* ]]; then');
+		lines.push("\t\t\t\tlocal _pidx_cand");
+		lines.push("\t\t\t\tfor _pidx_cand in $valueFlags; do");
+		lines.push(
+			'\t\t\t\t\tif [[ "$_pidx_cand" == "$_pidx_w" ]]; then _pidx_skip_next=1; break; fi',
+		);
+		lines.push("\t\t\t\tdone");
+		lines.push("\t\t\t\t((_pidx_j++)); continue");
+		lines.push("\t\t\tfi");
+		// Use `pos_idx=$((pos_idx + 1))` rather than `((pos_idx++))` so the
+		// statement's exit code is always 0. Bash treats `((expr))` as
+		// false when `expr` evaluates to 0, and `((pos_idx++))` evaluates
+		// to the *old* value of `pos_idx` — incrementing from 0 to 1
+		// would return exit code 1, which kills consumers that source
+		// the script under `set -e`.
+		lines.push("\t\t\tpos_idx=$((pos_idx + 1))");
+		lines.push("\t\t\t((_pidx_j++))");
+		lines.push("\t\tdone");
+		lines.push('\t\tlocal pos_choices=""');
+		// Per-command, nested per-slot case. The slot ladder includes a
+		// `*)` fallback for variadic-with-choices commands so every slot
+		// from `variadicFrom` onwards offers the variadic candidate set.
 		lines.push('\t\tcase "$cmd_path" in');
-		for (const c of argChoiceCases) {
-			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			lines.push(
-				`\t\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)} $subcmds" -- "$cur") )`,
-			);
-			lines.push("\t\t\t\treturn");
+		for (const entry of argChoiceEntries) {
+			lines.push(`\t\t\t"${bashDoubleQuoteInner(entry.cmdPath)}")`);
+			lines.push('\t\t\t\tcase "$pos_idx" in');
+			entry.bySlot.forEach((values, idx) => {
+				if (values === undefined) return;
+				lines.push(`\t\t\t\t\t${idx})`);
+				lines.push(`\t\t\t\t\t\tpos_choices="${bashDoubleQuoteInner(values)}"`);
+				lines.push("\t\t\t\t\t\t;;");
+			});
+			if (
+				entry.variadicFrom !== undefined &&
+				entry.variadicValues !== undefined
+			) {
+				lines.push("\t\t\t\t\t*)");
+				lines.push(
+					`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then pos_choices="${bashDoubleQuoteInner(entry.variadicValues)}"; fi`,
+				);
+				lines.push("\t\t\t\t\t\t;;");
+			}
+			lines.push("\t\t\t\tesac");
 			lines.push("\t\t\t\t;;");
 		}
 		lines.push("\t\tesac");
+		// At slot 0, blend positional choices with subcommand candidates so
+		// commands that offer BOTH a positional choice list AND subcommands
+		// surface both. At slot >0 we never offer subcommands.
+		lines.push("\t\tif (( pos_idx == 0 )); then");
+		lines.push(
+			'\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )',
+		);
+		lines.push("\t\telse");
+		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices" -- "$cur") )');
+		lines.push("\t\tfi");
+	} else {
+		lines.push('\t\tCOMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )');
 	}
-	lines.push('\t\tCOMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )');
 	lines.push("\tfi");
 	lines.push("}");
 	lines.push("");

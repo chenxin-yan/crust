@@ -116,6 +116,36 @@ function pathPredicate(
 }
 
 /**
+ * Build the `-n` predicate for a positional-argument-choice rule.
+ *
+ * Calls `__<ident>_path_at_arg <spellings...> <pos_spec> <block>` where
+ * `pos_spec` is either `<N>` (exact: completion fires when exactly N
+ * positionals have been consumed past the path) or `*<N>` (variadic
+ * fallback: fires when N-or-more positionals have been consumed, used
+ * for variadic args with choices).
+ *
+ * Notes on layering: this helper is intentionally a parallel function
+ * to `__<ident>_path_is` rather than a generalisation of it — the two
+ * call sites (subcommand/flag rules vs positional-choice rules) want
+ * distinct semantics and the call surfaces are clearer when each helper
+ * does one thing.
+ */
+function posPredicate(
+	ident: string,
+	path: readonly CompletionCommand[],
+	leaf: CompletionCommand,
+	posSpec: string,
+): string {
+	const args: string[] = [];
+	for (const node of path) {
+		args.push(fishSingleQuote(spellingsOf(node)));
+	}
+	args.push(fishSingleQuote(posSpec));
+	args.push(fishSingleQuote(childSpellings(leaf)));
+	return `__${ident}_path_at_arg ${args.join(" ")}`;
+}
+
+/**
  * Recursively walk the command tree and emit:
  *   1. one subcommand-listing rule per child of the current node, gated
  *      on the path predicate — these surface child names + aliases with
@@ -240,23 +270,26 @@ function emitRules(
 		}
 	}
 
-	// Positional arg with choices: surface the first arg's choices as
-	// rules with no flag (so fish offers them when no flag context is
-	// active). Variadic args reuse the same rules and simply offer the
-	// list at every slot.
-	const firstArg = current.args[0];
-	if (firstArg !== undefined && firstArg.choices !== undefined) {
-		for (const choice of firstArg.choices) {
+	// Positional arg choices: emit one rule per (slot, choice value)
+	// gated on the per-slot predicate `__<ident>_path_at_arg`. Fixed
+	// slots fire only when the user is filling that exact slot; a
+	// variadic-with-choices arg fires for every slot from its declared
+	// index onwards (`*<N>` spec).
+	current.args.forEach((arg, idx) => {
+		if (arg.choices === undefined || arg.choices.length === 0) return;
+		const posSpec = arg.variadic ? `*${idx}` : String(idx);
+		const posCondition = posPredicate(ident, path, current, posSpec);
+		for (const choice of arg.choices) {
 			out.push(
 				renderRule(binName, {
-					condition,
+					condition: posCondition,
 					arguments: fishSingleQuote(choice),
-					description: firstArg.description ?? "",
+					description: arg.description ?? "",
 					noFiles: true,
 				}),
 			);
 		}
-	}
+	});
 
 	// Recurse.
 	for (const sub of current.subCommands) {
@@ -321,6 +354,78 @@ function emitHelper(ident: string): string[] {
 }
 
 /**
+ * Emit the per-script `__<ident>_path_at_arg` helper. Like
+ * {@link emitHelper} but takes an extra `pos_spec` argument before the
+ * block list. `pos_spec` is `<N>` (fires when exactly N positionals have
+ * been consumed past the path — the cursor is filling slot N) or
+ * `*<N>` (variadic; fires when N-or-more positionals have been
+ * consumed, used for variadic-with-choices args).
+ *
+ * The walking loop is identical to `__<ident>_path_is`; only the final
+ * test differs. Kept as a separate helper rather than a parameterised
+ * superset of the existing one so call sites stay declarative — a
+ * subcommand rule wants "we are at this path, nothing further typed",
+ * not "we are at this path with offset=0".
+ */
+function emitPosHelper(ident: string): string[] {
+	const fn = `__${ident}_path_at_arg`;
+	const lines: string[] = [];
+	lines.push(`function ${fn}`);
+	lines.push("\tset -l total_argv (count $argv)");
+	lines.push('\tset -l block (string split " " -- $argv[$total_argv])');
+	lines.push("\tset -l pos_spec $argv[(math $total_argv - 1)]");
+	lines.push("\tset -l n (math $total_argv - 2)");
+	lines.push("\tset -l variadic 0");
+	lines.push("\tset -l target $pos_spec");
+	lines.push("\tif string match -q -- '\\**' $pos_spec");
+	lines.push("\t\tset variadic 1");
+	lines.push("\t\tset target (string sub --start 2 -- $pos_spec)");
+	lines.push("\tend");
+	lines.push("\tset -l tokens (commandline -opc)");
+	lines.push("\tset -l total (count $tokens)");
+	lines.push("\tset -l j 2");
+	lines.push("\tset -l consumed 0");
+	lines.push("\tset -l end_of_options 0");
+	lines.push("\twhile test $j -le $total");
+	lines.push("\t\tset -l t $tokens[$j]");
+	lines.push('\t\tif test "$t" = "--"');
+	lines.push("\t\t\tset end_of_options 1");
+	lines.push("\t\t\tset j (math $j + 1)");
+	lines.push("\t\t\tcontinue");
+	lines.push("\t\tend");
+	lines.push(
+		"\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t",
+	);
+	lines.push("\t\t\tset j (math $j + 1)");
+	lines.push("\t\t\tcontinue");
+	lines.push("\t\tend");
+	lines.push("\t\tif test $consumed -lt $n");
+	lines.push(
+		'\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])',
+	);
+	lines.push("\t\t\tif not contains -- $t $alts");
+	lines.push("\t\t\t\treturn 1");
+	lines.push("\t\t\tend");
+	lines.push("\t\t\tset consumed (math $consumed + 1)");
+	lines.push("\t\telse");
+	lines.push("\t\t\tif contains -- $t $block");
+	lines.push("\t\t\t\treturn 1");
+	lines.push("\t\t\tend");
+	lines.push("\t\t\tset consumed (math $consumed + 1)");
+	lines.push("\t\tend");
+	lines.push("\t\tset j (math $j + 1)");
+	lines.push("\tend");
+	lines.push("\tset -l beyond (math $consumed - $n)");
+	lines.push("\tif test $variadic -eq 1");
+	lines.push("\t\ttest $beyond -ge $target");
+	lines.push("\telse");
+	lines.push("\t\ttest $beyond -eq $target");
+	lines.push("\tend");
+	lines.push("end");
+	return lines;
+}
+
+/**
  * Render a self-contained fish completion script for the given spec.
  *
  * The script is safe to drop into `~/.config/fish/completions/<bin>.fish`
@@ -347,8 +452,10 @@ export function renderFish(
 	);
 	lines.push("");
 
-	// Emit the path-resolution helper before any rules reference it.
+	// Emit the path-resolution helpers before any rules reference them.
 	lines.push(...emitHelper(ident));
+	lines.push("");
+	lines.push(...emitPosHelper(ident));
 	lines.push("");
 
 	// Disable file completion globally for the command. Individual rules

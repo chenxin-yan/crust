@@ -239,3 +239,159 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		expect(completions).toContain("--target");
 	});
 });
+
+/**
+ * Behavioural tests for per-slot positional-argument choices. Verifies
+ * that bash offers slot N's `choices` for the N-th positional, not just
+ * the first — the historical limitation called out in the consistency
+ * audit.
+ */
+describe("renderBash · multi-positional choices", () => {
+	const multiPosFixture: CompletionSpec = {
+		root: {
+			name: "mp",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "two",
+					description: "two fixed positional slots",
+					flags: [],
+					args: [
+						{
+							name: "first",
+							type: "string",
+							required: true,
+							variadic: false,
+							choices: ["alpha", "beta"],
+						},
+						{
+							name: "second",
+							type: "string",
+							required: true,
+							variadic: false,
+							choices: ["gamma", "delta"],
+						},
+					],
+					subCommands: [],
+				},
+				{
+					name: "vary",
+					description: "variadic with choices from slot 1",
+					flags: [],
+					args: [
+						{
+							name: "mode",
+							type: "string",
+							required: true,
+							variadic: false,
+							choices: ["start", "stop"],
+						},
+						{
+							name: "items",
+							type: "string",
+							required: false,
+							variadic: true,
+							choices: ["a", "b", "c"],
+						},
+					],
+					subCommands: [],
+				},
+			],
+		},
+	};
+
+	let scriptPath: string;
+	let tmpDir: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-multipos-"));
+		scriptPath = join(tmpDir, "mp-completion.bash");
+		const script = renderBash(multiPosFixture, "mp", "1.0.0");
+		await writeFile(scriptPath, script, "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	async function runCompletion(words: string[]): Promise<string[]> {
+		const shQuote = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+		const compWordsLines = words
+			.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
+			.join("\n");
+		const compCword = words.length - 1;
+		const driver = `
+set -e
+source ${shQuote(scriptPath)}
+${compWordsLines}
+COMP_CWORD=${compCword}
+COMP_LINE=${shQuote(words.join(" "))}
+COMP_POINT=${words.join(" ").length}
+_mp
+for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
+`;
+		const proc = Bun.spawn(["bash", "-c", driver], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [out, err] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+		const code = await proc.exited;
+		if (code !== 0) {
+			throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
+		}
+		return out
+			.split("\n")
+			.map((l) => l.trim())
+			.filter((l) => l.length > 0)
+			.sort();
+	}
+
+	it("slot 0 of `mp two` offers the first arg's choices", async () => {
+		const completions = await runCompletion(["mp", "two", ""]);
+		expect(completions).toContain("alpha");
+		expect(completions).toContain("beta");
+		expect(completions).not.toContain("gamma");
+	});
+
+	it("slot 1 of `mp two` offers the second arg's choices (not the first's)", async () => {
+		const completions = await runCompletion(["mp", "two", "alpha", ""]);
+		expect(completions).toContain("gamma");
+		expect(completions).toContain("delta");
+		expect(completions).not.toContain("alpha");
+		expect(completions).not.toContain("beta");
+	});
+
+	it("variadic-with-choices offers the variadic list at every slot >= variadicFrom", async () => {
+		// Slot 0 still gets the `mode` arg's choices.
+		const slot0 = await runCompletion(["mp", "vary", ""]);
+		expect(slot0).toContain("start");
+		expect(slot0).toContain("stop");
+		expect(slot0).not.toContain("a");
+
+		// Slot 1: enters the variadic.
+		const slot1 = await runCompletion(["mp", "vary", "start", ""]);
+		expect(slot1.sort()).toEqual(["a", "b", "c"]);
+
+		// Slot 2 and beyond: still the variadic list.
+		const slot2 = await runCompletion(["mp", "vary", "start", "a", ""]);
+		expect(slot2.sort()).toEqual(["a", "b", "c"]);
+	});
+
+	it("intervening flags do not count toward the positional slot index", async () => {
+		// `--unknown=x` and `--foo bar` between positionals should be
+		// skipped; slot 1 should still offer the second arg's choices.
+		const completions = await runCompletion([
+			"mp",
+			"two",
+			"alpha",
+			"--unknown=x",
+			"",
+		]);
+		expect(completions).toContain("gamma");
+		expect(completions).toContain("delta");
+	});
+});
