@@ -41,12 +41,12 @@ $ my-cli completion bash | head -1
 
 ## Options
 
-| Option     | Type                                     | Default                    | Description                                                                       |
-| ---------- | ---------------------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
-| `command`  | `string`                                 | `"completion"`             | Subcommand name. Override only if `completion` collides with an existing command. |
-| `binName`  | `string`                                 | root command's `meta.name` | Binary name embedded in generated scripts (the `complete -F` target, etc.).       |
-| `shells`   | `Array<"bash" \| "zsh" \| "fish">`       | `["bash", "zsh", "fish"]`  | Shells written by `--output-dir`. The CLI accepts any of these as `<shell>`.      |
-| `version`  | `string`                                 | `"0.0.0"`                  | Free-form version string embedded in script headers. Pass `pkg.version`.          |
+| Option    | Type                               | Default                    | Description                                                                       |
+| --------- | ---------------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
+| `command` | `string`                           | `"completion"`             | Subcommand name. Override only if `completion` collides with an existing command. |
+| `binName` | `string`                           | root command's `meta.name` | Binary name embedded in generated scripts (the `complete -F` target, etc.).       |
+| `shells`  | `Array<"bash" \| "zsh" \| "fish">` | `["bash", "zsh", "fish"]`  | Shells written by `--output-dir`. The CLI accepts any of these as `<shell>`.      |
+| `version` | `string`                           | `"0.0.0"`                  | Free-form version string embedded in script headers. Pass `pkg.version`.          |
 
 ## Per-shell install
 
@@ -80,7 +80,7 @@ mkdir -p ~/.zsh/completions
 my-cli completion zsh > ~/.zsh/completions/_my-cli
 ```
 
-Then in `~/.zshrc`, *before* `compinit`:
+Then in `~/.zshrc`, _before_ `compinit`:
 
 ```zsh
 fpath=(~/.zsh/completions $fpath)
@@ -197,9 +197,9 @@ script:
 // package.json
 {
   "scripts": {
-    "prepublishOnly": "bun run dist/my-cli.js completion bash --output-dir completions/"
+    "prepublishOnly": "bun run dist/my-cli.js completion bash --output-dir completions/",
   },
-  "files": ["dist", "completions"]
+  "files": ["dist", "completions"],
 }
 ```
 
@@ -264,31 +264,3 @@ the CLI's startup time on every shell launch.
   per-shell escaping; control characters (newlines, NUL, ESC, …) are
   scrubbed at the boundary so they cannot break out of comment lines or
   shell-quoted strings.
-
-## Design notes
-
-<details>
-<summary>Why pure-static? (vs Cobra/clap_complete-style delegate)</summary>
-
-Cobra and clap_complete generate small bootstrap scripts that shell out to
-the binary on every TAB. That trades stale-after-upgrade drift for a
-~5–10 ms subprocess cost per completion (worse on JVM/Node startups). The
-delegate pattern also breaks if the binary moves on `$PATH` or fails to
-launch.
-
-Pure-static — the pattern used by oclif's `plugin-autocomplete`, jujutsu,
-mise, and Zellij — emits a self-contained script with the command tree
-baked in. Cost on TAB is zero; cost is one regeneration per CLI upgrade,
-mitigated by the `--output-dir` packaging path which lets distributors do
-the regeneration at packaging time.
-
-The two choices are equally valid; we picked pure-static for v1 because:
-
-1. Crust commands are defined declaratively at build time, so the tree is
-   already enumerable without any extra plumbing.
-2. It ships cleanly without any changes to `@crustjs/core` (no hidden
-   `__complete` subcommand, no middleware bypass).
-3. Adding dynamic per-arg/per-flag callbacks later is non-breaking — we can
-   evolve into a hybrid without changing the v1 contract.
-
-</details>
