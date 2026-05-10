@@ -94,12 +94,19 @@ const app = new Crust("my-cli")
     skillPlugin({
       version: pkg.version,
       customSkills: [
+        // Inherits `version: pkg.version` from the plugin — the typical
+        // case when the bundle ships in the same package as the CLI.
         {
           name: "funnel-builder",
           // Resolved against the nearest package.json walking up from
           // process.argv[1] — same rules as installSkillBundle().
           sourceDir: "skills/funnel-builder",
-          version: pkg.version,
+        },
+        // Explicit override for an independently-versioned bundle.
+        {
+          name: "vendored-toolkit",
+          sourceDir: "skills/vendored-toolkit",
+          version: "0.3.0",
         },
       ],
     }),
@@ -113,13 +120,18 @@ await app.execute();
   characters and hyphens, no leading/trailing/consecutive hyphens), must
   be unique within the array, and must not collide with the main skill's
   name. The bundle's `SKILL.md` frontmatter must declare a matching
-  `name:` field — it is the source of truth at install time.
+  `name:` field — mismatches are rejected at install time.
 - **`sourceDir`** accepts a `URL` (`file:` protocol), an absolute path, or
   a relative string resolved from the nearest `package.json`. Resolution
   errors surface at install time, not at plugin setup.
-- **`version`** is required and typically wired to the consuming package's
-  `package.json` `version`. Identical-version reinstalls are skipped, so
-  bump this whenever the bundle contents change.
+- **`version`** is optional. When omitted, the bundle inherits the
+  plugin's top-level `version` — the typical case when the bundle ships
+  alongside the CLI. Pass an explicit value when the bundle's release
+  cadence is independent of the consuming CLI (for example, vendored
+  from another package). Identical-version reinstalls are skipped, so
+  bump the effective version whenever bundle contents change. The
+  bundle's `SKILL.md` frontmatter `version:` / `metadata.version`, if
+  any, is intentionally ignored — see the [`installSkillBundle()` note](#installing-hand-authored-bundles).
 - **`scope`** and **`installMode`** are optional per-entry overrides;
   unset values inherit from the plugin's `defaultScope` / `installMode`.
 

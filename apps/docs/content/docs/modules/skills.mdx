@@ -127,10 +127,13 @@ const app = new Crust("my-cli")
     skillPlugin({
       version: pkg.version,
       customSkills: [
+        // Inherits `version: pkg.version` from the plugin.
+        { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+        // Explicit override for an independently-versioned bundle.
         {
-          name: "funnel-builder",
-          sourceDir: "skills/funnel-builder",
-          version: pkg.version,
+          name: "vendored-toolkit",
+          sourceDir: "skills/vendored-toolkit",
+          version: "0.3.0",
         },
       ],
     }),
@@ -144,11 +147,19 @@ The `CustomSkillConfig` shape:
 interface CustomSkillConfig {
   name: string;                          // unique; must match SKILL.md frontmatter
   sourceDir: string | URL;               // file:// URL, absolute path, or bare relative
-  version: string;                       // typically pkg.version
+  version?: string;                      // inherits plugin `version` when omitted
   scope?: "global" | "project";          // overrides plugin defaultScope
   installMode?: "auto" | "symlink" | "copy";
 }
 ```
+
+`version` is optional: omit it to inherit the plugin's top-level
+`version` (the typical case when the bundle ships in the same package as
+the CLI), or pass an explicit value when a bundle's release cadence is
+independent of the consuming CLI. The bundle's `SKILL.md` frontmatter
+`version:` / `metadata.version`, if any, is intentionally not read — see
+the [`installSkillBundle()` callout](#installing-hand-authored-bundles)
+for the rationale.
 
 Resolution rules for `sourceDir` mirror
 [`installSkillBundle()`](#installing-hand-authored-bundles): URL with

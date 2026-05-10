@@ -166,7 +166,8 @@ function deriveSkillMeta(
  * - `customSkills` itself must be an array (or `undefined`).
  * - Each `entry.name` must satisfy {@link isValidSkillName}, must not collide
  *   with the main skill's name, and must be unique within the array.
- * - `entry.version` must be a non-empty string.
+ * - `entry.version`, when set, must be a non-empty string. When omitted, the
+ *   plugin's top-level `version` is used at install time.
  * - `entry.sourceDir` must be `string` or `URL`.
  * - `entry.scope`, when set, must be `"project"` or `"global"`.
  * - `entry.installMode`, when set, must be `"auto"`, `"symlink"`, or `"copy"`.
@@ -227,10 +228,13 @@ function validateCustomSkillsConfig(
 		}
 		seen.add(entry.name);
 
-		if (typeof entry.version !== "string" || entry.version.length === 0) {
+		if (
+			entry.version !== undefined &&
+			(typeof entry.version !== "string" || entry.version.length === 0)
+		) {
 			throw new Error(
 				`skillPlugin: customSkills[${i}].version (for "${entry.name}") ` +
-					`must be a non-empty string.`,
+					`must be a non-empty string when set, or omitted to inherit the plugin's \`version\`.`,
 			);
 		}
 
@@ -303,6 +307,7 @@ async function autoUpdateCustomSkill(
 
 	const scopes = resolveCustomSkillScopes(entry, options);
 	const installMode = entry.installMode ?? options.installMode;
+	const effectiveVersion = entry.version ?? options.version;
 
 	for (const scope of scopes) {
 		const status = await skillStatus({
@@ -314,7 +319,9 @@ async function autoUpdateCustomSkill(
 		const needsUpdate = status.agents.filter((a) => {
 			if (!a.installed) return false;
 			const expectedOutputDir = resolveAgentPath(a.agent, scope, entry.name);
-			return a.version !== entry.version || a.outputDir !== expectedOutputDir;
+			return (
+				a.version !== effectiveVersion || a.outputDir !== expectedOutputDir
+			);
 		});
 
 		if (needsUpdate.length === 0) {
@@ -328,7 +335,7 @@ async function autoUpdateCustomSkill(
 					const res = await installSkillBundle({
 						sourceDir: entry.sourceDir,
 						agents: needsUpdate.map((a) => a.agent),
-						version: entry.version,
+						version: effectiveVersion,
 						scope,
 						installMode,
 						expectedName: entry.name,
@@ -341,7 +348,7 @@ async function autoUpdateCustomSkill(
 
 					if (updatedLabels.length > 0) {
 						updateMessage(
-							`Updated bundle "${entry.name}" to v${entry.version} for ${updatedLabels.join(", ")} (${scope})`,
+							`Updated bundle "${entry.name}" to v${effectiveVersion} for ${updatedLabels.join(", ")} (${scope})`,
 						);
 					}
 
@@ -610,6 +617,7 @@ async function reconcileBundleInteractively(opts: {
 }): Promise<void> {
 	const { entry, options, scope, installAll, isInteractive } = opts;
 	const installMode = entry.installMode ?? options.installMode;
+	const effectiveVersion = entry.version ?? options.version;
 
 	const detectedAgents = await detectInstalledAgents();
 	const universalAgents = getUniversalAgents();
@@ -716,7 +724,7 @@ async function reconcileBundleInteractively(opts: {
 		const e = statusMap.get(agent);
 		if (!e?.installed) return false;
 		const expectedOutputDir = resolveAgentPath(agent, scope, entry.name);
-		return e.version !== entry.version || e.outputDir !== expectedOutputDir;
+		return e.version !== effectiveVersion || e.outputDir !== expectedOutputDir;
 	});
 	const toUninstall = [...installedAgentSet].filter(
 		(agent) => !selectedAgents.includes(agent),
@@ -732,7 +740,7 @@ async function reconcileBundleInteractively(opts: {
 					installSkillBundle({
 						sourceDir: entry.sourceDir,
 						agents: agentsToInstall,
-						version: entry.version,
+						version: effectiveVersion,
 						scope,
 						installMode,
 						expectedName: entry.name,
@@ -740,7 +748,7 @@ async function reconcileBundleInteractively(opts: {
 			});
 
 			console.log(
-				`\n${bold(`Installed bundle "${entry.name}" v${entry.version}`)}`,
+				`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`,
 			);
 			for (const line of formatInstallOutput(result.agents)) {
 				console.log(dim(`  ${line.label} → ${line.outputDir}`));
@@ -766,7 +774,7 @@ async function reconcileBundleInteractively(opts: {
 							installSkillBundle({
 								sourceDir: entry.sourceDir,
 								agents: [err.details.agent],
-								version: entry.version,
+								version: effectiveVersion,
 								scope,
 								force: true,
 								installMode,
@@ -775,7 +783,7 @@ async function reconcileBundleInteractively(opts: {
 					});
 
 					console.log(
-						`\n${bold(`Installed bundle "${entry.name}" v${entry.version}`)}`,
+						`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`,
 					);
 					for (const line of formatInstallOutput(result.agents)) {
 						console.log(dim(`  ${line.label} → ${line.outputDir}`));
@@ -1199,6 +1207,7 @@ function buildSkillUpdateCommand(
 				const entryScope = entry.scope ?? scope;
 				const entryEffectiveScope = resolveEffectiveScope(entryScope);
 				const entryInstallMode = entry.installMode ?? options.installMode;
+				const entryEffectiveVersion = entry.version ?? options.version;
 				try {
 					const bundleStatus = await skillStatus({
 						name: entry.name,
@@ -1213,7 +1222,8 @@ function buildSkillUpdateCommand(
 							entry.name,
 						);
 						return (
-							a.version !== entry.version || a.outputDir !== expectedOutputDir
+							a.version !== entryEffectiveVersion ||
+							a.outputDir !== expectedOutputDir
 						);
 					});
 
@@ -1232,7 +1242,7 @@ function buildSkillUpdateCommand(
 							installSkillBundle({
 								sourceDir: entry.sourceDir,
 								agents: bundleNeedsUpdate.map((a) => a.agent),
-								version: entry.version,
+								version: entryEffectiveVersion,
 								scope: entryScope,
 								installMode: entryInstallMode,
 								expectedName: entry.name,
@@ -1246,7 +1256,7 @@ function buildSkillUpdateCommand(
 					if (updatedLabels.length > 0) {
 						console.log(
 							`\n${bold(
-								`Updated bundle "${entry.name}" to v${entry.version} for ${updatedLabels.join(", ")} (${entryEffectiveScope})`,
+								`Updated bundle "${entry.name}" to v${entryEffectiveVersion} for ${updatedLabels.join(", ")} (${entryEffectiveScope})`,
 							)}`,
 						);
 					}

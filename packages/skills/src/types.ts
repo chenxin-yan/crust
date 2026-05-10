@@ -586,8 +586,8 @@ export interface StatusResult {
  * skill — auto-update on version change, surfaced in the interactive `skill`
  * subcommand multiselect, supports uninstall via the same toggle UX, and
  * respects `autoUpdate: false` and `--all` non-interactive mode. Bundles
- * inherit `defaultScope` and `installMode` from the plugin unless overridden
- * per-entry.
+ * inherit `version`, `defaultScope`, and `installMode` from the plugin
+ * unless overridden per-entry.
  *
  * The bundle's `SKILL.md` frontmatter remains the source of truth for the
  * display `name` and `description` (validated by {@link installSkillBundle}
@@ -603,10 +603,13 @@ export interface StatusResult {
  * skillPlugin({
  *   version: pkg.version,
  *   customSkills: [
+ *     // Inherits `version: pkg.version` from the plugin.
+ *     { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+ *     // Explicit override for an independently-versioned bundle.
  *     {
- *       name: "funnel-builder",
- *       sourceDir: "skills/funnel-builder",
- *       version: pkg.version,
+ *       name: "vendored-toolkit",
+ *       sourceDir: "skills/vendored-toolkit",
+ *       version: "0.3.0",
  *     },
  *   ],
  * });
@@ -615,7 +618,7 @@ export interface StatusResult {
 export interface CustomSkillConfig
 	extends Pick<
 		InstallSkillBundleOptions,
-		"sourceDir" | "version" | "scope" | "installMode"
+		"sourceDir" | "scope" | "installMode"
 	> {
 	/**
 	 * Skill name used by the plugin for collision detection, status lookups,
@@ -631,6 +634,23 @@ export interface CustomSkillConfig
 	 * paths can never drift from the canonical install location.
 	 */
 	name: string;
+	/**
+	 * Version override. When omitted, the bundle inherits the plugin's
+	 * top-level {@link SkillPluginOptions.version}. Drives auto-update
+	 * detection: a bundle is reinstalled when its recorded `crust.json`
+	 * version differs from the effective (entry-or-plugin) version.
+	 *
+	 * Inheriting from the plugin matches the typical case where the bundle
+	 * ships in the same package as the consuming CLI — one `pkg.version`
+	 * drives the main skill and every bundle. Pass an explicit value when a
+	 * bundle's release cadence is independent of the consuming CLI (for
+	 * example, vendored from another package).
+	 *
+	 * The bundle's `SKILL.md` frontmatter `version:` / `metadata.version`,
+	 * if any, is intentionally not read — this option (or its plugin-level
+	 * fallback) is the sole source of truth.
+	 */
+	version?: InstallSkillBundleOptions["version"];
 	/**
 	 * Installation scope override. When omitted, the bundle inherits
 	 * {@link SkillPluginOptions.defaultScope} resolution: explicit `--scope`
@@ -734,15 +754,17 @@ export interface SkillPluginOptions {
 	 * via {@link installSkillBundle} and inherit `defaultScope` /
 	 * `installMode` resolution unless overridden per-entry.
 	 *
-	 * Each entry's `version` drives auto-update detection (compared against
-	 * the recorded `crust.json` version) — typically wired to the consuming
-	 * package's `package.json` `version`.
+	 * Each entry's effective `version` drives auto-update detection (compared
+	 * against the recorded `crust.json` version). When the entry omits
+	 * `version`, the plugin's top-level {@link SkillPluginOptions.version} is
+	 * used — the typical case when the bundle ships in the same package as
+	 * the consuming CLI.
 	 *
 	 * Setup-time validation enforces:
 	 * - Each `name` satisfies `isValidSkillName`.
 	 * - No `name` collides with the main skill's name.
 	 * - All `name` values are unique within the array.
-	 * - Each `version` is a non-empty string.
+	 * - When set, `version` is a non-empty string.
 	 * - Each `sourceDir` is a `string` or `URL`.
 	 *
 	 * `sourceDir` resolution-time errors (non-`file:` URL, missing source

@@ -1027,7 +1027,10 @@ describe("skillPlugin customSkills validation", () => {
 		expect(exitCode).toBe(1);
 	});
 
-	it("rejects an empty version string", async () => {
+	it("rejects an empty version string when set", async () => {
+		// `version` is optional and inherits from the plugin when omitted, but
+		// an explicit empty string is still rejected so a typo can't silently
+		// fall through to the plugin-level fallback.
 		const app = new Crust("empty-version-test")
 			.meta({ description: "test" })
 			.run(() => {})
@@ -1049,7 +1052,7 @@ describe("skillPlugin customSkills validation", () => {
 			app.execute({ argv: [] }),
 		);
 
-		expect(stderr).toMatch(/must be a non-empty string/);
+		expect(stderr).toMatch(/must be a non-empty string when set/);
 		expect(exitCode).toBe(1);
 	});
 
@@ -1486,6 +1489,118 @@ describe("skillPlugin customSkills auto-update", () => {
 		// No funnel-builder dir was created.
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		await expect(stat(funnelDir)).rejects.toThrow();
+	});
+
+	it("inherits plugin-level version when entry omits version", async () => {
+		// Pre-install bundle at v1.0.0.
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+
+		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+
+		// Plugin-level version is bumped to 2.0.0; entry omits `version`, so
+		// it should inherit and trigger a reinstall to 2.0.0.
+		const app = new Crust("inherit-version-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							// version omitted on purpose — must inherit
+							// `version: "2.0.0"` from the plugin.
+						},
+					],
+				}),
+			);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+	});
+
+	it("explicit entry version overrides plugin-level version", async () => {
+		// Pre-install bundle at v1.0.0.
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+
+		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+
+		// Plugin says 2.0.0 but the entry pins itself at 0.3.0 — a vendored
+		// bundle whose cadence is independent of the consuming CLI.
+		const app = new Crust("override-version-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "2.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "0.3.0",
+						},
+					],
+				}),
+			);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		// Bundle now records the explicit override, not the plugin-level
+		// version.
+		expect(await readInstalledVersion(bundleDir)).toBe("0.3.0");
+	});
+
+	it("does not reinstall an inherited-version bundle when plugin version is unchanged", async () => {
+		// Pre-install at the same version the plugin will report. Auto-update
+		// should see no diff and skip the rewrite.
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+
+		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		const sentinel = join(bundleDir, ".sentinel");
+		await writeFile(sentinel, "do-not-touch");
+
+		const app = new Crust("inherit-noop-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
+				}),
+			);
+
+		await withCwd(tmpDir, () => app.execute({ argv: [] }));
+
+		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
+		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
 	});
 });
 
