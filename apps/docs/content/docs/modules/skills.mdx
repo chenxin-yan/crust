@@ -51,6 +51,7 @@ interface SkillPluginOptions {
   autoUpdate?: boolean; // default: true
   command?: string; // default: "skill"
   instructions?: string | string[]; // extra top-level SKILL.md content
+  customSkills?: CustomSkillConfig[]; // hand-authored bundles, default: []
 }
 ```
 
@@ -103,6 +104,73 @@ The user toggles options on or off and the system reconciles the desired state:
 ```sh
 my-cli skill
 ```
+
+### Hand-authored bundles via `customSkills`
+
+The plugin can manage hand-authored skill bundles alongside the auto-
+generated command-reference skill. Each entry follows the same plugin
+lifecycle as the main skill — auto-update, interactive multiselect, and
+`skill update` — and gets its own multiselect prompt after the main one,
+in array order. See the [`@crustjs/skills` README][skills-custom] for
+the full reference.
+
+[skills-custom]: https://github.com/chenxin-yan/crust/tree/main/packages/skills#hand-authored-bundles-via-customskills
+
+```ts
+import { Crust } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
+    skillPlugin({
+      version: pkg.version,
+      customSkills: [
+        // Inherits `version: pkg.version` from the plugin.
+        { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+        // Explicit override for an independently-versioned bundle.
+        {
+          name: "vendored-toolkit",
+          sourceDir: "skills/vendored-toolkit",
+          version: "0.3.0",
+        },
+      ],
+    }),
+  )
+  .run(() => {});
+```
+
+The `CustomSkillConfig` shape:
+
+```ts
+interface CustomSkillConfig {
+  name: string;                          // unique; must match SKILL.md frontmatter
+  sourceDir: string | URL;               // file:// URL, absolute path, or bare relative
+  version?: string;                      // inherits plugin `version` when omitted
+  scope?: "global" | "project";          // overrides plugin defaultScope
+  installMode?: "auto" | "symlink" | "copy";
+}
+```
+
+`version` is optional: omit it to inherit the plugin's top-level
+`version` (the typical case when the bundle ships in the same package as
+the CLI), or pass an explicit value when a bundle's release cadence is
+independent of the consuming CLI. The bundle's `SKILL.md` frontmatter
+`version:` / `metadata.version`, if any, is intentionally not read — see
+the [`installSkillBundle()` callout](#installing-hand-authored-bundles)
+for the rationale.
+
+Resolution rules for `sourceDir` mirror
+[`installSkillBundle()`](#installing-hand-authored-bundles): URL with
+`file:` protocol, absolute path, or a bare relative string resolved from
+the nearest `package.json` walking up from `process.argv[1]`. Resolution
+errors surface at install time, not at plugin setup.
+
+Bundles share the canonical `.crust/skills` store with the main skill
+and inherit `defaultScope` / `installMode` resolution unless overridden
+per-entry. When `customSkills` is omitted or empty, only the generated
+main skill is managed.
 
 ## Conflict Detection
 
@@ -351,15 +419,16 @@ consuming package's `package.json` `version` is the typical pattern.
 | Option        | Type                            | Default    | Description                                                                                                                        |
 | ------------- | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `sourceDir`   | `string \| URL`                 | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.                           |
-| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                                             |
+| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`).                 |
 | `version`     | `string`                        | — required | Recorded in `crust.json` and compared on subsequent installs. Typically wired to the consuming package's `package.json` `version`. |
 | `scope`       | `"global" \| "project"`         | `"global"` | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                                   |
 | `installMode` | `"auto" \| "symlink" \| "copy"` | `"auto"`   | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.                             |
 | `clean`       | `boolean`                       | `true`     | Remove the existing skill directory before writing.                                                                                |
 | `force`       | `boolean`                       | `false`    | Overwrite a conflicting directory (no `crust.json`, kind mismatch, or malformed manifest) instead of throwing.                     |
 
-Crust copies the bundle's `SKILL.md` and supporting files as UTF-8 text —
-binary files are not supported and will be corrupted on round-trip.
+Crust copies bundle files as raw bytes, so supporting assets such as images,
+fonts, or scripts round-trip unchanged. `SKILL.md` is also parsed as UTF-8 to
+read its required frontmatter.
 
 `crust.json` at the bundle root is **reserved**: Crust regenerates it
 during installation. If a `crust.json` is found in the source bundle,

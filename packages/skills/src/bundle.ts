@@ -368,11 +368,11 @@ export async function loadBundleFiles(
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
 			path: entry.relPath,
-			content: await readFile(entry.absPath, "utf-8"),
+			content: await readFile(entry.absPath),
 		})),
 	);
 
-	const skillContent = files.find((f) => f.path === SKILL_MD)?.content ?? "";
+	const skillContent = await readFile(skillMd.absPath, "utf-8");
 	const probed = probeFrontmatter(skillContent);
 
 	if (probed.name === null || probed.name === "") {
@@ -426,8 +426,8 @@ export async function loadBundleFiles(
  *   kind or with no `crust.json` (and `force` is not set).
  * @throws {Error} If `SKILL.md` is missing, its frontmatter lacks `name:` or
  *   `description:`, the declared `name` is not a valid skill name, the
- *   source directory escapes itself via symlink, or `sourceDir` cannot be
- *   resolved.
+ *   declared `name` does not match `expectedName` when set, the source
+ *   directory escapes itself via symlink, or `sourceDir` cannot be resolved.
  *
  * @example
  * ```ts
@@ -452,11 +452,8 @@ export async function installSkillBundle(
 		clean = true,
 		force = false,
 		installMode = "auto",
+		expectedName,
 	} = options;
-
-	if (agents.length === 0) {
-		return { agents: [] };
-	}
 
 	const { files, frontmatter } = await loadBundleFiles(sourceDir);
 
@@ -466,6 +463,17 @@ export async function installSkillBundle(
 			`Invalid skill name "${resolvedName}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
 				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
 		);
+	}
+
+	if (expectedName !== undefined && resolvedName !== expectedName) {
+		throw new Error(
+			`Bundle SKILL.md frontmatter name "${resolvedName}" does not match the expected name "${expectedName}". ` +
+				`Update the bundle's SKILL.md frontmatter \`name:\` field, or change the configured \`name\` to match.`,
+		);
+	}
+
+	if (agents.length === 0) {
+		return { agents: [] };
 	}
 
 	const meta: SkillMeta = {

@@ -1154,6 +1154,10 @@ async function writeFiles(
 	// Write files sequentially in deterministic order (already sorted by caller)
 	for (const file of files) {
 		const filePath = join(baseDir, file.path);
-		await writeFile(filePath, file.content, "utf-8");
+		if (typeof file.content === "string") {
+			await writeFile(filePath, file.content, "utf-8");
+		} else {
+			await writeFile(filePath, file.content);
+		}
 	}
 }

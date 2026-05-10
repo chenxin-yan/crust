@@ -76,6 +76,78 @@ The plugin automatically updates already-installed skills when the version chang
 
 Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
+#### Hand-authored bundles via `customSkills`
+
+The plugin can also manage **hand-authored** skill bundles alongside the
+auto-generated command-reference skill. Pass an array of
+`CustomSkillConfig` entries via `customSkills`; each entry is reconciled
+through the same lifecycle as the main skill.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { skillPlugin } from "@crustjs/skills";
+import pkg from "./package.json" with { type: "json" };
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(
+    skillPlugin({
+      version: pkg.version,
+      customSkills: [
+        // Inherits `version: pkg.version` from the plugin — the typical
+        // case when the bundle ships in the same package as the CLI.
+        {
+          name: "funnel-builder",
+          // Resolved against the nearest package.json walking up from
+          // process.argv[1] — same rules as installSkillBundle().
+          sourceDir: "skills/funnel-builder",
+        },
+        // Explicit override for an independently-versioned bundle.
+        {
+          name: "vendored-toolkit",
+          sourceDir: "skills/vendored-toolkit",
+          version: "0.3.0",
+        },
+      ],
+    }),
+  )
+  .run(() => {});
+
+await app.execute();
+```
+
+- **`name`** must satisfy `isValidSkillName` (1–64 lowercase alphanumeric
+  characters and hyphens, no leading/trailing/consecutive hyphens), must
+  be unique within the array, and must not collide with the main skill's
+  name. The bundle's `SKILL.md` frontmatter must declare a matching
+  `name:` field — mismatches are rejected at install time.
+- **`sourceDir`** accepts a `URL` (`file:` protocol), an absolute path, or
+  a relative string resolved from the nearest `package.json`. Resolution
+  errors surface at install time, not at plugin setup.
+- **`version`** is optional. When omitted, the bundle inherits the
+  plugin's top-level `version` — the typical case when the bundle ships
+  alongside the CLI. Pass an explicit value when the bundle's release
+  cadence is independent of the consuming CLI (for example, vendored
+  from another package). Identical-version reinstalls are skipped, so
+  bump the effective version whenever bundle contents change. The
+  bundle's `SKILL.md` frontmatter `version:` / `metadata.version`, if
+  any, is intentionally ignored — see the [`installSkillBundle()` note](#installing-hand-authored-bundles).
+- **`scope`** and **`installMode`** are optional per-entry overrides;
+  unset values inherit from the plugin's `defaultScope` / `installMode`.
+
+The interactive `skill` command shows one multiselect prompt per skill in
+order: the main auto-generated skill first, then each `customSkills`
+entry with its name in the prompt header (e.g. `"Select agents to install
+skills for [funnel-builder]"`). Each prompt is independent — selecting
+or deselecting agents reconciles only that skill's installs. `skill
+--all` skips every prompt and installs every skill for the full agent
+set; `skill update` updates outdated installs across main + every bundle.
+
+Auto-update on plugin startup is per-skill: only outdated installs are
+rewritten, and a single bundle's failure (e.g. missing `sourceDir`) does
+not abort the others. Pass `autoUpdate: false` to disable startup auto-
+update for both the main skill and all bundles.
+
 ### Programmatic Auto-Install
 
 For full control over first-time installation, call `generateSkill()`
@@ -530,7 +602,7 @@ await installSkillBundle({
 | Option        | Type                                | Default     | Description                                                                                                       |
 | ------------- | ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
 | `sourceDir`   | `string \| URL`                     | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.          |
-| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                            |
+| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`). |
 | `version`     | `string`                            | — required | Recorded in `crust.json` and compared on subsequent installs.                                |
 | `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
 | `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
@@ -540,22 +612,20 @@ await installSkillBundle({
 ### What gets copied
 
 The bundle's `SKILL.md` plus every supporting file is copied into the
-canonical Crust store — markdown, configs, scripts, etc. Files are read and
-written as UTF-8, so binary supporting files are not currently supported and
-will be corrupted on round-trip. Open an issue if you need binary support.
+canonical Crust store — markdown, configs, scripts, images, fonts, and other
+assets. Bundle files are copied as raw bytes; `SKILL.md` is also parsed as
+UTF-8 to read its required frontmatter.
 
 Bundle content changes do not propagate without a `version` bump:
 identical-version reinstalls report `up-to-date` and leave the canonical
 store untouched. Pass a fresh `version` (typically wired to the consuming
 package's `package.json` `version`) whenever the bundle contents change.
 
-Exclusions at the bundle root only:
-
-- `node_modules/`, `.DS_Store`
-- Any dotfile at the root (e.g. `.git/`, `.editorconfig`, `.gitignore`)
-- Any pre-existing `crust.json` (Crust regenerates it)
-
-Dotfiles inside subdirectories **are** copied.
+Bundle contents are copied as authored — no implicit name-based filtering.
+Dotfiles, `node_modules/`, `.DS_Store`, and editor cruft are all copied if
+present. Keep `sourceDir` clean. The only reserved filename is
+`crust.json` at the bundle root (Crust generates this and rejects bundles
+that ship one).
 
 ### Publishing a bundle to npm
 

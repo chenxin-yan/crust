@@ -264,8 +264,8 @@ export interface ManifestNode {
 export interface RenderedFile {
 	/** Relative file path within the skill output directory */
 	path: string;
-	/** File content (UTF-8 text) */
-	content: string;
+	/** File content: UTF-8 text for generated files, raw bytes for bundle assets. */
+	content: string | Uint8Array;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -362,8 +362,8 @@ export interface GenerateOptions {
  * the file. A fresh `crust.json` is written alongside the bundle for
  * ownership and version tracking.
  *
- * Files are copied as **UTF-8 text** — binary supporting files are not
- * supported and will be corrupted on round-trip.
+ * Bundle files are copied as raw bytes. `SKILL.md` is also parsed as UTF-8
+ * to read its required frontmatter.
  *
  * Bundle content changes do not propagate without a `version` bump:
  * identical-version reinstalls report `up-to-date` and leave the canonical
@@ -403,7 +403,9 @@ export interface InstallSkillBundleOptions {
 	 * Agent targets to install the bundle for.
 	 *
 	 * Required — unlike {@link GenerateOptions.agents}, the bundle entrypoint
-	 * does not auto-detect agents. Pass `[]` for a no-op (no install performed).
+	 * does not auto-detect agents. Pass `[]` for a validated no-op: no install
+	 * is performed, but `sourceDir`, `SKILL.md`, bundle paths, frontmatter, and
+	 * skill name are still validated.
 	 */
 	agents: AgentTarget[];
 	/**
@@ -438,6 +440,16 @@ export interface InstallSkillBundleOptions {
 	 * @default false
 	 */
 	force?: boolean;
+	/**
+	 * When set, the bundle's `SKILL.md` frontmatter `name:` must equal this
+	 * string. A mismatch throws before any filesystem write.
+	 *
+	 * Used by `skillPlugin`'s `customSkills` reconciliation to keep the
+	 * config-level `name` (used for status / uninstall lookups) in lockstep
+	 * with the frontmatter `name` (the canonical install path), preventing
+	 * orphan installs.
+	 */
+	expectedName?: string;
 }
 
 /**
@@ -562,6 +574,97 @@ export interface StatusResult {
 // Plugin option types
 // ────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// Custom skill bundle configuration
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Configuration for a single hand-authored skill bundle managed by
+ * {@link skillPlugin} alongside the auto-generated command-reference skill.
+ *
+ * Each entry is reconciled through the same plugin lifecycle as the main
+ * skill — auto-update on version change, surfaced in the interactive `skill`
+ * subcommand multiselect, supports uninstall via the same toggle UX, and
+ * respects `autoUpdate: false` and `--all` non-interactive mode. Bundles
+ * inherit `version`, `defaultScope`, and `installMode` from the plugin
+ * unless overridden per-entry.
+ *
+ * The bundle's `SKILL.md` frontmatter remains the source of truth for the
+ * display `name` and `description` (validated by {@link installSkillBundle}
+ * at install time). The duplicated `name` field on this config is what the
+ * plugin uses for cheap collision-detection, status lookups, and uninstall
+ * paths without having to read the bundle's frontmatter at plugin setup.
+ *
+ * @example
+ * ```ts
+ * import { skillPlugin } from "@crustjs/skills";
+ * import pkg from "./package.json" with { type: "json" };
+ *
+ * skillPlugin({
+ *   version: pkg.version,
+ *   customSkills: [
+ *     // Inherits `version: pkg.version` from the plugin.
+ *     { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+ *     // Explicit override for an independently-versioned bundle.
+ *     {
+ *       name: "vendored-toolkit",
+ *       sourceDir: "skills/vendored-toolkit",
+ *       version: "0.3.0",
+ *     },
+ *   ],
+ * });
+ * ```
+ */
+export interface CustomSkillConfig
+	extends Pick<
+		InstallSkillBundleOptions,
+		"sourceDir" | "scope" | "installMode"
+	> {
+	/**
+	 * Skill name used by the plugin for collision detection, status lookups,
+	 * and uninstall paths.
+	 *
+	 * Must satisfy `isValidSkillName` (1–64 lowercase alphanumeric characters
+	 * and hyphens, no leading/trailing/consecutive hyphens), must be unique
+	 * within the `customSkills` array, and must not collide with the main
+	 * skill's name (derived from the root command's `meta`).
+	 *
+	 * The bundle's `SKILL.md` frontmatter `name:` must match this value —
+	 * mismatches are rejected at install time so plugin status / uninstall
+	 * paths can never drift from the canonical install location.
+	 */
+	name: string;
+	/**
+	 * Version override. When omitted, the bundle inherits the plugin's
+	 * top-level {@link SkillPluginOptions.version}. Drives auto-update
+	 * detection: a bundle is reinstalled when its recorded `crust.json`
+	 * version differs from the effective (entry-or-plugin) version.
+	 *
+	 * Inheriting from the plugin matches the typical case where the bundle
+	 * ships in the same package as the consuming CLI — one `pkg.version`
+	 * drives the main skill and every bundle. Pass an explicit value when a
+	 * bundle's release cadence is independent of the consuming CLI (for
+	 * example, vendored from another package).
+	 *
+	 * The bundle's `SKILL.md` frontmatter `version:` / `metadata.version`,
+	 * if any, is intentionally not read — this option (or its plugin-level
+	 * fallback) is the sole source of truth.
+	 */
+	version?: InstallSkillBundleOptions["version"];
+	/**
+	 * Installation scope override. When omitted, the bundle inherits
+	 * {@link SkillPluginOptions.defaultScope} resolution: explicit `--scope`
+	 * flag wins, else `defaultScope`, else the interactive scope prompt
+	 * (or `"global"` in non-interactive mode).
+	 */
+	scope?: InstallSkillBundleOptions["scope"];
+	/**
+	 * Installation strategy override. When omitted, inherits
+	 * {@link SkillPluginOptions.installMode} (default `"auto"`).
+	 */
+	installMode?: InstallSkillBundleOptions["installMode"];
+}
+
 /**
  * Options for the skill plugin.
  *
@@ -637,6 +740,44 @@ export interface SkillPluginOptions {
 	 * @default false
 	 */
 	disableModelInvocation?: boolean;
+	/**
+	 * Hand-authored skill bundles to manage alongside the auto-generated
+	 * command-reference skill.
+	 *
+	 * Each entry is reconciled through the same plugin lifecycle as the main
+	 * skill — auto-update on version change, surfaced in the interactive
+	 * `skill` subcommand multiselect (one prompt per bundle, in array order,
+	 * after the main-skill prompt), supports uninstall via the same toggle
+	 * UX, and respects `autoUpdate: false` and `--all` non-interactive mode.
+	 *
+	 * Bundles share the canonical `.crust/skills` store with the main skill
+	 * via {@link installSkillBundle} and inherit `defaultScope` /
+	 * `installMode` resolution unless overridden per-entry.
+	 *
+	 * Each entry's effective `version` drives auto-update detection (compared
+	 * against the recorded `crust.json` version). When the entry omits
+	 * `version`, the plugin's top-level {@link SkillPluginOptions.version} is
+	 * used — the typical case when the bundle ships in the same package as
+	 * the consuming CLI.
+	 *
+	 * Setup-time validation enforces:
+	 * - Each `name` satisfies `isValidSkillName`.
+	 * - No `name` collides with the main skill's name.
+	 * - All `name` values are unique within the array.
+	 * - When set, `version` is a non-empty string.
+	 * - Each `sourceDir` is a `string` or `URL`.
+	 *
+	 * `sourceDir` resolution-time errors (non-`file:` URL, missing source
+	 * directory, missing `SKILL.md`, etc.) defer to the underlying
+	 * `installSkillBundle` invocation and surface there with descriptive
+	 * messages.
+	 *
+	 * When omitted or empty, plugin behavior is byte-identical to running
+	 * without the option — only the auto-generated main skill is managed.
+	 *
+	 * @default []
+	 */
+	customSkills?: CustomSkillConfig[];
 	/**
 	 * Register an interactive skill management subcommand on the root command.
 	 *

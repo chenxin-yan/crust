@@ -490,7 +490,43 @@ describe("installSkillBundle", () => {
 		expect(agent.status).toBe("up-to-date");
 	});
 
-	it("agents: [] is a no-op", async () => {
+	it("agents: [] validates the bundle before returning", async () => {
+		const dir = join(tmpDir, "missing-skill-md");
+		await mkdir(dir, { recursive: true });
+
+		await expect(
+			withCwd(tmpDir, () =>
+				installSkillBundle({
+					sourceDir: dir,
+					agents: [],
+					scope: "project",
+					version: BUNDLE_VERSION,
+				}),
+			),
+		).rejects.toThrow(/SKILL\.md/);
+	});
+
+	it("agents: [] validates the frontmatter skill name before returning", async () => {
+		const dir = join(tmpDir, "invalid-empty-agent");
+		await mkdir(dir, { recursive: true });
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: Funnel-Builder\ndescription: Build a sales funnel\n---\n",
+		);
+
+		await expect(
+			withCwd(tmpDir, () =>
+				installSkillBundle({
+					sourceDir: dir,
+					agents: [],
+					scope: "project",
+					version: BUNDLE_VERSION,
+				}),
+			),
+		).rejects.toThrow(/Invalid skill name/);
+	});
+
+	it("agents: [] is a validated no-op", async () => {
 		const result = await withCwd(tmpDir, () =>
 			installSkillBundle({
 				sourceDir: FIXTURE_DIR,
@@ -503,6 +539,31 @@ describe("installSkillBundle", () => {
 		// No canonical directory created.
 		const canonicalDir = join(tmpDir, ".crust", "skills", "funnel-builder");
 		await expect(stat(canonicalDir)).rejects.toThrow();
+	});
+
+	it("preserves binary bundle files exactly", async () => {
+		const dir = join(tmpDir, "with-binary");
+		await mkdir(dir, { recursive: true });
+		const binary = new Uint8Array([0xff, 0xfe, 0x00, 0x61, 0xc3, 0x28]);
+		await writeFile(join(dir, "asset.bin"), binary);
+		await writeFile(
+			join(dir, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
+		);
+
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: dir,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+			}),
+		);
+
+		const canonicalAsset = await readFile(
+			join(tmpDir, ".crust", "skills", "funnel-builder", "asset.bin"),
+		);
+		expect([...canonicalAsset]).toEqual([...binary]);
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
