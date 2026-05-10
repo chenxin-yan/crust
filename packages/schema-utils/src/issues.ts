@@ -63,34 +63,22 @@ export function formatPath(path: readonly PropertyKey[]): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a single Standard Schema path segment to a `PropertyKey`.
- *
- * Standard Schema paths contain either bare `PropertyKey` values or
- * `{ key: PropertyKey }` segment objects. This function normalizes both
- * forms to plain `PropertyKey`.
- */
-function resolvePathSegment(
-	segment: PropertyKey | StandardSchemaV1.PathSegment,
-): PropertyKey {
-	if (typeof segment === "object" && segment !== null && "key" in segment) {
-		return segment.key;
-	}
-	return segment as PropertyKey;
-}
-
-/**
  * Normalize a Standard Schema issue path to an array of `PropertyKey`.
  *
- * Handles:
- * - `undefined` → empty array (root-level issue)
- * - Bare `PropertyKey` segments
- * - `{ key: PropertyKey }` segment objects
+ * Standard Schema paths contain either bare `PropertyKey` values or
+ * `{ key: PropertyKey }` segment objects; both forms are flattened to
+ * plain `PropertyKey`. Returns an empty array for a root-level issue
+ * (`undefined`).
  */
 export function normalizeStandardPath(
 	path: ReadonlyArray<PropertyKey | StandardSchemaV1.PathSegment> | undefined,
 ): PropertyKey[] {
 	if (!path) return [];
-	return path.map(resolvePathSegment);
+	return path.map((segment) =>
+		typeof segment === "object" && segment !== null && "key" in segment
+			? segment.key
+			: (segment as PropertyKey),
+	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

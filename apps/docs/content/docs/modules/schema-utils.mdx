@@ -6,7 +6,7 @@ description: Vendor-aware Standard Schema introspection helpers shared by @crust
 import { Callout } from "fumadocs-ui/components/callout";
 
 `@crustjs/schema-utils` exposes the **vendor-aware introspection layer** that
-`@crustjs/validate` and `@crustjs/store` use to recover metadata from any
+`@crustjs/validate` uses to recover metadata from any
 [Standard Schema v1](https://standardschema.dev/) object. Given a schema, it
 dispatches on `~standard.vendor` to return the `type`, `array` shape,
 `description`, `default`, and normalized issue paths that a CLI or a
@@ -14,10 +14,10 @@ persistent store needs.
 
 <Callout type="warn">
 **Pre-stability — version `0.0.1`.** Most users do not need to install this
-package directly. The high-level packages (`@crustjs/validate`,
-`@crustjs/store`) consume it internally. Only depend on it when authoring
-framework-level tooling on top of Standard Schema. Pin an exact version —
-the surface is unstable until `0.1.0`.
+package directly — `@crustjs/validate` consumes it internally (and
+`@crustjs/store` consumes it transitively via `field()`). Only depend on
+it when authoring framework-level tooling on top of Standard Schema. Pin
+an exact version — the surface is unstable until `0.1.0`.
 </Callout>
 
 ## Install
@@ -71,10 +71,10 @@ walker first (Zod's `ZodDefault`, Effect's `Default` annotation), then falls
 back to a vendor-neutral `validate(undefined)` probe.
 
 <Callout>
-Effect schemas annotated only via `Schema.annotations({ default })` cannot
-inject defaults during decode and therefore won't be extracted. Use
-`Schema.optionalWith(Schema, { default })` (or `.default()` in Zod) to opt
-in to default-extraction.
+Both Effect `Schema.annotations({ default })` and
+`Schema.optionalWith(s, { default })` are recoverable: the former is read
+directly off the AST `Default` annotation, the latter falls through to the
+vendor-neutral `validate(undefined)` probe.
 </Callout>
 
 ## Boundary assertion

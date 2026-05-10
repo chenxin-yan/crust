@@ -5,9 +5,8 @@ Vendor-aware [Standard Schema v1](https://standardschema.dev/) introspection hel
 > **⚠️ Pre-stability — version `0.0.1`.** The surface here is intended for
 > framework authors and the other `@crustjs/*` packages. It is unstable until
 > `0.1.0`. Pin an exact version if you depend on it directly. Most CLI authors
-> should use [`@crustjs/validate`](https://www.npmjs.com/package/@crustjs/validate)
-> or [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store), which
-> consume this package internally.
+> should use [`@crustjs/validate`](https://www.npmjs.com/package/@crustjs/validate),
+> which consumes this package internally.
 
 `@crustjs/schema-utils` answers the question: *given any Standard Schema, what
 does the rest of the framework need to know?* It dispatches on
@@ -64,17 +63,19 @@ import { z } from "zod";
 
 const port = z.number().default(3000);
 extractDefault(port);
-// → { value: 3000 }
+// → { ok: true, value: 3000 }
 
 const free = z.string();
 extractDefault(free);
-// → undefined
+// → { ok: false }
 ```
 
-`extractDefault` returns `undefined` when the schema has no statically
-discoverable default. Effect schemas using `Schema.annotations({ default })`
-are not extracted today; use `Schema.optionalWith({ default })` (or
-`.default()` in Zod) to opt in.
+`extractDefault` returns the discriminated union
+`{ ok: true, value } | { ok: false }`. Always discriminate on `ok` — falsy
+defaults (`false`, `0`, `""`, `null`) are valid results. Both Effect
+`Schema.annotations({ default })` and `Schema.optionalWith(s, { default })`
+are recoverable (the former via the AST annotation, the latter via the
+synchronous `validate(undefined)` fallback).
 
 ### Normalize issues for display
 
@@ -94,7 +95,7 @@ if (result.issues) {
 import { assertStandardSchema } from "@crustjs/schema-utils";
 
 assertStandardSchema(value, "options.schema");
-// throws TypeError if value is not a StandardSchemaV1
+// throws CrustError("DEFINITION") if value is not a StandardSchemaV1
 ```
 
 ## Primary consumers
@@ -103,8 +104,9 @@ assertStandardSchema(value, "options.schema");
   consumes `inferOptions` / `extractDefault` to derive `arg` / `flag` / `field`
   metadata from any Standard Schema.
 - [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store) — consumes
-  the same helpers via `field()` to derive store-field defaults and types
-  without forcing store users to import `@crustjs/validate`.
+  the same helpers transitively through `field()` (re-exported by
+  `@crustjs/validate`). A direct `@crustjs/store` → `@crustjs/schema-utils`
+  dependency is planned in TP-018.
 
 ## License
 

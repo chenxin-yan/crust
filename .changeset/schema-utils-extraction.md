@@ -1,6 +1,6 @@
 ---
-"@crustjs/schema-utils": minor
-"@crustjs/validate": minor
+"@crustjs/schema-utils": patch
+"@crustjs/validate": patch
 ---
 
 # `@crustjs/schema-utils` 0.0.1 — initial release; `@crustjs/validate` extraction

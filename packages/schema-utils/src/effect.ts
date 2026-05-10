@@ -17,10 +17,10 @@ import type { StandardSchema } from "./types.ts";
 // Duck-typed access to Effect AST internals
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// `effect` is an *optional* peer dependency. Importing anything from
-// `effect/*` at runtime in this file would break Zod-only / Standard-Schema-
-// only consumers because the import chain `index.ts` → `schema.ts` →
-// `introspect/registry.ts` → `introspect/effect.ts` is unconditional.
+// `effect` is an *optional* peer dependency. This file is reached
+// unconditionally via `index.ts → introspect.ts → effect.ts`, so importing
+// anything from `effect/*` at runtime here would break Zod-only /
+// Standard-Schema-only consumers.
 //
 // To stay zero-runtime-cost when `effect` is absent we duck-type the two
 // pieces of Effect's API we need:
@@ -360,21 +360,6 @@ function resolveDescriptionFromAst(ast: AST): string | undefined {
 	return undefined;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Public entry — full inference for an Effect-wrapped Standard Schema
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Infer CLI metadata from an Effect schema wrapped via
- * `Schema.standardSchemaV1()`.
- *
- * Reads `.ast` off the wrapper. If the wrapper does not expose `.ast`
- * (Effect < 3.14.2 or hand-rolled wrapper), returns `{}`.
- *
- * Throws `CrustError("DEFINITION")` for structural issues that signal
- * definite user mistakes (e.g. tuple schemas with fixed elements, array
- * elements that are not primitives).
- */
 // ─────────────────────────────────────────────────────────────────────────
 // Default extraction — read AST.DefaultAnnotation
 // ─────────────────────────────────────────────────────────────────────────
@@ -407,6 +392,21 @@ export function extractEffectDefault(
 	return { ok: false };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Public entry — full inference for an Effect-wrapped Standard Schema
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Infer CLI metadata from an Effect schema wrapped via
+ * `Schema.standardSchemaV1()`.
+ *
+ * Reads `.ast` off the wrapper. If the wrapper does not expose `.ast`
+ * (Effect < 3.14.2 or hand-rolled wrapper), returns `{}`.
+ *
+ * Throws `CrustError("DEFINITION")` for structural issues that signal
+ * definite user mistakes (e.g. tuple schemas with fixed elements, array
+ * elements that are not primitives).
+ */
 export function inferFromEffect(
 	schema: StandardSchema,
 	label: string,
