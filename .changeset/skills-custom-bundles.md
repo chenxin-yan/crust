@@ -36,7 +36,7 @@ new Crust("my-cli")
 `CustomSkillConfig.sourceDir` accepts a `URL` (`file:` protocol), an
 absolute path, or a bare relative string resolved from the nearest
 `package.json` walking up from `process.argv[1]` — the same three modes
-used by `installSkillBundle()` (TP-003). Each entry's `version` drives
+used by `installSkillBundle()`. Each entry's `version` drives
 auto-update detection (compared against the recorded `crust.json`
 version) and is typically wired to the consuming package's
 `package.json` `version`. Per-entry `scope` and `installMode` overrides
@@ -50,10 +50,11 @@ Setup-time validation enforces:
 - Each `version` is a non-empty string.
 - Each `sourceDir` is a `string` or `URL`.
 
-Per-entry failures during auto-update or interactive reconciliation are
-logged with the bundle name and never abort other entries. Plugin
-behavior is byte-identical to today when `customSkills` is omitted or
-empty.
+Bundle files are copied as raw bytes, so supporting binary assets round-trip
+unchanged. Passing `agents: []` to `installSkillBundle()` validates the
+bundle without installing it.
 
-Builds on `installSkillBundle()` (introduced in #119); resolves the
-plugin-integration half of #110.
+Per-entry failures during auto-update or interactive reconciliation are
+logged with the bundle name and never abort other entries. When
+`customSkills` is omitted or empty, only the generated main skill is
+managed.

@@ -153,8 +153,6 @@ function deriveSkillMeta(
  * Resolution-time errors (non-`file:` URL, missing source directory, missing
  * `SKILL.md`, etc.) are deliberately deferred to the underlying
  * {@link installSkillBundle} invocation so plugin setup stays fast.
- *
- * @internal Exported for unit testing via the plugin entrypoint only.
  */
 function validateCustomSkillsConfig(
 	mainName: string,
@@ -554,27 +552,7 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 // Interactive skill command builder
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Builds the interactive skill management command.
- *
- * Presents a single multiselect prompt listing all detected agents with their
- * current installation status pre-filled. The user toggles agents on/off and
- * the system reconciles the desired state: newly selected agents are installed,
- * deselected agents are uninstalled, and already-correct agents are skipped.
- *
- * The command resolves scope from `--scope`, `defaultScope`, or an interactive
- * prompt. When `defaultScope` is not set and the terminal is interactive, users
- * are prompted to choose between project and global. In non-interactive mode,
- * scope falls back to global.
- */
-/**
- * Reconciles a single custom-skill bundle through the same multiselect
- * pipeline used by the main-skill block: detect agents, compute status,
- * prompt (or skip when `installAll`), diff selection, install/uninstall.
- *
- * Mirrors the main-skill flow but uses {@link installSkillBundle} for the
- * install path and the entry's display name in prompt + heading text.
- */
+/** Reconciles one custom-skill bundle through the interactive skill flow. */
 async function reconcileBundleInteractively(opts: {
 	entry: CustomSkillConfig;
 	options: SkillPluginOptions;
@@ -791,6 +769,19 @@ async function reconcileBundleInteractively(opts: {
 	}
 }
 
+/**
+ * Builds the interactive skill management command.
+ *
+ * Presents a single multiselect prompt listing all detected agents with their
+ * current installation status pre-filled. The user toggles agents on/off and
+ * the system reconciles the desired state: newly selected agents are installed,
+ * deselected agents are uninstalled, and already-correct agents are skipped.
+ *
+ * The command resolves scope from `--scope`, `defaultScope`, or an interactive
+ * prompt. When `defaultScope` is not set and the terminal is interactive, users
+ * are prompted to choose between project and global. In non-interactive mode,
+ * scope falls back to global.
+ */
 function buildSkillCommand(
 	rootCmd: CommandNode,
 	options: SkillPluginOptions,

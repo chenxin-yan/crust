@@ -51,6 +51,12 @@ function findFile(
 	return files.find((f) => f.path === path);
 }
 
+function expectTextContent(file: RenderedFile | undefined): string {
+	expect(file).toBeDefined();
+	expect(typeof file?.content).toBe("string");
+	return file?.content as string;
+}
+
 /**
  * Builds a simple manifest from a makeCommand call for testing.
  */
@@ -1167,15 +1173,14 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const allPaths = new Set(files.map((f) => f.path));
 
-			const skill = findFile(files, "SKILL.md");
-			expect(skill).toBeDefined();
+			const skillContent = expectTextContent(findFile(files, "SKILL.md"));
 
 			// Extract markdown link targets (non-relative only)
 			const linkRegex = /\]\(([^)]+)\)/g;
 			const links: string[] = [];
 			let match: RegExpExecArray | null = null;
 			// biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop pattern
-			while ((match = linkRegex.exec(skill?.content ?? "")) !== null) {
+			while ((match = linkRegex.exec(skillContent)) !== null) {
 				const target = match[1];
 				if (target && !target.startsWith("http") && !target.startsWith("#")) {
 					links.push(target);
@@ -1465,15 +1470,17 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const test = findFile(files, "commands/test.md");
+			const testContent = expectTextContent(
+				findFile(files, "commands/test.md"),
+			);
 
 			// Pipe should be escaped inside table cells
-			expect(test?.content).toContain("Use enable \\| disable to toggle");
+			expect(testContent).toContain("Use enable \\| disable to toggle");
 			// But the raw | should not appear unescaped in a table row
-			const tableRows = test?.content
+			const tableRows = testContent
 				.split("\n")
 				.filter((l) => l.startsWith("| ") && l.includes("enable"));
-			for (const row of tableRows ?? []) {
+			for (const row of tableRows) {
 				// Count unescaped pipes — they should only be column separators
 				const cells = row.split(/(?<!\\)\|/).filter((c) => c.trim());
 				expect(cells.length).toBe(4); // Flag, Type, Required, Description

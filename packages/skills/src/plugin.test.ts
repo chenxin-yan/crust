@@ -1317,7 +1317,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
 	});
 
-	it("is byte-identical to today when customSkills is omitted", async () => {
+	it("does not install bundles when customSkills is omitted", async () => {
 		// Same as the existing "auto-updates already-installed skills" test but
 		// asserts that no bundle directory is ever created.
 		const app = new Crust("identical-test")

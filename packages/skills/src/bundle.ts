@@ -368,11 +368,11 @@ export async function loadBundleFiles(
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
 			path: entry.relPath,
-			content: await readFile(entry.absPath, "utf-8"),
+			content: await readFile(entry.absPath),
 		})),
 	);
 
-	const skillContent = files.find((f) => f.path === SKILL_MD)?.content ?? "";
+	const skillContent = await readFile(skillMd.absPath, "utf-8");
 	const probed = probeFrontmatter(skillContent);
 
 	if (probed.name === null || probed.name === "") {
@@ -454,10 +454,6 @@ export async function installSkillBundle(
 		installMode = "auto",
 	} = options;
 
-	if (agents.length === 0) {
-		return { agents: [] };
-	}
-
 	const { files, frontmatter } = await loadBundleFiles(sourceDir);
 
 	const resolvedName = resolveSkillName(frontmatter.name);
@@ -466,6 +462,10 @@ export async function installSkillBundle(
 			`Invalid skill name "${resolvedName}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
 				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
 		);
+	}
+
+	if (agents.length === 0) {
+		return { agents: [] };
 	}
 
 	const meta: SkillMeta = {

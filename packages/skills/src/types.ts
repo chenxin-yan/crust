@@ -264,8 +264,8 @@ export interface ManifestNode {
 export interface RenderedFile {
 	/** Relative file path within the skill output directory */
 	path: string;
-	/** File content (UTF-8 text) */
-	content: string;
+	/** File content: UTF-8 text for generated files, raw bytes for bundle assets. */
+	content: string | Uint8Array;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -362,8 +362,8 @@ export interface GenerateOptions {
  * the file. A fresh `crust.json` is written alongside the bundle for
  * ownership and version tracking.
  *
- * Files are copied as **UTF-8 text** — binary supporting files are not
- * supported and will be corrupted on round-trip.
+ * Bundle files are copied as raw bytes. `SKILL.md` is also parsed as UTF-8
+ * to read its required frontmatter.
  *
  * Bundle content changes do not propagate without a `version` bump:
  * identical-version reinstalls report `up-to-date` and leave the canonical
@@ -403,7 +403,9 @@ export interface InstallSkillBundleOptions {
 	 * Agent targets to install the bundle for.
 	 *
 	 * Required — unlike {@link GenerateOptions.agents}, the bundle entrypoint
-	 * does not auto-detect agents. Pass `[]` for a no-op (no install performed).
+	 * does not auto-detect agents. Pass `[]` for a validated no-op: no install
+	 * is performed, but `sourceDir`, `SKILL.md`, bundle paths, frontmatter, and
+	 * skill name are still validated.
 	 */
 	agents: AgentTarget[];
 	/**
@@ -610,8 +612,11 @@ export interface CustomSkillConfig {
 	 * within the `customSkills` array, and must not collide with the main
 	 * skill's name (derived from the root command's `meta`).
 	 *
-	 * The bundle's `SKILL.md` frontmatter must declare a matching `name:`
-	 * field; {@link installSkillBundle} validates this at install time.
+	 * The bundle's `SKILL.md` frontmatter is the source of truth for the
+	 * installed skill's name, so it must match this `name`. The plugin does
+	 * not cross-check them — a mismatch silently installs the bundle under
+	 * the frontmatter name while plugin status, auto-update, and uninstall
+	 * lookups use this `name`, leaving an orphan install on disk.
 	 */
 	name: string;
 	/**

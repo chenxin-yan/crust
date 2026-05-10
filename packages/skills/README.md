@@ -590,7 +590,7 @@ await installSkillBundle({
 | Option        | Type                                | Default     | Description                                                                                                       |
 | ------------- | ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
 | `sourceDir`   | `string \| URL`                     | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.          |
-| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                            |
+| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`). |
 | `version`     | `string`                            | — required | Recorded in `crust.json` and compared on subsequent installs.                                |
 | `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
 | `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
@@ -600,9 +600,9 @@ await installSkillBundle({
 ### What gets copied
 
 The bundle's `SKILL.md` plus every supporting file is copied into the
-canonical Crust store — markdown, configs, scripts, etc. Files are read and
-written as UTF-8, so binary supporting files are not currently supported and
-will be corrupted on round-trip. Open an issue if you need binary support.
+canonical Crust store — markdown, configs, scripts, images, fonts, and other
+assets. Bundle files are copied as raw bytes; `SKILL.md` is also parsed as
+UTF-8 to read its required frontmatter.
 
 Bundle content changes do not propagate without a `version` bump:
 identical-version reinstalls report `up-to-date` and leave the canonical

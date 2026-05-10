@@ -156,8 +156,8 @@ errors surface at install time, not at plugin setup.
 
 Bundles share the canonical `.crust/skills` store with the main skill
 and inherit `defaultScope` / `installMode` resolution unless overridden
-per-entry. When `customSkills` is omitted or empty, plugin behavior is
-byte-identical to today.
+per-entry. When `customSkills` is omitted or empty, only the generated
+main skill is managed.
 
 ## Conflict Detection
 
@@ -406,15 +406,16 @@ consuming package's `package.json` `version` is the typical pattern.
 | Option        | Type                            | Default    | Description                                                                                                                        |
 | ------------- | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `sourceDir`   | `string \| URL`                 | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.                           |
-| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` is a no-op (no auto-detection — unlike `generateSkill()`).                                             |
+| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`).                 |
 | `version`     | `string`                        | — required | Recorded in `crust.json` and compared on subsequent installs. Typically wired to the consuming package's `package.json` `version`. |
 | `scope`       | `"global" \| "project"`         | `"global"` | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                                   |
 | `installMode` | `"auto" \| "symlink" \| "copy"` | `"auto"`   | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.                             |
 | `clean`       | `boolean`                       | `true`     | Remove the existing skill directory before writing.                                                                                |
 | `force`       | `boolean`                       | `false`    | Overwrite a conflicting directory (no `crust.json`, kind mismatch, or malformed manifest) instead of throwing.                     |
 
-Crust copies the bundle's `SKILL.md` and supporting files as UTF-8 text —
-binary files are not supported and will be corrupted on round-trip.
+Crust copies bundle files as raw bytes, so supporting assets such as images,
+fonts, or scripts round-trip unchanged. `SKILL.md` is also parsed as UTF-8 to
+read its required frontmatter.
 
 `crust.json` at the bundle root is **reserved**: Crust regenerates it
 during installation. If a `crust.json` is found in the source bundle,
