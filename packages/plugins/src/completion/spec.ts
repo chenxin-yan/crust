@@ -58,6 +58,14 @@ export interface CompletionFlag {
 	 */
 	multiple?: true;
 	/**
+	 * `true` when the boolean flag has explicitly opted out of `--no-`
+	 * negation (mirrors `BooleanFlagDef.noNegate` in core). Only
+	 * meaningful for `type: "boolean"` flags; absent on string/number.
+	 * Templates use this to decide whether to emit the `--no-<name>`
+	 * candidate alongside `--<name>`.
+	 */
+	noNegate?: true;
+	/**
 	 * Static enumeration of valid values, surfaced from TP-009's `choices`
 	 * field on `StringFlagDef` / `StringMultiFlagDef`. When present,
 	 * templates emit a fixed value list (`--flag=(a b c)` in zsh,

@@ -68,63 +68,80 @@ describe("renderFish", () => {
 
 	it("disables global file completion before emitting rules", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		expect(script).toContain("complete -c mycli -f");
+		// Bin name is single-quoted as defence-in-depth.
+		expect(script).toContain("complete -c 'mycli' -f");
 	});
 
-	it("emits subcommand rules gated on __fish_use_subcommand at the top level", () => {
+	it("emits a per-script ordered path-resolution helper", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
+		// Replaces the order-insensitive `__fish_seen_subcommand_from`
+		// chain with a helper that walks `commandline -opc` left-to-right.
+		expect(script).toContain("function __mycli_path_is");
+		expect(script).toContain("commandline -opc");
+	});
+
+	it("emits subcommand rules gated on __<ident>_path_is at the top level", () => {
+		const script = renderFish(fixture, "mycli", "1.0.0");
+		// Top-level rules call the helper with the leaf-block list (the
+		// canonical+alias spellings of the root's children) as the only
+		// argument — no consumed-path prefix. The condition is itself
+		// fish-single-quoted, so embedded `'` from the helper args are
+		// emitted as `\'` (fish's single-quote escape sequence).
+		expect(script).toContain("-n '__mycli_path_is \\'build deploy dep\\''");
+		// Build / deploy / deploy-alias rules each carry their own `-a`.
+		expect(script).toMatch(/-f -a 'build' -d 'Build artifact'/);
+		expect(script).toMatch(/-f -a 'deploy' -d 'Deploy'/);
+		expect(script).toMatch(/-f -a 'dep' -d 'Deploy'/);
+	});
+
+	it("emits choice flags as one rule per candidate", () => {
+		const script = renderFish(fixture, "mycli", "1.0.0");
+		// We deliberately emit one `complete` rule per candidate — fish
+		// accumulates them — so we never need to embed a multi-value
+		// list inside a single shell-token (which would force
+		// triple-nested fish quoting).
+		expect(script).toMatch(/-x -l 'target' -a 'browser'/);
+		expect(script).toMatch(/-x -l 'target' -a 'bun'/);
+		expect(script).toMatch(/-x -l 'target' -a 'node'/);
+	});
+
+	it("nested subcommand rules call __<ident>_path_is with the consumed path", () => {
+		const script = renderFish(fixture, "mycli", "1.0.0");
+		// `deploy prod --env` lives at depth 2; the helper receives the
+		// depth-1 spelling list (`deploy dep`), then the leaf block
+		// (empty here because `prod` has no children). Embedded `'`s in
+		// the helper-call string are escaped as `\'` by fish.
 		expect(script).toContain(
-			"complete -c mycli -n '__fish_use_subcommand' -f -a 'build' -d 'Build artifact'",
+			"-n '__mycli_path_is \\'deploy dep\\' \\'prod\\' \\'\\''",
 		);
-		// Aliases of `deploy` get their own rule.
+	});
+
+	it("negates deeper subcommand candidates via the helper's leaf-block list", () => {
+		const script = renderFish(fixture, "mycli", "1.0.0");
+		// At depth `[deploy]` the leaf-block list is `prod` (its only
+		// child); the helper rejects when `prod` has already appeared.
 		expect(script).toContain(
-			"complete -c mycli -n '__fish_use_subcommand' -f -a 'deploy' -d 'Deploy'",
+			"-n '__mycli_path_is \\'deploy dep\\' \\'prod\\''",
 		);
-		expect(script).toContain(
-			"complete -c mycli -n '__fish_use_subcommand' -f -a 'dep' -d 'Deploy'",
-		);
-	});
-
-	it("emits choice flags as `-x -a 'opt1 opt2 opt3'`", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		// build --target choices, gated on the build subcommand chain.
-		expect(script).toMatch(
-			/complete -c mycli -n '__fish_seen_subcommand_from build[^']*' -x -l target -a 'browser bun node'/,
-		);
-	});
-
-	it("nested subcommand rules use chained `seen_subcommand_from` predicates", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		// deploy prod --env should be gated on the chain: seen deploy and seen prod.
-		expect(script).toMatch(
-			/seen_subcommand_from deploy dep.*seen_subcommand_from prod.*-x -l env -a 'dev staging prod'/,
-		);
-	});
-
-	it("negates deeper subcommand candidates so flags do not bleed past depth", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		// At `mycli deploy <here>` we should NOT show deploy's flags after
-		// the user has typed `prod`, so the predicate carries
-		// `not __fish_seen_subcommand_from prod`.
-		expect(script).toContain("not __fish_seen_subcommand_from prod");
 	});
 
 	it("emits boolean flags without -r/-x", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		// `--release` is a boolean toggle on `build`. Should not have -r or -x.
+		// `--release` is a boolean toggle on `build`. The canonical rule
+		// (matching `-l 'release'` exactly) must not carry -r or -x.
 		const releaseLine = script
 			.split("\n")
-			.find((l) => l.includes("-l release"));
+			.find((l) => l.includes("-l 'release'"));
 		expect(releaseLine).toBeDefined();
-		expect(releaseLine).not.toMatch(/-r\b/);
-		expect(releaseLine).not.toMatch(/-x\b/);
+		expect(releaseLine).not.toMatch(/ -r\b/);
+		expect(releaseLine).not.toMatch(/ -x\b/);
 	});
 
 	it("emits short alias on flags via -s", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		const helpLine = script.split("\n").find((l) => l.includes("-l help"));
+		const helpLine = script.split("\n").find((l) => l.includes("-l 'help'"));
 		expect(helpLine).toBeDefined();
-		expect(helpLine).toContain("-s h");
+		expect(helpLine).toContain("-s 'h'");
 	});
 
 	it("escapes single quotes in descriptions", () => {
@@ -144,7 +161,10 @@ describe("renderFish", () => {
 			},
 		};
 		const script = renderFish(spec, "x", "1.0.0");
-		expect(script).toContain("it\\'s complicated");
+		// Description goes through `fishSingleQuote`, which produces
+		// `'it\'s complicated'` — fish single-quote with `\'` for the
+		// embedded apostrophe.
+		expect(script).toContain("-d 'it\\'s complicated'");
 	});
 });
 

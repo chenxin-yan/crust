@@ -253,6 +253,17 @@ the CLI's startup time on every shell launch.
   `foo/_my-cli`, and `foo/my-cli.fish`. This matches the packaging-time
   use case where distributors want every artifact in one go. Use the
   print path (no `--output-dir`) when you want a single shell only.
+- **Strict identifier and choice-value validation.** Command names, flag
+  names, flag aliases, short flags, arg names, and `binName` must match
+  `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`. Choice values (on flags **and** args)
+  must match `/^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/` — enough for things like
+  `us-east-1`, `node@20`, or `text/plain`, but not whitespace, quotes, or
+  shell metacharacters. The plugin throws at `setup()` time with a clear
+  error if any input falls outside this set, rather than silently mis-quote
+  the generated script. Description text is free-form and goes through
+  per-shell escaping; control characters (newlines, NUL, ESC, …) are
+  scrubbed at the boundary so they cannot break out of comment lines or
+  shell-quoted strings.
 
 ## Design notes
 
@@ -279,10 +290,5 @@ The two choices are equally valid; we picked pure-static for v1 because:
    `__complete` subcommand, no middleware bypass).
 3. Adding dynamic per-arg/per-flag callbacks later is non-breaking — we can
    evolve into a hybrid without changing the v1 contract.
-
-Research artifacts: see `/tmp/crust-completion-research/` (bash, zsh, fish
-protocol references) and `/tmp/crust-completion-verification/` (oracle
-red-team review, distribution patterns) in the repo's research drop for the
-full evaluation.
 
 </details>

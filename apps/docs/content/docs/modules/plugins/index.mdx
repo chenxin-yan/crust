@@ -55,6 +55,7 @@ import {
   versionPlugin,
   didYouMeanPlugin,
   updateNotifierPlugin,
+  completionPlugin,
 } from "@crustjs/plugins";
 import { Crust } from "@crustjs/core";
 
@@ -65,6 +66,7 @@ const main = new Crust("my-cli")
   .use(didYouMeanPlugin({ mode: "help" }))
   .use(helpPlugin())
   .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: "1.0.0" }))
+  .use(completionPlugin({ version: "1.0.0" }))
   .run(() => {
     console.log("Hello!");
   });

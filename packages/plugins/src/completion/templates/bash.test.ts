@@ -74,7 +74,9 @@ describe("renderBash", () => {
 	it("registers via `complete -F _<bin>` and includes a fallback init shim", () => {
 		const script = renderBash(fixture, "mycli", "1.0.0");
 		expect(script).toContain("__mycli_init_completion()");
-		expect(script).toContain("complete -o default -F _mycli mycli");
+		// Bin name is single-quoted as defence-in-depth even though it has
+		// already passed `assertSafeBinName`.
+		expect(script).toContain("complete -o default -F _mycli 'mycli'");
 		// Fallback for systems without bash-completion.
 		expect(script).toContain("declare -F _init_completion");
 	});
@@ -85,7 +87,7 @@ describe("renderBash", () => {
 		// should remain the on-disk binary name.
 		expect(script).toContain("_my_cli()");
 		expect(script).toContain("__my_cli_init_completion()");
-		expect(script).toContain("complete -o default -F _my_cli my-cli");
+		expect(script).toContain("complete -o default -F _my_cli 'my-cli'");
 	});
 
 	it("produces a stable golden snapshot for the fixture", () => {
@@ -97,7 +99,7 @@ describe("renderBash", () => {
 		const idxHeader = script.indexOf("# completion script for mycli");
 		const idxInit = script.indexOf("__mycli_init_completion()");
 		const idxMain = script.indexOf("_mycli() {");
-		const idxRegister = script.indexOf("complete -o default -F _mycli mycli");
+		const idxRegister = script.indexOf("complete -o default -F _mycli 'mycli'");
 		expect(idxHeader).toBeGreaterThanOrEqual(0);
 		expect(idxInit).toBeGreaterThan(idxHeader);
 		expect(idxMain).toBeGreaterThan(idxInit);
@@ -109,7 +111,9 @@ describe("renderBash", () => {
 		expect(script).toContain('"|dep")'); // alias of `deploy`
 		expect(script).toContain('"deploy|prod")');
 
-		// Verify choice handling for build --target.
+		// Verify choice handling for build --target. Choice values are
+		// validated to a safe character set and emitted bare in the
+		// `compgen -W` wordlist.
 		expect(script).toContain('"build|--target")');
 		expect(script).toContain('compgen -W "browser bun node"');
 		expect(script).toContain('"deploy:prod|--env")');

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { Crust, type CrustPlugin } from "@crustjs/core";
+import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
@@ -109,7 +110,17 @@ export function completionPlugin(
 		name: "completion",
 		setup(context, actions) {
 			const rootCommand = context.rootCommand;
-			const binName = options.binName ?? rootCommand.meta.name;
+			// Validate `binName` once, at setup, so misconfigured CLIs fail
+			// loudly during plugin registration rather than at script-emit
+			// time. The walker also re-validates command/flag identifiers
+			// when it builds the spec.
+			const binName = assertSafeBinName(
+				options.binName ?? rootCommand.meta.name,
+			);
+			// `version` flows into header comments only; sanitise to drop
+			// control characters (newlines especially) so they cannot break
+			// out of the comment line in the emitted script.
+			const safeVersion = sanitizeFreeText(version);
 
 			// Build the completion subcommand using a fresh `Crust` builder.
 			// The handler closes over `rootCommand` so it can walk the live
@@ -156,7 +167,7 @@ export function completionPlugin(
 							requestedShell,
 							spec,
 							binName,
-							version,
+							safeVersion,
 						);
 						process.stdout.write(script);
 						return;
@@ -170,8 +181,22 @@ export function completionPlugin(
 					await mkdir(targetDir, { recursive: true });
 					for (const shell of shells) {
 						const filename = filenameForShell(shell, binName);
-						const script = renderForShell(shell, spec, binName, version);
+						const script = renderForShell(shell, spec, binName, safeVersion);
 						const targetPath = resolvePath(targetDir, filename);
+						// Defence-in-depth: even though `binName` is validated
+						// upstream (rejects path separators / `..`), verify the
+						// resolved path stays inside `targetDir`. This catches
+						// future regressions in the validator and platform-
+						// specific edge cases (e.g. Windows drive letters).
+						if (
+							targetPath !== targetDir &&
+							!targetPath.startsWith(`${targetDir}/`) &&
+							!targetPath.startsWith(`${targetDir}\\`)
+						) {
+							throw new Error(
+								`completion plugin: refusing to write outside output dir (${targetPath})`,
+							);
+						}
 						await writeFile(targetPath, script, "utf8");
 					}
 				})._node;

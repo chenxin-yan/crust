@@ -1,3 +1,9 @@
+import {
+	sanitizeForComment,
+	zshArgsDescription,
+	zshDescribeField,
+	zshSingleQuote,
+} from "../escape.ts";
 import type {
 	CompletionCommand,
 	CompletionFlag,
@@ -17,35 +23,17 @@ import type {
  * and the entry-point function is invoked with `"$@"` at the end so the
  * script works both when dropped into `$fpath` and when sourced directly
  * (e.g. via `eval "$(mycli completion zsh)"`).
+ *
+ * **Quoting model.** Every spec string is wrapped via {@link zshSingleQuote}
+ * so it survives any character (description text, choice values) by going
+ * through the standard `'foo'\''bar'` close-and-reopen idiom. The spec
+ * **contents** are independently escaped via {@link zshArgsDescription}
+ * (for `_arguments` description brackets) and {@link zshDescribeField}
+ * (for the colon-separated `_describe` items).
  */
 
 function toShellIdent(name: string): string {
 	return name.replace(/[^A-Za-z0-9_]/g, "_");
-}
-
-/**
- * Escape a string for inclusion inside a zsh `_arguments` spec's `[desc]`
- * bracket. Per `man zshcompsys`, description text in `_arguments` runs
- * until the matching `]`, and `:` is the field separator, so we backslash
- * those plus backslash itself. We also drop newlines defensively.
- */
-function escZshDesc(text: string): string {
-	return text
-		.replace(/\\/g, "\\\\")
-		.replace(/\[/g, "\\[")
-		.replace(/]/g, "\\]")
-		.replace(/:/g, "\\:")
-		.replace(/[\r\n]+/g, " ");
-}
-
-/**
- * Escape a value for inclusion in a zsh single-quoted string.
- * Single quotes have no escape sequence; close-and-concat is the standard
- * idiom (`'foo'\''bar'` for `foo'bar`). Choice/subcommand values rarely
- * carry quotes in practice, but we are defensive.
- */
-function escSingleQuoted(value: string): string {
-	return value.replace(/'/g, "'\\''");
 }
 
 /**
@@ -63,43 +51,131 @@ function renderFlagSpecs(node: CompletionCommand): string[] {
 
 function flagSpecs(flag: CompletionFlag): string[] {
 	const desc = flag.description ?? "";
-	const descPart = `[${escZshDesc(desc)}]`;
+	const descPart = `[${zshArgsDescription(desc)}]`;
 
 	// Build the value-action suffix once: empty for booleans, ` :NAME:`
-	// for free-form values, ` :NAME:(opt1 opt2)` for choice flags.
+	// (with `_files` for free-form strings) for value-takers.
 	let valueSuffix = "";
 	if (flag.takesValue) {
 		const valueLabel = flag.name; // shown as the prompt placeholder
 		if (flag.choices !== undefined && flag.choices.length > 0) {
-			const opts = flag.choices.map(escSingleQuoted).join(" ");
+			// Choice values are validated by `assertSafeChoiceValue` to
+			// contain only `[A-Za-z0-9_.+:@/-]`, so they can be emitted bare
+			// inside the `(…)` action list without further escaping.
+			const opts = flag.choices.join(" ");
 			valueSuffix = `:${valueLabel}:(${opts})`;
+		} else if (flag.type === "string") {
+			valueSuffix = `:${valueLabel}:_files`;
 		} else {
-			valueSuffix = `:${valueLabel}:`;
+			valueSuffix = `:${valueLabel}: `;
 		}
 	}
+
+	// Repeatable flags: prefix with `*` per zshcompsys so the spec can
+	// match more than once (otherwise zsh hides used options after the
+	// first occurrence). Boolean negation candidates (`--no-foo`) are
+	// emitted as separate single-form specs further down.
+	const repeat = flag.multiple === true ? "*" : "";
 
 	// Pre-compute the alias spellings list for the mutual-exclusion prefix.
 	const allLong = [flag.name, ...(flag.aliases ?? [])];
 	const allShort = flag.short !== undefined ? [flag.short] : [];
 
+	const specs: string[] = [];
+
 	if (allShort.length === 0 && allLong.length === 1) {
 		// Single long form — simplest spec.
 		const eq = flag.takesValue ? "=" : "";
-		return [`'--${flag.name}${eq}${descPart}${valueSuffix}'`];
+		const body = `${repeat}--${flag.name}${eq}${descPart}${valueSuffix}`;
+		specs.push(zshSingleQuote(body));
+	} else {
+		// Multiple spellings — emit a mutex group. The standard zsh idiom
+		// (per `man zshcompsys`) is:
+		//   `(-h --help)'{-h,--help}'[desc]`
+		// with the mutex names listed in parentheses and the brace
+		// alternation expanding to one option per spelling. We
+		// single-quote-wrap each piece so flag names with `-` survive
+		// shell tokenisation cleanly.
+		const mutex = [
+			...allShort.map((s) => `-${s}`),
+			...allLong.map((l) => `--${l}`),
+		].join(" ");
+		const altGroup = [
+			...allShort.map((s) => `-${s}`),
+			...allLong.map((l) => `--${l}${flag.takesValue ? "=" : ""}`),
+		].join(",");
+		// Repeat marker in the brace alternation: `*{-h,--help}` ensures
+		// each member of the alternation can repeat. The mutex prefix
+		// `(...)` is only meaningful for non-repeatable specs.
+		const headPrefix = flag.multiple === true ? "" : `(${mutex})`;
+		const repeatBrace = flag.multiple === true ? "*" : "";
+		// The spec is built without an outer wrapper so we can wrap the
+		// whole thing in zsh single quotes after the brace alternation.
+		// Example: '(--help -h)'{-h,--help}'[desc]' — three single-quoted
+		// fragments concatenated. Each fragment is independently safe
+		// because none of the quoted contents contain a single quote
+		// (description quotes are escaped by zshArgsDescription).
+		const fragments = [
+			zshSingleQuote(headPrefix),
+			`${repeatBrace}{${altGroup}}`,
+			zshSingleQuote(`${descPart}${valueSuffix}`),
+		];
+		specs.push(fragments.join(""));
 	}
 
-	// Multiple spellings — emit a mutex group. The standard zsh idiom:
-	// `'(-h --help)'{-h,--help}'[desc]'`
-	const mutex = [
-		...allShort.map((s) => `-${s}`),
-		...allLong.map((l) => `--${l}`),
-	].join(" ");
-	const altGroup = [
-		...allShort.map((s) => `-${s}`),
-		...allLong.map((l) => `--${l}${flag.takesValue ? "=" : ""}`),
-	].join(",");
+	// `--no-<name>` for boolean toggles (matches the parser's
+	// negation-acceptance contract). Emitted as a separate spec so it
+	// shows up alongside `--<name>` in the menu.
+	if (flag.type === "boolean" && flag.noNegate !== true) {
+		const negDesc = `[${zshArgsDescription(`disable: ${desc}`.trim())}]`;
+		const negNames = allLong.map((l) => `--no-${l}`);
+		if (negNames.length === 1) {
+			specs.push(zshSingleQuote(`${repeat}${negNames[0]}${negDesc}`));
+		} else {
+			const negMutex = negNames.join(" ");
+			const negAlt = negNames.join(",");
+			const headPrefix = flag.multiple === true ? "" : `(${negMutex})`;
+			const repeatBrace = flag.multiple === true ? "*" : "";
+			specs.push(
+				[
+					zshSingleQuote(headPrefix),
+					`${repeatBrace}{${negAlt}}`,
+					zshSingleQuote(negDesc),
+				].join(""),
+			);
+		}
+	}
 
-	return [`'(${mutex})'{${altGroup}}'${descPart}${valueSuffix}'`];
+	return specs;
+}
+
+/**
+ * Render the positional-argument specs for a single command.
+ *
+ * Uses the same `'<idx>:NAME:<action>'` shape across leaf and non-leaf
+ * helpers. Variadic args expand the `<idx>` to `*` and run the action
+ * for every remaining word. Choice-bearing args use `(a b c)`; free-form
+ * string args fall through to `_files` so users get filesystem
+ * completion. Number/boolean positional args (rare) use a noop action
+ * so zsh doesn't try to file-complete them.
+ */
+function renderArgSpecs(node: CompletionCommand): string[] {
+	const specs: string[] = [];
+	node.args.forEach((arg, idx) => {
+		const idxToken = arg.variadic ? "*" : String(idx + 1);
+		const label = arg.name;
+		let action: string;
+		if (arg.choices !== undefined && arg.choices.length > 0) {
+			// Validated bare values — see comment in flagSpecs.
+			action = `(${arg.choices.join(" ")})`;
+		} else if (arg.type === "string") {
+			action = "_files";
+		} else {
+			action = " ";
+		}
+		specs.push(zshSingleQuote(`${idxToken}:${label}:${action}`));
+	});
+	return specs;
 }
 
 /**
@@ -115,12 +191,18 @@ function helperName(rootIdent: string, path: readonly string[]): string {
 /**
  * Render a single command's helper function.
  *
- * - Leaf commands: declare flag specs and an optional final `*: :_files`
- *   for free positional arguments.
+ * - Leaf commands: declare flag specs and any positional arg specs.
  * - Non-leaf commands: add the standard `->state` routing and a `case`
  *   over `$line[1]` (the first non-option positional) that dispatches to
  *   each child helper. Aliases reuse the same helper as their canonical
  *   sibling.
+ *
+ * Non-leaf commands with positional args are uncommon but supported:
+ * the routing emits `'1: :->cmds'` so the first slot is treated as a
+ * subcommand, plus any *additional* positional specs (slots 2+) for the
+ * declared args. If a CLI uses arg slot 1 AND has subcommands, the
+ * subcommand wins for that slot — matches the parser's behaviour where
+ * a known subcommand takes precedence over a positional value.
  */
 function renderHelper(
 	rootIdent: string,
@@ -130,6 +212,7 @@ function renderHelper(
 ): void {
 	const fnName = helperName(rootIdent, path);
 	const flagSpecLines = renderFlagSpecs(node);
+	const argSpecLines = renderArgSpecs(node);
 	const hasChildren = node.subCommands.length > 0;
 
 	out.push(`${fnName}() {`);
@@ -150,11 +233,15 @@ function renderHelper(
 		out.push("\t\t\tlocal -a subcmds");
 		out.push("\t\t\tsubcmds=(");
 		for (const sub of node.subCommands) {
-			const desc = escSingleQuoted(sub.description ?? "");
-			out.push(`\t\t\t\t'${escSingleQuoted(sub.name)}:${desc}'`);
+			const desc = zshDescribeField(sub.description ?? "");
+			out.push(
+				`\t\t\t\t${zshSingleQuote(`${zshDescribeField(sub.name)}:${desc}`)}`,
+			);
 			if (sub.aliases !== undefined) {
 				for (const alias of sub.aliases) {
-					out.push(`\t\t\t\t'${escSingleQuoted(alias)}:${desc}'`);
+					out.push(
+						`\t\t\t\t${zshSingleQuote(`${zshDescribeField(alias)}:${desc}`)}`,
+					);
 				}
 			}
 		}
@@ -165,10 +252,12 @@ function renderHelper(
 		out.push('\t\t\tcase "$line[1]" in');
 		for (const sub of node.subCommands) {
 			const childFn = helperName(rootIdent, [...path, sub.name]);
-			const names = [sub.name, ...(sub.aliases ?? [])]
-				.map(escSingleQuoted)
-				.join("|");
-			out.push(`\t\t\t\t${names})`);
+			// Each spelling becomes its own quoted case alternative — we
+			// avoid `|`-joined patterns because a quoted alternation list
+			// is simpler to keep literal (no glob metacharacter risk).
+			const allSpellings = [sub.name, ...(sub.aliases ?? [])];
+			const alts = allSpellings.map(zshSingleQuote).join("|");
+			out.push(`\t\t\t\t${alts})`);
 			out.push(`\t\t\t\t\t${childFn}`);
 			out.push("\t\t\t\t\t;;");
 		}
@@ -176,34 +265,16 @@ function renderHelper(
 		out.push("\t\t\t;;");
 		out.push("\tesac");
 	} else {
-		// Leaf — flat _arguments call. If the command declares positional
-		// args we emit `*: :_files` so files are offered for free-form
-		// positional slots; otherwise we omit it to keep the menu clean.
-		if (flagSpecLines.length === 0 && node.args.length === 0) {
+		// Leaf — flat _arguments call.
+		if (flagSpecLines.length === 0 && argSpecLines.length === 0) {
 			// Pure noop helper — keep an empty body so the caller's `case`
 			// dispatch still has a target to jump to.
 			out.push("\t:");
 		} else {
 			out.push("\t_arguments \\");
-			const lines: string[] = [...flagSpecLines];
-			if (node.args.length > 0) {
-				// Surface choices on positional args via positional spec
-				// `1:NAME:(a b c)`. Variadic args use the trailing `*:`.
-				node.args.forEach((arg, idx) => {
-					const idxToken = arg.variadic ? "*" : String(idx + 1);
-					const label = arg.name;
-					if (arg.choices !== undefined && arg.choices.length > 0) {
-						const opts = arg.choices.map(escSingleQuoted).join(" ");
-						lines.push(`'${idxToken}:${label}:(${opts})'`);
-					} else if (arg.type === "string") {
-						lines.push(`'${idxToken}:${label}:_files'`);
-					} else {
-						lines.push(`'${idxToken}:${label}:'`);
-					}
-				});
-			}
-			lines.forEach((spec, idx) => {
-				const trailing = idx === lines.length - 1 ? "" : " \\";
+			const allSpecs: string[] = [...flagSpecLines, ...argSpecLines];
+			allSpecs.forEach((spec, idx) => {
+				const trailing = idx === allSpecs.length - 1 ? "" : " \\";
 				out.push(`\t\t${spec}${trailing}`);
 			});
 		}
@@ -226,8 +297,8 @@ function renderHelper(
  * inline form actually invoke completion when the file is sourced.
  *
  * @param spec     Walker output.
- * @param binName  User-facing binary name. The `#compdef` line and the
- *                 entry-point function name derive from it.
+ * @param binName  User-facing binary name; validated upstream via
+ *                 {@link assertSafeBinName}.
  * @param version  Free-form version string for the header comment.
  */
 export function renderZsh(
@@ -238,10 +309,16 @@ export function renderZsh(
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
+	const safeBin = sanitizeForComment(binName);
+	const safeVersion = sanitizeForComment(version);
+
 	// `#compdef` MUST be the first line for zsh's autoload mechanism.
+	// `binName` was validated upstream; only the safe identifier set
+	// reaches here, so a quoted compdef target is unnecessary (and `zsh`
+	// itself rejects unusual `#compdef` arguments).
 	lines.push(`#compdef ${binName}`);
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion zsh`,
+		`# completion script for ${safeBin} v${safeVersion} — regenerate with: ${safeBin} completion zsh`,
 	);
 	lines.push("");
 
@@ -254,10 +331,12 @@ export function renderZsh(
 	// file by hand (the inline `eval` install), nothing has called the
 	// entry function yet. Guard with `compdef` so the autoload path doesn't
 	// double-invoke. Pattern adapted from yargs (research zsh.md §5.2).
+	// `binName` is validated, so the bare form is safe; we still single-
+	// quote it for readability and as defence-in-depth.
 	lines.push(`if [ "$funcstack[1]" = "_${ident}" ]; then`);
 	lines.push(`\t_${ident} "$@"`);
 	lines.push("else");
-	lines.push(`\tcompdef _${ident} ${binName}`);
+	lines.push(`\tcompdef _${ident} ${zshSingleQuote(binName)}`);
 	lines.push("fi");
 
 	return `${lines.join("\n")}\n`;

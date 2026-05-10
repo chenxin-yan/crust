@@ -85,6 +85,8 @@ describe("renderZsh", () => {
 
 	it("emits choices via :NAME:(opt1 opt2 opt3) form on string flags", () => {
 		const script = renderZsh(fixture, "mycli", "1.0.0");
+		// Choice values are validated to a safe character set and emitted
+		// bare inside the `(…)` action list.
 		expect(script).toContain(":target:(browser bun node)");
 		expect(script).toContain(":env:(dev staging prod)");
 	});
@@ -98,8 +100,10 @@ describe("renderZsh", () => {
 
 	it("aliases (TP-016) are dispatched to the same child helper", () => {
 		const script = renderZsh(fixture, "mycli", "1.0.0");
-		// `deploy|dep) _mycli_deploy ;;` — both spellings hit the same helper.
-		expect(script).toMatch(/deploy\|dep\)/);
+		// Both spellings hit the same helper. Each alternative is single-
+		// quoted so glob metacharacters in command names are matched
+		// literally rather than as zsh `case` patterns.
+		expect(script).toMatch(/'deploy'\|'dep'\)/);
 		// Subcommand menu surfaces both spellings.
 		expect(script).toContain("'deploy:Deploy'");
 		expect(script).toContain("'dep:Deploy'");
@@ -108,9 +112,10 @@ describe("renderZsh", () => {
 	it("derives helper function names from bin name with non-alpha mapped to _", () => {
 		const script = renderZsh(fixture, "my-cli", "1.0.0");
 		// Function is `_my_cli`, but `#compdef` and `compdef` retain the
-		// real binary name.
+		// real binary name. The `compdef` argument is single-quoted as
+		// defence-in-depth.
 		expect(script).toContain("_my_cli() {");
-		expect(script).toContain("compdef _my_cli my-cli");
+		expect(script).toContain("compdef _my_cli 'my-cli'");
 	});
 
 	it("escapes special characters in descriptions", () => {

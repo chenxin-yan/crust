@@ -38,14 +38,33 @@ Highlights:
 
 - **All three shells from one walk.** The bash template ships a Cobra-style
   init shim so it works on systems without the `bash-completion` package
-  (macOS default bash, Alpine, NixOS without the package). The zsh template
-  uses `_arguments -C` with `->state` subcommand routing and emits
-  description-rich menus. The fish template emits declarative `complete -c`
-  rules with chained `__fish_seen_subcommand_from` predicates.
+  (macOS default bash, Alpine, NixOS without the package), handles the
+  `--` end-of-options terminator, the `--name=value` form, and value-flag
+  context. The zsh template uses `_arguments -C` with `->state` subcommand
+  routing and emits description-rich menus, including positional choices
+  and `_files` fallback for free-form string flags. The fish template
+  emits declarative `complete -c` rules gated on a per-script ordered
+  path predicate that walks `commandline -opc` left-to-right — unlike
+  fish's stock `__fish_seen_subcommand_from`, the predicate is order-
+  sensitive, so nested commands that reuse names at different depths
+  route correctly.
 - **Choices and aliases surface end-to-end.** Static enums declared via
   the `choices` field on `FlagDef`/`ArgDef` become value lists in the
-  generated scripts. Command aliases (`meta.aliases`) are tab-completable
-  and resolve to the canonical command's flags.
+  generated scripts (flags **and** the first positional arg, in all
+  three shells). Command aliases (`meta.aliases`) are tab-completable
+  and resolve to the canonical command's flags. Boolean toggles also
+  surface their `--no-<name>` negation candidate (unless `noNegate: true`).
+- **Strict input validation.** Command names, flag names, flag aliases,
+  short flags, arg names, and `binName` must match
+  `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`. Choice values must match
+  `/^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/`. The plugin throws at `setup()`
+  time with a clear error if any input falls outside this set, rather
+  than silently mis-quote the generated script. Description text and the
+  `version` string flow through per-shell escapes; control characters
+  are scrubbed at the boundary so they cannot break out of comment lines.
+  `binName` is additionally rejected if it contains path separators or
+  `..`, and the `--output-dir` writer verifies that resolved paths stay
+  inside the requested directory.
 - **`--output-dir` for distributors.** Writes all configured shells with
   the canonical filenames Homebrew, Nix, AUR, and Debian expect
   (`<bin>` for bash, `_<bin>` for zsh, `<bin>.fish` for fish) — no rename

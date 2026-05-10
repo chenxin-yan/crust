@@ -1,4 +1,10 @@
+import {
+	bashDoubleQuoteInner,
+	bashSingleQuote,
+	sanitizeForComment,
+} from "../escape.ts";
 import type {
+	CompletionArg,
 	CompletionCommand,
 	CompletionFlag,
 	CompletionSpec,
@@ -17,43 +23,47 @@ import type {
  *    (`__<bin>_init_completion`) so the script works even when the
  *    `bash-completion` package is not installed (macOS default bash,
  *    Alpine, NixOS without the package).
- * 2. Walks `COMP_WORDS` left-to-right, skipping option words, and
- *    advances a `cmd_path` through the static command tree using a
- *    `case` dispatch keyed by `"<parent-path>|<word>"`.
+ * 2. Walks `COMP_WORDS` left-to-right, advancing a `cmd_path` through
+ *    the static command tree. Stops walking at the `--` end-of-options
+ *    terminator and skips value-taking flag pairs so we don't mistake a
+ *    flag value for a subcommand.
  * 3. Once the path is resolved, picks completion candidates:
- *    - if the previous token is a known flag-with-choices, offers the
- *      static value list,
- *    - else if the current token starts with `-`, offers the flag set
- *      for the resolved command,
- *    - else offers the subcommand list (canonical names + aliases).
- * 4. Registers via `complete -F _<bin> <bin>`.
+ *    - if the user is mid-`--name=value`, splits on `=` and offers the
+ *      static value list (or files) for that flag,
+ *    - else if the previous token is a known flag-with-choices, offers
+ *      the static value list,
+ *    - else if the previous token is a known free-form value flag,
+ *      falls back to file completion,
+ *    - else if the current token starts with `-`, offers the flag set,
+ *    - else offers the subcommand list and the resolved command's
+ *      positional choices (or files for free-form positionals).
+ * 4. Registers via `complete -F _<bin> <bin>` with the bin name passed
+ *    through {@link bashSingleQuote}.
  */
 
 /**
- * Convert an arbitrary command name into a bash identifier. Bash function
- * names cannot contain `-`; we map every non-`[A-Za-z0-9_]` to `_` so
- * generated function names are always valid.
+ * Convert a (validated) command name into a bash identifier. Bash
+ * function names cannot contain `-` or `.`; we map the validated
+ * identifier set down to `[A-Za-z0-9_]` so generated function names are
+ * always valid even when names contain `-` or `.`.
  */
 function toShellIdent(name: string): string {
 	return name.replace(/[^A-Za-z0-9_]/g, "_");
 }
 
 /**
- * Quote a value for safe inclusion inside a double-quoted bash string.
- * We only inline command names, flag spellings, and choice values — none of
- * which can legitimately carry control characters — so this is a defensive
- * check rather than a sanitiser. We escape `"`, `\`, `$`, and backtick.
- */
-function bashQuote(value: string): string {
-	return value.replace(/[\\$`"]/g, "\\$&");
-}
-
-/**
- * Render the space-separated wordlist of subcommand candidates for a
- * single command. Includes canonical names and any declared aliases so
- * users can tab-complete either spelling.
+ * Render the wordlist of subcommand candidates for a single command —
+ * each candidate as a bash-quoted shell word so values containing
+ * spaces (theoretical: identifier validation rejects them) or shell
+ * metacharacters (theoretical: same) survive `compgen -W` splitting.
+ *
+ * Includes canonical names and any declared aliases.
  */
 function subcmdWordlist(node: CompletionCommand): string {
+	// Names are validated identifiers (`assertSafeIdentifier`), so a
+	// space-joined bare list is safe to embed in `compgen -W` and in
+	// `for x in $list` loops — both do bash word-splitting that
+	// doesn't strip quotes from already-quoted tokens.
 	const words: string[] = [];
 	for (const sub of node.subCommands) {
 		words.push(sub.name);
@@ -61,16 +71,13 @@ function subcmdWordlist(node: CompletionCommand): string {
 			for (const alias of sub.aliases) words.push(alias);
 		}
 	}
-	return words.map(bashQuote).join(" ");
+	return words.join(" ");
 }
 
 /**
- * Render the space-separated wordlist of flag candidates for a single
- * command. Includes long names, short alias (with single-dash prefix), and
- * any extra long aliases. Boolean flags with `noNegate !== true` are not
- * specially marked here — we leave `--no-foo` out of completion candidates
- * by default to keep menus tight (users who know the negation form will
- * type it manually). The visible set is what `effectiveFlags` exposes.
+ * Render the wordlist of flag candidates for a single command. Includes
+ * long names, short alias, extra long aliases, and `--no-<name>` for
+ * boolean flags that haven't opted out via `noNegate`.
  */
 function flagWordlist(node: CompletionCommand): string {
 	const words: string[] = [];
@@ -80,8 +87,17 @@ function flagWordlist(node: CompletionCommand): string {
 		if (flag.aliases !== undefined) {
 			for (const alias of flag.aliases) words.push(`--${alias}`);
 		}
+		// `--no-<name>` for boolean toggles. Mirrors the parser's
+		// negation-acceptance contract (core/parser.ts) so users can tab
+		// to either spelling. Boolean multi-flags also support negation.
+		if (flag.type === "boolean" && flag.noNegate !== true) {
+			words.push(`--no-${flag.name}`);
+			if (flag.aliases !== undefined) {
+				for (const alias of flag.aliases) words.push(`--no-${alias}`);
+			}
+		}
 	}
-	return words.map(bashQuote).join(" ");
+	return words.join(" ");
 }
 
 interface BashCase {
@@ -96,6 +112,8 @@ interface BashCase {
 	subcmds: string;
 	/** Flag wordlist for the new path. */
 	flags: string;
+	/** Space-separated list of flag spellings that take a value at this depth. */
+	valueFlags: string;
 }
 
 /**
@@ -113,6 +131,7 @@ function collectPathCases(
 		const newPath = parentPath === "" ? sub.name : `${parentPath}:${sub.name}`;
 		const subcmds = subcmdWordlist(sub);
 		const flags = flagWordlist(sub);
+		const valueFlags = valueFlagWordlist(sub);
 
 		// Canonical name edge.
 		out.push({
@@ -120,6 +139,7 @@ function collectPathCases(
 			cmdPath: newPath,
 			subcmds,
 			flags,
+			valueFlags,
 		});
 
 		// Alias edges resolve to the same cmd_path so children of the
@@ -131,6 +151,7 @@ function collectPathCases(
 					cmdPath: newPath,
 					subcmds,
 					flags,
+					valueFlags,
 				});
 			}
 		}
@@ -142,7 +163,7 @@ function collectPathCases(
 interface ChoiceCase {
 	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
 	key: string;
-	/** Space-separated value list. */
+	/** Bash-quoted, space-joined value list. */
 	values: string;
 }
 
@@ -159,7 +180,10 @@ function collectChoiceCases(
 ): void {
 	for (const flag of node.flags) {
 		if (flag.choices === undefined) continue;
-		const values = flag.choices.map(bashQuote).join(" ");
+		// Choice values are validated to a safe character set, so we can
+		// emit them bare inside the `compgen -W` wordlist without per-
+		// candidate quoting. This keeps the generated script readable.
+		const values = flag.choices.join(" ");
 		const spellings = flagSpellings(flag);
 		for (const spelling of spellings) {
 			out.push({ key: `${cmdPath}|${spelling}`, values });
@@ -168,6 +192,37 @@ function collectChoiceCases(
 	for (const sub of node.subCommands) {
 		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
 		collectChoiceCases(subPath, sub, out);
+	}
+}
+
+interface ArgChoiceCase {
+	/** `<cmd_path>` of the command whose first positional has choices. */
+	key: string;
+	/** Bash-quoted, space-joined value list. */
+	values: string;
+}
+
+/**
+ * Collect, per command, the *first* positional argument's choice list (if
+ * any). Bash's `compgen -W` model is best at offering one set of
+ * candidates at a time; we surface positional choices for the first slot
+ * and fall through to file completion for further slots.
+ */
+function collectArgChoiceCases(
+	cmdPath: string,
+	node: CompletionCommand,
+	out: ArgChoiceCase[],
+): void {
+	const firstArg: CompletionArg | undefined = node.args[0];
+	if (firstArg !== undefined && firstArg.choices !== undefined) {
+		out.push({
+			key: cmdPath,
+			values: firstArg.choices.join(" "),
+		});
+	}
+	for (const sub of node.subCommands) {
+		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		collectArgChoiceCases(subPath, sub, out);
 	}
 }
 
@@ -181,17 +236,27 @@ function flagSpellings(flag: CompletionFlag): string[] {
 }
 
 /**
+ * Render the wordlist of *value-taking* flag spellings for a single
+ * command. Used to drive both flag-value context (after `--target`) and
+ * the path walker's "skip the next token" heuristic.
+ */
+function valueFlagWordlist(node: CompletionCommand): string {
+	const words: string[] = [];
+	for (const flag of node.flags) {
+		if (!flag.takesValue) continue;
+		for (const spelling of flagSpellings(flag)) words.push(spelling);
+	}
+	return words.join(" ");
+}
+
+/**
  * Render a self-contained bash completion script for the given spec.
  *
  * @param spec     The walker output describing the command tree.
- * @param binName  The user-facing binary name (the `complete -F` target).
- *                 Should be the name the user actually invokes — usually
- *                 the root `meta.name`. Special characters are tolerated
- *                 in the registration line; the helper function name is
- *                 derived via `toShellIdent` so it remains a valid bash
- *                 identifier.
- * @param version  Free-form version string for the header comment. We do
- *                 not parse it; the value flows through verbatim.
+ * @param binName  The user-facing binary name. Validated via
+ *                 {@link assertSafeBinName} upstream.
+ * @param version  Free-form version string for the header comment;
+ *                 control characters are stripped before emission.
  */
 export function renderBash(
 	spec: CompletionSpec,
@@ -204,6 +269,7 @@ export function renderBash(
 
 	const rootSubcmds = subcmdWordlist(spec.root);
 	const rootFlags = flagWordlist(spec.root);
+	const rootValueFlags = valueFlagWordlist(spec.root);
 
 	const pathCases: BashCase[] = [];
 	collectPathCases("", spec.root, pathCases);
@@ -211,11 +277,15 @@ export function renderBash(
 	const choiceCases: ChoiceCase[] = [];
 	collectChoiceCases("", spec.root, choiceCases);
 
+	const argChoiceCases: ArgChoiceCase[] = [];
+	collectArgChoiceCases("", spec.root, argChoiceCases);
+
 	const lines: string[] = [];
 
-	// Header — first line per task spec.
+	const safeBin = sanitizeForComment(binName);
+	const safeVersion = sanitizeForComment(version);
 	lines.push(
-		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion bash`,
+		`# completion script for ${safeBin} v${safeVersion} — regenerate with: ${safeBin} completion bash`,
 	);
 	lines.push("");
 
@@ -236,6 +306,18 @@ export function renderBash(
 	lines.push("}");
 	lines.push("");
 
+	// Helper: test whether the previous token is a value-taking flag at
+	// the current depth. Returns 0 (true) when prev is in $valueFlags,
+	// 1 otherwise.
+	lines.push(`__${ident}_prev_is_value_flag() {`);
+	lines.push("\tlocal candidate");
+	lines.push("\tfor candidate in $valueFlags; do");
+	lines.push('\t\tif [[ "$candidate" == "$prev" ]]; then return 0; fi');
+	lines.push("\tdone");
+	lines.push("\treturn 1");
+	lines.push("}");
+	lines.push("");
+
 	// Main completion function.
 	lines.push(`${fnName}() {`);
 	lines.push("\tlocal cur prev words cword");
@@ -246,22 +328,44 @@ export function renderBash(
 	lines.push("\tfi");
 	lines.push("");
 	lines.push('\tlocal cmd_path=""');
+	lines.push(`\tlocal subcmds="${bashDoubleQuoteInner(rootSubcmds)}"`);
+	lines.push(`\tlocal flags="${bashDoubleQuoteInner(rootFlags)}"`);
+	lines.push(`\tlocal valueFlags="${bashDoubleQuoteInner(rootValueFlags)}"`);
 	lines.push("\tlocal i=1");
-	lines.push(`\tlocal subcmds="${rootSubcmds}"`);
-	lines.push(`\tlocal flags="${rootFlags}"`);
+	lines.push("\tlocal end_of_options=0");
 	lines.push("");
 	lines.push("\twhile (( i < cword )); do");
 	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
 	lines.push('\t\tlocal w="${words[$i]}"');
-	lines.push('\t\tif [[ "$w" == -* ]]; then');
+	// `--` terminator: stop subcommand routing for the rest of the line.
+	lines.push('\t\tif [[ "$w" == "--" ]]; then');
+	lines.push("\t\t\tend_of_options=1");
+	lines.push("\t\t\t((i++)); break");
+	lines.push("\t\tfi");
+	// `--name=value` form: the equals sign is part of one token, so we
+	// don't need to skip a following value token.
+	lines.push('\t\tif [[ "$w" == --*=* ]]; then');
 	lines.push("\t\t\t((i++)); continue");
+	lines.push("\t\tfi");
+	// Bare flag: if it's a value-taking flag, skip the value too.
+	lines.push('\t\tif [[ "$w" == -* ]]; then');
+	lines.push("\t\t\tlocal candidate");
+	lines.push("\t\t\tlocal _was_value_flag=0");
+	lines.push("\t\t\tfor candidate in $valueFlags; do");
+	lines.push(
+		'\t\t\t\tif [[ "$candidate" == "$w" ]]; then _was_value_flag=1; break; fi',
+	);
+	lines.push("\t\t\tdone");
+	lines.push("\t\t\tif (( _was_value_flag )); then ((i+=2)); else ((i++)); fi");
+	lines.push("\t\t\tcontinue");
 	lines.push("\t\tfi");
 	lines.push('\t\tcase "$cmd_path|$w" in');
 	for (const c of pathCases) {
-		lines.push(`\t\t\t"${bashQuote(c.key)}")`);
-		lines.push(`\t\t\t\tcmd_path="${bashQuote(c.cmdPath)}"`);
-		lines.push(`\t\t\t\tsubcmds="${c.subcmds}"`);
-		lines.push(`\t\t\t\tflags="${c.flags}"`);
+		lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
+		lines.push(`\t\t\t\tcmd_path="${bashDoubleQuoteInner(c.cmdPath)}"`);
+		lines.push(`\t\t\t\tsubcmds="${bashDoubleQuoteInner(c.subcmds)}"`);
+		lines.push(`\t\t\t\tflags="${bashDoubleQuoteInner(c.flags)}"`);
+		lines.push(`\t\t\t\tvalueFlags="${bashDoubleQuoteInner(c.valueFlags)}"`);
 		lines.push("\t\t\t\t;;");
 	}
 	lines.push("\t\t\t*) break ;;");
@@ -270,12 +374,48 @@ export function renderBash(
 	lines.push("\tdone");
 	lines.push("");
 
+	// After `--`: stop offering subcommands/flags entirely; bash falls
+	// through to file completion via `complete -o default`.
+	lines.push("\tif (( end_of_options )); then");
+	lines.push("\t\treturn");
+	lines.push("\tfi");
+	lines.push("");
+
+	// `--name=value` partial: split, look up, offer either choice values
+	// or fall through to default (file) completion.
+	lines.push('\tif [[ "$cur" == --*=* ]]; then');
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	lines.push('\t\tlocal _flag="${cur%%=*}"');
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	lines.push('\t\tlocal _value="${cur#*=}"');
+	if (choiceCases.length > 0) {
+		// `compgen -P` prefixes every candidate with `${_flag}=` so bash's
+		// command-line replacement substitutes the full token (otherwise
+		// readline would replace `--target=br` with bare `browser`).
+		lines.push('\t\tcase "$cmd_path|$_flag" in');
+		for (const c of choiceCases) {
+			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			lines.push(
+				`\t\t\t\tCOMPREPLY=( $(compgen -P "\${_flag}=" -W "${bashDoubleQuoteInner(c.values)}" -- "$_value") )`,
+			);
+			lines.push("\t\t\t\treturn");
+			lines.push("\t\t\t\t;;");
+		}
+		lines.push("\t\tesac");
+	}
+	// Free-form `--name=value`: let bash file-complete the value portion.
+	lines.push("\t\treturn");
+	lines.push("\tfi");
+	lines.push("");
+
 	// Flag-with-choices: if previous word matches, offer the value list.
 	if (choiceCases.length > 0) {
 		lines.push('\tcase "$cmd_path|$prev" in');
 		for (const c of choiceCases) {
-			lines.push(`\t\t"${bashQuote(c.key)}")`);
-			lines.push(`\t\t\tCOMPREPLY=( $(compgen -W "${c.values}" -- "$cur") )`);
+			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			lines.push(
+				`\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)}" -- "$cur") )`,
+			);
 			lines.push("\t\t\treturn");
 			lines.push("\t\t\t;;");
 		}
@@ -283,10 +423,32 @@ export function renderBash(
 		lines.push("");
 	}
 
-	// Default branch: flags vs subcmds.
+	// Free-form value flag context: previous token is a known
+	// value-taking flag with no choices → fall through to file completion
+	// via `complete -o default` (we just return with no COMPREPLY set).
+	lines.push(`\tif __${ident}_prev_is_value_flag; then`);
+	lines.push("\t\treturn");
+	lines.push("\tfi");
+	lines.push("");
+
+	// Default branch: flags vs subcmds vs positional choices.
 	lines.push('\tif [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
+	if (argChoiceCases.length > 0) {
+		// Try the resolved command's positional-choice list first; if it
+		// returns nothing, fall through to the subcommand list.
+		lines.push('\t\tcase "$cmd_path" in');
+		for (const c of argChoiceCases) {
+			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			lines.push(
+				`\t\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)} $subcmds" -- "$cur") )`,
+			);
+			lines.push("\t\t\t\treturn");
+			lines.push("\t\t\t\t;;");
+		}
+		lines.push("\t\tesac");
+	}
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )');
 	lines.push("\tfi");
 	lines.push("}");
@@ -294,8 +456,9 @@ export function renderBash(
 
 	// Registration. `-o default` lets bash fall through to filename
 	// completion when our wordlists return nothing — handy for free
-	// positional args that take filesystem paths.
-	lines.push(`complete -o default -F ${fnName} ${bashQuote(binName)}`);
+	// positional args that take filesystem paths and for free-form
+	// flag values after we `return` without setting COMPREPLY.
+	lines.push(`complete -o default -F ${fnName} ${bashSingleQuote(binName)}`);
 
 	return `${lines.join("\n")}\n`;
 }

@@ -103,9 +103,11 @@ describe("completionPlugin", () => {
 		await app.execute({ argv: ["completion", "bash"] });
 		const out = getStdout();
 		expect(out.startsWith("# completion script for mycli v1.2.3")).toBe(true);
-		expect(out).toContain("complete -o default -F _mycli mycli");
-		expect(out).toContain("browser bun node"); // build --target choices
-		expect(out).toContain("dev staging prod"); // deploy prod --env choices
+		expect(out).toContain("complete -o default -F _mycli 'mycli'");
+		// Choice values are validated to a safe character set and emitted
+		// bare in the `compgen -W` wordlist.
+		expect(out).toContain("browser bun node"); // build --target
+		expect(out).toContain("dev staging prod"); // deploy prod --env
 	});
 
 	it("`mycli completion zsh` prints a zsh script with #compdef header", async () => {
@@ -122,8 +124,12 @@ describe("completionPlugin", () => {
 		await app.execute({ argv: ["completion", "fish"] });
 		const out = getStdout();
 		expect(out.startsWith("# completion script for mycli v1.2.3")).toBe(true);
-		expect(out).toContain("complete -c mycli -f");
-		expect(out).toContain("__fish_use_subcommand");
+		expect(out).toContain("complete -c 'mycli' -f");
+		// We replaced the order-insensitive `__fish_seen_subcommand_from`
+		// chain with a per-script helper that walks `commandline -opc`
+		// left-to-right.
+		expect(out).toContain("function __mycli_path_is");
+		expect(out).toContain("__mycli_path_is");
 	});
 
 	it("rejects unsupported shell names with a clear stderr message", async () => {
@@ -160,13 +166,13 @@ describe("completionPlugin", () => {
 
 			const bash = await readFile(join(tmpDir, "mycli"), "utf8");
 			expect(bash).toContain("# completion script for mycli v1.2.3");
-			expect(bash).toContain("complete -o default -F _mycli mycli");
+			expect(bash).toContain("complete -o default -F _mycli 'mycli'");
 
 			const zsh = await readFile(join(tmpDir, "_mycli"), "utf8");
 			expect(zsh.startsWith("#compdef mycli\n")).toBe(true);
 
 			const fish = await readFile(join(tmpDir, "mycli.fish"), "utf8");
-			expect(fish).toContain("complete -c mycli -f");
+			expect(fish).toContain("complete -c 'mycli' -f");
 		});
 
 		it("writes nothing to stdout in --output-dir mode", async () => {

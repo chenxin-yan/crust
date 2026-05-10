@@ -1,4 +1,9 @@
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import {
+	assertSafeChoiceValue,
+	assertSafeIdentifier,
+	sanitizeFreeText,
+} from "./escape.ts";
 import type {
 	CompletionArg,
 	CompletionCommand,
@@ -47,7 +52,7 @@ function stripAnsi(value: string): string {
  */
 function normaliseDescription(value: string | undefined): string | undefined {
 	if (value === undefined) return undefined;
-	const stripped = stripAnsi(value).trim();
+	const stripped = sanitizeFreeText(stripAnsi(value)).trim();
 	return stripped.length === 0 ? undefined : stripped;
 }
 
@@ -58,7 +63,14 @@ function normaliseDescription(value: string | undefined): string | undefined {
  * depth.
  */
 function walkFlag(name: string, def: FlagDef): CompletionFlag {
+	assertSafeIdentifier(name, "flag name");
 	const aliases = def.aliases?.filter((alias) => alias.length > 0);
+	if (aliases !== undefined) {
+		for (const alias of aliases) assertSafeIdentifier(alias, "flag alias");
+	}
+	if (def.short !== undefined && def.short.length > 0) {
+		assertSafeIdentifier(def.short, "flag short alias");
+	}
 
 	const flag: CompletionFlag = {
 		name,
@@ -83,13 +95,20 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 		flag.multiple = true;
 	}
 
+	// `noNegate` is a `boolean`-flag-only opt-out from auto `--no-<name>`
+	// rendering; it lives on both single and multi boolean variants in
+	// core's `FlagDef` discriminated union.
+	if (def.type === "boolean" && def.noNegate === true) {
+		flag.noNegate = true;
+	}
+
 	// `choices` lives only on string-typed flags (TP-009 — see `types.ts`).
 	// We accept the field via discriminated narrowing rather than an `as`
 	// cast to keep the reader honest about which branches actually carry it.
 	if (def.type === "string") {
 		const choices = def.choices;
 		if (choices !== undefined && choices.length > 0) {
-			flag.choices = choices;
+			flag.choices = choices.map(assertSafeChoiceValue);
 		}
 	}
 
@@ -98,6 +117,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 
 /** Project a single `ArgDef` onto a `CompletionArg`. */
 function walkArg(def: ArgDef): CompletionArg {
+	assertSafeIdentifier(def.name, "arg name");
 	const arg: CompletionArg = {
 		name: def.name,
 		type: def.type,
@@ -114,7 +134,7 @@ function walkArg(def: ArgDef): CompletionArg {
 	if (def.type === "string") {
 		const choices = def.choices;
 		if (choices !== undefined && choices.length > 0) {
-			arg.choices = choices;
+			arg.choices = choices.map(assertSafeChoiceValue);
 		}
 	}
 
@@ -128,6 +148,13 @@ function walkArg(def: ArgDef): CompletionArg {
  * visible by construction.
  */
 function walkCommand(node: CommandNode): CompletionCommand {
+	assertSafeIdentifier(node.meta.name, "command name");
+	const nodeAliases = node.meta.aliases;
+	if (nodeAliases !== undefined) {
+		for (const alias of nodeAliases) {
+			assertSafeIdentifier(alias, "command alias");
+		}
+	}
 	const flags: CompletionFlag[] = [];
 	for (const [flagName, flagDef] of Object.entries(node.effectiveFlags)) {
 		flags.push(walkFlag(flagName, flagDef));
