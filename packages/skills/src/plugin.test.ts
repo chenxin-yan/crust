@@ -858,7 +858,22 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
+		// Empty `customSkills` must be a true no-op: setup completes, no
+		// warnings surface, and exit code stays 0.
+		const warnings: string[] = [];
+		const origWarn = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
+		} finally {
+			console.warn = origWarn;
+			process.exitCode = origExitCode;
+		}
+		expect(warnings).toEqual([]);
 	});
 
 	it("accepts a URL sourceDir", async () => {
@@ -1066,6 +1081,91 @@ describe("skillPlugin customSkills validation", () => {
 	});
 });
 
+describe("skillPlugin customSkills name mismatch", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = join(
+			tmpdir(),
+			`crust-skill-plugin-name-mismatch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
+		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("refuses to install when entry.name disagrees with SKILL.md frontmatter name", async () => {
+		// Pre-install pricing-toolkit at v1.0.0 (using its real fixture) so the
+		// auto-update path actually invokes installSkillBundle for that entry.
+		// The plugin entry then points at FIXTURE_DIR (whose frontmatter
+		// declares funnel-builder) — expectedName must reject the mismatch.
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR_SECOND,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+
+		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
+		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+
+		const warnings: string[] = [];
+		const origWarn = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+
+		const app = new Crust("name-mismatch-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							// Config name claims pricing-toolkit, but FIXTURE_DIR's
+							// SKILL.md frontmatter declares funnel-builder. Without
+							// expectedName enforcement, the funnel-builder install
+							// would silently install at v2.0.0 under the wrong
+							// directory.
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+					],
+				}),
+			);
+
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: [] }));
+		} finally {
+			console.warn = origWarn;
+			process.exitCode = origExitCode;
+		}
+
+		// pricing-toolkit must remain at 1.0.0 — the install was rejected.
+		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		// No orphan funnel-builder dir was created.
+		await expect(stat(funnelDir)).rejects.toThrow();
+		// The mismatch warning surfaces with both names so the bundle author
+		// can see exactly what disagreed.
+		expect(
+			warnings.some(
+				(line) =>
+					line.includes("pricing-toolkit") && line.includes("funnel-builder"),
+			),
+		).toBe(true);
+	});
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // customSkills — autoUpdate behavior
 // ─────────────────────────────────────────────────────────────────────────
@@ -1133,8 +1233,12 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		const skillMd = join(bundleDir, "SKILL.md");
-		const statBefore = await stat(skillMd);
+		// Drop a sentinel inside the installed bundle. If the auto-update path
+		// rewrites the bundle (clean: true), the sentinel is removed; if it
+		// short-circuits as up-to-date, the sentinel survives. This is more
+		// reliable than mtime equality on coarse-resolution filesystems.
+		const sentinel = join(bundleDir, ".sentinel");
+		await writeFile(sentinel, "do-not-touch");
 
 		const app = new Crust("bundle-noop-host")
 			.meta({ description: "test" })
@@ -1155,8 +1259,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		const statAfter = await stat(skillMd);
-		expect(statAfter.mtimeMs).toBe(statBefore.mtimeMs);
+		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
 		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
 	});
 
@@ -1187,8 +1290,16 @@ describe("skillPlugin customSkills auto-update", () => {
 			}),
 		);
 
+		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+
 		const originalWrite = process.stderr.write;
 		process.stderr.write = (() => true) as typeof process.stderr.write;
+		const warnings: string[] = [];
+		const origWarn = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
 
 		const app = new Crust("bundle-resilience-host")
 			.meta({ description: "test" })
@@ -1217,10 +1328,17 @@ describe("skillPlugin customSkills auto-update", () => {
 			await withCwd(tmpDir, () => app.execute({ argv: [] }));
 		} finally {
 			process.stderr.write = originalWrite;
+			console.warn = origWarn;
 		}
 
 		// Second bundle still updated, despite first entry's error.
 		expect(await readInstalledVersion(secondDir)).toBe("2.0.0");
+		// First bundle stayed at its previous version.
+		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+		// Warning surfaced naming the failed bundle.
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
+			true,
+		);
 	});
 
 	it("skips bundle auto-update when autoUpdate is false", async () => {
@@ -1260,6 +1378,12 @@ describe("skillPlugin customSkills auto-update", () => {
 	});
 
 	it("skips bundle auto-update when invoking the skill subcommand", async () => {
+		// Pre-install at v1.0.0; configure entry with a bogus sourceDir at
+		// v2.0.0. Both the auto-update setup hook and the `skill update`
+		// subcommand would *try* to reconcile this entry, and both would emit
+		// a warning when the install fails. Counting warnings is the only
+		// instrument-free way to distinguish "both ran" (2 warnings) from
+		// "only subcommand ran" (1 warning).
 		await withCwd(tmpDir, () =>
 			installSkillBundle({
 				sourceDir: FIXTURE_DIR,
@@ -1271,8 +1395,6 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 
-		// Install a base main skill so the `skill update` doesn't trigger
-		// further bundle work — the host argv enters the skill subcommand.
 		const app = new Crust("subcmd-skip-host")
 			.meta({ description: "test" })
 			.run(() => {})
@@ -1283,7 +1405,7 @@ describe("skillPlugin customSkills auto-update", () => {
 					customSkills: [
 						{
 							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
+							sourceDir: "/nonexistent/path/to/funnel-builder",
 							version: "2.0.0",
 						},
 					],
@@ -1298,23 +1420,36 @@ describe("skillPlugin customSkills auto-update", () => {
 			value: false,
 			configurable: true,
 		});
+		const warnings: string[] = [];
 		const origLog = console.log;
+		const origWarn = console.warn;
 		console.log = () => {};
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+		// Reset exitCode — `skill update` will set it on the failed bundle.
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
 		try {
-			// Use `skill update` so the bundle path runs explicitly under the
-			// subcommand, not via the auto-update setup hook.
 			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
 		} finally {
 			if (originalIsTTY) {
 				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
 			}
 			console.log = origLog;
+			console.warn = origWarn;
+			process.exitCode = origExitCode;
 		}
 
-		// `skill update` itself updates the bundle — and the auto-update hook
-		// did NOT run separately. Net result: bundle is at v2.0.0 because the
-		// subcommand ran. Sanity check that the subcommand still does its job.
-		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+		// Bundle stayed at v1.0.0 because the bogus sourceDir failed install.
+		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		// Exactly one warning naming the failed bundle — only the `skill
+		// update` subcommand ran. If the auto-update setup hook also ran,
+		// there would be two warnings.
+		const funnelWarnings = warnings.filter((line) =>
+			line.includes("[funnel-builder]"),
+		);
+		expect(funnelWarnings.length).toBe(1);
 	});
 
 	it("does not install bundles when customSkills is omitted", async () => {
@@ -1475,6 +1610,126 @@ describe("skillPlugin customSkills interactive command", () => {
 			),
 		).toBe(true);
 	});
+
+	it("--all honors explicit --scope flag over defaultScope", async () => {
+		// Plugin defaultScope is "project", but `--scope global` should win.
+		// Bundle should land in the global scope, not the project scope.
+		const app = new Crust("all-scope-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
+			);
+
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
+		// Redirect HOME so global-scope writes land inside tmpDir, then
+		// restore. Crust derives the global path from `homedir()`, so
+		// overriding HOME is the canonical hook.
+		const origHome = process.env.HOME;
+		process.env.HOME = tmpDir;
+		const origLog = console.log;
+		console.log = () => {};
+		try {
+			await withCwd(tmpDir, () =>
+				app.execute({ argv: ["skill", "--all", "--scope", "global"] }),
+			);
+		} finally {
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
+			console.log = origLog;
+			process.env.HOME = origHome;
+		}
+
+		const projectBundle = join(tmpDir, ".agents", "skills", "funnel-builder");
+		// Project-scope path must NOT exist — the explicit --scope flag wins.
+		await expect(stat(projectBundle)).rejects.toThrow();
+	});
+
+	it("--all isolates per-bundle failures and exits non-zero", async () => {
+		const app = new Crust("all-isolation-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							// Bogus path — install rejects at resolve time.
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "1.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "1.0.0",
+						},
+					],
+				}),
+			);
+
+		const originalIsTTY = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: false,
+			configurable: true,
+		});
+		const warnings: string[] = [];
+		const origLog = console.log;
+		const origWarn = console.warn;
+		console.log = () => {};
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "--all"] }));
+		} finally {
+			if (originalIsTTY) {
+				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+			}
+			console.log = origLog;
+			console.warn = origWarn;
+		}
+
+		// Second bundle still installed.
+		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
+		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		// First bundle was rejected.
+		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
+		await expect(stat(funnelDir)).rejects.toThrow();
+		// Warning surfaced naming the failed bundle.
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
+			true,
+		);
+		// Exit code is non-zero so CI/scripts notice the partial failure.
+		expect(process.exitCode).toBe(1);
+		process.exitCode = origExitCode;
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1624,5 +1879,80 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		expect(logs.some((line) => line.includes("No updates needed"))).toBe(true);
 		expect(logs.some((line) => line.includes("[funnel-builder]"))).toBe(true);
+	});
+
+	it("isolates per-bundle failures and exits non-zero", async () => {
+		// Pre-install both bundles at v1.0.0 so `skill update` actually visits
+		// both entries (the update path only acts on installed bundles).
+		// Then the plugin entry for funnel-builder points at a bogus
+		// sourceDir, forcing its install to fail at resolve time.
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: FIXTURE_DIR_SECOND,
+				agents: ["opencode"],
+				version: "1.0.0",
+				scope: "project",
+			}),
+		);
+
+		const app = new Crust("update-isolation-host")
+			.meta({ description: "test" })
+			.run(() => {})
+			.use(
+				skillPlugin({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "2.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "2.0.0",
+						},
+					],
+				}),
+			);
+
+		const warnings: string[] = [];
+		const origLog = console.log;
+		const origWarn = console.warn;
+		console.log = () => {};
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			await withCwd(tmpDir, () =>
+				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+			);
+		} finally {
+			console.log = origLog;
+			console.warn = origWarn;
+		}
+
+		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
+		// Second bundle updated despite first entry's failure.
+		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
+		// Failure was logged with the bundle name.
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
+			true,
+		);
+		// Non-zero exit so automation notices the partial failure.
+		expect(process.exitCode).toBe(1);
+		process.exitCode = origExitCode;
 	});
 });

@@ -609,13 +609,11 @@ identical-version reinstalls report `up-to-date` and leave the canonical
 store untouched. Pass a fresh `version` (typically wired to the consuming
 package's `package.json` `version`) whenever the bundle contents change.
 
-Exclusions at the bundle root only:
-
-- `node_modules/`, `.DS_Store`
-- Any dotfile at the root (e.g. `.git/`, `.editorconfig`, `.gitignore`)
-- Any pre-existing `crust.json` (Crust regenerates it)
-
-Dotfiles inside subdirectories **are** copied.
+Bundle contents are copied as authored — no implicit name-based filtering.
+Dotfiles, `node_modules/`, `.DS_Store`, and editor cruft are all copied if
+present. Keep `sourceDir` clean. The only reserved filename is
+`crust.json` at the bundle root (Crust generates this and rejects bundles
+that ship one).
 
 ### Publishing a bundle to npm
 

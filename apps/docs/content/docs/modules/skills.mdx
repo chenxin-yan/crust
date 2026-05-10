@@ -108,11 +108,13 @@ my-cli skill
 ### Hand-authored bundles via `customSkills`
 
 The plugin can manage hand-authored skill bundles alongside the auto-
-generated command-reference skill. Each entry is reconciled through the
-same lifecycle: auto-update on version change, surfaced in the
-interactive `skill` subcommand multiselect (one prompt per bundle, in
-array order, after the main-skill prompt), supports uninstall via the
-same toggle UX, and respects `autoUpdate: false` and `--all`.
+generated command-reference skill. Each entry follows the same plugin
+lifecycle as the main skill — auto-update, interactive multiselect, and
+`skill update` — and gets its own multiselect prompt after the main one,
+in array order. See the [`@crustjs/skills` README][skills-custom] for
+the full reference.
+
+[skills-custom]: https://github.com/chenxin-yan/crust/tree/main/packages/skills#hand-authored-bundles-via-customskills
 
 ```ts
 import { Crust } from "@crustjs/core";

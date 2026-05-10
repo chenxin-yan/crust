@@ -440,6 +440,16 @@ export interface InstallSkillBundleOptions {
 	 * @default false
 	 */
 	force?: boolean;
+	/**
+	 * When set, the bundle's `SKILL.md` frontmatter `name:` must equal this
+	 * string. A mismatch throws before any filesystem write.
+	 *
+	 * Used by `skillPlugin`'s `customSkills` reconciliation to keep the
+	 * config-level `name` (used for status / uninstall lookups) in lockstep
+	 * with the frontmatter `name` (the canonical install path), preventing
+	 * orphan installs.
+	 */
+	expectedName?: string;
 }
 
 /**
@@ -602,7 +612,11 @@ export interface StatusResult {
  * });
  * ```
  */
-export interface CustomSkillConfig {
+export interface CustomSkillConfig
+	extends Pick<
+		InstallSkillBundleOptions,
+		"sourceDir" | "version" | "scope" | "installMode"
+	> {
 	/**
 	 * Skill name used by the plugin for collision detection, status lookups,
 	 * and uninstall paths.
@@ -612,54 +626,23 @@ export interface CustomSkillConfig {
 	 * within the `customSkills` array, and must not collide with the main
 	 * skill's name (derived from the root command's `meta`).
 	 *
-	 * The bundle's `SKILL.md` frontmatter is the source of truth for the
-	 * installed skill's name, so it must match this `name`. The plugin does
-	 * not cross-check them — a mismatch silently installs the bundle under
-	 * the frontmatter name while plugin status, auto-update, and uninstall
-	 * lookups use this `name`, leaving an orphan install on disk.
+	 * The bundle's `SKILL.md` frontmatter `name:` must match this value —
+	 * mismatches are rejected at install time so plugin status / uninstall
+	 * paths can never drift from the canonical install location.
 	 */
 	name: string;
 	/**
-	 * Source directory containing the bundle to install.
-	 *
-	 * Resolution rules (mirror {@link InstallSkillBundleOptions.sourceDir}):
-	 * - `URL` — must use `file:` protocol; resolved via `fileURLToPath()`.
-	 * - Absolute string path — resolved via `path.resolve()`.
-	 * - Relative string path — resolved against the nearest `package.json`
-	 *   directory walking up from `process.argv[1]`.
-	 *
-	 * The canonical form for plugin authors is the bare relative string
-	 * (e.g. `"skills/funnel-builder"`), mirroring `@crustjs/create`'s
-	 * `scaffold({ template })` ergonomics. Resolution-time errors are
-	 * deferred until the install runs.
+	 * Installation scope override. When omitted, the bundle inherits
+	 * {@link SkillPluginOptions.defaultScope} resolution: explicit `--scope`
+	 * flag wins, else `defaultScope`, else the interactive scope prompt
+	 * (or `"global"` in non-interactive mode).
 	 */
-	sourceDir: string | URL;
+	scope?: InstallSkillBundleOptions["scope"];
 	/**
-	 * Version string recorded for this install and compared on subsequent
-	 * installs to drive auto-update.
-	 *
-	 * Required. Typically wired to the consuming package's `package.json`
-	 * `version` (e.g. via `import pkg from "./package.json" with { type:
-	 * "json" }`). Identical-version reinstalls report `up-to-date` and skip
-	 * the canonical-store rewrite, so bump this whenever bundle contents
-	 * change.
+	 * Installation strategy override. When omitted, inherits
+	 * {@link SkillPluginOptions.installMode} (default `"auto"`).
 	 */
-	version: string;
-	/**
-	 * Installation scope override.
-	 *
-	 * When omitted, the bundle inherits {@link SkillPluginOptions.defaultScope}
-	 * resolution: explicit `--scope` flag wins, else `defaultScope`, else
-	 * the interactive scope prompt (or `"global"` in non-interactive mode).
-	 */
-	scope?: Scope;
-	/**
-	 * Installation strategy override.
-	 *
-	 * When omitted, inherits {@link SkillPluginOptions.installMode} (default
-	 * `"auto"`).
-	 */
-	installMode?: SkillInstallMode;
+	installMode?: InstallSkillBundleOptions["installMode"];
 }
 
 /**

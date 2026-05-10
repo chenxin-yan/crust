@@ -3,13 +3,10 @@
 ---
 
 `skillPlugin` now accepts a `customSkills` array for managing hand-authored
-skill bundles alongside the auto-generated command-reference skill.
-
-Each entry is reconciled through the same plugin lifecycle as the main
-skill — auto-update on version change, surfaced in the interactive `skill`
-subcommand multiselect (one prompt per bundle, in array order, after the
-main-skill prompt), supports uninstall via the same toggle UX, and respects
-`autoUpdate: false` and `--all` non-interactive mode.
+skill bundles alongside the auto-generated command-reference skill. Each
+entry runs through the same lifecycle as the main skill (auto-update,
+interactive multiselect, `skill update`) and adds its own multiselect
+prompt after the main one, in array order.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -54,7 +51,12 @@ Bundle files are copied as raw bytes, so supporting binary assets round-trip
 unchanged. Passing `agents: []` to `installSkillBundle()` validates the
 bundle without installing it.
 
-Per-entry failures during auto-update or interactive reconciliation are
-logged with the bundle name and never abort other entries. When
-`customSkills` is omitted or empty, only the generated main skill is
-managed.
+Per-entry failures are logged with the bundle name and never abort other
+entries. Failures from explicit `skill --all` and `skill update` set a
+non-zero exit code so automation notices partial failures; startup
+auto-update remains warning-only. When `customSkills` is omitted or empty,
+only the generated main skill is managed.
+
+The bundle's `SKILL.md` frontmatter `name:` must equal the configured
+`name` — mismatches are rejected at install time so plugin status /
+uninstall paths can never drift from the canonical install location.

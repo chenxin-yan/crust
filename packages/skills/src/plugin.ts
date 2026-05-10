@@ -27,6 +27,7 @@ import type {
 	AgentTarget,
 	CustomSkillConfig,
 	Scope,
+	SkillInstallMode,
 	SkillMeta,
 	SkillPluginOptions,
 } from "./types.ts";
@@ -39,18 +40,31 @@ function isScope(value: unknown): value is Scope {
 	return value === "global" || value === "project";
 }
 
+function isInstallMode(value: unknown): value is SkillInstallMode {
+	return value === "auto" || value === "symlink" || value === "copy";
+}
+
+/**
+ * Validates an explicit `--scope` flag. Returns the typed scope when set,
+ * `undefined` when omitted. Throws on a non-Scope string so the caller
+ * does not need to repeat the check.
+ */
+function parseScopeFlag(rawScope: string | undefined): Scope | undefined {
+	if (rawScope === undefined) return undefined;
+	if (!isScope(rawScope)) {
+		throw new Error(
+			`Invalid --scope value: ${String(rawScope)}. Expected "project" or "global".`,
+		);
+	}
+	return rawScope;
+}
+
 async function resolveScopeForCommand(
 	rawScope: string | undefined,
 	options: SkillPluginOptions,
 ): Promise<Scope> {
-	if (rawScope !== undefined) {
-		if (!isScope(rawScope)) {
-			throw new Error(
-				`Invalid --scope value: ${String(rawScope)}. Expected "project" or "global".`,
-			);
-		}
-		return rawScope;
-	}
+	const explicit = parseScopeFlag(rawScope);
+	if (explicit !== undefined) return explicit;
 
 	if (options.defaultScope) {
 		return options.defaultScope;
@@ -142,23 +156,36 @@ function deriveSkillMeta(
 /**
  * Validates and normalizes the `customSkills` array passed to {@link skillPlugin}.
  *
- * Rules (run synchronously at plugin setup before any FS work):
- * - Each `entry.name` must satisfy {@link isValidSkillName}.
- * - `entry.name` must not collide with the main skill's name (derived from
- *   the root command's `meta`).
- * - `entry.name` must be unique within the array.
+ * Acts as the single boundary check (per AGENTS.md "validate untrusted input
+ * once at the boundary; trust types inside"). Runs synchronously at plugin
+ * setup before any FS work; resolution-time errors (non-`file:` URL, missing
+ * source directory, missing `SKILL.md`, etc.) are deferred to the underlying
+ * {@link installSkillBundle} invocation so plugin setup stays fast.
+ *
+ * Rules:
+ * - `customSkills` itself must be an array (or `undefined`).
+ * - Each `entry.name` must satisfy {@link isValidSkillName}, must not collide
+ *   with the main skill's name, and must be unique within the array.
  * - `entry.version` must be a non-empty string.
  * - `entry.sourceDir` must be `string` or `URL`.
- *
- * Resolution-time errors (non-`file:` URL, missing source directory, missing
- * `SKILL.md`, etc.) are deliberately deferred to the underlying
- * {@link installSkillBundle} invocation so plugin setup stays fast.
+ * - `entry.scope`, when set, must be `"project"` or `"global"`.
+ * - `entry.installMode`, when set, must be `"auto"`, `"symlink"`, or `"copy"`.
  */
 function validateCustomSkillsConfig(
 	mainName: string,
 	customSkills: readonly CustomSkillConfig[] | undefined,
 ): readonly CustomSkillConfig[] {
-	if (!customSkills || customSkills.length === 0) {
+	if (customSkills === undefined) {
+		return [];
+	}
+	if (!Array.isArray(customSkills)) {
+		throw new Error(
+			`skillPlugin: customSkills must be an array, got ${
+				customSkills === null ? "null" : typeof customSkills
+			}.`,
+		);
+	}
+	if (customSkills.length === 0) {
 		return [];
 	}
 
@@ -214,6 +241,20 @@ function validateCustomSkillsConfig(
 			throw new Error(
 				`skillPlugin: customSkills[${i}].sourceDir (for "${entry.name}") ` +
 					`must be a string or URL, got ${typeof entry.sourceDir}.`,
+			);
+		}
+
+		if (entry.scope !== undefined && !isScope(entry.scope)) {
+			throw new Error(
+				`skillPlugin: customSkills[${i}].scope (for "${entry.name}") ` +
+					`must be "project" or "global", got ${JSON.stringify(entry.scope)}.`,
+			);
+		}
+
+		if (entry.installMode !== undefined && !isInstallMode(entry.installMode)) {
+			throw new Error(
+				`skillPlugin: customSkills[${i}].installMode (for "${entry.name}") ` +
+					`must be "auto", "symlink", or "copy", got ${JSON.stringify(entry.installMode)}.`,
 			);
 		}
 	}
@@ -290,6 +331,7 @@ async function autoUpdateCustomSkill(
 						version: entry.version,
 						scope,
 						installMode,
+						expectedName: entry.name,
 					});
 
 					const updatedAgents = res.agents
@@ -450,6 +492,12 @@ async function autoUpdateCustomSkillsLoop(
 		try {
 			await autoUpdateCustomSkill(entry, options);
 		} catch (err) {
+			// Startup auto-update is opportunistic: log and continue so a single
+			// broken bundle (missing sourceDir, frontmatter mismatch, FS error,
+			// etc.) does not stop the user's CLI from running. Per-bundle
+			// `SkillConflictError`s are already narrowed inside
+			// `autoUpdateCustomSkill`. Unlike the explicit `skill --all` /
+			// `skill update` paths, this loop never sets `process.exitCode`.
 			const message = err instanceof Error ? err.message : String(err);
 			console.warn(
 				yellow(
@@ -687,6 +735,7 @@ async function reconcileBundleInteractively(opts: {
 						version: entry.version,
 						scope,
 						installMode,
+						expectedName: entry.name,
 					}),
 			});
 
@@ -721,6 +770,7 @@ async function reconcileBundleInteractively(opts: {
 								scope,
 								force: true,
 								installMode,
+								expectedName: entry.name,
 							}),
 					});
 
@@ -807,8 +857,12 @@ function buildSkillCommand(
 			const meta = deriveSkillMeta(rootCmd, options);
 			const installAll = ctx.flags.all === true;
 			const isInteractive = !!process.stdin.isTTY;
+			// `--scope` always wins when set; `--all` skips only the interactive
+			// prompt fallback, falling back to `defaultScope` or `"global"`.
 			const scope = installAll
-				? (options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+				? (parseScopeFlag(ctx.flags.scope) ??
+					options.defaultScope ??
+					DEFAULT_SKILL_SCOPE)
 				: await resolveScopeForCommand(ctx.flags.scope, options);
 
 			// Detect installed agents
@@ -1029,7 +1083,9 @@ function buildSkillCommand(
 
 			// Custom skill bundles — sequential per-bundle prompts.
 			// Each bundle is reconciled independently; a single-entry failure
-			// aborts that entry only and subsequent entries still run.
+			// aborts that entry only and subsequent entries still run, but the
+			// command exits non-zero so callers (CI, scripts) see the failure.
+			const failedEntries: string[] = [];
 			for (const entry of customSkills) {
 				const entryScope = entry.scope ?? scope;
 				try {
@@ -1041,6 +1097,10 @@ function buildSkillCommand(
 						isInteractive,
 					});
 				} catch (err) {
+					// Recoverable per-entry failure: keep reconciling siblings.
+					// SkillConflictError is already handled inside the helper; any
+					// error reaching here (filesystem, bad bundle, etc.) is logged
+					// and tracked for the final exit code.
 					const message = err instanceof Error ? err.message : String(err);
 					console.warn(
 						yellow(
@@ -1048,7 +1108,11 @@ function buildSkillCommand(
 								`Continuing with remaining skills.`,
 						),
 					);
+					failedEntries.push(entry.name);
 				}
+			}
+			if (failedEntries.length > 0) {
+				process.exitCode = 1;
 			}
 		})
 		.command(updateCommand)._node;
@@ -1127,6 +1191,10 @@ function buildSkillUpdateCommand(
 			}
 
 			// Custom skill bundles — update each in turn after the main skill.
+			// SkillConflictError is logged and treated as recoverable (matches
+			// the main-skill update behavior); any other error is also logged
+			// per-entry but tracked so the command exits non-zero.
+			const failedEntries: string[] = [];
 			for (const entry of customSkills) {
 				const entryScope = entry.scope ?? scope;
 				const entryEffectiveScope = resolveEffectiveScope(entryScope);
@@ -1167,6 +1235,7 @@ function buildSkillUpdateCommand(
 								version: entry.version,
 								scope: entryScope,
 								installMode: entryInstallMode,
+								expectedName: entry.name,
 							}),
 					});
 
@@ -1183,6 +1252,9 @@ function buildSkillUpdateCommand(
 					}
 				} catch (err) {
 					if (err instanceof SkillConflictError) {
+						// Conflict matches main-skill `skill update` semantics:
+						// log and skip without failing the command (caller can
+						// resolve manually).
 						const kindMismatchSuffix = err.details.kindMismatch
 							? ` (existing is a "${err.details.kindMismatch.existing}" skill, attempted "${err.details.kindMismatch.attempted}")`
 							: "";
@@ -1194,6 +1266,10 @@ function buildSkillUpdateCommand(
 							),
 						);
 					} else {
+						// Unexpected error (filesystem, bad bundle, frontmatter
+						// mismatch from `expectedName`, etc.). Keep updating siblings
+						// so a single bad entry does not block the rest, but track
+						// it so the command exits non-zero.
 						const message = err instanceof Error ? err.message : String(err);
 						console.warn(
 							yellow(
@@ -1201,8 +1277,12 @@ function buildSkillUpdateCommand(
 									`Continuing with remaining skills.`,
 							),
 						);
+						failedEntries.push(entry.name);
 					}
 				}
+			}
+			if (failedEntries.length > 0) {
+				process.exitCode = 1;
 			}
 		});
 }
