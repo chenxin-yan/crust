@@ -17,6 +17,7 @@ bun add @crustjs/plugins
 | `versionPlugin(version)` | Adds `--version` / `-v` flag |
 | `didYouMeanPlugin(options?)` | Suggests corrections for mistyped subcommands via Levenshtein matching |
 | `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
+| `completionPlugin(options?)` | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts |
 
 ## Usage
 
@@ -166,6 +167,37 @@ updateNotifierPlugin({
 ```
 
 > **Note:** Version comparison uses standard semver (`major.minor.patch`). Prerelease suffixes are stripped before comparison — `1.2.3-beta.1` is treated as `1.2.3`.
+
+### Completion
+
+The `completionPlugin()` adds a `completion <shell>` subcommand that emits a self-contained tab-completion script for **bash**, **zsh**, or **fish**.
+
+```ts
+import { Crust } from "@crustjs/core";
+import { completionPlugin } from "@crustjs/plugins";
+import pkg from "../package.json";
+
+const app = new Crust("my-cli")
+  .use(completionPlugin({ version: pkg.version }))
+  .command("build", (cmd) =>
+    cmd
+      .meta({ description: "Build artifact" })
+      .flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
+      .run(() => {}),
+  )
+  .run(() => {});
+
+await app.execute();
+```
+
+```sh
+# Print to stdout (one shell at a time)
+my-cli completion bash > ~/.local/share/bash-completion/completions/my-cli
+# Or write all configured shells in one go (packaging-time)
+my-cli completion bash --output-dir completions/
+```
+
+See [the completion guide](https://crustjs.com/docs/modules/plugins/completion) for per-shell install paths, packaging recipes, and the v1 limitations (notably the strict identifier/choice-value validation).
 
 ## Documentation
 

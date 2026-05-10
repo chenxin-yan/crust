@@ -43,6 +43,11 @@ function levenshtein(a: string, b: string): number {
  * within threshold, the better score wins for that command (a short alias
  * cannot lose to a more-distant canonical, and vice-versa).
  *
+ * Subcommands marked `meta.hidden: true` are excluded from the candidate
+ * set so internal commands (e.g. `__complete`) cannot leak into
+ * user-facing typo suggestions. They remain invocable by direct name —
+ * routing does not consult `meta.hidden`.
+ *
  * The matching is limited to: (a) `candidate.startsWith(input)` (a
  * forward-completion hint, useful when the user typed a prefix) and
  * (b) Levenshtein distance ≤ 3. The reverse `input.startsWith(candidate)`
@@ -67,6 +72,7 @@ function findSuggestions(
 	};
 
 	for (const [name, node] of Object.entries(subCommands)) {
+		if (node.meta.hidden === true) continue;
 		const d = score(name);
 		if (d !== null) record(name, d);
 		for (const alias of node.meta.aliases ?? []) {
@@ -115,8 +121,16 @@ export function didYouMeanPlugin(
 					return;
 				}
 
-				if (details.available.length > 0) {
-					message += `\n\nAvailable commands: ${details.available.join(", ")}`;
+				// `details.available` lists every canonical sibling name including
+				// those marked `meta.hidden: true`. The error message is user-
+				// facing, so filter the same way `findSuggestions` does — internal
+				// commands stay invocable but never surface in this list.
+				const visibleAvailable = details.available.filter(
+					(canonical) =>
+						details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
+				);
+				if (visibleAvailable.length > 0) {
+					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
 				}
 				console.error(message);
 				process.exitCode = 1;

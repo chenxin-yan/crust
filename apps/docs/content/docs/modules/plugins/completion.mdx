@@ -1,0 +1,266 @@
+---
+title: Completion
+description: Generate shell tab-completion scripts for bash, zsh, and fish.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The completion plugin adds a `completion <shell>` subcommand that emits a
+tab-completion script for **bash**, **zsh**, or **fish**. The strategy is
+**pure-static**: the plugin walks your live command tree at run time and
+prints a self-contained script — no hidden subcommand, no runtime callbacks,
+no shell-out on TAB.
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { completionPlugin } from "@crustjs/plugins";
+import pkg from "../package.json";
+
+const main = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .use(completionPlugin({ version: pkg.version }))
+  .command("build", (cmd) =>
+    cmd
+      .meta({ description: "Build artifact" })
+      .flags({
+        target: { type: "string", choices: ["browser", "bun", "node"] },
+      })
+      .run(() => {}),
+  )
+  .run(() => {});
+
+await main.execute();
+```
+
+```sh
+$ my-cli completion bash | head -1
+# completion script for my-cli v1.0.0 — regenerate with: my-cli completion bash
+```
+
+## Options
+
+| Option    | Type                               | Default                    | Description                                                                       |
+| --------- | ---------------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
+| `command` | `string`                           | `"completion"`             | Subcommand name. Override only if `completion` collides with an existing command. |
+| `binName` | `string`                           | root command's `meta.name` | Binary name embedded in generated scripts (the `complete -F` target, etc.).       |
+| `shells`  | `Array<"bash" \| "zsh" \| "fish">` | `["bash", "zsh", "fish"]`  | Shells written by `--output-dir`. The CLI accepts any of these as `<shell>`.      |
+| `version` | `string`                           | `"0.0.0"`                  | Free-form version string embedded in script headers. Pass `pkg.version`.          |
+
+## Per-shell install
+
+The runtime contract is the same in every shell: print to stdout, redirect into
+the shell's auto-discovery directory.
+
+### Bash
+
+```sh
+# Per-user (lazy-loaded by bash-completion ≥ 2.0)
+mkdir -p ~/.local/share/bash-completion/completions
+my-cli completion bash > ~/.local/share/bash-completion/completions/my-cli
+```
+
+Or eval inline (shell-startup cost):
+
+```sh
+# in ~/.bashrc
+eval "$(my-cli completion bash)"
+```
+
+The generated script ships a Cobra-style fallback init shim, so it works on
+systems that do **not** have the `bash-completion` package installed (macOS
+default bash, Alpine, NixOS without the package).
+
+### Zsh
+
+```sh
+# Per-user — drop into a directory on $fpath
+mkdir -p ~/.zsh/completions
+my-cli completion zsh > ~/.zsh/completions/_my-cli
+```
+
+Then in `~/.zshrc`, _before_ `compinit`:
+
+```zsh
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+```
+
+Or eval inline:
+
+```zsh
+# in ~/.zshrc, after `autoload -Uz compinit && compinit`
+eval "$(my-cli completion zsh)"
+```
+
+### Fish
+
+```sh
+my-cli completion fish > ~/.config/fish/completions/my-cli.fish
+```
+
+Fish auto-loads files in `~/.config/fish/completions/` the first time you
+invoke the matching command. No `source` line needed.
+
+Or eval inline:
+
+```fish
+# in ~/.config/fish/config.fish
+my-cli completion fish | source
+```
+
+## Packaging recipes
+
+The generated filenames match every major packaging system's expectations
+(`<bin>` for bash, `_<bin>` for zsh, `<bin>.fish` for fish), so no rename is
+needed. The two installation patterns are **runtime-invocation** (run the
+binary at install time) and **pre-generated files** (ship the artifacts in
+the source tarball).
+
+### Homebrew
+
+Modern formulae use the `generate_completions_from_executable` helper, which
+runs the freshly-built binary at brew install time:
+
+```ruby
+class MyCli < Formula
+  # ...
+  def install
+    bin.install "my-cli"
+    generate_completions_from_executable(bin/"my-cli", "completion")
+  end
+end
+```
+
+The helper passes the shell name (`bash`/`zsh`/`fish`) as the trailing argv,
+which matches the plugin's positional `<shell>` argument exactly.
+
+### Nix
+
+`installShellCompletion` from `installShellFiles` accepts the artifacts
+directly with no `--cmd` rename:
+
+```nix
+{ stdenv, installShellFiles }:
+stdenv.mkDerivation {
+  # ...
+  nativeBuildInputs = [ installShellFiles ];
+
+  postInstall = lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+    installShellCompletion --cmd my-cli \
+      --bash <($out/bin/my-cli completion bash) \
+      --zsh  <($out/bin/my-cli completion zsh)  \
+      --fish <($out/bin/my-cli completion fish)
+  '';
+}
+```
+
+The `canExecute` guard is required: under cross-compilation the host can't
+run the target binary. Cross builds will skip completion install — see the
+**Cross-compile note** below for the workaround.
+
+### AUR (Arch Linux)
+
+Standard PKGBUILD pattern:
+
+```bash
+package() {
+  install -Dm755 my-cli "$pkgdir/usr/bin/my-cli"
+  install -Dm644 <("$pkgdir/usr/bin/my-cli" completion bash) \
+    "$pkgdir/usr/share/bash-completion/completions/my-cli"
+  "$pkgdir/usr/bin/my-cli" completion zsh \
+    > "$pkgdir/usr/share/zsh/site-functions/_my-cli"
+  "$pkgdir/usr/bin/my-cli" completion fish \
+    > "$pkgdir/usr/share/fish/vendor_completions.d/my-cli.fish"
+}
+```
+
+### Debian
+
+For bash-only completion (the common case in Debian), add a
+`debian/my-cli.bash-completion` file via `dh_bash-completion`. The newer
+`dh-shell-completions` helper supports zsh/fish too.
+
+## Cross-compile note (nixpkgs)
+
+`bun build --compile` produces per-platform binaries. When nixpkgs builds
+aarch64-darwin from x86_64-linux (and vice versa), the binary cannot run at
+build time and the `canExecute` guard above skips completion install — your
+aarch64-darwin users get no completion.
+
+The fix is to **ship pre-generated completion files in the npm tarball** so
+the derivation never needs to invoke the binary. Add a `prepublishOnly`
+script:
+
+```jsonc
+// package.json
+{
+  "scripts": {
+    "prepublishOnly": "bun run dist/my-cli.js completion bash --output-dir completions/",
+  },
+  "files": ["dist", "completions"],
+}
+```
+
+Then a Nix derivation can copy the files verbatim with no `canExecute` guard:
+
+```nix
+postInstall = ''
+  installShellCompletion \
+    --bash completions/my-cli \
+    --zsh  completions/_my-cli \
+    --fish completions/my-cli.fish
+'';
+```
+
+Passing `--output-dir <path>` writes **all configured shells** in one
+invocation (bash/zsh/fish by default; restrict via the `shells` option), with
+canonical filenames the helpers consume directly.
+
+## Drift handling
+
+A pure-static script is a snapshot of the command tree at the moment you
+generated it. After upgrading the CLI, regenerate:
+
+```sh
+my-cli completion bash > ~/.local/share/bash-completion/completions/my-cli
+```
+
+Every generated script's first line includes the binary name and version it
+was built from, so users (and `diff`) can spot stale completion files at a
+glance:
+
+```text
+# completion script for my-cli v1.0.0 — regenerate with: my-cli completion bash
+```
+
+For installation paths that re-run the CLI on each login (`eval "$(my-cli
+completion bash)"` in `~/.bashrc`), drift is impossible — the cost is paying
+the CLI's startup time on every shell launch.
+
+## Limitations (v1)
+
+- **No dynamic value completion.** Per-flag/per-arg `complete?:` callbacks
+  are intentionally deferred to a future minor bump. Adding them is
+  non-breaking, so v1 ships pure-static today and grows into a hybrid
+  later. Use the static `choices` field on flags and args (see
+  [`@crustjs/core`](/docs/modules/core)) for fixed enums today; that's enough
+  for the majority of CLI flags.
+- **No PowerShell.** PowerShell completion is on the v2 roadmap.
+- **`--output-dir` writes every configured shell.** Even if you invoke
+  `my-cli completion bash --output-dir foo/`, the plugin writes `foo/my-cli`,
+  `foo/_my-cli`, and `foo/my-cli.fish`. This matches the packaging-time
+  use case where distributors want every artifact in one go. Use the
+  print path (no `--output-dir`) when you want a single shell only.
+- **Strict identifier and choice-value validation.** Command names, flag
+  names, flag aliases, short flags, arg names, and `binName` must match
+  `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`. Choice values (on flags **and** args)
+  must match `/^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/` — enough for things like
+  `us-east-1`, `node@20`, or `text/plain`, but not whitespace, quotes, or
+  shell metacharacters. The plugin throws at `setup()` time with a clear
+  error if any input falls outside this set, rather than silently mis-quote
+  the generated script. Description text is free-form and goes through
+  per-shell escaping; control characters (newlines, NUL, ESC, …) are
+  scrubbed at the boundary so they cannot break out of comment lines or
+  shell-quoted strings.

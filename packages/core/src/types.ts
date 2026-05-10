@@ -671,22 +671,36 @@ export interface CommandMeta {
 	 */
 	aliases?: readonly string[];
 	/**
-	 * When `true`, omit this command from any tooling that enumerates the
-	 * command tree for users — help output, generated man pages, skill
-	 * descriptors, completion candidate lists, and similar surfaces.
+	 * When `true`, omit this command from every tooling surface that
+	 * enumerates the command tree for users:
 	 *
-	 * The command is **only hidden from listings**: it stays fully invocable
-	 * by name (or alias), routing is unchanged, and it can still surface
-	 * through tooling that looks up specific commands rather than
-	 * enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
+	 * - `helpPlugin` rendered output (subcommand list + USAGE token)
+	 * - `@crustjs/man` generated man pages (`SUBCOMMANDS` section)
+	 * - `completionPlugin` candidate lists (recursively — hidden
+	 *   subcommands and their descendants never appear in generated
+	 *   bash/zsh/fish scripts)
+	 * - `didYouMeanPlugin` typo suggestions and "Available commands"
+	 *   list (so internal names never surface in error UX)
+	 * - `skillPlugin` manifests
 	 *
-	 * Intended for internal/runtime commands like a `__complete` shell-
-	 * completion entrypoint. Marking a user-facing command `hidden` is
-	 * supported but unusual.
+	 * The command is **only hidden from listings**: routing in
+	 * `@crustjs/core` does not consult `meta.hidden`, so it stays fully
+	 * invocable by direct name (or alias). The intended use case is
+	 * internal/runtime commands like a `__complete` shell-completion
+	 * entrypoint. Marking a user-facing command `hidden` is supported but
+	 * unusual.
 	 *
-	 * Tooling contract: any renderer or generator that walks `subCommands`
-	 * to produce a user-facing listing should skip nodes where
-	 * `meta.hidden === true`.
+	 * **Scope: commands only.** There is no analogous `hidden` field on
+	 * `FlagDef` or `ArgDef`; flags and positional arguments always surface
+	 * in help, completion, and man output. If you need a flag that does
+	 * not advertise itself, the workaround is to register it through a
+	 * plugin's `setup()` hook without describing it (omit `description`),
+	 * which suppresses its description body but still lists the spelling
+	 * — there is intentionally no full hide mechanism at the flag layer.
+	 *
+	 * Tooling contract: any renderer or generator that walks
+	 * `subCommands` to produce a user-facing listing should skip nodes
+	 * where `meta.hidden === true`.
 	 *
 	 * @example
 	 * meta: { name: "__complete", hidden: true, description: "Internal" }

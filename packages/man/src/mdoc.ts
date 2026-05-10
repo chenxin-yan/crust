@@ -84,14 +84,66 @@ function formatUsagePlain(
 	return parts.join(" ");
 }
 
+/**
+ * Render the labels for a single flag definition for the `OPTIONS`
+ * tagged-list. The output is a comma-joined sequence of spellings:
+ *
+ *   `-o, --output, --out, --no-output, --no-out`
+ *
+ * Order: short flag first (when present), canonical long form, every
+ * declared long alias (`def.aliases`), then — for boolean flags that
+ * have not opted out of negation — the `--no-<spelling>` forms in the
+ * same order. Long aliases are surfaced so the man page documents the
+ * complete callable surface of the flag; without them users only see
+ * the canonical name and have no way to discover that `--out` is
+ * equivalent.
+ */
 function formatFlagLabels(name: string, def: FlagDef): string {
+	const longNames: string[] = [name];
+	if (def.aliases) {
+		for (const alias of def.aliases) longNames.push(alias);
+	}
 	const labels: string[] = [];
 	if (def.short) labels.push(`-${def.short}`);
-	labels.push(`--${name}`);
+	for (const long of longNames) labels.push(`--${long}`);
 	if (def.type === "boolean" && !def.noNegate) {
-		labels.push(`--no-${name}`);
+		for (const long of longNames) labels.push(`--no-${long}`);
 	}
 	return labels.join(", ");
+}
+
+/**
+ * Render a trailing `[choices: a, b, c]` hint when the supplied list is
+ * non-empty. Returns an empty string otherwise so the caller can
+ * unconditionally concatenate.
+ *
+ * Takes the raw `choices` array directly rather than a `def` object —
+ * `FlagDef` and `ArgDef` are discriminated unions whose number/boolean
+ * variants do not carry `choices` at all, so a structural `{ choices? }`
+ * parameter fails TS excess-property checks. Each caller already has
+ * access to `def.choices` (typed as `readonly string[] | undefined`),
+ * so passing it directly avoids the union narrowing.
+ */
+function formatChoicesSuffix(choices: readonly string[] | undefined): string {
+	if (!choices || choices.length === 0) return "";
+	return `[choices: ${choices.join(", ")}]`;
+}
+
+/**
+ * Join a flag/arg description, its default-value suffix, and its
+ * choices-suffix into a single mdoc body. Each piece is optional;
+ * separators collapse so we never emit a stray double-space.
+ */
+function formatDescriptionWithChoices(
+	description: string | undefined,
+	defaultValue: unknown,
+	choices: readonly string[] | undefined,
+): string {
+	const base = formatDescription(description, defaultValue);
+	const suffix = formatChoicesSuffix(choices);
+	if (!suffix) return base;
+	if (!base) return suffix;
+	return `${base} ${suffix}`;
 }
 
 function dtTitle(name: string): string {
@@ -140,6 +192,11 @@ function formatSubcommandLabel(
 function longestSubcommandWidth(command: CommandNode): string {
 	let max = 8;
 	for (const [name, sub] of Object.entries(command.subCommands)) {
+		// Hidden subcommands are not rendered (see SUBCOMMANDS loop) and
+		// therefore must not influence the column width — a long hidden
+		// internal command name would otherwise stretch the layout for
+		// every visible peer.
+		if (sub.meta.hidden === true) continue;
 		const label = formatSubcommandLabel(name, sub.meta.aliases);
 		max = Math.max(max, label.length);
 	}
@@ -208,13 +265,21 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(escapeMdocBodyLine(rawLine));
 	}
 
-	const subNames = Object.keys(root.subCommands);
-	if (subNames.length > 0) {
+	// Filter subcommands marked `meta.hidden: true`. Hidden subcommands
+	// remain invocable by direct name (the router does not consult
+	// `meta.hidden`); they are excluded from generated documentation so
+	// internal commands (e.g. `__complete`) do not surface in published
+	// man pages. Matches the contract upheld by `helpPlugin` and
+	// `completionPlugin`.
+	const visibleSubEntries = Object.entries(root.subCommands).filter(
+		([, sub]) => sub.meta.hidden !== true,
+	);
+	if (visibleSubEntries.length > 0) {
 		lines.push(".Sh SUBCOMMANDS");
 		lines.push(`.Bl -tag -width ${longestSubcommandWidth(root)}`);
-		for (const subName of subNames.sort()) {
-			const sub = root.subCommands[subName];
-			if (!sub) continue;
+		for (const [subName, sub] of visibleSubEntries.sort(([a], [b]) =>
+			a.localeCompare(b),
+		)) {
 			// `.It Nm <name> (alias1, alias2)` keeps the canonical name marked up
 			// as a name macro while letting aliases ride along as plain text.
 			// Parens and commas are not mdoc macros, so no escaping is needed.
@@ -238,7 +303,15 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		for (const [flagName, def] of flagEntries) {
 			const labels = formatFlagLabels(flagName, def);
 			lines.push(`.It Sy ${labels}`);
-			const body = formatDescription(def.description, def.default).trim();
+			// `choices` only exists on string-typed flag variants; number/
+			// boolean flags narrow to `undefined` and `formatChoicesSuffix`
+			// renders that as the empty string.
+			const choices = def.type === "string" ? def.choices : undefined;
+			const body = formatDescriptionWithChoices(
+				def.description,
+				def.default,
+				choices,
+			).trim();
 			if (body) {
 				lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 			}
@@ -251,7 +324,12 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".Bl -tag -width 12n");
 		for (const arg of root.args) {
 			lines.push(`.It Ql ${formatArgToken(arg)}`);
-			const body = formatDescription(arg.description, arg.default).trim();
+			const choices = arg.type === "string" ? arg.choices : undefined;
+			const body = formatDescriptionWithChoices(
+				arg.description,
+				arg.default,
+				choices,
+			).trim();
 			if (body) {
 				lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 			}
