@@ -125,7 +125,17 @@ export function createStore<const F extends FieldsDef>(
 			if (value === undefined) continue;
 
 			try {
-				await def.validate(value as never);
+				const result = await def.validate(value as never);
+				// Fail-fast migration guard: FieldDef.validate is contractually
+				// `void | Promise<void>` — it throws on failure. If a caller
+				// returns a value (e.g. the legacy `{ ok, value } | { ok, issues }`
+				// shape that earlier docs incorrectly showed), surface it loudly
+				// instead of silently treating it as success.
+				if (result !== undefined) {
+					throw new TypeError(
+						`FieldDef.validate must return void. Throw an Error to reject the value (see @crustjs/store validation docs).`,
+					);
+				}
 			} catch (cause) {
 				const message =
 					cause instanceof Error ? cause.message : "Validation failed";

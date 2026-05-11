@@ -414,7 +414,9 @@ describe("input — validation", () => {
 	it("shows error message when validation fails", async () => {
 		const promise = input({
 			message: "Email?",
-			validate: (v) => (v.includes("@") ? true : "Must contain @"),
+			validate: (v) => {
+				if (!v.includes("@")) throw new Error("Must contain @");
+			},
 		});
 
 		await tick();
@@ -445,7 +447,7 @@ describe("input — validation", () => {
 			message: "Name?",
 			validate: (v) => {
 				validateCallCount++;
-				return v.length >= 2 ? true : "Too short";
+				if (v.length < 2) throw new Error("Too short");
 			},
 		});
 
@@ -473,7 +475,7 @@ describe("input — validation", () => {
 			message: "Code?",
 			validate: async (v) => {
 				await new Promise((r) => setTimeout(r, 5));
-				return v === "1234" ? true : "Wrong code";
+				if (v !== "1234") throw new Error("Wrong code");
 			},
 		});
 
@@ -496,7 +498,9 @@ describe("input — validation", () => {
 		const promise = input({
 			message: "Name?",
 			default: "",
-			validate: (v) => (v.length > 0 ? true : "Required"),
+			validate: (v) => {
+				if (v.length === 0) throw new Error("Required");
+			},
 		});
 
 		await tick();
@@ -1024,10 +1028,12 @@ async function _inputTypeInferenceTests() {
 	});
 	const _portIsNumber: number = port;
 
-	// Function-validator overload — resolves to string.
+	// Function-validator overload — resolves to string. Throw-on-fail contract.
 	const name = await input({
 		message: "?",
-		validate: (v) => v.length > 0 || "required",
+		validate: (v) => {
+			if (v.length === 0) throw new Error("required");
+		},
 	});
 	const _nameIsString: string = name;
 

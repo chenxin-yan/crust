@@ -284,7 +284,6 @@ import type {
 	SpinnerOptions,
 	SpinnerType,
 	ValidateFn,
-	ValidateResult,
 } from "../src/index.ts";
 
 describe("type exports", () => {
@@ -339,8 +338,8 @@ describe("type exports", () => {
 			task: async () => "done",
 		};
 		const _spinnerType: SpinnerType = "dots";
-		const _validateResult: ValidateResult = true;
-		const _validateFn: ValidateFn<string> = () => true;
+		// ValidateFn<T> is throw-on-fail / void-on-success since 0.x.0.
+		const _validateFn: ValidateFn<string> = () => {};
 		const _partialTheme: PartialPromptTheme = {};
 		const _normalized: NormalizedChoice<string> = {
 			label: "a",

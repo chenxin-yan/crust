@@ -86,33 +86,33 @@ export type Choice<T> =
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Result of a validation function.
- * - `true` means valid
- * - A `string` is the error message to display
- */
-export type ValidateResult = true | string;
-
-/**
  * Validation function for prompt values.
- * May be synchronous or asynchronous.
+ *
+ * Throw an `Error` to reject the input — the error's `message` is rendered
+ * inline below the prompt. Return `void` (or `Promise<void>`) when the value
+ * is valid. May be synchronous or asynchronous.
+ *
+ * This matches the throw-on-fail contract used by `@crustjs/store`'s
+ * `FieldDef.validate` and the schema-driven `parseValue()`/`field()`
+ * helpers — one rule across the workspace.
  *
  * @example
  * ```ts
  * const validateEmail: ValidateFn<string> = (value) => {
- *   if (!value.includes("@")) return "Must be a valid email address";
- *   return true;
+ *   if (!value.includes("@")) {
+ *     throw new Error("Must be a valid email address");
+ *   }
  * };
  * ```
  */
-export type ValidateFn<T> = (
-	value: T,
-) => ValidateResult | Promise<ValidateResult>;
+export type ValidateFn<T> = (value: T) => void | Promise<void>;
 
 /**
  * Polymorphic validate slot for text-input prompts.
  *
  * Accepts either:
- * - a {@link ValidateFn} (returns `true` for valid or a string error), or
+ * - a {@link ValidateFn} (throw an `Error` to reject; return `void` on
+ *   success), or
  * - a {@link StandardSchemaV1} schema (e.g. Zod, Valibot, Effect Schema)
  *   that parses the raw `string` input into a transformed `Output`.
  *

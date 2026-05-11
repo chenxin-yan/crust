@@ -12,7 +12,7 @@ import { Callout } from "fumadocs-ui/components/callout";
 </Callout>
 
 <Callout>
-  Both `input()` and `password()` accept either a `(value: string) => true | string` validator **or** any [Standard Schema v1](https://standardschema.dev/) object directly (Zod, Valibot, Effect Schema, ArkType, …). When a schema is supplied, the prompt resolves to the schema's *transformed output* type — see [Schema validation](#schema-validation) below.
+  Both `input()` and `password()` accept either a `(value: string) => void | Promise<void>` validator (throw an `Error` to reject) **or** any [Standard Schema v1](https://standardschema.dev/) object directly (Zod, Valibot, Effect Schema, ArkType, …). When a schema is supplied, the prompt resolves to the schema's *transformed output* type — see [Validation](#validation) below.
 </Callout>
 
 All prompt UI renders to **stderr** so it never pollutes piped stdout. Every prompt accepts an `initial` option to skip interactivity, which is useful for prefilling from CLI flags or CI environments.
@@ -71,7 +71,9 @@ const name = await input({
   message: "What is your name?",
   placeholder: "John Doe",
   default: "anonymous",
-  validate: (v) => v.length > 0 || "Name is required",
+  validate: (v) => {
+    if (v.length === 0) throw new Error("Name is required");
+  },
 });
 ```
 
@@ -81,10 +83,10 @@ const name = await input({
 | `placeholder` | `string`             | —       | Placeholder text shown when input is empty    |
 | `default`     | `string`             | —       | Value used when the user submits empty input  |
 | `initial`     | `string`             | —       | Skip prompt and return this value immediately |
-| `validate`    | `ValidateFn<string>` \| Standard Schema v1 | — | Function (returns `true` or error string) **or** Standard Schema (resolves to its transformed `Output`) |
+| `validate`    | `ValidateFn<string>` \| Standard Schema v1 | — | Function (throw to reject) **or** Standard Schema (resolves to its transformed `Output`) |
 | `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
 
-See [Schema validation](#schema-validation) for the schema shape and typed return values.
+See [Validation](#validation) for the schema shape and typed return values.
 
 ### `password(options)`
 
@@ -93,7 +95,9 @@ Masked text input. Characters are displayed as the mask character, which default
 ```ts
 const secret = await password({
   message: "Enter your password:",
-  validate: (v) => v.length >= 8 || "Must be at least 8 characters",
+  validate: (v) => {
+    if (v.length < 8) throw new Error("Must be at least 8 characters");
+  },
 });
 ```
 
@@ -102,14 +106,14 @@ const secret = await password({
 | `message`  | `string`             | —       | Prompt message                                |
 | `mask`     | `string`             | `"*"`   | Character used to mask the input              |
 | `initial`  | `string`             | —       | Skip prompt and return this value immediately |
-| `validate` | `ValidateFn<string>` \| Standard Schema v1 | — | Function (returns `true` or error string) **or** Standard Schema (resolves to its transformed `Output`) |
+| `validate` | `ValidateFn<string>` \| Standard Schema v1 | — | Function (throw to reject) **or** Standard Schema (resolves to its transformed `Output`) |
 | `theme`    | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
 
-## Schema validation
+## Validation
 
 The `validate` slot on `input()` and `password()` is **polymorphic**:
 
-- a `(value: string) => true | string | Promise<true | string>` validator, or
+- a `(value: string) => void | Promise<void>` validator that **throws an `Error` to reject** the input (the error's `message` renders inline), or
 - any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
 
 When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success. There is no second-pass parse step.
@@ -450,8 +454,7 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `PromptTheme`         | Complete theme with all style slots              |
 | `PartialPromptTheme`  | Partial theme for overrides                      |
 | `Choice<T>`           | Choice item: string or `{ label, value, hint? }` |
-| `ValidateFn<T>`       | Validation function type                         |
-| `ValidateResult`      | `true` or an error message string                |
+| `ValidateFn<T>`       | Validation function type — `(value: T) => void \| Promise<void>`, throws on failure |
 | `KeypressEvent`       | Structured keypress event                        |
 | `PromptConfig<S,T>`   | Configuration for `runPrompt()`                  |
 | `SubmitResult<T>`     | Submit action type                               |

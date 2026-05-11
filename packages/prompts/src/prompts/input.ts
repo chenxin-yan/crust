@@ -51,7 +51,7 @@ async function parseShortCircuit<Output>(
  * Options for the {@link input} prompt.
  *
  * The `validate` slot is polymorphic: it accepts either a classic
- * {@link ValidateFn} (returning `true` or an error string) or a
+ * {@link ValidateFn} (throws an `Error` to reject the input) or a
  * {@link StandardSchemaV1} schema (Zod, Valibot, Effect Schema, …). When a
  * schema is supplied, the prompt resolves to the schema's transformed
  * `Output` type instead of the raw `string`.
@@ -65,7 +65,9 @@ async function parseShortCircuit<Output>(
  * // Function shape — resolves to string
  * const name = await input({
  *   message: "What is your name?",
- *   validate: (v) => v.length > 0 || "Name is required",
+ *   validate: (v) => {
+ *     if (v.length === 0) throw new Error("Name is required");
+ *   },
  * });
  * ```
  *
@@ -89,7 +91,7 @@ export interface InputOptions<Output = string> {
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
 	/**
-	 * Validation: either a function returning `true | string` or a
+	 * Validation: either a `ValidateFn` (throw an `Error` to reject) or a
 	 * Standard Schema v1 object whose parsed output replaces the raw input.
 	 */
 	readonly validate?: PromptValidate<Output>;
@@ -146,10 +148,25 @@ function createHandleKey<Output>(
 					return submit((result as { value: Output }).value);
 				}
 
-				// Function path — preserved unchanged.
-				const fnResult = await (validate as ValidateFn<string>)(submitValue);
-				if (fnResult !== true) {
-					return { ...state, error: fnResult };
+				// Function path — throw-on-fail contract. Catch the thrown
+				// `Error` and render its message inline (same as the schema
+				// path's first-issue rendering).
+				try {
+					const fnResult = await (validate as ValidateFn<string>)(submitValue);
+					// Fail-fast migration guard: ValidateFn used to accept a
+					// `true | string` return shape. Now it returns `void` and
+					// throws on failure. If a caller still returns a value, surface
+					// it loudly instead of silently misinterpreting it.
+					if (fnResult !== undefined) {
+						throw new TypeError(
+							`validate() returned ${typeof fnResult === "string" ? `"${fnResult}"` : String(fnResult)}; ValidateFn must return void. Throw an Error to reject the input (see @crustjs/prompts ValidateFn docs).`,
+						);
+					}
+				} catch (err) {
+					return {
+						...state,
+						error: err instanceof Error ? err.message : "Validation failed",
+					};
 				}
 				return submit(submitValue);
 			}

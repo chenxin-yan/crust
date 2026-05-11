@@ -17,14 +17,13 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 const INVALID_NAME_CHARS = /[<>:"|?*\\]/;
-function validateProjectName(name: string): true | string {
+function validateProjectName(name: string): void {
 	if (!name) {
-		return "Project name cannot be empty";
+		throw new Error("Project name cannot be empty");
 	}
 	if (INVALID_NAME_CHARS.test(name)) {
-		return `Project name contains invalid characters: ${name}`;
+		throw new Error(`Project name contains invalid characters: ${name}`);
 	}
-	return true;
 }
 
 function parseTemplateStyle(
