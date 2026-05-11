@@ -7,7 +7,6 @@
     "crust",
     "create",
     "validate",
-    "schema-utils",
     "progress",
     "prompts",
     "style",

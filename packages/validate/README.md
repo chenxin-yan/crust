@@ -8,11 +8,6 @@ Valibot, ArkType, Sury, or anything else that implements the spec — and the
 package introspects what it can (Zod and Effect natively), then validates
 arguments, flags, prompts, and store fields against your schema.
 
-> The vendor-aware introspection layer lives in
-> [`@crustjs/schema-utils`](https://www.npmjs.com/package/@crustjs/schema-utils).
-> Consumers of `@crustjs/validate`'s public surface do not need to import it
-> directly — `arg`, `flag`, `field`, etc. forward through it transparently.
-
 ```sh
 bun add @crustjs/validate
 # Optional, depending on your schema library:

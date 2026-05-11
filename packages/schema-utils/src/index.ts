@@ -1,12 +1,12 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/schema-utils — Standard Schema introspection helpers
+// @crustjs/schema-utils — Standard Schema introspection helpers (INTERNAL)
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Vendor-aware introspection layer shared across the Crust ecosystem.
-// Public consumers: `@crustjs/validate` (root API surface) and
-// `@crustjs/store` (TP-018, store-field metadata extraction).
-//
-// Pre-stability — version `0.0.1`. Surface unstable until `0.1.0`.
+// Internal Crust workspace package. Published to npm only so that the
+// `dependencies` of `@crustjs/validate` (and, later, `@crustjs/store`)
+// resolve for external consumers. **Not part of the public Crust API** —
+// may change in any release without a deprecation cycle. Do not import
+// from `@crustjs/schema-utils` outside this workspace.
 
 // ── Boundary assertions ─────────────────────────────────────────────────────
 export { assertStandardSchema, isStandardSchema } from "./assertions.ts";

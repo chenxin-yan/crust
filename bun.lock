@@ -171,6 +171,7 @@
       "name": "@crustjs/schema-utils",
       "version": "0.0.1",
       "dependencies": {
+        "@crustjs/core": "workspace:*",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
@@ -181,7 +182,6 @@
         "zod": "^4.0.0",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:*",
         "typescript": "catalog:",
       },
     },

@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/schema-utils",
 	"version": "0.0.1",
-	"description": "Vendor-aware Standard Schema introspection helpers shared by @crustjs/validate and @crustjs/store",
+	"description": "Internal Crust workspace package. Do not depend on directly — use @crustjs/validate.",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
@@ -10,20 +10,6 @@
 		"url": "git+https://github.com/chenxin-yan/crust.git",
 		"directory": "packages/schema-utils"
 	},
-	"homepage": "https://crustjs.com",
-	"bugs": {
-		"url": "https://github.com/chenxin-yan/crust/issues"
-	},
-	"keywords": [
-		"standard-schema",
-		"schema",
-		"introspection",
-		"zod",
-		"effect",
-		"cli",
-		"bun",
-		"typescript"
-	],
 	"files": [
 		"dist"
 	],
@@ -51,10 +37,10 @@
 		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
 	},
 	"dependencies": {
+		"@crustjs/core": "workspace:*",
 		"@standard-schema/spec": "^1.1.0"
 	}
 }
