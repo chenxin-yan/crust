@@ -1,31 +1,16 @@
-// Regression test: parse and store helpers must throw actionable
-// `CrustError("DEFINITION")` errors when handed a non-Standard-Schema
-// value, instead of letting raw `TypeError: Cannot read properties of
-// undefined (reading 'validate')` escape from internal `~standard.validate`
-// access.
+// Regression test: parse helper must throw an actionable
+// `CrustError("DEFINITION")` when handed a non-Standard-Schema value,
+// instead of letting raw `TypeError: Cannot read properties of undefined
+// (reading 'validate')` escape from internal `~standard.validate` access.
+//
+// `field()` lives in `@crustjs/store` as of 0.3.0; its equivalent
+// regression test lives in `packages/store/src/field.test.ts`.
 
 import { describe, expect, it } from "bun:test";
 import { CrustError } from "@crustjs/core";
-import { field, parseValue } from "../src/index.ts";
+import { parseValue } from "../src/index.ts";
 
 const NOT_A_SCHEMA: unknown = { foo: "bar" };
-
-function expectDefinitionError(
-	thunk: () => unknown | Promise<unknown>,
-	matcher: RegExp,
-): void {
-	try {
-		const out = thunk();
-		if (out instanceof Promise) {
-			throw new Error("expected synchronous throw");
-		}
-		throw new Error("expected throw");
-	} catch (err) {
-		expect(err).toBeInstanceOf(CrustError);
-		expect((err as CrustError).code).toBe("DEFINITION");
-		expect((err as CrustError).message).toMatch(matcher);
-	}
-}
 
 async function expectAsyncDefinitionError(
 	thunk: () => Promise<unknown>,
@@ -46,15 +31,6 @@ describe("parse helper rejects non-Standard-Schema input at construction", () =>
 	it("parseValue throws DEFINITION for non-schema", async () => {
 		await expectAsyncDefinitionError(
 			() => parseValue(NOT_A_SCHEMA as never, "x" as never),
-			/Standard Schema v1/i,
-		);
-	});
-});
-
-describe("store field helper rejects non-Standard-Schema input at construction", () => {
-	it("field() throws DEFINITION for non-schema", () => {
-		expectDefinitionError(
-			() => field(NOT_A_SCHEMA as never),
 			/Standard Schema v1/i,
 		);
 	});

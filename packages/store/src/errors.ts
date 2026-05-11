@@ -50,6 +50,19 @@ export interface ValidationErrorDetails {
 }
 
 /**
+ * Contextual details attached to a `DEFINITION` error.
+ *
+ * Returned when a `field()` call cannot produce a valid `FieldDef` from the
+ * provided schema and options — e.g. the input is not a Standard Schema v1
+ * object, or the schema is of an unknown vendor and `opts.type` was not
+ * supplied so the runtime CLI type cannot be inferred.
+ */
+export interface DefinitionErrorDetails {
+	/** The schema vendor name, when the failing input was a Standard Schema. */
+	vendor?: string;
+}
+
+/**
  * Maps each {@link StoreErrorCode} to its structured details type.
  *
  * Used internally for conditional constructor parameters and type narrowing.
@@ -59,6 +72,7 @@ export interface StoreErrorDetailsMap {
 	PARSE: ParseErrorDetails;
 	IO: IOErrorDetails;
 	VALIDATION: ValidationErrorDetails;
+	DEFINITION: DefinitionErrorDetails;
 }
 
 /**
@@ -68,6 +82,7 @@ export interface StoreErrorDetailsMap {
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator
+ * - `DEFINITION` — `field()` cannot produce a valid `FieldDef` from the given schema/options
  *
  * @example
  * ```ts

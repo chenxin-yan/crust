@@ -304,15 +304,14 @@ const store = createStore({
 await store.write({ port: 0, host: "localhost" });
 ```
 
-### Schema-Based Validation
+### Schema-driven validation
 
-For schema-driven validation, use [`field()`](/docs/modules/validate#store-field-validation)
-from `@crustjs/validate`. The factory builds a complete `FieldDef` from a
-schema — type, default, description, and the per-field validator are
-all derived in one call:
+The built-in `field()` factory builds a complete `FieldDef` from any
+Standard Schema — type, default, description, and the per-field validator
+are all derived in one call:
 
 ```ts
-import { field } from "@crustjs/validate";
+import { configDir, createStore, field } from "@crustjs/store";
 import { z } from "zod";
 
 const store = createStore({
@@ -324,14 +323,48 @@ const store = createStore({
 });
 ```
 
-`validate` is called on `read`, `write`, `update`, and `patch` — never on `reset`. If a validator throws, the operation is aborted and a `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
+Effect users wrap their schema once with `Schema.standardSchemaV1(...)`
+before passing it to `field()`:
 
-Store field validators are validation-only. Schema transforms/coercions in the schema passed to `field()` are not written back into store state.
+```ts
+import * as Schema from "effect/Schema";
+import { configDir, createStore, field } from "@crustjs/store";
 
-For more on the `field()` factory — including the runtime-vs-type-level
-behavior of schema-derived defaults — see
-[Store field validation in `@crustjs/validate`](/docs/modules/validate#store-field-validation).
-Effect users wrap their schema once with `Schema.standardSchemaV1(...)` before passing it to `field()`.
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  fields: {
+    theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
+  },
+});
+```
+
+`validate` is called on `read`, `write`, `update`, and `patch` — never on
+`reset`. If a validator throws, the operation is aborted and a
+`CrustStoreError` with `VALIDATION` code is thrown with structured issues.
+
+Store field validators are validation-only. Schema transforms/coercions
+in the schema passed to `field()` are not written back into store state.
+
+#### Schema-derived defaults and TypeScript
+
+Standard Schema v1 has no spec-portable type-level access to schema
+defaults. As a result:
+
+- `field(z.string().default("x"))` populates `default: "x"` at runtime,
+  but the inferred config type is `string | undefined` (NOT narrowed).
+- `field(z.string(), { default: "x" })` populates `default: "x"` AND
+  narrows the inferred config type to `string`.
+
+Prefer the explicit form when the field is required to always have a
+value at use sites.
+
+#### `field()` throws on invalid input
+
+`field()` throws `CrustStoreError("DEFINITION")` when handed a
+non-Standard-Schema value, or when the runtime CLI type cannot be
+inferred from the schema and `opts.type` was not supplied. The thrown
+error's `details.vendor` field carries the schema's vendor name (when
+available) to help locate the offending call site.
 
 <Callout type="warn" title="Effect ≥ 3.14.2 required">
   Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the

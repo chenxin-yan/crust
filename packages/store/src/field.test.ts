@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { CrustError } from "@crustjs/core";
+import type { StandardSchema } from "@crustjs/schema-utils";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
-import { field } from "./store.ts";
-import type { StandardSchema } from "./types.ts";
+import { CrustStoreError } from "./errors.ts";
+import { field } from "./field.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // field(schema, opts?) — runtime FieldDef factory
@@ -56,7 +56,7 @@ describe("field() — runtime shape", () => {
 		expect(def.description).toBe("Theme");
 	});
 
-	it("throws CrustError DEFINITION when type cannot be inferred and opts.type is missing", () => {
+	it("throws CrustStoreError DEFINITION when type cannot be inferred and opts.type is missing", () => {
 		// Custom Standard Schema with unknown vendor — no type inference.
 		const opaque: StandardSchema<unknown, unknown> = {
 			"~standard": {
@@ -65,7 +65,15 @@ describe("field() — runtime shape", () => {
 				validate: (v) => ({ value: v }),
 			},
 		};
-		expect(() => field(opaque)).toThrow(CrustError);
+		expect(() => field(opaque)).toThrow(CrustStoreError);
+		try {
+			field(opaque);
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			if (err instanceof CrustStoreError && err.is("DEFINITION")) {
+				expect(err.details.vendor).toBe("valibot-fake");
+			}
+		}
 	});
 
 	it("accepts explicit type for unknown-vendor schemas", () => {
@@ -80,9 +88,9 @@ describe("field() — runtime shape", () => {
 		expect(def.type).toBe("string");
 	});
 
-	it("throws DEFINITION error for non-Standard-Schema input", () => {
+	it("throws CrustStoreError DEFINITION for non-Standard-Schema input", () => {
 		// biome-ignore lint/suspicious/noExplicitAny: testing runtime guard
-		expect(() => field({} as any)).toThrow(CrustError);
+		expect(() => field({} as any)).toThrow(CrustStoreError);
 	});
 });
 

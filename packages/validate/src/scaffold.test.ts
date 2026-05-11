@@ -8,20 +8,19 @@ describe("@crustjs/validate scaffold", () => {
 		expect(typeof mod.arg).toBe("function");
 		expect(typeof mod.flag).toBe("function");
 		expect(typeof mod.commandValidator).toBe("function");
-		expect(typeof mod.field).toBe("function");
 		expect(typeof mod.parseValue).toBe("function");
 		expect(typeof mod.isStandardSchema).toBe("function");
 		expect(typeof mod.validateStandard).toBe("function");
 		expect(typeof mod.validateStandardSync).toBe("function");
 	});
 
-	it("root entrypoint exports exactly the locked 8-function API surface", async () => {
+	it("root entrypoint exports exactly the locked 7-function API surface", async () => {
+		// `field()` moved to `@crustjs/store` in 0.3.0 (see TP-019).
 		const mod = await import("./index.ts");
 		const exports = Object.keys(mod).sort();
 		expect(exports).toEqual([
 			"arg",
 			"commandValidator",
-			"field",
 			"flag",
 			"isStandardSchema",
 			"parseValue",

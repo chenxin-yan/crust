@@ -6,7 +6,8 @@ Standard Schema-first validation helpers for the [Crust CLI framework](https://c
 [Standard Schema v1](https://standardschema.dev/) object — Zod, Effect,
 Valibot, ArkType, Sury, or anything else that implements the spec — and the
 package introspects what it can (Zod and Effect natively), then validates
-arguments, flags, prompts, and store fields against your schema.
+arguments, flags, and prompts against your schema. For store fields, use
+[`field()` from `@crustjs/store`](https://www.npmjs.com/package/@crustjs/store).
 
 ```sh
 bun add @crustjs/validate
@@ -17,7 +18,7 @@ bun add effect   # wrap with `Schema.standardSchemaV1(...)`
 
 ## Locked public surface
 
-The package exports exactly **eight** functions and one type group from a
+The package exports exactly **seven** functions and one type group from a
 single root entry. The mental model is uniform: schema in, typed value
 out.
 
@@ -26,7 +27,6 @@ out.
 | `arg(name, schema, opts?)` | Define a positional argument |
 | `flag(schema, opts?)` | Define a flag |
 | `commandValidator(handler)` | Wrap a Crust handler with full schema validation |
-| `field(schema, opts?)` | Build a `@crustjs/store` field definition |
 | `parseValue(schema, value)` | Validate + return typed output (throws on failure) |
 | `validateStandard(schema, value)` | Async low-level primitive (returns a result) |
 | `validateStandardSync(schema, value)` | Sync low-level primitive (throws on async schemas) |
@@ -34,7 +34,9 @@ out.
 
 Every helper accepts any Standard Schema v1 object. Vendor-specific
 introspection (Zod, Effect) auto-derives metadata where possible; explicit
-options always win silently.
+options always win silently. Store field construction lives in
+[`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store) (see
+`field()` there).
 
 ## Quick start — Zod
 
@@ -66,9 +68,8 @@ const serve = new Crust("serve")
 ## Quick start — Effect
 
 Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
-passing them to `arg()` / `flag()` / `field()`. The wrapper exposes
-`.ast`, which the registry walks to recover the same metadata Zod gives
-natively.
+passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
+registry walks to recover the same metadata Zod gives natively.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -187,9 +188,10 @@ new Crust("hi")
   .run(commandValidator(({ args }) => { /* args.name: string */ }));
 ```
 
-If `type:` is missing for an unknown vendor, `arg()` / `flag()` /
-`field()` throws a `CrustError("DEFINITION")` naming the failing
-definition and the detected `vendor`.
+If `type:` is missing for an unknown vendor, `arg()` / `flag()` throws a
+`CrustError("DEFINITION")` naming the failing definition and the detected
+`vendor`. (`field()` from `@crustjs/store` throws `CrustStoreError("DEFINITION")`
+in the equivalent case.)
 
 ## Command validation
 
@@ -239,14 +241,11 @@ const port = await parseValue(z.coerce.number().int().positive(), "8080");
 
 ## Store field validation
 
-`field(schema, opts?)` returns a `FieldDef` value that structurally fits
-`@crustjs/store`'s discriminated union — no validate runtime dep needed
-on store's side. Introspection auto-derives `type`, `default`, `array`,
-and `description`; pass `opts` to override any of them silently.
+`field()` moved to [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store)
+in 0.3.0. Import from there:
 
 ```ts
-import { configDir, createStore } from "@crustjs/store";
-import { field } from "@crustjs/validate";
+import { configDir, createStore, field } from "@crustjs/store";
 import { z } from "zod";
 
 const store = createStore({
@@ -259,18 +258,9 @@ const store = createStore({
 });
 ```
 
-### Schema-derived defaults and TypeScript
-
-Standard Schema v1 has no spec-portable type-level access to schema
-defaults. As a result:
-
-- `field(z.string().default("x"))` populates `default: "x"` at runtime,
-  but the inferred config type is `string | undefined` (NOT narrowed).
-- `field(z.string(), { default: "x" })` populates `default: "x"` AND
-  narrows the inferred config type to `string`.
-
-For tight typing of default-bearing fields, prefer the explicit form
-when the field is required to always have a value at use sites.
+See [`@crustjs/store`'s README](https://www.npmjs.com/package/@crustjs/store)
+for the full reference, including the runtime-vs-type-level behaviour of
+schema-derived defaults.
 
 ## Low-level primitives
 
@@ -334,32 +324,29 @@ The `errorStrategy` option on `promptValidator` is gone everywhere. Prompts
 render the first issue inline; `parseValue` throws with all issues in
 `error.details.issues`. There is no toggle.
 
-**`field()` shape change (breaking):**
+## Migrating from 0.2.x
+
+**`field()` moved to `@crustjs/store` (breaking):**
 
 ```ts
-// 0.1.x — schema repeated, validator-only field()
-fields: {
-  theme: {
-    type: "string",
-    default: "light",
-    validate: field(z.enum(["light", "dark"])),
-  },
-}
+// 0.2.x
+import { field } from "@crustjs/validate";
 
-// 0.2.0 — single source of truth
-fields: {
-  theme: field(z.enum(["light", "dark"]).default("light")),
-}
+// 0.3.0
+import { field } from "@crustjs/store";
 ```
 
-Schema-derived defaults populate at runtime but do NOT narrow the TS
-type — see [Schema-derived defaults and TypeScript](#schema-derived-defaults-and-typescript).
+No behaviour change. The factory now throws `CrustStoreError("DEFINITION")`
+instead of `CrustError("DEFINITION")` on invalid input so the error class
+matches the package that owns the store-field surface. `FieldOptions` is
+no longer exported from `@crustjs/validate`; import it from
+`@crustjs/store` if you previously relied on the type.
 
 ## See also
 
 - [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema)
 - [`@crustjs/core`](../core/README.md) — the framework itself
-- [`@crustjs/store`](../store/README.md) — config storage that consumes
-  this package's `field()` factory
+- [`@crustjs/store`](../store/README.md) — config storage with its own
+  schema-driven `field()` factory
 - [`@crustjs/prompts`](../prompts/README.md) — prompts that accept
   Standard Schemas directly via `validate:`

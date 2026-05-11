@@ -5,6 +5,7 @@ import {
 	configDir,
 	createStore,
 	dataDir,
+	field,
 	stateDir,
 } from "./index.ts";
 
@@ -44,6 +45,11 @@ describe("@crustjs/store", () => {
 		expect(typeof CrustStoreError).toBe("function");
 	});
 
+	it("should export field", () => {
+		expect(field).toBeDefined();
+		expect(typeof field).toBe("function");
+	});
+
 	it("should export exactly the documented runtime API surface", async () => {
 		const mod = await import("./index.ts");
 		const exports = Object.keys(mod).sort();
@@ -53,6 +59,7 @@ describe("@crustjs/store", () => {
 			"configDir",
 			"createStore",
 			"dataDir",
+			"field",
 			"stateDir",
 		]);
 	});

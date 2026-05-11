@@ -317,17 +317,15 @@ Merged defaults exist only in memory. The persisted file remains unchanged until
 
 Add per-field validation to enforce config integrity on every read, write, update, and patch. When a `validate` function is configured on a field, validation is **strict by default** — invalid values fail loudly.
 
-### Using `@crustjs/validate`
+### Schema-driven validation
 
-The easiest way to add validation is with [`field()`](https://crustjs.com/docs/modules/validate#store-field-validation)
-from `@crustjs/validate`. The factory builds a complete `FieldDef` from a
-schema — type, default, description, and the per-field validator are
-all derived in one call:
+The easiest way to add validation is with the built-in `field()` factory.
+It builds a complete `FieldDef` from any Standard Schema — type, default,
+description, and the per-field validator are all derived in one call:
 
 ```ts
 import { z } from "zod";
-import { field } from "@crustjs/validate";
-import { createStore, configDir } from "@crustjs/store";
+import { createStore, configDir, field } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
@@ -350,7 +348,7 @@ For Effect schemas, wrap once with `Schema.standardSchemaV1()`:
 
 ```ts
 import * as Schema from "effect/Schema";
-import { field } from "@crustjs/validate";
+import { createStore, configDir, field } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
@@ -359,6 +357,27 @@ const store = createStore({
   },
 });
 ```
+
+#### Schema-derived defaults and TypeScript
+
+Standard Schema v1 has no spec-portable type-level access to schema
+defaults. As a result:
+
+- `field(z.string().default("x"))` populates `default: "x"` at runtime,
+  but the inferred config type is `string | undefined` (NOT narrowed).
+- `field(z.string(), { default: "x" })` populates `default: "x"` AND
+  narrows the inferred config type to `string`.
+
+Prefer the explicit form when the field is required to always have a
+value at use sites.
+
+#### `field()` throws on invalid input
+
+`field()` throws `CrustStoreError("DEFINITION")` when handed a
+non-Standard-Schema value, or when the runtime CLI type cannot be
+inferred from the schema and `opts.type` was not supplied. The thrown
+error's `details.vendor` field carries the schema's vendor name (when
+available) to help locate the offending call site.
 
 > **Effect ≥ 3.14.2 required.** Effect 3.14.2 made `standardSchemaV1(...)`
 > wrappers expose `.ast`, which is what the validate registry walks. On
@@ -369,7 +388,10 @@ const store = createStore({
 
 ### Custom validators
 
-You can also provide a validator function directly on each field:
+You can also provide a validator function directly on each field. Validators
+return `void` on success and **throw** on failure — the thrown `Error`'s
+`message` is captured as the issue text and the field name is used as the
+issue path.
 
 ```ts
 const store = createStore({
@@ -379,25 +401,24 @@ const store = createStore({
       type: "string",
       default: "light",
       validate(value) {
-        const str = value as string;
-        if (str !== "light" && str !== "dark") {
-          return {
-            ok: false,
-            issues: [{ message: 'Must be "light" or "dark"', path: "" }],
-          };
+        if (value !== "light" && value !== "dark") {
+          throw new Error('Must be "light" or "dark"');
         }
-        return { ok: true, value: str };
       },
     },
   },
 });
 ```
 
-The per-field `validate` function follows the `StoreValidator<T>` contract: `(value: unknown) => StoreValidatorResult<T> | Promise<StoreValidatorResult<T>>`, where `StoreValidatorResult<T>` is `{ ok: true, value: T } | { ok: false, issues: StoreValidatorIssue[] }`.
+The per-field `validate` function's contract is
+`(value: V) => void | Promise<void>`. Return `void` (or `Promise<void>`) for
+a valid value; throw an `Error` to reject. Validators are side-effect only —
+they cannot transform the persisted value. Use the built-in `field()` factory
+(above) when you need schema-driven validation.
 
 ### Validation behavior
 
-- **Write**: Validates each field before persisting. If a validator transforms the value, the transformed result is persisted.
+- **Write**: Validates each field before persisting. The persisted value is the input value unchanged — custom validators cannot transform.
 - **Read**: Validates each field after applying defaults. Invalid persisted config fails loudly — no silent fallback to defaults.
 - **Update**: Reads raw config (no validation), applies updater, validates each field, then persists.
 - **Patch**: Reads raw config, applies shallow partial merge, validates each field, then persists.
@@ -412,7 +433,7 @@ try {
   await store.read();
 } catch (err) {
   if (err instanceof CrustStoreError && err.is("VALIDATION")) {
-    // err.details is { operation: "read" | "write" | "update" | "patch", issues: StoreValidationIssue[] }
+    // err.details is { operation: "read" | "write" | "update" | "patch", issues: StoreValidatorIssue[] }
     console.error(`Validation failed during ${err.details.operation}:`);
     for (const issue of err.details.issues) {
       console.error(`  ${issue.path || "(root)"}: ${issue.message}`);

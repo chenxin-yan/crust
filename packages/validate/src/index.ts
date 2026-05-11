@@ -9,7 +9,8 @@
 // Effect users wrap raw schemas with `Schema.standardSchemaV1(...)` once
 // before passing them here. The previously deprecated `/zod`, `/effect`,
 // and `/standard` subpaths were removed in 0.2.0 — there is now only the
-// single root entry.
+// single root entry. Store-field construction (`field()`) lives in
+// `@crustjs/store` as of 0.3.0.
 
 // ── Command DSL ─────────────────────────────────────────────────────────────
 export { commandValidator } from "./command.ts";
@@ -21,14 +22,11 @@ export type {
 	ArgDef$ as ArgDef,
 	ArgOptions,
 	CommandValidatorHandler,
-	FieldOptions,
 	FlagDef$ as FlagDef,
 	FlagOptions,
 	InferValidatedArgs,
 	InferValidatedFlags,
 } from "./schema-types.ts";
-// ── Store field factory ─────────────────────────────────────────────────────
-export { field } from "./store.ts";
 export type {
 	InferInput,
 	InferOutput,
