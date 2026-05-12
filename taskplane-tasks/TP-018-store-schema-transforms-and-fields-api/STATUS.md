@@ -1,6 +1,6 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
-**Current Step:** Step 3: Persist transforms with read-stability guard
+**Current Step:** Step 4: Documentation flip
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-05-12
 
@@ -55,14 +55,15 @@
 ---
 
 ### Step 3: Persist transforms with read-stability guard in `runFieldValidators`
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Migration-guard `TypeError` block replaced with persistence flow
-- [ ] `result === undefined` → continue (validation-only path preserved)
-- [ ] `result.value` captured; non-`read` ops persist when changed
-- [ ] Read-stability re-check rejects cross-type transforms
-- [ ] Step 1 RED tests now pass
-- [ ] Step 1 GREEN/pin tests still pass
+- [x] Migration-guard `TypeError` block replaced with persistence flow
+- [x] `result === undefined` → continue (validation-only path preserved)
+- [x] `result.value` captured; non-`read` ops persist when changed
+- [x] Read-stability re-check rejects cross-type transforms
+- [x] Step 1 RED tests now pass
+- [x] Step 1 GREEN/pin tests still pass
+- [x] Updated pre-existing `field.test.ts` adapter test to assert `{ value }` shape (contract widening; see Discoveries)
 
 ---
 
@@ -118,6 +119,8 @@
 
 | Discovery | Disposition | Location |
 |-----------|-------------|----------|
+| `field.test.ts` adapter test asserted `def.validate("hello")` resolves `undefined` | Updated to assert `{ value: "hello" }` and added a sibling test for transformed output | `packages/store/src/field.test.ts:110` |
+| Step 1 "Read does NOT transform" test passes today (PROMPT labeled RED) | Retained as pin/contract assertion; the underlying property is preserved by the new `operation === "read"` skip in `runFieldValidators` | `packages/store/src/store.test.ts` |
 
 ---
 

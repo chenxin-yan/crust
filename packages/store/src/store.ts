@@ -134,18 +134,83 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
-			// Fail-fast migration guard runs OUTSIDE the try block so it
-			// cannot be caught and re-wrapped as `CrustStoreError("VALIDATION")`.
-			// FieldDef.validate is contractually `void | Promise<void>` — any
-			// return value is a caller bug (e.g. the legacy `{ ok, value }`
-			// shape that earlier docs incorrectly showed), not a validation
-			// failure. Letting `TypeError` propagate keeps user-thrown errors
-			// (including `TypeError`) inside the try as legitimate rejections.
-			if (result !== undefined) {
-				throw new TypeError(
-					`FieldDef.validate must return void. Throw an Error to reject the value (see @crustjs/store validation docs).`,
-				);
+			// `FieldDef.validate` is contractually `void | { value }` — anything
+			// else is a caller bug (e.g. the legacy `{ ok, value }` shape).
+			// The fail-fast migration guard runs OUTSIDE the try block so the
+			// resulting `TypeError` cannot be caught and re-wrapped as a
+			// `CrustStoreError("VALIDATION")`.
+
+			// Validation-only: validator returned no transformed value.
+			if (result === undefined) continue;
+
+			// Transform path: validator returned `{ value }`.
+			if (
+				typeof result === "object" &&
+				result !== null &&
+				"value" in result
+			) {
+				const transformed = (result as { value: unknown }).value;
+
+				// On read, transforms are discarded — reads always return the
+				// on-disk value verbatim (canonicalization happens on the
+				// next write/update/patch).
+				if (operation === "read") continue;
+
+				// Persist-time path: if the transform changed the value,
+				// re-validate the output once. This catches cross-type
+				// transforms like `z.string().transform(Number)` whose output
+				// would fail the schema on the next read.
+				if (!Object.is(transformed, value)) {
+					let recheck: unknown;
+					try {
+						recheck = await def.validate(transformed as never);
+					} catch (cause) {
+						const message =
+							cause instanceof Error
+								? cause.message
+								: "re-validation failed";
+						issues.push({
+							message: `read-unstable transform: ${message}`,
+							path: key,
+						});
+						continue;
+					}
+
+					// Recheck must accept the transformed value: either `void`
+					// (validation-only contract) or `{ value }` that is
+					// stable under another round of the same transform (i.e.
+					// `Object.is(recheck.value, transformed)`). Anything else
+					// means the next read would see a different value than the
+					// one we'd persist now.
+					if (recheck !== undefined) {
+						if (
+							typeof recheck !== "object" ||
+							recheck === null ||
+							!("value" in recheck) ||
+							!Object.is(
+								(recheck as { value: unknown }).value,
+								transformed,
+							)
+						) {
+							issues.push({
+								message: `read-unstable transform: output would be transformed again on re-read`,
+								path: key,
+							});
+							continue;
+						}
+					}
+
+					record[key] = transformed;
+				}
+				continue;
 			}
+
+			// Any other return shape (e.g. legacy `{ ok, issues }`) is a
+			// caller bug — surface as a TypeError so it isn't misclassified
+			// as a `VALIDATION` failure.
+			throw new TypeError(
+				`FieldDef.validate must return void or { value } (see @crustjs/store validation docs).`,
+			);
 		}
 
 		if (issues.length > 0) {
