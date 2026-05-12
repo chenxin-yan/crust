@@ -37,14 +37,30 @@ interface FieldDefBase<V> {
 	 * Optional per-field validation function.
 	 *
 	 * Called during `read`, `write`, `update`, and `patch` operations when
-	 * the field has a value (not `undefined`). Throw an error to reject the
-	 * value.
+	 * the field has a value (not `undefined`).
+	 *
+	 * Return shapes:
+	 * - `void` (or `Promise<void>`) — validation-only; the input value is
+	 *   persisted as-is. This is the contract for hand-rolled validators.
+	 * - `{ value }` (or `Promise<{ value }>`) — the schema (or transform)
+	 *   produced an output value. On `write` / `update` / `patch`, the
+	 *   transformed value replaces the input before persistence and is
+	 *   re-validated once to catch read-unstable transforms (cross-type
+	 *   transforms whose output would fail the schema on the next read).
+	 *   On `read`, the transformed value is discarded — reads always return
+	 *   the on-disk value verbatim.
+	 * - Throwing an error — the value is rejected; the error message is
+	 *   captured as a validation issue with the field name as `path`.
 	 *
 	 * @param value - The field value to validate.
-	 * @throws When the value is invalid — the error message is captured as a
-	 *   validation issue with the field name as `path`.
 	 */
-	validate?: (value: V) => void | Promise<void>;
+	validate?: (
+		value: V,
+	) =>
+		| void
+		| Promise<void>
+		| { value: V }
+		| Promise<{ value: V }>;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────

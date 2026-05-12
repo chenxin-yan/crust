@@ -58,10 +58,19 @@ export interface FieldOptions<T = unknown> {
 // Schema → field validate adapter
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Build the per-field async validate function from a Standard Schema. */
+/**
+ * Build the per-field async validate function from a Standard Schema.
+ *
+ * On success returns `{ value: result.value }` so the store can persist
+ * schema-transformed values (e.g. `z.string().transform(s => s.trim())`).
+ * On issues, throws an `Error` whose message contains the schema's
+ * normalized issues. The store treats `{ value }` returns as
+ * "persist on write/update/patch, discard on read" — see
+ * `FieldDef.validate` in `./types.ts`.
+ */
 function makeValidator<S extends StandardSchema>(
 	schema: S,
-): (value: unknown) => Promise<void> {
+): (value: unknown) => Promise<{ value: unknown }> {
 	return async (value: unknown) => {
 		const result = await schema["~standard"].validate(value);
 		if (result.issues) {
@@ -71,6 +80,7 @@ function makeValidator<S extends StandardSchema>(
 			);
 			throw new Error(messages.join("; "));
 		}
+		return { value: result.value };
 	};
 }
 

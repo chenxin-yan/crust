@@ -1,6 +1,6 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
-**Current Step:** Step 2: Widen FieldDef.validate contract
+**Current Step:** Step 3: Persist transforms with read-stability guard
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-05-12
 
@@ -46,11 +46,11 @@
 ---
 
 ### Step 2: Widen `FieldDef.validate` contract; update `field()` helper
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `FieldDef.validate` return type widened to `void | { value: T }` (sync/async)
-- [ ] `field.ts` `makeValidator` returns `{ value: result.value }` on success
-- [ ] `bun run --cwd packages/store check:types` clean
+- [x] `FieldDef.validate` return type widened to `void | { value: T }` (sync/async)
+- [x] `field.ts` `makeValidator` returns `{ value: result.value }` on success
+- [x] `bun run --cwd packages/store check:types` clean
 
 ---
 
