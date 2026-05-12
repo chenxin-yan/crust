@@ -135,6 +135,8 @@
 | 2026-05-12 23:48 | Task started | Runtime V2 lane-runner execution |
 | 2026-05-12 23:48 | Step 0 started | Preflight |
 | 2026-05-12 | Steps 0–7 complete | All RED tests turn GREEN; full suite + check + check:types + build pass; 5/5 manual sanity scenarios pass; single `@crustjs/store` minor changeset committed |
+| 2026-05-12 23:59 | Worker iter 1 | done in 694s, tools: 106 |
+| 2026-05-12 23:59 | Task complete | .DONE created |
 
 ---
 
