@@ -53,9 +53,8 @@ needed.
 ## Quick start — Effect
 
 Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
-passing them to `arg()` / `flag()` / `field()`. The wrapper exposes
-`.ast`, which the registry walks to recover the same metadata Zod gives
-natively.
+passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
+registry walks to recover the same metadata Zod gives natively.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -179,9 +178,10 @@ new Crust("hi")
   );
 ```
 
-If `type:` is missing for an unknown vendor, `arg()` / `flag()` /
-`field()` throws a `CrustError("DEFINITION")` naming the failing
-definition.
+If `type:` is missing for an unknown vendor, `arg()` / `flag()` throws a
+`CrustError("DEFINITION")` naming the failing definition. (`field()`
+from [`@crustjs/store`](/docs/modules/store) throws
+`CrustStoreError("DEFINITION")` in the equivalent case.)
 
 ## Command validation
 
@@ -229,14 +229,13 @@ const port = await parseValue(z.coerce.number().int().positive(), "8080");
 
 ## Store field validation
 
-`field(schema, opts?)` returns a `FieldDef` value that structurally fits
-`@crustjs/store`'s discriminated union — store has zero runtime
-dependency on validate. Introspection auto-derives `type`, `default`,
-`array`, and `description`; pass `opts` to override silently.
+`field()` lives in [`@crustjs/store`](/docs/modules/store) as of 0.3.0.
+See the [store-field validation guide](/docs/modules/store#schema-driven-validation)
+for the full reference — including runtime-vs-type-level behaviour of
+schema-derived defaults.
 
 ```ts
-import { configDir, createStore } from "@crustjs/store";
-import { field } from "@crustjs/validate";
+import { configDir, createStore, field } from "@crustjs/store";
 import { z } from "zod";
 
 const store = createStore({
@@ -249,18 +248,6 @@ const store = createStore({
 });
 ```
 
-### Schema-derived defaults and TypeScript
-
-Standard Schema v1 has no spec-portable type-level access to schema
-defaults. As a result:
-
-- `field(z.string().default("x"))` populates `default: "x"` at runtime,
-  but the inferred config type is `string | undefined` (NOT narrowed).
-- `field(z.string(), { default: "x" })` populates `default: "x"` AND
-  narrows the inferred config type to `string`.
-
-For tight typing of default-bearing fields, prefer the explicit form.
-
 ## Validation errors
 
 All failures normalize to `CrustError("VALIDATION")` with:
@@ -270,10 +257,29 @@ All failures normalize to `CrustError("VALIDATION")` with:
   issues with dot-paths (`args[0].port`, `flags.verbose`, …).
 - `error.cause` — the same array of issues.
 
+## Migrating from 0.2.x
+
+`@crustjs/validate` 0.3.0 moves `field()` to [`@crustjs/store`](/docs/modules/store).
+
+```ts
+// 0.2.x
+import { field } from "@crustjs/validate";
+
+// 0.3.0
+import { field } from "@crustjs/store";
+```
+
+No behaviour change. The factory now throws `CrustStoreError("DEFINITION")`
+instead of `CrustError("DEFINITION")` on invalid input so the error class
+matches the package that owns the store-field surface. `FieldOptions` is
+no longer exported from `@crustjs/validate`; import it from
+[`@crustjs/store`](/docs/modules/store) if you previously relied on the
+type.
+
 ## Migrating from 0.1.x
 
 `@crustjs/validate` 0.2.0 removes the deprecated subpath barrels and
-trims the public surface to the locked 8-function root.
+trims the public surface to the (then) locked 8-function root.
 
 **Subpath removal (breaking):**
 
@@ -305,29 +311,11 @@ The `errorStrategy` option on `promptValidator` is gone everywhere. Prompts
 render the first issue inline; `parseValue` throws with all issues in
 `error.details.issues`. There is no toggle.
 
-**`field()` shape change (breaking):**
-
-```ts
-// 0.1.x — schema repeated, validator-only field()
-fields: {
-  theme: {
-    type: "string",
-    default: "light",
-    validate: field(z.enum(["light", "dark"])),
-  },
-}
-
-// 0.2.0 — single source of truth
-fields: {
-  theme: field(z.enum(["light", "dark"]).default("light")),
-}
-```
-
 ## See also
 
 - [Standard Schema v1 spec](https://github.com/standard-schema/standard-schema)
 - [`@crustjs/core`](/docs/modules/core) — the CLI framework itself
-- [`@crustjs/store`](/docs/modules/store) — config storage that consumes
-  this package's `field()` factory
+- [`@crustjs/store`](/docs/modules/store) — config storage with its own
+  schema-driven `field()` factory
 - [`@crustjs/prompts`](/docs/modules/prompts) — prompts accept Standard
   Schemas directly via `validate:`

@@ -12,7 +12,6 @@ export type {
 	PartialPromptTheme,
 	PromptTheme,
 	ValidateFn,
-	ValidateResult,
 } from "./core/types.ts";
 export type { NormalizedChoice } from "./core/utils.ts";
 

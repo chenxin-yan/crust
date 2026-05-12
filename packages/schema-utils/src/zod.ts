@@ -15,7 +15,7 @@
 //   • `values`       — populated for `enum`/`literal`
 //   • `description`  — set via `.describe("…")`
 
-import type { StandardSchema } from "../types.ts";
+import type { StandardSchema } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result type — partial because not every property is always inferable
@@ -270,19 +270,6 @@ function resolveZodDescription(schema: unknown): string | undefined {
 	}
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Public entry — full inference for a Zod-based Standard Schema
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Infer CLI metadata from a Zod schema (via Standard Schema interface).
- *
- * Returns a partial result; missing fields signal "no inference available"
- * rather than absence of the property. Caller merges with explicit options.
- *
- * Recognises array schemas — when detected, returns `multiple: true` plus
- * the inner element's primitive type.
- */
 // ─────────────────────────────────────────────────────────────────────────
 // Default extraction — walk wrappers for a `ZodDefault` node and read
 // `defaultValue` (Zod 4 stores the value directly; v3 stored a thunk).
@@ -363,6 +350,19 @@ export function extractZodDefault(
 	return { ok: false };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Public entry — full inference for a Zod-based Standard Schema
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Infer CLI metadata from a Zod schema (via Standard Schema interface).
+ *
+ * Returns a partial result; missing fields signal "no inference available"
+ * rather than absence of the property. Caller merges with explicit options.
+ *
+ * Recognises array schemas — when detected, returns `multiple: true` plus
+ * the inner element's primitive type.
+ */
 export function inferFromZod(schema: StandardSchema): ZodInferResult {
 	const result: ZodInferResult = {};
 

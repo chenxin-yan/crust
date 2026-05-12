@@ -124,12 +124,27 @@ export function createStore<const F extends FieldsDef>(
 			// Skip validation for undefined values (field has no default, not persisted)
 			if (value === undefined) continue;
 
+			let result: unknown;
 			try {
-				await def.validate(value as never);
+				result = await def.validate(value as never);
 			} catch (cause) {
 				const message =
 					cause instanceof Error ? cause.message : "Validation failed";
 				issues.push({ message, path: key });
+				continue;
+			}
+
+			// Fail-fast migration guard runs OUTSIDE the try block so it
+			// cannot be caught and re-wrapped as `CrustStoreError("VALIDATION")`.
+			// FieldDef.validate is contractually `void | Promise<void>` — any
+			// return value is a caller bug (e.g. the legacy `{ ok, value }`
+			// shape that earlier docs incorrectly showed), not a validation
+			// failure. Letting `TypeError` propagate keeps user-thrown errors
+			// (including `TypeError`) inside the try as legitimate rejections.
+			if (result !== undefined) {
+				throw new TypeError(
+					`FieldDef.validate must return void. Throw an Error to reject the value (see @crustjs/store validation docs).`,
+				);
 			}
 		}
 

@@ -359,8 +359,10 @@ describe("password — validation", () => {
 	it("shows error message when validation fails", async () => {
 		const promise = password({
 			message: "Password?",
-			validate: (v) =>
-				v.length >= 4 ? true : "Password must be at least 4 characters",
+			validate: (v) => {
+				if (v.length < 4)
+					throw new Error("Password must be at least 4 characters");
+			},
 		});
 
 		await tick();
@@ -390,7 +392,7 @@ describe("password — validation", () => {
 			message: "Token?",
 			validate: async (v) => {
 				await new Promise((r) => setTimeout(r, 5));
-				return v === "valid" ? true : "Invalid token";
+				if (v !== "valid") throw new Error("Invalid token");
 			},
 		});
 
@@ -408,7 +410,9 @@ describe("password — validation", () => {
 	it("clears error on new character input", async () => {
 		const promise = password({
 			message: "Password?",
-			validate: (v) => (v.length >= 2 ? true : "Too short"),
+			validate: (v) => {
+				if (v.length < 2) throw new Error("Too short");
+			},
 		});
 
 		await tick();
@@ -787,10 +791,12 @@ async function _passwordTypeInferenceTests() {
 	});
 	const _pinIsNumber: number = pin;
 
-	// Function-validator overload — resolves to string.
+	// Function-validator overload — resolves to string. Throw-on-fail contract.
 	const secret = await password({
 		message: "?",
-		validate: (v) => v.length >= 8 || "too short",
+		validate: (v) => {
+			if (v.length < 8) throw new Error("too short");
+		},
 	});
 	const _secretIsString: string = secret;
 

@@ -1,31 +1,15 @@
 {
-	"name": "@crustjs/store",
-	"version": "0.0.4",
-	"description": "DX-first, typed persistence for CLI apps with config/data/state/cache separation",
+	"name": "@crustjs/schema-utils",
+	"version": "0.0.1",
+	"description": "Internal Crust workspace package. Do not depend on directly — use @crustjs/validate.",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/store"
+		"directory": "packages/schema-utils"
 	},
-	"homepage": "https://crustjs.com",
-	"bugs": {
-		"url": "https://github.com/chenxin-yan/crust/issues"
-	},
-	"keywords": [
-		"cli",
-		"config",
-		"data",
-		"state",
-		"cache",
-		"store",
-		"persistence",
-		"xdg",
-		"bun",
-		"typescript"
-	],
 	"files": [
 		"dist"
 	],
@@ -47,6 +31,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
 		"bunup": "catalog:",
 		"effect": "3.14.2",
 		"zod": "^4.0.0"
@@ -55,6 +40,7 @@
 		"typescript": "catalog:"
 	},
 	"dependencies": {
-		"@crustjs/schema-utils": "workspace:*"
+		"@crustjs/core": "workspace:*",
+		"@standard-schema/spec": "^1.1.0"
 	}
 }

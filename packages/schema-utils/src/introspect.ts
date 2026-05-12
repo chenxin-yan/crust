@@ -6,8 +6,8 @@
 // adapter. Other vendors (Valibot, ArkType, etc.) return an empty result;
 // users supply CLI metadata explicitly via options.
 
-import type { StandardSchema } from "../types.ts";
 import { extractEffectDefault, inferFromEffect } from "./effect.ts";
+import type { StandardSchema } from "./types.ts";
 import { extractZodDefault, inferFromZod } from "./zod.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

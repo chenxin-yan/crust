@@ -1,4 +1,5 @@
 import { CrustError } from "@crustjs/core";
+import { formatPath } from "@crustjs/schema-utils";
 import type { ValidationIssue } from "./types.ts";
 
 interface IssueInput {
@@ -7,7 +8,7 @@ interface IssueInput {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Path formatting — normalize issue paths to dot-path strings
+// Path formatting — re-exported from `@crustjs/schema-utils` (TP-017)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -17,34 +18,10 @@ interface IssueInput {
  * - String/symbol keys are joined with dots: `flags.verbose`
  * - An empty path array produces an empty string (root-level issue)
  *
- * @example
- * ```ts
- * formatPath(["flags", "verbose"]);
- * // => "flags.verbose"
- *
- * formatPath(["args", 0]);
- * // => "args[0]"
- *
- * formatPath([]);
- * // => ""
- * ```
+ * Re-exported here so internal validate-package callers keep their existing
+ * import path stable. The implementation lives in `@crustjs/schema-utils`.
  */
-export function formatPath(path: readonly PropertyKey[]): string {
-	let result = "";
-	for (const segment of path) {
-		if (typeof segment === "number") {
-			result += `[${String(segment)}]`;
-		} else {
-			const str = String(segment);
-			if (result.length > 0) {
-				result += `.${str}`;
-			} else {
-				result = str;
-			}
-		}
-	}
-	return result;
-}
+export { formatPath };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Issue normalization — convert provider issues to canonical form

@@ -1076,3 +1076,87 @@ describe("field validation", () => {
 		}
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// FieldDef.validate contract — fail-fast migration guard
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("FieldDef.validate contract", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("surfaces a buggy validator (returns a value) as TypeError, not CrustStoreError", async () => {
+		// Regression: previously the migration guard `throw new TypeError`
+		// ran inside the same try/catch that captures legitimate validation
+		// rejections, so consumers branching on `err.code === "VALIDATION"`
+		// silently misclassified a caller bug as a bad config value.
+		const fields = {
+			legacy: {
+				type: "string",
+				default: "x",
+				// Legacy `{ ok, issues }` return shape — a caller bug.
+				validate: ((_v: string) =>
+					({ ok: false, issues: [{ message: "bad", path: "" }] }) as never) as (
+					v: string,
+				) => void,
+			},
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		let caught: unknown;
+		try {
+			await store.write({ legacy: "anything" });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(TypeError);
+		expect((caught as TypeError).message).toContain(
+			"FieldDef.validate must return void",
+		);
+		// Critically: it is NOT a CrustStoreError("VALIDATION").
+		expect(caught).not.toBeInstanceOf(CrustStoreError);
+	});
+
+	it("collects user-thrown TypeError as a regular validation issue", async () => {
+		// Counterpart guarantee: a user that legitimately throws TypeError
+		// from their validator (e.g. `throw new TypeError("expected string")`)
+		// must still be captured as a normal validation rejection — not
+		// confused with the migration guard’s TypeError.
+		const fields = {
+			name: {
+				type: "string",
+				default: "ok",
+				validate: (v: string) => {
+					if (v === "bad") throw new TypeError("name rejected by user code");
+				},
+			},
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		try {
+			await store.write({ name: "bad" });
+			expect.unreachable("should have thrown");
+		} catch (__err) {
+			const e = __err as CrustStoreError;
+			expect(e).toBeInstanceOf(CrustStoreError);
+			expect(e.is("VALIDATION")).toBe(true);
+			if (e.is("VALIDATION")) {
+				expect(e.details.issues).toHaveLength(1);
+				expect(e.details.issues[0]?.path).toBe("name");
+				expect(e.details.issues[0]?.message).toBe("name rejected by user code");
+			}
+		}
+	});
+});

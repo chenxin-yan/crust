@@ -23,18 +23,22 @@ const fw = await select({
 });
 const secret = await password({
   message: "Enter password:",
-  validate: (v) => v.length >= 8 || "Must be at least 8 characters",
+  validate: (v) => {
+    if (v.length < 8) throw new Error("Must be at least 8 characters");
+  },
 });
 ```
 
 Pass `initial` to skip interactivity (useful for prefilling from CLI flags or in CI). For prompts that support a `default` (`input`, `confirm`, `multiselect`, `filter`), the default is also returned automatically when stdin is not a TTY; otherwise a `NonInteractiveError` is thrown.
 
-## Schema validation
+## Validation
 
 The `validate` slot on `input()` and `password()` is **polymorphic**:
 
-- a `(value: string) => true | string | Promise<true | string>` validator, or
+- a `(value: string) => void | Promise<void>` validator that **throws an `Error` to reject** the input (the error's `message` renders inline), or
 - any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
+
+This matches the throw-on-fail contract used by `@crustjs/store`'s `FieldDef.validate` and `parseValue()` — one rule across the workspace.
 
 When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success — no second-pass parse step. `initial` and non-TTY `default` are parsed through the schema as well, so the `Promise<Output>` contract holds for every code path; a value the schema rejects throws.
 

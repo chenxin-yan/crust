@@ -2,17 +2,57 @@
 // field() — Standard-Schema-first store-field factory
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Mirrors `arg(name, schema, opts?)` and `flag(schema, opts?)`: introspection
-// auto-derives `type` / `default` / `array` / `description`; the optional
-// second arg overrides silently. Returns a value that structurally satisfies
-// `@crustjs/store`'s discriminated `FieldDef` union — store has zero runtime
-// dep on validate.
+// Builds a `FieldDef` from any Standard Schema v1 object. Introspection
+// (via `@crustjs/schema-utils`) auto-derives `type` / `default` / `array` /
+// `description`; the optional second argument overrides silently. Returns
+// a value that satisfies store's discriminated `FieldDef` union.
 
-import { CrustError } from "@crustjs/core";
-import { extractDefault, inferOptions } from "./introspect/registry.ts";
-import type { FieldOptions } from "./schema-types.ts";
-import type { InferOutput, StandardSchema } from "./types.ts";
-import { assertStandardSchema, normalizeStandardIssues } from "./validate.ts";
+import {
+	extractDefault,
+	type InferOutput,
+	inferOptions,
+	isStandardSchema,
+	normalizeStandardIssues,
+	type StandardSchema,
+} from "@crustjs/schema-utils";
+import { CrustStoreError } from "./errors.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// FieldOptions — explicit overrides for the introspected values
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Optional overrides for the introspected `FieldDef` shape produced by
+ * {@link field}.
+ *
+ * Every key is optional. When automatic introspection covers a field
+ * (`type`, `description`, `default`, `array`), explicit values override
+ * the introspection silently. For schemas with unknown vendors (e.g.
+ * Valibot, ArkType), `type` MUST be supplied explicitly because no
+ * inference is available.
+ *
+ * No `validate` key — validation flows exclusively through the schema.
+ * If extra checks are needed, refine the schema with `.refine(...)`
+ * (Zod), `Schema.filter(...)` (Effect), etc.
+ *
+ * @typeParam T - The schema's output value type. Used to type-tighten the
+ *               `default` key when the user wants a non-`undefined` field.
+ */
+export interface FieldOptions<T = unknown> {
+	type?: "string" | "number" | "boolean";
+	description?: string;
+	/**
+	 * Default value for this field when the persisted state does not contain
+	 * a value for it. Passing `default` explicitly here narrows the inferred
+	 * config type from `T | undefined` to `T`. Schema-derived defaults
+	 * (e.g. `z.string().default("x")`) populate the runtime default but do
+	 * NOT narrow the TypeScript type — pass it explicitly here for tight
+	 * typing.
+	 */
+	default?: T;
+	/** Mark this field as an array (collects values into an array). */
+	array?: true;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Schema → field validate adapter
@@ -140,11 +180,11 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
 /**
  * Define a `@crustjs/store` field from any Standard Schema v1.
  *
- * Returns a value that structurally satisfies store's `FieldDef` discriminated
- * union. Auto-derives `type`, `array`, `description`, and `default` from the
+ * Returns a value that satisfies store's `FieldDef` discriminated union.
+ * Auto-derives `type`, `array`, `description`, and `default` from the
  * schema (Zod and Effect natively; Valibot/ArkType via the
- * `validate(undefined)` fallback for defaults). Pass `opts` to override any
- * key explicitly \u2014 explicit values win silently.
+ * `validate(undefined)` fallback for defaults). Pass `opts` to override
+ * any key explicitly — explicit values win silently.
  *
  * The returned `validate` is an async function that throws an `Error` with
  * the schema's normalized issue messages on failure (matches store's
@@ -164,12 +204,14 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  *                 Valibot/ArkType/Sury/etc. as-is)
  * @param opts - Optional store-field metadata; explicit keys override
  *                   the introspected values silently
+ * @throws {CrustStoreError} With code `"DEFINITION"` when the input is not
+ *         a Standard Schema, or when the runtime CLI type cannot be inferred
+ *         and `opts.type` was not supplied.
  *
  * @example Zod
  * ```ts
  * import { z } from "zod";
- * import { field } from "@crustjs/validate";
- * import { createStore, configDir } from "@crustjs/store";
+ * import { createStore, configDir, field } from "@crustjs/store";
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
@@ -177,6 +219,19 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  *     theme: field(z.enum(["light", "dark"]).default("light")),
  *     verbose: field(z.boolean().default(false)),
  *     tags: field(z.array(z.string()).default([])),
+ *   },
+ * });
+ * ```
+ *
+ * @example Effect
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import { createStore, configDir, field } from "@crustjs/store";
+ *
+ * const store = createStore({
+ *   dirPath: configDir("my-cli"),
+ *   fields: {
+ *     theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
  *   },
  * });
  * ```
@@ -194,7 +249,13 @@ export function field<S extends StandardSchema>(
 	schema: S,
 	opts?: FieldOptions<InferOutput<S>>,
 ): SchemaFieldDef<S> {
-	assertStandardSchema(schema, "field()");
+	if (!isStandardSchema(schema)) {
+		throw new CrustStoreError(
+			"DEFINITION",
+			`field(): argument must be a Standard Schema v1 object (got ${typeof schema})`,
+			{},
+		);
+	}
 
 	const schemaVendor = schema["~standard"]?.vendor ?? "unknown";
 	const label = `field (vendor: "${schemaVendor}")`;
@@ -203,9 +264,10 @@ export function field<S extends StandardSchema>(
 
 	const resolvedType = opts?.type ?? inferred.type;
 	if (!resolvedType) {
-		throw new CrustError(
+		throw new CrustStoreError(
 			"DEFINITION",
 			`${label}: unable to infer field type from schema. Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
+			{ vendor: schemaVendor },
 		);
 	}
 
@@ -216,9 +278,11 @@ export function field<S extends StandardSchema>(
 
 	// Resolve default: explicit opts wins; otherwise sync vendor-aware
 	// extraction with `validate(undefined)` fallback. Falsy defaults are
-	// preserved \u2014 we never use `=== undefined` as a sentinel.
+	// preserved — `"default" in opts` is the sole sentinel for "caller
+	// explicitly set a default", so `{ default: undefined }` is honored
+	// (matching the `D extends InferOutput<S>` overload contract).
 	const resolvedDefault =
-		opts && "default" in opts && opts.default !== undefined
+		opts && "default" in opts
 			? ({ ok: true, value: opts.default } as const)
 			: extractDefault(schema);
 
