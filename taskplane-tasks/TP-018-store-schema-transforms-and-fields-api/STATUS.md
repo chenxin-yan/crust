@@ -1,8 +1,8 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
-**Current Step:** Step 0 (Preflight) — ready to start
-**Status:** 🔵 Ready for Execution (PR #123 merged; scope reduced 2026-05-12)
-**Last Updated:** 2026-05-12 (Amendment 2 added; scope reduced from L to M)
+**Current Step:** Step 2: Widen FieldDef.validate contract
+**Status:** 🟡 In Progress
+**Last Updated:** 2026-05-12
 
 > **Scope reduction 2026-05-12 (operator decision):** original PROMPT
 > bundled three streams (transform persistence, polymorphic `FieldSpec`,
@@ -13,7 +13,7 @@
 
 **Review Level:** 2 (Plan + Code)
 **Review Counter:** 0
-**Iteration:** 0
+**Iteration:** 1
 **Size:** M
 
 > **Hydration:** Checkboxes represent meaningful outcomes, not individual code
@@ -24,24 +24,24 @@
 ---
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Required files and paths exist
-- [ ] PR #123 baseline confirmed (`field()` in store; `validate` exports 7 functions)
-- [ ] Pre-edit test suite green (store)
+- [x] Required files and paths exist
+- [x] PR #123 baseline confirmed (`field()` in store; `validate` exports 7 functions)
+- [x] Pre-edit test suite green (store) — 251 tests pass after `bun run build:packages`
 
 ---
 
 ### Step 1: Failing-tests-first — pin the transform-persistence asymmetry
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
 > Three RED tests + two GREEN/pin tests. Watch RED fail, GREEN pass.
 
-- [ ] RED: Zod `.transform(s => s.trim())` persists on write (on-disk JSON)
-- [ ] RED: read does NOT transform (pre-seeded file unchanged after read)
-- [ ] RED: read-stability guard rejects `string → number` transform at write
-- [ ] GREEN/pin: plain literal `{ type: "string", default: "x" }` end-to-end
-- [ ] GREEN/pin: hand-rolled `validate: (v) => { ... }` void-return contract
+- [x] RED: Zod `.transform(s => s.trim())` persists on write (on-disk JSON) — added write/update/patch variants; all RED today
+- [x] RED: read does NOT transform (pre-seeded file unchanged after read) — added; technically pin (passes today, retained as contract assertion for the new code path)
+- [x] RED: read-stability guard rejects `string → number` transform at write — used `z.string().transform(s => s.length)` for clean cross-type signal; RED today
+- [x] GREEN/pin: plain literal `{ type: "string", default: "x" }` end-to-end — passes
+- [x] GREEN/pin: hand-rolled `validate: (v) => { ... }` void-return contract — passes
 
 ---
 
@@ -128,6 +128,8 @@
 | 2026-05-07 | Task staged | PROMPT.md and STATUS.md created |
 | 2026-05-12 | Amendment 1 | PR #123 pre-delivered Step 6 (field() migration); workers skip |
 | 2026-05-12 | Amendment 2 | Scope reduced from L to M; dropped polymorphic `FieldSpec` + `store.fields()` API per operator decision |
+| 2026-05-12 23:48 | Task started | Runtime V2 lane-runner execution |
+| 2026-05-12 23:48 | Step 0 started | Preflight |
 
 ---
 
