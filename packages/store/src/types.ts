@@ -43,12 +43,15 @@ interface FieldDefBase<V> {
 	 * - `void` (or `Promise<void>`) — validation-only; the input value is
 	 *   persisted as-is. This is the contract for hand-rolled validators.
 	 * - `{ value }` (or `Promise<{ value }>`) — the schema (or transform)
-	 *   produced an output value. On `write` / `update` / `patch`, the
-	 *   transformed value replaces the input before persistence and is
-	 *   re-validated once to catch read-unstable transforms (cross-type
-	 *   transforms whose output would fail the schema on the next read).
-	 *   On `read`, the transformed value is discarded — reads always return
-	 *   the on-disk value verbatim.
+	 *   produced an output value (typed as `unknown` because schema
+	 *   transforms may emit a value of a different runtime type than
+	 *   `V`; the read-stability guard enforces shape correctness at
+	 *   write time). On `write` / `update` / `patch`, the transformed
+	 *   value replaces the input before persistence and is re-validated
+	 *   once to catch read-unstable transforms (cross-type transforms
+	 *   whose output would fail the schema on the next read). On `read`,
+	 *   the transformed value is discarded — reads always return the
+	 *   on-disk value verbatim.
 	 * - Throwing an error — the value is rejected; the error message is
 	 *   captured as a validation issue with the field name as `path`.
 	 *
@@ -56,11 +59,7 @@ interface FieldDefBase<V> {
 	 */
 	validate?: (
 		value: V,
-	) =>
-		| void
-		| Promise<void>
-		| { value: V }
-		| Promise<{ value: V }>;
+	) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────

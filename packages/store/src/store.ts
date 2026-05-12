@@ -144,11 +144,7 @@ export function createStore<const F extends FieldsDef>(
 			if (result === undefined) continue;
 
 			// Transform path: validator returned `{ value }`.
-			if (
-				typeof result === "object" &&
-				result !== null &&
-				"value" in result
-			) {
+			if (typeof result === "object" && result !== null && "value" in result) {
 				const transformed = (result as { value: unknown }).value;
 
 				// On read, transforms are discarded — reads always return the
@@ -166,9 +162,7 @@ export function createStore<const F extends FieldsDef>(
 						recheck = await def.validate(transformed as never);
 					} catch (cause) {
 						const message =
-							cause instanceof Error
-								? cause.message
-								: "re-validation failed";
+							cause instanceof Error ? cause.message : "re-validation failed";
 						issues.push({
 							message: `read-unstable transform: ${message}`,
 							path: key,
@@ -187,10 +181,7 @@ export function createStore<const F extends FieldsDef>(
 							typeof recheck !== "object" ||
 							recheck === null ||
 							!("value" in recheck) ||
-							!Object.is(
-								(recheck as { value: unknown }).value,
-								transformed,
-							)
+							!Object.is((recheck as { value: unknown }).value, transformed)
 						) {
 							issues.push({
 								message: `read-unstable transform: output would be transformed again on re-read`,

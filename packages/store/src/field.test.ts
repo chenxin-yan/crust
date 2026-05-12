@@ -285,8 +285,16 @@ describe("default extraction — vendor-neutral fallback", () => {
 describe("field() — type-level integration with FieldDef", () => {
 	it("returns a value structurally compatible with store FieldDef.validate", async () => {
 		const def = field(z.string());
-		// Structural check: validate signature aligns with FieldDef.validate
-		const validate: (value: unknown) => void | Promise<void> = def.validate;
+		// Structural check: validate signature aligns with the widened
+		// FieldDef.validate union (TP-018) — schema-driven validators emit
+		// `{ value: unknown }` on success so the store can persist transforms.
+		const validate: (
+			value: unknown,
+		) =>
+			| void
+			| Promise<void>
+			| { value: unknown }
+			| Promise<{ value: unknown }> = def.validate;
 		await validate("hello");
 	});
 });

@@ -130,7 +130,7 @@ type ResolveScalarType<S> =
 type ScalarFieldDef<T extends ValueType> = {
 	readonly type: T;
 	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** A scalar `FieldDef` with a narrowed default. */
@@ -138,7 +138,7 @@ type ScalarFieldDefWithDefault<T extends ValueType, D> = {
 	readonly type: T;
 	readonly description?: string;
 	readonly default: D;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** An array `FieldDef` with no narrowed default. */
@@ -146,7 +146,7 @@ type ArrayFieldDef<T extends ValueType> = {
 	readonly type: T;
 	readonly array: true;
 	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** An array `FieldDef` with a narrowed default. */
@@ -155,7 +155,7 @@ type ArrayFieldDefWithDefault<T extends ValueType, D> = {
 	readonly array: true;
 	readonly description?: string;
 	readonly default: D;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /**

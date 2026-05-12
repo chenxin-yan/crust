@@ -1278,9 +1278,7 @@ describe("schema transform persistence", () => {
 			expect(e.details.operation).toBe("write");
 			expect(e.details.issues).toHaveLength(1);
 			expect(e.details.issues[0]?.path).toBe("x");
-			expect(e.details.issues[0]?.message).toContain(
-				"read-unstable transform",
-			);
+			expect(e.details.issues[0]?.message).toContain("read-unstable transform");
 		}
 
 		// Nothing should have been persisted.

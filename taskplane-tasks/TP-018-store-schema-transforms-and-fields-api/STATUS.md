@@ -1,6 +1,6 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
-**Current Step:** Step 6: Testing & Verification
+**Current Step:** Step 7: Documentation & Delivery
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-05-12
 
@@ -86,16 +86,17 @@
 ---
 
 ### Step 6: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] FULL test suite passing (`bun run test`)
-- [ ] Lint clean (`bun run check`)
-- [ ] Types clean (`bun run check:types`)
-- [ ] Build clean (`bun run build`)
-- [ ] Manual sanity: literal store unchanged
-- [ ] Manual sanity: Zod trim store persists trimmed
-- [ ] Manual sanity: `string → number` transform rejected at write
-- [ ] Manual sanity: hand-rolled `validate` void-return unchanged
+- [x] FULL test suite passing (`bun run test`) — all 23 tasks pass
+- [x] Lint clean (`bun run check`)
+- [x] Types clean (`bun run check:types`)
+- [x] Build clean (`bun run build`)
+- [x] Manual sanity: literal store unchanged (write/read/update/reset round-trip)
+- [x] Manual sanity: Zod trim store persists trimmed (`  hi   ` → `hi` on disk)
+- [x] Manual sanity: `string → number` transform rejected at write (read-unstable, no file written)
+- [x] Manual sanity: hand-rolled `validate` void-return unchanged (8080 accepted, 0 rejected)
+- [x] Manual sanity (bonus): pre-seeded file survives `read()` unchanged; next `write` canonicalizes
 
 ---
 
