@@ -4,7 +4,9 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { CrustStoreError } from "./errors.ts";
+import { field } from "./field.ts";
 import { createStore } from "./store.ts";
 import type { FieldsDef } from "./types.ts";
 
@@ -1156,6 +1158,187 @@ describe("FieldDef.validate contract", () => {
 				expect(e.details.issues).toHaveLength(1);
 				expect(e.details.issues[0]?.path).toBe("name");
 				expect(e.details.issues[0]?.message).toBe("name rejected by user code");
+			}
+		}
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Schema-driven transform persistence + read-stability guard (TP-018)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Closes the command/store asymmetry: schema transforms (e.g.
+// `z.string().transform(s => s.trim())`) MUST persist on write/update/
+// patch operations. Reads return on-disk values verbatim (no transform on
+// read). A write-time read-stability guard rejects cross-type transforms
+// whose output would fail the schema's own re-validation on the next
+// read.
+
+describe("schema transform persistence", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	// RED: today the store discards `result.value` and persists the
+	// untransformed input. After TP-018 the trimmed value is written.
+	it("persists Zod transform output on write (trim example)", async () => {
+		const fields = {
+			name: field(z.string().transform((s) => s.trim())),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.write({ name: "  hi  " });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ name: "hi" });
+	});
+
+	it("persists Zod transform output on update", async () => {
+		const fields = {
+			name: field(z.string().transform((s) => s.trim())),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.update(() => ({ name: "  spaced  " }));
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ name: "spaced" });
+	});
+
+	it("persists Zod transform output on patch", async () => {
+		const fields = {
+			name: field(z.string().transform((s) => s.trim())),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.patch({ name: "  patched  " });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ name: "patched" });
+	});
+
+	// Pin: reads MUST NOT mutate on-disk state, even when the schema would
+	// transform the persisted value. Existing on-disk values survive
+	// untouched until the next write canonicalizes them.
+	it("read does NOT transform — pre-seeded file survives unchanged", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ name: "  hi  " }));
+
+		const fields = {
+			name: field(z.string().transform((s) => s.trim())),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		const result = await store.read();
+		expect(result.name).toBe("  hi  ");
+
+		const rawAfter = await readFile(filePath, "utf-8");
+		expect(JSON.parse(rawAfter)).toEqual({ name: "  hi  " });
+	});
+
+	// RED: cross-type transform (string → number) succeeds the first
+	// validation but its output fails the schema on re-validation. Must
+	// surface as `read-unstable transform` at write time and never touch
+	// disk. Today this either persists the raw string or surfaces as a
+	// regular validation issue depending on coercion; after TP-018 it is
+	// always rejected with the read-unstable message.
+	it("rejects read-unstable cross-type transform at write time", async () => {
+		const fields = {
+			x: field(z.string().transform((s) => s.length)),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		let caught: unknown;
+		try {
+			await store.write({ x: "hello" as unknown as number });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(CrustStoreError);
+		const e = caught as CrustStoreError;
+		expect(e.is("VALIDATION")).toBe(true);
+		if (e.is("VALIDATION")) {
+			expect(e.details.operation).toBe("write");
+			expect(e.details.issues).toHaveLength(1);
+			expect(e.details.issues[0]?.path).toBe("x");
+			expect(e.details.issues[0]?.message).toContain("read-unstable transform");
+		}
+
+		// Nothing should have been persisted.
+		const filePath = join(tempDir, "config.json");
+		expect(existsSync(filePath)).toBe(false);
+	});
+
+	// Pin: literal fields with the discriminated-union shape are
+	// unaffected by transform persistence. The written JSON matches the
+	// input value byte-for-byte (after coercion, which is unchanged).
+	it("plain literal FieldDef is unaffected (end-to-end pin)", async () => {
+		const fields = {
+			theme: { type: "string", default: "x" },
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.write({ theme: "dark" });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ theme: "dark" });
+
+		const result = await store.read();
+		expect(result.theme).toBe("dark");
+	});
+
+	// Pin: hand-rolled void-returning `validate` callbacks keep their
+	// current contract — accept on no-throw, reject on throw. The widened
+	// FieldDef.validate signature must remain backward-compatible.
+	it("hand-rolled void-return validate keeps current contract", async () => {
+		const fields = {
+			port: {
+				type: "number",
+				default: 3000,
+				validate: (v: number) => {
+					if (v < 1 || v > 65535) throw new Error("invalid port");
+				},
+			},
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		// Accept on no-throw: writes 8080 successfully.
+		await store.write({ port: 8080 });
+		const filePath = join(tempDir, "config.json");
+		expect(JSON.parse(await readFile(filePath, "utf-8"))).toEqual({
+			port: 8080,
+		});
+
+		// Reject on throw: 0 is out of range → CrustStoreError(VALIDATION).
+		try {
+			await store.write({ port: 0 });
+			expect.unreachable("should have thrown");
+		} catch (__err) {
+			const e = __err as CrustStoreError;
+			expect(e).toBeInstanceOf(CrustStoreError);
+			expect(e.is("VALIDATION")).toBe(true);
+			if (e.is("VALIDATION")) {
+				expect(e.details.issues[0]?.message).toBe("invalid port");
 			}
 		}
 	});

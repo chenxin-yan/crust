@@ -58,10 +58,19 @@ export interface FieldOptions<T = unknown> {
 // Schema → field validate adapter
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Build the per-field async validate function from a Standard Schema. */
+/**
+ * Build the per-field async validate function from a Standard Schema.
+ *
+ * On success returns `{ value: result.value }` so the store can persist
+ * schema-transformed values (e.g. `z.string().transform(s => s.trim())`).
+ * On issues, throws an `Error` whose message contains the schema's
+ * normalized issues. The store treats `{ value }` returns as
+ * "persist on write/update/patch, discard on read" — see
+ * `FieldDef.validate` in `./types.ts`.
+ */
 function makeValidator<S extends StandardSchema>(
 	schema: S,
-): (value: unknown) => Promise<void> {
+): (value: unknown) => Promise<{ value: unknown }> {
 	return async (value: unknown) => {
 		const result = await schema["~standard"].validate(value);
 		if (result.issues) {
@@ -71,6 +80,7 @@ function makeValidator<S extends StandardSchema>(
 			);
 			throw new Error(messages.join("; "));
 		}
+		return { value: result.value };
 	};
 }
 
@@ -120,7 +130,7 @@ type ResolveScalarType<S> =
 type ScalarFieldDef<T extends ValueType> = {
 	readonly type: T;
 	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** A scalar `FieldDef` with a narrowed default. */
@@ -128,7 +138,7 @@ type ScalarFieldDefWithDefault<T extends ValueType, D> = {
 	readonly type: T;
 	readonly description?: string;
 	readonly default: D;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** An array `FieldDef` with no narrowed default. */
@@ -136,7 +146,7 @@ type ArrayFieldDef<T extends ValueType> = {
 	readonly type: T;
 	readonly array: true;
 	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /** An array `FieldDef` with a narrowed default. */
@@ -145,7 +155,7 @@ type ArrayFieldDefWithDefault<T extends ValueType, D> = {
 	readonly array: true;
 	readonly description?: string;
 	readonly default: D;
-	readonly validate: (value: unknown) => Promise<void>;
+	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
 };
 
 /**
