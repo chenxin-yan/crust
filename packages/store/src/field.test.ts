@@ -39,6 +39,18 @@ describe("field() — runtime shape", () => {
 		expect((def as { default?: unknown }).default).toBe("y");
 	});
 
+	it("opts.default = undefined is honored (key-present sentinel, not !== undefined)", () => {
+		// Regression: previously the implementation also checked
+		// `opts.default !== undefined`, which silently dropped an explicitly
+		// passed `undefined` and fell back to schema extraction — contradicting
+		// the `D extends InferOutput<S>` overload contract.
+		const def = field(z.string().optional().default("fallback"), {
+			default: undefined,
+		});
+		expect("default" in def).toBe(true);
+		expect((def as { default?: unknown }).default).toBeUndefined();
+	});
+
 	it("opts.description overrides inferred description", () => {
 		const def = field(z.string().describe("from schema"), {
 			description: "from opts",

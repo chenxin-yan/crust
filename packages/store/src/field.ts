@@ -278,9 +278,11 @@ export function field<S extends StandardSchema>(
 
 	// Resolve default: explicit opts wins; otherwise sync vendor-aware
 	// extraction with `validate(undefined)` fallback. Falsy defaults are
-	// preserved — we never use `=== undefined` as a sentinel.
+	// preserved — `"default" in opts` is the sole sentinel for "caller
+	// explicitly set a default", so `{ default: undefined }` is honored
+	// (matching the `D extends InferOutput<S>` overload contract).
 	const resolvedDefault =
-		opts && "default" in opts && opts.default !== undefined
+		opts && "default" in opts
 			? ({ ok: true, value: opts.default } as const)
 			: extractDefault(schema);
 
