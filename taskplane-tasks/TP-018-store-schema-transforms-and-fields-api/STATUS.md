@@ -1,6 +1,6 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
-**Current Step:** Step 4: Documentation flip
+**Current Step:** Step 6: Testing & Verification
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-05-12
 
@@ -68,20 +68,20 @@
 ---
 
 ### Step 4: Documentation flip
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `store.mdx` lines ~345-346 inverted; new contract documented
-- [ ] `packages/store/README.md` validation section mirrored
+- [x] `store.mdx` lines ~345-346 inverted; new contract documented (transform persistence + read-stability guard + read-verbatim guarantee)
+- [x] `packages/store/README.md` validation section mirrored (per-operation behavior table updated)
 
 ---
 
 ### Step 5: Changeset
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `bunx changeset` produces single `@crustjs/store` minor entry
-- [ ] Behavior-change note explicit (trim example; existing on-disk values survive on read; canonicalize on next write)
-- [ ] `FieldDef.validate` widened contract documented
-- [ ] No surface contraction note included
+- [x] `bunx changeset` produces single `@crustjs/store` minor entry (`.changeset/store-transform-persistence.md`)
+- [x] Behavior-change note explicit (trim example; existing on-disk values survive on read; canonicalize on next write)
+- [x] `FieldDef.validate` widened contract documented
+- [x] No surface contraction note included
 
 ---
 
