@@ -2,7 +2,7 @@
 
 **Current Step:** Step 7: Documentation & Delivery
 **Status:** ✅ Complete
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-12 (iteration 1)
 
 > **Scope reduction 2026-05-12 (operator decision):** original PROMPT
 > bundled three streams (transform persistence, polymorphic `FieldSpec`,
@@ -134,6 +134,7 @@
 | 2026-05-12 | Amendment 2 | Scope reduced from L to M; dropped polymorphic `FieldSpec` + `store.fields()` API per operator decision |
 | 2026-05-12 23:48 | Task started | Runtime V2 lane-runner execution |
 | 2026-05-12 23:48 | Step 0 started | Preflight |
+| 2026-05-12 | Steps 0–7 complete | All RED tests turn GREEN; full suite + check + check:types + build pass; 5/5 manual sanity scenarios pass; single `@crustjs/store` minor changeset committed |
 
 ---
 
