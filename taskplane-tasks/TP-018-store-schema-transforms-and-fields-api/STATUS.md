@@ -1,7 +1,7 @@
 # TP-018: Store schema transform persistence + read-stability guard — Status
 
 **Current Step:** Step 7: Documentation & Delivery
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete
 **Last Updated:** 2026-05-12
 
 > **Scope reduction 2026-05-12 (operator decision):** original PROMPT
@@ -101,11 +101,11 @@
 ---
 
 ### Step 7: Documentation & Delivery
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] "Must Update" docs modified
-- [ ] "Check If Affected" docs reviewed
-- [ ] Discoveries logged
+- [x] "Must Update" docs modified (`store.mdx`, `packages/store/README.md`)
+- [x] "Check If Affected" docs reviewed (`apps/docs/content/docs/guide/*.mdx` — only `lifecycle.mdx` mentions "transform" in an unrelated context; `taskplane-tasks/CONTEXT.md` has no entries for store/command asymmetry)
+- [x] Discoveries logged (see Discoveries section)
 
 ---
 
