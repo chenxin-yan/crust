@@ -1,5 +1,131 @@
 # @crustjs/core
 
+## 0.0.17
+
+### Patch Changes
+
+- b87e0ee: Add `choices` to `FlagDef`/`ArgDef` and `hidden` to `CommandMeta`.
+
+  Two purely-additive optional fields on the `@crustjs/core` public type surface:
+
+  - **`choices?: readonly string[]`** on string-typed flag and arg variants
+    (`StringFlagDef`, `StringMultiFlagDef`, `StringArgDef`) — a static enum of
+    valid values for the flag/arg.
+
+    ```ts
+    flags: {
+      target: { type: "string", choices: ["browser", "bun", "node"] },
+    }
+    ```
+
+    `choices` is a **hint for tooling** consumed by shell-completion tooling
+    to emit static value candidates and may be consumed by future opt-in
+    validation. It is **NOT** enforced at parse time in this version: passing
+    a value outside `choices` does not throw, the value is still parsed as a
+    string and delivered to your handler. Validate explicitly inside your
+    handler if you need runtime rejection today. Adding `choices` to
+    number/boolean variants is a compile-time error.
+
+  - **`hidden?: boolean`** on `CommandMeta` — omits a command from any
+    tooling that enumerates the command tree for users (help output, man
+    pages, skill descriptors, completion candidate lists, etc.).
+
+    ```ts
+    meta: { name: "__complete", hidden: true, description: "Internal" }
+    ```
+
+    Listing-only: the command stays fully invocable by name (or alias),
+    routing is unchanged, and it can still surface through tooling that
+    looks up specific commands rather than enumerating the tree (e.g.
+    `didYouMeanPlugin`). The default `helpPlugin` (in `@crustjs/plugins`)
+    follows this contract today; first-party generators and custom
+    renderers should too.
+
+  Both fields are purely additive at the type level — existing code that
+  does not set `choices` or `hidden` is unchanged. The parser is
+  unmodified.
+
+- f1baa45: Add `aliases` to `CommandMeta`.
+
+  Commands and subcommands can now declare alternative names that resolve to the same command node:
+
+  ```ts
+  new Crust("my-cli").command("issue", (cmd) =>
+    cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+  );
+  // my-cli issue, my-cli issues, and my-cli i all route to the same command
+  ```
+
+  The change is purely additive at the type level — existing code that does not set `aliases` is unchanged. `resolveCommand` gains a fast path that scans sibling `meta.aliases` on miss; `commandPath` continues to record the canonical name only, so error messages, help titles, and downstream plugins are unaffected by which alias the user typed. `CrustError("COMMAND_NOT_FOUND")`'s `details.available` keeps its canonical-only contract — alias-aware consumers (e.g. `didYouMeanPlugin`) read aliases directly from `details.parentCommand.subCommands`.
+
+  Alias collisions are eagerly rejected at registration time with `CrustError("DEFINITION", …)`. Plugin-installed subcommands (via the `addCommand` setup action) get the same check and are skipped with a warning if their canonical name or any alias collides — mirroring how a colliding canonical name was already handled. `validateCommandTree` re-runs the full check against the final tree. An alias may not equal the command's own canonical name, any sibling's canonical name, or any sibling's alias; aliases must be non-empty, contain no whitespace, and not start with `-`.
+
+- 8779692: Make the `choices`, `meta.aliases`, and `meta.hidden` contracts consistent
+  across every consumer (help, did-you-mean, man, completion).
+
+  A cross-consumer audit found three gaps:
+
+  - `helpPlugin` rendered output omitted the `choices` list for both flags
+    and positional args, so users could not discover valid values from
+    `--help` without resorting to shell completion or source-reading.
+  - `didYouMeanPlugin` and the `@crustjs/man` manpage generator both
+    walked the command tree without filtering `meta.hidden: true`, so
+    internal commands (e.g. `__complete`) leaked into typo suggestions,
+    the "Available commands" fallback, and published man pages.
+  - `@crustjs/man` omitted long flag aliases (`def.aliases`) and `choices`
+    from the OPTIONS / ARGUMENTS sections, leaving the man page strictly
+    less informative than `--help`.
+  - The completion plugin's bash and fish templates only surfaced
+    `choices` for the **first** positional argument; zsh respected every
+    slot. Variadic-with-choices arguments and multi-positional commands
+    silently fell through to file completion in bash/fish.
+
+  Changes:
+
+  - `helpPlugin` renders `[choices: a, b, c]` after the description for
+    every flag and arg that declares a `choices` list, composed with
+    `[default: ...]` when both are present.
+  - `didYouMeanPlugin` skips `meta.hidden: true` siblings in both the
+    Levenshtein suggestion corpus (canonical names **and** aliases) and
+    the "Available commands" fallback list.
+  - `@crustjs/man` filters `meta.hidden: true` subcommands from the
+    SUBCOMMANDS section (and skips the section entirely when every
+    subcommand is hidden), surfaces flag and arg `choices` as a
+    `[choices: ...]` suffix, and includes long flag aliases in OPTIONS
+    labels (`-o, --output, --out`, plus `--no-` negation for every long
+    spelling on boolean flags).
+  - `completionPlugin` bash and fish templates now track positional slot
+    index past the resolved command path and emit per-slot choice
+    candidates. Variadic-with-choices arguments are handled correctly
+    (the choice list applies at every slot from the variadic's declared
+    index onwards). The fish template gains a second per-script helper
+    `__<ident>_path_at_arg` that the existing `__<ident>_path_is` is
+    layered alongside; subcommand and flag rules continue to use the
+    original predicate.
+
+  Core / docs:
+
+  - `CommandMeta.hidden` JSDoc now enumerates every tooling surface the
+    flag affects (help, completion, did-you-mean, man, skills) and is
+    explicit that there is intentionally no analogous `FlagDef.hidden` —
+    the workaround for flag-level hiding is to register without a
+    description.
+
+- 9db2613: Make build-validation mode safe for in-process callers.
+
+  `Crust.execute()` no longer calls `process.exit()` when only
+  `CRUST_INTERNAL_VALIDATE_ONLY=1` is set — it now runs the validation
+  pipeline, surfaces errors via stderr and `process.exitCode`, and returns
+  like the rest of `.execute()`'s error paths. Process termination is
+  opt-in via the new `CRUST_INTERNAL_VALIDATE_FORCE_EXIT=1` env var, which
+  `crust build`'s `validateEntrypoint()` sets on its spawned subprocess.
+
+  For end users there is no change: `crust build` now sets both env vars on
+  its validation subprocess, preserving the existing behavior of skipping
+  entrypoint code after `await app.execute()` during the build check.
+  Tests and embedders that need to exercise the validation pipeline can
+  now do so without being terminated.
+
 ## 0.0.16
 
 ### Patch Changes
