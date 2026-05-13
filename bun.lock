@@ -60,6 +60,9 @@
     "packages/create": {
       "name": "@crustjs/create",
       "version": "0.0.5",
+      "dependencies": {
+        "@crustjs/utils": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
@@ -192,6 +195,7 @@
         "@crustjs/progress": "workspace:*",
         "@crustjs/prompts": "workspace:*",
         "@crustjs/style": "workspace:*",
+        "@crustjs/utils": "workspace:*",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -222,6 +226,17 @@
     "packages/style": {
       "name": "@crustjs/style",
       "version": "0.2.0",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "typescript": "catalog:",
+      },
+    },
+    "packages/utils": {
+      "name": "@crustjs/utils",
+      "version": "0.0.1",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
@@ -394,6 +409,8 @@
     "@crustjs/store": ["@crustjs/store@workspace:packages/store"],
 
     "@crustjs/style": ["@crustjs/style@workspace:packages/style"],
+
+    "@crustjs/utils": ["@crustjs/utils@workspace:packages/utils"],
 
     "@crustjs/validate": ["@crustjs/validate@workspace:packages/validate"],
 

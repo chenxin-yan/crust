@@ -15,6 +15,7 @@
     "store",
     "skills",
     "log",
-    "man"
+    "man",
+    "utils"
   ]
 }

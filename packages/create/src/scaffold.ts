@@ -6,8 +6,8 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, relative, resolve } from "node:path";
+import { resolveSourceDir } from "@crustjs/utils";
 import { interpolate } from "./interpolate.ts";
 import { isBinary } from "./isBinary.ts";
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
@@ -79,65 +79,6 @@ function isNonEmptyDir(dirPath: string): boolean {
 }
 
 /**
- * Find the nearest directory containing `package.json`.
- */
-function findNearestPackageRoot(startPath: string): string | null {
-	let current = resolve(startPath);
-
-	if (existsSync(current) && !statSync(current).isDirectory()) {
-		current = dirname(current);
-	}
-
-	while (true) {
-		if (existsSync(join(current, "package.json"))) {
-			return current;
-		}
-
-		const parent = dirname(current);
-		if (parent === current) {
-			return null;
-		}
-
-		current = parent;
-	}
-}
-
-/**
- * Resolve the template directory from a string path or file URL.
- */
-function resolveTemplateDir(template: string | URL): string {
-	if (template instanceof URL) {
-		if (template.protocol !== "file:") {
-			throw new Error(
-				`Template URL must use file: protocol, got "${template.protocol}".`,
-			);
-		}
-
-		return fileURLToPath(template);
-	}
-
-	if (isAbsolute(template)) {
-		return resolve(template);
-	}
-
-	const entrypoint = process.argv[1];
-	if (!entrypoint) {
-		throw new Error(
-			`Could not resolve relative template path "${template}" because process.argv[1] is not set. Pass an absolute path or a file: URL template.`,
-		);
-	}
-
-	const packageRoot = findNearestPackageRoot(resolve(entrypoint));
-	if (!packageRoot) {
-		throw new Error(
-			`Could not resolve relative template path "${template}" from entrypoint "${entrypoint}" because no package.json was found in its parent directories. Pass an absolute path or a file: URL template.`,
-		);
-	}
-
-	return resolve(packageRoot, template);
-}
-
-/**
  * Convert template input to a readable string for diagnostics.
  */
 function formatTemplateInput(template: string | URL): string {
@@ -182,7 +123,7 @@ export async function scaffold(
 ): Promise<ScaffoldResult> {
 	const { template, dest, context, conflict = "abort" } = options;
 
-	const templateDir = resolveTemplateDir(template);
+	const templateDir = resolveSourceDir(template);
 	const destDir = resolve(dest);
 
 	if (!existsSync(templateDir)) {

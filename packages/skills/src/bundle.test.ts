@@ -9,13 +9,9 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { Crust } from "@crustjs/core";
-import {
-	installSkillBundle,
-	loadBundleFiles,
-	resolveBundleSourceDir,
-} from "./bundle.ts";
+import { installSkillBundle, loadBundleFiles } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
 import { generateSkill } from "./generate.ts";
 import type { AgentResult, SkillMeta } from "./types.ts";
@@ -60,20 +56,6 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-async function withArgv1<T>(value: string, fn: () => Promise<T>): Promise<T> {
-	const original = process.argv[1];
-	process.argv[1] = value;
-	try {
-		return await fn();
-	} finally {
-		if (original === undefined) {
-			process.argv.length = 1;
-		} else {
-			process.argv[1] = original;
-		}
-	}
-}
-
 async function listFiles(dir: string, prefix = ""): Promise<string[]> {
 	const entries = await readdir(dir, { withFileTypes: true });
 	const out: string[] = [];
@@ -101,57 +83,11 @@ const META: SkillMeta = {
 
 const BUNDLE_VERSION = "1.0.0";
 
-// ────────────────────────────────────────────────────────────────────────────
-// resolveBundleSourceDir
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveBundleSourceDir", () => {
-	it("resolves a file: URL", () => {
-		const url = pathToFileURL(`${FIXTURE_DIR}/`);
-		expect(resolveBundleSourceDir(url)).toBe(fileURLToPath(url));
-	});
-
-	it("rejects a non-file: URL with a clear error", () => {
-		const url = new URL("https://example.com/skills/funnel-builder");
-		expect(() => resolveBundleSourceDir(url)).toThrow(/file: protocol/);
-	});
-
-	it("returns absolute string paths verbatim (after resolve)", () => {
-		expect(resolveBundleSourceDir(FIXTURE_DIR)).toBe(FIXTURE_DIR);
-	});
-
-	it("resolves relative string paths from the nearest package.json", async () => {
-		// The test runs inside packages/skills/, which has a package.json.
-		// Use src/ as the "entrypoint" so the walk lands on packages/skills/.
-		const fakeEntry = join(dirname(fileURLToPath(import.meta.url)), "index.ts");
-		await withArgv1(fakeEntry, async () => {
-			const resolved = resolveBundleSourceDir("tests/fixtures/bundle");
-			// The package root is packages/skills/
-			expect(resolved.endsWith("/tests/fixtures/bundle")).toBe(true);
-		});
-	});
-
-	it("throws when relative path is supplied with no process.argv[1]", async () => {
-		const original = process.argv[1];
-		process.argv.length = 1; // unset argv[1]
-		try {
-			expect(() => resolveBundleSourceDir("skills/x")).toThrow(
-				/process\.argv\[1\] is not set/,
-			);
-		} finally {
-			if (original !== undefined) process.argv[1] = original;
-		}
-	});
-
-	it("throws when no walkable package.json is found", async () => {
-		// /tmp typically has no package.json walking up from it.
-		await withArgv1("/tmp/no-pkg-here.js", async () => {
-			expect(() => resolveBundleSourceDir("rel/path")).toThrow(
-				/no package\.json was found/,
-			);
-		});
-	});
-});
+// Resolution-mode coverage (URL / absolute / relative / failure modes) is
+// owned by `@crustjs/utils` (see packages/utils/src/source.test.ts). The
+// bundle-install pipeline relies on `resolveSourceDir` from `@crustjs/utils`
+// and is exercised end-to-end via `loadBundleFiles` and `installSkillBundle`
+// below.
 
 // ────────────────────────────────────────────────────────────────────────────
 // loadBundleFiles

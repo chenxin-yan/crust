@@ -1,25 +1,25 @@
 {
-	"name": "@crustjs/skills",
-	"version": "0.1.0",
-	"description": "Agent skill generation from Crust command definitions",
+	"name": "@crustjs/utils",
+	"version": "0.0.1",
+	"description": "Shared low-level utilities for the Crust ecosystem (pre-stable)",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/skills"
+		"directory": "packages/utils"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
 		"url": "https://github.com/chenxin-yan/crust/issues"
 	},
 	"keywords": [
-		"cli",
-		"skills",
-		"agent",
-		"generation",
-		"documentation",
+		"crust",
+		"utils",
+		"utilities",
+		"resolve",
+		"package-root",
 		"bun",
 		"typescript"
 	],
@@ -42,19 +42,11 @@
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks || true"
 	},
-	"dependencies": {
-		"@crustjs/progress": "workspace:*",
-		"@crustjs/prompts": "workspace:*",
-		"@crustjs/style": "workspace:*",
-		"@crustjs/utils": "workspace:*"
-	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/core": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
 	}
 }
