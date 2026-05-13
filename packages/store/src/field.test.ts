@@ -107,9 +107,17 @@ describe("field() — runtime shape", () => {
 });
 
 describe("field() — validate adapter", () => {
-	it("returns a validate function that resolves on valid input", async () => {
+	it("returns a validate function that resolves to { value } on valid input", async () => {
+		// Schema-driven validators return `{ value: result.value }` so the
+		// store can persist transformed outputs (TP-018). For non-
+		// transforming schemas the value round-trips unchanged.
 		const def = field(z.string());
-		await expect(def.validate("hello")).resolves.toBeUndefined();
+		await expect(def.validate("hello")).resolves.toEqual({ value: "hello" });
+	});
+
+	it("returns a validate function that resolves to the transformed value", async () => {
+		const def = field(z.string().transform((s) => s.trim()));
+		await expect(def.validate("  hi  ")).resolves.toEqual({ value: "hi" });
 	});
 
 	it("returns a validate function that rejects on invalid input", async () => {
@@ -277,8 +285,18 @@ describe("default extraction — vendor-neutral fallback", () => {
 describe("field() — type-level integration with FieldDef", () => {
 	it("returns a value structurally compatible with store FieldDef.validate", async () => {
 		const def = field(z.string());
-		// Structural check: validate signature aligns with FieldDef.validate
-		const validate: (value: unknown) => void | Promise<void> = def.validate;
+		// Structural check: schema-driven validators emit `{ value: unknown }`
+		// on success so the store can persist transforms. The parameter is
+		// typed as `unknown` here because `FieldDef.validate` narrows its
+		// argument per-discriminant (string vs number vs …) and the public
+		// `field()` factory has to accept any input shape.
+		const validate: (
+			value: unknown,
+		) =>
+			| void
+			| Promise<void>
+			| { value: unknown }
+			| Promise<{ value: unknown }> = def.validate;
 		await validate("hello");
 	});
 });

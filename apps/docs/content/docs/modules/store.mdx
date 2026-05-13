@@ -342,8 +342,23 @@ const store = createStore({
 `reset`. If a validator throws, the operation is aborted and a
 `CrustStoreError` with `VALIDATION` code is thrown with structured issues.
 
-Store field validators are validation-only. Schema transforms/coercions
-in the schema passed to `field()` are not written back into store state.
+Schema transforms in fields built via `field()` are applied on `write`,
+`update`, and `patch` — never on `read`. The transformed output replaces
+the input before persistence and is then re-validated once: a transform
+whose output the schema would itself reject (e.g.
+`z.string().transform(Number)` — string in, number out) is rejected at
+write time with `CrustStoreError("VALIDATION")` and an issue message
+tagged `read-unstable transform`.
+
+On `read`, the schema still validates the persisted value but its
+transform output is discarded — the returned value matches what is on
+disk. Existing on-disk values for schema-using stores survive unchanged
+across upgrades; the first subsequent `write` / `update` / `patch`
+canonicalizes them through the transform.
+
+Hand-rolled `validate: (v) => { ... }` callbacks that return `void` are
+unaffected — they remain validation-only (throw to reject, return `void`
+to accept) and cannot transform the persisted value.
 
 #### Schema-derived defaults and TypeScript
 

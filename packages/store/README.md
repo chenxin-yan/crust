@@ -410,18 +410,36 @@ const store = createStore({
 });
 ```
 
-The per-field `validate` function's contract is
-`(value: V) => void | Promise<void>`. Return `void` (or `Promise<void>`) for
-a valid value; throw an `Error` to reject. Validators are side-effect only —
-they cannot transform the persisted value. Use the built-in `field()` factory
-(above) when you need schema-driven validation.
+Hand-rolled `validate` callbacks are `(value: V) => void | Promise<void>`.
+Return `void` (or `Promise<void>`) to accept; throw an `Error` to reject.
+These remain validation-only — they cannot transform the persisted value.
+
+Fields built via the `field()` factory carry a Standard Schema and DO
+persist transforms on `write` / `update` / `patch` (e.g.
+`field(z.string().transform(s => s.trim()))` writes the trimmed value to
+disk). On `read`, the schema still validates the persisted value but its
+transform output is discarded — the on-disk value is returned unchanged.
+Existing on-disk values survive unchanged across upgrades; the first
+subsequent write canonicalizes them through the transform.
+
+A write-time **read-stability guard** rejects cross-type transforms whose
+output would fail the schema's own re-validation. For example,
+`field(z.string().transform(Number))` (string in, number out) is rejected
+with `CrustStoreError("VALIDATION")` and an issue message tagged
+`read-unstable transform`. No on-disk write occurs.
 
 ### Validation behavior
 
-- **Write**: Validates each field before persisting. The persisted value is the input value unchanged — custom validators cannot transform.
-- **Read**: Validates each field after applying defaults. Invalid persisted config fails loudly — no silent fallback to defaults.
-- **Update**: Reads raw config (no validation), applies updater, validates each field, then persists.
-- **Patch**: Reads raw config, applies shallow partial merge, validates each field, then persists.
+- **Write**: Validates each field before persisting. Schema-driven
+  transforms (via `field()`) replace the input value with the transformed
+  output; hand-rolled validators cannot transform.
+- **Read**: Validates each field after applying defaults. Invalid persisted
+  config fails loudly — no silent fallback to defaults. Schema transform
+  output is discarded on read; the returned value matches what is on disk.
+- **Update**: Reads raw config (no validation), applies updater, validates
+  each field (persisting any schema-transformed outputs), then persists.
+- **Patch**: Reads raw config, applies shallow partial merge, validates each
+  field (persisting any schema-transformed outputs), then persists.
 - **Reset**: No validation — just removes the persisted file.
 
 ### Catching validation errors
