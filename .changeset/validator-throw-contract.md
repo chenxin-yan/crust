@@ -1,5 +1,5 @@
 ---
-"@crustjs/prompts": major
+"@crustjs/prompts": minor
 "@crustjs/store": patch
 ---
 
@@ -13,10 +13,10 @@ store).
 
 This unifies what was previously two contracts:
 
-| Surface | Before | After |
-| --- | --- | --- |
-| `@crustjs/prompts` `input()` / `password()` `validate` | `(v) => true \| string \| Promise<…>` | `(v) => void \| Promise<void>`, throws on failure |
-| `@crustjs/store` `FieldDef.validate` | `(v) => void \| Promise<void>` (already throw-on-fail) | unchanged |
+| Surface                                                | Before                                                 | After                                             |
+| ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------- |
+| `@crustjs/prompts` `input()` / `password()` `validate` | `(v) => true \| string \| Promise<…>`                  | `(v) => void \| Promise<void>`, throws on failure |
+| `@crustjs/store` `FieldDef.validate`                   | `(v) => void \| Promise<void>` (already throw-on-fail) | unchanged                                         |
 
 ### `@crustjs/prompts` (major) — breaking change
 

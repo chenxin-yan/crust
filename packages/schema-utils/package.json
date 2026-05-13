@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/schema-utils",
-	"version": "0.0.1",
+	"version": "0.0.0",
 	"description": "Internal Crust workspace package. Do not depend on directly — use @crustjs/validate.",
 	"type": "module",
 	"license": "MIT",

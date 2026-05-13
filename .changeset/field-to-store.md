@@ -1,5 +1,5 @@
 ---
-"@crustjs/validate": major
+"@crustjs/validate": minor
 "@crustjs/store": minor
 ---
 
@@ -29,9 +29,9 @@ same per-field async `validate` adapter.
 
 The locked TP-014 root surface shrinks from **8 functions to 7**:
 
-| Removed | Replacement |
-| --- | --- |
-| `field` | `import { field } from "@crustjs/store"` |
+| Removed               | Replacement                                          |
+| --------------------- | ---------------------------------------------------- |
+| `field`               | `import { field } from "@crustjs/store"`             |
 | `FieldOptions` (type) | `import type { FieldOptions } from "@crustjs/store"` |
 
 The remaining 7 functions (`arg`, `flag`, `commandValidator`, `parseValue`,
