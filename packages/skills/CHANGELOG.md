@@ -1,5 +1,220 @@
 # @crustjs/skills
 
+## 0.1.0
+
+### Minor Changes
+
+- 2de97e2: `skillPlugin` now accepts a `customSkills` array for managing hand-authored
+  skill bundles alongside the auto-generated command-reference skill. Each
+  entry runs through the same lifecycle as the main skill (auto-update,
+  interactive multiselect, `skill update`) and adds its own multiselect
+  prompt after the main one, in array order.
+
+  ```ts
+  import { Crust } from "@crustjs/core";
+  import { skillPlugin } from "@crustjs/skills";
+  import pkg from "./package.json" with { type: "json" };
+
+  new Crust("my-cli")
+    .meta({ description: "My CLI" })
+    .use(
+      skillPlugin({
+        version: pkg.version,
+        customSkills: [
+          {
+            name: "funnel-builder",
+            sourceDir: "skills/funnel-builder",
+            version: pkg.version,
+          },
+        ],
+      }),
+    )
+    .run(() => {});
+  ```
+
+  `CustomSkillConfig.sourceDir` accepts a `URL` (`file:` protocol), an
+  absolute path, or a bare relative string resolved from the nearest
+  `package.json` walking up from `process.argv[1]` — the same three modes
+  used by `installSkillBundle()`. Each entry's `version` drives
+  auto-update detection (compared against the recorded `crust.json`
+  version) and is typically wired to the consuming package's
+  `package.json` `version`. Per-entry `scope` and `installMode` overrides
+  are optional; unset values inherit from the plugin's `defaultScope` /
+  `installMode`.
+
+  Setup-time validation enforces:
+
+  - Each `name` satisfies `isValidSkillName`.
+  - No `name` collides with the main skill's name.
+  - All `name` values are unique within the array.
+  - Each `version` is a non-empty string.
+  - Each `sourceDir` is a `string` or `URL`.
+
+  Bundle files are copied as raw bytes, so supporting binary assets round-trip
+  unchanged. Passing `agents: []` to `installSkillBundle()` validates the
+  bundle without installing it.
+
+  Per-entry failures are logged with the bundle name and never abort other
+  entries. Failures from explicit `skill --all` and `skill update` set a
+  non-zero exit code so automation notices partial failures; startup
+  auto-update remains warning-only. When `customSkills` is omitted or empty,
+  only the generated main skill is managed.
+
+  The bundle's `SKILL.md` frontmatter `name:` must equal the configured
+  `name` — mismatches are rejected at install time so plugin status /
+  uninstall paths can never drift from the canonical install location.
+
+- 2de97e2: `CustomSkillConfig.version` is now optional in `skillPlugin`'s
+  `customSkills`. When omitted, the entry inherits the plugin's top-level
+  `version` — the typical case when the bundle ships in the same package as
+  the consuming CLI. Pass an explicit value to opt into independent
+  versioning (e.g. a bundle vendored from another package at a different
+  release cadence).
+
+  ```ts
+  skillPlugin({
+    version: pkg.version,
+    customSkills: [
+      // Inherits `version: pkg.version` from the plugin.
+      { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+      // Explicit override for an independently-versioned bundle.
+      {
+        name: "vendored-toolkit",
+        sourceDir: "skills/vendored-toolkit",
+        version: "0.3.0",
+      },
+    ],
+  });
+  ```
+
+  This aligns `version` with how `scope` and `installMode` already inherit
+  from the plugin. The existing required-`version` shape keeps working —
+  all current configs are unchanged.
+
+  Setup-time validation now rejects an explicit empty-string `version` so a
+  typo can't silently fall through to the plugin-level fallback. Omitting
+  the field entirely is the supported way to inherit.
+
+- dac902a: **Add `installSkillBundle()` for hand-authored skill bundles.**
+
+  New `installSkillBundle(options)` entrypoint installs a directory containing
+  `SKILL.md` and supporting files through the same canonical-store + agent
+  fan-out pipeline used by `generateSkill()`. The bundle's `SKILL.md`
+  frontmatter is the source of truth for `name` and `description` — both are
+  required, and Crust reads them without rewriting the file. `version` is a
+  required option (typically wired to the consuming package's `package.json`
+  `version`) recorded in `crust.json` for update detection. Files are copied
+  as UTF-8 text (binary supporting files are not supported). Bundle contents
+  are copied as authored — there is no implicit name-based filtering of
+  `node_modules/`, dotfiles, etc.; bundle authors are responsible for
+  pointing `sourceDir` at a clean directory. `crust.json` at the bundle
+  root is reserved: if found in the source, the call throws so the conflict
+  surfaces immediately. Crust then writes a fresh `crust.json` for
+  ownership tracking. Symlinks that escape the bundle root are rejected.
+
+  ```ts
+  import { installSkillBundle } from "@crustjs/skills";
+  import pkg from "./package.json" with { type: "json" };
+
+  await installSkillBundle({
+    sourceDir: "skills/funnel-builder",
+    agents: ["claude-code"],
+    version: pkg.version,
+  });
+  ```
+
+  `sourceDir` accepts an absolute path, a `file:` URL, or a relative path
+  resolved from the nearest `package.json` walking up from `process.argv[1]`
+  (matching `@crustjs/create`'s template resolution).
+
+  **Additive `kind` field on `crust.json`.** Generated and bundle skills now
+  record their origin in `crust.json` as `kind: "generated" | "bundle"`.
+  Legacy `crust.json` files written before this field existed are read as
+  `"generated"` for backward compatibility — existing generated installs
+  continue to update cleanly without a migration step.
+
+  **New `kindMismatch` and `manifestMalformed` details on `SkillConflictError`.**
+  Attempting to install a bundle on top of a generated skill (or vice versa)
+  at the same name now throws `SkillConflictError` with
+  `details.kindMismatch: { existing, attempted }`. A directory whose
+  `crust.json` exists but is unparseable, missing a version, or declares an
+  unrecognized `kind` surfaces as `details.manifestMalformed: { reason,
+rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
+  skill first.
+
+  `generateSkill()` behaviour is unchanged for existing callers.
+
+  Resolves part of #110 (the lower-level primitive half; plugin integration
+  via `skillPlugin({ customSkills })` is tracked separately).
+
+### Patch Changes
+
+- d4cd621: # Make `agents` optional on `generateSkill`, `uninstallSkill`, and `skillStatus`
+
+  The `agents` field on `GenerateOptions`, `UninstallOptions`, and
+  `StatusOptions` is now optional. The default differs by entrypoint so
+  install behavior tracks the current machine, while uninstall and status
+  sweep every known path:
+
+  | Entrypoint                      | Default when `agents` is omitted                              | `PATH` I/O? |
+  | ------------------------------- | ------------------------------------------------------------- | ----------- |
+  | `generateSkill`                 | `[...getUniversalAgents(), ...await detectInstalledAgents()]` | Yes         |
+  | `uninstallSkill`, `skillStatus` | Every supported agent (exhaustive sweep of all known paths)   | No          |
+
+  In all three, `agents: []` is treated as a no-op (no install, uninstall, or
+  status entries). An explicit array always overrides the default.
+
+  **Behavior change.** Existing callers that pass an explicit `agents` array
+  keep their current behavior. Callers that omit `agents` (or pass
+  `agents: undefined`, which is common from object spread) now trigger the
+  defaults above:
+
+  - `generateSkill` performs filesystem I/O via `detectInstalledAgents()` to
+    probe `PATH` for installed agent CLIs.
+  - `uninstallSkill` and `skillStatus` do not probe `PATH`; they iterate the
+    full agent registry and stat each per-agent path, which can return a
+    larger result set than before (one entry per supported agent).
+
+  **Migration.**
+
+  ```ts
+  // Before — manual composition of universals + detected agents
+  const universal = getUniversalAgents();
+  const additional = await detectInstalledAgents();
+  await generateSkill({
+    command,
+    meta,
+    agents: [...universal, ...additional],
+    scope: "global",
+  });
+
+  // After — same result, no manual composition
+  await generateSkill({ command, meta, scope: "global" });
+  ```
+
+  `getUniversalAgents()`, `getAdditionalAgents()`, and
+  `detectInstalledAgents()` remain exported for callers who want fine-grained
+  control.
+
+  **Bug fix.** `detectInstalledAgents()` no longer reports a command as
+  installed when the matching `PATH` entry is an executable directory rather
+  than a file. The probe now requires the entry to be a regular file (or
+  symlink to one) before checking the `X_OK` bit.
+
+- Updated dependencies [075490b]
+- Updated dependencies [b87e0ee]
+- Updated dependencies [f1baa45]
+- Updated dependencies [075490b]
+- Updated dependencies [8779692]
+- Updated dependencies [67f815a]
+- Updated dependencies [82f5ad6]
+- Updated dependencies [9db2613]
+- Updated dependencies [3421dbf]
+  - @crustjs/style@0.2.0
+  - @crustjs/core@0.0.17
+  - @crustjs/prompts@0.1.0
+  - @crustjs/progress@0.0.4
+
 ## 0.0.24
 
 ### Patch Changes
