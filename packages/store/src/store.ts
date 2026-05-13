@@ -16,6 +16,16 @@ import type {
 	StoreValidatorIssue,
 } from "./types.ts";
 
+/**
+ * Narrow a `FieldDef.validate` return to the transform-result shape
+ * `{ value: unknown }`. Rejects the legacy `{ ok, value }` and
+ * `{ ok, issues }` shapes so they fall through to the fail-fast
+ * `TypeError` migration guard instead of being silently persisted.
+ */
+function isFieldValueResult(r: unknown): r is { value: unknown } {
+	return typeof r === "object" && r !== null && "value" in r && !("ok" in r);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — Public factory
 // ────────────────────────────────────────────────────────────────────────────
@@ -134,18 +144,17 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
-			// `FieldDef.validate` is contractually `void | { value }` — anything
-			// else is a caller bug (e.g. the legacy `{ ok, value }` shape).
-			// The fail-fast migration guard runs OUTSIDE the try block so the
-			// resulting `TypeError` cannot be caught and re-wrapped as a
-			// `CrustStoreError("VALIDATION")`.
+			// `FieldDef.validate` is contractually `void | { value }`. Anything
+			// else (notably the legacy `{ ok, value }` shape) is a caller bug
+			// and is surfaced below as a `TypeError` OUTSIDE the try/catch so
+			// it cannot be re-wrapped as `CrustStoreError("VALIDATION")`.
 
 			// Validation-only: validator returned no transformed value.
 			if (result === undefined) continue;
 
 			// Transform path: validator returned `{ value }`.
-			if (typeof result === "object" && result !== null && "value" in result) {
-				const transformed = (result as { value: unknown }).value;
+			if (isFieldValueResult(result)) {
+				const transformed = result.value;
 
 				// On read, transforms are discarded — reads always return the
 				// on-disk value verbatim (canonicalization happens on the
@@ -155,8 +164,10 @@ export function createStore<const F extends FieldsDef>(
 				// Persist-time path: if the transform changed the value,
 				// re-validate the output once. This catches cross-type
 				// transforms like `z.string().transform(Number)` whose output
-				// would fail the schema on the next read.
-				if (!Object.is(transformed, value)) {
+				// would fail the schema on the next read. Compare structurally
+				// because Standard Schema parsers (e.g. Zod arrays/objects)
+				// return fresh references even when contents are identical.
+				if (!Bun.deepEquals(transformed, value)) {
 					let recheck: unknown;
 					try {
 						recheck = await def.validate(transformed as never);
@@ -172,23 +183,19 @@ export function createStore<const F extends FieldsDef>(
 
 					// Recheck must accept the transformed value: either `void`
 					// (validation-only contract) or `{ value }` that is
-					// stable under another round of the same transform (i.e.
-					// `Object.is(recheck.value, transformed)`). Anything else
-					// means the next read would see a different value than the
-					// one we'd persist now.
-					if (recheck !== undefined) {
-						if (
-							typeof recheck !== "object" ||
-							recheck === null ||
-							!("value" in recheck) ||
-							!Object.is((recheck as { value: unknown }).value, transformed)
-						) {
-							issues.push({
-								message: `read-unstable transform: output would be transformed again on re-read`,
-								path: key,
-							});
-							continue;
-						}
+					// structurally stable under another round of the same
+					// transform. Anything else means the next read would see a
+					// different value than the one we'd persist now.
+					if (
+						recheck !== undefined &&
+						(!isFieldValueResult(recheck) ||
+							!Bun.deepEquals(recheck.value, transformed))
+					) {
+						issues.push({
+							message: `read-unstable transform: output would be transformed again on re-read`,
+							path: key,
+						});
+						continue;
 					}
 
 					record[key] = transformed;
@@ -196,9 +203,9 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
-			// Any other return shape (e.g. legacy `{ ok, issues }`) is a
-			// caller bug — surface as a TypeError so it isn't misclassified
-			// as a `VALIDATION` failure.
+			// Any other return shape (e.g. legacy `{ ok, value }` or
+			// `{ ok, issues }`) is a caller bug — surface as a TypeError so
+			// it isn't misclassified as a `VALIDATION` failure.
 			throw new TypeError(
 				`FieldDef.validate must return void or { value } (see @crustjs/store validation docs).`,
 			);

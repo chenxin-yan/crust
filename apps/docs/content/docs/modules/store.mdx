@@ -350,10 +350,11 @@ whose output the schema would itself reject (e.g.
 write time with `CrustStoreError("VALIDATION")` and an issue message
 tagged `read-unstable transform`.
 
-Reads always return the on-disk value verbatim. Existing on-disk values
-for schema-using stores survive unchanged across upgrades; the first
-subsequent `write` / `update` / `patch` canonicalizes them through the
-transform.
+On `read`, the schema still validates the persisted value but its
+transform output is discarded — the returned value matches what is on
+disk. Existing on-disk values for schema-using stores survive unchanged
+across upgrades; the first subsequent `write` / `update` / `patch`
+canonicalizes them through the transform.
 
 Hand-rolled `validate: (v) => { ... }` callbacks that return `void` are
 unaffected — they remain validation-only (throw to reject, return `void`

@@ -285,9 +285,11 @@ describe("default extraction — vendor-neutral fallback", () => {
 describe("field() — type-level integration with FieldDef", () => {
 	it("returns a value structurally compatible with store FieldDef.validate", async () => {
 		const def = field(z.string());
-		// Structural check: validate signature aligns with the widened
-		// FieldDef.validate union (TP-018) — schema-driven validators emit
-		// `{ value: unknown }` on success so the store can persist transforms.
+		// Structural check: schema-driven validators emit `{ value: unknown }`
+		// on success so the store can persist transforms. The parameter is
+		// typed as `unknown` here because `FieldDef.validate` narrows its
+		// argument per-discriminant (string vs number vs …) and the public
+		// `field()` factory has to accept any input shape.
 		const validate: (
 			value: unknown,
 		) =>

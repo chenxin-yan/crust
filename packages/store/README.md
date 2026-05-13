@@ -417,8 +417,9 @@ These remain validation-only — they cannot transform the persisted value.
 Fields built via the `field()` factory carry a Standard Schema and DO
 persist transforms on `write` / `update` / `patch` (e.g.
 `field(z.string().transform(s => s.trim()))` writes the trimmed value to
-disk). Reads always return the on-disk value verbatim — transforms never
-run on `read`. Existing on-disk values survive unchanged; the first
+disk). On `read`, the schema still validates the persisted value but its
+transform output is discarded — the on-disk value is returned unchanged.
+Existing on-disk values survive unchanged across upgrades; the first
 subsequent write canonicalizes them through the transform.
 
 A write-time **read-stability guard** rejects cross-type transforms whose
@@ -433,8 +434,8 @@ with `CrustStoreError("VALIDATION")` and an issue message tagged
   transforms (via `field()`) replace the input value with the transformed
   output; hand-rolled validators cannot transform.
 - **Read**: Validates each field after applying defaults. Invalid persisted
-  config fails loudly — no silent fallback to defaults. Schema transforms
-  do NOT run on read; the on-disk value is returned verbatim.
+  config fails loudly — no silent fallback to defaults. Schema transform
+  output is discarded on read; the returned value matches what is on disk.
 - **Update**: Reads raw config (no validation), applies updater, validates
   each field (persisting any schema-transformed outputs), then persists.
 - **Patch**: Reads raw config, applies shallow partial merge, validates each

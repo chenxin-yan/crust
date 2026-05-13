@@ -1095,6 +1095,38 @@ describe("FieldDef.validate contract", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
+	// Regression: previously the migration guard accepted any object with
+	// a `"value" in result` key, so `{ ok: false, value: "bad" }` was
+	// silently persisted as `"bad"` instead of throwing TypeError. The
+	// guard now rejects any return shape carrying an `ok` key.
+	it("surfaces legacy { ok, value } validator return as TypeError", async () => {
+		const fields = {
+			name: {
+				type: "string",
+				default: "ok",
+				validate: ((_v: string) => ({ ok: false, value: "bad" }) as never) as (
+					v: string,
+				) => void,
+			},
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		let caught: unknown;
+		try {
+			await store.write({ name: "input" });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(TypeError);
+		expect(caught).not.toBeInstanceOf(CrustStoreError);
+		// Critically: the legacy `value: "bad"` was NOT persisted.
+		const filePath = join(tempDir, "config.json");
+		expect(existsSync(filePath)).toBe(false);
+	});
+
 	it("surfaces a buggy validator (returns a value) as TypeError, not CrustStoreError", async () => {
 		// Regression: previously the migration guard `throw new TypeError`
 		// ran inside the same try/catch that captures legitimate validation
@@ -1186,8 +1218,6 @@ describe("schema transform persistence", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	// RED: today the store discards `result.value` and persists the
-	// untransformed input. After TP-018 the trimmed value is written.
 	it("persists Zod transform output on write (trim example)", async () => {
 		const fields = {
 			name: field(z.string().transform((s) => s.trim())),
@@ -1250,12 +1280,10 @@ describe("schema transform persistence", () => {
 		expect(JSON.parse(rawAfter)).toEqual({ name: "  hi  " });
 	});
 
-	// RED: cross-type transform (string → number) succeeds the first
-	// validation but its output fails the schema on re-validation. Must
+	// Cross-type transform (string → number) succeeds the first
+	// validation but its output fails the schema on re-validation — must
 	// surface as `read-unstable transform` at write time and never touch
-	// disk. Today this either persists the raw string or surfaces as a
-	// regular validation issue depending on coercion; after TP-018 it is
-	// always rejected with the read-unstable message.
+	// disk.
 	it("rejects read-unstable cross-type transform at write time", async () => {
 		const fields = {
 			x: field(z.string().transform((s) => s.length)),
@@ -1289,6 +1317,42 @@ describe("schema transform persistence", () => {
 	// Pin: literal fields with the discriminated-union shape are
 	// unaffected by transform persistence. The written JSON matches the
 	// input value byte-for-byte (after coercion, which is unchanged).
+	// Regression: the read-stability guard previously used reference
+	// identity (`Object.is`), so Standard Schema parsers that return fresh
+	// references for identical content (Zod arrays/objects) tripped the
+	// guard and made `field(z.array(...))` unwritable.
+	it("writes array field without tripping read-stability guard", async () => {
+		const fields = {
+			tags: field(z.array(z.string())),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.write({ tags: ["a", "b"] });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ tags: ["a", "b"] });
+	});
+
+	// Regression: an array schema whose elements transform (e.g.
+	// `z.array(z.string().transform(s => s.trim()))`) must still persist
+	// the transformed array — the structural compare must accept the
+	// recheck output as stable when contents match by value.
+	it("persists Zod array-of-transforms output on write", async () => {
+		const fields = {
+			tags: field(z.array(z.string().transform((s) => s.trim()))),
+		} as const satisfies FieldsDef;
+
+		const store = createStore({ dirPath: tempDir, fields });
+
+		await store.write({ tags: ["  a  ", "b "] });
+
+		const filePath = join(tempDir, "config.json");
+		const raw = await readFile(filePath, "utf-8");
+		expect(JSON.parse(raw)).toEqual({ tags: ["a", "b"] });
+	});
+
 	it("plain literal FieldDef is unaffected (end-to-end pin)", async () => {
 		const fields = {
 			theme: { type: "string", default: "x" },
