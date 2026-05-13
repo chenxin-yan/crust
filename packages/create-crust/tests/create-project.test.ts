@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { createCrustProject } from "../src/create-project.ts";
@@ -28,33 +28,42 @@ afterEach(() => {
 
 describe("createCrustProject", () => {
 	it("scaffolds a project and installs dependencies when requested", async () => {
-		await createCrustProject({
-			resolvedDir: TEST_DIR,
-			name: "install-test-cli",
-			template: "minimal",
-			distributionMode: "binary",
-			installDeps: true,
-			initGit: false,
-		});
+		const runSteps = mock(async () => {});
+
+		await createCrustProject(
+			{
+				resolvedDir: TEST_DIR,
+				name: "install-test-cli",
+				template: "minimal",
+				distributionMode: "binary",
+				installDeps: true,
+				initGit: false,
+			},
+			{ runSteps },
+		);
 
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "bun.lock"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "node_modules"))).toBe(true);
+		expect(runSteps).toHaveBeenCalledTimes(1);
+		expect(runSteps).toHaveBeenCalledWith([{ type: "install" }], TEST_DIR);
 	});
 
 	it("scaffolds a project without installing dependencies when skipped", async () => {
-		await createCrustProject({
-			resolvedDir: TEST_DIR,
-			name: "skip-install-cli",
-			template: "minimal",
-			distributionMode: "binary",
-			installDeps: false,
-			initGit: false,
-		});
+		const runSteps = mock(async () => {});
+
+		await createCrustProject(
+			{
+				resolvedDir: TEST_DIR,
+				name: "skip-install-cli",
+				template: "minimal",
+				distributionMode: "binary",
+				installDeps: false,
+				initGit: false,
+			},
+			{ runSteps },
+		);
 
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "bun.lock"))).toBe(false);
-		expect(existsSync(resolve(TEST_DIR, "node_modules"))).toBe(false);
+		expect(runSteps).not.toHaveBeenCalled();
 
 		const pkg = JSON.parse(
 			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),

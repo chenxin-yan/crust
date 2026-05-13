@@ -1,3 +1,4 @@
+import type { PostScaffoldStep } from "@crustjs/create";
 import { runSteps, scaffold } from "@crustjs/create";
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
@@ -13,6 +14,10 @@ export interface CreateCrustProjectOptions {
 	readonly distributionMode: DistributionMode;
 	readonly installDeps: boolean;
 	readonly initGit: boolean;
+}
+
+interface CreateCrustProjectDependencies {
+	readonly runSteps?: (steps: PostScaffoldStep[], cwd: string) => Promise<void>;
 }
 
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
@@ -65,17 +70,19 @@ export async function scaffoldCrustProject(
  */
 export async function createCrustProject(
 	options: CreateCrustProjectOptions,
+	dependencies: CreateCrustProjectDependencies = {},
 ): Promise<void> {
 	const { resolvedDir, installDeps, initGit } = options;
+	const runPostScaffoldSteps = dependencies.runSteps ?? runSteps;
 
 	await scaffoldCrustProject(options);
 
 	if (installDeps) {
-		await runSteps([{ type: "install" }], resolvedDir);
+		await runPostScaffoldSteps([{ type: "install" }], resolvedDir);
 	}
 
 	if (initGit) {
-		await runSteps(
+		await runPostScaffoldSteps(
 			[{ type: "git-init", commit: "chore: initial commit" }],
 			resolvedDir,
 		);

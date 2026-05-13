@@ -13,18 +13,18 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@tanstack/react-router": "1.168.23",
+    "@tanstack/react-router": "1.169.2",
     "@tanstack/react-router-devtools": "1.166.13",
-    "@tanstack/react-start": "1.167.42",
+    "@tanstack/react-start": "1.167.65",
     "fumadocs-core": "16.8.1",
     "fumadocs-mdx": "14.3.1",
     "fumadocs-ui": "16.8.1",
     "lucide-react": "^1.8.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "shiki": "^4.0.2",
     "tailwind-merge": "^3.5.0",
-    "vite": "^8.0.9"
+    "vite": "^8.0.12"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.33.0",
