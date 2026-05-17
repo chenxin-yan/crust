@@ -6,7 +6,7 @@
 
 Fold `@crustjs/schema-utils` into `@crustjs/utils` as the internal `/schema` subpath.
 
-`@crustjs/utils` now exposes Standard Schema introspection helpers (`assertStandardSchema`, `isStandardSchema`, `extractDefault`, `inferOptions`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus type aliases) under `@crustjs/utils/schema`. The subpath inherits the same internal-only contract that `@crustjs/schema-utils` had — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
+`@crustjs/utils` now exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`) under `@crustjs/utils/schema`. The subpath inherits the same internal-only contract that `@crustjs/schema-utils` had — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
 
 `@crustjs/core` is now an optional `peerDependency` of `@crustjs/utils` — callers of `resolveSourceDir` alone do not need it; only consumers of `/schema` (which already depend on `@crustjs/core`) provide it.
 

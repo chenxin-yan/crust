@@ -11,8 +11,9 @@ import { fileURLToPath } from "node:url";
  * filesystem from `startPath`.
  *
  * If `startPath` points at an existing file, its parent directory is used as
- * the starting point. Symlinks are not followed explicitly — `fs.statSync`
- * resolves them with default semantics.
+ * the starting point. The directory walk uses `path.resolve()` (lexical), not
+ * `fs.realpath()`, so a symlink's parent chain is walked rather than the
+ * symlink target's parent chain.
  *
  * @param startPath - Directory or file path to start walking from.
  * @returns The absolute path of the nearest enclosing directory containing

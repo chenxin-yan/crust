@@ -248,8 +248,6 @@ interface RawSingleFlagDef extends SingleFlagBase {
 	type?: never;
 	default?: unknown;
 	choices?: readonly string[];
-	/** When `true`, hide the generated `--no-{name}` help label */
-	noNegate?: true;
 }
 
 interface RawMultiFlagDef extends MultiFlagBase {
@@ -257,8 +255,6 @@ interface RawMultiFlagDef extends MultiFlagBase {
 	type?: never;
 	default?: unknown[];
 	choices?: readonly string[];
-	/** When `true`, hide the generated `--no-{name}` help label */
-	noNegate?: true;
 }
 
 export type FlagDef =
