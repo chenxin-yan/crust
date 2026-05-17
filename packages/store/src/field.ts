@@ -2,10 +2,10 @@
 // field() — Standard-Schema-first store-field factory
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Builds a `FieldDef` from any Standard Schema v1 object. Introspection
-// (via `@crustjs/utils/schema`) auto-derives `type` / `default` / `array` /
-// `description`; the optional second argument overrides silently. Returns
-// a value that satisfies store's discriminated `FieldDef` union.
+// Builds a `FieldDef` from any Standard Schema v1 object. Crust stores raw
+// values, then lets the schema validate and transform them. Metadata such as
+// `type`, `default`, `array`, and `description` is supplied explicitly through
+// options when needed.
 
 import {
 	type InferOutput,
@@ -16,18 +16,15 @@ import {
 import { CrustStoreError } from "./errors.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// FieldOptions — explicit overrides for the introspected values
+// FieldOptions — explicit Crust metadata
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Optional overrides for the introspected `FieldDef` shape produced by
- * {@link field}.
+ * Optional Crust metadata for the `FieldDef` shape produced by {@link field}.
  *
- * Every key is optional. When automatic introspection covers a field
- * (`type`, `description`, `default`, `array`), explicit values override
- * the introspection silently. For schemas with unknown vendors (e.g.
- * Valibot, ArkType), `type` MUST be supplied explicitly because no
- * inference is available.
+ * Every key is optional. Crust does not infer metadata from schemas; schemas
+ * validate and transform actual runtime values, including missing values passed
+ * as `undefined`.
  *
  * No `validate` key — validation flows exclusively through the schema.
  * If extra checks are needed, refine the schema with `.refine(...)`
@@ -40,12 +37,10 @@ export interface FieldOptions<T = unknown> {
 	type?: "string" | "number" | "boolean";
 	description?: string;
 	/**
-	 * Default value for this field when the persisted state does not contain
-	 * a value for it. Passing `default` explicitly here narrows the inferred
-	 * config type from `T | undefined` to `T`. Schema-derived defaults
-	 * (e.g. `z.string().default("x")`) populate the runtime default but do
-	 * NOT narrow the TypeScript type — pass it explicitly here for tight
-	 * typing.
+	 * Crust metadata default for this field when the persisted state does not
+	 * contain a value for it. Schema defaults should usually live in the schema;
+	 * missing persisted values are validated as `undefined`, so `.default()` works
+	 * naturally at read time.
 	 */
 	default?: T;
 	/** Mark this field as an array (collects values into an array). */
@@ -269,6 +264,7 @@ export function field<S extends StandardSchema>(
 
 	const def: Record<string, unknown> = {
 		validate,
+		validateMissing: true,
 	};
 	if (opts?.type !== undefined) {
 		def.type = opts.type;

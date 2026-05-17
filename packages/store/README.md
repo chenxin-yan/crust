@@ -381,7 +381,7 @@ available) to help locate the offending call site.
 
 > **Effect ≥ 3.14.2 required.** Effect 3.14.2 made `standardSchemaV1(...)`
 > wrappers expose `.ast`, which is what the validate registry walks. On
-> Effect 3.14.0 / 3.14.1 the wrapper is a plain object and introspection
+> Effect 3.14.0 / 3.14.1 the wrapper is a plain object and validation
 > silently fails. See
 > [`@crustjs/validate` Effect setup](https://crustjs.com/docs/modules/validate#quick-start--effect)
 > for the floor and a workaround.

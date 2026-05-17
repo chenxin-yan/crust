@@ -60,6 +60,9 @@ interface FieldDefBase<V> {
 	validate?: (
 		value: V,
 	) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
+
+	/** Internal marker: validate missing values as `undefined` for schema-backed fields. */
+	validateMissing?: true;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────

@@ -5,8 +5,8 @@ Standard Schema-first validation helpers for the [Crust CLI framework](https://c
 `@crustjs/validate` exposes a single, library-agnostic API. You pass any
 [Standard Schema v1](https://standardschema.dev/) object — Zod, Effect,
 Valibot, ArkType, Sury, or anything else that implements the spec — and the
-package introspects what it can (Zod and Effect natively), then validates
-arguments, flags, and prompts against your schema. For store fields, use
+package parses CLI syntax into raw values, then validates and transforms
+arguments, flags, and prompts with your schema. For store fields, use
 [`field()` from `@crustjs/store`](https://www.npmjs.com/package/@crustjs/store).
 
 ```sh
@@ -32,9 +32,9 @@ out.
 | `validateStandardSync(schema, value)` | Sync low-level primitive (throws on async schemas) |
 | `isStandardSchema(value)` | Runtime type guard for `Standard Schema v1` |
 
-Every helper accepts any Standard Schema v1 object. Vendor-specific
-introspection (Zod, Effect) auto-derives metadata where possible; explicit
-options always win silently. Store field construction lives in
+Every helper accepts any Standard Schema v1 object. Crust does not infer metadata from schemas. Use Crust options for
+descriptions and legacy parser hints; schemas decide requiredness, defaults,
+and transformations by validating runtime values. Store field construction lives in
 [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store) (see
 `field()` there).
 
@@ -48,13 +48,13 @@ import { z } from "zod";
 const serve = new Crust("serve")
   .meta({ description: "Start the dev server" })
   .args([
-    arg("port", z.number().int().min(1).describe("Port to listen on")),
+    arg("port", z.coerce.number().int().min(1), { description: "Port to listen on" }),
     arg("host", z.string().default("localhost")),
   ])
   .flags({
     verbose: flag(
-      z.boolean().default(false).describe("Enable verbose logging"),
-      { short: "v" },
+      z.boolean().default(false),
+      { short: "v", description: "Enable verbose logging" },
     ),
   })
   .run(
@@ -68,8 +68,8 @@ const serve = new Crust("serve")
 ## Quick start — Effect
 
 Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
-passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
-registry walks to recover the same metadata Zod gives natively.
+passing them to `arg()` / `flag()`. Crust uses only the wrapper's Standard
+Schema `validate` function at runtime.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -78,30 +78,22 @@ import * as Schema from "effect/Schema";
 
 new Crust("serve")
   .args([
-    arg(
-      "port",
-      Schema.standardSchemaV1(
-        Schema.Number.annotations({ description: "Port to listen on" }),
-      ),
-    ),
+    arg("port", Schema.standardSchemaV1(Schema.NumberFromString), {
+      description: "Port to listen on",
+    }),
   ])
   .flags({
-    verbose: flag(
-      Schema.standardSchemaV1(
-        Schema.UndefinedOr(
-          Schema.Boolean.annotations({ description: "Enable verbose logging" }),
-        ),
-      ),
-      { short: "v" },
-    ),
+    verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
+      short: "v",
+      description: "Enable verbose logging",
+    }),
   })
   .run(commandValidator(({ args, flags }) => { /* … */ }));
 ```
 
-> **Effect ≥ 3.14.2 required.** Effect 3.14.2
-> [made `standardSchemaV1(...)`](https://github.com/Effect-TS/effect/pull/4648)
-> wrappers expose `.ast`, which is what the registry walks. On older
-> versions still work through the Standard Schema `validate` function. Supply descriptions through Crust options.
+> **Metadata lives in Crust options.** Descriptions, aliases, and legacy parser
+> hints are Crust metadata. Schemas decide requiredness, defaults, and
+> transformations by validating actual values.
 
 If you use Effect heavily and want shorter call sites, drop these
 helpers into your own project:
@@ -169,8 +161,8 @@ export const eflag = <
 
 ## Quick start — other Standard Schema vendors
 
-Any other library implementing the spec works too. Supply CLI metadata
-explicitly via the second argument:
+Any other library implementing the spec works too. Supply descriptions as Crust
+metadata when you want them in help output:
 
 ```ts
 import { arg, commandValidator } from "@crustjs/validate";
@@ -179,17 +171,15 @@ import * as v from "valibot";
 new Crust("hi")
   .args([
     arg("name", v.pipe(v.string(), v.minLength(1)), {
-      type: "string",
       description: "Your name",
     }),
   ])
   .run(commandValidator(({ args }) => { /* args.name: string */ }));
 ```
 
-If `type:` is missing for an unknown vendor, `arg()` / `flag()` throws a
-`CrustError("DEFINITION")` naming the failing definition and the detected
-`vendor`. (`field()` from `@crustjs/store` throws `CrustStoreError("DEFINITION")`
-in the equivalent case.)
+`type` is optional for every Standard Schema vendor. Omit it for raw
+schema-backed parsing, or pass it as a legacy parser hint when you need
+`--flag value` consumption or parser pre-coercion.
 
 ## Command validation
 
@@ -305,7 +295,7 @@ import { arg, flag, commandValidator, field } from "@crustjs/validate";
 ```
 
 The `effect` peer dependency was removed; users install `effect`
-themselves at their preferred version (≥ 3.14.2 to keep introspection
+themselves at their preferred version (≥ 3.14.2 to keep validation
 working).
 
 **Helper renames and removals:**

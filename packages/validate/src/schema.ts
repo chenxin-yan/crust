@@ -70,7 +70,7 @@ function validateArgArrayShape(
  * import { z } from "zod";
  * import { arg } from "@crustjs/validate";
  *
- * arg("port", z.number().int().min(1).describe("Port to listen on"));
+ * arg("port", z.coerce.number().int().min(1), { description: "Port to listen on" });
  * arg("files", z.string(), { variadic: true });
  * ```
  *
@@ -147,7 +147,7 @@ export function arg<
  * import { z } from "zod";
  * import { flag } from "@crustjs/validate";
  *
- * flag(z.boolean().default(false).describe("Enable verbose logging"), { short: "v" });
+ * flag(z.boolean().default(false), { short: "v", description: "Enable verbose logging" });
  * flag(z.enum(["json", "text"]).default("text"));
  * ```
  */

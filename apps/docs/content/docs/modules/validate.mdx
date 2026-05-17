@@ -7,9 +7,8 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 `@crustjs/validate` exposes a single, library-agnostic API. You pass any
 [Standard Schema v1](https://standardschema.dev/) object — Zod, Effect,
-Valibot, ArkType, Sury, or anything else — and the package introspects what
-it can (Zod and Effect natively, via vendor dispatch), then validates
-arguments, flags, prompts, and store fields against your schema.
+Valibot, ArkType, Sury, or anything else — and Crust parses CLI syntax into
+raw values, then validates and transforms them with your schema.
 
 ## Install
 
@@ -30,13 +29,13 @@ import { z } from "zod";
 const serve = new Crust("serve")
   .meta({ description: "Start the dev server" })
   .args([
-    arg("port", z.number().int().min(1).describe("Port to listen on")),
+    arg("port", z.coerce.number().int().min(1), { description: "Port to listen on" }),
     arg("host", z.string().default("localhost")),
   ])
   .flags({
     verbose: flag(
-      z.boolean().default(false).describe("Enable verbose logging"),
-      { short: "v" },
+      z.boolean().default(false),
+      { short: "v", description: "Enable verbose logging" },
     ),
   })
   .run(
@@ -46,15 +45,15 @@ const serve = new Crust("serve")
   );
 ```
 
-Inferred CLI metadata (`type`, `required`, `description`, plus
-array/variadic detection) comes from the schema. No additional wrapping
-needed.
+Crust does not infer metadata from schemas. Use coercing schemas for CLI string
+input, and pass descriptions through Crust options. Missing values are validated
+as `undefined`, so `.optional()` and `.default()` work naturally.
 
 ## Quick start — Effect
 
 Wrap your raw Effect schemas with `Schema.standardSchemaV1(...)` before
-passing them to `arg()` / `flag()`. The wrapper exposes `.ast`, which the
-registry walks to recover the same metadata Zod gives natively.
+passing them to `arg()` / `flag()`. Crust uses only the wrapper's Standard
+Schema `validate` function at runtime.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -63,12 +62,9 @@ import * as Schema from "effect/Schema";
 
 const serve = new Crust("serve")
   .args([
-    arg(
-      "port",
-      Schema.standardSchemaV1(
-        Schema.Number.annotations({ description: "Port to listen on" }),
-      ),
-    ),
+    arg("port", Schema.standardSchemaV1(Schema.NumberFromString), {
+      description: "Port to listen on",
+    }),
   ])
   .flags({
     verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
@@ -147,17 +143,15 @@ is structural. The forwarded `Variadic` / `Short` / `Aliases` /
 A type-level test for this recipe lives in
 `packages/validate/tests/effect-helper-recipe.test-d.ts`.
 
-<Callout type="warn" title="Effect ≥ 3.14.2 required">
-  Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
-  registry walks. On 3.14.0 and 3.14.1 the wrapper is a plain object and the
-  registry cannot introspect it — supply `type:` / `description:` explicitly via
-  the second argument.
+<Callout type="info" title="Metadata lives in Crust options">
+  Descriptions, aliases, and legacy parser hints are Crust metadata. Schemas
+  decide requiredness, defaults, and transformations by validating actual values.
 </Callout>
 
 ## Quick start — other Standard Schema vendors
 
-For any other library implementing the spec, supply CLI metadata
-explicitly:
+Any library implementing the spec works the same way. Supply descriptions as
+Crust metadata when you want them in help output:
 
 ```ts
 import { arg, commandValidator } from "@crustjs/validate";
@@ -167,7 +161,6 @@ import * as v from "valibot";
 new Crust("hi")
   .args([
     arg("name", v.pipe(v.string(), v.minLength(1)), {
-      type: "string",
       description: "Your name",
     }),
   ])
@@ -178,10 +171,9 @@ new Crust("hi")
   );
 ```
 
-If `type:` is missing for an unknown vendor, `arg()` / `flag()` throws a
-`CrustError("DEFINITION")` naming the failing definition. (`field()`
-from [`@crustjs/store`](/docs/modules/store) throws
-`CrustStoreError("DEFINITION")` in the equivalent case.)
+`type` is optional for every Standard Schema vendor. Omit it for raw
+schema-backed parsing, or pass it as a legacy parser hint when you need
+`--flag value` consumption or parser pre-coercion.
 
 ## Command validation
 

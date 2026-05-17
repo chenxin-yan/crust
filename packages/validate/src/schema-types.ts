@@ -37,14 +37,14 @@ type PrimitiveToValueType<T> = [T] extends [string]
 		? "number"
 		: [T] extends [boolean]
 			? "boolean"
-			: ValueType;
+			: "string";
 
 /**
  * Resolve CLI ValueType from a Standard Schema's input type.
  *
- * Falls back to `ValueType` (the union) for non-primitive schemas — runtime
- * introspection always produces the correct narrow value, so this only
- * affects type inference at `arg()`/`flag()` call sites.
+ * Falls back to `ValueType` (the union) for non-primitive schemas. This only
+ * affects structural compatibility with core definitions; validated handler
+ * output is inferred from the schema output type.
  */
 export type ResolveValueType<S> =
 	S extends StandardSchema<infer In, infer _Out>

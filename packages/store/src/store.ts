@@ -132,6 +132,8 @@ export function createStore<const F extends FieldsDef>(
 
 			const value = record[key];
 
+			if (value === undefined && def.validateMissing !== true) continue;
+
 			let result: unknown;
 			try {
 				result = await def.validate(value as never);
