@@ -1,9 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
-// arg() / flag() — Standard-Schema-first DSL with vendor-dispatch introspection
+// arg() / flag() — Standard-Schema-first DSL with raw schema-backed parsing
 // ────────────────────────────────────────────────────────────────────────────
 
 import { CrustError } from "@crustjs/core";
-import { inferOptions } from "@crustjs/utils/schema";
 import {
 	type ArgDef$,
 	type ArgOptions,
@@ -49,10 +48,8 @@ function validateArgArrayShape(
  * Returns a core `ArgDef` enriched with hidden schema metadata (via the
  * `[VALIDATED_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
- * CLI metadata (`type`, `required`, `description`) is automatically inferred
- * for Zod and Effect schemas. For other Standard Schema libraries (Valibot,
- * ArkType, Sury, etc.), supply `type:` (and optionally `required:`,
- * `description:`) via `options`.
+ * Crust does not infer metadata from schemas. Omit `type` for raw schema-backed
+ * parsing, or pass `type` as a legacy parser hint when you need parser coercion.
  *
  * **Variadic args**: when `{ variadic: true }` is set, the inferred TypeScript
  * type is always `T[]` — a possibly-empty array, never `T[] | undefined`. The
@@ -110,32 +107,16 @@ export function arg<
 	const label = `arg "${name}"`;
 	const variadic = options?.variadic;
 
-	const inferred = inferOptions(schema, "arg", label);
-
-	const resolvedType = options?.type ?? inferred.type;
-	if (!resolvedType) {
-		const vendor = schema["~standard"].vendor;
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: unable to infer CLI type from schema (vendor: "${vendor}"). Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
-		);
-	}
-
-	const inferredMultiple = inferred.multiple === true;
-	validateArgArrayShape(label, variadic, inferredMultiple, "an array schema");
-
-	const description = options?.description ?? inferred.description;
-
-	const inferredOptional = inferred.optional === true;
-	const required =
-		options?.required !== undefined ? options.required : !inferredOptional;
+	validateArgArrayShape(label, variadic, false, "an array schema");
 
 	const def = {
 		name,
-		type: resolvedType,
-		...(description !== undefined && { description }),
+		...(options?.type !== undefined && { type: options.type }),
+		...(options?.description !== undefined && {
+			description: options.description,
+		}),
 		variadic: variadic as Variadic,
-		...(required && { required: true as const }),
+		...(options?.required && { required: true as const }),
 		[VALIDATED_SCHEMA]: schema,
 	};
 
@@ -152,8 +133,8 @@ export function arg<
  * Returns a core `FlagDef` enriched with hidden schema metadata for runtime
  * validation by `commandValidator`.
  *
- * CLI metadata is automatically inferred for Zod and Effect schemas; supply
- * `type:` explicitly for other Standard Schema vendors.
+ * Crust does not infer metadata from schemas. Omit `type` for raw schema-backed
+ * parsing, or pass `type` as a legacy parser hint when you need parser coercion.
  *
  * **Effect users**: wrap your schema with `Schema.standardSchemaV1(...)`
  * before passing it here.
@@ -190,25 +171,7 @@ export function flag<
 		);
 	}
 
-	const schemaVendor = schema["~standard"]?.vendor ?? "unknown";
-	const label = `flag (vendor: "${schemaVendor}")`;
-	const inferred = inferOptions(schema, "flag", label);
-
-	const resolvedType = options?.type ?? inferred.type;
-	if (!resolvedType) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: unable to infer CLI type from schema. Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
-		);
-	}
-
-	const multiple = options?.multiple === true || inferred.multiple === true;
-
-	const description = options?.description ?? inferred.description;
-
-	const inferredOptional = inferred.optional === true;
-	const resolvedRequired =
-		options?.required !== undefined ? options.required : !inferredOptional;
+	const multiple = options?.multiple === true;
 
 	const short: string | undefined = options?.short;
 	const aliases: string[] | undefined = options?.aliases
@@ -217,13 +180,15 @@ export function flag<
 	const inherit: true | undefined = options?.inherit ? true : undefined;
 
 	const def = {
-		type: resolvedType,
+		...(options?.type !== undefined && { type: options.type }),
 		...(multiple && { multiple: true as const }),
 		short,
 		aliases,
 		inherit,
-		...(description !== undefined && { description }),
-		...(resolvedRequired && { required: true as const }),
+		...(options?.description !== undefined && {
+			description: options.description,
+		}),
+		...(options?.required && { required: true as const }),
 		[VALIDATED_SCHEMA]: schema,
 	};
 

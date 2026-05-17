@@ -8,9 +8,7 @@
 // a value that satisfies store's discriminated `FieldDef` union.
 
 import {
-	extractDefault,
 	type InferOutput,
-	inferOptions,
 	isStandardSchema,
 	normalizeStandardIssues,
 	type StandardSchema,
@@ -267,49 +265,22 @@ export function field<S extends StandardSchema>(
 		);
 	}
 
-	const schemaVendor = schema["~standard"]?.vendor ?? "unknown";
-	const label = `field (vendor: "${schemaVendor}")`;
-
-	const inferred = inferOptions(schema, "field", label);
-
-	const resolvedType = opts?.type ?? inferred.type;
-	if (!resolvedType) {
-		throw new CrustStoreError(
-			"DEFINITION",
-			`${label}: unable to infer field type from schema. Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
-			{ vendor: schemaVendor },
-		);
-	}
-
-	const isArray = opts?.array === true || inferred.multiple === true;
-
-	// Resolve description: explicit opts wins; otherwise inferred.
-	const description = opts?.description ?? inferred.description;
-
-	// Resolve default: explicit opts wins; otherwise sync vendor-aware
-	// extraction with `validate(undefined)` fallback. Falsy defaults are
-	// preserved — `"default" in opts` is the sole sentinel for "caller
-	// explicitly set a default", so `{ default: undefined }` is honored
-	// (matching the `D extends InferOutput<S>` overload contract).
-	const resolvedDefault =
-		opts && "default" in opts
-			? ({ ok: true, value: opts.default } as const)
-			: extractDefault(schema);
-
 	const validate = makeValidator(schema);
 
 	const def: Record<string, unknown> = {
-		type: resolvedType,
 		validate,
 	};
-	if (isArray) {
+	if (opts?.type !== undefined) {
+		def.type = opts.type;
+	}
+	if (opts?.array === true) {
 		def.array = true;
 	}
-	if (description !== undefined) {
-		def.description = description;
+	if (opts?.description !== undefined) {
+		def.description = opts.description;
 	}
-	if (resolvedDefault.ok) {
-		def.default = resolvedDefault.value;
+	if (opts && "default" in opts) {
+		def.default = opts.default;
 	}
 
 	return def as unknown as SchemaFieldDef<S>;

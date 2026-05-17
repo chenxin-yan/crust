@@ -155,10 +155,8 @@ export type FlagDef$<
 /**
  * Optional CLI metadata passed to `arg()`.
  *
- * Every field is optional. When automatic introspection covers a field
- * (`type`, `description`, `required`), explicit values override it
- * silently. For schemas with unknown vendors (e.g. Valibot, ArkType),
- * `type` MUST be supplied explicitly because no inference is available.
+ * Every field is optional. Omit `type` for raw schema-backed parsing; pass it
+ * as a legacy parser hint when you need parser coercion or `--flag value`.
  */
 export interface ArgOptions {
 	type?: "string" | "number" | "boolean";
@@ -177,11 +175,9 @@ export interface ArgOptions {
 /**
  * Optional CLI metadata passed to `flag()`.
  *
- * Every field is optional. When automatic introspection covers a field
- * (`type`, `description`, `required`, `multiple`), explicit values
- * override it silently. For schemas with unknown vendors (e.g. Valibot,
- * ArkType), `type` MUST be supplied explicitly because no inference is
- * available; use `multiple: true` to declare a multi-value flag.
+ * Every field is optional. Omit `type` for raw schema-backed parsing; pass it
+ * as a legacy parser hint when you need parser coercion or `--flag value`. Use
+ * `multiple: true` to declare a multi-value flag.
  */
 export interface FlagOptions {
 	type?: "string" | "number" | "boolean";

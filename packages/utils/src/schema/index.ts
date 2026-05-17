@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/utils/schema — Standard Schema introspection helpers (INTERNAL)
+// @crustjs/utils/schema — Standard Schema helpers (INTERNAL)
 // ────────────────────────────────────────────────────────────────────────────
 //
 // Internal subpath. Published as part of `@crustjs/utils` only so that the
@@ -10,9 +10,6 @@
 
 // ── Boundary assertions ─────────────────────────────────────────────────────
 export { assertStandardSchema, isStandardSchema } from "./assertions.ts";
-// ── Introspection ───────────────────────────────────────────────────────────
-export type { ExtractedDefault, InferredOptions } from "./introspect.ts";
-export { extractDefault, inferOptions } from "./introspect.ts";
 
 // ── Issue normalization ─────────────────────────────────────────────────────
 export type { ValidationIssue } from "./issues.ts";

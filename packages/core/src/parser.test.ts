@@ -1296,3 +1296,61 @@ describe("validateParsed", () => {
 		expect(() => validateParsed(cmd, parsed)).not.toThrow();
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Raw schema-backed flags (no parser type hint)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — raw schema-backed flags", () => {
+	const cmd = makeNode({
+		meta: { name: "raw" },
+		args: [{ name: "value" }],
+		flags: {
+			verbose: { short: "v", aliases: ["loud"] },
+			port: {},
+			tag: { multiple: true },
+		},
+	});
+
+	it("defaults missing raw flag to undefined", () => {
+		const result = parseArgs(cmd, []);
+		expect(result.flags.verbose).toBeUndefined();
+	});
+
+	it("parses positive and negated raw flags", () => {
+		expect(parseArgs(cmd, ["--verbose"]).flags.verbose).toBe(true);
+		expect(parseArgs(cmd, ["--no-verbose"]).flags.verbose).toBe(false);
+	});
+
+	it("parses raw equals values as strings", () => {
+		const result = parseArgs(cmd, ["--port=3000"]);
+		expect(result.flags.port).toBe("3000");
+	});
+
+	it("does not consume the next token in raw mode", () => {
+		const result = parseArgs(cmd, ["--port", "3000"]);
+		expect(result.flags.port).toBe(true);
+		expect((result.args as Record<string, unknown>).value).toBe("3000");
+	});
+
+	it("supports short and long aliases", () => {
+		expect(parseArgs(cmd, ["-v"]).flags.verbose).toBe(true);
+		expect(parseArgs(cmd, ["--loud"]).flags.verbose).toBe(true);
+	});
+
+	it("keeps repeated raw flags last-write-wins unless multiple is true", () => {
+		expect(parseArgs(cmd, ["--port=1", "--port=2"]).flags.port).toBe("2");
+		expect(parseArgs(cmd, ["--tag=a", "--tag=b"]).flags.tag).toEqual([
+			"a",
+			"b",
+		]);
+	});
+
+	it("preserves explicit typed flag behavior", () => {
+		const typed = makeNode({
+			meta: { name: "typed" },
+			flags: { port: { type: "number" } },
+		});
+		expect(parseArgs(typed, ["--port", "3000"]).flags.port).toBe(3000);
+	});
+});

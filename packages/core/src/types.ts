@@ -101,7 +101,15 @@ interface BooleanArgDef extends ArgDefBase {
  * ] as const satisfies ArgsDef;
  * ```
  */
-export type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
+interface RawArgDef extends ArgDefBase {
+	/** Optional parser hint. Omit for raw schema-backed validation. */
+	type?: never;
+	/** Raw default value when the argument is not provided */
+	default?: unknown;
+	choices?: readonly string[];
+}
+
+export type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
 
 /** Ordered tuple of positional argument definitions */
 export type ArgsDef = readonly ArgDef[];
@@ -235,13 +243,33 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
  * } satisfies FlagsDef;
  * ```
  */
+interface RawSingleFlagDef extends SingleFlagBase {
+	/** Optional parser hint. Omit for raw schema-backed validation. */
+	type?: never;
+	default?: unknown;
+	choices?: readonly string[];
+	/** When `true`, hide the generated `--no-{name}` help label */
+	noNegate?: true;
+}
+
+interface RawMultiFlagDef extends MultiFlagBase {
+	/** Optional parser hint. Omit for raw schema-backed validation. */
+	type?: never;
+	default?: unknown[];
+	choices?: readonly string[];
+	/** When `true`, hide the generated `--no-{name}` help label */
+	noNegate?: true;
+}
+
 export type FlagDef =
 	| StringFlagDef
 	| NumberFlagDef
 	| BooleanFlagDef
 	| StringMultiFlagDef
 	| NumberMultiFlagDef
-	| BooleanMultiFlagDef;
+	| BooleanMultiFlagDef
+	| RawSingleFlagDef
+	| RawMultiFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -555,16 +583,21 @@ export type EffectiveFlags<
  * `variadic: true` with `required: true` keeps the inferred type as `T[]`;
  * `required` only gates empty-array validation, not the type.
  */
-type InferArgValue<A extends ArgDef> =
-	// Variadic always produces an array
-	A extends { variadic: true }
-		? ResolvePrimitive<A["type"]>[]
-		: // Required or has a default → guaranteed present
-			A extends { required: true }
-			? ResolvePrimitive<A["type"]>
-			: A extends { default: ResolvePrimitive<A["type"]> }
-				? ResolvePrimitive<A["type"]>
-				: ResolvePrimitive<A["type"]> | undefined;
+type InferArgValue<A extends ArgDef> = A extends {
+	type: infer T extends ValueType;
+}
+	? A extends { variadic: true }
+		? ResolvePrimitive<T>[]
+		: A extends { required: true }
+			? ResolvePrimitive<T>
+			: A extends { default: ResolvePrimitive<T> }
+				? ResolvePrimitive<T>
+				: ResolvePrimitive<T> | undefined
+	: A extends { variadic: true }
+		? unknown[]
+		: A extends { required: true } | { default: unknown }
+			? unknown
+			: unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
@@ -607,17 +640,23 @@ export type InferArgs<A> = A extends ArgsDef
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
-type InferFlagValue<F extends FlagDef> = F extends { multiple: true }
-	? F extends { required: true }
-		? ResolvePrimitive<F["type"]>[]
-		: F extends { default: ResolvePrimitive<F["type"]>[] }
-			? ResolvePrimitive<F["type"]>[]
-			: ResolvePrimitive<F["type"]>[] | undefined
-	: F extends { required: true }
-		? ResolvePrimitive<F["type"]>
-		: F extends { default: ResolvePrimitive<F["type"]> }
-			? ResolvePrimitive<F["type"]>
-			: ResolvePrimitive<F["type"]> | undefined;
+type InferFlagValue<F extends FlagDef> = F extends {
+	type: infer T extends ValueType;
+}
+	? F extends { multiple: true }
+		? F extends { required: true }
+			? ResolvePrimitive<T>[]
+			: F extends { default: ResolvePrimitive<T>[] }
+				? ResolvePrimitive<T>[]
+				: ResolvePrimitive<T>[] | undefined
+		: F extends { required: true }
+			? ResolvePrimitive<T>
+			: F extends { default: ResolvePrimitive<T> }
+				? ResolvePrimitive<T>
+				: ResolvePrimitive<T> | undefined
+	: F extends { multiple: true }
+		? unknown[] | undefined
+		: unknown;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.

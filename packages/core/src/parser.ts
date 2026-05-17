@@ -57,6 +57,10 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			);
 		}
 
+		if (def.type === undefined) {
+			continue;
+		}
+
 		// Map Crust types to util.parseArgs types
 		// util.parseArgs only supports "string" and "boolean"
 		// "number" types are parsed as "string" then coerced
@@ -157,6 +161,10 @@ function coerceFlagValue(
 ): unknown {
 	const label = `--${name}`;
 
+	if (def.type === undefined) {
+		return parsedValue;
+	}
+
 	if (def.multiple && Array.isArray(parsedValue)) {
 		return def.type === "boolean"
 			? parsedValue.filter((v): v is boolean => typeof v === "boolean")
@@ -192,6 +200,26 @@ function coerceFlagValue(
  * Resolve aliases in raw parsed values to their canonical flag names,
  * merging arrays for `multiple` flags that are provided via mixed aliases.
  */
+function appendParsedFlag(
+	canonical: Record<string, ParsedFlagValue>,
+	name: string,
+	value: string | boolean,
+	multiple: boolean,
+) {
+	if (!multiple) {
+		canonical[name] = value;
+		return;
+	}
+	const existing = canonical[name];
+	if (Array.isArray(existing)) {
+		existing.push(value);
+	} else if (existing !== undefined) {
+		canonical[name] = [existing, value];
+	} else {
+		canonical[name] = [value];
+	}
+}
+
 function resolveAliases(
 	parsedValues: Record<string, unknown>,
 	aliasToName: Record<string, string>,
@@ -287,16 +315,15 @@ function resolveArgs(
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
 			resolved[name] =
-				def.type === "string"
+				def.type === undefined || def.type === "string"
 					? remaining
 					: remaining.map((v) => coerceValue(v, def.type, `<${name}>`));
 			index = positionals.length;
 		} else if (index < positionals.length) {
-			resolved[name] = coerceValue(
-				positionals[index] as string,
-				def.type,
-				`<${name}>`,
-			);
+			resolved[name] =
+				def.type === undefined
+					? positionals[index]
+					: coerceValue(positionals[index] as string, def.type, `<${name}>`);
 			index++;
 		} else {
 			resolved[name] = def.default ?? undefined;
@@ -313,6 +340,86 @@ function resolveArgs(
  * Negating long aliases (for example `--no-loud` where `loud` aliases
  * `verbose`) is rejected with a targeted CrustError.
  */
+function stripRawFlags(
+	argv: string[],
+	flagsDef: FlagsDef | undefined,
+): { argv: string[]; values: Record<string, ParsedFlagValue> } {
+	if (!flagsDef) return { argv, values: {} };
+
+	const rawNames = new Map<string, string>();
+	for (const [name, def] of Object.entries(flagsDef)) {
+		if (def.type !== undefined) continue;
+		rawNames.set(name, name);
+		if (def.short) rawNames.set(def.short, name);
+		for (const alias of def.aliases ?? []) rawNames.set(alias, name);
+	}
+	if (rawNames.size === 0) return { argv, values: {} };
+
+	const kept: string[] = [];
+	const values: Record<string, ParsedFlagValue> = {};
+	let afterSeparator = false;
+
+	for (const arg of argv) {
+		if (afterSeparator) {
+			kept.push(arg);
+			continue;
+		}
+		if (arg === "--") {
+			afterSeparator = true;
+			kept.push(arg);
+			continue;
+		}
+
+		if (arg.startsWith("--no-")) {
+			const rawName = arg.slice("--no-".length).split("=", 1)[0] ?? "";
+			const canonical = rawNames.get(rawName);
+			if (canonical) {
+				appendParsedFlag(
+					values,
+					canonical,
+					false,
+					flagsDef[canonical]?.multiple === true,
+				);
+				continue;
+			}
+		}
+
+		if (arg.startsWith("--") && arg.length > 2) {
+			const body = arg.slice(2);
+			const equalsIndex = body.indexOf("=");
+			const rawName = equalsIndex === -1 ? body : body.slice(0, equalsIndex);
+			const canonical = rawNames.get(rawName);
+			if (canonical) {
+				const value = equalsIndex === -1 ? true : body.slice(equalsIndex + 1);
+				appendParsedFlag(
+					values,
+					canonical,
+					value,
+					flagsDef[canonical]?.multiple === true,
+				);
+				continue;
+			}
+		}
+
+		if (arg.startsWith("-") && !arg.startsWith("--") && arg.length === 2) {
+			const canonical = rawNames.get(arg.slice(1));
+			if (canonical) {
+				appendParsedFlag(
+					values,
+					canonical,
+					true,
+					flagsDef[canonical]?.multiple === true,
+				);
+				continue;
+			}
+		}
+
+		kept.push(arg);
+	}
+
+	return { argv: kept, values };
+}
+
 function validateCanonicalNegationUsage(
 	argv: string[],
 	flagsDef: FlagsDef | undefined,
@@ -337,7 +444,7 @@ function validateCanonicalNegationUsage(
 		if (canonical === rawName) continue;
 
 		const def = flagsDef[canonical];
-		if (def?.type !== "boolean") continue;
+		if (def?.type !== "boolean" && def?.type !== undefined) continue;
 
 		throw new CrustError(
 			"PARSE",
@@ -377,12 +484,13 @@ export function parseArgs<
 		buildParseArgsOptionDescriptor(flagsDef);
 
 	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
+	const strippedRaw = stripRawFlags(argv, flagsDef);
 
 	let parsed: ReturnType<typeof nodeParseArgs>;
 
 	try {
 		parsed = nodeParseArgs({
-			args: argv,
+			args: strippedRaw.argv,
 			options: parseOptions,
 			strict: true,
 			allowPositionals: true,
@@ -425,7 +533,11 @@ export function parseArgs<
 		preSeparatorPositionals.push(...parsed.positionals);
 	}
 
-	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
+	const resolvedFlags = resolveFlags(
+		flagsDef,
+		{ ...parsed.values, ...strippedRaw.values },
+		aliasToName,
+	);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and

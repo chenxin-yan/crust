@@ -321,7 +321,7 @@ Add per-field validation to enforce config integrity on every read, write, updat
 
 The easiest way to add validation is with the built-in `field()` factory.
 It builds a complete `FieldDef` from any Standard Schema — type, default,
-description, and the per-field validator are all derived in one call:
+and the per-field validator are declared in one call:
 
 ```ts
 import { z } from "zod";
@@ -375,7 +375,7 @@ value at use sites.
 
 `field()` throws `CrustStoreError("DEFINITION")` when handed a
 non-Standard-Schema value, or when the runtime CLI type cannot be
-inferred from the schema and `opts.type` was not supplied. The thrown
+available. `type` is optional for schema-backed fields; pass it only as legacy metadata. The thrown
 error's `details.vendor` field carries the schema's vendor name (when
 available) to help locate the offending call site.
 

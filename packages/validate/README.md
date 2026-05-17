@@ -101,9 +101,7 @@ new Crust("serve")
 > **Effect ≥ 3.14.2 required.** Effect 3.14.2
 > [made `standardSchemaV1(...)`](https://github.com/Effect-TS/effect/pull/4648)
 > wrappers expose `.ast`, which is what the registry walks. On older
-> versions the introspection registry returns an empty result and you
-> must supply `type:` / `description:` explicitly via the second
-> argument.
+> versions still work through the Standard Schema `validate` function. Supply descriptions through Crust options.
 
 If you use Effect heavily and want shorter call sites, drop these
 helpers into your own project:

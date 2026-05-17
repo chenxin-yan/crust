@@ -142,13 +142,25 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
  * } satisfies FieldsDef;
  * ```
  */
+interface RawScalarFieldDef extends ScalarFieldBase<unknown> {
+	type?: never;
+	default?: unknown;
+}
+
+interface RawArrayFieldDef extends ArrayFieldBase<unknown[]> {
+	type?: never;
+	default?: readonly unknown[];
+}
+
 export type FieldDef =
 	| StringFieldDef
 	| NumberFieldDef
 	| BooleanFieldDef
 	| StringArrayFieldDef
 	| NumberArrayFieldDef
-	| BooleanArrayFieldDef;
+	| BooleanArrayFieldDef
+	| RawScalarFieldDef
+	| RawArrayFieldDef;
 
 /** Record mapping field names to their definitions. */
 export type FieldsDef = Record<string, FieldDef>;
@@ -164,13 +176,17 @@ export type FieldsDef = Record<string, FieldDef>;
  * - **has default** → `primitive` (guaranteed present)
  * - **no default** → `primitive | undefined` (optional)
  */
-type InferFieldValue<F extends FieldDef> = F extends { array: true }
-	? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
-		? ResolvePrimitive<F["type"]>[]
-		: ResolvePrimitive<F["type"]>[] | undefined
-	: F extends { default: ResolvePrimitive<F["type"]> }
-		? ResolvePrimitive<F["type"]>
-		: ResolvePrimitive<F["type"]> | undefined;
+type InferFieldValue<F extends FieldDef> = F extends { type: ValueType }
+	? F extends { array: true }
+		? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
+			? ResolvePrimitive<F["type"]>[]
+			: ResolvePrimitive<F["type"]>[] | undefined
+		: F extends { default: ResolvePrimitive<F["type"]> }
+			? ResolvePrimitive<F["type"]>
+			: ResolvePrimitive<F["type"]> | undefined
+	: F extends { default: infer D }
+		? D
+		: unknown;
 
 /**
  * Maps a full {@link FieldsDef} record to the inferred config object type.

@@ -307,8 +307,7 @@ await store.write({ port: 0, host: "localhost" });
 ### Schema-driven validation
 
 The built-in `field()` factory builds a complete `FieldDef` from any
-Standard Schema — type, default, description, and the per-field validator
-are all derived in one call:
+Standard Schema fields validate and transform persisted raw values in one call:
 
 ```ts
 import { configDir, createStore, field } from "@crustjs/store";
@@ -377,14 +376,13 @@ value at use sites.
 
 `field()` throws `CrustStoreError("DEFINITION")` when handed a
 non-Standard-Schema value, or when the runtime CLI type cannot be
-inferred from the schema and `opts.type` was not supplied. The thrown
+available. `type` is optional for schema-backed fields; pass it only as legacy metadata. The thrown
 error's `details.vendor` field carries the schema's vendor name (when
 available) to help locate the offending call site.
 
 <Callout type="warn" title="Effect ≥ 3.14.2 required">
   Effect 3.14.2 made `standardSchemaV1(...)` wrappers expose `.ast`, which the
-  validate registry walks for introspection. On Effect 3.14.0 / 3.14.1 the
-  wrapper has no `.ast` and field-validator introspection silently fails. See
+  validator uses only the Standard Schema `validate` function. See
   [`@crustjs/validate` Effect setup](/docs/modules/validate#quick-start--effect)
   for the floor and a workaround.
 </Callout>
