@@ -99,3 +99,16 @@ considered but deferred (until ≥2 cross-package consumers exist) include:
 
 If you have a use case that would benefit from one of these, open an issue
 describing the consumer(s) you'd add to the dependency graph.
+
+## Internal subpath: `@crustjs/utils/schema`
+
+<Callout type="warn" title="Internal — do not import">
+	Standard Schema introspection helpers consumed by `@crustjs/validate` and
+	`@crustjs/store`. **Not part of the public Crust API** — may change in any
+	release without a deprecation cycle. Use `@crustjs/validate` instead.
+</Callout>
+
+Lives under `@crustjs/utils/schema` only so the `dependencies` of
+`@crustjs/validate` (and `@crustjs/store`) resolve for external consumers.
+Depends on `@crustjs/core` (declared as an optional `peerDependency` on
+`@crustjs/utils` — callers of `resolveSourceDir` alone do not need it).

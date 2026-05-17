@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { StandardSchema } from "@crustjs/schema-utils";
+import type { StandardSchema } from "@crustjs/utils/schema";
 import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { CrustStoreError } from "./errors.ts";

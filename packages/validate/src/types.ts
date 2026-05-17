@@ -5,7 +5,7 @@ import type { CommandNode } from "@crustjs/core";
 // ────────────────────────────────────────────────────────────────────────────
 //
 // `StandardSchema`, `InferInput`, `InferOutput`, and `ValidationIssue` are
-// owned by `@crustjs/schema-utils` (TP-017). Re-exported here so the locked
+// owned by `@crustjs/utils/schema` (TP-017). Re-exported here so the locked
 // TP-014 root export surface of `@crustjs/validate` continues to publish them
 // from a single import path.
 export type {
@@ -13,9 +13,9 @@ export type {
 	InferOutput,
 	StandardSchema,
 	ValidationIssue,
-} from "@crustjs/schema-utils";
+} from "@crustjs/utils/schema";
 
-import type { ValidationIssue } from "@crustjs/schema-utils";
+import type { ValidationIssue } from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validated context — shared across all providers

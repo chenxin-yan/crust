@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 //
 // Builds a `FieldDef` from any Standard Schema v1 object. Introspection
-// (via `@crustjs/schema-utils`) auto-derives `type` / `default` / `array` /
+// (via `@crustjs/utils/schema`) auto-derives `type` / `default` / `array` /
 // `description`; the optional second argument overrides silently. Returns
 // a value that satisfies store's discriminated `FieldDef` union.
 
@@ -14,7 +14,7 @@ import {
 	isStandardSchema,
 	normalizeStandardIssues,
 	type StandardSchema,
-} from "@crustjs/schema-utils";
+} from "@crustjs/utils/schema";
 import { CrustStoreError } from "./errors.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

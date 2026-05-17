@@ -170,24 +170,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/schema-utils": {
-      "name": "@crustjs/schema-utils",
-      "version": "0.0.1",
-      "dependencies": {
-        "@crustjs/core": "workspace:*",
-        "@standard-schema/spec": "^1.1.0",
-      },
-      "devDependencies": {
-        "@crustjs/config": "workspace:*",
-        "@crustjs/core": "workspace:*",
-        "bunup": "catalog:",
-        "effect": "3.14.2",
-        "zod": "^4.0.0",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
-      },
-    },
     "packages/skills": {
       "name": "@crustjs/skills",
       "version": "0.1.0",
@@ -211,7 +193,7 @@
       "name": "@crustjs/store",
       "version": "0.1.0",
       "dependencies": {
-        "@crustjs/schema-utils": "workspace:*",
+        "@crustjs/utils": "workspace:*",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -237,19 +219,29 @@
     "packages/utils": {
       "name": "@crustjs/utils",
       "version": "0.0.1",
+      "dependencies": {
+        "@standard-schema/spec": "^1.1.0",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
         "bunup": "catalog:",
+        "effect": "3.14.2",
+        "zod": "^4.0.0",
       },
       "peerDependencies": {
+        "@crustjs/core": "workspace:*",
         "typescript": "catalog:",
       },
+      "optionalPeers": [
+        "@crustjs/core",
+      ],
     },
     "packages/validate": {
       "name": "@crustjs/validate",
       "version": "0.1.0",
       "dependencies": {
-        "@crustjs/schema-utils": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
@@ -401,8 +393,6 @@
     "@crustjs/progress": ["@crustjs/progress@workspace:packages/progress"],
 
     "@crustjs/prompts": ["@crustjs/prompts@workspace:packages/prompts"],
-
-    "@crustjs/schema-utils": ["@crustjs/schema-utils@workspace:packages/schema-utils"],
 
     "@crustjs/skills": ["@crustjs/skills@workspace:packages/skills"],
 

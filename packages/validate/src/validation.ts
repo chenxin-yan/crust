@@ -1,5 +1,5 @@
 import { CrustError } from "@crustjs/core";
-import { formatPath } from "@crustjs/schema-utils";
+import { formatPath } from "@crustjs/utils/schema";
 import type { ValidationIssue } from "./types.ts";
 
 interface IssueInput {
@@ -8,7 +8,7 @@ interface IssueInput {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Path formatting — re-exported from `@crustjs/schema-utils` (TP-017)
+// Path formatting — re-exported from `@crustjs/utils/schema` (TP-017)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -19,7 +19,7 @@ interface IssueInput {
  * - An empty path array produces an empty string (root-level issue)
  *
  * Re-exported here so internal validate-package callers keep their existing
- * import path stable. The implementation lives in `@crustjs/schema-utils`.
+ * import path stable. The implementation lives in `@crustjs/utils/schema`.
  */
 export { formatPath };
 

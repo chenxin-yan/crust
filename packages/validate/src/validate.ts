@@ -1,4 +1,4 @@
-import { normalizeStandardIssues as normalizeStandardIssuesImpl } from "@crustjs/schema-utils";
+import { normalizeStandardIssues as normalizeStandardIssuesImpl } from "@crustjs/utils/schema";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
 	StandardSchema,
@@ -12,7 +12,7 @@ import type {
 // Re-exports — assertions and issue normalization helpers
 // ────────────────────────────────────────────────────────────────────────────
 //
-// These helpers physically live in `@crustjs/schema-utils` (TP-017). They
+// These helpers physically live in `@crustjs/utils/schema` (TP-017). They
 // are re-exported here so internal validate-package callers (`store.ts`,
 // `parse.ts`, `middleware.ts`, `schema.ts`) keep their existing imports
 // pointing at `./validate.ts` without churn.
@@ -21,7 +21,7 @@ export {
 	isStandardSchema,
 	normalizeStandardIssues,
 	normalizeStandardPath,
-} from "@crustjs/schema-utils";
+} from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result constructors — convenience builders for ValidationResult

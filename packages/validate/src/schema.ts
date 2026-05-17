@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { CrustError } from "@crustjs/core";
-import { inferOptions } from "@crustjs/schema-utils";
+import { inferOptions } from "@crustjs/utils/schema";
 import {
 	type ArgDef$,
 	type ArgOptions,

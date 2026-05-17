@@ -54,6 +54,19 @@ const b = resolveSourceDir("/abs/path/to/templates/base");
 const c = resolveSourceDir("templates/base");
 ```
 
+## Internal subpath: `@crustjs/utils/schema`
+
+> **Internal — do not import.** Standard Schema introspection helpers
+> consumed by `@crustjs/validate` and `@crustjs/store`. Not part of the
+> public Crust API; may change in any release without a deprecation cycle.
+> Use `@crustjs/validate` instead.
+
+Published under this subpath only so the `dependencies` of
+`@crustjs/validate` (and `@crustjs/store`) resolve for external consumers.
+The subpath consumes `@crustjs/core` (declared as an optional
+`peerDependency` on `@crustjs/utils` — callers of `resolveSourceDir` alone
+do not need it).
+
 ## License
 
 MIT
