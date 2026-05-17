@@ -320,8 +320,9 @@ Add per-field validation to enforce config integrity on every read, write, updat
 ### Schema-driven validation
 
 The easiest way to add validation is with the built-in `field()` factory.
-It builds a complete `FieldDef` from any Standard Schema — type, default,
-and the per-field validator are declared in one call:
+It builds a `FieldDef` from any [Standard Schema v1](https://standardschema.dev/)
+object. Crust stores raw values; the schema validates and transforms them on
+read/write.
 
 ```ts
 import { z } from "zod";
@@ -358,33 +359,34 @@ const store = createStore({
 });
 ```
 
+Missing persisted values flow through the schema as `undefined`:
+
+- `field(z.string().default("x"))` returns `"x"` on read when the field
+  is missing from disk.
+- `field(z.string().optional())` returns `undefined`.
+- `field(z.string())` fails read-time validation with a `VALIDATION`
+  error when the field is missing.
+
 #### Schema-derived defaults and TypeScript
 
 Standard Schema v1 has no spec-portable type-level access to schema
-defaults. As a result:
+defaults. Crust does not inspect schemas to populate runtime metadata;
+defaults are materialized on read by validating `undefined` through the
+schema. As a result:
 
-- `field(z.string().default("x"))` populates `default: "x"` at runtime,
-  but the inferred config type is `string | undefined` (NOT narrowed).
-- `field(z.string(), { default: "x" })` populates `default: "x"` AND
-  narrows the inferred config type to `string`.
+- `field(z.string().default("x"))` returns `"x"` on read, but the
+  inferred config type is `string | undefined` (NOT narrowed).
+- `field(z.string(), { default: "x" })` keeps `"x"` as the Crust-level
+  default AND narrows the inferred config type to `string`.
 
 Prefer the explicit form when the field is required to always have a
 value at use sites.
 
 #### `field()` throws on invalid input
 
-`field()` throws `CrustStoreError("DEFINITION")` when handed a
-non-Standard-Schema value, or when the runtime CLI type cannot be
-available. `type` is optional for schema-backed fields; pass it only as legacy metadata. The thrown
-error's `details.vendor` field carries the schema's vendor name (when
-available) to help locate the offending call site.
-
-> **Effect ≥ 3.14.2 required.** Effect 3.14.2 made `standardSchemaV1(...)`
-> wrappers expose `.ast`, which is what the validate registry walks. On
-> Effect 3.14.0 / 3.14.1 the wrapper is a plain object and validation
-> silently fails. See
-> [`@crustjs/validate` Effect setup](https://crustjs.com/docs/modules/validate#quick-start--effect)
-> for the floor and a workaround.
+`field()` throws `CrustStoreError("DEFINITION")` when handed a value that
+is not a Standard Schema v1 object. `type` is optional for schema-backed
+fields; pass it through `opts` only as legacy metadata for tooling.
 
 ### Custom validators
 

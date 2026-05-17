@@ -295,8 +295,7 @@ import { arg, flag, commandValidator, field } from "@crustjs/validate";
 ```
 
 The `effect` peer dependency was removed; users install `effect`
-themselves at their preferred version (≥ 3.14.2 to keep validation
-working).
+themselves at their preferred version.
 
 **Helper renames and removals:**
 

@@ -3,10 +3,7 @@ import { Crust, CrustError } from "@crustjs/core";
 import { z } from "zod";
 import { commandValidator } from "./command.ts";
 import { arg, flag } from "./schema.ts";
-import type {
-	InferValidatedArgs,
-	InferValidatedFlags,
-} from "./schema-types.ts";
+import type { InferValidatedArgs } from "./schema-types.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =

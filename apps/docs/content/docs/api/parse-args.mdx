@@ -60,6 +60,13 @@ interface ParseResult<A, F> {
 | `"string"` | Kept as-is |
 | `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
 | `"boolean"` | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected |
+| omitted | Raw schema-backed mode. `--flag` -> `true`, `--no-flag` -> `false`, `--flag=value` -> `"value"`. `--flag value` does **not** consume the next token — leave `value` as a positional and let your schema coerce/validate it (e.g. `z.coerce.number()`). |
+
+Raw mode is automatic when a flag or arg is defined without a `type`. The
+`arg()` and `flag()` helpers in [`@crustjs/validate`](/docs/modules/validate)
+use this mode by default; their schemas decide requiredness, defaults, and
+transformations by validating the raw value (including `undefined` when the
+flag is missing).
 
 ### Alias Resolution
 

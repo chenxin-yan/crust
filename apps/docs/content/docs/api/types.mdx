@@ -88,11 +88,15 @@ Intended for internal/runtime commands such as a `__complete` entrypoint used by
 
 ### `ArgDef`
 
-Defines a single positional argument. Discriminated union by `type` for type-safe defaults:
+Defines a single positional argument. Discriminated union by `type` for type-safe defaults, plus a `type`-less variant for raw schema-backed parsing:
 
 ```ts
-type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
+type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
 ```
+
+`type` is optional. Omitting it activates the raw parser mode (see
+[`parseArgs`](/docs/api/parse-args)) and is the default produced by
+[`arg()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
 
 Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
 
@@ -138,8 +142,14 @@ Defines a single named flag. Discriminated union by `type` and `multiple`:
 ```ts
 type FlagDef =
   | StringFlagDef | NumberFlagDef | BooleanFlagDef           // single-value
-  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef; // multi-value
+  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef // multi-value
+  | RawSingleFlagDef | RawMultiFlagDef;                       // schema-backed
 ```
+
+The `Raw*` variants omit `type` and let a Standard Schema validate the raw
+parser output (`true` / `false` / `string` for single flags, arrays for
+`multiple: true`). They are the default shape produced by
+[`flag()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
 
 Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
 

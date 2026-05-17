@@ -1,10 +1,10 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Branded types for arg() / flag() / commandValidator() — single-vendor edition
+// Branded types for arg() / flag() / commandValidator()
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Replaces the per-library `ZodArgDef` / `EffectArgDef` types with one
-// generic def shape parameterized over a Standard Schema. The hidden brand
-// `[VALIDATED_SCHEMA]` enables the strict-mode `HasAllSchemas` check.
+// One generic def shape parameterized over a Standard Schema. The hidden
+// brand `[VALIDATED_SCHEMA]` lets `commandValidator` find the schema at
+// runtime and enables the strict-mode `HasAllSchemas` compile-time check.
 
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "@crustjs/core";
 import type { StandardSchema, ValidatedContext } from "./types.ts";
@@ -132,10 +132,9 @@ interface FlagDefBase$<
  * `Schema.Array(Schema.String)`) pin `multiple: true` so they discriminate
  * against core's `StringMultiFlagDef` etc.; scalar schemas omit it.
  *
- * The optional 5th `Type` generic exists so the deprecated `/effect`
- * subpath shim can pin the CLI value-type literal when its schema generic
- * collapses to the broad `StandardSchema`. End-user call sites should
- * leave it on its default.
+ * The optional 5th `Type` generic exists so callers that widen `S` to the
+ * broad `StandardSchema` can still pin the CLI value-type literal. End-user
+ * call sites should leave it on its default.
  */
 export type FlagDef$<
 	S extends StandardSchema = StandardSchema,

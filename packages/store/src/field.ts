@@ -94,11 +94,11 @@ type PrimitiveToValueType<T> = [T] extends [string]
 			: ValueType;
 
 /**
- * Resolve the runtime CLI value-type from a Standard Schema's output type.
+ * Resolve the runtime value-type from a Standard Schema's output type.
  *
  * Array schemas are detected via `IsArrayOutput`; their element type drives
- * the value-type literal so `field(z.array(z.string()))` resolves to
- * `{ type: "string"; array: true }`.
+ * the value-type literal so `field(z.array(z.string()))` resolves to a
+ * string-array field.
  */
 type IsArrayOutput<S> =
 	S extends StandardSchema<infer _I, infer Out>
@@ -154,10 +154,9 @@ type ArrayFieldDefWithDefault<T extends ValueType, D> = {
 /**
  * `FieldDef` inferred from a Standard Schema, with no narrowed default.
  *
- * Schema-derived defaults are populated at runtime but do NOT narrow the
- * TypeScript type — Standard Schema v1 has no spec-portable type-level
- * access to defaults. Pass `field(schema, { default: x })` explicitly to
- * narrow.
+ * Standard Schema v1 has no spec-portable type-level access to defaults, so
+ * schema `.default()` does not narrow the inferred TypeScript type. Pass
+ * `field(schema, { default: x })` explicitly to narrow.
  */
 type SchemaFieldDef<S extends StandardSchema> =
 	IsArrayOutput<S> extends true
@@ -184,32 +183,29 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  * Define a `@crustjs/store` field from any Standard Schema v1.
  *
  * Returns a value that satisfies store's `FieldDef` discriminated union.
- * Auto-derives `type`, `array`, `description`, and `default` from the
- * schema (Zod and Effect natively; Valibot/ArkType via the
- * `validate(undefined)` fallback for defaults). Pass `opts` to override
- * any key explicitly — explicit values win silently.
+ * Crust stores raw values and lets the schema validate and transform them on
+ * read/write; missing persisted values flow through the schema as `undefined`,
+ * so `.optional()` and `.default()` behave naturally.
  *
  * The returned `validate` is an async function that throws an `Error` with
  * the schema's normalized issue messages on failure (matches store's
  * `FieldDef.validate` contract).
  *
- * **Type-level defaults**: schema-derived defaults populate at runtime but
- * do NOT narrow the inferred config type. For tight typing of
- * default-bearing fields, pass `default` via `opts`:
+ * **Type-level defaults**: Standard Schema v1 has no spec-portable type-level
+ * access to defaults. For tight typing of default-bearing fields, pass
+ * `default` via `opts`:
  *
  * ```ts
- * field(z.string().default("x"))                       // state: string | undefined
- * field(z.string(), { default: "x" })                  // state: string
+ * field(z.string().default("x"))         // value materializes on read; state: string | undefined
+ * field(z.string(), { default: "x" })    // Crust-level default; state: string
  * ```
  *
  * @param schema - Any Standard Schema v1 object (Zod schemas natively;
  *                 Effect schemas wrapped via `Schema.standardSchemaV1`;
  *                 Valibot/ArkType/Sury/etc. as-is)
- * @param opts - Optional store-field metadata; explicit keys override
- *                   the introspected values silently
+ * @param opts - Optional Crust-level metadata
  * @throws {CrustStoreError} With code `"DEFINITION"` when the input is not
- *         a Standard Schema, or when the runtime CLI type cannot be inferred
- *         and `opts.type` was not supplied.
+ *         a Standard Schema v1 object.
  *
  * @example Zod
  * ```ts
