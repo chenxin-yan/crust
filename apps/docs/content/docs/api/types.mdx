@@ -273,8 +273,12 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 | `{ type: "number", default: 3000 }` | `number` |
 | `{ type: "string", variadic: true }` | `string[]` |
 | `{ type: "string", variadic: true, required: true }` | `string[]` |
+| `{ name: "x" }` (no `type`) | `unknown` |
+| `{ name: "x", variadic: true }` (no `type`) | `unknown[]` |
 
 Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
+
+Type-less (raw) positional args — produced by [`arg()`](/docs/modules/validate#quick-start--zod) from `@crustjs/validate` — resolve to `unknown` (or `unknown[]` when variadic). The downstream schema validator narrows them to the concrete output type.
 
 ### `InferFlags<F>`
 

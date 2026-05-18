@@ -397,6 +397,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`      |
 | `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
 | `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }` |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`         |
 
 ### Catching Errors
 
@@ -466,6 +467,7 @@ if (err instanceof CrustStoreError) {
 | Function      | Description                                           |
 | ------------- | ----------------------------------------------------- |
 | `createStore` | Create a typed async store backed by JSON             |
+| `field`       | Build a `FieldDef` from any Standard Schema v1 object |
 | `configDir`   | Resolve platform-standard config directory for an app |
 | `dataDir`     | Resolve platform-standard data directory for an app   |
 | `stateDir`    | Resolve platform-standard state directory for an app  |
@@ -481,9 +483,12 @@ if (err instanceof CrustStoreError) {
 | `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`. |
 | `FieldsDef`              | Record of field names to `FieldDef` definitions.                                  |
 | `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                          |
+| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory.                        |
 | `StoreValidatorIssue`    | Issue object with `{ message: string, path: string }`.                            |
 | `ValidationErrorDetails` | Details for `VALIDATION` errors: `{ operation, issues }`.                         |
-| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.                |
+| `DefinitionErrorDetails` | Details for `DEFINITION` errors: `{ vendor? }`.                                   |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`. |
+| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                |
 | `PlatformEnv`            | Injectable platform environment for testing path helpers.                         |
 | `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                            |
 

@@ -85,7 +85,7 @@ const config = createStore({
 const data = createStore({
   dirPath: dataDir("my-cli"),
   fields: {
-    bookmarks: { type: "array", default: [] },
+    bookmarks: { type: "string", array: true, default: [] },
   },
 });
 
@@ -472,6 +472,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PARSE`      | Malformed JSON in persisted config file                 | `{ path: string }`      |
 | `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
 | `VALIDATION` | Config fails validator on read, write, update, or patch | `{ operation, issues }` |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`         |
 
 ### Catching errors by code
 
@@ -531,13 +532,13 @@ import type {
   StoreUpdater,
   FieldDef,
   FieldsDef,
+  FieldOptions,
   InferStoreConfig,
-  StoreValidator,
-  StoreValidatorResult,
   StoreValidatorIssue,
   StoreErrorCode,
-  StoreValidationIssue,
   ValidationErrorDetails,
+  DefinitionErrorDetails,
+  ValueType,
   PlatformEnv,
 } from "@crustjs/store";
 ```
@@ -549,13 +550,13 @@ import type {
 | `StoreUpdater`           | Updater function type `(current: T) => T`.                                                     |
 | `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.              |
 | `FieldsDef`              | Record of field names to `FieldDef` definitions.                                               |
+| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory (`type`, `default`, `array`, `description`). |
 | `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                                       |
-| `StoreValidator`         | Validator function contract `(value: unknown) => StoreValidatorResult`.                        |
-| `StoreValidatorResult`   | Discriminated union: `{ ok: true, value: T } \| { ok: false, issues: StoreValidatorIssue[] }`. |
 | `StoreValidatorIssue`    | `{ message: string, path: string }`.                                                           |
-| `StoreValidationIssue`   | Validation issue in error details payload.                                                     |
 | `ValidationErrorDetails` | Error details for `VALIDATION` code: `{ operation, issues }`.                                  |
-| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.                             |
+| `DefinitionErrorDetails` | Error details for `DEFINITION` code: `{ vendor? }`.                                            |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`.             |
+| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                            |
 | `PlatformEnv`            | Injectable platform environment for testing path helpers.                                      |
 | `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                                         |
 
