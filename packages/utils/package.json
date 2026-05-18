@@ -48,17 +48,10 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/core": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
 		"typescript": "catalog:"
-	},
-	"peerDependenciesMeta": {
-		"@crustjs/core": {
-			"optional": true
-		}
 	},
 	"dependencies": {
 		"@standard-schema/spec": "^1.1.0"

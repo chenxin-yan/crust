@@ -14,6 +14,7 @@ import {
 	type StandardSchema,
 } from "@crustjs/utils/schema";
 import { CrustStoreError } from "./errors.ts";
+import type { FIELD_SCHEMA_OUTPUT } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // FieldOptions — explicit Crust metadata
@@ -81,75 +82,26 @@ function makeValidator<S extends StandardSchema>(
 // FieldDef shape inference (TS narrowing)
 // ────────────────────────────────────────────────────────────────────────────
 
-type ValueType = "string" | "number" | "boolean";
-
-type StripUndefined<T> = Exclude<T, undefined>;
-
-type PrimitiveToValueType<T> = [T] extends [string]
-	? "string"
-	: [T] extends [number]
-		? "number"
-		: [T] extends [boolean]
-			? "boolean"
-			: ValueType;
-
-/**
- * Resolve the runtime value-type from a Standard Schema's output type.
- *
- * Array schemas are detected via `IsArrayOutput`; their element type drives
- * the value-type literal so `field(z.array(z.string()))` resolves to a
- * string-array field.
- */
-type IsArrayOutput<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? StripUndefined<Out> extends readonly unknown[]
-			? true
-			: false
-		: false;
-
-type ArrayElementOutput<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? StripUndefined<Out> extends readonly (infer E)[]
-			? E
-			: never
-		: never;
-
-type ResolveScalarType<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? PrimitiveToValueType<StripUndefined<Out>>
-		: ValueType;
-
-/** A scalar `FieldDef` with no narrowed default. */
-type ScalarFieldDef<T extends ValueType> = {
-	readonly type: T;
+type RawSchemaFieldDef<Out> = {
+	readonly type?: never;
+	readonly array?: never;
 	readonly description?: string;
 	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
+	readonly validateMissing: true;
+	readonly [FIELD_SCHEMA_OUTPUT]?: Out;
 };
 
-/** A scalar `FieldDef` with a narrowed default. */
-type ScalarFieldDefWithDefault<T extends ValueType, D> = {
-	readonly type: T;
-	readonly description?: string;
-	readonly default: D;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
-
-/** An array `FieldDef` with no narrowed default. */
-type ArrayFieldDef<T extends ValueType> = {
-	readonly type: T;
-	readonly array: true;
-	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
-
-/** An array `FieldDef` with a narrowed default. */
-type ArrayFieldDefWithDefault<T extends ValueType, D> = {
-	readonly type: T;
-	readonly array: true;
-	readonly description?: string;
-	readonly default: D;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
+type SchemaFieldDefWithOptions<
+	Out,
+	Type extends FieldOptions["type"],
+	Array extends true | undefined,
+	D = never,
+> = Omit<RawSchemaFieldDef<Out>, "type" | "array"> &
+	(Type extends NonNullable<FieldOptions["type"]>
+		? { readonly type: Type }
+		: { readonly type?: never }) &
+	(Array extends true ? { readonly array: true } : { readonly array?: never }) &
+	([D] extends [never] ? unknown : { readonly default: D });
 
 /**
  * `FieldDef` inferred from a Standard Schema, with no narrowed default.
@@ -158,22 +110,9 @@ type ArrayFieldDefWithDefault<T extends ValueType, D> = {
  * schema `.default()` does not narrow the inferred TypeScript type. Pass
  * `field(schema, { default: x })` explicitly to narrow.
  */
-type SchemaFieldDef<S extends StandardSchema> =
-	IsArrayOutput<S> extends true
-		? ArrayFieldDef<PrimitiveToValueType<StripUndefined<ArrayElementOutput<S>>>>
-		: ScalarFieldDef<ResolveScalarType<S>>;
-
-/**
- * `FieldDef` inferred from a Standard Schema, with the explicit `opts.default`
- * narrowed into the type.
- */
-type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
-	IsArrayOutput<S> extends true
-		? ArrayFieldDefWithDefault<
-				PrimitiveToValueType<StripUndefined<ArrayElementOutput<S>>>,
-				D
-			>
-		: ScalarFieldDefWithDefault<ResolveScalarType<S>, D>;
+type SchemaFieldDef<S extends StandardSchema> = RawSchemaFieldDef<
+	InferOutput<S>
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // field() — overloads
@@ -236,18 +175,31 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  * ```
  */
 export function field<S extends StandardSchema>(schema: S): SchemaFieldDef<S>;
-export function field<S extends StandardSchema, D extends InferOutput<S>>(
+export function field<
+	S extends StandardSchema,
+	D extends InferOutput<S>,
+	const Type extends FieldOptions<InferOutput<S>>["type"] = undefined,
+	const Array extends true | undefined = undefined,
+>(
 	schema: S,
-	opts: FieldOptions<InferOutput<S>> & { default: D },
-): SchemaFieldDefWithDefault<S, D>;
-export function field<S extends StandardSchema>(
+	opts: FieldOptions<InferOutput<S>> & {
+		default: D;
+		type?: Type;
+		array?: Array;
+	},
+): SchemaFieldDefWithOptions<InferOutput<S>, Type, Array, D>;
+export function field<
+	S extends StandardSchema,
+	const Type extends FieldOptions<InferOutput<S>>["type"] = undefined,
+	const Array extends true | undefined = undefined,
+>(
 	schema: S,
-	opts: FieldOptions<InferOutput<S>>,
-): SchemaFieldDef<S>;
+	opts: FieldOptions<InferOutput<S>> & { type?: Type; array?: Array },
+): SchemaFieldDefWithOptions<InferOutput<S>, Type, Array>;
 export function field<S extends StandardSchema>(
 	schema: S,
 	opts?: FieldOptions<InferOutput<S>>,
-): SchemaFieldDef<S> {
+): unknown {
 	if (!isStandardSchema(schema)) {
 		throw new CrustStoreError(
 			"DEFINITION",

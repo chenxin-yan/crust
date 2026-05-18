@@ -1,4 +1,8 @@
-import { normalizeStandardIssues as normalizeStandardIssuesImpl } from "@crustjs/utils/schema";
+import { CrustError } from "@crustjs/core";
+import {
+	isStandardSchema,
+	normalizeStandardIssues as normalizeStandardIssuesImpl,
+} from "@crustjs/utils/schema";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
 	StandardSchema,
@@ -17,11 +21,19 @@ import type {
 // `parse.ts`, `middleware.ts`, `schema.ts`) keep their existing imports
 // pointing at `./validate.ts` without churn.
 export {
-	assertStandardSchema,
 	isStandardSchema,
 	normalizeStandardIssues,
 	normalizeStandardPath,
 } from "@crustjs/utils/schema";
+
+export function assertStandardSchema(value: unknown, label: string): void {
+	if (!isStandardSchema(value)) {
+		throw new CrustError(
+			"DEFINITION",
+			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
+		);
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Result constructors — convenience builders for ValidationResult

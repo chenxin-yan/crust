@@ -1338,6 +1338,28 @@ describe("parseArgs — raw schema-backed flags", () => {
 		expect(parseArgs(cmd, ["--loud"]).flags.verbose).toBe(true);
 	});
 
+	it("rejects negated raw aliases", () => {
+		expect(() => parseArgs(cmd, ["--no-loud"])).toThrow(
+			'Cannot negate alias "--no-loud"; use "--no-verbose" instead',
+		);
+	});
+
+	it("rejects values on negated raw flags", () => {
+		expect(() => parseArgs(cmd, ["--no-verbose=true"])).toThrow(
+			'Negated flag "--no-verbose" must not include a value',
+		);
+	});
+
+	it("rejects raw alias collisions", () => {
+		const collision = makeNode({
+			meta: { name: "collision" },
+			flags: { verbose: { aliases: ["port"] }, port: {} },
+		});
+		expect(() => parseArgs(collision, [])).toThrow(
+			'Alias collision: "--port" is used by both "--port" and "--verbose"',
+		);
+	});
+
 	it("keeps repeated raw flags last-write-wins unless multiple is true", () => {
 		expect(parseArgs(cmd, ["--port=1", "--port=2"]).flags.port).toBe("2");
 		expect(parseArgs(cmd, ["--tag=a", "--tag=b"]).flags.tag).toEqual([

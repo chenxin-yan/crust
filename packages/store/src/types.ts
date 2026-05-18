@@ -172,6 +172,8 @@ export type FieldsDef = Record<string, FieldDef>;
 // InferStoreConfig — Type inference from field definitions
 // ────────────────────────────────────────────────────────────────────────────
 
+export declare const FIELD_SCHEMA_OUTPUT: unique symbol;
+
 /**
  * Infer the resolved type for a single field definition.
  *
@@ -179,17 +181,23 @@ export type FieldsDef = Record<string, FieldDef>;
  * - **has default** → `primitive` (guaranteed present)
  * - **no default** → `primitive | undefined` (optional)
  */
-type InferFieldValue<F extends FieldDef> = F extends { type: ValueType }
-	? F extends { array: true }
-		? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
-			? ResolvePrimitive<F["type"]>[]
-			: ResolvePrimitive<F["type"]>[] | undefined
-		: F extends { default: ResolvePrimitive<F["type"]> }
-			? ResolvePrimitive<F["type"]>
-			: ResolvePrimitive<F["type"]> | undefined
-	: F extends { default: infer D }
+type InferFieldValue<F extends FieldDef> = F extends {
+	readonly [FIELD_SCHEMA_OUTPUT]?: infer O;
+}
+	? F extends { default: infer D }
 		? D
-		: unknown;
+		: O | undefined
+	: F extends { type: ValueType }
+		? F extends { array: true }
+			? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
+				? ResolvePrimitive<F["type"]>[]
+				: ResolvePrimitive<F["type"]>[] | undefined
+			: F extends { default: ResolvePrimitive<F["type"]> }
+				? ResolvePrimitive<F["type"]>
+				: ResolvePrimitive<F["type"]> | undefined
+		: F extends { default: infer D }
+			? D
+			: unknown;
 
 /**
  * Maps a full {@link FieldsDef} record to the inferred config object type.

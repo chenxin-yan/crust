@@ -89,8 +89,44 @@ export function arg<
 >(
 	name: Name,
 	schema: S,
+	options?: Omit<ArgOptions, "type" | "variadic"> & {
+		variadic?: Variadic;
+		type?: undefined;
+	},
+): ArgDef$<Name, S, Variadic, undefined>;
+export function arg<
+	Name extends string,
+	S extends StandardSchema,
+	const Variadic extends true | undefined = undefined,
+	const Type extends NonNullable<ArgOptions["type"]> = NonNullable<
+		ArgOptions["type"]
+	>,
+>(
+	name: Name,
+	schema: S,
+	options: Omit<ArgOptions, "type" | "variadic"> & {
+		variadic?: Variadic;
+		type: Type;
+	},
+): ArgDef$<Name, S, Variadic, Type>;
+export function arg<
+	Name extends string,
+	S extends StandardSchema,
+	const Variadic extends true | undefined = undefined,
+>(
+	name: Name,
+	schema: S,
 	options?: ArgOptions & { variadic?: Variadic },
-): ArgDef$<Name, S, Variadic> {
+): ArgDef$<Name, S, Variadic, ArgOptions["type"]>;
+export function arg<
+	Name extends string,
+	S extends StandardSchema,
+	const Variadic extends true | undefined = undefined,
+>(
+	name: Name,
+	schema: S,
+	options?: ArgOptions & { variadic?: Variadic },
+): unknown {
 	if (!name.trim()) {
 		throw new CrustError(
 			"DEFINITION",
@@ -120,7 +156,7 @@ export function arg<
 		[VALIDATED_SCHEMA]: schema,
 	};
 
-	return def as ArgDef$<Name, S, Variadic>;
+	return def;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -156,6 +192,47 @@ export function flag<
 	const Short extends string | undefined = undefined,
 	const Aliases extends readonly string[] | undefined = undefined,
 	const Inherit extends true | undefined = undefined,
+	const Multiple extends true | undefined = undefined,
+>(
+	schema: S,
+	options?: Omit<
+		FlagOptions,
+		"short" | "aliases" | "inherit" | "type" | "multiple"
+	> & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+		type?: undefined;
+		multiple?: Multiple;
+	},
+): FlagDef$<S, Short, Aliases, Inherit, undefined, Multiple>;
+export function flag<
+	S extends StandardSchema,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
+	const Type extends NonNullable<FlagOptions["type"]> = NonNullable<
+		FlagOptions["type"]
+	>,
+	const Multiple extends true | undefined = undefined,
+>(
+	schema: S,
+	options: Omit<
+		FlagOptions,
+		"short" | "aliases" | "inherit" | "type" | "multiple"
+	> & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+		type: Type;
+		multiple?: Multiple;
+	},
+): FlagDef$<S, Short, Aliases, Inherit, Type, Multiple>;
+export function flag<
+	S extends StandardSchema,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
 >(
 	schema: S,
 	options?: FlagOptions & {
@@ -163,7 +240,27 @@ export function flag<
 		aliases?: Aliases;
 		inherit?: Inherit;
 	},
-): FlagDef$<S, Short, Aliases, Inherit> {
+): FlagDef$<
+	S,
+	Short,
+	Aliases,
+	Inherit,
+	FlagOptions["type"],
+	FlagOptions["multiple"]
+>;
+export function flag<
+	S extends StandardSchema,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
+>(
+	schema: S,
+	options?: FlagOptions & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
+): unknown {
 	if (!isStandardSchema(schema)) {
 		throw new CrustError(
 			"DEFINITION",
@@ -192,5 +289,5 @@ export function flag<
 		[VALIDATED_SCHEMA]: schema,
 	};
 
-	return def as FlagDef$<S, Short, Aliases, Inherit>;
+	return def;
 }

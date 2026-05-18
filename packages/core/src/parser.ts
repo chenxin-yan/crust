@@ -57,19 +57,18 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			);
 		}
 
-		if (def.type === undefined) {
-			continue;
-		}
+		const parseType =
+			def.type === undefined
+				? undefined
+				: def.type === "boolean"
+					? "boolean"
+					: "string";
 
-		// Map Crust types to util.parseArgs types
-		// util.parseArgs only supports "string" and "boolean"
-		// "number" types are parsed as "string" then coerced
-		const parseType = def.type === "boolean" ? "boolean" : "string";
+		const opt: ParseArgsOptionDescriptor | undefined = parseType
+			? { type: parseType }
+			: undefined;
 
-		const opt: ParseArgsOptionDescriptor = { type: parseType };
-
-		// Handle multiple flag
-		if (def.multiple) {
+		if (def.multiple && opt) {
 			opt.multiple = true;
 		}
 
@@ -92,7 +91,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			}
 			aliasRegistry.set(def.short, name);
 			aliasToName[def.short] = name;
-			opt.short = def.short;
+			if (opt) opt.short = def.short;
 		}
 
 		// Handle long aliases
@@ -116,15 +115,17 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 				aliasRegistry.set(alias, name);
 				aliasToName[alias] = name;
 
-				const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
-				if (def.multiple) {
-					aliasOpt.multiple = true;
+				if (parseType) {
+					const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
+					if (def.multiple) {
+						aliasOpt.multiple = true;
+					}
+					options[alias] = aliasOpt;
 				}
-				options[alias] = aliasOpt;
 			}
 		}
 
-		options[name] = opt;
+		if (opt) options[name] = opt;
 	}
 
 	return { options, aliasToName };
@@ -371,9 +372,21 @@ function stripRawFlags(
 		}
 
 		if (arg.startsWith("--no-")) {
-			const rawName = arg.slice("--no-".length).split("=", 1)[0] ?? "";
+			if (arg.includes("=")) {
+				throw new CrustError(
+					"PARSE",
+					`Negated flag "${arg.split("=", 1)[0]}" must not include a value`,
+				);
+			}
+			const rawName = arg.slice("--no-".length);
 			const canonical = rawNames.get(rawName);
 			if (canonical) {
+				if (canonical !== rawName) {
+					throw new CrustError(
+						"PARSE",
+						`Cannot negate alias "--no-${rawName}"; use "--no-${canonical}" instead`,
+					);
+				}
 				appendParsedFlag(
 					values,
 					canonical,

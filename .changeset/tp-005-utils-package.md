@@ -13,7 +13,7 @@ Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSour
 
 - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
 - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
-- `@crustjs/core` is an optional `peerDependency` — callers of `resolveSourceDir` alone do not need it; only consumers of `/schema` (which already depend on `@crustjs/core`) provide it.
+- `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
 
 **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
@@ -22,7 +22,7 @@ Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSour
 - Validated CLI flags can now omit `{ type: "boolean" }`: raw flags parse `--flag` as `true`, `--no-flag` as `false`, and `--flag=value` as the string value. In raw mode, `--flag value` does not consume `value`; pass an explicit `type` parser hint to preserve legacy `--flag value` behavior.
 - Descriptions must now be supplied through Crust options.
 - The internal `@crustjs/utils/schema` introspection exports (`inferOptions`, `extractDefault`, and related types) were removed.
-- `@crustjs/validate` and `@crustjs/store` swap internal imports from `@crustjs/schema-utils` to `@crustjs/utils/schema`. No public API change for either package.
+- This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
 **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
 

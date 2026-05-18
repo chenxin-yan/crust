@@ -28,6 +28,7 @@ export type VALIDATED_SCHEMA = typeof VALIDATED_SCHEMA;
 // ────────────────────────────────────────────────────────────────────────────
 
 type ValueType = "string" | "number" | "boolean";
+type ParserType = ValueType | undefined;
 
 type StripUndefined<T> = Exclude<T, undefined>;
 
@@ -58,53 +59,23 @@ export type ResolveValueType<S> =
 /**
  * Crust `ArgDef` carrying a hidden Standard Schema.
  *
- * The schema-derived `Type` literal is computed from `S`'s input type, so
- * core's discriminated `ArgDef` union resolves to a single variant.
+ * The `type` parser hint is present only when explicitly supplied to `arg()`.
+ * Raw schema-backed args intentionally omit it at runtime.
  */
-export interface ArgDef$<
+export type ArgDef$<
 	Name extends string = string,
 	S extends StandardSchema = StandardSchema,
 	Variadic extends true | undefined = true | undefined,
-	Type extends ValueType = ResolveValueType<S>,
-> {
+	Type extends ParserType = undefined,
+> = {
 	readonly name: Name;
-	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
-	/**
-	 * Non-optional for type-level variadic-args validation in core.
-	 *
-	 * When `true`, the inferred TypeScript type for this arg is always `T[]`,
-	 * regardless of `required`.
-	 */
 	readonly variadic: Variadic;
 	readonly [VALIDATED_SCHEMA]: S;
-}
-
-/**
- * Detect array-shaped Standard Schema inputs. Used by `FlagDef$` to
- * select the multi-value variant (`multiple: true`) so that
- * `flag(z.array(z.string()))` satisfies core's discriminated `FlagDef`.
- */
-type IsArrayInput<S> =
-	S extends StandardSchema<infer In, infer _Out>
-		? StripUndefined<In> extends readonly unknown[]
-			? true
-			: false
-		: false;
-
-/** Element type of an array Standard Schema input, or `never`. */
-type ArrayElementInput<S> =
-	S extends StandardSchema<infer In, infer _Out>
-		? StripUndefined<In> extends readonly (infer E)[]
-			? E
-			: never
-		: never;
-
-/** ValueType resolution for an array Standard Schema (uses element type). */
-type ResolveArrayElementType<S> = PrimitiveToValueType<
-	StripUndefined<ArrayElementInput<S>>
->;
+} & (Type extends ValueType
+	? { readonly type: Type }
+	: { readonly type?: never });
 
 /**
  * Common shape for both single- and multi-value flag defs.
@@ -114,9 +85,7 @@ interface FlagDefBase$<
 	Short extends string | undefined,
 	Aliases extends readonly string[] | undefined,
 	Inherit extends true | undefined,
-	Type extends ValueType,
 > {
-	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
 	readonly inherit: Inherit;
@@ -128,24 +97,24 @@ interface FlagDefBase$<
 /**
  * Crust `FlagDef` carrying a hidden Standard Schema.
  *
- * Array-typed schemas (e.g. `z.array(z.string())`,
- * `Schema.Array(Schema.String)`) pin `multiple: true` so they discriminate
- * against core's `StringMultiFlagDef` etc.; scalar schemas omit it.
- *
- * The optional 5th `Type` generic exists so callers that widen `S` to the
- * broad `StandardSchema` can still pin the CLI value-type literal. End-user
- * call sites should leave it on its default.
+ * The `type` parser hint and `multiple` marker are present only when explicitly
+ * supplied to `flag()`. Raw schema-backed flags intentionally omit them at
+ * runtime, even when the schema input is array-shaped.
  */
 export type FlagDef$<
 	S extends StandardSchema = StandardSchema,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Inherit extends true | undefined = true | undefined,
-	Type extends ValueType = IsArrayInput<S> extends true
-		? ResolveArrayElementType<S>
-		: ResolveValueType<S>,
-> = FlagDefBase$<S, Short, Aliases, Inherit, Type> &
-	(IsArrayInput<S> extends true ? { readonly multiple: true } : unknown);
+	Type extends ParserType = undefined,
+	Multiple extends true | undefined = undefined,
+> = FlagDefBase$<S, Short, Aliases, Inherit> &
+	(Type extends ValueType
+		? { readonly type: Type }
+		: { readonly type?: never }) &
+	(Multiple extends true
+		? { readonly multiple: true }
+		: { readonly multiple?: never });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public option types for arg() / flag()
