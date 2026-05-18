@@ -2,6 +2,7 @@ import {
 	parseArgs as nodeParseArgs,
 	type ParseArgsOptionDescriptor,
 } from "node:util";
+import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import type {
@@ -137,8 +138,8 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
  */
 function coerceValue(value: string, type: ValueType, label: string) {
 	if (type === "number") {
-		const num = Number(value);
-		if (Number.isNaN(num)) {
+		const num = tryCoerceNumber(value);
+		if (num === undefined) {
 			throw new CrustError(
 				"PARSE",
 				`Expected number for ${label}, got "${value}"`,
@@ -148,7 +149,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
 	}
 	if (type === "boolean") {
 		// util.parseArgs handles boolean flags natively, but in case we receive a string
-		return value === "true" || value === "1";
+		return coerceBooleanString(value);
 	}
 	return value;
 }

@@ -49,6 +49,9 @@
     "packages/core": {
       "name": "@crustjs/core",
       "version": "0.0.17",
+      "dependencies": {
+        "@crustjs/utils": "workspace:*",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",

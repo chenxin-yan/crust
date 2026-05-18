@@ -2,7 +2,7 @@
 
 The core library for the [Crust](https://crustjs.com) CLI framework.
 
-Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, and a plugin system — with **zero runtime dependencies**.
+Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, and a plugin system. Runtime dependencies are limited to shared Crust workspace utilities.
 
 ## Install
 
