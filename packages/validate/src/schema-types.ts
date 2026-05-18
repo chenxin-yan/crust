@@ -1,10 +1,10 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Branded types for arg() / flag() / commandValidator() — single-vendor edition
+// Branded types for arg() / flag() / commandValidator()
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Replaces the per-library `ZodArgDef` / `EffectArgDef` types with one
-// generic def shape parameterized over a Standard Schema. The hidden brand
-// `[VALIDATED_SCHEMA]` enables the strict-mode `HasAllSchemas` check.
+// One generic def shape parameterized over a Standard Schema. The hidden
+// brand `[VALIDATED_SCHEMA]` lets `commandValidator` find the schema at
+// runtime and enables the strict-mode `HasAllSchemas` compile-time check.
 
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "@crustjs/core";
 import type { StandardSchema, ValidatedContext } from "./types.ts";
@@ -28,6 +28,8 @@ export type VALIDATED_SCHEMA = typeof VALIDATED_SCHEMA;
 // ────────────────────────────────────────────────────────────────────────────
 
 type ValueType = "string" | "number" | "boolean";
+type ParserType = ValueType | undefined;
+type FlagParserType = ValueType;
 
 type StripUndefined<T> = Exclude<T, undefined>;
 
@@ -37,14 +39,14 @@ type PrimitiveToValueType<T> = [T] extends [string]
 		? "number"
 		: [T] extends [boolean]
 			? "boolean"
-			: ValueType;
+			: "string";
 
 /**
  * Resolve CLI ValueType from a Standard Schema's input type.
  *
- * Falls back to `ValueType` (the union) for non-primitive schemas — runtime
- * introspection always produces the correct narrow value, so this only
- * affects type inference at `arg()`/`flag()` call sites.
+ * Falls back to `ValueType` (the union) for non-primitive schemas. This only
+ * affects structural compatibility with core definitions; validated handler
+ * output is inferred from the schema output type.
  */
 export type ResolveValueType<S> =
 	S extends StandardSchema<infer In, infer _Out>
@@ -58,53 +60,23 @@ export type ResolveValueType<S> =
 /**
  * Crust `ArgDef` carrying a hidden Standard Schema.
  *
- * The schema-derived `Type` literal is computed from `S`'s input type, so
- * core's discriminated `ArgDef` union resolves to a single variant.
+ * The `type` parser hint is present only when explicitly supplied to `arg()`.
+ * Raw schema-backed args intentionally omit it at runtime.
  */
-export interface ArgDef$<
+export type ArgDef$<
 	Name extends string = string,
 	S extends StandardSchema = StandardSchema,
 	Variadic extends true | undefined = true | undefined,
-	Type extends ValueType = ResolveValueType<S>,
-> {
+	Type extends ParserType = undefined,
+> = {
 	readonly name: Name;
-	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
-	/**
-	 * Non-optional for type-level variadic-args validation in core.
-	 *
-	 * When `true`, the inferred TypeScript type for this arg is always `T[]`,
-	 * regardless of `required`.
-	 */
 	readonly variadic: Variadic;
 	readonly [VALIDATED_SCHEMA]: S;
-}
-
-/**
- * Detect array-shaped Standard Schema inputs. Used by `FlagDef$` to
- * select the multi-value variant (`multiple: true`) so that
- * `flag(z.array(z.string()))` satisfies core's discriminated `FlagDef`.
- */
-type IsArrayInput<S> =
-	S extends StandardSchema<infer In, infer _Out>
-		? StripUndefined<In> extends readonly unknown[]
-			? true
-			: false
-		: false;
-
-/** Element type of an array Standard Schema input, or `never`. */
-type ArrayElementInput<S> =
-	S extends StandardSchema<infer In, infer _Out>
-		? StripUndefined<In> extends readonly (infer E)[]
-			? E
-			: never
-		: never;
-
-/** ValueType resolution for an array Standard Schema (uses element type). */
-type ResolveArrayElementType<S> = PrimitiveToValueType<
-	StripUndefined<ArrayElementInput<S>>
->;
+} & (Type extends ValueType
+	? { readonly type: Type }
+	: { readonly type?: never });
 
 /**
  * Common shape for both single- and multi-value flag defs.
@@ -114,9 +86,7 @@ interface FlagDefBase$<
 	Short extends string | undefined,
 	Aliases extends readonly string[] | undefined,
 	Inherit extends true | undefined,
-	Type extends ValueType,
 > {
-	readonly type: Type;
 	readonly description?: string;
 	readonly required?: true;
 	readonly inherit: Inherit;
@@ -128,25 +98,21 @@ interface FlagDefBase$<
 /**
  * Crust `FlagDef` carrying a hidden Standard Schema.
  *
- * Array-typed schemas (e.g. `z.array(z.string())`,
- * `Schema.Array(Schema.String)`) pin `multiple: true` so they discriminate
- * against core's `StringMultiFlagDef` etc.; scalar schemas omit it.
- *
- * The optional 5th `Type` generic exists so the deprecated `/effect`
- * subpath shim can pin the CLI value-type literal when its schema generic
- * collapses to the broad `StandardSchema`. End-user call sites should
- * leave it on its default.
+ * The `type` parser hint is required for flags because it defines CLI grammar:
+ * boolean toggles do not consume a value, while string/number flags do.
  */
 export type FlagDef$<
 	S extends StandardSchema = StandardSchema,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Inherit extends true | undefined = true | undefined,
-	Type extends ValueType = IsArrayInput<S> extends true
-		? ResolveArrayElementType<S>
-		: ResolveValueType<S>,
-> = FlagDefBase$<S, Short, Aliases, Inherit, Type> &
-	(IsArrayInput<S> extends true ? { readonly multiple: true } : unknown);
+	Type extends FlagParserType = FlagParserType,
+	Multiple extends true | undefined = undefined,
+> = FlagDefBase$<S, Short, Aliases, Inherit> & {
+	readonly type: Type;
+} & (Multiple extends true
+		? { readonly multiple: true }
+		: { readonly multiple?: never });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public option types for arg() / flag()
@@ -155,10 +121,8 @@ export type FlagDef$<
 /**
  * Optional CLI metadata passed to `arg()`.
  *
- * Every field is optional. When automatic introspection covers a field
- * (`type`, `description`, `required`), explicit values override it
- * silently. For schemas with unknown vendors (e.g. Valibot, ArkType),
- * `type` MUST be supplied explicitly because no inference is available.
+ * Every field is optional. Omit `type` for raw schema-backed positional
+ * parsing; pass it as a parser hint when you want parser-level coercion.
  */
 export interface ArgOptions {
 	type?: "string" | "number" | "boolean";
@@ -175,16 +139,15 @@ export interface ArgOptions {
 }
 
 /**
- * Optional CLI metadata passed to `flag()`.
+ * CLI metadata passed to `flag()`.
  *
- * Every field is optional. When automatic introspection covers a field
- * (`type`, `description`, `required`, `multiple`), explicit values
- * override it silently. For schemas with unknown vendors (e.g. Valibot,
- * ArkType), `type` MUST be supplied explicitly because no inference is
- * available; use `multiple: true` to declare a multi-value flag.
+ * `type` is required because it describes flag grammar, not schema output:
+ * boolean flags do not consume a value; string and number flags consume
+ * `--flag value` / `--flag=value`. Use `multiple: true` to declare a
+ * multi-value flag.
  */
 export interface FlagOptions {
-	type?: "string" | "number" | "boolean";
+	type: "string" | "number" | "boolean";
 	description?: string;
 	required?: boolean;
 	short?: string;

@@ -2,9 +2,8 @@
 // @crustjs/validate — Single Standard Schema-first entry point
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Library-agnostic at the public boundary. Auto-introspection for Zod and
-// Effect (via `Schema.standardSchemaV1(...)` wrappers, requires Effect ≥
-// 3.14.2) is handled internally via vendor dispatch.
+// Library-agnostic at the public boundary. Crust uses only Standard Schema's
+// validate function at runtime and schema output types for inference.
 //
 // Effect users wrap raw schemas with `Schema.standardSchemaV1(...)` once
 // before passing them here. The previously deprecated `/zod`, `/effect`,

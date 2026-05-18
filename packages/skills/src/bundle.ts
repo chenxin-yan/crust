@@ -2,10 +2,9 @@
 // Bundle install — installs a hand-authored skill directory as a Crust skill
 // ────────────────────────────────────────────────────────────────────────────
 
-import { existsSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, sep } from "node:path";
+import { resolveSourceDir } from "@crustjs/utils";
 import {
 	installRenderedSkill,
 	isValidSkillName,
@@ -25,84 +24,6 @@ import { CRUST_MANIFEST } from "./version.ts";
 
 /** Filename of the entrypoint markdown file required at the bundle root. */
 const SKILL_MD = "SKILL.md";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal — sourceDir resolution
-// (mirrors @crustjs/create's resolveTemplateDir / findNearestPackageRoot;
-// see packages/create/src/scaffold.ts. Tracked as tech debt to extract into
-// a shared util — TP-003 deliberately copies rather than introduces a new
-// runtime dependency on @crustjs/skills.)
-// ────────────────────────────────────────────────────────────────────────────
-
-function findNearestPackageRoot(startPath: string): string | null {
-	let current = resolve(startPath);
-
-	if (existsSync(current) && !statSync(current).isDirectory()) {
-		current = dirname(current);
-	}
-
-	while (true) {
-		if (existsSync(join(current, "package.json"))) {
-			return current;
-		}
-
-		const parent = dirname(current);
-		if (parent === current) {
-			return null;
-		}
-
-		current = parent;
-	}
-}
-
-/**
- * Resolves an absolute filesystem path from the caller-supplied `sourceDir`.
- *
- * Three modes (mirroring `@crustjs/create`'s template resolution):
- * - `URL` — must use `file:` protocol; resolved via `fileURLToPath()`.
- * - Absolute string path — resolved via `path.resolve()`.
- * - Relative string path — resolved against the nearest `package.json`
- *   directory walking up from `process.argv[1]`.
- *
- * Throws with an actionable error if the URL is non-`file:`, if
- * `process.argv[1]` is missing, or if no `package.json` is found while
- * walking up.
- *
- * @internal Exported for unit testing.
- */
-export function resolveBundleSourceDir(sourceDir: string | URL): string {
-	if (sourceDir instanceof URL) {
-		if (sourceDir.protocol !== "file:") {
-			throw new Error(
-				`Bundle URL must use file: protocol, got "${sourceDir.protocol}".`,
-			);
-		}
-		return fileURLToPath(sourceDir);
-	}
-
-	if (isAbsolute(sourceDir)) {
-		return resolve(sourceDir);
-	}
-
-	const entrypoint = process.argv[1];
-	if (!entrypoint) {
-		throw new Error(
-			`Could not resolve relative bundle path "${sourceDir}" because process.argv[1] is not set. ` +
-				`Pass an absolute path or a file: URL sourceDir.`,
-		);
-	}
-
-	const packageRoot = findNearestPackageRoot(resolve(entrypoint));
-	if (!packageRoot) {
-		throw new Error(
-			`Could not resolve relative bundle path "${sourceDir}" from entrypoint "${entrypoint}" ` +
-				`because no package.json was found in its parent directories. ` +
-				`Pass an absolute path or a file: URL sourceDir.`,
-		);
-	}
-
-	return resolve(packageRoot, sourceDir);
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — frontmatter probe
@@ -321,7 +242,7 @@ export interface LoadedBundle {
 export async function loadBundleFiles(
 	sourceDir: string | URL,
 ): Promise<LoadedBundle> {
-	const resolved = resolveBundleSourceDir(sourceDir);
+	const resolved = resolveSourceDir(sourceDir);
 
 	let canonicalRoot: string;
 	try {

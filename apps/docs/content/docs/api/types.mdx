@@ -88,11 +88,15 @@ Intended for internal/runtime commands such as a `__complete` entrypoint used by
 
 ### `ArgDef`
 
-Defines a single positional argument. Discriminated union by `type` for type-safe defaults:
+Defines a single positional argument. Discriminated union by `type` for type-safe defaults, plus a `type`-less variant for raw schema-backed parsing:
 
 ```ts
-type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef;
+type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
 ```
+
+`type` is optional. Omitting it activates the raw parser mode (see
+[`parseArgs`](/docs/api/parse-args)) and is the default produced by
+[`arg()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
 
 Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
 
@@ -140,6 +144,12 @@ type FlagDef =
   | StringFlagDef | NumberFlagDef | BooleanFlagDef           // single-value
   | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef; // multi-value
 ```
+
+Flags always declare `type` because it defines CLI grammar/token ownership:
+boolean flags do not consume a value, while string and number flags consume
+`--flag value` / `--flag=value`. Schema-backed flags produced by
+[`flag()`](/docs/modules/validate#quick-start--zod) still include this parser
+metadata; the schema validates and transforms the parsed value afterward.
 
 Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
 
@@ -263,8 +273,12 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 | `{ type: "number", default: 3000 }` | `number` |
 | `{ type: "string", variadic: true }` | `string[]` |
 | `{ type: "string", variadic: true, required: true }` | `string[]` |
+| `{ name: "x" }` (no `type`) | `unknown` |
+| `{ name: "x", variadic: true }` (no `type`) | `unknown[]` |
 
 Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
+
+Type-less (raw) positional args — produced by [`arg()`](/docs/modules/validate#quick-start--zod) from `@crustjs/validate` — resolve to `unknown` (or `unknown[]` when variadic). The downstream schema validator narrows them to the concrete output type.
 
 ### `InferFlags<F>`
 

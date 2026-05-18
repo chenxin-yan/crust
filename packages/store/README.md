@@ -85,7 +85,7 @@ const config = createStore({
 const data = createStore({
   dirPath: dataDir("my-cli"),
   fields: {
-    bookmarks: { type: "array", default: [] },
+    bookmarks: { type: "string", array: true, default: [] },
   },
 });
 
@@ -320,8 +320,9 @@ Add per-field validation to enforce config integrity on every read, write, updat
 ### Schema-driven validation
 
 The easiest way to add validation is with the built-in `field()` factory.
-It builds a complete `FieldDef` from any Standard Schema — type, default,
-description, and the per-field validator are all derived in one call:
+It builds a `FieldDef` from any [Standard Schema v1](https://standardschema.dev/)
+object. Crust stores raw values; the schema validates and transforms them on
+read/write.
 
 ```ts
 import { z } from "zod";
@@ -358,33 +359,34 @@ const store = createStore({
 });
 ```
 
+Missing persisted values flow through the schema as `undefined`:
+
+- `field(z.string().default("x"))` returns `"x"` on read when the field
+  is missing from disk.
+- `field(z.string().optional())` returns `undefined`.
+- `field(z.string())` fails read-time validation with a `VALIDATION`
+  error when the field is missing.
+
 #### Schema-derived defaults and TypeScript
 
 Standard Schema v1 has no spec-portable type-level access to schema
-defaults. As a result:
+defaults. Crust does not inspect schemas to populate runtime metadata;
+defaults are materialized on read by validating `undefined` through the
+schema. As a result:
 
-- `field(z.string().default("x"))` populates `default: "x"` at runtime,
-  but the inferred config type is `string | undefined` (NOT narrowed).
-- `field(z.string(), { default: "x" })` populates `default: "x"` AND
-  narrows the inferred config type to `string`.
+- `field(z.string().default("x"))` returns `"x"` on read, but the
+  inferred config type is `string | undefined` (NOT narrowed).
+- `field(z.string(), { default: "x" })` keeps `"x"` as the Crust-level
+  default AND narrows the inferred config type to `string`.
 
 Prefer the explicit form when the field is required to always have a
 value at use sites.
 
 #### `field()` throws on invalid input
 
-`field()` throws `CrustStoreError("DEFINITION")` when handed a
-non-Standard-Schema value, or when the runtime CLI type cannot be
-inferred from the schema and `opts.type` was not supplied. The thrown
-error's `details.vendor` field carries the schema's vendor name (when
-available) to help locate the offending call site.
-
-> **Effect ≥ 3.14.2 required.** Effect 3.14.2 made `standardSchemaV1(...)`
-> wrappers expose `.ast`, which is what the validate registry walks. On
-> Effect 3.14.0 / 3.14.1 the wrapper is a plain object and introspection
-> silently fails. See
-> [`@crustjs/validate` Effect setup](https://crustjs.com/docs/modules/validate#quick-start--effect)
-> for the floor and a workaround.
+`field()` throws `CrustStoreError("DEFINITION")` when handed a value that
+is not a Standard Schema v1 object. `type` is optional for schema-backed
+fields; pass it through `opts` only as legacy metadata for tooling.
 
 ### Custom validators
 
@@ -470,6 +472,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PARSE`      | Malformed JSON in persisted config file                 | `{ path: string }`      |
 | `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
 | `VALIDATION` | Config fails validator on read, write, update, or patch | `{ operation, issues }` |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`         |
 
 ### Catching errors by code
 
@@ -529,13 +532,13 @@ import type {
   StoreUpdater,
   FieldDef,
   FieldsDef,
+  FieldOptions,
   InferStoreConfig,
-  StoreValidator,
-  StoreValidatorResult,
   StoreValidatorIssue,
   StoreErrorCode,
-  StoreValidationIssue,
   ValidationErrorDetails,
+  DefinitionErrorDetails,
+  ValueType,
   PlatformEnv,
 } from "@crustjs/store";
 ```
@@ -547,13 +550,13 @@ import type {
 | `StoreUpdater`           | Updater function type `(current: T) => T`.                                                     |
 | `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.              |
 | `FieldsDef`              | Record of field names to `FieldDef` definitions.                                               |
+| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory (`type`, `default`, `array`, `description`). |
 | `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                                       |
-| `StoreValidator`         | Validator function contract `(value: unknown) => StoreValidatorResult`.                        |
-| `StoreValidatorResult`   | Discriminated union: `{ ok: true, value: T } \| { ok: false, issues: StoreValidatorIssue[] }`. |
 | `StoreValidatorIssue`    | `{ message: string, path: string }`.                                                           |
-| `StoreValidationIssue`   | Validation issue in error details payload.                                                     |
 | `ValidationErrorDetails` | Error details for `VALIDATION` code: `{ operation, issues }`.                                  |
-| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION"`.                             |
+| `DefinitionErrorDetails` | Error details for `DEFINITION` code: `{ vendor? }`.                                            |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`.             |
+| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                            |
 | `PlatformEnv`            | Injectable platform environment for testing path helpers.                                      |
 | `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                                         |
 

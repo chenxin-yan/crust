@@ -54,11 +54,10 @@ export interface ValidationErrorDetails {
  *
  * Returned when a `field()` call cannot produce a valid `FieldDef` from the
  * provided schema and options — e.g. the input is not a Standard Schema v1
- * object, or the schema is of an unknown vendor and `opts.type` was not
- * supplied so the runtime CLI type cannot be inferred.
+ * object.
  */
 export interface DefinitionErrorDetails {
-	/** The schema vendor name, when the failing input was a Standard Schema. */
+	/** The schema vendor name, when available. */
 	vendor?: string;
 }
 

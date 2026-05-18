@@ -75,7 +75,6 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 	const flag: CompletionFlag = {
 		name,
 		type: def.type,
-		// Boolean flags are toggle-only; everything else takes a value.
 		takesValue: def.type !== "boolean",
 	};
 
@@ -120,7 +119,7 @@ function walkArg(def: ArgDef): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const arg: CompletionArg = {
 		name: def.name,
-		type: def.type,
+		type: def.type ?? "string",
 		required: def.required === true,
 		variadic: def.variadic === true,
 	};

@@ -1,15 +1,28 @@
 {
-	"name": "@crustjs/schema-utils",
+	"name": "@crustjs/utils",
 	"version": "0.0.1",
-	"description": "Internal Crust workspace package. Do not depend on directly — use @crustjs/validate.",
+	"description": "Shared low-level utilities for the Crust ecosystem (pre-stable)",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/schema-utils"
+		"directory": "packages/utils"
 	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"crust",
+		"utils",
+		"utilities",
+		"resolve",
+		"package-root",
+		"bun",
+		"typescript"
+	],
 	"files": [
 		"dist"
 	],
@@ -17,6 +30,10 @@
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
+		},
+		"./schema": {
+			"import": "./dist/schema/index.js",
+			"types": "./dist/schema/index.d.ts"
 		}
 	},
 	"publishConfig": {
@@ -31,16 +48,12 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/core": "workspace:*",
-		"bunup": "catalog:",
-		"effect": "3.14.2",
-		"zod": "^4.0.0"
+		"bunup": "catalog:"
 	},
 	"peerDependencies": {
 		"typescript": "catalog:"
 	},
 	"dependencies": {
-		"@crustjs/core": "workspace:*",
 		"@standard-schema/spec": "^1.1.0"
 	}
 }

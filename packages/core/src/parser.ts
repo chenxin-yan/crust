@@ -57,14 +57,20 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			);
 		}
 
-		// Map Crust types to util.parseArgs types
-		// util.parseArgs only supports "string" and "boolean"
-		// "number" types are parsed as "string" then coerced
-		const parseType = def.type === "boolean" ? "boolean" : "string";
+		if (
+			def.type !== "string" &&
+			def.type !== "number" &&
+			def.type !== "boolean"
+		) {
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "--${name}" must declare a parser type ("string", "number", or "boolean")`,
+			);
+		}
 
+		const parseType = def.type === "boolean" ? "boolean" : "string";
 		const opt: ParseArgsOptionDescriptor = { type: parseType };
 
-		// Handle multiple flag
 		if (def.multiple) {
 			opt.multiple = true;
 		}
@@ -287,16 +293,15 @@ function resolveArgs(
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
 			resolved[name] =
-				def.type === "string"
+				def.type === undefined || def.type === "string"
 					? remaining
 					: remaining.map((v) => coerceValue(v, def.type, `<${name}>`));
 			index = positionals.length;
 		} else if (index < positionals.length) {
-			resolved[name] = coerceValue(
-				positionals[index] as string,
-				def.type,
-				`<${name}>`,
-			);
+			resolved[name] =
+				def.type === undefined
+					? positionals[index]
+					: coerceValue(positionals[index] as string, def.type, `<${name}>`);
 			index++;
 		} else {
 			resolved[name] = def.default ?? undefined;

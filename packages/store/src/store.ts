@@ -81,6 +81,7 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	function coerceByType(value: unknown, type: FieldDef["type"]): unknown {
+		if (type === undefined) return value;
 		if (type === "number" && typeof value === "string") {
 			const num = Number(value);
 			return Number.isNaN(num) ? value : num;
@@ -131,8 +132,7 @@ export function createStore<const F extends FieldsDef>(
 
 			const value = record[key];
 
-			// Skip validation for undefined values (field has no default, not persisted)
-			if (value === undefined) continue;
+			if (value === undefined && def.validateMissing !== true) continue;
 
 			let result: unknown;
 			try {
@@ -156,10 +156,12 @@ export function createStore<const F extends FieldsDef>(
 			if (isFieldValueResult(result)) {
 				const transformed = result.value;
 
-				// On read, transforms are discarded — reads always return the
-				// on-disk value verbatim (canonicalization happens on the
-				// next write/update/patch).
-				if (operation === "read") continue;
+				// On read, preserve persisted values verbatim, but allow schemas to
+				// materialize missing values by validating `undefined` (e.g. defaults).
+				if (operation === "read") {
+					if (value === undefined) record[key] = transformed;
+					continue;
+				}
 
 				// Persist-time path: if the transform changed the value,
 				// re-validate the output once. This catches cross-type

@@ -93,7 +93,7 @@ function normalizeArgs(argsDef: readonly ArgDef[] | undefined): ManifestArg[] {
 function normalizeArg(arg: ArgDef): ManifestArg {
 	const result: ManifestArg = {
 		name: arg.name,
-		type: arg.type,
+		type: arg.type ?? "string",
 		required: arg.required === true,
 		variadic: arg.variadic === true,
 	};
@@ -135,7 +135,7 @@ function normalizeFlags(
 function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 	const result: ManifestFlag = {
 		name,
-		type: flag.type,
+		type: flag.type ?? "string",
 		required: flag.required === true,
 		multiple: flag.multiple === true,
 		short: flag.short,

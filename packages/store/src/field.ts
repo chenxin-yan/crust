@@ -2,34 +2,30 @@
 // field() — Standard-Schema-first store-field factory
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Builds a `FieldDef` from any Standard Schema v1 object. Introspection
-// (via `@crustjs/schema-utils`) auto-derives `type` / `default` / `array` /
-// `description`; the optional second argument overrides silently. Returns
-// a value that satisfies store's discriminated `FieldDef` union.
+// Builds a `FieldDef` from any Standard Schema v1 object. Crust stores raw
+// values, then lets the schema validate and transform them. Metadata such as
+// `type`, `default`, `array`, and `description` is supplied explicitly through
+// options when needed.
 
 import {
-	extractDefault,
 	type InferOutput,
-	inferOptions,
 	isStandardSchema,
 	normalizeStandardIssues,
 	type StandardSchema,
-} from "@crustjs/schema-utils";
+} from "@crustjs/utils/schema";
 import { CrustStoreError } from "./errors.ts";
+import type { FIELD_SCHEMA_OUTPUT } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// FieldOptions — explicit overrides for the introspected values
+// FieldOptions — explicit Crust metadata
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Optional overrides for the introspected `FieldDef` shape produced by
- * {@link field}.
+ * Optional Crust metadata for the `FieldDef` shape produced by {@link field}.
  *
- * Every key is optional. When automatic introspection covers a field
- * (`type`, `description`, `default`, `array`), explicit values override
- * the introspection silently. For schemas with unknown vendors (e.g.
- * Valibot, ArkType), `type` MUST be supplied explicitly because no
- * inference is available.
+ * Every key is optional. Crust does not infer metadata from schemas; schemas
+ * validate and transform actual runtime values, including missing values passed
+ * as `undefined`.
  *
  * No `validate` key — validation flows exclusively through the schema.
  * If extra checks are needed, refine the schema with `.refine(...)`
@@ -42,12 +38,10 @@ export interface FieldOptions<T = unknown> {
 	type?: "string" | "number" | "boolean";
 	description?: string;
 	/**
-	 * Default value for this field when the persisted state does not contain
-	 * a value for it. Passing `default` explicitly here narrows the inferred
-	 * config type from `T | undefined` to `T`. Schema-derived defaults
-	 * (e.g. `z.string().default("x")`) populate the runtime default but do
-	 * NOT narrow the TypeScript type — pass it explicitly here for tight
-	 * typing.
+	 * Crust metadata default for this field when the persisted state does not
+	 * contain a value for it. Schema defaults should usually live in the schema;
+	 * missing persisted values are validated as `undefined`, so `.default()` works
+	 * naturally at read time.
 	 */
 	default?: T;
 	/** Mark this field as an array (collects values into an array). */
@@ -88,100 +82,37 @@ function makeValidator<S extends StandardSchema>(
 // FieldDef shape inference (TS narrowing)
 // ────────────────────────────────────────────────────────────────────────────
 
-type ValueType = "string" | "number" | "boolean";
-
-type StripUndefined<T> = Exclude<T, undefined>;
-
-type PrimitiveToValueType<T> = [T] extends [string]
-	? "string"
-	: [T] extends [number]
-		? "number"
-		: [T] extends [boolean]
-			? "boolean"
-			: ValueType;
-
-/**
- * Resolve the runtime CLI value-type from a Standard Schema's output type.
- *
- * Array schemas are detected via `IsArrayOutput`; their element type drives
- * the value-type literal so `field(z.array(z.string()))` resolves to
- * `{ type: "string"; array: true }`.
- */
-type IsArrayOutput<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? StripUndefined<Out> extends readonly unknown[]
-			? true
-			: false
-		: false;
-
-type ArrayElementOutput<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? StripUndefined<Out> extends readonly (infer E)[]
-			? E
-			: never
-		: never;
-
-type ResolveScalarType<S> =
-	S extends StandardSchema<infer _I, infer Out>
-		? PrimitiveToValueType<StripUndefined<Out>>
-		: ValueType;
-
-/** A scalar `FieldDef` with no narrowed default. */
-type ScalarFieldDef<T extends ValueType> = {
-	readonly type: T;
+type RawSchemaFieldDef<Out> = {
+	readonly type?: never;
+	readonly array?: never;
 	readonly description?: string;
 	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
+	readonly validateMissing: true;
+	readonly [FIELD_SCHEMA_OUTPUT]?: Out;
 };
 
-/** A scalar `FieldDef` with a narrowed default. */
-type ScalarFieldDefWithDefault<T extends ValueType, D> = {
-	readonly type: T;
-	readonly description?: string;
-	readonly default: D;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
-
-/** An array `FieldDef` with no narrowed default. */
-type ArrayFieldDef<T extends ValueType> = {
-	readonly type: T;
-	readonly array: true;
-	readonly description?: string;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
-
-/** An array `FieldDef` with a narrowed default. */
-type ArrayFieldDefWithDefault<T extends ValueType, D> = {
-	readonly type: T;
-	readonly array: true;
-	readonly description?: string;
-	readonly default: D;
-	readonly validate: (value: unknown) => Promise<{ value: unknown }>;
-};
+type SchemaFieldDefWithOptions<
+	Out,
+	Type extends FieldOptions["type"],
+	Array extends true | undefined,
+	D = never,
+> = Omit<RawSchemaFieldDef<Out>, "type" | "array"> &
+	(Type extends NonNullable<FieldOptions["type"]>
+		? { readonly type: Type }
+		: { readonly type?: never }) &
+	(Array extends true ? { readonly array: true } : { readonly array?: never }) &
+	([D] extends [never] ? unknown : { readonly default: D });
 
 /**
  * `FieldDef` inferred from a Standard Schema, with no narrowed default.
  *
- * Schema-derived defaults are populated at runtime but do NOT narrow the
- * TypeScript type — Standard Schema v1 has no spec-portable type-level
- * access to defaults. Pass `field(schema, { default: x })` explicitly to
- * narrow.
+ * Standard Schema v1 has no spec-portable type-level access to defaults, so
+ * schema `.default()` does not narrow the inferred TypeScript type. Pass
+ * `field(schema, { default: x })` explicitly to narrow.
  */
-type SchemaFieldDef<S extends StandardSchema> =
-	IsArrayOutput<S> extends true
-		? ArrayFieldDef<PrimitiveToValueType<StripUndefined<ArrayElementOutput<S>>>>
-		: ScalarFieldDef<ResolveScalarType<S>>;
-
-/**
- * `FieldDef` inferred from a Standard Schema, with the explicit `opts.default`
- * narrowed into the type.
- */
-type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
-	IsArrayOutput<S> extends true
-		? ArrayFieldDefWithDefault<
-				PrimitiveToValueType<StripUndefined<ArrayElementOutput<S>>>,
-				D
-			>
-		: ScalarFieldDefWithDefault<ResolveScalarType<S>, D>;
+type SchemaFieldDef<S extends StandardSchema> = RawSchemaFieldDef<
+	InferOutput<S>
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // field() — overloads
@@ -191,32 +122,29 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  * Define a `@crustjs/store` field from any Standard Schema v1.
  *
  * Returns a value that satisfies store's `FieldDef` discriminated union.
- * Auto-derives `type`, `array`, `description`, and `default` from the
- * schema (Zod and Effect natively; Valibot/ArkType via the
- * `validate(undefined)` fallback for defaults). Pass `opts` to override
- * any key explicitly — explicit values win silently.
+ * Crust stores raw values and lets the schema validate and transform them on
+ * read/write; missing persisted values flow through the schema as `undefined`,
+ * so `.optional()` and `.default()` behave naturally.
  *
  * The returned `validate` is an async function that throws an `Error` with
  * the schema's normalized issue messages on failure (matches store's
  * `FieldDef.validate` contract).
  *
- * **Type-level defaults**: schema-derived defaults populate at runtime but
- * do NOT narrow the inferred config type. For tight typing of
- * default-bearing fields, pass `default` via `opts`:
+ * **Type-level defaults**: Standard Schema v1 has no spec-portable type-level
+ * access to defaults. For tight typing of default-bearing fields, pass
+ * `default` via `opts`:
  *
  * ```ts
- * field(z.string().default("x"))                       // state: string | undefined
- * field(z.string(), { default: "x" })                  // state: string
+ * field(z.string().default("x"))         // value materializes on read; state: string | undefined
+ * field(z.string(), { default: "x" })    // Crust-level default; state: string
  * ```
  *
  * @param schema - Any Standard Schema v1 object (Zod schemas natively;
  *                 Effect schemas wrapped via `Schema.standardSchemaV1`;
  *                 Valibot/ArkType/Sury/etc. as-is)
- * @param opts - Optional store-field metadata; explicit keys override
- *                   the introspected values silently
+ * @param opts - Optional Crust-level metadata
  * @throws {CrustStoreError} With code `"DEFINITION"` when the input is not
- *         a Standard Schema, or when the runtime CLI type cannot be inferred
- *         and `opts.type` was not supplied.
+ *         a Standard Schema v1 object.
  *
  * @example Zod
  * ```ts
@@ -247,18 +175,31 @@ type SchemaFieldDefWithDefault<S extends StandardSchema, D> =
  * ```
  */
 export function field<S extends StandardSchema>(schema: S): SchemaFieldDef<S>;
-export function field<S extends StandardSchema, D extends InferOutput<S>>(
+export function field<
+	S extends StandardSchema,
+	D extends InferOutput<S>,
+	const Type extends FieldOptions<InferOutput<S>>["type"] = undefined,
+	const Array extends true | undefined = undefined,
+>(
 	schema: S,
-	opts: FieldOptions<InferOutput<S>> & { default: D },
-): SchemaFieldDefWithDefault<S, D>;
-export function field<S extends StandardSchema>(
+	opts: FieldOptions<InferOutput<S>> & {
+		default: D;
+		type?: Type;
+		array?: Array;
+	},
+): SchemaFieldDefWithOptions<InferOutput<S>, Type, Array, D>;
+export function field<
+	S extends StandardSchema,
+	const Type extends FieldOptions<InferOutput<S>>["type"] = undefined,
+	const Array extends true | undefined = undefined,
+>(
 	schema: S,
-	opts: FieldOptions<InferOutput<S>>,
-): SchemaFieldDef<S>;
+	opts: FieldOptions<InferOutput<S>> & { type?: Type; array?: Array },
+): SchemaFieldDefWithOptions<InferOutput<S>, Type, Array>;
 export function field<S extends StandardSchema>(
 	schema: S,
 	opts?: FieldOptions<InferOutput<S>>,
-): SchemaFieldDef<S> {
+): unknown {
 	if (!isStandardSchema(schema)) {
 		throw new CrustStoreError(
 			"DEFINITION",
@@ -267,49 +208,23 @@ export function field<S extends StandardSchema>(
 		);
 	}
 
-	const schemaVendor = schema["~standard"]?.vendor ?? "unknown";
-	const label = `field (vendor: "${schemaVendor}")`;
-
-	const inferred = inferOptions(schema, "field", label);
-
-	const resolvedType = opts?.type ?? inferred.type;
-	if (!resolvedType) {
-		throw new CrustStoreError(
-			"DEFINITION",
-			`${label}: unable to infer field type from schema. Pass an explicit { type: "string" | "number" | "boolean" } in options. If this is an Effect schema, wrap it with Schema.standardSchemaV1(...) before passing it here.`,
-			{ vendor: schemaVendor },
-		);
-	}
-
-	const isArray = opts?.array === true || inferred.multiple === true;
-
-	// Resolve description: explicit opts wins; otherwise inferred.
-	const description = opts?.description ?? inferred.description;
-
-	// Resolve default: explicit opts wins; otherwise sync vendor-aware
-	// extraction with `validate(undefined)` fallback. Falsy defaults are
-	// preserved — `"default" in opts` is the sole sentinel for "caller
-	// explicitly set a default", so `{ default: undefined }` is honored
-	// (matching the `D extends InferOutput<S>` overload contract).
-	const resolvedDefault =
-		opts && "default" in opts
-			? ({ ok: true, value: opts.default } as const)
-			: extractDefault(schema);
-
 	const validate = makeValidator(schema);
 
 	const def: Record<string, unknown> = {
-		type: resolvedType,
 		validate,
+		validateMissing: true,
 	};
-	if (isArray) {
+	if (opts?.type !== undefined) {
+		def.type = opts.type;
+	}
+	if (opts?.array === true) {
 		def.array = true;
 	}
-	if (description !== undefined) {
-		def.description = description;
+	if (opts?.description !== undefined) {
+		def.description = opts.description;
 	}
-	if (resolvedDefault.ok) {
-		def.default = resolvedDefault.value;
+	if (opts && "default" in opts) {
+		def.default = opts.default;
 	}
 
 	return def as unknown as SchemaFieldDef<S>;

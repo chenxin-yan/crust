@@ -1,0 +1,115 @@
+---
+title: "Utils"
+description: Shared low-level utilities for the Crust ecosystem (pre-stable).
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+<Callout type="warn" title="Pre-stable">
+	**Status: pre-stable (`0.0.1`).** Public surface may change without notice
+	until `0.1.0`. Pin to an exact version if depending externally — `bun add
+	@crustjs/utils@0.0.1`.
+</Callout>
+
+Internal de-duplication primitives shared across `@crustjs/*` packages.
+Plugin authors may use these at their own risk; no stability promises are
+made until the package graduates to `0.1.0`.
+
+## Install
+
+```sh
+bun add @crustjs/utils
+```
+
+## Exports
+
+| Export             | Description                                                                     |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `resolveSourceDir` | Resolve a source directory descriptor (file URL / absolute / relative) to a path |
+
+## `resolveSourceDir`
+
+```ts
+function resolveSourceDir(input: string | URL): string;
+```
+
+Resolves an absolute filesystem path from a caller-supplied source directory
+descriptor. Designed for tools that ship reference assets (templates, skill
+bundles, etc.) alongside their published package and need a uniform way to
+locate them at runtime regardless of how the consumer expressed the path.
+
+Used internally by [`scaffold`](/docs/modules/create#scaffoldoptions) in `@crustjs/create`
+and [`installSkillBundle`](/docs/modules/skills) in `@crustjs/skills` — the `template` and
+`sourceDir` options are resolved through this helper, so the three input
+modes documented here apply uniformly to both packages.
+
+### Resolution modes
+
+#### 1. `file:` URL
+
+Must use the `file:` protocol — typically constructed as
+`new URL("./relative/path", import.meta.url)` so the path is anchored to the
+calling module's location on disk. Resolved via `url.fileURLToPath()`.
+
+```ts
+import { resolveSourceDir } from "@crustjs/utils";
+
+const dir = resolveSourceDir(new URL("../templates/base", import.meta.url));
+```
+
+#### 2. Absolute string path
+
+Returned as `path.resolve(input)` — `.` / `..` segments are normalized.
+
+```ts
+const dir = resolveSourceDir("/abs/path/to/templates/base");
+```
+
+#### 3. Relative string path
+
+Resolved against the nearest `package.json` directory walking up from
+`process.argv[1]`. This makes `"templates/base"` resolve to
+`<consumer-package-root>/templates/base` regardless of the consumer's current
+working directory.
+
+```ts
+// In a package whose entrypoint is dist/cli.js, this resolves to
+// <package-root>/templates/base.
+const dir = resolveSourceDir("templates/base");
+```
+
+### Failure modes
+
+`resolveSourceDir` throws a descriptive `Error` in three cases:
+
+| Trigger                                                               | Error includes                                          |
+| --------------------------------------------------------------------- | ------------------------------------------------------- |
+| URL with non-`file:` protocol                                         | The offending protocol (`got "https:"`, etc.)           |
+| Relative string path with `process.argv[1]` unset                     | The input + suggestion to use an absolute path or URL   |
+| Relative string path but no `package.json` found walking up           | The input, the entrypoint, and the same suggestion     |
+
+## Stability
+
+The public surface is intentionally narrow in `0.0.1`. Helpers that have been
+considered but deferred (until ≥2 cross-package consumers exist) include:
+
+- `findNearestPackageRoot` (currently private)
+- `readPackageJson`
+- `parseSemver`
+
+If you have a use case that would benefit from one of these, open an issue
+describing the consumer(s) you'd add to the dependency graph.
+
+## Internal subpath: `@crustjs/utils/schema`
+
+<Callout type="warn" title="Internal — do not import">
+	Standard Schema helpers consumed by `@crustjs/validate` and
+	`@crustjs/store`. **Not part of the public Crust API** — may change in any
+	release without a deprecation cycle. Use `@crustjs/validate` instead.
+</Callout>
+
+Lives under `@crustjs/utils/schema` only so the shared Standard Schema
+boundary code used by `@crustjs/validate` and `@crustjs/store` resolves for
+external consumers. The subpath is core-free: it depends on the Standard Schema
+spec package, not `@crustjs/core`, and does not wrap errors in package-specific
+Crust error classes.

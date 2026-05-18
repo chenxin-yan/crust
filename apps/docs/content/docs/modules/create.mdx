@@ -5,7 +5,7 @@ description: Headless scaffolding engine for building create-xx tools.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/create` is a headless, zero-dependency scaffolding engine for building `npm create-xxx` / `bun create-xxx` tools. It handles the mechanical parts of scaffolding — copying template directories, interpolating variables, renaming dotfiles, resolving conflicts, and running post-scaffold steps — so you focus purely on template design and interactive flow.
+`@crustjs/create` is a headless scaffolding engine for building `npm create-xxx` / `bun create-xxx` tools. It handles the mechanical parts of scaffolding — copying template directories, interpolating variables, renaming dotfiles, resolving conflicts, and running post-scaffold steps — so you focus purely on template design and interactive flow.
 
 The library is **headless**: it has no opinions about prompts, CLI frameworks, or terminal UI. Pair it with `@crustjs/core` for command routing and `@crustjs/prompts` for interactive input.
 
@@ -109,7 +109,7 @@ Copy a template directory to a destination, applying variable interpolation and 
 
 | Field      | Type                     | Required | Description                                                                                                           |
 | ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| `template` | `string \| URL`          | Yes      | Template directory. Absolute `string` paths are used as-is; relative `string` paths resolve from the nearest package root of `process.argv[1]`. `URL` must be a `file:` URL. |
+| `template` | `string \| URL`          | Yes      | Template directory. Absolute `string` paths are used as-is; relative `string` paths resolve from the nearest package root of `process.argv[1]`. `URL` must be a `file:` URL. Resolution is performed by [`resolveSourceDir`](/docs/modules/utils#resolvesourcedir) from `@crustjs/utils`. |
 | `dest`     | `string`                 | Yes      | Absolute or relative path to the destination directory                                                                |
 | `context`  | `Record<string, string>` | Yes      | Variables to interpolate into `{{key}}` placeholders                                                                  |
 | `conflict` | `"abort" \| "overwrite"` | No       | How to handle an existing non-empty destination. Default: `"abort"`                                                   |

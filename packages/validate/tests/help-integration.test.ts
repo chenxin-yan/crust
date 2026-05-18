@@ -1,144 +1,53 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Crust } from "@crustjs/core";
-import { helpPlugin, renderHelp } from "@crustjs/plugins";
+import { renderHelp } from "@crustjs/plugins";
 import { z } from "zod";
 import { arg, commandValidator, flag } from "../src/index.ts";
-
-let stdoutChunks: string[];
-let originalLog: typeof console.log;
-
-beforeEach(() => {
-	stdoutChunks = [];
-	originalLog = console.log;
-	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
-	};
-});
-
-afterEach(() => {
-	console.log = originalLog;
-	process.exitCode = 0;
-});
-
-function getStdout(): string {
-	return stdoutChunks.join("\n");
-}
 
 function stripAnsi(text: string): string {
 	return Bun.stripANSI(text);
 }
 
-describe("help plugin integration with Crust builder + commandValidator", () => {
-	it("renders help for a flags-only schema-first command", async () => {
-		const app = new Crust("serve")
-			.meta({ description: "Start dev server" })
-			.flags({
-				verbose: flag(
-					z.boolean().default(false).describe("Enable verbose logging"),
-					{ short: "v" },
-				),
-			})
-			.run(commandValidator(() => {}))
-			.use(helpPlugin());
-
-		await app.execute({ argv: ["--help"] });
-
-		const output = stripAnsi(getStdout());
-		expect(output).toContain("serve - Start dev server");
-		expect(output).toContain("USAGE:");
-		expect(output).toContain("serve [options]");
-		expect(output).toContain("OPTIONS:");
-		expect(output).toContain("-v, --verbose, --no-verbose");
-		expect(output).toContain("Enable verbose logging");
-		expect(output).toContain("-h, --help");
-	});
-
-	it("renders args and options sections from generated definitions", () => {
+describe("help plugin integration with schema-backed definitions", () => {
+	it("renders descriptions supplied as Crust metadata", () => {
 		const app = new Crust("build")
 			.args([
-				arg("entry", z.string().describe("Entry file")),
-				arg("target", z.string().optional().describe("Build target")),
+				arg("entry", z.string(), { description: "Entry file", required: true }),
+				arg("target", z.string().optional(), { description: "Build target" }),
 			])
 			.flags({
-				outDir: flag(z.string().default("dist").describe("Output directory"), {
+				outDir: flag(z.string().default("dist"), {
+					type: "string",
 					short: "o",
+					description: "Output directory",
 				}),
 			});
 
 		const output = stripAnsi(renderHelp(app._node));
 		expect(output).toContain("build <entry> [target] [options]");
-		expect(output).toContain("ARGS:");
-		expect(output).toContain("<entry>");
 		expect(output).toContain("Entry file");
-		expect(output).toContain("[target]");
 		expect(output).toContain("Build target");
-		expect(output).toContain("OPTIONS:");
 		expect(output).toContain("-o, --outDir");
+		expect(output).toContain("Output directory");
 	});
 
-	it("extracts description from .describe() on the schema", () => {
-		const app = new Crust("app").flags({
-			port: flag(z.number().describe("Schema description")),
-		});
+	it("runs a command with raw schema-backed args and typed schema-backed flags", async () => {
+		let received: { port: number; verbose: boolean } | undefined;
+		const app = new Crust("serve")
+			.args([arg("port", z.coerce.number())])
+			.flags({
+				verbose: flag(z.boolean().default(false), {
+					type: "boolean",
+					short: "v",
+				}),
+			})
+			.run(
+				commandValidator(({ args, flags }) => {
+					received = { port: args.port, verbose: flags.verbose };
+				}),
+			);
 
-		const output = stripAnsi(renderHelp(app._node));
-		expect(output).toContain("Schema description");
-	});
-
-	it("resolves description through wrappers like .optional() and .default()", () => {
-		const app = new Crust("app").flags({
-			port: flag(z.number().describe("Port number").default(3000)),
-			host: flag(z.string().describe("Host name").optional()),
-		});
-
-		const output = stripAnsi(renderHelp(app._node));
-		expect(output).toContain("Port number");
-		expect(output).toContain("Host name");
-	});
-
-	it("renders variadic positional args", () => {
-		const app = new Crust("lint").args([
-			arg("mode", z.string()),
-			arg("files", z.string().describe("Files to lint"), {
-				variadic: true,
-			}),
-		]);
-
-		const output = stripAnsi(renderHelp(app._node));
-		expect(output).toContain("<mode>");
-		expect(output).toContain("<files...>");
-		expect(output).toContain("Files to lint");
-	});
-
-	it("renders parent and subcommand help correctly", async () => {
-		function createApp() {
-			return new Crust("app")
-				.meta({ description: "App CLI" })
-				.command("deploy", (cmd) =>
-					cmd
-						.flags({
-							env: flag(
-								z.string().default("staging").describe("Target environment"),
-								{ short: "e" },
-							),
-						})
-						.run(commandValidator(() => {})),
-				)
-				.use(helpPlugin());
-		}
-
-		await createApp().execute({ argv: ["--help"] });
-
-		const parentOutput = stripAnsi(getStdout());
-		expect(parentOutput).toContain("COMMANDS:");
-		expect(parentOutput).toContain("deploy");
-
-		stdoutChunks = [];
-		await createApp().execute({ argv: ["deploy", "--help"] });
-
-		const childOutput = stripAnsi(getStdout());
-		expect(childOutput).toContain("deploy");
-		expect(childOutput).toContain("-e, --env");
-		expect(childOutput).toContain("Target environment");
+		await app.execute({ argv: ["3000", "--verbose"] });
+		expect(received).toEqual({ port: 3000, verbose: true });
 	});
 });

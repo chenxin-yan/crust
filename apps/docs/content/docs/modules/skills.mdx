@@ -383,6 +383,8 @@ import pkg from "./package.json" with { type: "json" };
 await installSkillBundle({
   // Resolved relative to the nearest package.json walking up from
   // process.argv[1]. You may also pass an absolute path or a file: URL.
+  // Resolution is performed by `resolveSourceDir` from
+  // [`@crustjs/utils`](/docs/modules/utils#resolvesourcedir).
   sourceDir: "skills/funnel-builder",
   agents: ["claude-code", "opencode"],
   version: pkg.version,

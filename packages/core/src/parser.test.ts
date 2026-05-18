@@ -1296,3 +1296,40 @@ describe("validateParsed", () => {
 		expect(() => validateParsed(cmd, parsed)).not.toThrow();
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Schema-backed args with no parser type hint
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — raw schema-backed args", () => {
+	it("throws DEFINITION when dynamic flag definitions omit parser type", () => {
+		const cmd = makeNode({
+			meta: { name: "invalid-flag" },
+			flags: { verbose: {} as never },
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(
+			'Flag "--verbose" must declare a parser type ("string", "number", or "boolean")',
+		);
+	});
+
+	it("keeps untyped positional args as raw strings", () => {
+		const cmd = makeNode({
+			meta: { name: "raw-arg" },
+			args: [{ name: "port" }],
+		});
+		const result = parseArgs(cmd, ["3000"]);
+		expect((result.args as Record<string, unknown>).port).toBe("3000");
+	});
+
+	it("keeps untyped variadic args as raw string arrays", () => {
+		const cmd = makeNode({
+			meta: { name: "raw-variadic" },
+			args: [{ name: "files", variadic: true }],
+		});
+		const result = parseArgs(cmd, ["a.ts", "b.ts"]);
+		expect((result.args as Record<string, unknown>).files).toEqual([
+			"a.ts",
+			"b.ts",
+		]);
+	});
+});

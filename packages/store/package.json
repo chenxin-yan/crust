@@ -55,6 +55,6 @@
 		"typescript": "catalog:"
 	},
 	"dependencies": {
-		"@crustjs/schema-utils": "workspace:*"
+		"@crustjs/utils": "workspace:*"
 	}
 }
