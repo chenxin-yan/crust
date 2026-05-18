@@ -243,29 +243,13 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
  * } satisfies FlagsDef;
  * ```
  */
-interface RawSingleFlagDef extends SingleFlagBase {
-	/** Optional parser hint. Omit for raw schema-backed validation. */
-	type?: never;
-	default?: unknown;
-	choices?: readonly string[];
-}
-
-interface RawMultiFlagDef extends MultiFlagBase {
-	/** Optional parser hint. Omit for raw schema-backed validation. */
-	type?: never;
-	default?: unknown[];
-	choices?: readonly string[];
-}
-
 export type FlagDef =
 	| StringFlagDef
 	| NumberFlagDef
 	| BooleanFlagDef
 	| StringMultiFlagDef
 	| NumberMultiFlagDef
-	| BooleanMultiFlagDef
-	| RawSingleFlagDef
-	| RawMultiFlagDef;
+	| BooleanMultiFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -650,9 +634,7 @@ type InferFlagValue<F extends FlagDef> = F extends {
 			: F extends { default: ResolvePrimitive<T> }
 				? ResolvePrimitive<T>
 				: ResolvePrimitive<T> | undefined
-	: F extends { multiple: true }
-		? unknown[] | undefined
-		: unknown;
+	: never;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.

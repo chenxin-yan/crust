@@ -1298,81 +1298,38 @@ describe("validateParsed", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Raw schema-backed flags (no parser type hint)
+// Schema-backed args with no parser type hint
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("parseArgs — raw schema-backed flags", () => {
-	const cmd = makeNode({
-		meta: { name: "raw" },
-		args: [{ name: "value" }],
-		flags: {
-			verbose: { short: "v", aliases: ["loud"] },
-			port: {},
-			tag: { multiple: true },
-		},
-	});
-
-	it("defaults missing raw flag to undefined", () => {
-		const result = parseArgs(cmd, []);
-		expect(result.flags.verbose).toBeUndefined();
-	});
-
-	it("parses positive and negated raw flags", () => {
-		expect(parseArgs(cmd, ["--verbose"]).flags.verbose).toBe(true);
-		expect(parseArgs(cmd, ["--no-verbose"]).flags.verbose).toBe(false);
-	});
-
-	it("parses raw equals values as strings", () => {
-		const result = parseArgs(cmd, ["--port=3000"]);
-		expect(result.flags.port).toBe("3000");
-	});
-
-	it("does not consume the next token in raw mode", () => {
-		const result = parseArgs(cmd, ["--port", "3000"]);
-		expect(result.flags.port).toBe(true);
-		expect((result.args as Record<string, unknown>).value).toBe("3000");
-	});
-
-	it("supports short and long aliases", () => {
-		expect(parseArgs(cmd, ["-v"]).flags.verbose).toBe(true);
-		expect(parseArgs(cmd, ["--loud"]).flags.verbose).toBe(true);
-	});
-
-	it("rejects negated raw aliases", () => {
-		expect(() => parseArgs(cmd, ["--no-loud"])).toThrow(
-			'Cannot negate alias "--no-loud"; use "--no-verbose" instead',
-		);
-	});
-
-	it("rejects values on negated raw flags", () => {
-		expect(() => parseArgs(cmd, ["--no-verbose=true"])).toThrow(
-			'Negated flag "--no-verbose" must not include a value',
-		);
-	});
-
-	it("rejects raw alias collisions", () => {
-		const collision = makeNode({
-			meta: { name: "collision" },
-			flags: { verbose: { aliases: ["port"] }, port: {} },
+describe("parseArgs — raw schema-backed args", () => {
+	it("throws DEFINITION when dynamic flag definitions omit parser type", () => {
+		const cmd = makeNode({
+			meta: { name: "invalid-flag" },
+			flags: { verbose: {} as never },
 		});
-		expect(() => parseArgs(collision, [])).toThrow(
-			'Alias collision: "--port" is used by both "--port" and "--verbose"',
+		expect(() => parseArgs(cmd, [])).toThrow(
+			'Flag "--verbose" must declare a parser type ("string", "number", or "boolean")',
 		);
 	});
 
-	it("keeps repeated raw flags last-write-wins unless multiple is true", () => {
-		expect(parseArgs(cmd, ["--port=1", "--port=2"]).flags.port).toBe("2");
-		expect(parseArgs(cmd, ["--tag=a", "--tag=b"]).flags.tag).toEqual([
-			"a",
-			"b",
+	it("keeps untyped positional args as raw strings", () => {
+		const cmd = makeNode({
+			meta: { name: "raw-arg" },
+			args: [{ name: "port" }],
+		});
+		const result = parseArgs(cmd, ["3000"]);
+		expect((result.args as Record<string, unknown>).port).toBe("3000");
+	});
+
+	it("keeps untyped variadic args as raw string arrays", () => {
+		const cmd = makeNode({
+			meta: { name: "raw-variadic" },
+			args: [{ name: "files", variadic: true }],
+		});
+		const result = parseArgs(cmd, ["a.ts", "b.ts"]);
+		expect((result.args as Record<string, unknown>).files).toEqual([
+			"a.ts",
+			"b.ts",
 		]);
-	});
-
-	it("preserves explicit typed flag behavior", () => {
-		const typed = makeNode({
-			meta: { name: "typed" },
-			flags: { port: { type: "number" } },
-		});
-		expect(parseArgs(typed, ["--port", "3000"]).flags.port).toBe(3000);
 	});
 });

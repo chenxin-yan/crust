@@ -8,7 +8,7 @@ function stripAnsi(text: string): string {
 	return Bun.stripANSI(text);
 }
 
-describe("help plugin integration with raw schema-backed definitions", () => {
+describe("help plugin integration with schema-backed definitions", () => {
 	it("renders descriptions supplied as Crust metadata", () => {
 		const app = new Crust("build")
 			.args([
@@ -31,11 +31,16 @@ describe("help plugin integration with raw schema-backed definitions", () => {
 		expect(output).toContain("Output directory");
 	});
 
-	it("runs a command with raw schema-backed args and flags", async () => {
+	it("runs a command with raw schema-backed args and typed schema-backed flags", async () => {
 		let received: { port: number; verbose: boolean } | undefined;
 		const app = new Crust("serve")
 			.args([arg("port", z.coerce.number())])
-			.flags({ verbose: flag(z.boolean().default(false), { short: "v" }) })
+			.flags({
+				verbose: flag(z.boolean().default(false), {
+					type: "boolean",
+					short: "v",
+				}),
+			})
 			.run(
 				commandValidator(({ args, flags }) => {
 					received = { port: args.port, verbose: flags.verbose };

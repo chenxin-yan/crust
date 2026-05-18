@@ -142,14 +142,14 @@ Defines a single named flag. Discriminated union by `type` and `multiple`:
 ```ts
 type FlagDef =
   | StringFlagDef | NumberFlagDef | BooleanFlagDef           // single-value
-  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef // multi-value
-  | RawSingleFlagDef | RawMultiFlagDef;                       // schema-backed
+  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef; // multi-value
 ```
 
-The `Raw*` variants omit `type` and let a Standard Schema validate the raw
-parser output (`true` / `false` / `string` for single flags, arrays for
-`multiple: true`). They are the default shape produced by
-[`flag()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
+Flags always declare `type` because it defines CLI grammar/token ownership:
+boolean flags do not consume a value, while string and number flags consume
+`--flag value` / `--flag=value`. Schema-backed flags produced by
+[`flag()`](/docs/modules/validate#quick-start--zod) still include this parser
+metadata; the schema validates and transforms the parsed value afterward.
 
 Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
 

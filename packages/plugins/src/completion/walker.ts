@@ -74,9 +74,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 
 	const flag: CompletionFlag = {
 		name,
-		type: def.type ?? "string",
-		// Raw schema-backed flags accept --flag / --flag=value; completions treat
-		// them as value-taking so shells do not hide value completion candidates.
+		type: def.type,
 		takesValue: def.type !== "boolean",
 	};
 

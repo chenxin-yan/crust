@@ -108,7 +108,8 @@ describing the consumer(s) you'd add to the dependency graph.
 	release without a deprecation cycle. Use `@crustjs/validate` instead.
 </Callout>
 
-Lives under `@crustjs/utils/schema` only so the `dependencies` of
-`@crustjs/validate` (and `@crustjs/store`) resolve for external consumers.
-Depends on `@crustjs/core` (declared as an optional `peerDependency` on
-`@crustjs/utils` — callers of `resolveSourceDir` alone do not need it).
+Lives under `@crustjs/utils/schema` only so the shared Standard Schema
+boundary code used by `@crustjs/validate` and `@crustjs/store` resolves for
+external consumers. The subpath is core-free: it depends on the Standard Schema
+spec package, not `@crustjs/core`, and does not wrap errors in package-specific
+Crust error classes.

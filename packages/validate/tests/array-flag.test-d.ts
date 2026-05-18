@@ -26,5 +26,5 @@ new Crust("x").flags({
 
 // 4) Scalar boolean → single-value flag (regression: should still work).
 new Crust("x").flags({
-	verbose: flag(z.boolean().default(false), { short: "v" }),
+	verbose: flag(z.boolean().default(false), { type: "boolean", short: "v" }),
 });

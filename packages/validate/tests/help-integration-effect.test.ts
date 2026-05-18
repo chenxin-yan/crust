@@ -24,6 +24,7 @@ describe("help plugin integration with Effect Standard Schema", () => {
 			])
 			.flags({
 				verbose: flag(wrapEffect(Schema.UndefinedOr(Schema.Boolean)), {
+					type: "boolean",
 					short: "v",
 					description: "Verbose logging",
 				}),
@@ -40,7 +41,9 @@ describe("help plugin integration with Effect Standard Schema", () => {
 		const app = new Crust("serve")
 			.flags({
 				port: flag(wrapEffect(Schema.Number), { type: "number" }),
-				verbose: flag(wrapEffect(Schema.UndefinedOr(Schema.Boolean))),
+				verbose: flag(wrapEffect(Schema.UndefinedOr(Schema.Boolean)), {
+					type: "boolean",
+				}),
 			})
 			.run(
 				commandValidator(({ flags }) => {

@@ -38,8 +38,16 @@ import type { ValidatedContext } from "./types.ts";
  * import { arg, flag, commandValidator } from "@crustjs/validate";
  *
  * const serve = new Crust("serve")
- *   .args([arg("port", z.number().int().min(1))])
- *   .flags({ verbose: flag(z.boolean().default(false), { short: "v" }) })
+ *   .args([arg("port", z.coerce.number().int().min(1), {
+ *     description: "Port to listen on",
+ *   })])
+ *   .flags({
+ *     verbose: flag(z.boolean().default(false), {
+ *       type: "boolean",
+ *       short: "v",
+ *       description: "Enable verbose logging",
+ *     }),
+ *   })
  *   .run(commandValidator(({ args, flags }) => {
  *     // args.port: number, flags.verbose: boolean
  *   }));

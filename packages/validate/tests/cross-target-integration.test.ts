@@ -124,7 +124,7 @@ function effectFlag<
 	const Inherit extends true | undefined = undefined,
 >(
 	schema: Schema.Schema<A, I, never>,
-	options?: Parameters<typeof flag>[1] & {
+	options: Parameters<typeof flag>[1] & {
 		short?: Short;
 		aliases?: Aliases;
 		inherit?: Inherit;
@@ -192,7 +192,10 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 		const app = new Crust("config")
 			.args([zodArg("theme", z.enum(["light", "dark"]))])
 			.flags({
-				verbose: zodFlag(z.boolean().default(false), { short: "v" }),
+				verbose: zodFlag(z.boolean().default(false), {
+					type: "boolean",
+					short: "v",
+				}),
 			})
 			.run(
 				zodCommandValidator(({ args, flags }) => {
@@ -211,7 +214,7 @@ describe("Zod: shared schema across command, prompt, and store", () => {
 		const app = new Crust("config")
 			.args([zodArg("theme", z.enum(["light", "dark"]))])
 			.flags({
-				verbose: zodFlag(z.boolean().default(false)),
+				verbose: zodFlag(z.boolean().default(false), { type: "boolean" }),
 			})
 			.run(zodCommandValidator(() => {}));
 
@@ -377,7 +380,9 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 		const app = new Crust("config")
 			.args([effectArg("theme", Schema.Literal("light", "dark"))])
 			.flags({
-				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
+				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean), {
+					type: "boolean",
+				}),
 			})
 			.run(
 				effectCommandValidator(({ args, flags }) => {
@@ -395,7 +400,9 @@ describe("Effect: shared schema across command, prompt, and store", () => {
 		const app = new Crust("config")
 			.args([effectArg("theme", Schema.Literal("light", "dark"))])
 			.flags({
-				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean)),
+				verbose: effectFlag(Schema.UndefinedOr(Schema.Boolean), {
+					type: "boolean",
+				}),
 			})
 			.run(effectCommandValidator(() => {}));
 

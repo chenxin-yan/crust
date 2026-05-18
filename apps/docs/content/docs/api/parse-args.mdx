@@ -60,13 +60,12 @@ interface ParseResult<A, F> {
 | `"string"` | Kept as-is |
 | `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
 | `"boolean"` | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected |
-| omitted | Raw schema-backed mode. `--flag` -> `true`, `--no-flag` -> `false`, `--flag=value` -> `"value"`. `--flag value` does **not** consume the next token — leave `value` as a positional and let your schema coerce/validate it (e.g. `z.coerce.number()`). |
+| omitted | Positional args only: kept as the raw string token (or raw string array for variadic args). Flags must declare `type` because parser grammar determines whether `--flag value` is consumed. |
 
-Raw mode is automatic when a flag or arg is defined without a `type`. The
-`arg()` and `flag()` helpers in [`@crustjs/validate`](/docs/modules/validate)
-use this mode by default; their schemas decide requiredness, defaults, and
-transformations by validating the raw value (including `undefined` when the
-flag is missing).
+Raw mode is automatic when a positional arg is defined without a `type`. The
+`arg()` helper in [`@crustjs/validate`](/docs/modules/validate) uses this mode
+by default; its schema decides requiredness, defaults, and transformations by
+validating the raw value (including `undefined` when the arg is missing).
 
 ### Alias Resolution
 

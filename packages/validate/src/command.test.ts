@@ -46,10 +46,12 @@ describe("arg() — raw schema-backed definitions", () => {
 	});
 });
 
-describe("flag() — raw schema-backed definitions", () => {
-	it("does not infer type or description from schemas", () => {
-		const def = flag(z.boolean().default(false).describe("Verbose"));
-		expect(def.type).toBeUndefined();
+describe("flag() — schema-backed definitions", () => {
+	it("requires explicit parser type and does not infer description", () => {
+		const def = flag(z.boolean().default(false).describe("Verbose"), {
+			type: "boolean",
+		});
+		expect(def.type).toBe("boolean");
 		expect(def.description).toBeUndefined();
 	});
 
@@ -66,6 +68,13 @@ describe("flag() — raw schema-backed definitions", () => {
 		expect(def.aliases).toEqual(["loud"]);
 		expect(def.inherit).toBe(true);
 		expect(def.description).toBe("Verbose");
+	});
+
+	it("throws DEFINITION when parser type is missing at runtime", () => {
+		expect(() => flag(z.boolean(), {} as never)).toThrow(CrustError);
+		expect(() => flag(z.boolean(), {} as never)).toThrow(
+			'flag(): options.type is required and must be "string", "number", or "boolean"',
+		);
 	});
 });
 
@@ -105,10 +114,15 @@ describe("commandValidator — raw schema-backed runtime", () => {
 		process.exitCode = 0;
 	});
 
-	it("supports boolean flags without a type hint", async () => {
+	it("supports boolean flags with explicit parser grammar", async () => {
 		const received = capture<{ verbose: boolean }>();
 		const app = new Crust("run")
-			.flags({ verbose: flag(z.boolean().default(false), { short: "v" }) })
+			.flags({
+				verbose: flag(z.boolean().default(false), {
+					type: "boolean",
+					short: "v",
+				}),
+			})
 			.run(commandValidator(({ flags }) => received.set(flags)));
 
 		await app.execute({ argv: [] });
@@ -121,17 +135,19 @@ describe("commandValidator — raw schema-backed runtime", () => {
 		expect(received.box.value).toEqual({ verbose: true });
 	});
 
-	it("supports raw equals value flags", async () => {
+	it("supports schema-coerced value flags with string parser grammar", async () => {
 		const received = capture<{ port: number }>();
 		const app = new Crust("serve")
-			.flags({ port: flag(z.coerce.number().int().min(1)) })
+			.flags({ port: flag(z.coerce.number().int().min(1), { type: "string" }) })
 			.run(commandValidator(({ flags }) => received.set(flags)));
 
-		await app.execute({ argv: ["--port=3000"] });
+		await app.execute({ argv: ["--port", "3000"] });
 		expect(received.box.value).toEqual({ port: 3000 });
+		await app.execute({ argv: ["--port=3001"] });
+		expect(received.box.value).toEqual({ port: 3001 });
 	});
 
-	it("keeps explicit typed parser hints for --flag value compatibility", async () => {
+	it("supports parser-coerced number flags", async () => {
 		const received = capture<{ port: number }>();
 		const app = new Crust("serve")
 			.flags({ port: flag(z.number(), { type: "number", short: "p" }) })
@@ -141,13 +157,15 @@ describe("commandValidator — raw schema-backed runtime", () => {
 		expect(received.box.value).toEqual({ port: 3000 });
 	});
 
-	it("supports raw multiple flags", async () => {
+	it("supports explicit multiple flags", async () => {
 		const received = capture<{ tag: string[] }>();
 		const app = new Crust("tag")
-			.flags({ tag: flag(z.array(z.string()), { multiple: true }) })
+			.flags({
+				tag: flag(z.array(z.string()), { type: "string", multiple: true }),
+			})
 			.run(commandValidator(({ flags }) => received.set(flags)));
 
-		await app.execute({ argv: ["--tag=a", "--tag=b"] });
+		await app.execute({ argv: ["--tag", "a", "--tag=b"] });
 		expect(received.box.value).toEqual({ tag: ["a", "b"] });
 	});
 });

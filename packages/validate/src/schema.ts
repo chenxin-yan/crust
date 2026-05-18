@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// arg() / flag() — Standard-Schema-first DSL with raw schema-backed parsing
+// arg() / flag() — Standard-Schema-first DSL with explicit flag grammar
 // ────────────────────────────────────────────────────────────────────────────
 
 import { CrustError } from "@crustjs/core";
@@ -48,8 +48,8 @@ function validateArgArrayShape(
  * Returns a core `ArgDef` enriched with hidden schema metadata (via the
  * `[VALIDATED_SCHEMA]` symbol) for runtime validation by `commandValidator`.
  *
- * Crust does not infer metadata from schemas. Omit `type` for raw schema-backed
- * parsing, or pass `type` as a legacy parser hint when you need parser coercion.
+ * Crust does not infer metadata from schemas. Omit `type` to validate the raw
+ * positional string, or pass `type` when you want parser-level coercion.
  *
  * **Variadic args**: when `{ variadic: true }` is set, the inferred TypeScript
  * type is always `T[]` — a possibly-empty array, never `T[] | undefined`. The
@@ -169,22 +169,27 @@ export function arg<
  * Returns a core `FlagDef` enriched with hidden schema metadata for runtime
  * validation by `commandValidator`.
  *
- * Crust does not infer metadata from schemas. Omit `type` for raw schema-backed
- * parsing, or pass `type` as a legacy parser hint when you need parser coercion.
+ * Crust does not infer flag grammar from schemas. `type` is required and
+ * describes CLI parsing, not schema output: boolean flags do not consume a
+ * value, while string/number flags consume `--flag value` / `--flag=value`.
  *
  * **Effect users**: wrap your schema with `Schema.standardSchemaV1(...)`
  * before passing it here.
  *
  * @param schema - Any Standard Schema v1 object
- * @param options - Optional flag metadata
+ * @param options - Flag metadata, including required parser grammar `type`
  *
  * @example
  * ```ts
  * import { z } from "zod";
  * import { flag } from "@crustjs/validate";
  *
- * flag(z.boolean().default(false), { short: "v", description: "Enable verbose logging" });
- * flag(z.enum(["json", "text"]).default("text"));
+ * flag(z.boolean().default(false), {
+ *   type: "boolean",
+ *   short: "v",
+ *   description: "Enable verbose logging",
+ * });
+ * flag(z.enum(["json", "text"]).default("text"), { type: "string" });
  * ```
  */
 export function flag<
@@ -192,28 +197,7 @@ export function flag<
 	const Short extends string | undefined = undefined,
 	const Aliases extends readonly string[] | undefined = undefined,
 	const Inherit extends true | undefined = undefined,
-	const Multiple extends true | undefined = undefined,
->(
-	schema: S,
-	options?: Omit<
-		FlagOptions,
-		"short" | "aliases" | "inherit" | "type" | "multiple"
-	> & {
-		short?: Short;
-		aliases?: Aliases;
-		inherit?: Inherit;
-		type?: undefined;
-		multiple?: Multiple;
-	},
-): FlagDef$<S, Short, Aliases, Inherit, undefined, Multiple>;
-export function flag<
-	S extends StandardSchema,
-	const Short extends string | undefined = undefined,
-	const Aliases extends readonly string[] | undefined = undefined,
-	const Inherit extends true | undefined = undefined,
-	const Type extends NonNullable<FlagOptions["type"]> = NonNullable<
-		FlagOptions["type"]
-	>,
+	const Type extends FlagOptions["type"] = FlagOptions["type"],
 	const Multiple extends true | undefined = undefined,
 >(
 	schema: S,
@@ -235,27 +219,7 @@ export function flag<
 	const Inherit extends true | undefined = undefined,
 >(
 	schema: S,
-	options?: FlagOptions & {
-		short?: Short;
-		aliases?: Aliases;
-		inherit?: Inherit;
-	},
-): FlagDef$<
-	S,
-	Short,
-	Aliases,
-	Inherit,
-	FlagOptions["type"],
-	FlagOptions["multiple"]
->;
-export function flag<
-	S extends StandardSchema,
-	const Short extends string | undefined = undefined,
-	const Aliases extends readonly string[] | undefined = undefined,
-	const Inherit extends true | undefined = undefined,
->(
-	schema: S,
-	options?: FlagOptions & {
+	options: FlagOptions & {
 		short?: Short;
 		aliases?: Aliases;
 		inherit?: Inherit;
@@ -267,25 +231,36 @@ export function flag<
 			`flag(): schema must be a Standard Schema v1 object (got ${typeof schema})`,
 		);
 	}
+	if (
+		options === undefined ||
+		(options.type !== "string" &&
+			options.type !== "number" &&
+			options.type !== "boolean")
+	) {
+		throw new CrustError(
+			"DEFINITION",
+			'flag(): options.type is required and must be "string", "number", or "boolean"',
+		);
+	}
 
-	const multiple = options?.multiple === true;
+	const multiple = options.multiple === true;
 
-	const short: string | undefined = options?.short;
-	const aliases: string[] | undefined = options?.aliases
+	const short: string | undefined = options.short;
+	const aliases: string[] | undefined = options.aliases
 		? [...options.aliases]
 		: undefined;
-	const inherit: true | undefined = options?.inherit ? true : undefined;
+	const inherit: true | undefined = options.inherit ? true : undefined;
 
 	const def = {
-		...(options?.type !== undefined && { type: options.type }),
+		type: options.type,
 		...(multiple && { multiple: true as const }),
 		short,
 		aliases,
 		inherit,
-		...(options?.description !== undefined && {
+		...(options.description !== undefined && {
 			description: options.description,
 		}),
-		...(options?.required && { required: true as const }),
+		...(options.required && { required: true as const }),
 		[VALIDATED_SCHEMA]: schema,
 	};
 

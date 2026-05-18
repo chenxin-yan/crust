@@ -29,6 +29,7 @@ export type VALIDATED_SCHEMA = typeof VALIDATED_SCHEMA;
 
 type ValueType = "string" | "number" | "boolean";
 type ParserType = ValueType | undefined;
+type FlagParserType = ValueType;
 
 type StripUndefined<T> = Exclude<T, undefined>;
 
@@ -97,22 +98,19 @@ interface FlagDefBase$<
 /**
  * Crust `FlagDef` carrying a hidden Standard Schema.
  *
- * The `type` parser hint and `multiple` marker are present only when explicitly
- * supplied to `flag()`. Raw schema-backed flags intentionally omit them at
- * runtime, even when the schema input is array-shaped.
+ * The `type` parser hint is required for flags because it defines CLI grammar:
+ * boolean toggles do not consume a value, while string/number flags do.
  */
 export type FlagDef$<
 	S extends StandardSchema = StandardSchema,
 	Short extends string | undefined = string | undefined,
 	Aliases extends readonly string[] | undefined = readonly string[] | undefined,
 	Inherit extends true | undefined = true | undefined,
-	Type extends ParserType = undefined,
+	Type extends FlagParserType = FlagParserType,
 	Multiple extends true | undefined = undefined,
-> = FlagDefBase$<S, Short, Aliases, Inherit> &
-	(Type extends ValueType
-		? { readonly type: Type }
-		: { readonly type?: never }) &
-	(Multiple extends true
+> = FlagDefBase$<S, Short, Aliases, Inherit> & {
+	readonly type: Type;
+} & (Multiple extends true
 		? { readonly multiple: true }
 		: { readonly multiple?: never });
 
@@ -123,8 +121,8 @@ export type FlagDef$<
 /**
  * Optional CLI metadata passed to `arg()`.
  *
- * Every field is optional. Omit `type` for raw schema-backed parsing; pass it
- * as a legacy parser hint when you need parser coercion or `--flag value`.
+ * Every field is optional. Omit `type` for raw schema-backed positional
+ * parsing; pass it as a parser hint when you want parser-level coercion.
  */
 export interface ArgOptions {
 	type?: "string" | "number" | "boolean";
@@ -141,14 +139,15 @@ export interface ArgOptions {
 }
 
 /**
- * Optional CLI metadata passed to `flag()`.
+ * CLI metadata passed to `flag()`.
  *
- * Every field is optional. Omit `type` for raw schema-backed parsing; pass it
- * as a legacy parser hint when you need parser coercion or `--flag value`. Use
- * `multiple: true` to declare a multi-value flag.
+ * `type` is required because it describes flag grammar, not schema output:
+ * boolean flags do not consume a value; string and number flags consume
+ * `--flag value` / `--flag=value`. Use `multiple: true` to declare a
+ * multi-value flag.
  */
 export interface FlagOptions {
-	type?: "string" | "number" | "boolean";
+	type: "string" | "number" | "boolean";
 	description?: string;
 	required?: boolean;
 	short?: string;

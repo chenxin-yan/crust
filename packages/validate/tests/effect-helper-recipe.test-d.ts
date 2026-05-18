@@ -50,7 +50,7 @@ const eflag = <
 	const Inherit extends true | undefined = undefined,
 >(
 	schema: S,
-	options?: FlagOptions & {
+	options: FlagOptions & {
 		short?: Short;
 		aliases?: Aliases;
 		inherit?: Inherit;
@@ -73,11 +73,12 @@ new Crust("demo")
 		earg("count", Schema.Number),
 	])
 	.flags({
-		force: eflag(Schema.UndefinedOr(Schema.Boolean)),
+		force: eflag(Schema.UndefinedOr(Schema.Boolean), { type: "boolean" }),
 		replicas: eflag(
 			Schema.UndefinedOr(
 				Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
 			),
+			{ type: "number" },
 		),
 	})
 	.run(

@@ -35,7 +35,7 @@ const serve = new Crust("serve")
   .flags({
     verbose: flag(
       z.boolean().default(false),
-      { short: "v", description: "Enable verbose logging" },
+      { type: "boolean", short: "v", description: "Enable verbose logging" },
     ),
   })
   .run(
@@ -68,6 +68,7 @@ const serve = new Crust("serve")
   ])
   .flags({
     verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
+      type: "boolean",
       short: "v",
     }),
   })
@@ -122,7 +123,7 @@ export const eflag = <
   const Inherit extends true | undefined = undefined,
 >(
   schema: S,
-  options?: FlagOptions & {
+  options: FlagOptions & {
     short?: Short;
     aliases?: Aliases;
     inherit?: Inherit;
@@ -143,9 +144,10 @@ is structural. The forwarded `Variadic` / `Short` / `Aliases` /
 A type-level test for this recipe lives in
 `packages/validate/tests/effect-helper-recipe.test-d.ts`.
 
-<Callout type="info" title="Metadata lives in Crust options">
-  Descriptions, aliases, and legacy parser hints are Crust metadata. Schemas
-  decide requiredness, defaults, and transformations by validating actual values.
+<Callout type="info" title="Parser grammar lives in Crust options">
+  Descriptions, aliases, and flag `type` are Crust metadata. For flags, `type`
+  declares CLI grammar/token ownership; schemas decide requiredness, defaults,
+  and transformations by validating actual values.
 </Callout>
 
 ## Quick start — other Standard Schema vendors
@@ -171,9 +173,11 @@ new Crust("hi")
   );
 ```
 
-`type` is optional for every Standard Schema vendor. Omit it for raw
-schema-backed parsing, or pass it as a legacy parser hint when you need
-`--flag value` consumption or parser pre-coercion.
+For positional args, `type` is optional because the token is already owned by
+the argument. For flags, `type` is required because it declares CLI grammar:
+`type: "boolean"` does not consume a value, while `type: "string"` and
+`type: "number"` consume `--flag value` / `--flag=value`. Schemas validate and
+transform the parsed value after grammar is applied.
 
 ## Command validation
 

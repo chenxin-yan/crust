@@ -25,7 +25,7 @@ out.
 | Function | Purpose |
 | --- | --- |
 | `arg(name, schema, opts?)` | Define a positional argument |
-| `flag(schema, opts?)` | Define a flag |
+| `flag(schema, opts)` | Define a flag; `opts.type` declares CLI grammar |
 | `commandValidator(handler)` | Wrap a Crust handler with full schema validation |
 | `parseValue(schema, value)` | Validate + return typed output (throws on failure) |
 | `validateStandard(schema, value)` | Async low-level primitive (returns a result) |
@@ -33,7 +33,7 @@ out.
 | `isStandardSchema(value)` | Runtime type guard for `Standard Schema v1` |
 
 Every helper accepts any Standard Schema v1 object. Crust does not infer metadata from schemas. Use Crust options for
-descriptions and legacy parser hints; schemas decide requiredness, defaults,
+descriptions and flag parser grammar; schemas decide requiredness, defaults,
 and transformations by validating runtime values. Store field construction lives in
 [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store) (see
 `field()` there).
@@ -54,7 +54,7 @@ const serve = new Crust("serve")
   .flags({
     verbose: flag(
       z.boolean().default(false),
-      { short: "v", description: "Enable verbose logging" },
+      { type: "boolean", short: "v", description: "Enable verbose logging" },
     ),
   })
   .run(
@@ -84,6 +84,7 @@ new Crust("serve")
   ])
   .flags({
     verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
+      type: "boolean",
       short: "v",
       description: "Enable verbose logging",
     }),
@@ -91,9 +92,10 @@ new Crust("serve")
   .run(commandValidator(({ args, flags }) => { /* … */ }));
 ```
 
-> **Metadata lives in Crust options.** Descriptions, aliases, and legacy parser
-> hints are Crust metadata. Schemas decide requiredness, defaults, and
-> transformations by validating actual values.
+> **Parser grammar lives in Crust options.** Descriptions, aliases, and flag
+> `type` are Crust metadata. For flags, `type` declares CLI grammar/token
+> ownership; schemas decide requiredness, defaults, and transformations by
+> validating actual values.
 
 If you use Effect heavily and want shorter call sites, drop these
 helpers into your own project:
@@ -138,7 +140,7 @@ export const eflag = <
   const Inherit extends true | undefined = undefined,
 >(
   schema: S,
-  options?: FlagOptions & {
+  options: FlagOptions & {
     short?: Short;
     aliases?: Aliases;
     inherit?: Inherit;
@@ -165,6 +167,7 @@ Any other library implementing the spec works too. Supply descriptions as Crust
 metadata when you want them in help output:
 
 ```ts
+import { Crust } from "@crustjs/core";
 import { arg, commandValidator } from "@crustjs/validate";
 import * as v from "valibot";
 
@@ -177,9 +180,11 @@ new Crust("hi")
   .run(commandValidator(({ args }) => { /* args.name: string */ }));
 ```
 
-`type` is optional for every Standard Schema vendor. Omit it for raw
-schema-backed parsing, or pass it as a legacy parser hint when you need
-`--flag value` consumption or parser pre-coercion.
+For positional args, `type` is optional because the token is already owned by
+the argument. For flags, `type` is required because it declares CLI grammar:
+`type: "boolean"` does not consume a value, while `type: "string"` and
+`type: "number"` consume `--flag value` / `--flag=value`. Schemas validate and
+transform the parsed value after grammar is applied.
 
 ## Command validation
 
