@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import {
 	coerceBooleanString,
-	tryCoerceNumber,
 	type ResolvePrimitive,
+	tryCoerceNumber,
 } from "./primitive.ts";
 
 type Expect<T extends true> = T;
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() =>
-	T extends B ? 1 : 2
-	? true
-	: false;
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+		? true
+		: false;
 
 type _checkDistributive = Expect<
 	Equal<ResolvePrimitive<"number" | "boolean">, number | boolean>
