@@ -2,11 +2,12 @@
 
 ## Current step
 
-Step 0 complete — preflight and scope reconciliation.
+Step 1 complete — utils primitive module added and verified.
 
 ## Step log
 
 - Step 0: The authoritative PROMPT path provided in the task is absent in this checkout, so implementation is proceeding from the user's task text plus the three supplied context-builder files. Verified `packages/utils/` exists and `apps/docs/content/docs/modules/utils.mdx` exists. Baseline package tests were already green in the supplied validation context.
+- Step 1: Added `packages/utils/src/primitive.ts` with `BaseValueType`, distributive `ResolvePrimitive`, `tryCoerceNumber`, and exact `coerceBooleanString`; added `primitive.test.ts`; exported primitives from utils barrel; updated `packages/utils/README.md`.
 
 ## Discoveries
 
@@ -19,3 +20,4 @@ Step 0 complete — preflight and scope reconciliation.
 ## Verification
 
 - Step 0: Context files read; package and docs surfaces inspected.
+- Step 1: `cd packages/utils && bun test` — pass (16 tests).
