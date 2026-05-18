@@ -2,6 +2,7 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
+import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
@@ -83,12 +84,11 @@ export function createStore<const F extends FieldsDef>(
 	function coerceByType(value: unknown, type: FieldDef["type"]): unknown {
 		if (type === undefined) return value;
 		if (type === "number" && typeof value === "string") {
-			const num = Number(value);
-			return Number.isNaN(num) ? value : num;
+			return tryCoerceNumber(value) ?? value;
 		}
 
 		if (type === "boolean" && typeof value === "string") {
-			return value === "true" || value === "1";
+			return coerceBooleanString(value);
 		}
 
 		return value;

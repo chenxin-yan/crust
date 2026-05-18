@@ -2,13 +2,14 @@
 
 ## Current step
 
-Step 2 complete — core migrated to shared utils primitives and verified.
+Step 3 complete — store migrated to shared utils primitives and verified.
 
 ## Step log
 
 - Step 0: The authoritative PROMPT path provided in the task is absent in this checkout, so implementation is proceeding from the user's task text plus the three supplied context-builder files. Verified `packages/utils/` exists and `apps/docs/content/docs/modules/utils.mdx` exists. Baseline package tests were already green in the supplied validation context.
 - Step 1: Added `packages/utils/src/primitive.ts` with `BaseValueType`, distributive `ResolvePrimitive`, `tryCoerceNumber`, and exact `coerceBooleanString`; added `primitive.test.ts`; exported primitives from utils barrel; updated `packages/utils/README.md`.
 - Step 2: Migrated `packages/core/src/types.ts` and `packages/core/src/parser.ts` to `@crustjs/utils`. Added core runtime dependency on `@crustjs/utils` and updated the core README tagline away from zero runtime dependencies.
+- Step 3: Migrated `packages/store/src/types.ts`, `packages/store/src/store.ts`, and `packages/store/src/field.ts` to shared utils primitives. Preserved store numeric fallback with `tryCoerceNumber(value) ?? value`.
 
 ## Discoveries
 
@@ -23,3 +24,4 @@ Step 2 complete — core migrated to shared utils primitives and verified.
 - Step 0: Context files read; package and docs surfaces inspected.
 - Step 1: `cd packages/utils && bun test` — pass (16 tests).
 - Step 2: `cd packages/utils && bun run build && cd ../core && bun test` — pass (477 tests). The first core test attempt failed because `@crustjs/utils` dist was stale; building utils resolved it.
+- Step 3: `cd packages/store && bun test` — pass (244 tests).

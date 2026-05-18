@@ -2,27 +2,14 @@
 // @crustjs/store — Public type contracts
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Literal-to-primitive mapping
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Supported type literals for store fields. */
-export type ValueType = "string" | "number" | "boolean";
-
-/**
- * Resolves a type literal to its corresponding TypeScript primitive type.
- *
- * - `"string"` → `string`
- * - `"number"` → `number`
- * - `"boolean"` → `boolean`
- */
-type ResolvePrimitive<T extends ValueType> = T extends "string"
-	? string
-	: T extends "number"
-		? number
-		: T extends "boolean"
-			? boolean
-			: never;
+export type ValueType = BaseValueType;
 
 // ────────────────────────────────────────────────────────────────────────────
 // FieldDef — Store field definition (discriminated by `type` × `array`)
