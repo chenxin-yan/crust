@@ -1,5 +1,5 @@
 ---
-"@crustjs/utils": minor
+"@crustjs/utils": patch
 ---
 
-Add `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString` as the shared primitive type vocabulary for `@crustjs/core` and `@crustjs/store`.
+Add shared primitive type and string coercion helpers used by `@crustjs/core` and `@crustjs/store`.

@@ -29,18 +29,20 @@ describe("primitive helpers", () => {
 			// Number("") is 0, not NaN, so existing coercion accepts it.
 			expect(tryCoerceNumber("")).toBe(0);
 		});
+
+		it("coerces whitespace-padded numeric strings", () => {
+			expect(tryCoerceNumber(" 42 ")).toBe(42);
+		});
+
+		it("accepts Infinity", () => {
+			expect(tryCoerceNumber("Infinity")).toBe(Infinity);
+		});
 	});
 
 	describe("coerceBooleanString", () => {
-		it("coerces true to true", () => {
+		it("coerces strict truthy strings", () => {
 			expect(coerceBooleanString("true")).toBe(true);
-		});
-
-		it("coerces 1 to true", () => {
 			expect(coerceBooleanString("1")).toBe(true);
-		});
-
-		it("coerces false to false", () => {
 			expect(coerceBooleanString("false")).toBe(false);
 		});
 	});

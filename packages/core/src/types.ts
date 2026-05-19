@@ -1,7 +1,7 @@
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Literal-to-primitive mapping
+// Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Supported type literals for args and flags */
