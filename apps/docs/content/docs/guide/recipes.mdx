@@ -1,0 +1,253 @@
+---
+title: Recipes
+description: Copy-paste `parse` recipes for common formats that aren't built-in — date, duration, port, regex, count, bytes, bigint, hex, base64, file, dir.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Crust ships only six built-in `ValueType` literals (`string`, `number`, `boolean`, `url`, `path`, `json`). For everything else, attach a `parse` function to `type: "string"` and let TypeScript infer the runtime type from your function's return.
+
+<Callout type="info">
+  Every recipe below is a self-contained snippet you can paste into a `.flags()` or `.args()` block. The runtime type flows automatically from `ReturnType<parse>` — no `as` casts.
+</Callout>
+
+## Date — ISO-8601 / `Date` instance
+
+```ts
+.flags({
+  since: {
+    type: "string",
+    parse: (raw) => {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) throw new Error(`Invalid date "${raw}"`);
+      return d;
+    },
+  },
+})
+// flags.since: Date | undefined
+```
+
+## Duration — human strings to milliseconds
+
+```ts
+.flags({
+  timeout: {
+    type: "string",
+    parse: (raw) => {
+      const m = raw.match(/^(\d+(?:\.\d+)?)(ms|s|m|h)$/);
+      if (!m) throw new Error(`Invalid duration "${raw}" (expected e.g. 500ms, 30s, 5m)`);
+      const n = Number.parseFloat(m[1]);
+      const unit = m[2] as "ms" | "s" | "m" | "h";
+      const mult = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[unit];
+      return n * mult;
+    },
+    default: "30s",
+  },
+})
+// flags.timeout: number (milliseconds)
+```
+
+## Port — TCP/UDP port number
+
+```ts
+.flags({
+  port: {
+    type: "string",
+    parse: (raw) => {
+      const n = Number.parseInt(raw, 10);
+      if (!Number.isInteger(n) || n < 1 || n > 65_535) {
+        throw new Error(`Port must be 1–65535, got "${raw}"`);
+      }
+      return n;
+    },
+    default: "3000",
+  },
+})
+// flags.port: number (1–65535)
+```
+
+## Regex — compiled `RegExp`
+
+```ts
+.flags({
+  filter: {
+    type: "string",
+    parse: (raw) => {
+      try {
+        return new RegExp(raw);
+      } catch (e) {
+        throw new Error(`Invalid regex "${raw}": ${(e as Error).message}`);
+      }
+    },
+  },
+})
+// flags.filter: RegExp | undefined
+```
+
+## Count — repeatable counter (`-vvv` style)
+
+`count` is repeatable verbosity. Use `multiple: true` with `parse` returning `1`, then reduce to a number in your handler.
+
+```ts
+.flags({
+  verbose: {
+    type: "string",
+    short: "v",
+    multiple: true,
+    parse: () => 1,
+  },
+})
+.run(({ flags }) => {
+  const level = (flags.verbose ?? []).length; // 0, 1, 2, …
+})
+```
+
+## Bytes — human sizes to bytes
+
+```ts
+.flags({
+  size: {
+    type: "string",
+    parse: (raw) => {
+      const m = raw.match(/^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|KiB|MiB|GiB)?$/i);
+      if (!m) throw new Error(`Invalid size "${raw}" (e.g. 10MB, 1.5GiB)`);
+      const n = Number.parseFloat(m[1]);
+      const unit = (m[2] ?? "B").toUpperCase();
+      const table: Record<string, number> = {
+        B: 1,
+        KB: 1_000, MB: 1_000_000, GB: 1_000_000_000,
+        KIB: 1_024, MIB: 1_048_576, GIB: 1_073_741_824,
+      };
+      return n * (table[unit] ?? 1);
+    },
+  },
+})
+// flags.size: number (bytes)
+```
+
+## BigInt — arbitrary-precision integers
+
+```ts
+.flags({
+  block: {
+    type: "string",
+    parse: (raw) => {
+      try {
+        return BigInt(raw);
+      } catch {
+        throw new Error(`Invalid bigint "${raw}"`);
+      }
+    },
+  },
+})
+// flags.block: bigint | undefined
+```
+
+## Hex — hex-encoded `Buffer`
+
+```ts
+.flags({
+  key: {
+    type: "string",
+    parse: (raw) => {
+      const clean = raw.replace(/^0x/i, "");
+      if (!/^[0-9a-fA-F]+$/.test(clean) || clean.length % 2 !== 0) {
+        throw new Error(`Invalid hex string "${raw}"`);
+      }
+      return Buffer.from(clean, "hex");
+    },
+  },
+})
+// flags.key: Buffer | undefined
+```
+
+## Base64 — base64-encoded `Buffer`
+
+```ts
+.flags({
+  payload: {
+    type: "string",
+    parse: (raw) => {
+      // Round-trip to detect invalid encodings (Node's decoder is permissive).
+      const buf = Buffer.from(raw, "base64");
+      if (buf.toString("base64").replace(/=+$/, "") !== raw.replace(/=+$/, "")) {
+        throw new Error(`Invalid base64 "${raw}"`);
+      }
+      return buf;
+    },
+  },
+})
+// flags.payload: Buffer | undefined
+```
+
+## File — path that must exist and be a file
+
+For "I just want a path", use `type: "path"`. The recipes below add filesystem existence checks via Node's sync `fs`. Skip these checks if your CLI tolerates missing inputs.
+
+```ts
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
+
+.args([
+  {
+    name: "input",
+    type: "string",
+    required: true,
+    parse: (raw) => {
+      const abs = resolve(process.cwd(), raw);
+      const stat = statSync(abs, { throwIfNoEntry: false });
+      if (!stat) throw new Error(`File not found: ${raw}`);
+      if (!stat.isFile()) throw new Error(`Not a regular file: ${raw}`);
+      return abs;
+    },
+  },
+])
+// args.input: string (absolute path to an existing file)
+```
+
+## Dir — path that must exist and be a directory
+
+```ts
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
+
+.flags({
+  out: {
+    type: "string",
+    parse: (raw) => {
+      const abs = resolve(process.cwd(), raw);
+      const stat = statSync(abs, { throwIfNoEntry: false });
+      if (!stat) throw new Error(`Directory not found: ${raw}`);
+      if (!stat.isDirectory()) throw new Error(`Not a directory: ${raw}`);
+      return abs;
+    },
+  },
+})
+// flags.out: string | undefined (absolute path to an existing directory)
+```
+
+## Composing with `choices`
+
+`choices` validates the raw token **before** `parse` runs, so you can combine them safely:
+
+```ts
+.flags({
+  level: {
+    type: "string",
+    choices: ["1", "2", "3"] as const,
+    parse: (s) => Number.parseInt(s, 10),
+  },
+})
+// flags.level: number | undefined, always one of 1 | 2 | 3
+```
+
+## Adding your own
+
+The pattern is always the same:
+
+1. Declare `type: "string"`.
+2. Write a synchronous `parse: (raw: string) => T`.
+3. Throw a descriptive `Error` on invalid input — Crust wraps it in `CrustError("PARSE", …)` with the flag/argument name.
+4. Set `default` as a **raw string**; Crust runs `parse(String(default))` so the runtime value matches `T`.
+
+If you find yourself reusing a parser across commands, extract it as a plain function and reference it from the flag definition.

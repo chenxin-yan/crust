@@ -34,19 +34,27 @@ Each argument is an `ArgDef` object with properties like `name`, `type`, `descri
 
 ## Types
 
-Crust supports three argument type literals:
+Crust supports six built-in argument type literals:
 
 ```ts
 .args([
-  { name: "port", type: "number" },    // Coerced to number
-  { name: "host", type: "string" },    // Kept as string
-  { name: "verbose", type: "boolean" }, // Coerced to boolean
+  { name: "port",    type: "number" },   // Coerced to number
+  { name: "host",    type: "string" },   // Kept as string
+  { name: "verbose", type: "boolean" },  // Coerced to boolean
+  { name: "target",  type: "url" },      // Parsed to a URL instance
+  { name: "out",     type: "path" },     // Absolute path string
+  { name: "config",  type: "json" },     // Parsed JSON (unknown)
 ])
 ```
 
 - **`"string"`** — The value is kept as-is
 - **`"number"`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
 - **`"boolean"`** — The value is coerced to a boolean (`"true"` / `"1"` -> `true`)
+- **`"url"`** — Parsed via `new URL()` into a `URL` instance
+- **`"path"`** — `~` is expanded, then resolved against `process.cwd()` to an absolute string
+- **`"json"`** — Parsed via `JSON.parse()` to `unknown`
+
+See [Built-in Types](/docs/guide/built-in-types) for the deep dive and the `parse` escape hatch.
 
 ## Required Arguments
 

@@ -44,19 +44,27 @@ Each flag is a `FlagDef` object with properties like `type`, `description`, `def
 
 ## Types
 
-Crust supports three flag type literals:
+Crust supports six built-in flag type literals:
 
 ```ts
 .flags({
-  output: { type: "string" },   // --output value (string)
-  port: { type: "number" },      // --port 3000 (coerced to number)
-  verbose: { type: "boolean" },  // --verbose (boolean toggle)
+  output:   { type: "string" },   // --output value (string)
+  port:     { type: "number" },   // --port 3000 (coerced to number)
+  verbose:  { type: "boolean" },  // --verbose (boolean toggle)
+  endpoint: { type: "url" },      // --endpoint https://api  (URL instance)
+  out:      { type: "path" },     // --out ./dist            (absolute path string)
+  config:   { type: "json" },     // --config '{"k":1}'     (parsed JSON, unknown)
 })
 ```
 
 - **`"string"`** — Requires a value: `--output dist`
 - **`"number"`** — Requires a value, coerced to number: `--port 3000`. Throws a `PARSE` error if the value isn't a valid number
 - **`"boolean"`** — Toggle flag, no value needed: `--verbose`
+- **`"url"`** — Parsed via `new URL()` into a `URL` instance. Throws `PARSE` on values without a protocol
+- **`"path"`** — `~` is expanded against `$HOME`, then resolved against `process.cwd()` to an absolute string
+- **`"json"`** — Parsed via `JSON.parse()` to `unknown`. Wrap the value in single quotes to survive your shell
+
+See [Built-in Types](/docs/guide/built-in-types) for the deep dive, edge cases, and the `parse` escape hatch for custom transformations.
 
 ### Boolean Negation
 

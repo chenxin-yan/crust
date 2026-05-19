@@ -5,6 +5,8 @@
     "commands",
     "arguments",
     "flags",
+    "built-in-types",
+    "recipes",
     "subcommands",
     "plugins",
     "lifecycle",

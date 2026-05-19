@@ -60,7 +60,9 @@ bun add @crustjs/core
 | `PluginMiddleware` | Middleware function type |
 | `CrustError` | Typed error class |
 | `CrustErrorCode` | Error code union |
-| `ValueType` | Supported type literals (`"string" \| "number" \| "boolean"`) |
+| `ValueType` | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
+| `Resolve<T>` | Maps a `ValueType` literal to its runtime TypeScript type |
+| `ResolveBaseType<F>` | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>` |
 | `ValidateFlagAliases<F>` | Compile-time alias collision check |
 | `ValidateNoPrefixedFlags<F>` | Compile-time no- prefix check |
 | `ValidateVariadicArgs<A>` | Compile-time variadic position check |

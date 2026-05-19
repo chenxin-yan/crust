@@ -123,7 +123,7 @@ args: [
 ] as const
 ```
 
-**Currently a hint for tooling — not enforced at parse time.** Shell-completion plugins consume `choices` to emit value candidates, and a future opt-in validation hook may consume it too. The parser does not reject values outside `choices` in this version: a value like `--target=deno` is still parsed as a string and delivered to your handler. Validate explicitly inside your handler if you need runtime rejection today.
+**Validated at parse time.** Passing a value outside `choices` throws `CrustError("PARSE", …)` before any `parse` transform runs. Shell-completion plugins also consume `choices` to emit value candidates.
 
 ### `ArgsDef`
 
@@ -141,8 +141,10 @@ Defines a single named flag. Discriminated union by `type` and `multiple`:
 
 ```ts
 type FlagDef =
-  | StringFlagDef | NumberFlagDef | BooleanFlagDef           // single-value
-  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef; // multi-value
+  | StringFlagDef | NumberFlagDef | BooleanFlagDef
+  | UrlFlagDef    | PathFlagDef   | JsonFlagDef            // single-value
+  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef
+  | UrlMultiFlagDef    | PathMultiFlagDef   | JsonMultiFlagDef; // multi-value
 ```
 
 Flags always declare `type` because it defines CLI grammar/token ownership:
@@ -210,7 +212,20 @@ flags: {
 }
 ```
 
-**Currently a hint for tooling — not enforced at parse time.** Shell-completion plugins consume `choices` to emit value candidates after `--flag=` or `--flag <TAB>`, and a future opt-in validation hook may consume it too. The parser does not reject values outside `choices` in this version: passing `--target=deno` still produces `target: "deno"` in your parsed flags. Validate explicitly inside your handler if you need runtime rejection today.
+**Validated at parse time.** Passing a value outside `choices` throws `CrustError("PARSE", …)`. When combined with `parse`, the raw argv token is validated against `choices` first; `parse` only runs on values that pass the choices gate. Shell-completion plugins also consume `choices` to emit value candidates after `--flag=` or `--flag <TAB>`.
+
+#### `parse` (string flags and args only)
+
+A synchronous parser for the raw argv token: `parse?: (raw: string) => unknown`. The return type becomes the inferred runtime type of the flag/argument. Only allowed on `StringFlagDef`, `StringMultiFlagDef`, and `StringArgDef`; every non-string variant declares `parse?: never`, so misuse is rejected at compile time.
+
+```ts
+flags: {
+  port: { type: "string", parse: (s) => Number(s), default: "3000" },
+}
+// flags.port: number (3000 when argv is absent)
+```
+
+Async `parse` functions are rejected at command setup with `CrustError("CONFIG", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Built-in Types — the parse escape hatch](/docs/guide/built-in-types#the-parse-escape-hatch) for the full contract.
 
 ### `FlagsDef`
 
@@ -399,7 +414,41 @@ type PluginMiddleware = (
 Supported type literals for args and flags:
 
 ```ts
-type ValueType = "string" | "number" | "boolean";
+type ValueType = "string" | "number" | "boolean" | "url" | "path" | "json";
+```
+
+The three formatted built-ins resolve to:
+
+- `"url"`  — [`URL`](https://developer.mozilla.org/docs/Web/API/URL) instance via `new URL(raw)`
+- `"path"` — absolute `string` via `path.resolve(process.cwd(), expand(raw))`
+- `"json"` — `unknown` via `JSON.parse(raw)`
+
+See [Built-in Types](/docs/guide/built-in-types) for semantics, error modes, and shell-completion behaviour.
+
+### `Resolve<T>`
+
+Maps a `ValueType` literal to its runtime TypeScript type. Delegates to `ResolvePrimitive<T>` from `@crustjs/utils` for the three base types.
+
+```ts
+type Resolve<T extends ValueType> =
+  T extends "string"  ? string :
+  T extends "number"  ? number :
+  T extends "boolean" ? boolean :
+  T extends "url"     ? URL :
+  T extends "path"    ? string :
+  T extends "json"    ? unknown :
+  never;
+```
+
+### `ResolveBaseType<F>`
+
+Resolves the inferred runtime type for a flag/arg definition. When a `parse` escape hatch is declared, the inferred type is `ReturnType<typeof parse>`; otherwise it delegates to `Resolve<F["type"]>`.
+
+```ts
+type ResolveBaseType<F> =
+  F extends { parse: (raw: string) => infer R } ? R :
+  F extends { type: infer T extends ValueType } ? Resolve<T> :
+  never;
 ```
 
 ## Compile-Time Validation Types
