@@ -1298,3 +1298,103 @@ describe("FlagDef inherit toggle field", () => {
 		expect(true).toBe(true);
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// InferFlags — url/path/json types (TP-012)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("InferFlags — url/path/json types", () => {
+	it('maps "url" flag to URL | undefined', () => {
+		type Flags = { x: { type: "url" } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: URL | undefined }>>;
+		const val: Result = { x: undefined };
+		expect(val).toBeDefined();
+	});
+
+	it('maps "path" flag with default to string (no undefined)', () => {
+		type Flags = { x: { type: "path"; default: "/tmp" } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: string }>>;
+		const val: Result = { x: "/tmp" };
+		expect(val.x).toBe("/tmp");
+	});
+
+	it('maps required "json" flag to unknown', () => {
+		type Flags = { x: { type: "json"; required: true } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: unknown }>>;
+		const val: Result = { x: { hello: "world" } };
+		expect(val).toBeDefined();
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// InferFlags — parse field inference (TP-012)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("InferFlags — parse field inference", () => {
+	it("maps parse returning URL to URL | undefined", () => {
+		type Flags = { x: { type: "string"; parse: (s: string) => URL } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: URL | undefined }>>;
+		const val: Result = { x: undefined };
+		expect(val).toBeDefined();
+	});
+
+	it("maps multi-value parse returning number to number[] | undefined", () => {
+		type Flags = {
+			x: { type: "string"; multiple: true; parse: (s: string) => number };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: number[] | undefined }>>;
+		const val: Result = { x: undefined };
+		expect(val).toBeDefined();
+	});
+
+	it("maps required parse to non-optional inferred type", () => {
+		type Flags = {
+			x: { type: "string"; required: true; parse: (s: string) => number };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: number }>>;
+		const val: Result = { x: 42 };
+		expect(val.x).toBe(42);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// FlagDef — parse?: never enforcement on non-string variants (TP-012)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("FlagDef — parse?: never enforcement", () => {
+	it("rejects parse on number flags", () => {
+		// @ts-expect-error — parse is forbidden on number flags
+		const _bad: FlagDef = { type: "number", parse: (s: string) => Number(s) };
+		expect(true).toBe(true);
+	});
+
+	it("rejects parse on boolean flags", () => {
+		// @ts-expect-error — parse is forbidden on boolean flags
+		const _bad: FlagDef = { type: "boolean", parse: (s: string) => s };
+		expect(true).toBe(true);
+	});
+
+	it("rejects parse on url flags", () => {
+		// @ts-expect-error — parse is forbidden on url flags
+		const _bad: FlagDef = { type: "url", parse: (s: string) => s };
+		expect(true).toBe(true);
+	});
+
+	it("rejects parse on path flags", () => {
+		// @ts-expect-error — parse is forbidden on path flags
+		const _bad: FlagDef = { type: "path", parse: (s: string) => s };
+		expect(true).toBe(true);
+	});
+
+	it("rejects parse on json flags", () => {
+		// @ts-expect-error — parse is forbidden on json flags
+		const _bad: FlagDef = { type: "json", parse: (s: string) => s };
+		expect(true).toBe(true);
+	});
+});
