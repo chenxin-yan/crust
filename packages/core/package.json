@@ -41,6 +41,9 @@
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks || true"
 	},
+	"dependencies": {
+		"@crustjs/utils": "workspace:*"
+	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"

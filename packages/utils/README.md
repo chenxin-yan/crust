@@ -36,6 +36,25 @@ Relative paths are anchored to the consumer package root rather than the current
 working directory, which makes CLI entrypoints more predictable when invoked
 from arbitrary directories.
 
+## Type primitives
+
+```ts
+import {
+  coerceBooleanString,
+  tryCoerceNumber,
+  type BaseValueType,
+  type ResolvePrimitive,
+} from "@crustjs/utils";
+```
+
+`BaseValueType` is the shared primitive type vocabulary used by Crust packages:
+`"string" | "number" | "boolean"`. `ResolvePrimitive<T>` maps those literals to
+TypeScript primitives (`"number"` → `number`, etc.) and distributes over unions.
+
+`tryCoerceNumber(raw)` returns `undefined` only when `Number(raw)` is `NaN`, so
+`tryCoerceNumber("")` returns `0`. `coerceBooleanString(raw)` preserves Crust's
+strict boolean string behavior: only `"true"` and `"1"` are truthy.
+
 ## Internal subpath: `@crustjs/utils/schema`
 
 > **Internal — do not import from application code.** Standard Schema helpers

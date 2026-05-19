@@ -5,4 +5,10 @@
 // consumers have an established need; otherwise log it as tech debt in
 // `taskplane-tasks/CONTEXT.md` and keep it private.
 
+export {
+	type BaseValueType,
+	coerceBooleanString,
+	type ResolvePrimitive,
+	tryCoerceNumber,
+} from "./primitive.ts";
 export { resolveSourceDir } from "./source.ts";

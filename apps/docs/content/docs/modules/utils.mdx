@@ -23,9 +23,13 @@ bun add @crustjs/utils
 
 ## Exports
 
-| Export             | Description                                                                     |
-| ------------------ | ------------------------------------------------------------------------------- |
-| `resolveSourceDir` | Resolve a source directory descriptor (file URL / absolute / relative) to a path |
+| Export                | Description                                                                     |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `resolveSourceDir`    | Resolve a source directory descriptor (file URL / absolute / relative) to a path |
+| `BaseValueType`       | Shared primitive type literals: `"string" \| "number" \| "boolean"`         |
+| `ResolvePrimitive`    | Map primitive type literals to TypeScript primitives                            |
+| `tryCoerceNumber`     | Coerce a string with `Number(raw)`, returning `undefined` only for `NaN`         |
+| `coerceBooleanString` | Coerce Crust boolean strings; only `"true"` and `"1"` are truthy               |
 
 ## `resolveSourceDir`
 
@@ -87,6 +91,30 @@ const dir = resolveSourceDir("templates/base");
 | URL with non-`file:` protocol                                         | The offending protocol (`got "https:"`, etc.)           |
 | Relative string path with `process.argv[1]` unset                     | The input + suggestion to use an absolute path or URL   |
 | Relative string path but no `package.json` found walking up           | The input, the entrypoint, and the same suggestion     |
+
+## Type primitives
+
+```ts
+import {
+  coerceBooleanString,
+  tryCoerceNumber,
+  type BaseValueType,
+  type ResolvePrimitive,
+} from "@crustjs/utils";
+```
+
+`BaseValueType` is the canonical primitive vocabulary shared by Crust packages:
+`"string" | "number" | "boolean"`. `ResolvePrimitive<T>` maps those literals to
+their TypeScript primitives and distributes over unions, so
+`ResolvePrimitive<"number" | "boolean">` resolves to `number | boolean`.
+
+`tryCoerceNumber(raw)` mirrors the existing Crust number coercion behavior:
+`Number(raw)` is returned unless it is `NaN`, in which case the helper returns
+`undefined`. That means `tryCoerceNumber("")` returns `0` because `Number("")`
+is `0`.
+
+`coerceBooleanString(raw)` preserves Crust's strict boolean string behavior:
+only `"true"` and `"1"` return `true`; every other string returns `false`.
 
 ## Stability
 

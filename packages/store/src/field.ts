@@ -7,6 +7,7 @@
 // `type`, `default`, `array`, and `description` is supplied explicitly through
 // options when needed.
 
+import type { BaseValueType } from "@crustjs/utils";
 import {
 	type InferOutput,
 	isStandardSchema,
@@ -35,7 +36,7 @@ import type { FIELD_SCHEMA_OUTPUT } from "./types.ts";
  *               `default` key when the user wants a non-`undefined` field.
  */
 export interface FieldOptions<T = unknown> {
-	type?: "string" | "number" | "boolean";
+	type?: BaseValueType;
 	description?: string;
 	/**
 	 * Crust metadata default for this field when the persisted state does not

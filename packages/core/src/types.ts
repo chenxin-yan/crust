@@ -1,24 +1,11 @@
+import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils";
+
 // ────────────────────────────────────────────────────────────────────────────
-// Literal-to-primitive mapping
+// Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Supported type literals for args and flags */
-export type ValueType = "string" | "number" | "boolean";
-
-/**
- * Resolves a type literal to its corresponding TypeScript primitive type.
- *
- * - `"string"` → `string`
- * - `"number"` → `number`
- * - `"boolean"` → `boolean`
- */
-type ResolvePrimitive<T extends ValueType> = T extends "string"
-	? string
-	: T extends "number"
-		? number
-		: T extends "boolean"
-			? boolean
-			: never;
+export type ValueType = BaseValueType;
 
 // ────────────────────────────────────────────────────────────────────────────
 // ArgDef — Positional argument definition (discriminated by `type`)
