@@ -4,8 +4,50 @@ import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils";
 // Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Supported type literals for args and flags */
-export type ValueType = BaseValueType;
+/**
+ * Supported type literals for args and flags.
+ *
+ * Extends `BaseValueType` (`"string" | "number" | "boolean"`) with three
+ * formatted built-ins:
+ *
+ * - `"url"`  — the raw value is parsed via `new URL()` into a {@link URL}
+ * - `"path"` — the raw value is expanded (`~`) and resolved against
+ *              `process.cwd()` into an absolute `string`
+ * - `"json"` — the raw value is parsed via `JSON.parse()` into `unknown`
+ */
+export type ValueType = BaseValueType | "url" | "path" | "json";
+
+/**
+ * Resolve a {@link ValueType} literal to its runtime TypeScript type.
+ *
+ * Delegates to `ResolvePrimitive<T>` for the three base types; maps the
+ * three formatted types (`"url"`, `"path"`, `"json"`) to `URL`, `string`,
+ * and `unknown` respectively.
+ */
+export type Resolve<T extends ValueType> = T extends BaseValueType
+	? ResolvePrimitive<T>
+	: T extends "url"
+		? URL
+		: T extends "path"
+			? string
+			: T extends "json"
+				? unknown
+				: never;
+
+/**
+ * Resolve the inferred runtime type for a flag/arg definition.
+ *
+ * When the def declares a `parse` escape hatch (only allowed on `"string"`
+ * variants), the inferred type is `ReturnType<typeof parse>`. Otherwise it
+ * delegates to {@link Resolve} on the declared `type`.
+ */
+export type ResolveBaseType<F> = F extends {
+	parse: (raw: string) => infer R;
+}
+	? R
+	: F extends { type: infer T extends ValueType }
+		? Resolve<T>
+		: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // ArgDef — Positional argument definition (discriminated by `type`)
@@ -43,13 +85,10 @@ interface StringArgDef extends ArgDefBase {
 	/**
 	 * Static enum of valid values for this argument.
 	 *
-	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
-	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
-	 * and may be consumed by future opt-in validation. It is **NOT** enforced
-	 * at parse time in this version: passing a value outside `choices` does
-	 * not throw, the value is still parsed as a string and delivered to your
-	 * `run` handler. Validate explicitly inside your handler if you need
-	 * runtime rejection today.
+	 * Validated at parse time before `parse` runs. Passing a value outside
+	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
+	 * is applied. Also consumed by shell-completion plugins
+	 * (e.g. `@crustjs/plugins/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed args; not supported on number/boolean.
 	 *
@@ -57,6 +96,25 @@ interface StringArgDef extends ArgDefBase {
 	 * { name: "target", type: "string", choices: ["browser", "bun", "node"] }
 	 */
 	choices?: readonly string[];
+	/**
+	 * Custom synchronous parser for the raw argv string.
+	 *
+	 * Receives the raw token as it appeared on the command line (after
+	 * `choices` validation, when present) and returns the resolved value
+	 * that flows to the `run` handler. The return type is inferred and
+	 * becomes the arg's runtime type.
+	 *
+	 * Constraints:
+	 * - Synchronous only. `async` parsers are rejected at command setup
+	 *   with `CrustError("CONFIG", …)`.
+	 * - Only allowed on string-typed args/flags. `parse?: never` on every
+	 *   non-string variant prevents misuse at compile time.
+	 * - For variadic args, runs per element.
+	 *
+	 * @example
+	 * { name: "port", type: "string", parse: (s) => Number(s) }
+	 */
+	parse?: (raw: string) => unknown;
 }
 
 /** A positional argument whose value is a number */
@@ -64,6 +122,8 @@ interface NumberArgDef extends ArgDefBase {
 	type: "number";
 	/** Default number value when the argument is not provided */
 	default?: number;
+	/** Not supported on number args — use `type: "string"` with `parse`. */
+	parse?: never;
 }
 
 /** A positional argument whose value is a boolean */
@@ -71,6 +131,35 @@ interface BooleanArgDef extends ArgDefBase {
 	type: "boolean";
 	/** Default boolean value when the argument is not provided */
 	default?: boolean;
+	/** Not supported on boolean args — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A positional argument whose value is a {@link URL} */
+interface UrlArgDef extends ArgDefBase {
+	type: "url";
+	/** Default URL value when the argument is not provided */
+	default?: URL;
+	/** Not supported on url args — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A positional argument whose value is an absolute filesystem path */
+interface PathArgDef extends ArgDefBase {
+	type: "path";
+	/** Default path string when the argument is not provided */
+	default?: string;
+	/** Not supported on path args — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A positional argument whose value is JSON parsed to `unknown` */
+interface JsonArgDef extends ArgDefBase {
+	type: "json";
+	/** Default parsed JSON value when the argument is not provided */
+	default?: unknown;
+	/** Not supported on json args — use `type: "string"` with `parse`. */
+	parse?: never;
 }
 
 /**
@@ -94,9 +183,18 @@ interface RawArgDef extends ArgDefBase {
 	/** Raw default value when the argument is not provided */
 	default?: unknown;
 	choices?: readonly string[];
+	/** Not supported on raw args — schema validators own the transform. */
+	parse?: never;
 }
 
-export type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
+export type ArgDef =
+	| StringArgDef
+	| NumberArgDef
+	| BooleanArgDef
+	| UrlArgDef
+	| PathArgDef
+	| JsonArgDef
+	| RawArgDef;
 
 /** Ordered tuple of positional argument definitions */
 export type ArgsDef = readonly ArgDef[];
@@ -135,13 +233,10 @@ interface StringFlagDef extends SingleFlagBase {
 	/**
 	 * Static enum of valid values for this flag.
 	 *
-	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
-	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
-	 * and may be consumed by future opt-in validation. It is **NOT** enforced
-	 * at parse time in this version: passing a value outside `choices` does
-	 * not throw, the value is still parsed as a string and delivered to your
-	 * `run` handler. Validate explicitly inside your handler if you need
-	 * runtime rejection today.
+	 * Validated at parse time before `parse` runs. Passing a value outside
+	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
+	 * is applied. Also consumed by shell-completion plugins
+	 * (e.g. `@crustjs/plugins/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed flags; not supported on number/boolean.
 	 *
@@ -149,6 +244,27 @@ interface StringFlagDef extends SingleFlagBase {
 	 * { type: "string", choices: ["browser", "bun", "node"] }
 	 */
 	choices?: readonly string[];
+	/**
+	 * Custom synchronous parser for the raw argv string.
+	 *
+	 * Receives the raw token as it appeared on the command line (after
+	 * `choices` validation, when present) and returns the resolved value
+	 * that flows to the `run` handler. The return type is inferred and
+	 * becomes the flag's runtime type.
+	 *
+	 * Constraints:
+	 * - Synchronous only. `async` parsers are rejected at command setup
+	 *   with `CrustError("CONFIG", …)`.
+	 * - Only allowed on `type: "string"` (single + multi) and string args.
+	 *   `parse?: never` on every non-string variant prevents misuse at
+	 *   compile time.
+	 * - When `default` is set and argv is absent, `parse(String(default))`
+	 *   runs so the runtime value matches the inferred type.
+	 *
+	 * @example
+	 * { type: "string", parse: (s) => Number(s) }
+	 */
+	parse?: (raw: string) => unknown;
 }
 
 /** A single-value number flag */
@@ -156,6 +272,8 @@ interface NumberFlagDef extends SingleFlagBase {
 	type: "number";
 	/** Default number value */
 	default?: number;
+	/** Not supported on number flags — use `type: "string"` with `parse`. */
+	parse?: never;
 }
 
 /** A single-value boolean flag */
@@ -165,6 +283,35 @@ interface BooleanFlagDef extends SingleFlagBase {
 	default?: boolean;
 	/** When `true`, hide the generated `--no-{name}` help label */
 	noNegate?: true;
+	/** Not supported on boolean flags — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A single-value URL flag (parsed via `new URL()`) */
+interface UrlFlagDef extends SingleFlagBase {
+	type: "url";
+	/** Default URL value */
+	default?: URL;
+	/** Not supported on url flags — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A single-value path flag (expanded `~` + resolved against `process.cwd()`) */
+interface PathFlagDef extends SingleFlagBase {
+	type: "path";
+	/** Default path string value */
+	default?: string;
+	/** Not supported on path flags — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
+/** A single-value JSON flag (parsed via `JSON.parse()` to `unknown`) */
+interface JsonFlagDef extends SingleFlagBase {
+	type: "json";
+	/** Default parsed JSON value */
+	default?: unknown;
+	/** Not supported on json flags — use `type: "string"` with `parse`. */
+	parse?: never;
 }
 
 // ── Multi-value flags ─────────────────────────────────────────────────────
@@ -183,13 +330,10 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	/**
 	 * Static enum of valid values for each occurrence of this flag.
 	 *
-	 * `choices` is a **hint for tooling** — it is consumed by shell-completion
-	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates
-	 * and may be consumed by future opt-in validation. It is **NOT** enforced
-	 * at parse time in this version: passing a value outside `choices` does
-	 * not throw, the value is still parsed as a string and collected into the
-	 * array. Validate explicitly inside your handler if you need runtime
-	 * rejection today.
+	 * Each element is validated at parse time before `parse` runs. Passing
+	 * a value outside `choices` throws `CrustError("PARSE", …)` before any
+	 * `parse` transform is applied. Also consumed by shell-completion
+	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed multi-flags; not supported on number/boolean.
 	 *
@@ -197,6 +341,12 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * { type: "string", multiple: true, choices: ["unit", "integration"] }
 	 */
 	choices?: readonly string[];
+	/**
+	 * Custom synchronous per-element parser for each raw argv string.
+	 * See {@link StringFlagDef.parse} for full semantics. Runs once per
+	 * occurrence; the resolved value is `ReturnType<typeof parse>[]`.
+	 */
+	parse?: (raw: string) => unknown;
 }
 
 /** A multi-value number flag (collects repeated values into an array) */
@@ -204,6 +354,8 @@ interface NumberMultiFlagDef extends MultiFlagBase {
 	type: "number";
 	/** Default number array value */
 	default?: number[];
+	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	parse?: never;
 }
 
 /** A multi-value boolean flag (collects repeated values into an array) */
@@ -213,6 +365,35 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
 	default?: boolean[];
 	/** When `true`, hide the generated `--no-{name}` help label */
 	noNegate?: true;
+	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	parse?: never;
+}
+
+/** A multi-value URL flag (collects repeated URL values into an array) */
+interface UrlMultiFlagDef extends MultiFlagBase {
+	type: "url";
+	/** Default URL array value */
+	default?: URL[];
+	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	parse?: never;
+}
+
+/** A multi-value path flag (collects repeated path strings into an array) */
+interface PathMultiFlagDef extends MultiFlagBase {
+	type: "path";
+	/** Default path array value */
+	default?: string[];
+	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	parse?: never;
+}
+
+/** A multi-value JSON flag (collects repeated parsed JSON values) */
+interface JsonMultiFlagDef extends MultiFlagBase {
+	type: "json";
+	/** Default parsed JSON array value */
+	default?: unknown[];
+	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	parse?: never;
 }
 
 /**
@@ -234,9 +415,15 @@ export type FlagDef =
 	| StringFlagDef
 	| NumberFlagDef
 	| BooleanFlagDef
+	| UrlFlagDef
+	| PathFlagDef
+	| JsonFlagDef
 	| StringMultiFlagDef
 	| NumberMultiFlagDef
-	| BooleanMultiFlagDef;
+	| BooleanMultiFlagDef
+	| UrlMultiFlagDef
+	| PathMultiFlagDef
+	| JsonMultiFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -551,15 +738,15 @@ export type EffectiveFlags<
  * `required` only gates empty-array validation, not the type.
  */
 type InferArgValue<A extends ArgDef> = A extends {
-	type: infer T extends ValueType;
+	type: infer _T extends ValueType;
 }
 	? A extends { variadic: true }
-		? ResolvePrimitive<T>[]
+		? ResolveBaseType<A>[]
 		: A extends { required: true }
-			? ResolvePrimitive<T>
-			: A extends { default: ResolvePrimitive<T> }
-				? ResolvePrimitive<T>
-				: ResolvePrimitive<T> | undefined
+			? ResolveBaseType<A>
+			: A extends { default: ResolveBaseType<A> }
+				? ResolveBaseType<A>
+				: ResolveBaseType<A> | undefined
 	: A extends { variadic: true }
 		? unknown[]
 		: A extends { required: true } | { default: unknown }
@@ -608,19 +795,19 @@ export type InferArgs<A> = A extends ArgsDef
  * - otherwise → `primitive | undefined`
  */
 type InferFlagValue<F extends FlagDef> = F extends {
-	type: infer T extends ValueType;
+	type: infer _T extends ValueType;
 }
 	? F extends { multiple: true }
 		? F extends { required: true }
-			? ResolvePrimitive<T>[]
-			: F extends { default: ResolvePrimitive<T>[] }
-				? ResolvePrimitive<T>[]
-				: ResolvePrimitive<T>[] | undefined
+			? ResolveBaseType<F>[]
+			: F extends { default: ResolveBaseType<F>[] }
+				? ResolveBaseType<F>[]
+				: ResolveBaseType<F>[] | undefined
 		: F extends { required: true }
-			? ResolvePrimitive<T>
-			: F extends { default: ResolvePrimitive<T> }
-				? ResolvePrimitive<T>
-				: ResolvePrimitive<T> | undefined
+			? ResolveBaseType<F>
+			: F extends { default: ResolveBaseType<F> }
+				? ResolveBaseType<F>
+				: ResolveBaseType<F> | undefined
 	: never;
 
 /**
