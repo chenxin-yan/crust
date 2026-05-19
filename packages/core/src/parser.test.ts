@@ -1308,7 +1308,7 @@ describe("parseArgs — raw schema-backed args", () => {
 			flags: { verbose: {} as never },
 		});
 		expect(() => parseArgs(cmd, [])).toThrow(
-			'Flag "--verbose" must declare a parser type ("string", "number", or "boolean")',
+			'Flag "--verbose" must declare a parser type ("string", "number", "boolean", "url", "path", or "json")',
 		);
 	});
 
@@ -1331,5 +1331,249 @@ describe("parseArgs — raw schema-backed args", () => {
 			"a.ts",
 			"b.ts",
 		]);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// url / path / json built-in types (TP-012)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — url/path/json types", () => {
+	it("parses a url flag into a URL instance", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { endpoint: { type: "url" } },
+		});
+		const result = parseArgs(cmd, ["--endpoint", "https://example.com"]);
+		const value = result.flags.endpoint as unknown as URL;
+		expect(value).toBeInstanceOf(URL);
+		expect(value.href).toBe("https://example.com/");
+	});
+
+	it("throws CrustError(PARSE) on an invalid url flag value", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { endpoint: { type: "url" } },
+		});
+		expect(() => parseArgs(cmd, ["--endpoint", "not-a-url"])).toThrow(
+			CrustError,
+		);
+	});
+
+	it("parses a path flag into an absolute string", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { out: { type: "path" } },
+		});
+		const result = parseArgs(cmd, ["--out", "./dist"]);
+		const value = result.flags.out as unknown as string;
+		expect(typeof value).toBe("string");
+		expect(value.startsWith("/")).toBe(true);
+		expect(value.endsWith("/dist")).toBe(true);
+	});
+
+	it("parses a json flag into the corresponding value", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { config: { type: "json" } },
+		});
+		const result = parseArgs(cmd, ["--config", '{"k":1}']);
+		expect(result.flags.config).toEqual({ k: 1 });
+	});
+
+	it("throws CrustError(PARSE) on invalid json", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { config: { type: "json" } },
+		});
+		expect(() => parseArgs(cmd, ["--config", "not json"])).toThrow(CrustError);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// parse escape hatch (TP-012)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — parse escape hatch", () => {
+	it("runs parse on the raw argv value", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { n: { type: "string", parse: (s) => Number(s) } },
+		});
+		const result = parseArgs(cmd, ["--n", "42"]);
+		expect(result.flags.n).toBe(42);
+		expect(typeof result.flags.n).toBe("number");
+	});
+
+	it("runs parse per element on multi-value flags", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				nums: { type: "string", multiple: true, parse: (s) => Number(s) },
+			},
+		});
+		const result = parseArgs(cmd, ["--nums", "1", "--nums", "2"]);
+		expect(result.flags.nums).toEqual([1, 2]);
+	});
+
+	it("runs parse on default when argv is absent (oracle C regression)", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				port: { type: "string", parse: (s) => Number(s), default: "3000" },
+			},
+		});
+		const result = parseArgs(cmd, []);
+		expect(result.flags.port).toBe(3000);
+		expect(typeof result.flags.port).toBe("number");
+	});
+
+	it("returns undefined when argv and default are both absent (no parse call)", () => {
+		let called = false;
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				port: {
+					type: "string",
+					parse: (s) => {
+						called = true;
+						return Number(s);
+					},
+				},
+			},
+		});
+		const result = parseArgs(cmd, []);
+		expect(result.flags.port).toBeUndefined();
+		expect(called).toBe(false);
+	});
+
+	it("argv overrides default and runs parse on argv", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				port: { type: "string", parse: (s) => Number(s), default: "3000" },
+			},
+		});
+		const result = parseArgs(cmd, ["--port", "8080"]);
+		expect(result.flags.port).toBe(8080);
+	});
+
+	it("rejects async parse at setup with CrustError(CONFIG)", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				endpoint: { type: "string", parse: async (s: string) => s },
+			},
+		});
+		try {
+			parseArgs(cmd, []);
+			expect.unreachable("parseArgs should have rejected async parse");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			const e = err as CrustError;
+			expect(e.code).toBe("CONFIG");
+			expect(e.message).toMatch(/Async parse not supported/);
+			expect(e.message).toContain("--endpoint");
+		}
+	});
+
+	it("wraps parse errors as CrustError(PARSE) with the flag name", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				n: {
+					type: "string",
+					parse: () => {
+						throw new Error("custom failure");
+					},
+				},
+			},
+		});
+		try {
+			parseArgs(cmd, ["--n", "x"]);
+			expect.unreachable("parseArgs should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			const e = err as CrustError;
+			expect(e.code).toBe("PARSE");
+			expect(e.message).toContain("--n");
+			expect(e.message).toContain("custom failure");
+		}
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// choices enforcement (TP-012) — previously hint-only
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs — choices enforcement", () => {
+	it("passes a value that is in the choices list", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { mode: { type: "string", choices: ["a", "b"] as const } },
+		});
+		const result = parseArgs(cmd, ["--mode", "a"]);
+		expect(result.flags.mode).toBe("a");
+	});
+
+	it("rejects a value not in the choices list with CrustError(PARSE)", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { mode: { type: "string", choices: ["a", "b"] as const } },
+		});
+		expect(() => parseArgs(cmd, ["--mode", "c"])).toThrow(CrustError);
+		expect(() => parseArgs(cmd, ["--mode", "c"])).toThrow(/Invalid value/);
+	});
+
+	it("validates choices on raw argv before parse runs (order test)", () => {
+		let parseCalled = false;
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				n: {
+					type: "string",
+					choices: ["1", "2"] as const,
+					parse: (s) => {
+						parseCalled = true;
+						return Number(s);
+					},
+				},
+			},
+		});
+		expect(() => parseArgs(cmd, ["--n", "3"])).toThrow(CrustError);
+		expect(parseCalled).toBe(false);
+	});
+
+	it("runs parse on a valid choice value", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				n: {
+					type: "string",
+					choices: ["1", "2"] as const,
+					parse: (s) => Number(s),
+				},
+			},
+		});
+		const result = parseArgs(cmd, ["--n", "1"]);
+		expect(result.flags.n).toBe(1);
+	});
+
+	it("validates each element of multi-value choices independently", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				tags: {
+					type: "string",
+					multiple: true,
+					choices: ["a", "b", "c"] as const,
+				},
+			},
+		});
+		const ok = parseArgs(cmd, ["--tags", "a", "--tags", "b"]);
+		expect(ok.flags.tags).toEqual(["a", "b"]);
+		expect(() => parseArgs(cmd, ["--tags", "a", "--tags", "z"])).toThrow(
+			CrustError,
+		);
 	});
 });
