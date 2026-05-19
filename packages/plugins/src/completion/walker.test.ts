@@ -277,3 +277,72 @@ describe("walkCommandNode", () => {
 		expect(spec.root.args[0]?.choices).toBeUndefined();
 	});
 });
+
+describe("walkCommandNode — url/path/json hint fields (TP-012)", () => {
+	it("normalises url/path/json flag types to 'string' with isUrl/isPath/isJson hints", () => {
+		const root = makeNode({
+			name: "mycli",
+			localFlags: {
+				endpoint: { type: "url" },
+				out: { type: "path" },
+				config: { type: "json" },
+			},
+		});
+		const spec = walkCommandNode(root);
+		const by = Object.fromEntries(spec.root.flags.map((f) => [f.name, f]));
+
+		expect(by.endpoint?.type).toBe("string");
+		expect(by.endpoint?.takesValue).toBe(true);
+		expect(by.endpoint?.isUrl).toBe(true);
+		expect(by.endpoint?.isPath).toBeUndefined();
+		expect(by.endpoint?.isJson).toBeUndefined();
+
+		expect(by.out?.type).toBe("string");
+		expect(by.out?.takesValue).toBe(true);
+		expect(by.out?.isPath).toBe(true);
+		expect(by.out?.isUrl).toBeUndefined();
+		expect(by.out?.isJson).toBeUndefined();
+
+		expect(by.config?.type).toBe("string");
+		expect(by.config?.takesValue).toBe(true);
+		expect(by.config?.isJson).toBe(true);
+		expect(by.config?.isPath).toBeUndefined();
+		expect(by.config?.isUrl).toBeUndefined();
+	});
+
+	it("sets isPath on path positional args", () => {
+		const root = makeNode({
+			name: "mycli",
+			args: [
+				{ name: "src", type: "path" },
+				{ name: "dst", type: "url" },
+				{ name: "cfg", type: "json" },
+			],
+		});
+		const spec = walkCommandNode(root);
+		const [src, dst, cfg] = spec.root.args;
+		expect(src?.type).toBe("string");
+		expect(src?.isPath).toBe(true);
+		expect(dst?.isUrl).toBe(true);
+		expect(dst?.isPath).toBeUndefined();
+		expect(cfg?.isJson).toBe(true);
+		expect(cfg?.isPath).toBeUndefined();
+	});
+
+	it("does not set the hint fields on plain string/number/boolean flags", () => {
+		const root = makeNode({
+			name: "mycli",
+			localFlags: {
+				s: { type: "string" },
+				n: { type: "number" },
+				b: { type: "boolean" },
+			},
+		});
+		const spec = walkCommandNode(root);
+		for (const flag of spec.root.flags) {
+			expect(flag.isPath).toBeUndefined();
+			expect(flag.isUrl).toBeUndefined();
+			expect(flag.isJson).toBeUndefined();
+		}
+	});
+});

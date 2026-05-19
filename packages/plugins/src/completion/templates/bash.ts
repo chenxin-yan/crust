@@ -168,6 +168,44 @@ interface ChoiceCase {
 }
 
 /**
+ * One entry per value-flag that needs explicit value-completion handling.
+ *
+ * - `kind: "path"`     — emit `compgen -f` candidates for the value token.
+ * - `kind: "suppress"` — disable the `complete -o default` file fallback
+ *                       so url/json flags don't get filenames offered.
+ */
+interface ValueTypeCase {
+	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
+	key: string;
+	kind: "path" | "suppress";
+}
+
+/**
+ * Walk every flag at every depth and emit one {@link ValueTypeCase} per
+ * spelling for flags that declared `type: "path"` (file completion) or
+ * `type: "url" | "json"` (suppress file fallback).
+ */
+function collectValueTypeCases(
+	cmdPath: string,
+	node: CompletionCommand,
+	out: ValueTypeCase[],
+): void {
+	for (const flag of node.flags) {
+		let kind: ValueTypeCase["kind"] | undefined;
+		if (flag.isPath === true) kind = "path";
+		else if (flag.isUrl === true || flag.isJson === true) kind = "suppress";
+		if (kind === undefined) continue;
+		for (const spelling of flagSpellings(flag)) {
+			out.push({ key: `${cmdPath}|${spelling}`, kind });
+		}
+	}
+	for (const sub of node.subCommands) {
+		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		collectValueTypeCases(subPath, sub, out);
+	}
+}
+
+/**
  * For every flag at every command depth that declares `choices`, emit a
  * `case` branch mapping `<path>|<flag-spelling>` → values. Each spelling
  * (long, short, alias) gets its own branch so the lookup is constant-time
@@ -313,6 +351,9 @@ export function renderBash(
 	const choiceCases: ChoiceCase[] = [];
 	collectChoiceCases("", spec.root, choiceCases);
 
+	const valueTypeCases: ValueTypeCase[] = [];
+	collectValueTypeCases("", spec.root, valueTypeCases);
+
 	const argChoiceEntries: ArgChoiceEntry[] = [];
 	collectArgChoiceCases("", spec.root, argChoiceEntries);
 
@@ -439,6 +480,25 @@ export function renderBash(
 		}
 		lines.push("\t\tesac");
 	}
+	// `--name=value` for typed value flags: emit explicit path candidates
+	// (path) or suppress the `complete -o default` file fallback (url/json).
+	if (valueTypeCases.length > 0) {
+		lines.push('\t\tcase "$cmd_path|$_flag" in');
+		for (const c of valueTypeCases) {
+			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			if (c.kind === "path") {
+				lines.push(
+					// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+					'\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )',
+				);
+			} else {
+				lines.push("\t\t\t\tcompopt +o default 2>/dev/null");
+			}
+			lines.push("\t\t\t\treturn");
+			lines.push("\t\t\t\t;;");
+		}
+		lines.push("\t\tesac");
+	}
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
 	lines.push("\tfi");
@@ -459,9 +519,28 @@ export function renderBash(
 		lines.push("");
 	}
 
+	// Typed value-flag context: previous token is a path/url/json flag.
+	// Path → emit explicit file candidates; url/json → suppress the
+	// `complete -o default` fallback so we don't offer filenames.
+	if (valueTypeCases.length > 0) {
+		lines.push('\tcase "$cmd_path|$prev" in');
+		for (const c of valueTypeCases) {
+			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			if (c.kind === "path") {
+				lines.push('\t\t\tCOMPREPLY=( $(compgen -f -- "$cur") )');
+			} else {
+				lines.push("\t\t\tcompopt +o default 2>/dev/null");
+			}
+			lines.push("\t\t\treturn");
+			lines.push("\t\t\t;;");
+		}
+		lines.push("\tesac");
+		lines.push("");
+	}
+
 	// Free-form value flag context: previous token is a known
-	// value-taking flag with no choices → fall through to file completion
-	// via `complete -o default` (we just return with no COMPREPLY set).
+	// value-taking flag with no choices and no typed override → fall
+	// through to file completion via `complete -o default`.
 	lines.push(`\tif __${ident}_prev_is_value_flag; then`);
 	lines.push("\t\treturn");
 	lines.push("\tfi");

@@ -395,3 +395,55 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		expect(completions).toContain("delta");
 	});
 });
+
+describe("renderBash — url/path/json value-flag handling (TP-012)", () => {
+	const valueTypeFixture: CompletionSpec = {
+		root: {
+			name: "mycli",
+			flags: [
+				{
+					name: "out",
+					type: "string",
+					takesValue: true,
+					isPath: true,
+				},
+				{
+					name: "endpoint",
+					type: "string",
+					takesValue: true,
+					isUrl: true,
+				},
+				{
+					name: "config",
+					type: "string",
+					takesValue: true,
+					isJson: true,
+				},
+				// Plain string flag — must not regress to a typed branch.
+				{ name: "name", type: "string", takesValue: true },
+			],
+			args: [],
+			subCommands: [],
+		},
+	};
+
+	it("emits explicit file completion (compgen -f) for path flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain('"|--out")');
+		expect(script).toContain('compgen -f -- "$cur"');
+	});
+
+	it("emits compopt +o default suppression for url and json flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain('"|--endpoint")');
+		expect(script).toContain('"|--config")');
+		expect(script).toContain("compopt +o default 2>/dev/null");
+	});
+
+	it("does not emit a typed case branch for plain string flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		// The plain `--name` flag still routes through __prev_is_value_flag
+		// and the `complete -o default` fallback.
+		expect(script).not.toContain('"|--name")');
+	});
+});

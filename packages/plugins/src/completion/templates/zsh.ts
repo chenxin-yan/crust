@@ -64,6 +64,12 @@ function flagSpecs(flag: CompletionFlag): string[] {
 			// inside the `(…)` action list without further escaping.
 			const opts = flag.choices.join(" ");
 			valueSuffix = `:${valueLabel}:(${opts})`;
+		} else if (flag.isPath === true) {
+			// Explicit file completion for path flags.
+			valueSuffix = `:${valueLabel}:_files`;
+		} else if (flag.isUrl === true || flag.isJson === true) {
+			// Suppress file completion — url/json values are not paths.
+			valueSuffix = `:${valueLabel}: `;
 		} else if (flag.type === "string") {
 			valueSuffix = `:${valueLabel}:_files`;
 		} else {

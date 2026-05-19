@@ -237,3 +237,40 @@ async function isZshAvailable(): Promise<boolean> {
 function shQuoteForZsh(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
+
+describe("renderZsh — url/path/json value-flag handling (TP-012)", () => {
+	const valueTypeFixture: CompletionSpec = {
+		root: {
+			name: "mycli",
+			flags: [
+				{ name: "out", type: "string", takesValue: true, isPath: true },
+				{ name: "endpoint", type: "string", takesValue: true, isUrl: true },
+				{ name: "config", type: "string", takesValue: true, isJson: true },
+				{ name: "name", type: "string", takesValue: true },
+			],
+			args: [],
+			subCommands: [],
+		},
+	};
+
+	it("emits _files action for path flags", () => {
+		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
+		// `:out:_files` — single-flag spec, value label is the flag name.
+		expect(script).toContain(":out:_files");
+	});
+
+	it("emits empty action (no completion) for url and json flags", () => {
+		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
+		// `:endpoint: ` and `:config: ` — trailing space marks "no action".
+		expect(script).toContain(":endpoint: ");
+		expect(script).toContain(":config: ");
+		// And critically NOT `_files` for these.
+		expect(script).not.toContain(":endpoint:_files");
+		expect(script).not.toContain(":config:_files");
+	});
+
+	it("keeps _files action for plain string flags (no regression)", () => {
+		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain(":name:_files");
+	});
+});

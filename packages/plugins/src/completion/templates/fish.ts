@@ -213,12 +213,32 @@ function emitRules(
 		};
 		if (flag.short !== undefined) baseRule.short = flag.short;
 
-		if (flag.takesValue) {
+		// Emit a single value-taking rule for `flag`. Branches:
+		//   - choices       → one rule per literal candidate (via emitChoiceFlag)
+		//   - isPath        → require parameter + `(__fish_complete_path)`
+		//   - isUrl/isJson  → require parameter only; the script's leading
+		//                     `complete -c <bin> -f` keeps file completion off
+		//   - free-form     → require parameter (current behaviour)
+		const emitValueRule = (rule: RuleParts) => {
 			if (flag.choices !== undefined && flag.choices.length > 0) {
-				emitChoiceFlag(baseRule, flag.choices);
-			} else {
-				out.push(renderRule(binName, { ...baseRule, requireParameter: true }));
+				emitChoiceFlag(rule, flag.choices);
+				return;
 			}
+			if (flag.isPath === true) {
+				out.push(
+					renderRule(binName, {
+						...rule,
+						requireParameter: true,
+						arguments: fishSingleQuote("(__fish_complete_path)"),
+					}),
+				);
+				return;
+			}
+			out.push(renderRule(binName, { ...rule, requireParameter: true }));
+		};
+
+		if (flag.takesValue) {
+			emitValueRule(baseRule);
 		} else {
 			out.push(renderRule(binName, baseRule));
 		}
@@ -233,13 +253,7 @@ function emitRules(
 					description: desc,
 				};
 				if (flag.takesValue) {
-					if (flag.choices !== undefined && flag.choices.length > 0) {
-						emitChoiceFlag(aliasRule, flag.choices);
-					} else {
-						out.push(
-							renderRule(binName, { ...aliasRule, requireParameter: true }),
-						);
-					}
+					emitValueRule(aliasRule);
 				} else {
 					out.push(renderRule(binName, aliasRule));
 				}

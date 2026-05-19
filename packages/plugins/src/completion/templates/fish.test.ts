@@ -322,3 +322,49 @@ async function isFishAvailable(): Promise<boolean> {
 function shQuoteForFish(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
+
+describe("renderFish — url/path/json value-flag handling (TP-012)", () => {
+	const valueTypeFixture: CompletionSpec = {
+		root: {
+			name: "mycli",
+			flags: [
+				{ name: "out", type: "string", takesValue: true, isPath: true },
+				{ name: "endpoint", type: "string", takesValue: true, isUrl: true },
+				{ name: "config", type: "string", takesValue: true, isJson: true },
+				{ name: "name", type: "string", takesValue: true },
+			],
+			args: [],
+			subCommands: [],
+		},
+	};
+
+	it("emits __fish_complete_path for path flags", () => {
+		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
+		const line = script.split("\n").find((l) => l.includes("-l 'out'"));
+		expect(line).toBeDefined();
+		expect(line).toContain("-a '(__fish_complete_path)'");
+		expect(line).toContain("-r");
+	});
+
+	it("does not emit __fish_complete_path for url or json flags", () => {
+		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
+		const endpointLine = script
+			.split("\n")
+			.find((l) => l.includes("-l 'endpoint'"));
+		const configLine = script
+			.split("\n")
+			.find((l) => l.includes("-l 'config'"));
+		expect(endpointLine).toBeDefined();
+		expect(configLine).toBeDefined();
+		expect(endpointLine).not.toContain("__fish_complete_path");
+		expect(configLine).not.toContain("__fish_complete_path");
+	});
+
+	it("keeps requireParameter on plain string flags (no regression)", () => {
+		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
+		const line = script.split("\n").find((l) => l.includes("-l 'name'"));
+		expect(line).toBeDefined();
+		expect(line).toContain("-r");
+		expect(line).not.toContain("__fish_complete_path");
+	});
+});
