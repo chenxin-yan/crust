@@ -206,6 +206,61 @@ function invokeParse(
 }
 
 /**
+ * Resolve a flag/arg default to its runtime value, mirroring the argv-side
+ * coercion pipeline so omitted-flag behavior matches user-supplied behavior:
+ *
+ *   raw default → choices validation → parse | coerce → result
+ *
+ * Without this, `{ choices: ["a","b"], default: "z" }` silently returns "z"
+ * while `--flag z` throws, and `{ type: "path", default: "./dist" }` returns
+ * the raw relative string while `--out ./dist` returns an absolute path.
+ *
+ * `parse` is preferred when present (matches the escape-hatch contract).
+ * `type: "path"` defaults are coerced through `coercePath` because their
+ * default field is a raw string per `PathFlagDef`/`PathArgDef`. `url` and
+ * `json` defaults are already in their resolved form (`URL` / `unknown`)
+ * per the variant interfaces, so they pass through unchanged.
+ */
+function resolveDefault(
+	def: {
+		type: ValueType;
+		default?: unknown;
+		choices?: readonly string[];
+		parse?: (raw: string) => unknown;
+	},
+	label: string,
+): unknown {
+	const { default: defaultValue, choices, parse } = def;
+	if (defaultValue === undefined) return undefined;
+
+	if (choices) {
+		if (Array.isArray(defaultValue)) {
+			for (const v of defaultValue) validateChoice(String(v), choices, label);
+		} else {
+			validateChoice(String(defaultValue), choices, label);
+		}
+	}
+
+	if (parse) {
+		if (Array.isArray(defaultValue)) {
+			return defaultValue.map((v, i) =>
+				invokeParse(parse, String(v), label, i),
+			);
+		}
+		return invokeParse(parse, String(defaultValue), label);
+	}
+
+	if (def.type === "path") {
+		if (Array.isArray(defaultValue)) {
+			return defaultValue.map((v) => coercePath(String(v)));
+		}
+		return coercePath(String(defaultValue));
+	}
+
+	return defaultValue;
+}
+
+/**
  * Walk every flag/arg def with a `parse` field and reject async parsers
  * up-front. Async parse would return a Promise that the parser would treat
  * as the resolved value — almost certainly a bug. Throws
@@ -347,24 +402,10 @@ function resolveFlags(
 			continue;
 		}
 
-		// Default-coercion: when `parse` is present and argv is absent, we MUST
-		// run parse on the default so the runtime value matches the inferred
-		// type. Otherwise `{ parse: Number, default: "3000" }` would deliver
-		// the raw string "3000" while TS infers `number`.
-		const parse = (def as { parse?: (raw: string) => unknown }).parse;
-		if (parse && def.default !== undefined) {
-			const label = `--${name}`;
-			if (Array.isArray(def.default)) {
-				resolved[name] = def.default.map((v, i) =>
-					invokeParse(parse, String(v), label, i),
-				);
-			} else {
-				resolved[name] = invokeParse(parse, String(def.default), label);
-			}
-			continue;
-		}
-
-		resolved[name] = def.default ?? undefined;
+		resolved[name] = resolveDefault(
+			def as Parameters<typeof resolveDefault>[0],
+			`--${name}`,
+		);
 	}
 
 	return resolved;
@@ -423,17 +464,11 @@ function resolveArgs(
 		} else if (index < positionals.length) {
 			resolved[name] = coerceOne(positionals[index] as string);
 			index++;
-		} else if (parse && def.default !== undefined) {
-			// Default-coercion for positional args (parallels resolveFlags).
-			if (Array.isArray(def.default)) {
-				resolved[name] = def.default.map((v, i) =>
-					invokeParse(parse, String(v), label, i),
-				);
-			} else {
-				resolved[name] = invokeParse(parse, String(def.default), label);
-			}
 		} else {
-			resolved[name] = def.default ?? undefined;
+			resolved[name] = resolveDefault(
+				def as Parameters<typeof resolveDefault>[0],
+				label,
+			);
 		}
 	}
 

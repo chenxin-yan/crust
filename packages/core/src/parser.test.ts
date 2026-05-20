@@ -1570,3 +1570,97 @@ describe("parseArgs — choices enforcement", () => {
 		);
 	});
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Default coercion symmetry (PR #129 review follow-up)
+//
+// Argv-supplied values flow through choices → parse | coerce. The default
+// branch must mirror that so omitted-flag behavior is not silently weaker
+// (path defaults left relative, defaults outside `choices` accepted, etc.).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs \u2014 default coercion symmetry", () => {
+	it("runs coercePath on a `type: path` flag default when argv is absent", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { out: { type: "path", default: "./dist" } },
+		});
+		const result = parseArgs(cmd, []);
+		expect(result.flags.out).toBe(`${process.cwd()}/dist`);
+	});
+
+	it("runs coercePath per element on a multi `type: path` flag default", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				dirs: { type: "path", multiple: true, default: ["./a", "./b"] },
+			},
+		});
+		const result = parseArgs(cmd, []);
+		expect(result.flags.dirs).toEqual([
+			`${process.cwd()}/a`,
+			`${process.cwd()}/b`,
+		]);
+	});
+
+	it("runs coercePath on a `type: path` arg default when positional is absent", () => {
+		const cmd = makeNode({
+			meta: "test",
+			args: [{ name: "out", type: "path", default: "./dist" }],
+		});
+		const result = parseArgs(cmd, []);
+		expect((result.args as Record<string, unknown>).out).toBe(
+			`${process.cwd()}/dist`,
+		);
+	});
+
+	it("validates a non-parse `default` against `choices` when present", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				mode: {
+					type: "string",
+					choices: ["a", "b"] as const,
+					default: "z",
+				},
+			},
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(CrustError);
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
+	});
+
+	it("validates a parse `default` against `choices` before running parse", () => {
+		let parseCalled = false;
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				n: {
+					type: "string",
+					choices: ["1", "2"] as const,
+					parse: (s) => {
+						parseCalled = true;
+						return Number(s);
+					},
+					default: "3",
+				},
+			},
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(CrustError);
+		expect(parseCalled).toBe(false);
+	});
+
+	it("accepts a default that is in the choices list (no false positive)", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				mode: {
+					type: "string",
+					choices: ["a", "b"] as const,
+					default: "a",
+				},
+			},
+		});
+		const result = parseArgs(cmd, []);
+		expect(result.flags.mode).toBe("a");
+	});
+});

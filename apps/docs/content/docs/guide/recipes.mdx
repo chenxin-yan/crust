@@ -1,6 +1,6 @@
 ---
 title: Recipes
-description: Copy-paste `parse` recipes for common formats that aren't built-in — date, duration, port, regex, count, bytes, bigint, hex, base64, file, dir.
+description: Copy-paste `parse` recipes for common formats that aren't built-in — date, duration, port, regex, bytes, bigint, hex, base64, file, dir.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -82,24 +82,6 @@ Crust ships only six built-in `ValueType` literals (`string`, `number`, `boolean
   },
 })
 // flags.filter: RegExp | undefined
-```
-
-## Count — repeatable counter (`-vvv` style)
-
-`count` is repeatable verbosity. Use `multiple: true` with `parse` returning `1`, then reduce to a number in your handler.
-
-```ts
-.flags({
-  verbose: {
-    type: "string",
-    short: "v",
-    multiple: true,
-    parse: () => 1,
-  },
-})
-.run(({ flags }) => {
-  const level = (flags.verbose ?? []).length; // 0, 1, 2, …
-})
 ```
 
 ## Bytes — human sizes to bytes
