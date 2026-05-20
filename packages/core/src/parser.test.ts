@@ -1339,15 +1339,13 @@ describe("parseArgs — raw schema-backed args", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — url/path/json types", () => {
-	it("parses a url flag into a URL instance", () => {
+	it("parses a url flag into a URL instance (coercion details covered in coercers.test.ts)", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: { endpoint: { type: "url" } },
 		});
 		const result = parseArgs(cmd, ["--endpoint", "https://example.com"]);
-		const value = result.flags.endpoint as unknown as URL;
-		expect(value).toBeInstanceOf(URL);
-		expect(value.href).toBe("https://example.com/");
+		expect(result.flags.endpoint).toBeInstanceOf(URL);
 	});
 
 	it("throws CrustError(PARSE) on an invalid url flag value", () => {
@@ -1360,16 +1358,13 @@ describe("parseArgs — url/path/json types", () => {
 		);
 	});
 
-	it("parses a path flag into an absolute string", () => {
+	it("parses a path flag into an absolute string (coercion details covered in coercers.test.ts)", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: { out: { type: "path" } },
 		});
 		const result = parseArgs(cmd, ["--out", "./dist"]);
-		const value = result.flags.out as unknown as string;
-		expect(typeof value).toBe("string");
-		expect(value.startsWith("/")).toBe(true);
-		expect(value.endsWith("/dist")).toBe(true);
+		expect(typeof result.flags.out).toBe("string");
 	});
 
 	it("parses a json flag into the corresponding value", () => {
@@ -1402,7 +1397,6 @@ describe("parseArgs — parse escape hatch", () => {
 		});
 		const result = parseArgs(cmd, ["--n", "42"]);
 		expect(result.flags.n).toBe(42);
-		expect(typeof result.flags.n).toBe("number");
 	});
 
 	it("runs parse per element on multi-value flags", () => {
@@ -1425,7 +1419,6 @@ describe("parseArgs — parse escape hatch", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.flags.port).toBe(3000);
-		expect(typeof result.flags.port).toBe("number");
 	});
 
 	it("returns undefined when argv and default are both absent (no parse call)", () => {

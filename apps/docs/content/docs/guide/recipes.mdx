@@ -243,11 +243,7 @@ import { resolve } from "node:path";
 
 ## Adding your own
 
-The pattern is always the same:
+Two things the recipes above leave implicit:
 
-1. Declare `type: "string"`.
-2. Write a synchronous `parse: (raw: string) => T`.
-3. Throw a descriptive `Error` on invalid input — Crust wraps it in `CrustError("PARSE", …)` with the flag/argument name.
-4. Set `default` as a **raw string**; Crust runs `parse(String(default))` so the runtime value matches `T`.
-
-If you find yourself reusing a parser across commands, extract it as a plain function and reference it from the flag definition.
+- **Defaults are raw strings.** Crust runs `parse(String(default))` so the runtime value matches `T` — don't pre-parse them.
+- **Reuse across commands.** If the same recipe appears in multiple commands, extract `parse` as a plain function and reference it from each flag definition.

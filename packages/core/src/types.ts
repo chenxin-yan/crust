@@ -97,19 +97,8 @@ interface StringArgDef extends ArgDefBase {
 	 */
 	choices?: readonly string[];
 	/**
-	 * Custom synchronous parser for the raw argv string.
-	 *
-	 * Receives the raw token as it appeared on the command line (after
-	 * `choices` validation, when present) and returns the resolved value
-	 * that flows to the `run` handler. The return type is inferred and
-	 * becomes the arg's runtime type.
-	 *
-	 * Constraints:
-	 * - Synchronous only. `async` parsers are rejected at command setup
-	 *   with `CrustError("CONFIG", …)`.
-	 * - Only allowed on string-typed args/flags. `parse?: never` on every
-	 *   non-string variant prevents misuse at compile time.
-	 * - For variadic args, runs per element.
+	 * Custom synchronous parser for the raw argv string. Runs per element
+	 * for variadic args. See {@link StringFlagDef.parse} for full semantics.
 	 *
 	 * @example
 	 * { name: "port", type: "string", parse: (s) => Number(s) }
@@ -744,7 +733,12 @@ type InferArgValue<A extends ArgDef> = A extends {
 		? ResolveBaseType<A>[]
 		: A extends { required: true }
 			? ResolveBaseType<A>
-			: A extends { default: ResolveBaseType<A> }
+			: // Narrow on `default` presence, not its type. When `parse` is
+				// present the raw default is a string while `ResolveBaseType<A>`
+				// is the parsed return type, so a typed-default check would miss.
+				// ArgDef's discriminated interfaces already constrain the default
+				// shape at the call site.
+				A extends { default: unknown }
 				? ResolveBaseType<A>
 				: ResolveBaseType<A> | undefined
 	: A extends { variadic: true }
@@ -800,12 +794,15 @@ type InferFlagValue<F extends FlagDef> = F extends {
 	? F extends { multiple: true }
 		? F extends { required: true }
 			? ResolveBaseType<F>[]
-			: F extends { default: ResolveBaseType<F>[] }
+			: // See InferArgValue: narrow on default presence. With `parse`,
+				// the raw default is `string[]` while ResolveBaseType<F> is the
+				// parsed element type.
+				F extends { default: readonly unknown[] }
 				? ResolveBaseType<F>[]
 				: ResolveBaseType<F>[] | undefined
 		: F extends { required: true }
 			? ResolveBaseType<F>
-			: F extends { default: ResolveBaseType<F> }
+			: F extends { default: unknown }
 				? ResolveBaseType<F>
 				: ResolveBaseType<F> | undefined
 	: never;

@@ -74,23 +74,14 @@ export interface CompletionFlag {
 	 */
 	choices?: readonly string[];
 	/**
-	 * `true` when the underlying flag declared `type: "path"`. Templates
-	 * use this to emit file-completion candidates for the value token.
-	 * Set only when the source type is `"path"`; the spec-level `type`
-	 * is normalised to `"string"` because path values are string tokens.
+	 * Source-type hints for value completion. The spec-level `type` is
+	 * normalised to `"string"` for `url`/`path`/`json` (their values are
+	 * string tokens), so templates branch on these flags instead:
+	 *  - `isPath`  → emit file-completion candidates.
+	 *  - `isUrl`/`isJson` → suppress the string fallback's file completion.
 	 */
 	isPath?: true;
-	/**
-	 * `true` when the underlying flag declared `type: "url"`. Templates
-	 * use this to **suppress** file completion that the string fallback
-	 * would otherwise grant (a URL is not a filesystem path).
-	 */
 	isUrl?: true;
-	/**
-	 * `true` when the underlying flag declared `type: "json"`. Templates
-	 * use this to **suppress** file completion that the string fallback
-	 * would otherwise grant (a JSON literal is not a filesystem path).
-	 */
 	isJson?: true;
 }
 
@@ -115,11 +106,9 @@ export interface CompletionArg {
 	 * field on `StringArgDef`. Only string-typed args can carry choices.
 	 */
 	choices?: readonly string[];
-	/** See {@link CompletionFlag.isPath}. */
+	/** Source-type hints — see {@link CompletionFlag.isPath}. */
 	isPath?: true;
-	/** See {@link CompletionFlag.isUrl}. */
 	isUrl?: true;
-	/** See {@link CompletionFlag.isJson}. */
 	isJson?: true;
 }
 

@@ -446,4 +446,53 @@ describe("renderBash — url/path/json value-flag handling (TP-012)", () => {
 		// and the `complete -o default` fallback.
 		expect(script).not.toContain('"|--name")');
 	});
+
+	it("suppresses `complete -o default` for url/json positional slots; path positionals rely on the fallback", () => {
+		const posFixture: CompletionSpec = {
+			root: {
+				name: "mycli",
+				flags: [],
+				args: [
+					{
+						name: "src",
+						type: "string",
+						required: true,
+						variadic: false,
+						isPath: true,
+					},
+					{
+						name: "endpoint",
+						type: "string",
+						required: true,
+						variadic: false,
+						isUrl: true,
+					},
+					{
+						name: "payload",
+						type: "string",
+						required: true,
+						variadic: false,
+						isJson: true,
+					},
+				],
+				subCommands: [],
+			},
+		};
+		const script = renderBash(posFixture, "mycli", "1.0.0");
+		// Suppression case is emitted for the two non-path slots (1, 2).
+		expect(script).toContain("compopt +o default 2>/dev/null");
+		// Slot 0 (path) is NOT in the suppression case — only 1 and 2 are.
+		const suppressBlock = script
+			.split("\n")
+			.slice(
+				script.split("\n").findIndex((l) => l.includes("compopt +o default")) -
+					4,
+			)
+			.slice(0, 12)
+			.join("\n");
+		expect(suppressBlock).toMatch(/\b1\)\s*\n\s*compopt \+o default/);
+		expect(suppressBlock).toMatch(/\b2\)\s*\n\s*compopt \+o default/);
+		// The path slot (0) is not in the suppress block.
+		expect(suppressBlock).not.toMatch(/\b0\)\s*\n\s*compopt \+o default/);
+	});
 });

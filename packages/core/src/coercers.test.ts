@@ -24,9 +24,11 @@ describe("coerceUrl", () => {
 		}
 	});
 
-	it("throws CrustError(PARSE) when the input has no protocol", () => {
-		expect(() => coerceUrl("example.com")).toThrow(CrustError);
-		expect(() => coerceUrl("example.com")).toThrow(/missing protocol/);
+	it("omits the missing-protocol hint when the input already has a scheme", () => {
+		// `https://[bad` parses as a URL with a scheme but invalid syntax;
+		// telling the user they're missing a protocol would be misleading.
+		expect(() => coerceUrl("https://[bad")).toThrow(CrustError);
+		expect(() => coerceUrl("https://[bad")).not.toThrow(/missing protocol/);
 	});
 
 	it("throws CrustError(PARSE) on empty input", () => {

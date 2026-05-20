@@ -1361,6 +1361,34 @@ describe("InferFlags — parse field inference", () => {
 		const val: Result = { x: 42 };
 		expect(val.x).toBe(42);
 	});
+
+	it("narrows inference when parse + raw default are both present", () => {
+		// Regression: prior to TP-012 review the conditional checked
+		// `default: ResolveBaseType<F>` (the parsed type), so a raw string
+		// default with a numeric parse return left the inferred type optional.
+		type Flags = {
+			x: { type: "string"; parse: (s: string) => number; default: "3000" };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: number }>>;
+		const val: Result = { x: 3000 };
+		expect(val.x).toBe(3000);
+	});
+
+	it("narrows multi-value inference when parse + raw default[] are both present", () => {
+		type Flags = {
+			x: {
+				type: "string";
+				multiple: true;
+				parse: (s: string) => number;
+				default: ["3000", "8080"];
+			};
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: number[] }>>;
+		const val: Result = { x: [3000, 8080] };
+		expect(val.x).toEqual([3000, 8080]);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1368,33 +1396,17 @@ describe("InferFlags — parse field inference", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("FlagDef — parse?: never enforcement", () => {
-	it("rejects parse on number flags", () => {
+	it("rejects parse on non-string flag variants", () => {
 		// @ts-expect-error — parse is forbidden on number flags
-		const _bad: FlagDef = { type: "number", parse: (s: string) => Number(s) };
-		expect(true).toBe(true);
-	});
-
-	it("rejects parse on boolean flags", () => {
+		const _n: FlagDef = { type: "number", parse: (s: string) => Number(s) };
 		// @ts-expect-error — parse is forbidden on boolean flags
-		const _bad: FlagDef = { type: "boolean", parse: (s: string) => s };
-		expect(true).toBe(true);
-	});
-
-	it("rejects parse on url flags", () => {
+		const _b: FlagDef = { type: "boolean", parse: (s: string) => s };
 		// @ts-expect-error — parse is forbidden on url flags
-		const _bad: FlagDef = { type: "url", parse: (s: string) => s };
-		expect(true).toBe(true);
-	});
-
-	it("rejects parse on path flags", () => {
+		const _u: FlagDef = { type: "url", parse: (s: string) => s };
 		// @ts-expect-error — parse is forbidden on path flags
-		const _bad: FlagDef = { type: "path", parse: (s: string) => s };
-		expect(true).toBe(true);
-	});
-
-	it("rejects parse on json flags", () => {
+		const _p: FlagDef = { type: "path", parse: (s: string) => s };
 		// @ts-expect-error — parse is forbidden on json flags
-		const _bad: FlagDef = { type: "json", parse: (s: string) => s };
+		const _j: FlagDef = { type: "json", parse: (s: string) => s };
 		expect(true).toBe(true);
 	});
 });

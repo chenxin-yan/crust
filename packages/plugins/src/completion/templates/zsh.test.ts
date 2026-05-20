@@ -273,4 +273,43 @@ describe("renderZsh — url/path/json value-flag handling (TP-012)", () => {
 		const script = renderZsh(valueTypeFixture, "mycli", "1.0.0");
 		expect(script).toContain(":name:_files");
 	});
+
+	it("applies the same path/url/json branches to positional args", () => {
+		const posFixture: CompletionSpec = {
+			root: {
+				name: "mycli",
+				flags: [],
+				args: [
+					{
+						name: "src",
+						type: "string",
+						required: true,
+						variadic: false,
+						isPath: true,
+					},
+					{
+						name: "endpoint",
+						type: "string",
+						required: true,
+						variadic: false,
+						isUrl: true,
+					},
+					{
+						name: "payload",
+						type: "string",
+						required: true,
+						variadic: false,
+						isJson: true,
+					},
+				],
+				subCommands: [],
+			},
+		};
+		const script = renderZsh(posFixture, "mycli", "1.0.0");
+		expect(script).toContain(":src:_files");
+		expect(script).toContain(":endpoint: ");
+		expect(script).toContain(":payload: ");
+		expect(script).not.toContain(":endpoint:_files");
+		expect(script).not.toContain(":payload:_files");
+	});
 });

@@ -259,6 +259,50 @@ interface ArgChoiceEntry {
 }
 
 /**
+ * Per-command summary of positional-argument slots that must suppress
+ * the global `complete -o default` file fallback (url/json positionals
+ * are not filesystem paths). Mirrors {@link ArgChoiceEntry}'s shape so
+ * the renderer can iterate it the same way.
+ */
+interface ArgSuppressEntry {
+	cmdPath: string;
+	/** Fixed-slot suppression indices. */
+	slots: ReadonlyArray<number>;
+	/** Slot index from which variadic suppression applies, or `undefined`. */
+	variadicFrom?: number;
+}
+
+/**
+ * Collect per-command positional suppression entries. Each url/json
+ * positional contributes one slot index; a variadic url/json positional
+ * also sets `variadicFrom` so suppression extends past the declared slot.
+ */
+function collectArgSuppressCases(
+	cmdPath: string,
+	node: CompletionCommand,
+	out: ArgSuppressEntry[],
+): void {
+	const slots: number[] = [];
+	let variadicFrom: number | undefined;
+	node.args.forEach((arg: CompletionArg, idx: number) => {
+		const suppress = arg.isUrl === true || arg.isJson === true;
+		if (!suppress) return;
+		if (arg.variadic) {
+			variadicFrom = idx;
+		} else {
+			slots.push(idx);
+		}
+	});
+	if (slots.length > 0 || variadicFrom !== undefined) {
+		out.push({ cmdPath, slots, variadicFrom });
+	}
+	for (const sub of node.subCommands) {
+		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		collectArgSuppressCases(subPath, sub, out);
+	}
+}
+
+/**
  * Collect per-command positional choice entries, recursively. Returns
  * one {@link ArgChoiceEntry} per command that has at least one positional
  * arg with a `choices` list (variadic or otherwise). Commands with no
@@ -356,6 +400,9 @@ export function renderBash(
 
 	const argChoiceEntries: ArgChoiceEntry[] = [];
 	collectArgChoiceCases("", spec.root, argChoiceEntries);
+
+	const argSuppressEntries: ArgSuppressEntry[] = [];
+	collectArgSuppressCases("", spec.root, argSuppressEntries);
 
 	const lines: string[] = [];
 
@@ -550,7 +597,9 @@ export function renderBash(
 	lines.push('\tif [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
-	if (argChoiceEntries.length > 0) {
+	const needsPosWalk =
+		argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
+	if (needsPosWalk) {
 		// Count completed positional tokens between the resolved command
 		// path and the cursor. Token classes we *skip*:
 		//  - `--`                  (end-of-options terminator)
@@ -620,6 +669,33 @@ export function renderBash(
 			lines.push("\t\t\t\t;;");
 		}
 		lines.push("\t\tesac");
+
+		// url/json positional slots: disable the `complete -o default` file
+		// fallback so users aren't offered filenames for non-path values.
+		// Path positionals are *not* listed here.
+		if (argSuppressEntries.length > 0) {
+			lines.push('\t\tcase "$cmd_path" in');
+			for (const entry of argSuppressEntries) {
+				lines.push(`\t\t\t"${bashDoubleQuoteInner(entry.cmdPath)}")`);
+				lines.push('\t\t\t\tcase "$pos_idx" in');
+				for (const slot of entry.slots) {
+					lines.push(`\t\t\t\t\t${slot})`);
+					lines.push("\t\t\t\t\t\tcompopt +o default 2>/dev/null");
+					lines.push("\t\t\t\t\t\t;;");
+				}
+				if (entry.variadicFrom !== undefined) {
+					lines.push("\t\t\t\t\t*)");
+					lines.push(
+						`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then compopt +o default 2>/dev/null; fi`,
+					);
+					lines.push("\t\t\t\t\t\t;;");
+				}
+				lines.push("\t\t\t\tesac");
+				lines.push("\t\t\t\t;;");
+			}
+			lines.push("\t\tesac");
+		}
+
 		// At slot 0, blend positional choices with subcommand candidates so
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.

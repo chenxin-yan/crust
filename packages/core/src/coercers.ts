@@ -8,18 +8,21 @@ import { CrustError } from "./errors.ts";
  * ftp, …) is allowed.
  *
  * Throws `CrustError("PARSE", …)` when the input is not a valid URL.
- * The original input is echoed in the message and a "missing protocol"
- * hint is appended so users learn to include the scheme (e.g.
- * `https://example.com`).
+ * The original input is echoed in the message. When the input clearly
+ * lacks a URL scheme, we append a hint reminding the user to include
+ * one — a common foot-gun on the command line.
  */
 export function coerceUrl(raw: string): URL {
 	try {
 		return new URL(raw);
 	} catch {
-		throw new CrustError(
-			"PARSE",
-			`Invalid URL "${raw}": missing protocol (e.g. https://example.com)`,
-		);
+		// WHATWG-style scheme: ASCII letter followed by letters/digits/+/-/.
+		// then a colon. Matches `http:`, `file:`, `git+ssh:`, etc.
+		const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
+		const hint = hasScheme
+			? ""
+			: " (missing protocol — e.g. https://example.com)";
+		throw new CrustError("PARSE", `Invalid URL "${raw}"${hint}`);
 	}
 }
 

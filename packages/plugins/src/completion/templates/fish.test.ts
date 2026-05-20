@@ -367,4 +367,46 @@ describe("renderFish — url/path/json value-flag handling (TP-012)", () => {
 		expect(line).toContain("-r");
 		expect(line).not.toContain("__fish_complete_path");
 	});
+
+	it("emits a positional rule for path args; url/json positionals rely on the global -f suppression", () => {
+		const posFixture: CompletionSpec = {
+			root: {
+				name: "mycli",
+				flags: [],
+				args: [
+					{
+						name: "src",
+						type: "string",
+						required: true,
+						variadic: false,
+						isPath: true,
+					},
+					{
+						name: "endpoint",
+						type: "string",
+						required: true,
+						variadic: false,
+						isUrl: true,
+					},
+					{
+						name: "payload",
+						type: "string",
+						required: true,
+						variadic: false,
+						isJson: true,
+					},
+				],
+				subCommands: [],
+			},
+		};
+		const script = renderFish(posFixture, "mycli", "1.0.0");
+		// Path positional gets an explicit `(__fish_complete_path)` rule.
+		expect(script).toContain("-a '(__fish_complete_path)'");
+		// url/json positionals: no explicit rule — the global `-f` keeps
+		// file completion off, so suppression is implicit.
+		const pathRuleCount = script
+			.split("\n")
+			.filter((l) => l.includes("__fish_complete_path")).length;
+		expect(pathRuleCount).toBe(1);
+	});
 });
