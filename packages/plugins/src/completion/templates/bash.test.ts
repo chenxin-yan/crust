@@ -5,6 +5,53 @@ import { join } from "node:path";
 import type { CompletionSpec } from "../spec.ts";
 import { renderBash } from "./bash.ts";
 
+// Single-quote a value for bash, escaping embedded single quotes.
+const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * Drive a generated bash completion function as bash itself would: source
+ * the script (registers `fnName`), set `COMP_WORDS`/`COMP_CWORD` for the
+ * cursor position, invoke `fnName`, then print `COMPREPLY` one per line.
+ * Returns the candidates sorted so equality checks are order-stable.
+ */
+async function runBashCompletion(
+	scriptPath: string,
+	fnName: string,
+	words: string[],
+): Promise<string[]> {
+	const compWordsLines = words
+		.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
+		.join("\n");
+	const compCword = words.length - 1;
+	const driver = `
+set -e
+source ${shQuote(scriptPath)}
+${compWordsLines}
+COMP_CWORD=${compCword}
+COMP_LINE=${shQuote(words.join(" "))}
+COMP_POINT=${words.join(" ").length}
+${fnName}
+for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
+`;
+	const proc = Bun.spawn(["bash", "-c", driver], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [out, err] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const code = await proc.exited;
+	if (code !== 0) {
+		throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
+	}
+	return out
+		.split("\n")
+		.map((l) => l.trim())
+		.filter((l) => l.length > 0)
+		.sort();
+}
+
 /**
  * Fixture spec used across snapshot + behavioural tests. Mirrors a small
  * but representative tree: a flat subcommand (`build`), a nested
@@ -142,54 +189,8 @@ describe("renderBash · behavioural subprocess tests", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	/**
-	 * Drive the completion function as bash itself would. We:
-	 *  - source the generated script (registers `_mycli`),
-	 *  - set COMP_WORDS/COMP_CWORD for the cursor position,
-	 *  - call `_mycli`,
-	 *  - print `COMPREPLY` separated by newlines.
-	 *
-	 * Returning the candidates as a sorted array gives stable equality
-	 * checks regardless of how bash orders them.
-	 */
-	async function runCompletion(words: string[]): Promise<string[]> {
-		const compWordsLines = words
-			.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
-			.join("\n");
-		const compCword = words.length - 1;
-		const driver = `
-set -e
-source ${shQuote(scriptPath)}
-${compWordsLines}
-COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
-_mycli
-for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
-`;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		if (code !== 0) {
-			throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
-		}
-		return out
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l.length > 0)
-			.sort();
-	}
-
-	function shQuote(value: string): string {
-		// Single-quote, escape any embedded single quotes.
-		return `'${value.replace(/'/g, `'\\''`)}'`;
-	}
+	const runCompletion = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mycli", words);
 
 	it("scenario 1 — top-level subcommand: `mycli <TAB>` lists build and deploy", async () => {
 		const completions = await runCompletion(["mycli", ""]);
@@ -315,40 +316,8 @@ describe("renderBash · multi-positional choices", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	async function runCompletion(words: string[]): Promise<string[]> {
-		const shQuote = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
-		const compWordsLines = words
-			.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
-			.join("\n");
-		const compCword = words.length - 1;
-		const driver = `
-set -e
-source ${shQuote(scriptPath)}
-${compWordsLines}
-COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
-_mp
-for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
-`;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		if (code !== 0) {
-			throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
-		}
-		return out
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l.length > 0)
-			.sort();
-	}
+	const runCompletion = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mp", words);
 
 	it("slot 0 of `mp two` offers the first arg's choices", async () => {
 		const completions = await runCompletion(["mp", "two", ""]);

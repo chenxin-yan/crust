@@ -1514,8 +1514,14 @@ describe("parseArgs — choices enforcement", () => {
 			meta: "test",
 			flags: { mode: { type: "string", choices: ["a", "b"] as const } },
 		});
-		expect(() => parseArgs(cmd, ["--mode", "c"])).toThrow(CrustError);
-		expect(() => parseArgs(cmd, ["--mode", "c"])).toThrow(/Invalid value/);
+		let err: unknown;
+		try {
+			parseArgs(cmd, ["--mode", "c"]);
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toBeInstanceOf(CrustError);
+		expect((err as Error).message).toMatch(/Invalid value/);
 	});
 
 	it("validates choices on raw argv before parse runs (order test)", () => {
@@ -1625,8 +1631,14 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 				},
 			},
 		});
-		expect(() => parseArgs(cmd, [])).toThrow(CrustError);
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
+		let err: unknown;
+		try {
+			parseArgs(cmd, []);
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toBeInstanceOf(CrustError);
+		expect((err as Error).message).toMatch(/Invalid value "z" for --mode/);
 	});
 
 	it("validates a parse `default` against `choices` before running parse", () => {
