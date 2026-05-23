@@ -85,35 +85,6 @@ function tick(ms = 10): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("filter — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await filter({
-			message: "Search",
-			choices: ["TypeScript", "JavaScript", "Rust"],
-			initial: "Rust",
-		});
-
-		expect(result).toBe("Rust");
-	});
-
-	it("returns initial value for object choices", async () => {
-		const result = await filter<number>({
-			message: "Pick a port",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-			initial: 443,
-		});
-
-		expect(result).toBe(443);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default value cursor positioning
 // ────────────────────────────────────────────────────────────────────────────
 

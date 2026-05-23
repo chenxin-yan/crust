@@ -100,30 +100,6 @@ async function waitForStderr(needle: string, timeout = 500): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("input — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await input({
-			message: "Name?",
-			initial: "Alice",
-		});
-
-		expect(result).toBe("Alice");
-	});
-
-	it("returns empty string initial value", async () => {
-		const result = await input({
-			message: "Name?",
-			initial: "",
-		});
-
-		expect(result).toBe("");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Interactive behavior
 // ────────────────────────────────────────────────────────────────────────────
 

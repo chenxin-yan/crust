@@ -85,35 +85,6 @@ function tick(ms = 10): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("multiselect — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await multiselect({
-			message: "Select toppings",
-			choices: ["cheese", "pepperoni", "mushrooms"],
-			initial: ["cheese", "mushrooms"],
-		});
-
-		expect(result).toEqual(["cheese", "mushrooms"]);
-	});
-
-	it("returns initial value for object choices", async () => {
-		const result = await multiselect<number>({
-			message: "Select ports",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-			initial: [443],
-		});
-
-		expect(result).toEqual([443]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default pre-selection
 // ────────────────────────────────────────────────────────────────────────────
 

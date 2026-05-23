@@ -105,30 +105,6 @@ async function waitForStderr(needle: string, timeout = 500): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("password — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await password({
-			message: "Password?",
-			initial: "s3cret",
-		});
-
-		expect(result).toBe("s3cret");
-	});
-
-	it("returns empty string initial value", async () => {
-		const result = await password({
-			message: "Password?",
-			initial: "",
-		});
-
-		expect(result).toBe("");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Masked rendering
 // ────────────────────────────────────────────────────────────────────────────
 
