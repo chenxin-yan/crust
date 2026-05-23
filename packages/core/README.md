@@ -49,7 +49,7 @@ flags: {
 // flags.port: number
 ```
 
-See the [Built-in Types](https://crustjs.com/docs/guide/built-in-types) and [Recipes](https://crustjs.com/docs/guide/recipes) guides for the full contract.
+See the [Types](https://crustjs.com/docs/guide/types) guide for the full contract, error modes, and copy-paste recipes.
 
 ## Documentation
 

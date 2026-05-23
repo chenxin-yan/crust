@@ -225,7 +225,7 @@ flags: {
 // flags.port: number (3000 when argv is absent)
 ```
 
-Async `parse` functions are rejected at command setup with `CrustError("CONFIG", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Built-in Types — the parse escape hatch](/docs/guide/built-in-types#the-parse-escape-hatch) for the full contract.
+Async `parse` functions are rejected at command setup with `CrustError("CONFIG", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Types — the parse escape hatch](/docs/guide/types#the-parse-escape-hatch) for the full contract.
 
 ### `FlagsDef`
 
@@ -423,7 +423,7 @@ The three formatted built-ins resolve to:
 - `"path"` — absolute `string` via `path.resolve(process.cwd(), expand(raw))`
 - `"json"` — `unknown` via `JSON.parse(raw)`
 
-See [Built-in Types](/docs/guide/built-in-types) for semantics, error modes, and shell-completion behaviour.
+See [Types](/docs/guide/types) for semantics, error modes, and shell-completion behaviour.
 
 ### `Resolve<T>`
 
