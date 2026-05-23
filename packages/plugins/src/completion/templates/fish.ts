@@ -213,12 +213,33 @@ function emitRules(
 		};
 		if (flag.short !== undefined) baseRule.short = flag.short;
 
-		if (flag.takesValue) {
+		// Emit a single value-taking rule for `flag`. Branches:
+		//   - choices                       → one rule per literal candidate
+		//   - valueCompletion === "files"   → require parameter + `(__fish_complete_path)`
+		//   - valueCompletion === "none"    → require parameter only; the script's
+		//                                     leading `complete -c <bin> -f` keeps
+		//                                     file completion off
+		//   - free-form                     → require parameter (current behaviour)
+		const emitValueRule = (rule: RuleParts) => {
 			if (flag.choices !== undefined && flag.choices.length > 0) {
-				emitChoiceFlag(baseRule, flag.choices);
-			} else {
-				out.push(renderRule(binName, { ...baseRule, requireParameter: true }));
+				emitChoiceFlag(rule, flag.choices);
+				return;
 			}
+			if (flag.valueCompletion === "files") {
+				out.push(
+					renderRule(binName, {
+						...rule,
+						requireParameter: true,
+						arguments: fishSingleQuote("(__fish_complete_path)"),
+					}),
+				);
+				return;
+			}
+			out.push(renderRule(binName, { ...rule, requireParameter: true }));
+		};
+
+		if (flag.takesValue) {
+			emitValueRule(baseRule);
 		} else {
 			out.push(renderRule(binName, baseRule));
 		}
@@ -233,13 +254,7 @@ function emitRules(
 					description: desc,
 				};
 				if (flag.takesValue) {
-					if (flag.choices !== undefined && flag.choices.length > 0) {
-						emitChoiceFlag(aliasRule, flag.choices);
-					} else {
-						out.push(
-							renderRule(binName, { ...aliasRule, requireParameter: true }),
-						);
-					}
+					emitValueRule(aliasRule);
 				} else {
 					out.push(renderRule(binName, aliasRule));
 				}
@@ -275,17 +290,34 @@ function emitRules(
 	// slots fire only when the user is filling that exact slot; a
 	// variadic-with-choices arg fires for every slot from its declared
 	// index onwards (`*<N>` spec).
+	//
+	// Path positionals get one `(__fish_complete_path)` rule per slot.
+	// url/json positionals need no rule: the script's leading
+	// `complete -c <bin> -f` already keeps file completion off, so the
+	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
-		if (arg.choices === undefined || arg.choices.length === 0) return;
 		const posSpec = arg.variadic ? `*${idx}` : String(idx);
-		const posCondition = posPredicate(ident, path, current, posSpec);
-		for (const choice of arg.choices) {
+		if (arg.choices !== undefined && arg.choices.length > 0) {
+			const posCondition = posPredicate(ident, path, current, posSpec);
+			for (const choice of arg.choices) {
+				out.push(
+					renderRule(binName, {
+						condition: posCondition,
+						arguments: fishSingleQuote(choice),
+						description: arg.description ?? "",
+						noFiles: true,
+					}),
+				);
+			}
+			return;
+		}
+		if (arg.valueCompletion === "files") {
+			const posCondition = posPredicate(ident, path, current, posSpec);
 			out.push(
 				renderRule(binName, {
 					condition: posCondition,
-					arguments: fishSingleQuote(choice),
+					arguments: fishSingleQuote("(__fish_complete_path)"),
 					description: arg.description ?? "",
-					noFiles: true,
 				}),
 			);
 		}

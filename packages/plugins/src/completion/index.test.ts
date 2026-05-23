@@ -133,13 +133,17 @@ describe("completionPlugin", () => {
 	});
 
 	it("rejects unsupported shell names with a clear stderr message", async () => {
-		// `choices` on `<shell>` is advisory at parse time (TP-009 contract),
-		// so the parser hands the value through to the run handler. The
-		// plugin's run handler is responsible for validation — verify it
-		// emits a clear error to stderr and sets exit code 1.
+		// TP-012 wires `choices` enforcement into the parser, so the parser
+		// rejects unsupported shell names with a `CrustError("PARSE", …)`
+		// before the run handler ever sees the value. The error message names
+		// the offending value and the allowed set.
 		const app = buildCli();
 		await app.execute({ argv: ["completion", "powershell"] });
-		expect(stderrChunks.join("\n")).toContain('Unsupported shell "powershell"');
+		const stderr = stderrChunks.join("\n");
+		expect(stderr).toContain('Invalid value "powershell"');
+		expect(stderr).toContain("bash");
+		expect(stderr).toContain("zsh");
+		expect(stderr).toContain("fish");
 		expect(process.exitCode).toBe(1);
 	});
 

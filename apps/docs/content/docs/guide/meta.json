@@ -5,6 +5,7 @@
     "commands",
     "arguments",
     "flags",
+    "types",
     "subcommands",
     "plugins",
     "lifecycle",

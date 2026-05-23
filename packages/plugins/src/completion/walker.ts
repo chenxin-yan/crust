@@ -72,11 +72,25 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 		assertSafeIdentifier(def.short, "flag short alias");
 	}
 
+	// url/path/json all consume a string token at the shell-completion layer.
+	// We normalise them to `"string"` and surface the original kind via a
+	// single `valueCompletion` field so templates can branch on intent
+	// ("files" / "none") rather than the source type literal.
+	const sourceType = def.type;
+	const specType: "string" | "number" | "boolean" =
+		sourceType === "url" || sourceType === "path" || sourceType === "json"
+			? "string"
+			: sourceType;
+
 	const flag: CompletionFlag = {
 		name,
-		type: def.type,
-		takesValue: def.type !== "boolean",
+		type: specType,
+		takesValue: sourceType !== "boolean",
 	};
+
+	if (sourceType === "path") flag.valueCompletion = "files";
+	else if (sourceType === "url" || sourceType === "json")
+		flag.valueCompletion = "none";
 
 	if (def.short !== undefined && def.short.length > 0) {
 		flag.short = def.short;
@@ -117,12 +131,22 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 /** Project a single `ArgDef` onto a `CompletionArg`. */
 function walkArg(def: ArgDef): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
+	const sourceType = def.type;
+	const specType: "string" | "number" | "boolean" =
+		sourceType === "url" || sourceType === "path" || sourceType === "json"
+			? "string"
+			: (sourceType ?? "string");
+
 	const arg: CompletionArg = {
 		name: def.name,
-		type: def.type ?? "string",
+		type: specType,
 		required: def.required === true,
 		variadic: def.variadic === true,
 	};
+
+	if (sourceType === "path") arg.valueCompletion = "files";
+	else if (sourceType === "url" || sourceType === "json")
+		arg.valueCompletion = "none";
 
 	const description = normaliseDescription(def.description);
 	if (description !== undefined) {

@@ -277,3 +277,62 @@ describe("walkCommandNode", () => {
 		expect(spec.root.args[0]?.choices).toBeUndefined();
 	});
 });
+
+describe("walkCommandNode — url/path/json valueCompletion (TP-012)", () => {
+	it("normalises url/path/json flag types to 'string' with valueCompletion intent", () => {
+		const root = makeNode({
+			name: "mycli",
+			localFlags: {
+				endpoint: { type: "url" },
+				out: { type: "path" },
+				config: { type: "json" },
+			},
+		});
+		const spec = walkCommandNode(root);
+		const by = Object.fromEntries(spec.root.flags.map((f) => [f.name, f]));
+
+		expect(by.endpoint?.type).toBe("string");
+		expect(by.endpoint?.takesValue).toBe(true);
+		expect(by.endpoint?.valueCompletion).toBe("none");
+
+		expect(by.out?.type).toBe("string");
+		expect(by.out?.takesValue).toBe(true);
+		expect(by.out?.valueCompletion).toBe("files");
+
+		expect(by.config?.type).toBe("string");
+		expect(by.config?.takesValue).toBe(true);
+		expect(by.config?.valueCompletion).toBe("none");
+	});
+
+	it("sets valueCompletion on url/path/json positional args", () => {
+		const root = makeNode({
+			name: "mycli",
+			args: [
+				{ name: "src", type: "path" },
+				{ name: "dst", type: "url" },
+				{ name: "cfg", type: "json" },
+			],
+		});
+		const spec = walkCommandNode(root);
+		const [src, dst, cfg] = spec.root.args;
+		expect(src?.type).toBe("string");
+		expect(src?.valueCompletion).toBe("files");
+		expect(dst?.valueCompletion).toBe("none");
+		expect(cfg?.valueCompletion).toBe("none");
+	});
+
+	it("does not set valueCompletion on plain string/number/boolean flags", () => {
+		const root = makeNode({
+			name: "mycli",
+			localFlags: {
+				s: { type: "string" },
+				n: { type: "number" },
+				b: { type: "boolean" },
+			},
+		});
+		const spec = walkCommandNode(root);
+		for (const flag of spec.root.flags) {
+			expect(flag.valueCompletion).toBeUndefined();
+		}
+	});
+});

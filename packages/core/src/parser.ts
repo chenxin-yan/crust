@@ -3,6 +3,7 @@ import {
 	type ParseArgsOptionDescriptor,
 } from "node:util";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
+import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import type {
@@ -58,17 +59,15 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			);
 		}
 
-		if (
-			def.type !== "string" &&
-			def.type !== "number" &&
-			def.type !== "boolean"
-		) {
+		if (!ALLOWED_FLAG_TYPES.has(def.type)) {
 			throw new CrustError(
 				"DEFINITION",
-				`Flag "--${name}" must declare a parser type ("string", "number", or "boolean")`,
+				`Flag "--${name}" must declare a parser type ("string", "number", "boolean", "url", "path", or "json")`,
 			);
 		}
 
+		// All non-boolean types consume the next token as a raw string; the
+		// Crust-level coercion (url/path/json/number) runs in coerceValue.
 		const parseType = def.type === "boolean" ? "boolean" : "string";
 		const opt: ParseArgsOptionDescriptor = { type: parseType };
 
@@ -133,6 +132,15 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 	return { options, aliasToName };
 }
 
+const ALLOWED_FLAG_TYPES: ReadonlySet<ValueType> = new Set([
+	"string",
+	"number",
+	"boolean",
+	"url",
+	"path",
+	"json",
+]);
+
 /**
  * Coerce a string value to the expected type based on the type literal.
  */
@@ -151,11 +159,148 @@ function coerceValue(value: string, type: ValueType, label: string) {
 		// util.parseArgs handles boolean flags natively, but in case we receive a string
 		return coerceBooleanString(value);
 	}
+	if (type === "url") return coerceUrl(value);
+	if (type === "path") return coercePath(value);
+	if (type === "json") return coerceJson(value);
 	return value;
 }
 
 /**
+ * Validate a raw argv string against a flag/arg `choices` list. Throws
+ * `CrustError("PARSE", …)` when the value is not in the allowed set.
+ *
+ * Runs *before* any `parse` transform so the user-facing comparison is on
+ * the raw token, not the post-`parse` value.
+ */
+function validateChoice(
+	raw: string,
+	choices: readonly string[],
+	label: string,
+): void {
+	if (!choices.includes(raw)) {
+		throw new CrustError(
+			"PARSE",
+			`Invalid value "${raw}" for ${label}. Expected one of: ${choices.join(", ")}`,
+		);
+	}
+}
+
+/** Invoke a user `parse` function on a raw token, wrapping errors. */
+function invokeParse(
+	parse: (raw: string) => unknown,
+	raw: string,
+	label: string,
+	index?: number,
+): unknown {
+	try {
+		return parse(raw);
+	} catch (err) {
+		const location =
+			index === undefined ? label : `${label} element [${index}]`;
+		const reason = err instanceof Error ? err.message : String(err);
+		throw new CrustError(
+			"PARSE",
+			`Failed to parse ${location}: ${reason}`,
+		).withCause(err);
+	}
+}
+
+/**
+ * Resolve a flag/arg default to its runtime value, mirroring the argv-side
+ * coercion pipeline so omitted-flag behavior matches user-supplied behavior:
+ *
+ *   raw default → choices validation → parse | coerce → result
+ *
+ * Without this, `{ choices: ["a","b"], default: "z" }` silently returns "z"
+ * while `--flag z` throws, and `{ type: "path", default: "./dist" }` returns
+ * the raw relative string while `--out ./dist` returns an absolute path.
+ *
+ * `parse` is preferred when present (matches the escape-hatch contract).
+ * `type: "path"` defaults are coerced through `coercePath` because their
+ * default field is a raw string per `PathFlagDef`/`PathArgDef`. `url` and
+ * `json` defaults are already in their resolved form (`URL` / `unknown`)
+ * per the variant interfaces, so they pass through unchanged.
+ */
+function resolveDefault(
+	def: {
+		type: ValueType;
+		default?: unknown;
+		choices?: readonly string[];
+		parse?: (raw: string) => unknown;
+	},
+	label: string,
+): unknown {
+	const { default: defaultValue, choices, parse } = def;
+	if (defaultValue === undefined) return undefined;
+
+	if (choices) {
+		if (Array.isArray(defaultValue)) {
+			for (const v of defaultValue) validateChoice(String(v), choices, label);
+		} else {
+			validateChoice(String(defaultValue), choices, label);
+		}
+	}
+
+	if (parse) {
+		if (Array.isArray(defaultValue)) {
+			return defaultValue.map((v, i) =>
+				invokeParse(parse, String(v), label, i),
+			);
+		}
+		return invokeParse(parse, String(defaultValue), label);
+	}
+
+	if (def.type === "path") {
+		if (Array.isArray(defaultValue)) {
+			return defaultValue.map((v) => coercePath(String(v)));
+		}
+		return coercePath(String(defaultValue));
+	}
+
+	return defaultValue;
+}
+
+/**
+ * Walk every flag/arg def with a `parse` field and reject async parsers
+ * up-front. Async parse would return a Promise that the parser would treat
+ * as the resolved value — almost certainly a bug. Throws
+ * `CrustError("CONFIG", …)` for each offender. Called at the top of
+ * {@link parseArgs} so misconfigured commands fail fast.
+ */
+function validateAsyncParse(
+	flagsDef: FlagsDef | undefined,
+	argsDef: ArgsDef | undefined,
+): void {
+	if (flagsDef) {
+		for (const [name, def] of Object.entries(flagsDef)) {
+			const parse = (def as { parse?: (raw: string) => unknown }).parse;
+			if (parse && parse.constructor.name === "AsyncFunction") {
+				throw new CrustError(
+					"CONFIG",
+					`Async parse not supported for flag --${name}. Use a sync parser; do async work in run().`,
+				);
+			}
+		}
+	}
+	if (argsDef) {
+		for (const def of argsDef) {
+			const parse = (def as { parse?: (raw: string) => unknown }).parse;
+			if (parse && parse.constructor.name === "AsyncFunction") {
+				throw new CrustError(
+					"CONFIG",
+					`Async parse not supported for argument <${(def as ArgDef).name}>. Use a sync parser; do async work in run().`,
+				);
+			}
+		}
+	}
+}
+
+/**
  * Coerce a single flag's parsed value to its target type.
+ *
+ * Order on string-typed flags with `choices` and/or `parse`:
+ *   raw token → choices validation → parse transform (if set) → result.
+ * For multi-value flags both steps run per element.
  */
 function coerceFlagValue(
 	name: string,
@@ -163,11 +308,18 @@ function coerceFlagValue(
 	parsedValue: string | boolean | (string | boolean)[],
 ): unknown {
 	const label = `--${name}`;
+	const choices = (def as { choices?: readonly string[] }).choices;
+	const parse = (def as { parse?: (raw: string) => unknown }).parse;
 
 	if (def.multiple && Array.isArray(parsedValue)) {
-		return def.type === "boolean"
-			? parsedValue.filter((v): v is boolean => typeof v === "boolean")
-			: (parsedValue as string[]).map((v) => coerceValue(v, def.type, label));
+		if (def.type === "boolean") {
+			return parsedValue.filter((v): v is boolean => typeof v === "boolean");
+		}
+		return (parsedValue as string[]).map((v, i) => {
+			if (choices) validateChoice(v, choices, label);
+			if (parse) return invokeParse(parse, v, label, i);
+			return coerceValue(v, def.type, label);
+		});
 	}
 
 	if (def.type === "boolean") {
@@ -183,16 +335,20 @@ function coerceFlagValue(
 	}
 
 	if (typeof parsedValue === "string") {
+		if (choices) validateChoice(parsedValue, choices, label);
+		if (parse) return invokeParse(parse, parsedValue, label);
 		return coerceValue(parsedValue, def.type, label);
 	}
 
-	// "boolean" true for a non-boolean flag shouldn't normally happen with
-	// strict parsing, but handle gracefully by falling back to the default.
-	if (parsedValue === true) {
-		return def.default ?? undefined;
-	}
-
-	return parsedValue;
+	// Unreachable: `util.parseArgs` is configured with `type: "string"` for
+	// every non-boolean flag (see buildParseArgsOptionDescriptor) and
+	// `strict: true`, so a non-boolean flag can never see a boolean or
+	// array `parsedValue` here. Fail loud rather than silently returning a
+	// default value, which would mask a parser-configuration bug.
+	throw new CrustError(
+		"PARSE",
+		`Internal: unexpected value shape for flag "${label}" (got ${typeof parsedValue})`,
+	);
 }
 
 /**
@@ -248,7 +404,10 @@ function resolveFlags(
 			continue;
 		}
 
-		resolved[name] = def.default ?? undefined;
+		resolved[name] = resolveDefault(
+			def as Parameters<typeof resolveDefault>[0],
+			`--${name}`,
+		);
 	}
 
 	return resolved;
@@ -290,22 +449,28 @@ function resolveArgs(
 
 	for (const def of argsDef) {
 		const { name } = def as ArgDef;
+		const label = `<${name}>`;
+		const choices = (def as { choices?: readonly string[] }).choices;
+		const parse = (def as { parse?: (raw: string) => unknown }).parse;
+
+		const coerceOne = (raw: string, i?: number) => {
+			if (choices) validateChoice(raw, choices, label);
+			if (parse) return invokeParse(parse, raw, label, i);
+			return def.type === undefined ? raw : coerceValue(raw, def.type, label);
+		};
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			resolved[name] =
-				def.type === undefined || def.type === "string"
-					? remaining
-					: remaining.map((v) => coerceValue(v, def.type, `<${name}>`));
+			resolved[name] = remaining.map((v, i) => coerceOne(v, i));
 			index = positionals.length;
 		} else if (index < positionals.length) {
-			resolved[name] =
-				def.type === undefined
-					? positionals[index]
-					: coerceValue(positionals[index] as string, def.type, `<${name}>`);
+			resolved[name] = coerceOne(positionals[index] as string);
 			index++;
 		} else {
-			resolved[name] = def.default ?? undefined;
+			resolved[name] = resolveDefault(
+				def as Parameters<typeof resolveDefault>[0],
+				label,
+			);
 		}
 	}
 
@@ -378,6 +543,10 @@ export function parseArgs<
 >(command: CommandNode, argv: string[]) {
 	const argsDef = command.args as ArgsDef | undefined;
 	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
+
+	// CONFIG-class validation: reject async parse fns up-front so the parser
+	// never sees a Promise where a value was expected.
+	validateAsyncParse(flagsDef, argsDef);
 
 	const { options: parseOptions, aliasToName } =
 		buildParseArgsOptionDescriptor(flagsDef);

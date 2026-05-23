@@ -135,11 +135,20 @@ export function validateIncomingAliases(
 
 /** Returns a synthetic token that satisfies `parseArgs` for the given type. */
 function sampleToken(def: ArgDef | FlagDef): string {
+	// When `choices` is declared, picking any value outside the list now
+	// throws at parse time (TP-012). Use the first declared choice so the
+	// synthetic argv always passes the choices gate.
+	const choices = (def as { choices?: readonly string[] }).choices;
+	if (choices !== undefined && choices.length > 0) return choices[0] as string;
 	switch (def.type) {
 		case "number":
 			return "1";
 		case "boolean":
 			return "true";
+		case "url":
+			return "https://example.com";
+		case "json":
+			return "null";
 		default:
 			return "sample";
 	}

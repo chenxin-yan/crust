@@ -34,19 +34,7 @@ Each argument is an `ArgDef` object with properties like `name`, `type`, `descri
 
 ## Types
 
-Crust supports three argument type literals:
-
-```ts
-.args([
-  { name: "port", type: "number" },    // Coerced to number
-  { name: "host", type: "string" },    // Kept as string
-  { name: "verbose", type: "boolean" }, // Coerced to boolean
-])
-```
-
-- **`"string"`** — The value is kept as-is
-- **`"number"`** — The value is coerced to a number. Throws a `PARSE` error if the value isn't a valid number
-- **`"boolean"`** — The value is coerced to a boolean (`"true"` / `"1"` -> `true`)
+Positional arguments accept the same six built-in `type` literals as flags: `string`, `number`, `boolean`, `url`, `path`, and `json`. See [Types](/docs/guide/types) for the full semantics, error modes, and the `parse` escape hatch for custom transformations.
 
 ## Required Arguments
 
@@ -136,7 +124,7 @@ const cmd = new Crust("deploy")
   });
 ```
 
-`choices` is currently a **hint for tooling** (consumed by shell-completion plugins) and is **not enforced at parse time** — passing a value outside `choices` does not throw. Validate in your handler if you need runtime rejection. `choices` is only available on string-typed args; using it on number or boolean args is a compile-time error. See the [API reference](/docs/api/types#argdef) for details.
+`choices` is **validated at parse time** — passing a value outside the list throws `CrustError("PARSE", …)` before any `parse` transform runs. Shell-completion plugins also consume `choices` to emit value candidates. `choices` is only available on string-typed args; using it on number or boolean args is a compile-time error. See the [API reference](/docs/api/types#argdef) for details.
 
 ## The `--` Separator
 

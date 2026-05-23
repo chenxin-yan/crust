@@ -5,6 +5,53 @@ import { join } from "node:path";
 import type { CompletionSpec } from "../spec.ts";
 import { renderBash } from "./bash.ts";
 
+// Single-quote a value for bash, escaping embedded single quotes.
+const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * Drive a generated bash completion function as bash itself would: source
+ * the script (registers `fnName`), set `COMP_WORDS`/`COMP_CWORD` for the
+ * cursor position, invoke `fnName`, then print `COMPREPLY` one per line.
+ * Returns the candidates sorted so equality checks are order-stable.
+ */
+async function runBashCompletion(
+	scriptPath: string,
+	fnName: string,
+	words: string[],
+): Promise<string[]> {
+	const compWordsLines = words
+		.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
+		.join("\n");
+	const compCword = words.length - 1;
+	const driver = `
+set -e
+source ${shQuote(scriptPath)}
+${compWordsLines}
+COMP_CWORD=${compCword}
+COMP_LINE=${shQuote(words.join(" "))}
+COMP_POINT=${words.join(" ").length}
+${fnName}
+for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
+`;
+	const proc = Bun.spawn(["bash", "-c", driver], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [out, err] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const code = await proc.exited;
+	if (code !== 0) {
+		throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
+	}
+	return out
+		.split("\n")
+		.map((l) => l.trim())
+		.filter((l) => l.length > 0)
+		.sort();
+}
+
 /**
  * Fixture spec used across snapshot + behavioural tests. Mirrors a small
  * but representative tree: a flat subcommand (`build`), a nested
@@ -142,54 +189,8 @@ describe("renderBash · behavioural subprocess tests", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	/**
-	 * Drive the completion function as bash itself would. We:
-	 *  - source the generated script (registers `_mycli`),
-	 *  - set COMP_WORDS/COMP_CWORD for the cursor position,
-	 *  - call `_mycli`,
-	 *  - print `COMPREPLY` separated by newlines.
-	 *
-	 * Returning the candidates as a sorted array gives stable equality
-	 * checks regardless of how bash orders them.
-	 */
-	async function runCompletion(words: string[]): Promise<string[]> {
-		const compWordsLines = words
-			.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
-			.join("\n");
-		const compCword = words.length - 1;
-		const driver = `
-set -e
-source ${shQuote(scriptPath)}
-${compWordsLines}
-COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
-_mycli
-for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
-`;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		if (code !== 0) {
-			throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
-		}
-		return out
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l.length > 0)
-			.sort();
-	}
-
-	function shQuote(value: string): string {
-		// Single-quote, escape any embedded single quotes.
-		return `'${value.replace(/'/g, `'\\''`)}'`;
-	}
+	const runCompletion = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mycli", words);
 
 	it("scenario 1 — top-level subcommand: `mycli <TAB>` lists build and deploy", async () => {
 		const completions = await runCompletion(["mycli", ""]);
@@ -315,40 +316,8 @@ describe("renderBash · multi-positional choices", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	async function runCompletion(words: string[]): Promise<string[]> {
-		const shQuote = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
-		const compWordsLines = words
-			.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
-			.join("\n");
-		const compCword = words.length - 1;
-		const driver = `
-set -e
-source ${shQuote(scriptPath)}
-${compWordsLines}
-COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
-_mp
-for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
-`;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		if (code !== 0) {
-			throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
-		}
-		return out
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => l.length > 0)
-			.sort();
-	}
+	const runCompletion = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mp", words);
 
 	it("slot 0 of `mp two` offers the first arg's choices", async () => {
 		const completions = await runCompletion(["mp", "two", ""]);
@@ -393,5 +362,106 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 		]);
 		expect(completions).toContain("gamma");
 		expect(completions).toContain("delta");
+	});
+});
+
+describe("renderBash — url/path/json value-flag handling (TP-012)", () => {
+	const valueTypeFixture: CompletionSpec = {
+		root: {
+			name: "mycli",
+			flags: [
+				{
+					name: "out",
+					type: "string",
+					takesValue: true,
+					valueCompletion: "files",
+				},
+				{
+					name: "endpoint",
+					type: "string",
+					takesValue: true,
+					valueCompletion: "none",
+				},
+				{
+					name: "config",
+					type: "string",
+					takesValue: true,
+					valueCompletion: "none",
+				},
+				// Plain string flag — must not regress to a typed branch.
+				{ name: "name", type: "string", takesValue: true },
+			],
+			args: [],
+			subCommands: [],
+		},
+	};
+
+	it("emits explicit file completion (compgen -f) for path flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain('"|--out")');
+		expect(script).toContain('compgen -f -- "$cur"');
+	});
+
+	it("emits compopt +o default suppression for url and json flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		expect(script).toContain('"|--endpoint")');
+		expect(script).toContain('"|--config")');
+		expect(script).toContain("compopt +o default 2>/dev/null");
+	});
+
+	it("does not emit a typed case branch for plain string flags", () => {
+		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
+		// The plain `--name` flag still routes through __prev_is_value_flag
+		// and the `complete -o default` fallback.
+		expect(script).not.toContain('"|--name")');
+	});
+
+	it("suppresses `complete -o default` for url/json positional slots; path positionals rely on the fallback", () => {
+		const posFixture: CompletionSpec = {
+			root: {
+				name: "mycli",
+				flags: [],
+				args: [
+					{
+						name: "src",
+						type: "string",
+						required: true,
+						variadic: false,
+						valueCompletion: "files",
+					},
+					{
+						name: "endpoint",
+						type: "string",
+						required: true,
+						variadic: false,
+						valueCompletion: "none",
+					},
+					{
+						name: "payload",
+						type: "string",
+						required: true,
+						variadic: false,
+						valueCompletion: "none",
+					},
+				],
+				subCommands: [],
+			},
+		};
+		const script = renderBash(posFixture, "mycli", "1.0.0");
+		// Suppression case is emitted for the two non-path slots (1, 2).
+		expect(script).toContain("compopt +o default 2>/dev/null");
+		// Slot 0 (path) is NOT in the suppression case — only 1 and 2 are.
+		const suppressBlock = script
+			.split("\n")
+			.slice(
+				script.split("\n").findIndex((l) => l.includes("compopt +o default")) -
+					4,
+			)
+			.slice(0, 12)
+			.join("\n");
+		expect(suppressBlock).toMatch(/\b1\)\s*\n\s*compopt \+o default/);
+		expect(suppressBlock).toMatch(/\b2\)\s*\n\s*compopt \+o default/);
+		// The path slot (0) is not in the suppress block.
+		expect(suppressBlock).not.toMatch(/\b0\)\s*\n\s*compopt \+o default/);
 	});
 });

@@ -64,6 +64,12 @@ function flagSpecs(flag: CompletionFlag): string[] {
 			// inside the `(…)` action list without further escaping.
 			const opts = flag.choices.join(" ");
 			valueSuffix = `:${valueLabel}:(${opts})`;
+		} else if (flag.valueCompletion === "files") {
+			// Explicit file completion for path flags.
+			valueSuffix = `:${valueLabel}:_files`;
+		} else if (flag.valueCompletion === "none") {
+			// Suppress file completion — url/json values are not paths.
+			valueSuffix = `:${valueLabel}: `;
 		} else if (flag.type === "string") {
 			valueSuffix = `:${valueLabel}:_files`;
 		} else {
@@ -154,10 +160,12 @@ function flagSpecs(flag: CompletionFlag): string[] {
  *
  * Uses the same `'<idx>:NAME:<action>'` shape across leaf and non-leaf
  * helpers. Variadic args expand the `<idx>` to `*` and run the action
- * for every remaining word. Choice-bearing args use `(a b c)`; free-form
- * string args fall through to `_files` so users get filesystem
- * completion. Number/boolean positional args (rare) use a noop action
- * so zsh doesn't try to file-complete them.
+ * for every remaining word. Branches mirror {@link flagSpecs}:
+ *   - choices                       → `(a b c)`
+ *   - valueCompletion === "files"   → `_files`
+ *   - valueCompletion === "none"    → ` ` (noop — url/json are not paths)
+ *   - free-form string              → `_files`
+ *   - number/bool                   → ` ` (noop — rare positional case)
  */
 function renderArgSpecs(node: CompletionCommand): string[] {
 	const specs: string[] = [];
@@ -168,7 +176,9 @@ function renderArgSpecs(node: CompletionCommand): string[] {
 		if (arg.choices !== undefined && arg.choices.length > 0) {
 			// Validated bare values — see comment in flagSpecs.
 			action = `(${arg.choices.join(" ")})`;
-		} else if (arg.type === "string") {
+		} else if (arg.valueCompletion === "none") {
+			action = " ";
+		} else if (arg.valueCompletion === "files" || arg.type === "string") {
 			action = "_files";
 		} else {
 			action = " ";

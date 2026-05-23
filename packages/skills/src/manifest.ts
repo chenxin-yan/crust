@@ -93,7 +93,7 @@ function normalizeArgs(argsDef: readonly ArgDef[] | undefined): ManifestArg[] {
 function normalizeArg(arg: ArgDef): ManifestArg {
 	const result: ManifestArg = {
 		name: arg.name,
-		type: arg.type ?? "string",
+		type: manifestType(arg.type),
 		required: arg.required === true,
 		variadic: arg.variadic === true,
 	};
@@ -135,7 +135,7 @@ function normalizeFlags(
 function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
 	const result: ManifestFlag = {
 		name,
-		type: flag.type ?? "string",
+		type: manifestType(flag.type),
 		required: flag.required === true,
 		multiple: flag.multiple === true,
 		short: flag.short,
@@ -170,6 +170,21 @@ function normalizeChildren(
 		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so value is guaranteed
 		return buildNode(subCommands[key]!, parentPath);
 	});
+}
+
+/**
+ * Map a `FlagDef`/`ArgDef` `type` literal onto the manifest's narrow
+ * `"string" | "number" | "boolean"` union.
+ *
+ * The TP-012 built-ins (`"url"`, `"path"`, `"json"`) all consume a string
+ * token on the command line, so they collapse to `"string"` at the
+ * manifest layer until we extend the manifest schema for them.
+ */
+function manifestType(
+	type: string | undefined,
+): "string" | "number" | "boolean" {
+	if (type === "number" || type === "boolean") return type;
+	return "string";
 }
 
 /**

@@ -21,6 +21,7 @@ export interface CrustErrorDetailsMap {
 	PARSE: undefined;
 	EXECUTION: undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
+	CONFIG: undefined;
 }
 
 /**
@@ -30,6 +31,8 @@ export interface CrustErrorDetailsMap {
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
  * - `EXECUTION` — Runtime command/middleware failures
+ * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
+ * - `CONFIG` — Unsupported command/flag definition surfaced at setup time (e.g. async `parse`)
  *
  * @example
  * ```ts

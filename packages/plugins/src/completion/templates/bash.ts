@@ -168,6 +168,43 @@ interface ChoiceCase {
 }
 
 /**
+ * One entry per value-flag that needs explicit value-completion handling.
+ *
+ * - `kind: "path"`     — emit `compgen -f` candidates for the value token.
+ * - `kind: "suppress"` — disable the `complete -o default` file fallback
+ *                       so url/json flags don't get filenames offered.
+ */
+interface ValueTypeCase {
+	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
+	key: string;
+	kind: "path" | "suppress";
+}
+
+/**
+ * Walk every flag at every depth and emit one {@link ValueTypeCase} per
+ * spelling for flags that declared `type: "path"` (file completion) or
+ * `type: "url" | "json"` (suppress file fallback).
+ */
+function collectValueTypeCases(
+	cmdPath: string,
+	node: CompletionCommand,
+	out: ValueTypeCase[],
+): void {
+	for (const flag of node.flags) {
+		if (flag.valueCompletion === undefined) continue;
+		const kind: ValueTypeCase["kind"] =
+			flag.valueCompletion === "files" ? "path" : "suppress";
+		for (const spelling of flagSpellings(flag)) {
+			out.push({ key: `${cmdPath}|${spelling}`, kind });
+		}
+	}
+	for (const sub of node.subCommands) {
+		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		collectValueTypeCases(subPath, sub, out);
+	}
+}
+
+/**
  * For every flag at every command depth that declares `choices`, emit a
  * `case` branch mapping `<path>|<flag-spelling>` → values. Each spelling
  * (long, short, alias) gets its own branch so the lookup is constant-time
@@ -218,6 +255,49 @@ interface ArgChoiceEntry {
 	variadicFrom?: number;
 	/** Bash-quoted, space-joined value list for the variadic tail. */
 	variadicValues?: string;
+}
+
+/**
+ * Per-command summary of positional-argument slots that must suppress
+ * the global `complete -o default` file fallback (url/json positionals
+ * are not filesystem paths). Mirrors {@link ArgChoiceEntry}'s shape so
+ * the renderer can iterate it the same way.
+ */
+interface ArgSuppressEntry {
+	cmdPath: string;
+	/** Fixed-slot suppression indices. */
+	slots: ReadonlyArray<number>;
+	/** Slot index from which variadic suppression applies, or `undefined`. */
+	variadicFrom?: number;
+}
+
+/**
+ * Collect per-command positional suppression entries. Each url/json
+ * positional contributes one slot index; a variadic url/json positional
+ * also sets `variadicFrom` so suppression extends past the declared slot.
+ */
+function collectArgSuppressCases(
+	cmdPath: string,
+	node: CompletionCommand,
+	out: ArgSuppressEntry[],
+): void {
+	const slots: number[] = [];
+	let variadicFrom: number | undefined;
+	node.args.forEach((arg: CompletionArg, idx: number) => {
+		if (arg.valueCompletion !== "none") return;
+		if (arg.variadic) {
+			variadicFrom = idx;
+		} else {
+			slots.push(idx);
+		}
+	});
+	if (slots.length > 0 || variadicFrom !== undefined) {
+		out.push({ cmdPath, slots, variadicFrom });
+	}
+	for (const sub of node.subCommands) {
+		const subPath = cmdPath === "" ? sub.name : `${cmdPath}:${sub.name}`;
+		collectArgSuppressCases(subPath, sub, out);
+	}
 }
 
 /**
@@ -313,8 +393,14 @@ export function renderBash(
 	const choiceCases: ChoiceCase[] = [];
 	collectChoiceCases("", spec.root, choiceCases);
 
+	const valueTypeCases: ValueTypeCase[] = [];
+	collectValueTypeCases("", spec.root, valueTypeCases);
+
 	const argChoiceEntries: ArgChoiceEntry[] = [];
 	collectArgChoiceCases("", spec.root, argChoiceEntries);
+
+	const argSuppressEntries: ArgSuppressEntry[] = [];
+	collectArgSuppressCases("", spec.root, argSuppressEntries);
 
 	const lines: string[] = [];
 
@@ -439,6 +525,25 @@ export function renderBash(
 		}
 		lines.push("\t\tesac");
 	}
+	// `--name=value` for typed value flags: emit explicit path candidates
+	// (path) or suppress the `complete -o default` file fallback (url/json).
+	if (valueTypeCases.length > 0) {
+		lines.push('\t\tcase "$cmd_path|$_flag" in');
+		for (const c of valueTypeCases) {
+			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			if (c.kind === "path") {
+				lines.push(
+					// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+					'\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )',
+				);
+			} else {
+				lines.push("\t\t\t\tcompopt +o default 2>/dev/null");
+			}
+			lines.push("\t\t\t\treturn");
+			lines.push("\t\t\t\t;;");
+		}
+		lines.push("\t\tesac");
+	}
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
 	lines.push("\tfi");
@@ -459,9 +564,28 @@ export function renderBash(
 		lines.push("");
 	}
 
+	// Typed value-flag context: previous token is a path/url/json flag.
+	// Path → emit explicit file candidates; url/json → suppress the
+	// `complete -o default` fallback so we don't offer filenames.
+	if (valueTypeCases.length > 0) {
+		lines.push('\tcase "$cmd_path|$prev" in');
+		for (const c of valueTypeCases) {
+			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
+			if (c.kind === "path") {
+				lines.push('\t\t\tCOMPREPLY=( $(compgen -f -- "$cur") )');
+			} else {
+				lines.push("\t\t\tcompopt +o default 2>/dev/null");
+			}
+			lines.push("\t\t\treturn");
+			lines.push("\t\t\t;;");
+		}
+		lines.push("\tesac");
+		lines.push("");
+	}
+
 	// Free-form value flag context: previous token is a known
-	// value-taking flag with no choices → fall through to file completion
-	// via `complete -o default` (we just return with no COMPREPLY set).
+	// value-taking flag with no choices and no typed override → fall
+	// through to file completion via `complete -o default`.
 	lines.push(`\tif __${ident}_prev_is_value_flag; then`);
 	lines.push("\t\treturn");
 	lines.push("\tfi");
@@ -471,7 +595,9 @@ export function renderBash(
 	lines.push('\tif [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
-	if (argChoiceEntries.length > 0) {
+	const needsPosWalk =
+		argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
+	if (needsPosWalk) {
 		// Count completed positional tokens between the resolved command
 		// path and the cursor. Token classes we *skip*:
 		//  - `--`                  (end-of-options terminator)
@@ -541,6 +667,33 @@ export function renderBash(
 			lines.push("\t\t\t\t;;");
 		}
 		lines.push("\t\tesac");
+
+		// url/json positional slots: disable the `complete -o default` file
+		// fallback so users aren't offered filenames for non-path values.
+		// Path positionals are *not* listed here.
+		if (argSuppressEntries.length > 0) {
+			lines.push('\t\tcase "$cmd_path" in');
+			for (const entry of argSuppressEntries) {
+				lines.push(`\t\t\t"${bashDoubleQuoteInner(entry.cmdPath)}")`);
+				lines.push('\t\t\t\tcase "$pos_idx" in');
+				for (const slot of entry.slots) {
+					lines.push(`\t\t\t\t\t${slot})`);
+					lines.push("\t\t\t\t\t\tcompopt +o default 2>/dev/null");
+					lines.push("\t\t\t\t\t\t;;");
+				}
+				if (entry.variadicFrom !== undefined) {
+					lines.push("\t\t\t\t\t*)");
+					lines.push(
+						`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then compopt +o default 2>/dev/null; fi`,
+					);
+					lines.push("\t\t\t\t\t\t;;");
+				}
+				lines.push("\t\t\t\tesac");
+				lines.push("\t\t\t\t;;");
+			}
+			lines.push("\t\tesac");
+		}
+
 		// At slot 0, blend positional choices with subcommand candidates so
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.

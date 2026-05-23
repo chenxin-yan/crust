@@ -40,6 +40,8 @@ export type {
 	InheritableFlags,
 	MergeFlags,
 	ParseResult,
+	Resolve,
+	ResolveBaseType,
 	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
