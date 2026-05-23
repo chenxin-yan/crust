@@ -73,8 +73,9 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 	}
 
 	// url/path/json all consume a string token at the shell-completion layer.
-	// We normalise them to `"string"` and surface the original kind via
-	// hint fields (isPath/isUrl/isJson) so templates can branch explicitly.
+	// We normalise them to `"string"` and surface the original kind via a
+	// single `valueCompletion` field so templates can branch on intent
+	// ("files" / "none") rather than the source type literal.
 	const sourceType = def.type;
 	const specType: "string" | "number" | "boolean" =
 		sourceType === "url" || sourceType === "path" || sourceType === "json"
@@ -87,9 +88,9 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 		takesValue: sourceType !== "boolean",
 	};
 
-	if (sourceType === "path") flag.isPath = true;
-	else if (sourceType === "url") flag.isUrl = true;
-	else if (sourceType === "json") flag.isJson = true;
+	if (sourceType === "path") flag.valueCompletion = "files";
+	else if (sourceType === "url" || sourceType === "json")
+		flag.valueCompletion = "none";
 
 	if (def.short !== undefined && def.short.length > 0) {
 		flag.short = def.short;
@@ -143,9 +144,9 @@ function walkArg(def: ArgDef): CompletionArg {
 		variadic: def.variadic === true,
 	};
 
-	if (sourceType === "path") arg.isPath = true;
-	else if (sourceType === "url") arg.isUrl = true;
-	else if (sourceType === "json") arg.isJson = true;
+	if (sourceType === "path") arg.valueCompletion = "files";
+	else if (sourceType === "url" || sourceType === "json")
+		arg.valueCompletion = "none";
 
 	const description = normaliseDescription(def.description);
 	if (description !== undefined) {

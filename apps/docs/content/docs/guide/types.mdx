@@ -93,7 +93,7 @@ new Crust("build")
 - The result is resolved against `process.cwd()` via `path.resolve`, so the value handed to your run handler is always absolute.
 - Path traversal (`../`) is allowed — the coercer does not sandbox.
 - Empty input throws `CrustError("PARSE", …)`.
-- Shell completion **does** offer file candidates for `path` flags and positional arguments. `path` flags are emitted explicitly per shell (bash `compgen -f`, zsh `_files`, fish `__fish_complete_path`); `path` positional arguments rely on each shell's default filename fallback (bash `complete -o default`, zsh `_files`, fish `__fish_complete_path`).
+- Shell completion **does** offer file candidates for `path` flags and positional arguments. zsh emits `_files` and fish emits `(__fish_complete_path)` explicitly for both flags and positional args; bash emits `compgen -f` for path flag values and lets the script's global `complete -o default` filename fallback handle path positionals.
 
 ## `"json"`
 

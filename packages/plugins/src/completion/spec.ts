@@ -74,15 +74,15 @@ export interface CompletionFlag {
 	 */
 	choices?: readonly string[];
 	/**
-	 * Source-type hints for value completion. The spec-level `type` is
-	 * normalised to `"string"` for `url`/`path`/`json` (their values are
-	 * string tokens), so templates branch on these flags instead:
-	 *  - `isPath`  → emit file-completion candidates.
-	 *  - `isUrl`/`isJson` → suppress the string fallback's file completion.
+	 * Derived value-completion intent for `url`/`path`/`json` flags.
+	 * The spec-level `type` is normalised to `"string"` for these three
+	 * (their values are string tokens), so templates branch on this field:
+	 *  - `"files"` (`type: "path"`)  → emit file-completion candidates.
+	 *  - `"none"`  (`type: "url" | "json"`) → suppress the string fallback's
+	 *    file completion.
+	 *  - omitted: generic string — use each shell's default fallback.
 	 */
-	isPath?: true;
-	isUrl?: true;
-	isJson?: true;
+	valueCompletion?: "files" | "none";
 }
 
 /** Description of a single positional argument attached to a command. */
@@ -106,10 +106,8 @@ export interface CompletionArg {
 	 * field on `StringArgDef`. Only string-typed args can carry choices.
 	 */
 	choices?: readonly string[];
-	/** Source-type hints — see {@link CompletionFlag.isPath}. */
-	isPath?: true;
-	isUrl?: true;
-	isJson?: true;
+	/** Derived value-completion intent — see {@link CompletionFlag.valueCompletion}. */
+	valueCompletion?: "files" | "none";
 }
 
 /** Description of a single command node — recursive via `subCommands`. */

@@ -64,10 +64,10 @@ function flagSpecs(flag: CompletionFlag): string[] {
 			// inside the `(…)` action list without further escaping.
 			const opts = flag.choices.join(" ");
 			valueSuffix = `:${valueLabel}:(${opts})`;
-		} else if (flag.isPath === true) {
+		} else if (flag.valueCompletion === "files") {
 			// Explicit file completion for path flags.
 			valueSuffix = `:${valueLabel}:_files`;
-		} else if (flag.isUrl === true || flag.isJson === true) {
+		} else if (flag.valueCompletion === "none") {
 			// Suppress file completion — url/json values are not paths.
 			valueSuffix = `:${valueLabel}: `;
 		} else if (flag.type === "string") {
@@ -161,11 +161,11 @@ function flagSpecs(flag: CompletionFlag): string[] {
  * Uses the same `'<idx>:NAME:<action>'` shape across leaf and non-leaf
  * helpers. Variadic args expand the `<idx>` to `*` and run the action
  * for every remaining word. Branches mirror {@link flagSpecs}:
- *   - choices       → `(a b c)`
- *   - isPath        → `_files`
- *   - isUrl/isJson  → ` ` (noop — url/json values are not paths)
- *   - free-form str → `_files`
- *   - number/bool   → ` ` (noop — rare positional case)
+ *   - choices                       → `(a b c)`
+ *   - valueCompletion === "files"   → `_files`
+ *   - valueCompletion === "none"    → ` ` (noop — url/json are not paths)
+ *   - free-form string              → `_files`
+ *   - number/bool                   → ` ` (noop — rare positional case)
  */
 function renderArgSpecs(node: CompletionCommand): string[] {
 	const specs: string[] = [];
@@ -176,9 +176,9 @@ function renderArgSpecs(node: CompletionCommand): string[] {
 		if (arg.choices !== undefined && arg.choices.length > 0) {
 			// Validated bare values — see comment in flagSpecs.
 			action = `(${arg.choices.join(" ")})`;
-		} else if (arg.isUrl === true || arg.isJson === true) {
+		} else if (arg.valueCompletion === "none") {
 			action = " ";
-		} else if (arg.isPath === true || arg.type === "string") {
+		} else if (arg.valueCompletion === "files" || arg.type === "string") {
 			action = "_files";
 		} else {
 			action = " ";

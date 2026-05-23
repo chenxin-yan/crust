@@ -191,10 +191,9 @@ function collectValueTypeCases(
 	out: ValueTypeCase[],
 ): void {
 	for (const flag of node.flags) {
-		let kind: ValueTypeCase["kind"] | undefined;
-		if (flag.isPath === true) kind = "path";
-		else if (flag.isUrl === true || flag.isJson === true) kind = "suppress";
-		if (kind === undefined) continue;
+		if (flag.valueCompletion === undefined) continue;
+		const kind: ValueTypeCase["kind"] =
+			flag.valueCompletion === "files" ? "path" : "suppress";
 		for (const spelling of flagSpellings(flag)) {
 			out.push({ key: `${cmdPath}|${spelling}`, kind });
 		}
@@ -285,8 +284,7 @@ function collectArgSuppressCases(
 	const slots: number[] = [];
 	let variadicFrom: number | undefined;
 	node.args.forEach((arg: CompletionArg, idx: number) => {
-		const suppress = arg.isUrl === true || arg.isJson === true;
-		if (!suppress) return;
+		if (arg.valueCompletion !== "none") return;
 		if (arg.variadic) {
 			variadicFrom = idx;
 		} else {

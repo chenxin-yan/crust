@@ -340,13 +340,15 @@ function coerceFlagValue(
 		return coerceValue(parsedValue, def.type, label);
 	}
 
-	// "boolean" true for a non-boolean flag shouldn't normally happen with
-	// strict parsing, but handle gracefully by falling back to the default.
-	if (parsedValue === true) {
-		return def.default ?? undefined;
-	}
-
-	return parsedValue;
+	// Unreachable: `util.parseArgs` is configured with `type: "string"` for
+	// every non-boolean flag (see buildParseArgsOptionDescriptor) and
+	// `strict: true`, so a non-boolean flag can never see a boolean or
+	// array `parsedValue` here. Fail loud rather than silently returning a
+	// default value, which would mask a parser-configuration bug.
+	throw new CrustError(
+		"PARSE",
+		`Internal: unexpected value shape for flag "${label}" (got ${typeof parsedValue})`,
+	);
 }
 
 /**

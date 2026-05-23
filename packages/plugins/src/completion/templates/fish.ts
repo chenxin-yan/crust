@@ -214,17 +214,18 @@ function emitRules(
 		if (flag.short !== undefined) baseRule.short = flag.short;
 
 		// Emit a single value-taking rule for `flag`. Branches:
-		//   - choices       → one rule per literal candidate (via emitChoiceFlag)
-		//   - isPath        → require parameter + `(__fish_complete_path)`
-		//   - isUrl/isJson  → require parameter only; the script's leading
-		//                     `complete -c <bin> -f` keeps file completion off
-		//   - free-form     → require parameter (current behaviour)
+		//   - choices                       → one rule per literal candidate
+		//   - valueCompletion === "files"   → require parameter + `(__fish_complete_path)`
+		//   - valueCompletion === "none"    → require parameter only; the script's
+		//                                     leading `complete -c <bin> -f` keeps
+		//                                     file completion off
+		//   - free-form                     → require parameter (current behaviour)
 		const emitValueRule = (rule: RuleParts) => {
 			if (flag.choices !== undefined && flag.choices.length > 0) {
 				emitChoiceFlag(rule, flag.choices);
 				return;
 			}
-			if (flag.isPath === true) {
+			if (flag.valueCompletion === "files") {
 				out.push(
 					renderRule(binName, {
 						...rule,
@@ -310,7 +311,7 @@ function emitRules(
 			}
 			return;
 		}
-		if (arg.isPath === true) {
+		if (arg.valueCompletion === "files") {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			out.push(
 				renderRule(binName, {
