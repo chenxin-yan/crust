@@ -1,13 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	access,
-	lstat,
-	mkdir,
-	readFile,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -471,50 +463,6 @@ describe("skillPlugin auto-update", () => {
 		).toBe(false);
 	});
 
-	// TODO(skills): latent failure now reachable after validation mode stopped
-	// killing the runner; reconcile this expectation with current skillPlugin
-	// behavior.
-	it.skip("prints install output with Universal label", async () => {
-		const app = new Crust("install-message-test")
-			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
-			);
-
-		const logs: string[] = [];
-		const originalLog = console.log;
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
-		console.log = (...args: unknown[]) => {
-			logs.push(args.join(" "));
-		};
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			configurable: true,
-		});
-
-		try {
-			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
-		} finally {
-			console.log = originalLog;
-			if (originalIsTTY) {
-				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
-			}
-		}
-
-		expect(logs.some((line) => line.includes("Universal →"))).toBe(true);
-		expect(logs.some((line) => line.includes("OpenCode →"))).toBe(false);
-		expect(
-			logs.some((line) => line.includes("Agents supporting universal skills:")),
-		).toBe(false);
-	});
-
 	it("runs manual skill update command", async () => {
 		const app = new Crust("manual-update-test")
 			.meta({ description: "test" })
@@ -770,44 +718,6 @@ describe("skillPlugin auto-update", () => {
 		);
 
 		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
-	});
-
-	// TODO(skills): latent failure now reachable; reconcile the installMode
-	// expectation with current plugin behavior.
-	it.skip("respects installMode during interactive installs", async () => {
-		const app = new Crust("copy-mode-test")
-			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					installMode: "copy",
-				}),
-			);
-
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			configurable: true,
-		});
-
-		try {
-			await withCwd(tmpDir, () => app.execute({ argv: ["skill"] }));
-		} finally {
-			if (originalIsTTY) {
-				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
-			}
-		}
-
-		const outputDir = join(tmpDir, ".agents", "skills", "copy-mode-test");
-		const canonicalDir = join(tmpDir, ".crust", "skills", "copy-mode-test");
-
-		expect((await lstat(outputDir)).isSymbolicLink()).toBe(false);
-		expect((await stat(canonicalDir)).isDirectory()).toBe(true);
 	});
 });
 

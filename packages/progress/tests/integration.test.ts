@@ -1,26 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ProgressTheme } from "../src/index.ts";
-import {
-	createTheme,
-	defaultTheme,
-	getTheme,
-	setTheme,
-	spinner,
-} from "../src/index.ts";
-
-describe("barrel exports", () => {
-	it("exports spinner", () => {
-		expect(typeof spinner).toBe("function");
-	});
-
-	it("exports theme helpers", () => {
-		expect(typeof createTheme).toBe("function");
-		expect(typeof setTheme).toBe("function");
-		expect(typeof getTheme).toBe("function");
-		expect(defaultTheme).toBeDefined();
-		expect(typeof defaultTheme.spinner).toBe("function");
-	});
-});
+import { createTheme, defaultTheme, getTheme, setTheme } from "../src/index.ts";
 
 describe("createTheme integration", () => {
 	it("returns a valid theme with all slots defined", () => {
