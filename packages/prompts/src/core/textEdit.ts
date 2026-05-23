@@ -53,7 +53,6 @@ export function handleTextEdit(
 	text: string,
 	cursorPos: number,
 ): TextEditResult {
-	// Backspace — delete character before cursor
 	if (key.name === "backspace") {
 		if (cursorPos === 0) return { text, cursorPos };
 		const before = text.slice(0, cursorPos - 1);
@@ -61,7 +60,6 @@ export function handleTextEdit(
 		return { text: before + after, cursorPos: cursorPos - 1 };
 	}
 
-	// Delete — delete character at cursor
 	if (key.name === "delete") {
 		if (cursorPos >= text.length) return { text, cursorPos };
 		const before = text.slice(0, cursorPos);
@@ -69,24 +67,20 @@ export function handleTextEdit(
 		return { text: before + after, cursorPos };
 	}
 
-	// Left arrow — move cursor left
 	if (key.name === "left") {
 		if (cursorPos === 0) return { text, cursorPos };
 		return { text, cursorPos: cursorPos - 1 };
 	}
 
-	// Right arrow — move cursor right
 	if (key.name === "right") {
 		if (cursorPos >= text.length) return { text, cursorPos };
 		return { text, cursorPos: cursorPos + 1 };
 	}
 
-	// Home — jump to start
 	if (key.name === "home") {
 		return { text, cursorPos: 0 };
 	}
 
-	// End — jump to end
 	if (key.name === "end") {
 		return { text, cursorPos: text.length };
 	}
