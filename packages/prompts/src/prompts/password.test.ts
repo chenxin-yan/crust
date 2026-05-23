@@ -507,7 +507,7 @@ describe("password — non-TTY", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Standard Schema validation (TP-013)
+// Standard Schema validation
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — schema validation", () => {

@@ -1196,7 +1196,7 @@ describe("FieldDef.validate contract", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Schema-driven transform persistence + read-stability guard (TP-018)
+// Schema-driven transform persistence + read-stability guard
 // ─────────────────────────────────────────────────────────────────────────
 //
 // Closes the command/store asymmetry: schema transforms (e.g.

@@ -176,7 +176,7 @@ function normalizeChildren(
  * Map a `FlagDef`/`ArgDef` `type` literal onto the manifest's narrow
  * `"string" | "number" | "boolean"` union.
  *
- * The TP-012 built-ins (`"url"`, `"path"`, `"json"`) all consume a string
+ * The string-tokenised built-ins (`"url"`, `"path"`, `"json"`) all consume a string
  * token on the command line, so they collapse to `"string"` at the
  * manifest layer until we extend the manifest schema for them.
  */

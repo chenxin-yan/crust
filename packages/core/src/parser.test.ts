@@ -1335,7 +1335,7 @@ describe("parseArgs — raw schema-backed args", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// url / path / json built-in types (TP-012)
+// url / path / json built-in types
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — url/path/json types", () => {
@@ -1386,7 +1386,7 @@ describe("parseArgs — url/path/json types", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// parse escape hatch (TP-012)
+// parse escape hatch
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
@@ -1496,7 +1496,7 @@ describe("parseArgs — parse escape hatch", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// choices enforcement (TP-012) — previously hint-only
+// choices enforcement — previously hint-only
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — choices enforcement", () => {

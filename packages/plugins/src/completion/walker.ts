@@ -115,7 +115,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 		flag.noNegate = true;
 	}
 
-	// `choices` lives only on string-typed flags (TP-009 — see `types.ts`).
+	// `choices` lives only on string-typed flags (see `types.ts`).
 	// We accept the field via discriminated narrowing rather than an `as`
 	// cast to keep the reader honest about which branches actually carry it.
 	if (def.type === "string") {
@@ -153,7 +153,7 @@ function walkArg(def: ArgDef): CompletionArg {
 		arg.description = description;
 	}
 
-	// `choices` is only present on string-typed args (TP-009).
+	// `choices` is only present on string-typed args.
 	if (def.type === "string") {
 		const choices = def.choices;
 		if (choices !== undefined && choices.length > 0) {
@@ -194,7 +194,7 @@ function walkCommand(node: CommandNode): CompletionCommand {
 	for (const subNode of Object.values(node.subCommands)) {
 		// Mirror the help renderer's contract: skip listing-hidden nodes.
 		// Routing in `packages/core/src/router.ts` still resolves them by
-		// direct name (TP-009) — they are only invisible to enumeration.
+		// direct name — they are only invisible to enumeration.
 		if (subNode.meta.hidden === true) continue;
 		subCommands.push(walkCommand(subNode));
 	}

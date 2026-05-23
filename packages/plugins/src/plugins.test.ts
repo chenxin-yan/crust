@@ -469,7 +469,7 @@ describe("built-in plugins", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────
-	// helpPlugin alias rendering (TP-016)
+	// helpPlugin alias rendering
 	// ──────────────────────────────────────────────────────────────────────────────
 
 	it("renderHelp renders aliases inline next to the canonical command name", () => {
@@ -527,7 +527,7 @@ describe("built-in plugins", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
-	// helpPlugin hidden subcommand filtering (TP-009)
+	// helpPlugin hidden subcommand filtering
 	// ──────────────────────────────────────────────────────────────────────
 
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
@@ -622,7 +622,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("renderHelp surfaces flag `choices` as a `[choices: ...]` suffix", () => {
-		// The choices list is declared on the flag definition (TP-009);
+		// The choices list is declared on the flag definition;
 		// `helpPlugin` must surface it so users can discover the valid
 		// values from `--help` without resorting to shell completion or
 		// reading the source.

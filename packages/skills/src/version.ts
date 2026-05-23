@@ -82,7 +82,7 @@ export type InstalledManifestStatus =
  * including the typo / forward-compatible `kind` case where the previous
  * collapse would have produced a misleading "no crust.json found" error.
  *
- * Legacy `crust.json` files (written before TP-003) lack the `kind` field;
+ * Legacy `crust.json` files (written before the `kind` field was added) lack it;
  * those are normalized to `"generated"` and reported as `status: "ok"`.
  */
 export async function inspectInstalledManifest(
@@ -115,8 +115,8 @@ export async function inspectInstalledManifest(
 	const rawKind = record.kind;
 
 	if (rawKind === undefined) {
-		// Backward-compat: legacy crust.json files written before TP-003 lack
-		// the `kind` field; treat them as generated.
+		// Backward-compat: legacy crust.json files written before the `kind`
+		// field was added; treat them as generated.
 		return { status: "ok", manifest: { version, kind: "generated" } };
 	}
 	if (rawKind === "bundle" || rawKind === "generated") {
@@ -137,7 +137,7 @@ export async function inspectInstalledManifest(
  * Reads the installed manifest from a skill directory's `crust.json`.
  *
  * Returns the version string and the bundle kind. If `crust.json` exists but
- * has no `kind` field (legacy installs written before TP-003), the kind is
+ * has no `kind` field (legacy installs from before the `kind` field), the kind is
  * defaulted to `"generated"` for backward compatibility.
  *
  * If `kind` is **present** but holds an unrecognized value (e.g. a hand-edit

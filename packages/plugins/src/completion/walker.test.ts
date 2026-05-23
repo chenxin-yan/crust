@@ -121,7 +121,7 @@ describe("walkCommandNode", () => {
 		]);
 	});
 
-	it("captures choices on string flags and string args (TP-009)", () => {
+	it("captures choices on string flags and string args", () => {
 		const root = makeNode({
 			name: "mycli",
 			localFlags: {
@@ -197,7 +197,7 @@ describe("walkCommandNode", () => {
 		expect(subNames).toEqual(["build"]);
 	});
 
-	it("preserves command aliases (TP-016)", () => {
+	it("preserves command aliases", () => {
 		const child = makeNode({
 			name: "issue",
 			meta: { name: "issue", aliases: ["issues", "i"] },
@@ -278,7 +278,7 @@ describe("walkCommandNode", () => {
 	});
 });
 
-describe("walkCommandNode — url/path/json valueCompletion (TP-012)", () => {
+describe("walkCommandNode — url/path/json valueCompletion", () => {
 	it("normalises url/path/json flag types to 'string' with valueCompletion intent", () => {
 		const root = makeNode({
 			name: "mycli",

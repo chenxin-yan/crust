@@ -719,7 +719,7 @@ describe("resolveCommand — CommandNode tree", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// resolveCommand — alias resolution (TP-016)
+// resolveCommand — alias resolution
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("resolveCommand — aliases", () => {

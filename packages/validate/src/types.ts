@@ -5,8 +5,8 @@ import type { CommandNode } from "@crustjs/core";
 // ────────────────────────────────────────────────────────────────────────────
 //
 // `StandardSchema`, `InferInput`, `InferOutput`, and `ValidationIssue` are
-// owned by `@crustjs/utils/schema` (TP-017). Re-exported here so the locked
-// TP-014 root export surface of `@crustjs/validate` continues to publish them
+// owned by `@crustjs/utils/schema`. Re-exported here so the locked
+// root export surface of `@crustjs/validate` continues to publish them
 // from a single import path.
 export type {
 	InferInput,

@@ -641,7 +641,7 @@ describe("input — non-TTY", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Standard Schema validation (TP-013)
+// Standard Schema validation
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — schema validation", () => {

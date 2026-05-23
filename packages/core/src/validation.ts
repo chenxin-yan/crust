@@ -4,7 +4,8 @@ import { parseArgs, validateParsed } from "./parser.ts";
 import type { ArgDef, FlagDef } from "./types.ts";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Alias collision policy (TP-016)
+// Alias collision policy: aliases share a namespace with canonical names,
+// so a value collides with any sibling's canonical name or alias.
 //
 // Both registration time (`crust.ts`) and tree-walk validation
 // (`validateCommandTree`) reuse these helpers so the policy lives in one
@@ -136,7 +137,7 @@ export function validateIncomingAliases(
 /** Returns a synthetic token that satisfies `parseArgs` for the given type. */
 function sampleToken(def: ArgDef | FlagDef): string {
 	// When `choices` is declared, picking any value outside the list now
-	// throws at parse time (TP-012). Use the first declared choice so the
+	// throws at parse time. Use the first declared choice so the
 	// synthetic argv always passes the choices gate.
 	const choices = (def as { choices?: readonly string[] }).choices;
 	if (choices !== undefined && choices.length > 0) return choices[0] as string;

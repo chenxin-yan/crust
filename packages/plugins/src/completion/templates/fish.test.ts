@@ -323,7 +323,7 @@ function shQuoteForFish(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-describe("renderFish — url/path/json value-flag handling (TP-012)", () => {
+describe("renderFish — url/path/json value-flag handling", () => {
 	const valueTypeFixture: CompletionSpec = {
 		root: {
 			name: "mycli",
