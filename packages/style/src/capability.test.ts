@@ -317,76 +317,52 @@ describe("createStyle — never mode", () => {
 		expect(s.enabled).toBe(false);
 	});
 
-	it("bold returns plain text", () => {
-		expect(s.bold("text")).toBe("text");
-	});
+	it("all named style methods return plain text", () => {
+		const methodNames = [
+			"bold",
+			"dim",
+			"italic",
+			"underline",
+			"inverse",
+			"hidden",
+			"strikethrough",
+			"black",
+			"red",
+			"green",
+			"yellow",
+			"blue",
+			"magenta",
+			"cyan",
+			"white",
+			"gray",
+			"brightRed",
+			"brightGreen",
+			"brightYellow",
+			"brightBlue",
+			"brightMagenta",
+			"brightCyan",
+			"brightWhite",
+			"bgBlack",
+			"bgRed",
+			"bgGreen",
+			"bgYellow",
+			"bgBlue",
+			"bgMagenta",
+			"bgCyan",
+			"bgWhite",
+			"bgBrightBlack",
+			"bgBrightRed",
+			"bgBrightGreen",
+			"bgBrightYellow",
+			"bgBrightBlue",
+			"bgBrightMagenta",
+			"bgBrightCyan",
+			"bgBrightWhite",
+		] as const;
 
-	it("dim returns plain text", () => {
-		expect(s.dim("text")).toBe("text");
-	});
-
-	it("italic returns plain text", () => {
-		expect(s.italic("text")).toBe("text");
-	});
-
-	it("underline returns plain text", () => {
-		expect(s.underline("text")).toBe("text");
-	});
-
-	it("inverse returns plain text", () => {
-		expect(s.inverse("text")).toBe("text");
-	});
-
-	it("hidden returns plain text", () => {
-		expect(s.hidden("text")).toBe("text");
-	});
-
-	it("strikethrough returns plain text", () => {
-		expect(s.strikethrough("text")).toBe("text");
-	});
-
-	it("foreground colors return plain text", () => {
-		expect(s.black("text")).toBe("text");
-		expect(s.red("text")).toBe("text");
-		expect(s.green("text")).toBe("text");
-		expect(s.yellow("text")).toBe("text");
-		expect(s.blue("text")).toBe("text");
-		expect(s.magenta("text")).toBe("text");
-		expect(s.cyan("text")).toBe("text");
-		expect(s.white("text")).toBe("text");
-		expect(s.gray("text")).toBe("text");
-	});
-
-	it("bright foreground colors return plain text", () => {
-		expect(s.brightRed("text")).toBe("text");
-		expect(s.brightGreen("text")).toBe("text");
-		expect(s.brightYellow("text")).toBe("text");
-		expect(s.brightBlue("text")).toBe("text");
-		expect(s.brightMagenta("text")).toBe("text");
-		expect(s.brightCyan("text")).toBe("text");
-		expect(s.brightWhite("text")).toBe("text");
-	});
-
-	it("background colors return plain text", () => {
-		expect(s.bgBlack("text")).toBe("text");
-		expect(s.bgRed("text")).toBe("text");
-		expect(s.bgGreen("text")).toBe("text");
-		expect(s.bgYellow("text")).toBe("text");
-		expect(s.bgBlue("text")).toBe("text");
-		expect(s.bgMagenta("text")).toBe("text");
-		expect(s.bgCyan("text")).toBe("text");
-		expect(s.bgWhite("text")).toBe("text");
-	});
-
-	it("bright background colors return plain text", () => {
-		expect(s.bgBrightBlack("text")).toBe("text");
-		expect(s.bgBrightRed("text")).toBe("text");
-		expect(s.bgBrightGreen("text")).toBe("text");
-		expect(s.bgBrightYellow("text")).toBe("text");
-		expect(s.bgBrightBlue("text")).toBe("text");
-		expect(s.bgBrightMagenta("text")).toBe("text");
-		expect(s.bgBrightCyan("text")).toBe("text");
-		expect(s.bgBrightWhite("text")).toBe("text");
+		for (const methodName of methodNames) {
+			expect(s[methodName]("text")).toBe("text");
+		}
 	});
 
 	it("apply() returns plain text for any pair", () => {

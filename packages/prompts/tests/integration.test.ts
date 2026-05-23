@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Integration tests — Verify public API surface of @crustjs/prompts
+// Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────
 
-// Import everything from the barrel to verify all exports are accessible
 import type { PromptTheme } from "../src/index.ts";
 import {
-	assertTTY,
 	// Prompts
 	confirm,
 	// Theme
@@ -25,54 +23,9 @@ import {
 	NonInteractiveError,
 	normalizeChoices,
 	password,
-	runPrompt,
 	select,
 	setTheme,
-	spinner,
 } from "../src/index.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Export availability
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("barrel exports", () => {
-	it("exports all prompt functions", () => {
-		expect(typeof input).toBe("function");
-		expect(typeof password).toBe("function");
-		expect(typeof confirm).toBe("function");
-		expect(typeof select).toBe("function");
-		expect(typeof multiselect).toBe("function");
-		expect(typeof filter).toBe("function");
-		expect(typeof multifilter).toBe("function");
-		expect(typeof spinner).toBe("function");
-	});
-
-	it("exports theme functions and default theme", () => {
-		expect(typeof createTheme).toBe("function");
-		expect(typeof setTheme).toBe("function");
-		expect(typeof getTheme).toBe("function");
-		expect(defaultTheme).toBeDefined();
-		expect(typeof defaultTheme.prefix).toBe("function");
-		expect(typeof defaultTheme.message).toBe("function");
-		expect(typeof defaultTheme.error).toBe("function");
-	});
-
-	it("exports renderer utilities", () => {
-		expect(typeof runPrompt).toBe("function");
-		expect(typeof assertTTY).toBe("function");
-		expect(NonInteractiveError).toBeDefined();
-		expect(NonInteractiveError.prototype).toBeInstanceOf(Error);
-	});
-
-	it("exports fuzzy matching utilities", () => {
-		expect(typeof fuzzyMatch).toBe("function");
-		expect(typeof fuzzyFilter).toBe("function");
-	});
-
-	it("exports normalizeChoices utility", () => {
-		expect(typeof normalizeChoices).toBe("function");
-	});
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme integration

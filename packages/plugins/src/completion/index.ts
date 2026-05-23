@@ -148,9 +148,8 @@ export function completionPlugin(
 				.run(async (ctx) => {
 					const requestedShell = ctx.args.shell as CompletionShell;
 					if (!SUPPORTED_SHELLS.includes(requestedShell)) {
-						// `choices` is advisory at parse time, not enforced.
-						// Validate explicitly so users get a clear
-						// error instead of an unrelated stack trace.
+						// Parser-side `choices` validation normally rejects this path;
+						// keep the guard for direct handler invocation in tests/tools.
 						console.error(
 							`Unsupported shell "${requestedShell}". Supported: ${SUPPORTED_SHELLS.join(", ")}`,
 						);
