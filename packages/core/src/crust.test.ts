@@ -70,6 +70,98 @@ describe("Crust constructor", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Builder methods — immutability + non-mutation invariants
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Crust builder methods — immutability + non-mutation", () => {
+	type BuilderCase = readonly [
+		name: string,
+		apply: (a: Crust) => Crust,
+		assertOriginal: (a: Crust) => void,
+	];
+
+	const builderCases: readonly BuilderCase[] = [
+		[
+			".flags()",
+			(a) => a.flags({ verbose: { type: "boolean" } }) as Crust,
+			(a) => {
+				expect(a._node.localFlags).toEqual({});
+				expect(a._node.effectiveFlags).toEqual({});
+			},
+		],
+		[
+			".args()",
+			(a) => a.args([{ name: "file", type: "string" }]) as Crust,
+			(a) => {
+				expect(a._node.args).toBeUndefined();
+			},
+		],
+		[
+			".meta()",
+			(a) => a.meta({ description: "desc" }) as Crust,
+			(a) => {
+				expect(a._node.meta.description).toBeUndefined();
+			},
+		],
+		[
+			".command(name, cb)",
+			(a) => a.command("sub", (cmd) => cmd) as Crust,
+			(a) => {
+				expect(a._node.subCommands).toEqual({});
+			},
+		],
+		[
+			".run()",
+			(a) => a.run(() => {}) as Crust,
+			(a) => {
+				expect(a._node.run).toBeUndefined();
+			},
+		],
+		[
+			".preRun()",
+			(a) => a.preRun(() => {}) as Crust,
+			(a) => {
+				expect(a._node.preRun).toBeUndefined();
+			},
+		],
+		[
+			".postRun()",
+			(a) => a.postRun(() => {}) as Crust,
+			(a) => {
+				expect(a._node.postRun).toBeUndefined();
+			},
+		],
+		[
+			".use()",
+			(a) => a.use({ name: "test-plugin" } as CrustPlugin) as Crust,
+			(a) => {
+				expect(a._node.plugins.length).toBe(0);
+			},
+		],
+		[
+			".command(builder)",
+			(a) => a.command(new Crust("deploy")) as Crust,
+			(a) => {
+				expect(a._node.subCommands).toEqual({});
+			},
+		],
+	];
+
+	it.each(builderCases)("%s returns a new instance", (_name, apply) => {
+		const app = new Crust("test");
+		expect(apply(app)).not.toBe(app);
+	});
+
+	it.each(
+		builderCases,
+	)("%s does not mutate the original builder", (_name, apply, assertOriginal) => {
+		const app = new Crust("test");
+		apply(app);
+		assertOriginal(app);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // .flags()
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -89,26 +181,6 @@ describe("Crust .flags()", () => {
 			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
 		});
-	});
-
-	it("returns a different instance (immutability)", () => {
-		const app = new Crust("test");
-		const withFlags = app.flags({
-			verbose: { type: "boolean" },
-		});
-
-		expect(withFlags).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.flags({
-			verbose: { type: "boolean" },
-		});
-
-		// Original should still have empty flags
-		expect(app._node.localFlags).toEqual({});
-		expect(app._node.effectiveFlags).toEqual({});
 	});
 
 	it("deep copies flag definitions (decoupled from caller)", () => {
@@ -203,20 +275,6 @@ describe("Crust .args()", () => {
 		expect(withArgs._node.args?.[1]?.default).toBe(1);
 	});
 
-	it("returns a different instance (immutability)", () => {
-		const app = new Crust("test");
-		const withArgs = app.args([{ name: "file", type: "string" }]);
-
-		expect(withArgs).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.args([{ name: "file", type: "string" }]);
-
-		expect(app._node.args).toBeUndefined();
-	});
-
 	it("deep copies arg definitions (decoupled from caller)", () => {
 		const argDefs = [
 			{ name: "file" as const, type: "string" as const, description: "orig" },
@@ -302,20 +360,6 @@ describe("Crust .meta()", () => {
 	it("preserves the command name", () => {
 		const app = new Crust("my-cli").meta({ description: "desc" });
 		expect(app._node.meta.name).toBe("my-cli");
-	});
-
-	it("returns a new instance (immutability)", () => {
-		const app = new Crust("test");
-		const withMeta = app.meta({ description: "desc" });
-
-		expect(withMeta).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.meta({ description: "desc" });
-
-		expect(app._node.meta.description).toBeUndefined();
 	});
 
 	it("preserves flags and args from original builder", () => {
@@ -612,20 +656,6 @@ describe("Crust .command()", () => {
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toContain("already registered");
 		}
-	});
-
-	it("returns a new Crust instance (immutability)", () => {
-		const app = new Crust("cli");
-		const withSub = app.command("sub", (cmd) => cmd);
-
-		expect(withSub).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("cli");
-		app.command("sub", (cmd) => cmd);
-
-		expect(app._node.subCommands).toEqual({});
 	});
 
 	it("callback receives a fresh builder (not the parent)", () => {
@@ -937,20 +967,6 @@ describe("Crust .run()", () => {
 		expect(typeof app._node.run).toBe("function");
 	});
 
-	it("returns a new instance (immutability)", () => {
-		const app = new Crust("test");
-		const withRun = app.run(() => {});
-
-		expect(withRun).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.run(() => {});
-
-		expect(app._node.run).toBeUndefined();
-	});
-
 	it("handler is callable with correct context shape", () => {
 		let receivedCtx: CrustCommandContext | undefined;
 
@@ -1014,34 +1030,6 @@ describe("Crust .preRun() / .postRun()", () => {
 
 		expect(app._node.postRun).toBeDefined();
 		expect(typeof app._node.postRun).toBe("function");
-	});
-
-	it(".preRun() returns a new instance (immutability)", () => {
-		const app = new Crust("test");
-		const withPreRun = app.preRun(() => {});
-
-		expect(withPreRun).not.toBe(app);
-	});
-
-	it(".postRun() returns a new instance (immutability)", () => {
-		const app = new Crust("test");
-		const withPostRun = app.postRun(() => {});
-
-		expect(withPostRun).not.toBe(app);
-	});
-
-	it(".preRun() does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.preRun(() => {});
-
-		expect(app._node.preRun).toBeUndefined();
-	});
-
-	it(".postRun() does not mutate original builder", () => {
-		const app = new Crust("test");
-		app.postRun(() => {});
-
-		expect(app._node.postRun).toBeUndefined();
 	});
 
 	it("all three lifecycle hooks can be chained", () => {
@@ -1294,22 +1282,6 @@ describe("Crust .use()", () => {
 
 		expect(app._node.plugins.length).toBe(1);
 		expect(app._node.plugins[0]).toBe(plugin);
-	});
-
-	it("returns a new instance (immutability)", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-		const app = new Crust("test");
-		const withPlugin = app.use(plugin);
-
-		expect(withPlugin).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-		const app = new Crust("test");
-		app.use(plugin);
-
-		expect(app._node.plugins.length).toBe(0);
 	});
 
 	it("multiple .use() calls chain correctly", () => {
@@ -2452,22 +2424,6 @@ describe("Crust .command(builder)", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 		}
-	});
-
-	it("returns new instance (immutability)", () => {
-		const app = new Crust("cli");
-		const deploy = new Crust("deploy");
-		const result = app.command(deploy);
-
-		expect(result).not.toBe(app);
-	});
-
-	it("does not mutate original builder", () => {
-		const app = new Crust("cli");
-		const deploy = new Crust("deploy");
-		app.command(deploy);
-
-		expect(app._node.subCommands).toEqual({});
 	});
 
 	it("both overloads can be mixed: .command(name, cb).command(builder)", () => {
