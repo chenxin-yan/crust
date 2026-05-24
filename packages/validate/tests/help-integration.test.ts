@@ -19,7 +19,6 @@ type VendorFixtures = {
 	stringSchema: () => StandardSchema<string, string>;
 	optionalBoolSchema: () => StandardSchema<unknown, boolean | undefined>;
 	numberArgSchema: () => StandardSchema<unknown, number>;
-	numberFlagSchema: () => StandardSchema<unknown, number>;
 };
 
 const zodFixtures: VendorFixtures = {
@@ -32,8 +31,6 @@ const zodFixtures: VendorFixtures = {
 		>,
 	numberArgSchema: () =>
 		z.number() as unknown as StandardSchema<unknown, number>,
-	numberFlagSchema: () =>
-		z.number() as unknown as StandardSchema<unknown, number>,
 };
 
 const effectFixtures: VendorFixtures = {
@@ -41,7 +38,6 @@ const effectFixtures: VendorFixtures = {
 	stringSchema: () => wrapEffect(Schema.String),
 	optionalBoolSchema: () => wrapEffect(Schema.UndefinedOr(Schema.Boolean)),
 	numberArgSchema: () => wrapEffect(Schema.Number),
-	numberFlagSchema: () => wrapEffect(Schema.Number),
 };
 
 describe("help plugin integration with schema-backed definitions", () => {
