@@ -1,5 +1,16 @@
 # create-crust
 
+## 0.0.30
+
+### Patch Changes
+
+- Updated dependencies [0dc69b1]
+- Updated dependencies [d08439a]
+- Updated dependencies [c4d2b22]
+- Updated dependencies [c4d2b22]
+  - @crustjs/core@0.0.18
+  - @crustjs/create@0.0.6
+
 ## 0.0.29
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @crustjs/man
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [0dc69b1]
+- Updated dependencies [d08439a]
+- Updated dependencies [c4d2b22]
+- Updated dependencies [c4d2b22]
+  - @crustjs/core@0.0.18
+
 ## 0.1.0
 
 ### Minor Changes

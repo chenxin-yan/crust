@@ -1,6 +1,6 @@
-# @crustjs/create
+# @crustjs/utils
 
-## 0.0.6
+## 0.0.2
 
 ### Patch Changes
 
@@ -31,52 +31,4 @@
 
   The `@internal`-tagged `resolveBundleSourceDir` export from `@crustjs/skills/bundle` was removed. It carried `@internal` JSDoc and was undocumented (exported only for direct unit-test access); its behavior is preserved by `resolveSourceDir` from `@crustjs/utils`.
 
-- Updated dependencies [0dc69b1]
-- Updated dependencies [d08439a]
-  - @crustjs/utils@0.0.2
-
-## 0.0.5
-
-### Patch Changes
-
-- 291048b: Fix `create-crust` dependency installation on Windows and run `command` steps through Bun Shell for cross-platform shell execution.
-
-## 0.0.4
-
-### Patch Changes
-
-- a1f233e: Enable minification for all package builds, reducing bundle sizes by ~27%. Also shorten error messages in `@crustjs/core` for smaller output.
-- 4f4bddf: Add `isInGitRepo` utility to detect if a directory is inside an existing git repository.
-
-  Updated `create-crust` to skip the "Initialize a git repository?" prompt when scaffolding inside an existing repo, preventing accidental nested `.git` directories.
-
-## 0.0.3
-
-### Patch Changes
-
-- 55b588b: Update scaffold template path resolution to be package-root based for better generator DX.
-
-  - In `@crustjs/create`, relative string `template` paths now resolve from the nearest package root discovered from `process.argv[1]` (instead of `process.cwd()`).
-  - Absolute string paths are treated as-is, and `file:` URL templates remain supported.
-  - Added coverage for package-root resolution and explicit error cases when no package root can be found.
-  - Updated `create-crust` to use `template: "templates/base"`, aligned with package-root template resolution.
-
-## 0.0.2
-
-### Patch Changes
-
-- 6e5d21d: Simplify `scaffold()` template resolution: remove `importMeta` option, accept `string | URL` for `template`.
-
-  - `string` resolves relative to `process.cwd()`
-  - `URL` must be a `file:` URL (use `new URL("../templates/base", import.meta.url)` for module-relative paths)
-  - Added validation with clear error messages for missing directories, non-directory paths, and non-`file:` URLs
-
-## 0.0.1
-
-### Patch Changes
-
-- 5110c83: Add `@crustjs/create` — a headless, zero-dependency scaffolding engine for building `create-xxx` tools.
-
-  Provides `scaffold()` for template copying with `{{var}}` interpolation and dotfile renaming, `runSteps()` for declarative post-scaffold automation (install deps, git init, open editor, custom commands), and utilities for package manager detection and git user info.
-
-  Refactor `create-crust` to use `@crustjs/create` as its scaffolding backend, replacing the inline implementation with the shared library (dogfooding).
+- d08439a: Add shared primitive type and string coercion helpers used by `@crustjs/core` and `@crustjs/store`.
