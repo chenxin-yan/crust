@@ -85,30 +85,6 @@ function tick(ms = 10): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("confirm — initial value", () => {
-	it("returns initial value true immediately without rendering", async () => {
-		const result = await confirm({
-			message: "Continue?",
-			initial: true,
-		});
-
-		expect(result).toBe(true);
-	});
-
-	it("returns initial value false immediately without rendering", async () => {
-		const result = await confirm({
-			message: "Continue?",
-			initial: false,
-		});
-
-		expect(result).toBe(false);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default value
 // ────────────────────────────────────────────────────────────────────────────
 

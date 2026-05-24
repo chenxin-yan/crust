@@ -16,7 +16,7 @@ import type {
 // Re-exports — assertions and issue normalization helpers
 // ────────────────────────────────────────────────────────────────────────────
 //
-// These helpers physically live in `@crustjs/utils/schema` (TP-017). They
+// These helpers physically live in `@crustjs/utils/schema`. They
 // are re-exported here so internal validate-package callers (`store.ts`,
 // `parse.ts`, `middleware.ts`, `schema.ts`) keep their existing imports
 // pointing at `./validate.ts` without churn.

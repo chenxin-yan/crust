@@ -85,20 +85,12 @@ function tick(ms = 10): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
+// Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
 
+// String-choice happy-path is in tests/integration.test.ts; this exercises the
+// non-string `initial` codepath that integration does not cover.
 describe("select — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await select({
-			message: "Pick a color",
-			choices: ["red", "green", "blue"],
-			initial: "green",
-		});
-
-		expect(result).toBe("green");
-	});
-
 	it("returns initial value for object choices", async () => {
 		const result = await select<number>({
 			message: "Pick a port",

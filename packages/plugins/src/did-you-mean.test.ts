@@ -76,7 +76,7 @@ describe("didYouMeanPlugin", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────
-	// alias-aware suggestions (TP-016)
+	// alias-aware suggestions
 	// ──────────────────────────────────────────────────────────────────────────────
 
 	it("suggests the canonical name when the input matches an alias", async () => {

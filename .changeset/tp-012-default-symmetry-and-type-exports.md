@@ -2,7 +2,7 @@
 "@crustjs/core": patch
 ---
 
-Review-driven follow-ups to TP-012:
+Review-driven follow-ups to the value-type and parse-escape-hatch work:
 
 - `type: "path"` flag/arg defaults now run through `coercePath` so omitting the flag yields the same absolute path users get when they pass it on the command line (`{ type: "path", default: "./dist" }` previously returned the raw relative string).
 - `choices` is now validated against `default` values in both the parse and non-parse default branches, mirroring argv-side enforcement so `{ choices: ["a","b"], default: "z" }` can't be silently accepted while `--flag z` throws.

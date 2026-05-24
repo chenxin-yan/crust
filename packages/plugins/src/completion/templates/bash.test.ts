@@ -365,7 +365,7 @@ describe("renderBash · multi-positional choices", () => {
 	});
 });
 
-describe("renderBash — url/path/json value-flag handling (TP-012)", () => {
+describe("renderBash — url/path/json value-flag handling", () => {
 	const valueTypeFixture: CompletionSpec = {
 		root: {
 			name: "mycli",

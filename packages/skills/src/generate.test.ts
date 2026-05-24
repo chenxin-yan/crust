@@ -890,7 +890,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			// Strip `kind` from canonical crust.json to simulate a pre-TP-003 install
+			// Strip `kind` from canonical crust.json to simulate a pre-`kind`-field install
 			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
 			const legacyManifest = JSON.parse(
 				await readText(join(canonicalDir, CRUST_MANIFEST)),

@@ -8,7 +8,7 @@ interface IssueInput {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Path formatting — re-exported from `@crustjs/utils/schema` (TP-017)
+// Path formatting — re-exported from `@crustjs/utils/schema`
 // ────────────────────────────────────────────────────────────────────────────
 
 /**

@@ -100,19 +100,13 @@ async function waitForStderr(needle: string, timeout = 500): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Initial value short-circuit
+// Initial value — empty-string edge case
 // ────────────────────────────────────────────────────────────────────────────
 
+// Guards the `options.initial !== undefined` semantics against a regression to
+// a truthy check (which would treat "" as absent and drop into interactive mode).
+// Happy-path (non-empty initial) is covered by tests/integration.test.ts.
 describe("input — initial value", () => {
-	it("returns initial value immediately without rendering", async () => {
-		const result = await input({
-			message: "Name?",
-			initial: "Alice",
-		});
-
-		expect(result).toBe("Alice");
-	});
-
 	it("returns empty string initial value", async () => {
 		const result = await input({
 			message: "Name?",
@@ -665,7 +659,7 @@ describe("input — non-TTY", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Standard Schema validation (TP-013)
+// Standard Schema validation
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — schema validation", () => {

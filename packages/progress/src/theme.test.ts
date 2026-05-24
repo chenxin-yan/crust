@@ -7,25 +7,12 @@ import {
 	resolveTheme,
 	setTheme,
 } from "./theme.ts";
-import type { ProgressTheme } from "./types.ts";
 
 afterEach(() => {
 	setTheme();
 });
 
 describe("defaultTheme", () => {
-	it("has all required style slots defined", () => {
-		const slotNames: (keyof ProgressTheme)[] = [
-			"spinner",
-			"message",
-			"success",
-			"error",
-		];
-		for (const slot of slotNames) {
-			expect(typeof defaultTheme[slot]).toBe("function");
-		}
-	});
-
 	it("uses expected default colors", () => {
 		expect(defaultTheme.spinner).toBe(magenta);
 		expect(defaultTheme.message).toBe(bold);

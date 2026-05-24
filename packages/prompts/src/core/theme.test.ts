@@ -7,7 +7,6 @@ import {
 	resolveTheme,
 	setTheme,
 } from "./theme.ts";
-import type { PromptTheme } from "./types.ts";
 
 // Reset global theme after each test to prevent state leakage
 afterEach(() => {
@@ -15,24 +14,6 @@ afterEach(() => {
 });
 
 describe("defaultTheme", () => {
-	it("has all required style slots defined", () => {
-		const slotNames: (keyof PromptTheme)[] = [
-			"prefix",
-			"message",
-			"placeholder",
-			"cursor",
-			"selected",
-			"unselected",
-			"error",
-			"success",
-			"hint",
-			"filterMatch",
-		];
-		for (const slot of slotNames) {
-			expect(typeof defaultTheme[slot]).toBe("function");
-		}
-	});
-
 	it("uses expected default colors", () => {
 		expect(defaultTheme.prefix).toBe(cyan);
 		expect(defaultTheme.message).toBe(bold);

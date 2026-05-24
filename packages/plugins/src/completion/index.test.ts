@@ -133,7 +133,7 @@ describe("completionPlugin", () => {
 	});
 
 	it("rejects unsupported shell names with a clear stderr message", async () => {
-		// TP-012 wires `choices` enforcement into the parser, so the parser
+		// `choices` enforcement is wired into the parser, so the parser
 		// rejects unsupported shell names with a `CrustError("PARSE", …)`
 		// before the run handler ever sees the value. The error message names
 		// the offending value and the allowed set.

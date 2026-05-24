@@ -185,7 +185,7 @@ function formatCommandLabel(
 }
 
 function formatCommandsSection(command: CommandNode): string[] {
-	// Filter out subcommands marked `meta.hidden: true` (TP-009). Hidden
+	// Filter out subcommands marked `meta.hidden: true`. Hidden
 	// commands remain resolvable by direct invocation — routing in
 	// `packages/core/src/router.ts` does not consult `meta.hidden`. Filtering
 	// happens after `Object.entries` so insertion order is preserved for the

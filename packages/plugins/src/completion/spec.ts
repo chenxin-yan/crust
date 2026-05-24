@@ -66,7 +66,7 @@ export interface CompletionFlag {
 	 */
 	noNegate?: true;
 	/**
-	 * Static enumeration of valid values, surfaced from TP-009's `choices`
+	 * Static enumeration of valid values, surfaced from the `choices`
 	 * field on `StringFlagDef` / `StringMultiFlagDef`. When present,
 	 * templates emit a fixed value list (`--flag=(a b c)` in zsh,
 	 * `-x -a 'a b c'` in fish, etc.). Only string-typed flags can carry
@@ -102,7 +102,7 @@ export interface CompletionArg {
 	 */
 	variadic: boolean;
 	/**
-	 * Static enumeration of valid values, surfaced from TP-009's `choices`
+	 * Static enumeration of valid values, surfaced from the `choices`
 	 * field on `StringArgDef`. Only string-typed args can carry choices.
 	 */
 	choices?: readonly string[];
@@ -114,14 +114,14 @@ export interface CompletionArg {
 export interface CompletionCommand {
 	/**
 	 * The canonical command name. The router records canonical names in
-	 * `commandPath` regardless of which alias the user typed (TP-016), so
+	 * `commandPath` regardless of which alias the user typed, so
 	 * the spec keeps the canonical name as the source of truth and exposes
 	 * any alternative spellings via `aliases`.
 	 */
 	name: string;
 	/**
 	 * Additional sibling-level alternatives for `name`, surfaced from
-	 * `CommandMeta.aliases` (TP-016). When present, templates emit alias
+	 * `CommandMeta.aliases`. When present, templates emit alias
 	 * spellings as completion candidates that resolve to the same node, so
 	 * users can tab-complete any alias.
 	 */

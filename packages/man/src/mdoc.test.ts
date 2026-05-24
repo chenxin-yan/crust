@@ -67,7 +67,7 @@ describe("renderManPageMdoc", () => {
 		}
 	});
 
-	it("renders subcommand aliases inline next to the canonical name (TP-016)", async () => {
+	it("renders subcommand aliases inline next to the canonical name", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for alias tests." })
 			.command(

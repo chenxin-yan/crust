@@ -120,7 +120,7 @@ interface BashCase {
  * Recursively collect every (parent-path, child-word) edge in the command
  * tree as a `case` branch the dispatch loop can consume. Aliases are
  * surfaced as additional `case` keys that resolve to the same `cmd_path`,
- * matching the router's alias-aware behaviour (TP-016).
+ * matching the router's alias-aware behaviour.
  */
 function collectPathCases(
 	parentPath: string,

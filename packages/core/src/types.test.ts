@@ -471,7 +471,7 @@ describe("FlagDef toggle fields", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────
-// `choices` field — string-only on FlagDef and ArgDef (TP-009)
+// `choices` field — string-only on FlagDef and ArgDef
 // ───────────────────────────────────────────────────────────────────────
 
 describe("FlagDef choices field", () => {
@@ -593,7 +593,7 @@ describe("CommandMeta interface", () => {
 		expect(meta.aliases).toEqual([]);
 	});
 
-	it("accepts hidden: true (TP-009)", () => {
+	it("accepts hidden: true", () => {
 		const meta: CommandMeta = {
 			name: "__complete",
 			hidden: true,
@@ -602,12 +602,12 @@ describe("CommandMeta interface", () => {
 		expect(meta.hidden).toBe(true);
 	});
 
-	it("accepts hidden: false explicitly (TP-009)", () => {
+	it("accepts hidden: false explicitly", () => {
 		const meta: CommandMeta = { name: "serve", hidden: false };
 		expect(meta.hidden).toBe(false);
 	});
 
-	it("composes hidden with aliases (TP-009)", () => {
+	it("composes hidden with aliases", () => {
 		const meta: CommandMeta = {
 			name: "__complete",
 			aliases: ["__c"] as const,
@@ -1300,7 +1300,7 @@ describe("FlagDef inherit toggle field", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// InferFlags — url/path/json types (TP-012)
+// InferFlags — url/path/json types
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("InferFlags — url/path/json types", () => {
@@ -1330,7 +1330,7 @@ describe("InferFlags — url/path/json types", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// InferFlags — parse field inference (TP-012)
+// InferFlags — parse field inference
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("InferFlags — parse field inference", () => {
@@ -1363,7 +1363,7 @@ describe("InferFlags — parse field inference", () => {
 	});
 
 	it("narrows inference when parse + raw default are both present", () => {
-		// Regression: prior to TP-012 review the conditional checked
+		// Regression: a prior implementation of this conditional checked
 		// `default: ResolveBaseType<F>` (the parsed type), so a raw string
 		// default with a numeric parse return left the inferred type optional.
 		type Flags = {
@@ -1392,7 +1392,7 @@ describe("InferFlags — parse field inference", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// FlagDef — parse?: never enforcement on non-string variants (TP-012)
+// FlagDef — parse?: never enforcement on non-string variants
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("FlagDef — parse?: never enforcement", () => {

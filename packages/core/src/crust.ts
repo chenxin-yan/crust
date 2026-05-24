@@ -187,7 +187,7 @@ function createSetupActions(warnings?: string[]): SetupActions {
 				);
 				return;
 			}
-			// Mirror `.command()`'s eager alias collision detection (TP-016) but
+			// Mirror `.command()`'s eager alias collision detection but
 			// downgrade to a warning + skip, consistent with how this action
 			// already handles canonical-name collisions for plugin authors.
 			try {
@@ -724,7 +724,7 @@ export class Crust<
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
 
-			// Eager alias collision detection (TP-016). Mirrors commander v12:
+			// Eager alias collision detection. Mirrors commander v12:
 			// fail at registration time rather than risk silent shadowing at
 			// resolve time. Also catches the reverse-order case where a previously
 			// registered sibling reserved an alias that equals this command's name.
@@ -770,7 +770,7 @@ export class Crust<
 			);
 		}
 
-		// Eager alias collision detection (TP-016) for the pre-built builder path.
+		// Eager alias collision detection for the pre-built builder path.
 		validateIncomingAliases(
 			{ canonicalName: name, aliases: builder._node.meta.aliases },
 			this._node.subCommands,

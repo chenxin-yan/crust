@@ -274,7 +274,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// validateCommandTree — alias collisions (TP-016)
+// validateCommandTree — alias collisions
 //
 // Catches plugin-installed subcommands that bypass `.command()` (where
 // collision detection runs eagerly).

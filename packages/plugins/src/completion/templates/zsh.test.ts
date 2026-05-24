@@ -98,7 +98,7 @@ describe("renderZsh", () => {
 		expect(script).toContain("'(-h --help)'{-h,--help}");
 	});
 
-	it("aliases (TP-016) are dispatched to the same child helper", () => {
+	it("aliases are dispatched to the same child helper", () => {
 		const script = renderZsh(fixture, "mycli", "1.0.0");
 		// Both spellings hit the same helper. Each alternative is single-
 		// quoted so glob metacharacters in command names are matched
@@ -238,7 +238,7 @@ function shQuoteForZsh(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-describe("renderZsh — url/path/json value-flag handling (TP-012)", () => {
+describe("renderZsh — url/path/json value-flag handling", () => {
 	const valueTypeFixture: CompletionSpec = {
 		root: {
 			name: "mycli",

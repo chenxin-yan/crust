@@ -1,25 +1,68 @@
 import { describe, expect, it } from "bun:test";
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/plugins";
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { arg, commandValidator, flag } from "../src/index.ts";
+import type { StandardSchema } from "../src/types.ts";
+
+function wrapEffect<A, I>(s: Schema.Schema<A, I, never>): StandardSchema<I, A> {
+	return Schema.standardSchemaV1(s) as unknown as StandardSchema<I, A>;
+}
 
 function stripAnsi(text: string): string {
 	return Bun.stripANSI(text);
 }
 
+type VendorFixtures = {
+	name: "zod" | "effect";
+	stringSchema: () => StandardSchema<string, string>;
+	optionalBoolSchema: () => StandardSchema<unknown, boolean | undefined>;
+	numberArgSchema: () => StandardSchema<unknown, number>;
+};
+
+const zodFixtures: VendorFixtures = {
+	name: "zod",
+	stringSchema: () => z.string() as unknown as StandardSchema<string, string>,
+	optionalBoolSchema: () =>
+		z.boolean().optional() as unknown as StandardSchema<
+			unknown,
+			boolean | undefined
+		>,
+	numberArgSchema: () =>
+		z.number() as unknown as StandardSchema<unknown, number>,
+};
+
+const effectFixtures: VendorFixtures = {
+	name: "effect",
+	stringSchema: () => wrapEffect(Schema.String),
+	optionalBoolSchema: () => wrapEffect(Schema.UndefinedOr(Schema.Boolean)),
+	numberArgSchema: () => wrapEffect(Schema.Number),
+};
+
 describe("help plugin integration with schema-backed definitions", () => {
-	it("renders descriptions supplied as Crust metadata", () => {
+	it.each([
+		zodFixtures,
+		effectFixtures,
+	])("[$name] renders Crust metadata instead of schema annotations", (fx) => {
 		const app = new Crust("build")
 			.args([
-				arg("entry", z.string(), { description: "Entry file", required: true }),
-				arg("target", z.string().optional(), { description: "Build target" }),
+				arg("entry", fx.stringSchema(), {
+					description: "Entry file",
+					required: true,
+				}),
+				arg("target", fx.stringSchema(), { description: "Build target" }),
 			])
 			.flags({
-				outDir: flag(z.string().default("dist"), {
+				outDir: flag(fx.stringSchema(), {
 					type: "string",
 					short: "o",
 					description: "Output directory",
+				}),
+				verbose: flag(fx.optionalBoolSchema(), {
+					type: "boolean",
+					short: "v",
+					description: "Verbose logging",
 				}),
 			});
 
@@ -29,21 +72,28 @@ describe("help plugin integration with schema-backed definitions", () => {
 		expect(output).toContain("Build target");
 		expect(output).toContain("-o, --outDir");
 		expect(output).toContain("Output directory");
+		expect(output).toContain("Verbose logging");
 	});
 
-	it("runs a command with raw schema-backed args and typed schema-backed flags", async () => {
-		let received: { port: number; verbose: boolean } | undefined;
+	it.each([
+		zodFixtures,
+		effectFixtures,
+	])("[$name] runs a command with schema-backed args and typed schema-backed flags", async (fx) => {
+		let received: { port: number; verbose: boolean | undefined } | undefined;
 		const app = new Crust("serve")
-			.args([arg("port", z.coerce.number())])
+			.args([arg("port", fx.numberArgSchema(), { type: "number" })])
 			.flags({
-				verbose: flag(z.boolean().default(false), {
+				verbose: flag(fx.optionalBoolSchema(), {
 					type: "boolean",
 					short: "v",
 				}),
 			})
 			.run(
 				commandValidator(({ args, flags }) => {
-					received = { port: args.port, verbose: flags.verbose };
+					received = {
+						port: args.port as number,
+						verbose: flags.verbose as boolean | undefined,
+					};
 				}),
 			);
 
