@@ -105,6 +105,24 @@ async function waitForStderr(needle: string, timeout = 500): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Initial value — empty-string edge case
+// ────────────────────────────────────────────────────────────────────────────
+
+// Guards the `options.initial !== undefined` semantics against a regression to
+// a truthy check (which would treat "" as absent and drop into interactive mode).
+// Happy-path (non-empty initial) is covered by tests/integration.test.ts.
+describe("password — initial value", () => {
+	it("returns empty string initial value", async () => {
+		const result = await password({
+			message: "Password?",
+			initial: "",
+		});
+
+		expect(result).toBe("");
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Masked rendering
 // ────────────────────────────────────────────────────────────────────────────
 

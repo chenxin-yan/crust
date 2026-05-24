@@ -85,6 +85,27 @@ function tick(ms = 10): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Initial value — object-choice numeric value
+// ────────────────────────────────────────────────────────────────────────────
+
+// String-choice happy-path is in tests/integration.test.ts; this exercises the
+// non-string `initial` codepath that integration does not cover.
+describe("filter — initial value", () => {
+	it("returns initial value for object choices", async () => {
+		const result = await filter<number>({
+			message: "Pick a port",
+			choices: [
+				{ label: "HTTP", value: 80 },
+				{ label: "HTTPS", value: 443 },
+			],
+			initial: 443,
+		});
+
+		expect(result).toBe(443);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Default value cursor positioning
 // ────────────────────────────────────────────────────────────────────────────
 

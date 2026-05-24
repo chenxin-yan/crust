@@ -182,18 +182,18 @@ describe("fuzzy matching integration", () => {
 	});
 
 	it("fuzzyFilter returns sorted results", () => {
+		// `config` scores higher than `abc` because the match lands at the
+		// start of the string (START_BONUS). `xyz` does not match at all.
 		const items = [
-			{ label: "banana", value: "banana" },
-			{ label: "bar", value: "bar" },
+			{ label: "abc", value: "abc" },
+			{ label: "config", value: "config" },
 			{ label: "xyz", value: "xyz" },
 		];
-		const results = fuzzyFilter("ba", items);
+		const results = fuzzyFilter("c", items);
 
-		// "bar" and "banana" should match, "xyz" should not
 		expect(results.length).toBe(2);
-		for (const r of results) {
-			expect(["bar", "banana"]).toContain(r.item.label);
-		}
+		expect(results[0]?.item.label).toBe("config");
+		expect(results[1]?.item.label).toBe("abc");
 	});
 });
 
