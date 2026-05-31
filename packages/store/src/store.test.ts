@@ -139,6 +139,27 @@ describe("createStore", () => {
 		const configPath = join(tempDir, "config.json");
 		expect(existsSync(configPath)).toBe(true);
 	});
+
+	it("should persist the store file with the configured mode", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "auth",
+			fields: BASIC_FIELDS,
+			mode: 0o600,
+		});
+
+		const previous = process.umask(0o000);
+		try {
+			await store.write({ theme: "dark", verbose: true });
+			await store.patch({ theme: "light" });
+		} finally {
+			process.umask(previous);
+		}
+
+		const { stat } = await import("node:fs/promises");
+		const { mode } = await stat(join(tempDir, "auth.json"));
+		expect(mode & 0o777).toBe(0o600);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

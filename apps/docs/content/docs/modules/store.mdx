@@ -181,10 +181,32 @@ const store = createStore(options);
 | `name`         | `string`    | No       | Store name used as filename (default `"config"` → `config.json`).                            |
 | `fields`       | `FieldsDef` | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
 | `pruneUnknown` | `boolean`   | No       | Drop unknown persisted keys on read (default `true`).                                        |
+| `mode`         | `number`    | No       | Permission bits for the persisted file (e.g. `0o600`). Enforced exactly on every write regardless of `umask`. Unix only — see note below. |
+| `dirMode`      | `number`    | No       | Permission bits for the parent directory (e.g. `0o700`), applied only when a write creates it. Unix only — see note below. |
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
 
 **Throws:** `CrustStoreError` with `PATH` code if `dirPath` or `name` is invalid.
+
+#### Securing secrets
+
+Config/state stores that hold tokens or API keys should not be world-readable. Pass `mode` (and optionally `dirMode`) so the file is owner-only:
+
+```ts
+const auth = createStore({
+  dirPath: configDir("my-cli"),
+  name: "auth",
+  fields: { token: { type: "string" } },
+  mode: 0o600, // file: rw-------
+  dirMode: 0o700, // dir: rwx------ (only when created)
+});
+
+await auth.write({ token: "secret" }); // auth.json is 0600 even under a permissive umask
+```
+
+The mode is enforced on the temp file before the atomic rename, so the persisted file is never momentarily group/other-readable.
+
+**Platform behavior:** `mode` and `dirMode` are enforced on **macOS and Linux** (and other Unix systems), where POSIX permission bits are checked by the OS. On **Windows** they are **not enforced** — Windows uses ACLs, not Unix permission bits, so `mode` does not make a file owner-only there. The store does not throw or warn in this case. On Windows, confidentiality relies on the ACL inherited from the parent directory; the per-user profile location resolved by `configDir` / `stateDir` (under `%APPDATA%` / `%LOCALAPPDATA%`) is already restricted to the user. If you need strong secret confidentiality on Windows, use the OS credential store (Windows Credential Manager / DPAPI) rather than file permissions.
 
 ### `store.read()`
 

@@ -272,6 +272,32 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * @default true
 	 */
 	pruneUnknown?: boolean;
+
+	/**
+	 * Permission bits for the persisted store file (e.g. `0o600`).
+	 *
+	 * When set, every write produces a file with exactly these bits regardless
+	 * of the process `umask` — useful for config/state stores holding secrets
+	 * (tokens, API keys) that should stay owner-only.
+	 *
+	 * Enforced on Unix (macOS/Linux), where POSIX permission bits are checked by
+	 * the OS. On Windows it is not enforced (Windows uses ACLs, not Unix bits)
+	 * and the store neither throws nor warns — see the README "Securing secrets"
+	 * section. When omitted, the platform default applies.
+	 *
+	 * @example 0o600
+	 */
+	mode?: number;
+
+	/**
+	 * Permission bits for the store's parent directory (e.g. `0o700`).
+	 *
+	 * Applied only when a write actually creates the directory; a pre-existing
+	 * directory is left untouched. Enforced on Unix only — see `mode`.
+	 *
+	 * @example 0o700
+	 */
+	dirMode?: number;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
