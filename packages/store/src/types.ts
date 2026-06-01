@@ -295,6 +295,11 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * Applied only when a write actually creates the directory; a pre-existing
 	 * directory is left untouched. Enforced on Unix only — see `mode`.
 	 *
+	 * Only the immediate parent receives the exact bits. Ancestor directories
+	 * created in the same call are subject to the process `umask`
+	 * (`dirMode & ~umask`) — relevant only when `dirMode` sets bits a common
+	 * umask would clear (e.g. `0o755` under `umask 0o027`).
+	 *
 	 * @example 0o700
 	 */
 	dirMode?: number;

@@ -36,6 +36,11 @@ export interface WriteJsonOptions {
 	 *
 	 * Applied only when this write actually creates the directory; a
 	 * pre-existing directory is left untouched so callers retain control of it.
+	 *
+	 * Only the immediate parent receives the exact bits. Any ancestor
+	 * directories created in the same `mkdir` call are subject to the process
+	 * `umask` (`dirMode & ~umask`) — relevant only when `dirMode` sets bits that
+	 * a common umask would clear (e.g. `0o755` under `umask 0o027`).
 	 */
 	dirMode?: number;
 }
