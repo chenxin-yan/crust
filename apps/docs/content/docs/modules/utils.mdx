@@ -138,6 +138,10 @@ describing the consumer(s) you'd add to the dependency graph.
 
 Lives under `@crustjs/utils/schema` only so the shared Standard Schema
 boundary code used by `@crustjs/validate` and `@crustjs/store` resolves for
-external consumers. The subpath is core-free: it depends on the Standard Schema
-spec package, not `@crustjs/core`, and does not wrap errors in package-specific
-Crust error classes.
+external consumers. `@standard-schema/spec` is an **optional peer dependency**
+of `@crustjs/utils` rather than a hard dependency, so consumers that use only
+the type primitives or `resolveSourceDir` do not install it; packages that
+import this subpath (`@crustjs/validate`, `@crustjs/store`) declare
+`@standard-schema/spec` directly. The subpath is core-free: it does not depend
+on `@crustjs/core` and does not wrap errors in package-specific Crust error
+classes.

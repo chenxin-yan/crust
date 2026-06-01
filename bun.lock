@@ -197,6 +197,7 @@
       "version": "0.1.1",
       "dependencies": {
         "@crustjs/utils": "workspace:*",
+        "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -222,16 +223,18 @@
     "packages/utils": {
       "name": "@crustjs/utils",
       "version": "0.0.2",
-      "dependencies": {
-        "@standard-schema/spec": "^1.1.0",
-      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@standard-schema/spec": "^1.1.0",
         "bunup": "catalog:",
       },
       "peerDependencies": {
+        "@standard-schema/spec": "^1.1.0",
         "typescript": "catalog:",
       },
+      "optionalPeers": [
+        "@standard-schema/spec",
+      ],
     },
     "packages/validate": {
       "name": "@crustjs/validate",
