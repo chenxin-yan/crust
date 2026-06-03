@@ -380,7 +380,7 @@ async function installRenderedSkill(
 	const canonicalKindChanged =
 		canonicalManifest !== null && canonicalManifest.kind !== kind;
 	const canonicalChanged =
-		canonicalVersion !== meta.version || canonicalKindChanged;
+		force || canonicalVersion !== meta.version || canonicalKindChanged;
 	if (canonicalChanged) {
 		if (clean) {
 			await cleanDirectory(canonicalOutputDir);
@@ -451,6 +451,7 @@ async function installRenderedSkill(
 			inspection: state.current.inspection,
 			installedVersion: state.preferredVersion,
 			currentVersion: meta.version,
+			force,
 			// Per-output-path kind. Compared with the target `kind` so a
 			// `force` kind switch at the same version still rewrites copy-mode
 			// agent paths (the version-only `needsWrite` check would otherwise
@@ -696,6 +697,7 @@ interface EnsureAgentInstallPathOptions {
 	readonly inspection: InstallPathInspection;
 	readonly installedVersion: string | null;
 	readonly currentVersion: string;
+	readonly force: boolean;
 	readonly installedKind: SkillKind | null;
 	readonly currentKind: SkillKind;
 }
@@ -760,6 +762,7 @@ async function ensureAgentInstallPath(
 		inspection,
 		installedVersion,
 		currentVersion,
+		force,
 		installedKind,
 		currentKind,
 	} = options;
@@ -772,6 +775,7 @@ async function ensureAgentInstallPath(
 			inspection,
 			installedVersion,
 			currentVersion,
+			force,
 			installedKind,
 			currentKind,
 		});
@@ -803,6 +807,7 @@ async function ensureAgentInstallPath(
 			inspection: fallbackInspection,
 			installedVersion,
 			currentVersion,
+			force,
 			installedKind,
 			currentKind,
 		});
@@ -816,6 +821,7 @@ interface EnsureCopyInstallPathOptions {
 	readonly inspection: InstallPathInspection;
 	readonly installedVersion: string | null;
 	readonly currentVersion: string;
+	readonly force: boolean;
 	readonly installedKind: SkillKind | null;
 	readonly currentKind: SkillKind;
 }
@@ -830,6 +836,7 @@ async function ensureCopyInstallPath(
 		inspection,
 		installedVersion,
 		currentVersion,
+		force,
 		installedKind,
 		currentKind,
 	} = options;
@@ -842,6 +849,7 @@ async function ensureCopyInstallPath(
 	// agent fresh while another is stale — are repaired on the next `force`.
 	const kindChanged = installedKind !== null && installedKind !== currentKind;
 	const needsWrite =
+		force ||
 		!inspection.exists ||
 		inspection.isSymlink ||
 		installedVersion !== currentVersion ||

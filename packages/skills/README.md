@@ -332,7 +332,7 @@ const result = await generateSkill({
   scope: "project", // default: "global"
   installMode: "auto", // default: "auto" — symlink first, fallback to copy
   clean: true, // default: true — removes existing skill dir first
-  force: false, // default: false — throws SkillConflictError if dir exists without crust.json
+  force: false, // default: false — rewrite same-version output and overwrite conflicts
 });
 
 // result.agents — per-agent install results
@@ -607,7 +607,7 @@ await installSkillBundle({
 | `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
 | `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
 | `clean`       | `boolean`                           | `true`      | Remove the existing skill directory before writing.                                                               |
-| `force`       | `boolean`                           | `false`     | Overwrite a conflicting directory (no `crust.json`, kind mismatch, or malformed manifest) instead of throwing.    |
+| `force`       | `boolean`                           | `false`     | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.    |
 
 ### What gets copied
 

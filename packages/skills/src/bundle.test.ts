@@ -426,6 +426,56 @@ describe("installSkillBundle", () => {
 		expect(agent.status).toBe("up-to-date");
 	});
 
+	it("force: true rewrites same-version bundle content", async () => {
+		const firstSource = join(tmpDir, "first-bundle");
+		const secondSource = join(tmpDir, "second-bundle");
+		await mkdir(firstSource, { recursive: true });
+		await mkdir(secondSource, { recursive: true });
+		await writeFile(
+			join(firstSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Initial bundle\n---\n\nInitial content\n",
+		);
+		await writeFile(
+			join(secondSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Forced bundle\n---\n\nForced content\n",
+		);
+
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: firstSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "copy",
+			}),
+		);
+
+		const skillPath = join(
+			tmpDir,
+			".claude",
+			"skills",
+			"funnel-builder",
+			"SKILL.md",
+		);
+		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
+
+		const result = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: secondSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				force: true,
+				installMode: "copy",
+			}),
+		);
+
+		const agent = result.agents[0] as AgentResult;
+		expect(agent.status).toBe("updated");
+		expect(agent.previousVersion).toBe(BUNDLE_VERSION);
+		expect(await readFile(skillPath, "utf-8")).toContain("Forced content");
+	});
+
 	it("agents: [] validates the bundle before returning", async () => {
 		const dir = join(tmpDir, "missing-skill-md");
 		await mkdir(dir, { recursive: true });

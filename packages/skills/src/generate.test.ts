@@ -650,6 +650,90 @@ describe("generateSkill", () => {
 			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
 		});
 
+		it("force: true rewrites same-version generated content", async () => {
+			await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Initial description",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "copy",
+				}),
+			);
+
+			const skillPath = join(tmpDir, ".claude", "skills", "my-cli", "SKILL.md");
+			expect(await readText(skillPath)).toContain("Initial description");
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Forced description",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					force: true,
+					installMode: "copy",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("updated");
+			expect((result.agents[0] as AgentResult).previousVersion).toBe("1.0.0");
+			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
+			expect(await readText(skillPath)).toContain("Forced description");
+		});
+
+		it("force: true rewrites same-version canonical content in symlink mode", async () => {
+			if (process.platform === "win32") {
+				return;
+			}
+
+			const first = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Initial description",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					installMode: "symlink",
+				}),
+			);
+			const outputDir = (first.agents[0] as AgentResult).outputDir;
+			expect((await lstat(outputDir)).isSymbolicLink()).toBe(true);
+
+			const skillPath = join(outputDir, "SKILL.md");
+			expect(await readText(skillPath)).toContain("Initial description");
+
+			const result = await withCwd(tmpDir, () =>
+				generateSkill({
+					command: simpleCommand(),
+					meta: {
+						name: "my-cli",
+						description: "Forced description",
+						version: "1.0.0",
+					},
+					agents: ["claude-code"],
+					scope: "project",
+					force: true,
+					installMode: "symlink",
+				}),
+			);
+
+			expect((result.agents[0] as AgentResult).status).toBe("updated");
+			expect((result.agents[0] as AgentResult).previousVersion).toBe("1.0.0");
+			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
+			expect(await readText(skillPath)).toContain("Forced description");
+		});
+
 		it("returns installed status for fresh install", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({

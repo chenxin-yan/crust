@@ -340,9 +340,10 @@ export interface GenerateOptions {
 	 */
 	clean?: boolean;
 	/**
-	 * When `true`, overwrite an existing skill directory even if it was not
-	 * created by Crust (i.e. has no `crust.json`). Without this flag, a
-	 * conflict throws a {@link SkillConflictError}.
+	 * When `true`, rewrite the generated skill even when the recorded version is
+	 * unchanged, and overwrite an existing conflicting directory (for example,
+	 * no `crust.json`, malformed `crust.json`, or a different skill kind)
+	 * instead of throwing {@link SkillConflictError}.
 	 * @default false
 	 */
 	force?: boolean;
@@ -435,8 +436,10 @@ export interface InstallSkillBundleOptions {
 	 */
 	clean?: boolean;
 	/**
-	 * When `true`, overwrite an existing skill directory even if it conflicts
-	 * (no `crust.json`, or a `crust.json` whose `kind` differs from `"bundle"`).
+	 * When `true`, rewrite the bundle even when the recorded version is
+	 * unchanged, and overwrite an existing conflicting directory (for example,
+	 * no `crust.json`, malformed `crust.json`, or a different skill kind)
+	 * instead of throwing {@link SkillConflictError}.
 	 * @default false
 	 */
 	force?: boolean;
