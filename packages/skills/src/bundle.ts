@@ -338,13 +338,15 @@ export async function loadBundleFiles(
  * consuming package's `package.json` `version`.
  *
  * Bundles and generated skills cannot share a name unless the existing
- * install is removed first. To overwrite a kind-mismatched install, pass
- * `force: true`.
+ * install is removed first. `force: true` overwrites a conflicting install
+ * (no `crust.json`, malformed `crust.json`, or kind mismatch) and also
+ * rewrites a same-version bundle.
  *
  * @param options - Bundle install options (see {@link InstallSkillBundleOptions})
  * @returns Per-agent install results
- * @throws {SkillConflictError} If the canonical store exists with a different
- *   kind or with no `crust.json` (and `force` is not set).
+ * @throws {SkillConflictError} If the canonical store exists with no
+ *   `crust.json`, a malformed `crust.json`, or a different kind (and `force`
+ *   is not set).
  * @throws {Error} If `SKILL.md` is missing, its frontmatter lacks `name:` or
  *   `description:`, the declared `name` is not a valid skill name, the
  *   declared `name` does not match `expectedName` when set, the source

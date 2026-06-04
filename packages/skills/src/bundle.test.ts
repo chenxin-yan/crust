@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+	lstat,
 	mkdir,
 	readdir,
 	readFile,
@@ -457,6 +458,13 @@ describe("installSkillBundle", () => {
 			"funnel-builder",
 			"SKILL.md",
 		);
+		const canonicalPath = join(
+			tmpDir,
+			".crust",
+			"skills",
+			"funnel-builder",
+			"SKILL.md",
+		);
 		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
 
 		const result = await withCwd(tmpDir, () =>
@@ -473,7 +481,67 @@ describe("installSkillBundle", () => {
 		const agent = result.agents[0] as AgentResult;
 		expect(agent.status).toBe("updated");
 		expect(agent.previousVersion).toBe(BUNDLE_VERSION);
-		expect(await readFile(skillPath, "utf-8")).toContain("Forced content");
+
+		const agentContent = await readFile(skillPath, "utf-8");
+		expect(agentContent).toContain("Forced content");
+		expect(agentContent).not.toContain("Initial content");
+
+		const canonicalContent = await readFile(canonicalPath, "utf-8");
+		expect(canonicalContent).toContain("Forced content");
+		expect(canonicalContent).not.toContain("Initial content");
+	});
+
+	it("force: true rewrites same-version bundle content in symlink mode", async () => {
+		if (process.platform === "win32") {
+			return;
+		}
+
+		const firstSource = join(tmpDir, "first-symlink-bundle");
+		const secondSource = join(tmpDir, "second-symlink-bundle");
+		await mkdir(firstSource, { recursive: true });
+		await mkdir(secondSource, { recursive: true });
+		await writeFile(
+			join(firstSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Initial bundle\n---\n\nInitial content\n",
+		);
+		await writeFile(
+			join(secondSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Forced bundle\n---\n\nForced content\n",
+		);
+
+		const first = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: firstSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "symlink",
+			}),
+		);
+		const outputDir = (first.agents[0] as AgentResult).outputDir;
+		expect((await lstat(outputDir)).isSymbolicLink()).toBe(true);
+
+		const skillPath = join(outputDir, "SKILL.md");
+		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
+
+		const result = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: secondSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				force: true,
+				installMode: "symlink",
+			}),
+		);
+
+		const agent = result.agents[0] as AgentResult;
+		expect(agent.status).toBe("updated");
+		expect(agent.previousVersion).toBe(BUNDLE_VERSION);
+
+		const forcedContent = await readFile(skillPath, "utf-8");
+		expect(forcedContent).toContain("Forced content");
+		expect(forcedContent).not.toContain("Initial content");
 	});
 
 	it("agents: [] validates the bundle before returning", async () => {

@@ -403,9 +403,10 @@ description: Build a sales funnel
 ```
 
 `version` is required and recorded in `crust.json`; identical-version
-reinstalls report `up-to-date` and skip the canonical-store rewrite, so
-pass a fresh value whenever bundle contents change. Wiring it to the
-consuming package's `package.json` `version` is the typical pattern.
+reinstalls report `up-to-date` and skip the canonical-store rewrite
+(unless `force: true` is passed), so pass a fresh value whenever bundle
+contents change. Wiring it to the consuming package's `package.json`
+`version` is the typical pattern.
 
 <Callout type="info" title="`metadata.version` in SKILL.md is not read">
   The Agent Skills spec lets bundle authors record a version under

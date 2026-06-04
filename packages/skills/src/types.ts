@@ -416,8 +416,8 @@ export interface InstallSkillBundleOptions {
 	 * Required. Typically wired to the consuming package's `package.json`
 	 * `version` (e.g. via `import pkg from "./package.json" with { type:
 	 * "json" }`). Identical-version reinstalls report `up-to-date` and skip
-	 * the canonical-store rewrite, so bump this whenever bundle contents
-	 * change.
+	 * the canonical-store rewrite (unless `force: true` is passed), so bump
+	 * this whenever bundle contents change.
 	 */
 	version: string;
 	/**

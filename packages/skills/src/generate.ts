@@ -158,7 +158,7 @@ function resolveLegacySkillName(name: string): string {
  *
  * @param options - Generation options including command, metadata, agents, and scope
  * @returns Per-agent installation results
- * @throws {SkillConflictError} If the output directory exists but was not created by Crust
+ * @throws {SkillConflictError} If the output directory conflicts (no `crust.json`, malformed `crust.json`, or kind mismatch) and `force` is not set
  *
  * @example
  * ```ts

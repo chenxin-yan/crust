@@ -332,7 +332,7 @@ const result = await generateSkill({
   scope: "project", // default: "global"
   installMode: "auto", // default: "auto" — symlink first, fallback to copy
   clean: true, // default: true — removes existing skill dir first
-  force: false, // default: false — rewrite same-version output and overwrite conflicts
+  force: false, // default: false — set true to rewrite same-version output or overwrite conflicts
 });
 
 // result.agents — per-agent install results
@@ -618,8 +618,9 @@ UTF-8 to read its required frontmatter.
 
 Bundle content changes do not propagate without a `version` bump:
 identical-version reinstalls report `up-to-date` and leave the canonical
-store untouched. Pass a fresh `version` (typically wired to the consuming
-package's `package.json` `version`) whenever the bundle contents change.
+store untouched, unless `force: true` is passed. Pass a fresh `version`
+(typically wired to the consuming package's `package.json` `version`)
+whenever the bundle contents change.
 
 Bundle contents are copied as authored — no implicit name-based filtering.
 Dotfiles, `node_modules/`, `.DS_Store`, and editor cruft are all copied if
