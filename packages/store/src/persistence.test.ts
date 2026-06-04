@@ -229,66 +229,70 @@ describe("writeJson", () => {
 		expect(JSON.parse(raw)).toEqual(data);
 	});
 
-	it("should create the file with the requested mode regardless of umask", async () => {
-		const previous = process.umask(0o000);
-		try {
+	// POSIX permission bits only. On Windows the store ignores modes (it uses
+	// ACLs, not Unix bits), so these exact-mode assertions do not apply.
+	describe.skipIf(process.platform === "win32")("permission bits", () => {
+		it("should create the file with the requested mode regardless of umask", async () => {
+			const previous = process.umask(0o000);
+			try {
+				await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
+
+				const { stat } = await import("node:fs/promises");
+				const { mode } = await stat(filePath);
+				// Mask off the file-type bits, keep permission bits only.
+				expect(mode & 0o777).toBe(0o600);
+			} finally {
+				process.umask(previous);
+			}
+		});
+
+		it("should persist the final file with no group/other bits when mode is restrictive", async () => {
+			// chmod runs on the temp inode before rename (which preserves the mode),
+			// so the final renamed file carries only owner bits.
 			await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
 
 			const { stat } = await import("node:fs/promises");
 			const { mode } = await stat(filePath);
-			// Mask off the file-type bits, keep permission bits only.
-			expect(mode & 0o777).toBe(0o600);
-		} finally {
-			process.umask(previous);
-		}
-	});
+			expect(mode & 0o077).toBe(0);
+		});
 
-	it("should not leave a world-readable temp file when mode is restrictive", async () => {
-		// Even mid-write the temp inode carries the restrictive mode, so the
-		// final renamed file is never momentarily group/other readable.
-		await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
+		it("should apply directoryMode when it creates the directory", async () => {
+			const nested = join(tempDir, "secret-dir", "config.json");
+			const previous = process.umask(0o000);
+			try {
+				await writeJson(nested, { data: true }, { directoryMode: 0o700 });
 
-		const { stat } = await import("node:fs/promises");
-		const { mode } = await stat(filePath);
-		expect(mode & 0o077).toBe(0);
-	});
+				const { stat } = await import("node:fs/promises");
+				const { mode } = await stat(join(tempDir, "secret-dir"));
+				expect(mode & 0o777).toBe(0o700);
+			} finally {
+				process.umask(previous);
+			}
+		});
 
-	it("should apply directoryMode when it creates the directory", async () => {
-		const nested = join(tempDir, "secret-dir", "config.json");
-		const previous = process.umask(0o000);
-		try {
-			await writeJson(nested, { data: true }, { directoryMode: 0o700 });
+		it("should leave a pre-existing directory's mode untouched", async () => {
+			await mkdir(tempDir, { recursive: true });
+			await chmod(tempDir, 0o755);
 
-			const { stat } = await import("node:fs/promises");
-			const { mode } = await stat(join(tempDir, "secret-dir"));
-			expect(mode & 0o777).toBe(0o700);
-		} finally {
-			process.umask(previous);
-		}
-	});
-
-	it("should leave a pre-existing directory's mode untouched", async () => {
-		await mkdir(tempDir, { recursive: true });
-		await chmod(tempDir, 0o755);
-
-		await writeJson(filePath, { data: true }, { directoryMode: 0o700 });
-
-		const { stat } = await import("node:fs/promises");
-		const { mode } = await stat(tempDir);
-		expect(mode & 0o777).toBe(0o755);
-	});
-
-	it("should use the platform default when no mode is given", async () => {
-		const previous = process.umask(0o022);
-		try {
-			await writeJson(filePath, { data: true });
+			await writeJson(filePath, { data: true }, { directoryMode: 0o700 });
 
 			const { stat } = await import("node:fs/promises");
-			const { mode } = await stat(filePath);
-			expect(mode & 0o777).toBe(0o644);
-		} finally {
-			process.umask(previous);
-		}
+			const { mode } = await stat(tempDir);
+			expect(mode & 0o777).toBe(0o755);
+		});
+
+		it("should use the platform default when no mode is given", async () => {
+			const previous = process.umask(0o022);
+			try {
+				await writeJson(filePath, { data: true });
+
+				const { stat } = await import("node:fs/promises");
+				const { mode } = await stat(filePath);
+				expect(mode & 0o777).toBe(0o644);
+			} finally {
+				process.umask(previous);
+			}
+		});
 	});
 
 	it("should throw CrustStoreError IO when directory creation fails", async () => {

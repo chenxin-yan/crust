@@ -114,7 +114,12 @@ export async function writeJson(
 	data: unknown,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
-	const { fileMode, directoryMode } = options;
+	// Unix permission bits are meaningless on Windows (it uses ACLs, not POSIX
+	// bits) and chmod there can toggle the read-only attribute or throw. Ignore
+	// the modes entirely so behavior is a true no-op, as documented.
+	const isWindows = process.platform === "win32";
+	const fileMode = isWindows ? undefined : options.fileMode;
+	const directoryMode = isWindows ? undefined : options.directoryMode;
 	const dir = dirname(filePath);
 	const tempPath = join(dir, `.config-${randomUUID()}.tmp`);
 

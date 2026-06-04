@@ -172,14 +172,17 @@ The built-in string presets are intentionally small:
 Advanced callers can provide explicit permission bits without adding more named presets:
 
 ```ts
-// Owner-only secret store (same as access: "private")
-access: { file: 0o600, directory: 0o700 }
-
-// Group-readable store; group ownership is managed outside @crustjs/store
-access: { file: 0o640, directory: 0o750 }
-
-// World-readable non-secret store
-access: { file: 0o644, directory: 0o755 }
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  name: "auth",
+  fields: { token: { type: "string" } },
+  // Owner-only secret store (same as access: "private")
+  access: { file: 0o600, directory: 0o700 },
+  // Group-readable store; group ownership is managed outside @crustjs/store
+  // access: { file: 0o640, directory: 0o750 },
+  // World-readable non-secret store
+  // access: { file: 0o644, directory: 0o755 },
+});
 ```
 
 **Platform behavior:** `access` permission bits are enforced on **macOS and Linux** (and other Unix systems), where POSIX permission bits are checked by the OS. On **Windows** they are **not enforced** — Windows uses ACLs, not Unix bits, so `access: "private"` does not make a file owner-only there. The store does not throw or warn in this case. On Windows, confidentiality relies on the ACL inherited from the parent directory; the per-user profile location resolved by `configDir` / `stateDir` (under `%APPDATA%` / `%LOCALAPPDATA%`) is already restricted to the user. If you need strong secret confidentiality on Windows, use the OS credential store (Windows Credential Manager / DPAPI) rather than file permissions.

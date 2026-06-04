@@ -140,26 +140,30 @@ describe("createStore", () => {
 		expect(existsSync(configPath)).toBe(true);
 	});
 
-	it("should persist a private store as owner-only", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "auth",
-			fields: BASIC_FIELDS,
-			access: "private",
-		});
+	// POSIX-only: Windows ignores Unix permission bits (it uses ACLs).
+	it.skipIf(process.platform === "win32")(
+		"should persist a private store as owner-only",
+		async () => {
+			const store = createStore({
+				dirPath: tempDir,
+				name: "auth",
+				fields: BASIC_FIELDS,
+				access: "private",
+			});
 
-		const previous = process.umask(0o000);
-		try {
-			await store.write({ theme: "dark", verbose: true });
-			await store.patch({ theme: "light" });
-		} finally {
-			process.umask(previous);
-		}
+			const previous = process.umask(0o000);
+			try {
+				await store.write({ theme: "dark", verbose: true });
+				await store.patch({ theme: "light" });
+			} finally {
+				process.umask(previous);
+			}
 
-		const { stat } = await import("node:fs/promises");
-		const { mode } = await stat(join(tempDir, "auth.json"));
-		expect(mode & 0o777).toBe(0o600);
-	});
+			const { stat } = await import("node:fs/promises");
+			const { mode } = await stat(join(tempDir, "auth.json"));
+			expect(mode & 0o777).toBe(0o600);
+		},
+	);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
