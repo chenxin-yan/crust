@@ -69,13 +69,15 @@ export interface SkillConflictDetails {
  * Thrown when an install entrypoint detects that the target skill directory
  * already exists but cannot be overwritten safely.
  *
- * Two flavours:
+ * Three flavours:
  * - **No `crust.json`** — directory exists but was not created by Crust.
  *   This prevents Crust from silently overwriting a skill that was manually
  *   created or installed by another tool.
+ * - **Malformed `crust.json`** — directory is Crust-owned but its manifest
+ *   cannot be interpreted (see {@link SkillConflictDetails.manifestMalformed}).
  * - **Kind mismatch** — directory was created by Crust but with a different
  *   {@link SkillKind} (e.g. an existing `generated` skill collides with an
- *   incoming `bundle` install). `force: true` bypasses both cases.
+ *   incoming `bundle` install). `force: true` bypasses all three cases.
  *
  * @example
  * ```ts
