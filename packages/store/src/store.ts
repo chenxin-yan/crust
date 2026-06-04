@@ -6,7 +6,12 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
-import { deleteJson, readJson, writeJson } from "./persistence.ts";
+import {
+	deleteJson,
+	readJson,
+	type WriteJsonOptions,
+	writeJson,
+} from "./persistence.ts";
 import type {
 	CreateStoreOptions,
 	FieldDef,
@@ -25,6 +30,15 @@ import type {
  */
 function isFieldValueResult(r: unknown): r is { value: unknown } {
 	return typeof r === "object" && r !== null && "value" in r && !("ok" in r);
+}
+
+function resolveWriteOptions(
+	access: CreateStoreOptions<FieldsDef>["access"],
+): WriteJsonOptions {
+	if (access === "private") return { fileMode: 0o600, directoryMode: 0o700 };
+	if (access === undefined || access === "default") return {};
+
+	return { fileMode: access.file, directoryMode: access.directory };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -69,7 +83,7 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
 export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
-	const { dirPath, name, fields, pruneUnknown, mode, dirMode } = options;
+	const { dirPath, name, fields, pruneUnknown, access } = options;
 
 	// Resolve the config file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
@@ -77,8 +91,8 @@ export function createStore<const F extends FieldsDef>(
 	// Resolve pruneUnknown — defaults to true when not provided
 	const shouldPrune = pruneUnknown ?? true;
 
-	// Permission bits forwarded to every write (undefined → platform default).
-	const writeOptions = { mode, dirMode };
+	// Permission bits forwarded to every write (default → platform behavior).
+	const writeOptions = resolveWriteOptions(access);
 
 	// ──────────────────────────────────────────────────────────────────────
 	// normalizeStateTypes — Coerce values by field `type`

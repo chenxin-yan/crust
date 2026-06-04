@@ -29,7 +29,7 @@ export interface WriteJsonOptions {
 	 * the final file is never momentarily more permissive. Effectively a no-op
 	 * on Windows. When omitted, the platform default applies.
 	 */
-	mode?: number;
+	fileMode?: number;
 
 	/**
 	 * Unix permission bits for the parent directory (e.g. `0o700`).
@@ -39,10 +39,10 @@ export interface WriteJsonOptions {
 	 *
 	 * Only the immediate parent receives the exact bits. Any ancestor
 	 * directories created in the same `mkdir` call are subject to the process
-	 * `umask` (`dirMode & ~umask`) — relevant only when `dirMode` sets bits that
-	 * a common umask would clear (e.g. `0o755` under `umask 0o027`).
+	 * `umask` (`directoryMode & ~umask`) — relevant only when `directoryMode`
+	 * sets bits that a common umask would clear (e.g. `0o755` under `umask 0o027`).
 	 */
-	dirMode?: number;
+	directoryMode?: number;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ export async function writeJson(
 	data: unknown,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
-	const { mode, dirMode } = options;
+	const { fileMode, directoryMode } = options;
 	const dir = dirname(filePath);
 	const tempPath = join(dir, `.config-${randomUUID()}.tmp`);
 
@@ -122,7 +122,7 @@ export async function writeJson(
 	try {
 		// Ensure parent directory exists. mkdir returns the first directory it
 		// created (or undefined if the directory already existed).
-		createdDir = await mkdir(dir, { recursive: true, mode: dirMode });
+		createdDir = await mkdir(dir, { recursive: true, mode: directoryMode });
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"IO",
@@ -134,11 +134,11 @@ export async function writeJson(
 		).withCause(err);
 	}
 
-	// Enforce `dirMode` exactly when we created the directory. mkdir's `mode` is
-	// masked by `umask`, so a chmod is needed to guarantee the requested bits.
-	if (dirMode !== undefined && createdDir !== undefined) {
+	// Enforce `directoryMode` exactly when we created the directory. mkdir's `mode`
+	// is masked by `umask`, so a chmod is needed to guarantee the requested bits.
+	if (directoryMode !== undefined && createdDir !== undefined) {
 		try {
-			await chmod(dir, dirMode);
+			await chmod(dir, directoryMode);
 		} catch (err: unknown) {
 			throw new CrustStoreError(
 				"IO",
@@ -153,11 +153,11 @@ export async function writeJson(
 
 	try {
 		const json = JSON.stringify(data, null, "\t");
-		await writeFile(tempPath, json, { encoding: "utf-8", mode });
-		// Enforce `mode` exactly regardless of `umask`. Done on the temp inode
+		await writeFile(tempPath, json, { encoding: "utf-8", mode: fileMode });
+		// Enforce `fileMode` exactly regardless of `umask`. Done on the temp inode
 		// before rename, which preserves the mode — so the final file is never
 		// momentarily world-readable.
-		if (mode !== undefined) await chmod(tempPath, mode);
+		if (fileMode !== undefined) await chmod(tempPath, fileMode);
 	} catch (err: unknown) {
 		// Best-effort cleanup of temp file
 		await cleanupTempFile(tempPath);

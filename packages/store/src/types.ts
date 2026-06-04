@@ -217,6 +217,29 @@ export interface StoreValidatorIssue {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// StoreAccess — Persistence visibility
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Explicit Unix permission bits for store persistence. */
+export interface StorePermissionBits {
+	/** Permission bits for the persisted store file (e.g. `0o600`). */
+	file?: number;
+
+	/** Permission bits for the store's parent directory (e.g. `0o700`). */
+	directory?: number;
+}
+
+/**
+ * Persistence visibility for store writes.
+ *
+ * - `"default"` or omitted uses platform defaults.
+ * - `"private"` keeps the store owner-only on Unix (`0600` file, `0700` directory).
+ * - An object lets advanced callers provide explicit Unix permission bits for
+ *   group-readable or public non-secret stores without expanding the preset list.
+ */
+export type StoreAccess = "default" | "private" | StorePermissionBits;
+
+// ────────────────────────────────────────────────────────────────────────────
 // CreateStoreOptions — Factory configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -274,35 +297,24 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	pruneUnknown?: boolean;
 
 	/**
-	 * Permission bits for the persisted store file (e.g. `0o600`).
+	 * Persistence visibility for store writes.
 	 *
-	 * When set, every write produces a file with exactly these bits regardless
-	 * of the process `umask` — useful for config/state stores holding secrets
-	 * (tokens, API keys) that should stay owner-only.
+	 * Use `"private"` for config/state stores holding secrets (tokens, API keys)
+	 * that should stay owner-only. On Unix this writes the file as `0600` and
+	 * creates the parent directory as `0700`; on Windows it is not enforced
+	 * because Windows uses ACLs instead of Unix permission bits.
 	 *
-	 * Enforced on Unix (macOS/Linux), where POSIX permission bits are checked by
-	 * the OS. On Windows it is not enforced (Windows uses ACLs, not Unix bits)
-	 * and the store neither throws nor warns — see the README "Securing secrets"
-	 * section. When omitted, the platform default applies.
+	 * The only built-in presets are `"default"` and `"private"`. Advanced callers
+	 * can pass explicit bits with `{ file, directory }` for group-readable or public
+	 * non-secret stores. The file bits are enforced exactly on every write
+	 * regardless of `umask`. Directory bits apply only when a write creates the
+	 * directory; pre-existing directories are left untouched.
 	 *
-	 * @example 0o600
+	 * @default "default"
+	 * @example "private"
+	 * @example { file: 0o600, directory: 0o700 }
 	 */
-	mode?: number;
-
-	/**
-	 * Permission bits for the store's parent directory (e.g. `0o700`).
-	 *
-	 * Applied only when a write actually creates the directory; a pre-existing
-	 * directory is left untouched. Enforced on Unix only — see `mode`.
-	 *
-	 * Only the immediate parent receives the exact bits. Ancestor directories
-	 * created in the same call are subject to the process `umask`
-	 * (`dirMode & ~umask`) — relevant only when `dirMode` sets bits a common
-	 * umask would clear (e.g. `0o755` under `umask 0o027`).
-	 *
-	 * @example 0o700
-	 */
-	dirMode?: number;
+	access?: StoreAccess;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

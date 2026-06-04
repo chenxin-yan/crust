@@ -219,6 +219,26 @@ describe("CreateStoreOptions", () => {
 		expect(options.pruneUnknown).toBe(false);
 	});
 
+	it("should accept access presets and explicit permission bits", () => {
+		const fields = {
+			token: { type: "string" },
+		} as const satisfies FieldsDef;
+
+		const privateOptions: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp/test",
+			fields,
+			access: "private",
+		};
+		const explicitOptions: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp/test",
+			fields,
+			access: { file: 0o600, directory: 0o700 },
+		};
+
+		expect(privateOptions.access).toBe("private");
+		expect(explicitOptions.access).toEqual({ file: 0o600, directory: 0o700 });
+	});
+
 	it("should infer F from fields when used with createStore pattern", () => {
 		// Simulates how createStore<F> infers the type parameter
 		function acceptOptions<F extends FieldsDef>(

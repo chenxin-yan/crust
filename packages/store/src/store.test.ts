@@ -140,12 +140,12 @@ describe("createStore", () => {
 		expect(existsSync(configPath)).toBe(true);
 	});
 
-	it("should persist the store file with the configured mode", async () => {
+	it("should persist a private store as owner-only", async () => {
 		const store = createStore({
 			dirPath: tempDir,
 			name: "auth",
 			fields: BASIC_FIELDS,
-			mode: 0o600,
+			access: "private",
 		});
 
 		const previous = process.umask(0o000);
