@@ -7,7 +7,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
-import { deleteJson, readJson, writeJson } from "./persistence.ts";
+import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
 	FieldDef,
@@ -26,6 +26,13 @@ import type {
  */
 function isFieldValueResult(r: unknown): r is { value: unknown } {
 	return typeof r === "object" && r !== null && "value" in r && !("ok" in r);
+}
+
+function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): WriteJsonOptions {
+	if (access === "private") return { fileMode: 0o600, directoryMode: 0o700 };
+	if (access === undefined || access === "default") return {};
+
+	return { fileMode: access.file, directoryMode: access.directory };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -70,13 +77,16 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
 export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
-	const { dirPath, name, fields, pruneUnknown } = options;
+	const { dirPath, name, fields, pruneUnknown, access } = options;
 
 	// Resolve the config file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
 
 	// Resolve pruneUnknown — defaults to true when not provided
 	const shouldPrune = pruneUnknown ?? true;
+
+	// Permission bits forwarded to every write (default → platform behavior).
+	const writeOptions = resolveWriteOptions(access);
 
 	// ──────────────────────────────────────────────────────────────────────
 	// normalizeStateTypes — Coerce values by field `type`
@@ -251,7 +261,7 @@ export function createStore<const F extends FieldsDef>(
 	async function write(config: InferStoreConfig<F>): Promise<void> {
 		const normalized = normalizeStateTypes(config);
 		await runFieldValidators(normalized, "write");
-		await writeJson(filePath, normalized);
+		await writeJson(filePath, normalized, writeOptions);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -263,7 +273,7 @@ export function createStore<const F extends FieldsDef>(
 		const updated = updater(current);
 		const normalized = normalizeStateTypes(updated);
 		await runFieldValidators(normalized, "update");
-		await writeJson(filePath, normalized);
+		await writeJson(filePath, normalized, writeOptions);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -275,7 +285,7 @@ export function createStore<const F extends FieldsDef>(
 		const merged = { ...current, ...partial } as InferStoreConfig<F>;
 		const normalized = normalizeStateTypes(merged);
 		await runFieldValidators(normalized, "patch");
-		await writeJson(filePath, normalized);
+		await writeJson(filePath, normalized, writeOptions);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

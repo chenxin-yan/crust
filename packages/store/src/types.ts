@@ -215,6 +215,29 @@ export interface StoreValidatorIssue {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// StoreAccess — Persistence visibility
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Explicit Unix permission bits for store persistence. */
+export interface StorePermissionBits {
+	/** Permission bits for the persisted store file (e.g. `0o600`). */
+	file?: number;
+
+	/** Permission bits for the store's parent directory (e.g. `0o700`). */
+	directory?: number;
+}
+
+/**
+ * Persistence visibility for store writes.
+ *
+ * - `"default"` or omitted uses platform defaults.
+ * - `"private"` keeps the store owner-only on Unix (`0600` file, `0700` directory).
+ * - An object lets advanced callers provide explicit Unix permission bits for
+ *   group-readable or public non-secret stores without expanding the preset list.
+ */
+export type StoreAccess = "default" | "private" | StorePermissionBits;
+
+// ────────────────────────────────────────────────────────────────────────────
 // CreateStoreOptions — Factory configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -270,6 +293,26 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * @default true
 	 */
 	pruneUnknown?: boolean;
+
+	/**
+	 * Persistence visibility for store writes.
+	 *
+	 * Use `"private"` for config/state stores holding secrets (tokens, API keys)
+	 * that should stay owner-only. On Unix this writes the file as `0600` and
+	 * creates the parent directory as `0700`; on Windows it is not enforced
+	 * because Windows uses ACLs instead of Unix permission bits.
+	 *
+	 * The only built-in presets are `"default"` and `"private"`. Advanced callers
+	 * can pass explicit bits with `{ file, directory }` for group-readable or public
+	 * non-secret stores. The file bits are enforced exactly on every write
+	 * regardless of `umask`. Directory bits apply only when a write creates the
+	 * directory; pre-existing directories are left untouched.
+	 *
+	 * @default "default"
+	 * @example "private"
+	 * @example { file: 0o600, directory: 0o700 }
+	 */
+	access?: StoreAccess;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

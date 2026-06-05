@@ -19,6 +19,8 @@ export type {
 	FieldsDef,
 	InferStoreConfig,
 	Store,
+	StoreAccess,
+	StorePermissionBits,
 	StoreUpdater,
 	StoreValidatorIssue,
 	ValueType,
