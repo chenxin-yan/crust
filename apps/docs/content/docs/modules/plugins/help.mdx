@@ -14,9 +14,9 @@ On terminals with color support, the output is colorized automatically; in docs 
 import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
 
-const main = new Crust("my-cli")
-  .use(helpPlugin())
-  .run(() => { /* ... */ });
+const main = new Crust("my-cli").use(helpPlugin()).run(() => {
+  /* ... */
+});
 
 await main.execute();
 ```
@@ -104,9 +104,8 @@ my-cli <command> [name] [options]
 Override the auto-generated usage with `meta.usage`:
 
 ```ts
-new Crust("deploy")
-  .meta({ usage: "deploy <env> [--dry-run]" })
-  // ...
+new Crust("deploy").meta({ usage: "deploy <env> [--dry-run]" });
+// ...
 ```
 
 ## `renderHelp` Function

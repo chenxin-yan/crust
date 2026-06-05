@@ -70,13 +70,9 @@ When a default is set, the argument is always present in `args` — the inferred
 Arguments without `required` or `default` are optional. Their type includes `| undefined`:
 
 ```ts
-new Crust("example")
-  .args([
-    { name: "name", type: "string" },
-  ])
-  .run(({ args }) => {
-    args.name; // string | undefined
-  })
+new Crust("example").args([{ name: "name", type: "string" }]).run(({ args }) => {
+  args.name; // string | undefined
+});
 ```
 
 ## Variadic Arguments
@@ -91,7 +87,7 @@ const cmd = new Crust("copy")
   ])
   .run(({ args }) => {
     args.destination; // string
-    args.files;       // string[]
+    args.files; // string[]
     for (const file of args.files) {
       console.log(`Copying ${file} to ${args.destination}`);
     }
@@ -103,7 +99,8 @@ my-cli /output file1.txt file2.txt file3.txt
 ```
 
 <Callout type="warn">
-  Only the **last** argument can be variadic. Crust enforces this at both compile time and runtime. Placing `variadic: true` on a non-last argument produces a type error.
+  Only the **last** argument can be variadic. Crust enforces this at both compile time and runtime.
+  Placing `variadic: true` on a non-last argument produces a type error.
 </Callout>
 
 Variadic arguments with `required: true` error when no values are provided. Without `required`, an empty array is returned.
@@ -116,9 +113,7 @@ Use `choices` on a string positional argument to declare a static enum of valid 
 
 ```ts
 const cmd = new Crust("deploy")
-  .args([
-    { name: "target", type: "string", choices: ["browser", "bun", "node"] },
-  ] as const)
+  .args([{ name: "target", type: "string", choices: ["browser", "bun", "node"] }] as const)
   .run(({ args }) => {
     args.target; // string
   });

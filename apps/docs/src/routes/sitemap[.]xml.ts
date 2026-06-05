@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+
 import { absoluteUrl } from "@/lib/seo";
 import { source } from "@/lib/source";
 
@@ -36,8 +37,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           // All docs pages
           ...pages.map((page) => {
             const lastmod =
-              "lastModified" in page.data &&
-              page.data.lastModified instanceof Date
+              "lastModified" in page.data && page.data.lastModified instanceof Date
                 ? `\n    <lastmod>${formatDate(page.data.lastModified)}</lastmod>`
                 : "";
             return `  <url>

@@ -9,7 +9,8 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
-      - "biome.json"
+      - ".oxlintrc.json"
+      - ".oxfmtrc.json"
       - ".github/workflows/ci-docs.yml"
 
 concurrency:
@@ -38,7 +39,9 @@ jobs:
             turbo-docs-${{ runner.os }}-
 
       - name: Lint and format check (docs)
-        run: bun run check apps/docs
+        run: |
+          bun run lint apps/docs
+          bun run format apps/docs
 
       - name: Type check (docs)
         run: bun run check:types --filter=./apps/docs

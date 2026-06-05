@@ -1,11 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import * as codes from "./ansiCodes.ts";
 import { createStyle } from "./createStyle.ts";
-import {
-	isModifierName,
-	modifierNames,
-	styleMethodNames,
-} from "./styleMethodRegistry.ts";
+import { isModifierName, modifierNames, styleMethodNames } from "./styleMethodRegistry.ts";
 
 describe("createStyle — apply() under NO_COLOR", () => {
 	// NO_COLOR on a TTY: colorsEnabled=false, modifiersEnabled=true.
@@ -133,7 +130,7 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 		const out = autoStyle({}).bg("text", "#00ff88");
 		expect(out).toBe("\x1b[106mtext\x1b[49m");
 		// Invariant: bg open must always be a background SGR, never a fg one.
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
+		// oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences
 		expect(/^\x1b\[(?:4[0-7]|10[0-7])m/.test(out)).toBe(true);
 	});
 

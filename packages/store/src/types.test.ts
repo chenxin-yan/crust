@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import type {
 	CreateStoreOptions,
 	FieldDef,
@@ -21,11 +22,7 @@ type AssertAssignable<_A extends B, B> = true;
 /**
  * Compile-time assertion that A and B are exactly the same type.
  */
-type AssertExact<A, B> = [A] extends [B]
-	? [B] extends [A]
-		? true
-		: never
-	: never;
+type AssertExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferStoreConfig
@@ -241,9 +238,7 @@ describe("CreateStoreOptions", () => {
 
 	it("should infer F from fields when used with createStore pattern", () => {
 		// Simulates how createStore<F> infers the type parameter
-		function acceptOptions<F extends FieldsDef>(
-			_opts: CreateStoreOptions<F>,
-		): InferStoreConfig<F> {
+		function acceptOptions<F extends FieldsDef>(_opts: CreateStoreOptions<F>): InferStoreConfig<F> {
 			return {} as InferStoreConfig<F>;
 		}
 
@@ -256,10 +251,7 @@ describe("CreateStoreOptions", () => {
 		});
 
 		// Type inference should work
-		type _Check = AssertAssignable<
-			typeof result,
-			{ theme: string; verbose: boolean }
-		>;
+		type _Check = AssertAssignable<typeof result, { theme: string; verbose: boolean }>;
 
 		expect(true).toBe(true);
 	});

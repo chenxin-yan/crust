@@ -32,8 +32,4 @@ export {
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
-export type {
-	PostScaffoldStep,
-	ScaffoldOptions,
-	ScaffoldResult,
-} from "./types.ts";
+export type { PostScaffoldStep, ScaffoldOptions, ScaffoldResult } from "./types.ts";

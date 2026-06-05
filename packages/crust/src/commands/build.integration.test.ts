@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import { Crust } from "@crustjs/core";
+
 import { buildCommand } from "../../src/commands/build.ts";
 
 function getHostTarget(): string | null {

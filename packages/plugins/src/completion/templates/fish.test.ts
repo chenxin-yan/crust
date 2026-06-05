@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import type { CompletionSpec } from "../spec.ts";
 import { renderFish } from "./fish.ts";
 
@@ -111,27 +112,21 @@ describe("renderFish", () => {
 		// depth-1 spelling list (`deploy dep`), then the leaf block
 		// (empty here because `prod` has no children). Embedded `'`s in
 		// the helper-call string are escaped as `\'` by fish.
-		expect(script).toContain(
-			"-n '__mycli_path_is \\'deploy dep\\' \\'prod\\' \\'\\''",
-		);
+		expect(script).toContain("-n '__mycli_path_is \\'deploy dep\\' \\'prod\\' \\'\\''");
 	});
 
 	it("negates deeper subcommand candidates via the helper's leaf-block list", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// At depth `[deploy]` the leaf-block list is `prod` (its only
 		// child); the helper rejects when `prod` has already appeared.
-		expect(script).toContain(
-			"-n '__mycli_path_is \\'deploy dep\\' \\'prod\\''",
-		);
+		expect(script).toContain("-n '__mycli_path_is \\'deploy dep\\' \\'prod\\''");
 	});
 
 	it("emits boolean flags without -r/-x", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// `--release` is a boolean toggle on `build`. The canonical rule
 		// (matching `-l 'release'` exactly) must not carry -r or -x.
-		const releaseLine = script
-			.split("\n")
-			.find((l) => l.includes("-l 'release'"));
+		const releaseLine = script.split("\n").find((l) => l.includes("-l 'release'"));
 		expect(releaseLine).toBeDefined();
 		expect(releaseLine).not.toMatch(/ -r\b/);
 		expect(releaseLine).not.toMatch(/ -x\b/);
@@ -200,25 +195,18 @@ describe("renderFish", () => {
 		// Slot 0 of `two` -> exact spec `0`; one rule per choice value.
 		expect(script).toContain("-n '__mp_path_at_arg \\'two\\' \\'0\\' \\'\\''");
 		expect(
-			script
-				.split("\n")
-				.filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'0\\'")).length,
+			script.split("\n").filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'0\\'")).length,
 		).toBe(2); // one rule per choice value
 
 		// Slot 1 of `two` -> exact spec `1`.
 		expect(
-			script
-				.split("\n")
-				.filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'1\\'")).length,
+			script.split("\n").filter((l) => l.includes("__mp_path_at_arg \\'two\\' \\'1\\'")).length,
 		).toBe(2);
 
 		// `vary`'s variadic arg lives at index 0 and is declared variadic
 		// -> spec is `*0` (matches every slot >= 0).
 		expect(
-			script
-				.split("\n")
-				.filter((l) => l.includes("__mp_path_at_arg \\'vary\\' \\'*0\\'"))
-				.length,
+			script.split("\n").filter((l) => l.includes("__mp_path_at_arg \\'vary\\' \\'*0\\'")).length,
 		).toBe(2);
 	});
 
@@ -363,12 +351,8 @@ describe("renderFish — url/path/json value-flag handling", () => {
 
 	it("does not emit __fish_complete_path for url or json flags", () => {
 		const script = renderFish(valueTypeFixture, "mycli", "1.0.0");
-		const endpointLine = script
-			.split("\n")
-			.find((l) => l.includes("-l 'endpoint'"));
-		const configLine = script
-			.split("\n")
-			.find((l) => l.includes("-l 'config'"));
+		const endpointLine = script.split("\n").find((l) => l.includes("-l 'endpoint'"));
+		const configLine = script.split("\n").find((l) => l.includes("-l 'config'"));
 		expect(endpointLine).toBeDefined();
 		expect(configLine).toBeDefined();
 		expect(endpointLine).not.toContain("__fish_complete_path");

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { select } from "./select.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ function setupMocks(): void {
 		configurable: true,
 	});
 
-	// biome-ignore lint/suspicious/noExplicitAny: mocking process.stdin methods for testing
+	// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 	(process.stdin as any).setRawMode = (mode: boolean) => {
 		Object.defineProperty(process.stdin, "isRaw", {
 			value: mode,

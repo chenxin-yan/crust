@@ -1,13 +1,8 @@
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+
 import { resolveSourceDir } from "@crustjs/utils";
+
 import { interpolate } from "./interpolate.ts";
 import { isBinary } from "./isBinary.ts";
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
@@ -118,9 +113,7 @@ function formatTemplateInput(template: string | URL): string {
  * console.log("Created files:", result.files);
  * ```
  */
-export async function scaffold(
-	options: ScaffoldOptions,
-): Promise<ScaffoldResult> {
+export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
 	const { template, dest, context, conflict = "abort" } = options;
 
 	const templateDir = resolveSourceDir(template);

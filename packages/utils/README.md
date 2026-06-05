@@ -16,9 +16,7 @@ bun add @crustjs/utils
 ```ts
 import { resolveSourceDir } from "@crustjs/utils";
 
-const templateDir = resolveSourceDir(
-  new URL("../templates/base", import.meta.url),
-);
+const templateDir = resolveSourceDir(new URL("../templates/base", import.meta.url));
 ```
 
 Resolves a source directory descriptor to an absolute filesystem path. It is
@@ -40,10 +38,10 @@ from arbitrary directories.
 
 ```ts
 import {
-  coerceBooleanString,
-  tryCoerceNumber,
-  type BaseValueType,
-  type ResolvePrimitive,
+	coerceBooleanString,
+	tryCoerceNumber,
+	type BaseValueType,
+	type ResolvePrimitive,
 } from "@crustjs/utils";
 ```
 
@@ -70,3 +68,7 @@ The schema subpath exposes only portable Standard Schema utilities:
 It does not inspect vendor internals, dispatch on `schema["~standard"].vendor`,
 or extract metadata/defaults from schemas. Use `@crustjs/validate` for public
 schema-backed CLI validation APIs.
+
+`@standard-schema/spec` is an optional peer dependency, so importing this
+subpath requires the consumer to install `@standard-schema/spec` directly. The
+rest of `@crustjs/utils` has no runtime dependencies.

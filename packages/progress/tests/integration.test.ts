@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
+
 import type { ProgressTheme } from "../src/index.ts";
 import { createTheme, defaultTheme, getTheme, setTheme } from "../src/index.ts";
 
 describe("createTheme integration", () => {
 	it("returns a valid theme with all slots defined", () => {
 		const theme = createTheme();
-		const requiredSlots: (keyof ProgressTheme)[] = [
-			"spinner",
-			"message",
-			"success",
-			"error",
-		];
+		const requiredSlots: (keyof ProgressTheme)[] = ["spinner", "message", "success", "error"];
 
 		for (const slot of requiredSlots) {
 			expect(theme[slot]).toBeDefined();

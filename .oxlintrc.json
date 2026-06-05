@@ -1,0 +1,18 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"rules": {
+		"unicorn/no-new-array": "off",
+		"unicorn/no-useless-fallback-in-spread": "off",
+		"unicorn/no-useless-spread": "off"
+	},
+	"ignorePatterns": [
+		"**/node_modules/",
+		"**/dist/",
+		"**/.turbo/",
+		".pi/",
+		".worktrees/",
+		"apps/docs/.source/",
+		"apps/docs/.vercel/",
+		"apps/docs/src/routeTree.gen.ts"
+	]
+}

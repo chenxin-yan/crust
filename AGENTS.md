@@ -1,13 +1,15 @@
 # AGENTS.md — Crust CLI Framework
 
-Bun-native, TypeScript-first CLI framework. Turborepo monorepo, Bun runtime, Biome lint/format, bunup builds. All packages ESM.
+Bun-native, TypeScript-first CLI framework. Turborepo monorepo, Bun runtime, Oxlint/Oxfmt lint/format, bunup builds. All packages ESM.
 
 ## Commands
 
 ```sh
 bun install              # install deps
 bun run build            # build all packages
-bun run check            # Biome lint + format
+bun run lint             # Oxlint
+bun run format           # Oxfmt check
+bun run check            # lint + format
 bun run check:types      # type-check
 bun run test             # run all tests
 ```

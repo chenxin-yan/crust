@@ -188,10 +188,7 @@ function emitRules(
 	 * on {@link renderRule}'s `arguments` handling for why we don't
 	 * pack them into one space-joined list.
 	 */
-	const emitChoiceFlag = (
-		rule: RuleParts,
-		choices: readonly string[],
-	): void => {
+	const emitChoiceFlag = (rule: RuleParts, choices: readonly string[]): void => {
 		for (const choice of choices) {
 			out.push(
 				renderRule(binName, {
@@ -359,16 +356,12 @@ function emitHelper(ident: string): string[] {
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
-	lines.push(
-		"\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t",
-	);
+	lines.push("\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t");
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
 	lines.push("\t\tif test $consumed -lt $n");
-	lines.push(
-		'\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])',
-	);
+	lines.push('\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])');
 	lines.push("\t\t\tif not contains -- $t $alts");
 	lines.push("\t\t\t\treturn 1");
 	lines.push("\t\t\tend");
@@ -425,16 +418,12 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
-	lines.push(
-		"\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t",
-	);
+	lines.push("\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t");
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
 	lines.push("\t\tif test $consumed -lt $n");
-	lines.push(
-		'\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])',
-	);
+	lines.push('\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])');
 	lines.push("\t\t\tif not contains -- $t $alts");
 	lines.push("\t\t\t\treturn 1");
 	lines.push("\t\t\tend");
@@ -469,11 +458,7 @@ function emitPosHelper(ident: string): string[] {
  * @param binName  User-facing binary name; validated upstream.
  * @param version  Free-form version string for the header comment.
  */
-export function renderFish(
-	spec: CompletionSpec,
-	binName: string,
-	version: string,
-): string {
+export function renderFish(spec: CompletionSpec, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 

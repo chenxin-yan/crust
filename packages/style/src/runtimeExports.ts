@@ -41,60 +41,38 @@ export const magenta: ChainableStyleFn = createForwardingChainable("magenta");
 export const cyan: ChainableStyleFn = createForwardingChainable("cyan");
 export const white: ChainableStyleFn = createForwardingChainable("white");
 export const gray: ChainableStyleFn = createForwardingChainable("gray");
-export const brightRed: ChainableStyleFn =
-	createForwardingChainable("brightRed");
-export const brightGreen: ChainableStyleFn =
-	createForwardingChainable("brightGreen");
-export const brightYellow: ChainableStyleFn =
-	createForwardingChainable("brightYellow");
-export const brightBlue: ChainableStyleFn =
-	createForwardingChainable("brightBlue");
-export const brightMagenta: ChainableStyleFn =
-	createForwardingChainable("brightMagenta");
-export const brightCyan: ChainableStyleFn =
-	createForwardingChainable("brightCyan");
-export const brightWhite: ChainableStyleFn =
-	createForwardingChainable("brightWhite");
+export const brightRed: ChainableStyleFn = createForwardingChainable("brightRed");
+export const brightGreen: ChainableStyleFn = createForwardingChainable("brightGreen");
+export const brightYellow: ChainableStyleFn = createForwardingChainable("brightYellow");
+export const brightBlue: ChainableStyleFn = createForwardingChainable("brightBlue");
+export const brightMagenta: ChainableStyleFn = createForwardingChainable("brightMagenta");
+export const brightCyan: ChainableStyleFn = createForwardingChainable("brightCyan");
+export const brightWhite: ChainableStyleFn = createForwardingChainable("brightWhite");
 export const bgBlack: ChainableStyleFn = createForwardingChainable("bgBlack");
 export const bgRed: ChainableStyleFn = createForwardingChainable("bgRed");
 export const bgGreen: ChainableStyleFn = createForwardingChainable("bgGreen");
 export const bgYellow: ChainableStyleFn = createForwardingChainable("bgYellow");
 export const bgBlue: ChainableStyleFn = createForwardingChainable("bgBlue");
-export const bgMagenta: ChainableStyleFn =
-	createForwardingChainable("bgMagenta");
+export const bgMagenta: ChainableStyleFn = createForwardingChainable("bgMagenta");
 export const bgCyan: ChainableStyleFn = createForwardingChainable("bgCyan");
 export const bgWhite: ChainableStyleFn = createForwardingChainable("bgWhite");
-export const bgBrightBlack: ChainableStyleFn =
-	createForwardingChainable("bgBrightBlack");
-export const bgBrightRed: ChainableStyleFn =
-	createForwardingChainable("bgBrightRed");
-export const bgBrightGreen: ChainableStyleFn =
-	createForwardingChainable("bgBrightGreen");
-export const bgBrightYellow: ChainableStyleFn =
-	createForwardingChainable("bgBrightYellow");
-export const bgBrightBlue: ChainableStyleFn =
-	createForwardingChainable("bgBrightBlue");
-export const bgBrightMagenta: ChainableStyleFn =
-	createForwardingChainable("bgBrightMagenta");
-export const bgBrightCyan: ChainableStyleFn =
-	createForwardingChainable("bgBrightCyan");
-export const bgBrightWhite: ChainableStyleFn =
-	createForwardingChainable("bgBrightWhite");
+export const bgBrightBlack: ChainableStyleFn = createForwardingChainable("bgBrightBlack");
+export const bgBrightRed: ChainableStyleFn = createForwardingChainable("bgBrightRed");
+export const bgBrightGreen: ChainableStyleFn = createForwardingChainable("bgBrightGreen");
+export const bgBrightYellow: ChainableStyleFn = createForwardingChainable("bgBrightYellow");
+export const bgBrightBlue: ChainableStyleFn = createForwardingChainable("bgBrightBlue");
+export const bgBrightMagenta: ChainableStyleFn = createForwardingChainable("bgBrightMagenta");
+export const bgBrightCyan: ChainableStyleFn = createForwardingChainable("bgBrightCyan");
+export const bgBrightWhite: ChainableStyleFn = createForwardingChainable("bgBrightWhite");
 export const bold: ChainableStyleFn = createForwardingChainable("bold");
 export const dim: ChainableStyleFn = createForwardingChainable("dim");
 export const italic: ChainableStyleFn = createForwardingChainable("italic");
-export const underline: ChainableStyleFn =
-	createForwardingChainable("underline");
+export const underline: ChainableStyleFn = createForwardingChainable("underline");
 export const inverse: ChainableStyleFn = createForwardingChainable("inverse");
 export const hidden: ChainableStyleFn = createForwardingChainable("hidden");
-export const strikethrough: ChainableStyleFn =
-	createForwardingChainable("strikethrough");
+export const strikethrough: ChainableStyleFn = createForwardingChainable("strikethrough");
 
-export function link(
-	text: string,
-	url: string,
-	options?: HyperlinkOptions,
-): string {
+export function link(text: string, url: string, options?: HyperlinkOptions): string {
 	return style.link(text, url, options);
 }
 
@@ -128,9 +106,7 @@ export function fg<const T extends ColorInputCandidate>(
 	depth?: ColorDepth,
 ): string {
 	const broadInput = input as ColorInput;
-	return depth === undefined
-		? style.fg(text, broadInput)
-		: directFg(text, broadInput, depth);
+	return depth === undefined ? style.fg(text, broadInput) : directFg(text, broadInput, depth);
 }
 
 /**
@@ -149,9 +125,7 @@ export function bg<const T extends ColorInputCandidate>(
 	depth?: ColorDepth,
 ): string {
 	const broadInput = input as ColorInput;
-	return depth === undefined
-		? style.bg(text, broadInput)
-		: directBg(text, broadInput, depth);
+	return depth === undefined ? style.bg(text, broadInput) : directBg(text, broadInput, depth);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

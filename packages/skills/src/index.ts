@@ -14,11 +14,7 @@ export type { SkillCommandAnnotations } from "./annotations.ts";
 export { annotate } from "./annotations.ts";
 // Bundle install
 export { installSkillBundle } from "./bundle.ts";
-export type {
-	SkillConflictDetails,
-	SkillKindMismatch,
-	SkillManifestMalformed,
-} from "./errors.ts";
+export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } from "./errors.ts";
 // Errors
 export { SkillConflictError } from "./errors.ts";
 

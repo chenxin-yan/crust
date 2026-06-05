@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import { CrustError } from "@crustjs/core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+
 import { parseValue } from "./parse.ts";
 import type { StandardSchema } from "./types.ts";
 
@@ -18,9 +20,7 @@ function passthroughSchema<T = unknown>(): StandardSchema<T, T> {
 	};
 }
 
-function failingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
+function failingSchema(issues: StandardSchemaV1.Issue[]): StandardSchema<unknown, never> {
 	return {
 		"~standard": {
 			version: 1,
@@ -40,9 +40,7 @@ function asyncPassthroughSchema<T = unknown>(): StandardSchema<T, T> {
 	};
 }
 
-function asyncFailingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
+function asyncFailingSchema(issues: StandardSchemaV1.Issue[]): StandardSchema<unknown, never> {
 	return {
 		"~standard": {
 			version: 1,
@@ -137,10 +135,7 @@ describe("parseValue", () => {
 
 	it("throws CrustError(VALIDATION) on invalid input", async () => {
 		try {
-			await parseValue(
-				failingSchema([{ message: "Must be a valid email" }]),
-				"bad",
-			);
+			await parseValue(failingSchema([{ message: "Must be a valid email" }]), "bad");
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -262,7 +257,7 @@ describe("parseValue", () => {
 
 		it("throws DEFINITION error for non-Standard-Schema input", async () => {
 			try {
-				// biome-ignore lint/suspicious/noExplicitAny: testing runtime guard
+				// oxlint-disable-next-line typescript/no-explicit-any -- testing runtime guard
 				await parseValue({} as any, "x");
 				expect.unreachable("should have thrown");
 			} catch (err) {

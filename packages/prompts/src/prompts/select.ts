@@ -85,10 +85,7 @@ interface SelectState<T> {
 
 function createHandleKey<T>(
 	maxVisible: number,
-): (
-	key: KeypressEvent,
-	state: SelectState<T>,
-) => SelectState<T> | SubmitResult<T> {
+): (key: KeypressEvent, state: SelectState<T>) => SelectState<T> | SubmitResult<T> {
 	return (key, state) => {
 		const totalItems = state.choices.length;
 
@@ -162,9 +159,7 @@ function renderSelect<T>(
 		const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
 
 		if (isActive) {
-			lines.push(
-				`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(choice.label)}${hintText}`,
-			);
+			lines.push(`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(choice.label)}${hintText}`);
 		} else {
 			lines.push(`  ${theme.unselected(choice.label)}${hintText}`);
 		}
@@ -270,12 +265,7 @@ export async function select<T>(options: SelectOptions<T>): Promise<T> {
 	}
 
 	// Calculate initial scroll offset to keep cursor visible
-	const initialScrollOffset = calculateScrollOffset(
-		initialCursor,
-		0,
-		choices.length,
-		maxVisible,
-	);
+	const initialScrollOffset = calculateScrollOffset(initialCursor, 0, choices.length, maxVisible);
 
 	const initialState: SelectState<T> = {
 		cursor: initialCursor,

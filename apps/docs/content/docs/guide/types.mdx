@@ -9,14 +9,14 @@ Every flag and positional argument declares a `type` that determines two things:
 
 ## Quick reference
 
-| `type`      | Runtime value | Inferred TS type | Coercion |
-| ----------- | ------------- | ---------------- | -------- |
-| `"string"`  | The raw argv token | `string` | none |
-| `"number"`  | Coerced number | `number` | `Number(raw)`; throws `PARSE` on `NaN` |
-| `"boolean"` | Toggle (no value taken) | `boolean` | `--flag` → `true`, `--no-flag` → `false` |
-| `"url"`     | `URL` instance | `URL` | `new URL(raw)`; throws `PARSE` on missing protocol |
-| `"path"`    | Absolute path string | `string` | `~` expanded, then resolved against `process.cwd()` |
-| `"json"`    | Parsed JSON value | `unknown` | `JSON.parse(raw)`; throws `PARSE` on invalid JSON |
+| `type`      | Runtime value           | Inferred TS type | Coercion                                            |
+| ----------- | ----------------------- | ---------------- | --------------------------------------------------- |
+| `"string"`  | The raw argv token      | `string`         | none                                                |
+| `"number"`  | Coerced number          | `number`         | `Number(raw)`; throws `PARSE` on `NaN`              |
+| `"boolean"` | Toggle (no value taken) | `boolean`        | `--flag` → `true`, `--no-flag` → `false`            |
+| `"url"`     | `URL` instance          | `URL`            | `new URL(raw)`; throws `PARSE` on missing protocol  |
+| `"path"`    | Absolute path string    | `string`         | `~` expanded, then resolved against `process.cwd()` |
+| `"json"`    | Parsed JSON value       | `unknown`        | `JSON.parse(raw)`; throws `PARSE` on invalid JSON   |
 
 The inferred type for each variant flows through `default`, `required`, and `multiple` exactly like the base types. Optional flags without a default infer as `T | undefined`; required flags or flags with a `default` infer as `T`; `multiple: true` wraps the inferred type in an array.
 
@@ -117,7 +117,9 @@ new Crust("apply")
 - Shell completion **does not** offer filenames for `json` flags.
 
 <Callout type="info">
-  `JSON.parse` loses precision on integers above `Number.MAX_SAFE_INTEGER` (2^53 − 1). If you need bigints, use `type: "string"` with a custom `parse` — see the [BigInt recipe](#bigint--arbitrary-precision-integers).
+  `JSON.parse` loses precision on integers above `Number.MAX_SAFE_INTEGER` (2^53 − 1). If you need
+  bigints, use `type: "string"` with a custom `parse` — see the [BigInt
+  recipe](#bigint--arbitrary-precision-integers).
 </Callout>
 
 ## The `parse` escape hatch
@@ -231,7 +233,9 @@ A `parse` function that throws an error is automatically wrapped in `CrustError(
 The built-ins stay small on purpose. For specialised formats, paste one of the snippets below into a `.flags()` or `.args()` block — the runtime type flows automatically from `ReturnType<parse>`, no `as` casts needed.
 
 <Callout type="info">
-  Defaults are raw strings. Crust runs `parse(String(default))` so the runtime value matches the inferred type — don't pre-parse defaults. If a recipe is reused across commands, extract `parse` as a plain function and reference it from each definition.
+  Defaults are raw strings. Crust runs `parse(String(default))` so the runtime value matches the
+  inferred type — don't pre-parse defaults. If a recipe is reused across commands, extract `parse`
+  as a plain function and reference it from each definition.
 </Callout>
 
 ### Date — ISO-8601 / `Date` instance

@@ -35,7 +35,8 @@ preRun  ->  run  ->  postRun
 3. **`.postRun()`** — Called after `run()`, **even if `run()` throws**. Use for cleanup or teardown
 
 <Callout>
-  `postRun` runs in a `finally` block, so it executes even when `run()` throws an error. The error is still re-thrown after `postRun` completes.
+  `postRun` runs in a `finally` block, so it executes even when `run()` throws an error. The error
+  is still re-thrown after `postRun` completes.
 </Callout>
 
 ### Async Support
@@ -52,7 +53,7 @@ new Crust("migrate")
   })
   .postRun(async () => {
     await closeDatabaseConnection();
-  })
+  });
 ```
 
 ### Hook Context
@@ -61,10 +62,10 @@ Each hook receives the same `CrustCommandContext` object:
 
 ```ts
 interface CrustCommandContext<A, F> {
-  args: InferArgs<A>;       // Parsed positional arguments
-  flags: InferFlags<F>;     // Parsed flags (inherited + local merged)
-  rawArgs: string[];         // Arguments after `--`
-  command: CommandNode;      // The resolved command node
+  args: InferArgs<A>; // Parsed positional arguments
+  flags: InferFlags<F>; // Parsed flags (inherited + local merged)
+  rawArgs: string[]; // Arguments after `--`
+  command: CommandNode; // The resolved command node
 }
 ```
 

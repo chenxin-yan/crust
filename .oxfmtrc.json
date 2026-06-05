@@ -1,0 +1,16 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"sortImports": true,
+	"sortPackageJson": false,
+	"ignorePatterns": [".pi/", ".worktrees/", "apps/docs/.source/", "apps/docs/src/routeTree.gen.ts"],
+	"overrides": [
+		{
+			"files": ["apps/docs/**"],
+			"options": {
+				"useTabs": false,
+				"tabWidth": 2
+			}
+		}
+	]
+}

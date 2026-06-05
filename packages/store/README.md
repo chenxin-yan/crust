@@ -25,12 +25,12 @@ pnpm add @crustjs/store
 import { createStore, configDir } from "@crustjs/store";
 
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: { type: "string", default: "light" },
-    fontSize: { type: "number", default: 14 },
-    verbose: { type: "boolean", default: false },
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: { type: "string", default: "light" },
+		fontSize: { type: "number", default: 14 },
+		verbose: { type: "boolean", default: false },
+	},
 });
 
 // Read state (returns defaults when no persisted file exists)
@@ -64,47 +64,41 @@ No explicit generics needed — types are inferred from your `fields` definition
 | `cacheDir`  | Regenerable cached data   | HTTP caches, compiled assets           |
 
 ```ts
-import {
-  createStore,
-  configDir,
-  dataDir,
-  stateDir,
-  cacheDir,
-} from "@crustjs/store";
+import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/store";
 
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: { type: "string", default: "light" },
-    verbose: { type: "boolean", default: false },
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: { type: "string", default: "light" },
+		verbose: { type: "boolean", default: false },
+	},
 });
 
 // App data → ~/.local/share/my-cli/config.json
 const data = createStore({
-  dirPath: dataDir("my-cli"),
-  fields: {
-    bookmarks: { type: "string", array: true, default: [] },
-  },
+	dirPath: dataDir("my-cli"),
+	fields: {
+		bookmarks: { type: "string", array: true, default: [] },
+	},
 });
 
 // Runtime state → ~/.local/state/my-cli/config.json
 const state = createStore({
-  dirPath: stateDir("my-cli"),
-  fields: {
-    lastOpened: { type: "string", default: "" },
-    scrollY: { type: "number", default: 0 },
-  },
+	dirPath: stateDir("my-cli"),
+	fields: {
+		lastOpened: { type: "string", default: "" },
+		scrollY: { type: "number", default: 0 },
+	},
 });
 
 // Cache → ~/.cache/my-cli/config.json
 const cache = createStore({
-  dirPath: cacheDir("my-cli"),
-  fields: {
-    etag: { type: "string", default: "" },
-    payload: { type: "string", default: "" },
-  },
+	dirPath: cacheDir("my-cli"),
+	fields: {
+		etag: { type: "string", default: "" },
+		payload: { type: "string", default: "" },
+	},
 });
 ```
 
@@ -213,8 +207,8 @@ Reads the current effective state, applies the updater function, and atomically 
 
 ```ts
 await store.update((current) => ({
-  ...current,
-  theme: "dark",
+	...current,
+	theme: "dark",
 }));
 ```
 
@@ -303,21 +297,21 @@ const dir = configDir("my-cli");
 
 // Default store → ~/.config/my-cli/config.json
 const settingsStore = createStore({
-  dirPath: dir,
-  fields: {
-    theme: { type: "string", default: "light" },
-    fontSize: { type: "number", default: 14 },
-    verbose: { type: "boolean", default: false },
-  },
+	dirPath: dir,
+	fields: {
+		theme: { type: "string", default: "light" },
+		fontSize: { type: "number", default: 14 },
+		verbose: { type: "boolean", default: false },
+	},
 });
 
 // Auth store → ~/.config/my-cli/auth.json
 const authStore = createStore({
-  dirPath: dir,
-  name: "auth",
-  fields: {
-    token: { type: "string", default: "" },
-  },
+	dirPath: dir,
+	name: "auth",
+	fields: {
+		token: { type: "string", default: "" },
+	},
 });
 ```
 
@@ -331,12 +325,12 @@ When a persisted file exists, `read()` fills missing keys from field `defaults`:
 
 ```ts
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: { type: "string", default: "light" },
-    fontSize: { type: "number", default: 14 },
-    verbose: { type: "boolean", default: false },
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: { type: "string", default: "light" },
+		fontSize: { type: "number", default: 14 },
+		verbose: { type: "boolean", default: false },
+	},
 });
 
 // Persisted file contains: { "theme": "dark", "verbose": true }
@@ -372,11 +366,11 @@ import { z } from "zod";
 import { createStore, configDir, field } from "@crustjs/store";
 
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: field(z.enum(["light", "dark"]).default("light")),
-    verbose: { type: "boolean", default: false },
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: field(z.enum(["light", "dark"]).default("light")),
+		verbose: { type: "boolean", default: false },
+	},
 });
 
 // write() validates before persisting
@@ -395,10 +389,10 @@ import * as Schema from "effect/Schema";
 import { createStore, configDir, field } from "@crustjs/store";
 
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
+	},
 });
 ```
 
@@ -440,18 +434,18 @@ issue path.
 
 ```ts
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  fields: {
-    theme: {
-      type: "string",
-      default: "light",
-      validate(value) {
-        if (value !== "light" && value !== "dark") {
-          throw new Error('Must be "light" or "dark"');
-        }
-      },
-    },
-  },
+	dirPath: configDir("my-cli"),
+	fields: {
+		theme: {
+			type: "string",
+			default: "light",
+			validate(value) {
+				if (value !== "light" && value !== "dark") {
+					throw new Error('Must be "light" or "dark"');
+				}
+			},
+		},
+	},
 });
 ```
 
@@ -493,15 +487,15 @@ with `CrustStoreError("VALIDATION")` and an issue message tagged
 import { CrustStoreError } from "@crustjs/store";
 
 try {
-  await store.read();
+	await store.read();
 } catch (err) {
-  if (err instanceof CrustStoreError && err.is("VALIDATION")) {
-    // err.details is { operation: "read" | "write" | "update" | "patch", issues: StoreValidatorIssue[] }
-    console.error(`Validation failed during ${err.details.operation}:`);
-    for (const issue of err.details.issues) {
-      console.error(`  ${issue.path || "(root)"}: ${issue.message}`);
-    }
-  }
+	if (err instanceof CrustStoreError && err.is("VALIDATION")) {
+		// err.details is { operation: "read" | "write" | "update" | "patch", issues: StoreValidatorIssue[] }
+		console.error(`Validation failed during ${err.details.operation}:`);
+		for (const issue of err.details.issues) {
+			console.error(`  ${issue.path || "(root)"}: ${issue.message}`);
+		}
+	}
 }
 ```
 
@@ -509,13 +503,13 @@ try {
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                 |
-| ------------ | ------------------------------------------------------- | ----------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
-| `PARSE`      | Malformed JSON in persisted config file                 | `{ path: string }`      |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
-| `VALIDATION` | Config fails validator on read, write, update, or patch | `{ operation, issues }` |
-| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`         |
+| Code         | When                                                      | Details                 |
+| ------------ | --------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform   | `{ path: string }`      |
+| `PARSE`      | Malformed JSON in persisted config file                   | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure                 | `{ path, operation }`   |
+| `VALIDATION` | Config fails validator on read, write, update, or patch   | `{ operation, issues }` |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`           |
 
 ### Catching errors by code
 
@@ -523,19 +517,19 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 import { CrustStoreError } from "@crustjs/store";
 
 try {
-  const state = await store.read();
+	const state = await store.read();
 } catch (err) {
-  if (err instanceof CrustStoreError) {
-    switch (err.code) {
-      case "PARSE":
-        console.error(`Corrupt file at ${err.details.path}`);
-        console.error("Delete the file and retry, or fix the JSON manually.");
-        break;
-      case "IO":
-        console.error(`File ${err.details.operation} failed: ${err.message}`);
-        break;
-    }
-  }
+	if (err instanceof CrustStoreError) {
+		switch (err.code) {
+			case "PARSE":
+				console.error(`Corrupt file at ${err.details.path}`);
+				console.error("Delete the file and retry, or fix the JSON manually.");
+				break;
+			case "IO":
+				console.error(`File ${err.details.operation} failed: ${err.message}`);
+				break;
+		}
+	}
 }
 ```
 
@@ -545,8 +539,8 @@ The `.is()` method narrows the error type so `details` is fully typed:
 
 ```ts
 if (err instanceof CrustStoreError && err.is("IO")) {
-  // err.details is { path: string; operation: "read" | "write" | "delete" }
-  console.error(err.details.operation, err.details.path);
+	// err.details is { path: string; operation: "read" | "write" | "delete" }
+	console.error(err.details.operation, err.details.path);
 }
 ```
 
@@ -556,7 +550,7 @@ if (err instanceof CrustStoreError && err.is("IO")) {
 
 ```ts
 if (err instanceof CrustStoreError && err.is("VALIDATION")) {
-  console.error("Validation error:", err.cause);
+	console.error("Validation error:", err.cause);
 }
 ```
 
@@ -570,38 +564,38 @@ All types are exported for use in your application:
 
 ```ts
 import type {
-  CreateStoreOptions,
-  Store,
-  StoreUpdater,
-  FieldDef,
-  FieldsDef,
-  FieldOptions,
-  InferStoreConfig,
-  StoreValidatorIssue,
-  StoreErrorCode,
-  ValidationErrorDetails,
-  DefinitionErrorDetails,
-  ValueType,
-  PlatformEnv,
+	CreateStoreOptions,
+	Store,
+	StoreUpdater,
+	FieldDef,
+	FieldsDef,
+	FieldOptions,
+	InferStoreConfig,
+	StoreValidatorIssue,
+	StoreErrorCode,
+	ValidationErrorDetails,
+	DefinitionErrorDetails,
+	ValueType,
+	PlatformEnv,
 } from "@crustjs/store";
 ```
 
-| Type                     | Description                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `CreateStoreOptions`     | Options object for `createStore()`.                                                            |
-| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                               |
-| `StoreUpdater`           | Updater function type `(current: T) => T`.                                                     |
-| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.              |
-| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                               |
+| Type                     | Description                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `CreateStoreOptions`     | Options object for `createStore()`.                                                                    |
+| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                                       |
+| `StoreUpdater`           | Updater function type `(current: T) => T`.                                                             |
+| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.                      |
+| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                                       |
 | `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory (`type`, `default`, `array`, `description`). |
-| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                                       |
-| `StoreValidatorIssue`    | `{ message: string, path: string }`.                                                           |
-| `ValidationErrorDetails` | Error details for `VALIDATION` code: `{ operation, issues }`.                                  |
-| `DefinitionErrorDetails` | Error details for `DEFINITION` code: `{ vendor? }`.                                            |
-| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`.             |
-| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                            |
-| `PlatformEnv`            | Injectable platform environment for testing path helpers.                                      |
-| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                                         |
+| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                                               |
+| `StoreValidatorIssue`    | `{ message: string, path: string }`.                                                                   |
+| `ValidationErrorDetails` | Error details for `VALIDATION` code: `{ operation, issues }`.                                          |
+| `DefinitionErrorDetails` | Error details for `DEFINITION` code: `{ vendor? }`.                                                    |
+| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`.                     |
+| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                                    |
+| `PlatformEnv`            | Injectable platform environment for testing path helpers.                                              |
+| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                                                 |
 
 ## Scope & Non-Goals
 

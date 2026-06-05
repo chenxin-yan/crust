@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+
 import type { CommandNode, FlagsDef } from "@crustjs/core";
+
 import { walkCommandNode } from "./walker.ts";
 
 /**
@@ -12,9 +14,7 @@ import { walkCommandNode } from "./walker.ts";
  * we set `effectiveFlags` explicitly so the walker observes exactly the set
  * of flags we intend.
  */
-function makeNode(
-	partial: Partial<CommandNode> & { name: string },
-): CommandNode {
+function makeNode(partial: Partial<CommandNode> & { name: string }): CommandNode {
 	const flags: FlagsDef = partial.localFlags ?? {};
 	return {
 		meta: { name: partial.name, ...(partial.meta ?? {}) },

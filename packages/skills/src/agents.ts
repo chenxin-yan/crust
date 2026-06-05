@@ -5,6 +5,7 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+
 import type { AgentClass, AgentTarget, Scope } from "./types.ts";
 
 interface AgentConfig {
@@ -72,10 +73,7 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 		class: "additional",
 		projectSkillsDir: join(".claude", "skills"),
 		globalSkillsDir: (home) =>
-			join(
-				process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude"),
-				"skills",
-			),
+			join(process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude"), "skills"),
 		detectCommands: ["claude", "claude-code"],
 	},
 	cline: {
@@ -390,11 +388,7 @@ export async function detectInstalledAgents(
 /**
  * Resolves the filesystem path for a skill installation.
  */
-export function resolveAgentPath(
-	agent: AgentTarget,
-	scope: Scope,
-	name: string,
-): string {
+export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string): string {
 	const effectiveScope = resolveEffectiveScope(scope);
 	const cfg = AGENTS[agent];
 	if (effectiveScope === "project") {
@@ -430,9 +424,7 @@ function isCommandOnPath(command: string): boolean {
 
 	const isWindows = process.platform === "win32";
 	const pathExts = isWindows
-		? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-				.split(";")
-				.filter((e) => e.length > 0)
+		? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter((e) => e.length > 0)
 		: [];
 
 	for (const dir of dirs) {

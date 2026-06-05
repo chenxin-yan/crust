@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
+
 import { bold, cyan, dim, green, magenta, red, yellow } from "@crustjs/style";
-import {
-	createTheme,
-	defaultTheme,
-	getTheme,
-	resolveTheme,
-	setTheme,
-} from "./theme.ts";
+
+import { createTheme, defaultTheme, getTheme, resolveTheme, setTheme } from "./theme.ts";
 
 // Reset global theme after each test to prevent state leakage
 afterEach(() => {

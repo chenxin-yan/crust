@@ -24,7 +24,6 @@
 ### Patch Changes
 
 - f457387: Prefer spawning real `bun build --compile` over in-process `Bun.build()` to avoid standalone compiler failures on some host/target combinations.
-
   - Add `resolveBunBuildRunner()` to prefer the real Bun binary on PATH, falling back to `process.execPath` with `BUN_BE_BUN=1` only when needed
   - Update `execBuild()` to always use subprocess compilation instead of the programmatic API
   - Improve error reporting by surfacing both stdout and stderr from failed builds
@@ -61,7 +60,6 @@
 ### Patch Changes
 
 - 254b262: Add Windows ARM64 support to `crust build` and update distribution outputs.
-
   - `crust build` now supports `windows-arm64` (`bun-windows-arm64`) as a compile target.
   - Windows resolver generation now selects the correct binary for ARM64 and x64 hosts.
   - Binary distribution templates and package metadata now explicitly include resolver files and compiled binaries.

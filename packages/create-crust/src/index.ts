@@ -2,10 +2,12 @@
 
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
+
 import { Crust } from "@crustjs/core";
 import { isInGitRepo, runSteps } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
+
 import {
 	type DistributionMode,
 	scaffoldCrustProject,
@@ -26,32 +28,24 @@ function validateProjectName(name: string): void {
 	}
 }
 
-function parseTemplateStyle(
-	value: string | undefined,
-): TemplateStyle | undefined {
+function parseTemplateStyle(value: string | undefined): TemplateStyle | undefined {
 	if (value === undefined) {
 		return undefined;
 	}
 	if (value === "minimal" || value === "modular") {
 		return value;
 	}
-	throw new Error(
-		`Invalid template "${value}". Expected "minimal" or "modular".`,
-	);
+	throw new Error(`Invalid template "${value}". Expected "minimal" or "modular".`);
 }
 
-function parseDistributionMode(
-	value: string | undefined,
-): DistributionMode | undefined {
+function parseDistributionMode(value: string | undefined): DistributionMode | undefined {
 	if (value === undefined) {
 		return undefined;
 	}
 	if (value === "binary" || value === "runtime") {
 		return value;
 	}
-	throw new Error(
-		`Invalid distribution "${value}". Expected "binary" or "runtime".`,
-	);
+	throw new Error(`Invalid distribution "${value}". Expected "binary" or "runtime".`);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -110,9 +104,7 @@ const app = new Crust("create-crust")
 		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
 		if (targetDir !== "." && existsSync(resolvedDir)) {
 			if (flags.overwrite === true) {
-				console.log(
-					`Directory "${dirName}" already exists; overwriting (--overwrite).`,
-				);
+				console.log(`Directory "${dirName}" already exists; overwriting (--overwrite).`);
 			}
 			const overwrite = await confirm({
 				message: `Directory "${dirName}" already exists. Overwrite?`,
@@ -157,9 +149,7 @@ const app = new Crust("create-crust")
 				},
 			],
 			default: "binary",
-			...(distributionInitial !== undefined
-				? { initial: distributionInitial }
-				: {}),
+			...(distributionInitial !== undefined ? { initial: distributionInitial } : {}),
 		});
 		const installDeps = await confirm({
 			message: "Install dependencies?",
@@ -170,9 +160,7 @@ const app = new Crust("create-crust")
 		// Skip git init prompt if already inside a git repository.
 		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
 		// otherwise check the parent (directory will be created by scaffold).
-		const gitCheckDir = existsSync(resolvedDir)
-			? resolvedDir
-			: resolve(resolvedDir, "..");
+		const gitCheckDir = existsSync(resolvedDir) ? resolvedDir : resolve(resolvedDir, "..");
 		const alreadyInRepo = isInGitRepo(gitCheckDir);
 		const initGit = alreadyInRepo
 			? false
@@ -205,11 +193,7 @@ const app = new Crust("create-crust")
 		if (initGit) {
 			await spinner({
 				message: "Initializing git repository...",
-				task: () =>
-					runSteps(
-						[{ type: "git-init", commit: "chore: initial commit" }],
-						resolvedDir,
-					),
+				task: () => runSteps([{ type: "git-init", commit: "chore: initial commit" }], resolvedDir),
 			});
 		}
 
@@ -217,9 +201,7 @@ const app = new Crust("create-crust")
 		console.log(`\nCreated ${name}!\n`);
 		console.log("Next steps:");
 		if (targetDir !== ".") {
-			const relativeDir = targetDir.startsWith("/")
-				? targetDir
-				: `./${targetDir}`;
+			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
 			console.log(`  cd ${relativeDir}`);
 		}
 		console.log("  bun run dev");

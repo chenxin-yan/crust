@@ -24,7 +24,7 @@ export interface RunResult {
  *   expect(result.exitCode).toBe(0);
  */
 export async function executeCrust(
-	// biome-ignore lint/suspicious/noExplicitAny: accepts any Crust generic params
+	// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust generic params
 	builder: Crust<any, any, any>,
 	argv?: string[],
 ): Promise<RunResult> {
@@ -40,19 +40,13 @@ export async function executeCrust(
 
 	// Mock console to capture output
 	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stdoutChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 	console.error = (...args: unknown[]) => {
-		stderrChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 
 	try {

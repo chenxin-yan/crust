@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+
 import type {
 	ArgDef,
 	ArgsDef,
@@ -61,12 +62,7 @@ describe("integration: core APIs", () => {
 	});
 
 	it("execute() runs using argv override", async () => {
-		const result = await executeCrust(rootCmd, [
-			"serve",
-			"src",
-			"--port",
-			"4000",
-		]);
+		const result = await executeCrust(rootCmd, ["serve", "src", "--port", "4000"]);
 		expect(result.stdout).toContain("serve src on 4000");
 		expect(result.exitCode).toBe(0);
 	});
@@ -212,16 +208,14 @@ describe("integration: deeply nested subcommand (3 levels) inherits flags", () =
 				verbose: { type: "boolean", inherit: true },
 			})
 			.command("level1", (cmd) =>
-				cmd
-					.flags({ format: { type: "string", inherit: true } })
-					.command("level2", (cmd2) =>
-						cmd2.command("level3", (cmd3) =>
-							cmd3.run((ctx) => {
-								console.log(`verbose=${ctx.flags.verbose}`);
-								console.log(`format=${ctx.flags.format}`);
-							}),
-						),
+				cmd.flags({ format: { type: "string", inherit: true } }).command("level2", (cmd2) =>
+					cmd2.command("level3", (cmd3) =>
+						cmd3.run((ctx) => {
+							console.log(`verbose=${ctx.flags.verbose}`);
+							console.log(`format=${ctx.flags.format}`);
+						}),
 					),
+				),
 			);
 
 		const result = await executeCrust(app, [
@@ -314,12 +308,7 @@ describe("integration: non-inherit flag not visible to subcommand", () => {
 					),
 			);
 
-		const result = await executeCrust(app, [
-			"level1",
-			"level2",
-			"--l1Local",
-			"val",
-		]);
+		const result = await executeCrust(app, ["level1", "level2", "--l1Local", "val"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("Unknown flag");
 	});
@@ -464,25 +453,15 @@ describe("integration: .execute() full pipeline with argv override", () => {
 				dryRun: { type: "boolean", inherit: true },
 			})
 			.command("service", (cmd) =>
-				cmd
-					.args([{ name: "name", type: "string", required: true }] as const)
-					.run((ctx) => {
-						console.log(
-							`deploy service=${ctx.args.name} env=${ctx.flags.env} dryRun=${ctx.flags.dryRun}`,
-						);
-					}),
+				cmd.args([{ name: "name", type: "string", required: true }] as const).run((ctx) => {
+					console.log(
+						`deploy service=${ctx.args.name} env=${ctx.flags.env} dryRun=${ctx.flags.dryRun}`,
+					);
+				}),
 			);
 
-		const result = await executeCrust(app, [
-			"service",
-			"api",
-			"--env",
-			"production",
-			"--dryRun",
-		]);
-		expect(result.stdout).toContain(
-			"deploy service=api env=production dryRun=true",
-		);
+		const result = await executeCrust(app, ["service", "api", "--env", "production", "--dryRun"]);
+		expect(result.stdout).toContain("deploy service=api env=production dryRun=true");
 		expect(result.exitCode).toBe(0);
 	});
 
@@ -553,11 +532,7 @@ describe("integration: plugin adds flag visible to subcommand handler", () => {
 		);
 
 		await executeCrust(app, ["sub"]);
-		expect(order).toEqual([
-			"middleware:before:sub",
-			"sub:run",
-			"middleware:after:sub",
-		]);
+		expect(order).toEqual(["middleware:before:sub", "sub:run", "middleware:after:sub"]);
 	});
 });
 
@@ -575,13 +550,11 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 				cmd
 					.flags({ timeout: { type: "number", default: 30, inherit: true } })
 					.command("add", (cmd2) =>
-						cmd2
-							.args([{ name: "name", type: "string", required: true }] as const)
-							.run((ctx) => {
-								console.log(
-									`add remote=${ctx.args.name} verbose=${ctx.flags.verbose} timeout=${ctx.flags.timeout}`,
-								);
-							}),
+						cmd2.args([{ name: "name", type: "string", required: true }] as const).run((ctx) => {
+							console.log(
+								`add remote=${ctx.args.name} verbose=${ctx.flags.verbose} timeout=${ctx.flags.timeout}`,
+							);
+						}),
 					),
 			);
 
@@ -593,9 +566,7 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 			"--timeout",
 			"60",
 		]);
-		expect(result.stdout).toContain(
-			"add remote=origin verbose=true timeout=60",
-		);
+		expect(result.stdout).toContain("add remote=origin verbose=true timeout=60");
 		expect(result.exitCode).toBe(0);
 	});
 
@@ -625,7 +596,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 
 	// Simulate split-file pattern: subcommand definitions as separate const functions
 	const defineListCommand = (
-		// biome-ignore lint/complexity/noBannedTypes: testing empty initial local state
+		// oxlint-disable-next-line typescript/no-empty-object-type -- testing empty initial local state
 		cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
 	) =>
 		cmd
@@ -638,7 +609,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 			});
 
 	const defineGetCommand = (
-		// biome-ignore lint/complexity/noBannedTypes: testing empty initial local state
+		// oxlint-disable-next-line typescript/no-empty-object-type -- testing empty initial local state
 		cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
 	) =>
 		cmd
@@ -647,9 +618,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 				{ name: "id", type: "string", required: true },
 			] as const)
 			.run((ctx) => {
-				console.log(
-					`get ${ctx.args.resource}/${ctx.args.id} verbose=${ctx.flags.verbose}`,
-				);
+				console.log(`get ${ctx.args.resource}/${ctx.args.id} verbose=${ctx.flags.verbose}`);
 			});
 
 	it("split-file defined subcommands work through full pipeline", async () => {
@@ -660,22 +629,11 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 			.command("list", defineListCommand)
 			.command("get", defineGetCommand);
 
-		const listResult = await executeCrust(app, [
-			"list",
-			"pods",
-			"--verbose",
-			"--format",
-			"json",
-		]);
+		const listResult = await executeCrust(app, ["list", "pods", "--verbose", "--format", "json"]);
 		expect(listResult.stdout).toContain("list pods format=json verbose=true");
 		expect(listResult.exitCode).toBe(0);
 
-		const getResult = await executeCrust(app, [
-			"get",
-			"service",
-			"nginx",
-			"--verbose",
-		]);
+		const getResult = await executeCrust(app, ["get", "service", "nginx", "--verbose"]);
 		expect(getResult.stdout).toContain("get service/nginx verbose=true");
 		expect(getResult.exitCode).toBe(0);
 	});
@@ -688,9 +646,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 			.command("list", defineListCommand);
 
 		const result = await executeCrust(app, ["list", "deployments"]);
-		expect(result.stdout).toContain(
-			"list deployments format=table verbose=undefined",
-		);
+		expect(result.stdout).toContain("list deployments format=table verbose=undefined");
 		expect(result.exitCode).toBe(0);
 	});
 });
@@ -754,18 +710,19 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 			verbose: { type: "boolean", inherit: true },
 		});
 
-		const deployCmd = app
-			.sub("deploy")
-			.flags({ env: { type: "string", inherit: true } });
+		const deployCmd = app.sub("deploy").flags({ env: { type: "string", inherit: true } });
 
 		const statusCmd = deployCmd.sub("status").run((ctx) => {
 			console.log(`verbose=${ctx.flags.verbose} env=${ctx.flags.env}`);
 		});
 
-		const result = await executeCrust(
-			app.command(deployCmd.command(statusCmd)),
-			["deploy", "status", "--verbose", "--env", "staging"],
-		);
+		const result = await executeCrust(app.command(deployCmd.command(statusCmd)), [
+			"deploy",
+			"status",
+			"--verbose",
+			"--env",
+			"staging",
+		]);
 		expect(result.stdout).toContain("verbose=true env=staging");
 		expect(result.exitCode).toBe(0);
 	});
@@ -781,11 +738,7 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 		});
 
 		// rootOnly should not be recognized on the subcommand
-		const result = await executeCrust(app.command(sub), [
-			"sub",
-			"--rootOnly",
-			"val",
-		]);
+		const result = await executeCrust(app.command(sub), ["sub", "--rootOnly", "val"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("Unknown flag");
 	});
@@ -832,11 +785,7 @@ describe("integration: standalone builder → .command(builder) pattern", () => 
 				console.log(`deploy env=${ctx.flags.env}`);
 			});
 
-		const result = await executeCrust(app.command(deploy), [
-			"deploy",
-			"--env",
-			"production",
-		]);
+		const result = await executeCrust(app.command(deploy), ["deploy", "--env", "production"]);
 		expect(result.stdout).toContain("deploy env=production");
 		expect(result.exitCode).toBe(0);
 	});
@@ -849,10 +798,7 @@ describe("integration: standalone builder → .command(builder) pattern", () => 
 			console.log("deploy ran");
 		});
 
-		const result = await executeCrust(app.command(deploy), [
-			"deploy",
-			"--verbose",
-		]);
+		const result = await executeCrust(app.command(deploy), ["deploy", "--verbose"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("Unknown flag");
 	});
@@ -901,15 +847,7 @@ describe("integration: inherited multiple-value flag", () => {
 				}),
 			);
 
-		const result = await executeCrust(app, [
-			"sub",
-			"--tag",
-			"a",
-			"--tag",
-			"b",
-			"--tag",
-			"c",
-		]);
+		const result = await executeCrust(app, ["sub", "--tag", "a", "--tag", "b", "--tag", "c"]);
 		expect(result.stdout).toContain('tags=["a","b","c"]');
 		expect(result.exitCode).toBe(0);
 	});
@@ -936,13 +874,7 @@ describe("integration: separator (--) with subcommand and inherited flags", () =
 				}),
 			);
 
-		const result = await executeCrust(app, [
-			"sub",
-			"--verbose",
-			"--",
-			"extra1",
-			"extra2",
-		]);
+		const result = await executeCrust(app, ["sub", "--verbose", "--", "extra1", "extra2"]);
 		expect(result.stdout).toContain("verbose=true");
 		expect(result.stdout).toContain('rawArgs=["extra1","extra2"]');
 		expect(result.exitCode).toBe(0);
@@ -1000,9 +932,7 @@ describe("integration: complex real-world CLI scenario", () => {
 			.command("status", (cmd) =>
 				cmd.run((ctx) => {
 					order.push("status:run");
-					console.log(
-						`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`,
-					);
+					console.log(`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`);
 				}),
 			);
 
@@ -1014,24 +944,15 @@ describe("integration: complex real-world CLI scenario", () => {
 			"--config",
 			"/etc/myctl",
 		]);
-		expect(deployResult.stdout).toContain(
-			"deploy env=prod verbose=true config=/etc/myctl",
-		);
+		expect(deployResult.stdout).toContain("deploy env=prod verbose=true config=/etc/myctl");
 		expect(deployResult.exitCode).toBe(0);
-		expect(order).toEqual([
-			"audit:deploy",
-			"deploy:preRun",
-			"deploy:run",
-			"deploy:postRun",
-		]);
+		expect(order).toEqual(["audit:deploy", "deploy:preRun", "deploy:run", "deploy:postRun"]);
 
 		// Reset order for next test
 		order.length = 0;
 
 		const statusResult = await executeCrust(app, ["status", "-v"]);
-		expect(statusResult.stdout).toContain(
-			"status verbose=true config=~/.myctl",
-		);
+		expect(statusResult.stdout).toContain("status verbose=true config=~/.myctl");
 		expect(statusResult.exitCode).toBe(0);
 		expect(order).toEqual(["audit:status", "status:run"]);
 	});

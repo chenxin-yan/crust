@@ -25,12 +25,7 @@ function resolveLocal(spec: string, fromFile: string): string | undefined {
 	if (spec.startsWith(".")) {
 		const base = resolve(dirname(fromFile), spec);
 		// Try as-is, then with .ts, then as a folder index.
-		for (const candidate of [
-			base,
-			`${base}.ts`,
-			`${base}.tsx`,
-			resolve(base, "index.ts"),
-		]) {
+		for (const candidate of [base, `${base}.ts`, `${base}.tsx`, resolve(base, "index.ts")]) {
 			if (loadSource(candidate)) return candidate;
 		}
 	}

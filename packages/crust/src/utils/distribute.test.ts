@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import {
 	buildDistributionPlatformPackageJson,
 	buildDistributionRootPackageJson,
@@ -19,15 +14,11 @@ import {
 
 describe("derivePlatformPackageName", () => {
 	it("suffixes unscoped package names", () => {
-		expect(derivePlatformPackageName("my-cli", "darwin-arm64")).toBe(
-			"my-cli-darwin-arm64",
-		);
+		expect(derivePlatformPackageName("my-cli", "darwin-arm64")).toBe("my-cli-darwin-arm64");
 	});
 
 	it("suffixes scoped package names", () => {
-		expect(derivePlatformPackageName("@scope/my-cli", "linux-x64")).toBe(
-			"@scope/my-cli-linux-x64",
-		);
+		expect(derivePlatformPackageName("@scope/my-cli", "linux-x64")).toBe("@scope/my-cli-linux-x64");
 	});
 });
 
@@ -37,24 +28,16 @@ describe("inferCommandName", () => {
 	});
 
 	it("uses the single object bin key", () => {
-		expect(inferCommandName("my-cli", { crusty: "dist/cli" }, "my-cli")).toBe(
-			"crusty",
-		);
+		expect(inferCommandName("my-cli", { crusty: "dist/cli" }, "my-cli")).toBe("crusty");
 	});
 
 	it("uses the unscoped package name for string bin shorthand", () => {
-		expect(inferCommandName("@scope/my-cli", "dist/cli", "ignored")).toBe(
-			"my-cli",
-		);
+		expect(inferCommandName("@scope/my-cli", "dist/cli", "ignored")).toBe("my-cli");
 	});
 
 	it("throws for multiple bin entries", () => {
 		expect(() =>
-			inferCommandName(
-				"my-cli",
-				{ one: "dist/one", two: "dist/two" },
-				"my-cli",
-			),
+			inferCommandName("my-cli", { one: "dist/one", two: "dist/two" }, "my-cli"),
 		).toThrow(/exactly one bin entry/);
 	});
 });
@@ -99,9 +82,7 @@ describe("distribution manifest JSON builders", () => {
 			},
 		});
 
-		expect(
-			buildDistributionRootPackageJson(metadata, targets, { includeMan: true }),
-		).toEqual({
+		expect(buildDistributionRootPackageJson(metadata, targets, { includeMan: true })).toEqual({
 			name: "@crustjs/crust",
 			version: "1.2.3",
 			type: "module",
@@ -154,9 +135,7 @@ describe("distribution manifest JSON builders", () => {
 
 describe("getPackagePathSegment", () => {
 	it("returns the unscoped name for scoped packages", () => {
-		expect(getPackagePathSegment("@crustjs/crust-linux-x64")).toBe(
-			"crust-linux-x64",
-		);
+		expect(getPackagePathSegment("@crustjs/crust-linux-x64")).toBe("crust-linux-x64");
 	});
 });
 
@@ -184,9 +163,7 @@ describe("generateDistributionJsResolver", () => {
 		expect(launcher).toContain("const candidateTwo = resolve(");
 		expect(launcher).toContain('"packagePathSegment": "crust-linux-x64"');
 		expect(launcher).toContain('"packageName": "@crustjs/crust-linux-x64"');
-		expect(launcher).toContain(
-			'"binaryFilename": "crust-bun-linux-x64-baseline"',
-		);
+		expect(launcher).toContain('"binaryFilename": "crust-bun-linux-x64-baseline"');
 		expect(launcher).not.toContain('"targetAlias"');
 		expect(launcher).toContain("Missing platform package");
 		expect(launcher).toContain("optional dependencies are enabled");
@@ -233,9 +210,7 @@ describe("runDistributeBuild", () => {
 			validate: false,
 		});
 
-		const manifest = JSON.parse(
-			readFileSync(join(tmpDir, ".stage", "manifest.json"), "utf-8"),
-		) as {
+		const manifest = JSON.parse(readFileSync(join(tmpDir, ".stage", "manifest.json"), "utf-8")) as {
 			root: { dir: string; bin: string };
 			packages: Array<{ target: string; name: string }>;
 			publishOrder: string[];
@@ -299,13 +274,7 @@ export const app = new Crust("x").run(() => {});
 		expect(rootPkg.files).toEqual(["bin", "man"]);
 		expect(rootPkg.man).toEqual(["./man/man-stage-cli.1"]);
 
-		const stagedMan = join(
-			tmpDir,
-			".stage-man",
-			"root",
-			"man",
-			"man-stage-cli.1",
-		);
+		const stagedMan = join(tmpDir, ".stage-man", "root", "man", "man-stage-cli.1");
 		expect(existsSync(stagedMan)).toBe(true);
 		expect(readFileSync(stagedMan, "utf-8")).toContain(".Dd");
 

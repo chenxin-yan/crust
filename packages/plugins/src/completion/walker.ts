@@ -1,15 +1,7 @@
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import {
-	assertSafeChoiceValue,
-	assertSafeIdentifier,
-	sanitizeFreeText,
-} from "./escape.ts";
-import type {
-	CompletionArg,
-	CompletionCommand,
-	CompletionFlag,
-	CompletionSpec,
-} from "./spec.ts";
+
+import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "./spec.ts";
 
 /**
  * Strip ANSI escape sequences (CSI + private-use SGR codes) from a string.
@@ -28,7 +20,7 @@ import type {
  */
 // Build the pattern via the `RegExp` constructor with a string assembled from
 // `String.fromCharCode` so the source has no embedded control characters —
-// Biome's `noControlCharactersInRegex` rule flags both regex literals and
+// Oxlint's `no-control-regex` rule flags both regex literals and
 // string literals that contain raw `\x1b`/`\x07`. Behaviour is identical to
 // the equivalent regex literal.
 const ESC = String.fromCharCode(0x1b);
@@ -78,9 +70,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 	// ("files" / "none") rather than the source type literal.
 	const sourceType = def.type;
 	const specType: "string" | "number" | "boolean" =
-		sourceType === "url" || sourceType === "path" || sourceType === "json"
-			? "string"
-			: sourceType;
+		sourceType === "url" || sourceType === "path" || sourceType === "json" ? "string" : sourceType;
 
 	const flag: CompletionFlag = {
 		name,
@@ -89,8 +79,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 	};
 
 	if (sourceType === "path") flag.valueCompletion = "files";
-	else if (sourceType === "url" || sourceType === "json")
-		flag.valueCompletion = "none";
+	else if (sourceType === "url" || sourceType === "json") flag.valueCompletion = "none";
 
 	if (def.short !== undefined && def.short.length > 0) {
 		flag.short = def.short;
@@ -145,8 +134,7 @@ function walkArg(def: ArgDef): CompletionArg {
 	};
 
 	if (sourceType === "path") arg.valueCompletion = "files";
-	else if (sourceType === "url" || sourceType === "json")
-		arg.valueCompletion = "none";
+	else if (sourceType === "url" || sourceType === "json") arg.valueCompletion = "none";
 
 	const description = normaliseDescription(def.description);
 	if (description !== undefined) {

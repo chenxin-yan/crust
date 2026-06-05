@@ -7,12 +7,7 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { applyStyle } from "./styleEngine.ts";
-import type {
-	CheckedColorInput,
-	ColorDepth,
-	ColorInput,
-	ColorInputCandidate,
-} from "./types.ts";
+import type { CheckedColorInput, ColorDepth, ColorInput, ColorInputCandidate } from "./types.ts";
 
 export type { ColorInput } from "./types.ts";
 
@@ -36,10 +31,7 @@ const BG_INTRODUCER = "\x1b[48;";
 
 /** Quote strings, JSON-stringify objects, fall back to `String()`. */
 function describeInput(input: unknown): string {
-	if (
-		typeof input === "string" ||
-		(input !== null && typeof input === "object")
-	) {
+	if (typeof input === "string" || (input !== null && typeof input === "object")) {
 		try {
 			return JSON.stringify(input);
 		} catch {
@@ -85,11 +77,7 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 		return 30; // black
 	}
 	let ansi =
-		30 +
-		(((Math.round(b / 255) << 2) |
-			(Math.round(g / 255) << 1) |
-			Math.round(r / 255)) &
-			0b111);
+		30 + (((Math.round(b / 255) << 2) | (Math.round(g / 255) << 1) | Math.round(r / 255)) & 0b111);
 	if (brightnessBucket === 2) {
 		ansi += 60;
 	}
@@ -157,9 +145,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * fgCode({ r: 255, g: 0, b: 0 });
  * ```
  */
-export function fgCode<const T extends ColorInputCandidate>(
-	input: CheckedColorInput<T>,
-): AnsiPair {
+export function fgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
 	return { open: fgOpen(input as ColorInput, "truecolor"), close: FG_CLOSE };
 }
 
@@ -197,9 +183,7 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * bgCode("hsl(120, 100%, 50%)");
  * ```
  */
-export function bgCode<const T extends ColorInputCandidate>(
-	input: CheckedColorInput<T>,
-): AnsiPair {
+export function bgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
 	return { open: bgOpen(input as ColorInput, "truecolor"), close: BG_CLOSE };
 }
 

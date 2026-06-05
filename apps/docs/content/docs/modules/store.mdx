@@ -68,13 +68,7 @@ No explicit generics needed — types are inferred from your `fields` definition
 | `cacheDir`  | Regenerable cached data   | HTTP caches, compiled assets           |
 
 ```ts title="src/stores.ts"
-import {
-  createStore,
-  configDir,
-  dataDir,
-  stateDir,
-  cacheDir,
-} from "@crustjs/store";
+import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/store";
 
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
@@ -124,8 +118,8 @@ All four helpers follow XDG conventions on Linux and macOS, and Windows-native c
 | `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `$XDG_CACHE_HOME`  |
 
 <Callout>
-  macOS uses XDG conventions (same as Linux) for a unified Unix mental model,
-  not native `~/Library/...` paths.
+  macOS uses XDG conventions (same as Linux) for a unified Unix mental model, not native
+  `~/Library/...` paths.
 </Callout>
 
 The optional `env` parameter on each helper accepts a `PlatformEnv` object for deterministic testing without mutating `process.env`.
@@ -318,8 +312,8 @@ const state = await store.read();
 - Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
 
 <Callout>
-  Merged defaults exist only in memory. The persisted file remains unchanged
-  until you explicitly call `write()`, `update()`, or `patch()`.
+  Merged defaults exist only in memory. The persisted file remains unchanged until you explicitly
+  call `write()`, `update()`, or `patch()`.
 </Callout>
 
 ## Validation
@@ -417,7 +411,7 @@ schema. As a result:
 
 - `field(z.string().default("x"))` returns `"x"` on read when the field
   is missing from disk, but the inferred config type is `string |
-  undefined` (NOT narrowed).
+undefined` (NOT narrowed).
 - `field(z.string(), { default: "x" })` keeps `"x"` as the Crust-level
   default AND narrows the inferred config type to `string`.
 
@@ -434,13 +428,13 @@ fields; pass it through `opts` only as legacy metadata for tooling.
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                 |
-| ------------ | ------------------------------------------------------- | ----------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
-| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`      |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
-| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }` |
-| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`         |
+| Code         | When                                                      | Details                 |
+| ------------ | --------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform   | `{ path: string }`      |
+| `PARSE`      | Malformed JSON in persisted file                          | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure                 | `{ path, operation }`   |
+| `VALIDATION` | One or more field validators rejected the state           | `{ operation, issues }` |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`           |
 
 ### Catching Errors
 
@@ -498,9 +492,8 @@ if (err instanceof CrustStoreError) {
 ```
 
 <Callout type="warn">
-  `@crustjs/store` does **not** silently recover from malformed JSON. If the
-  persisted file contains invalid JSON, `read()` throws immediately — no
-  fallback to defaults.
+  `@crustjs/store` does **not** silently recover from malformed JSON. If the persisted file contains
+  invalid JSON, `read()` throws immediately — no fallback to defaults.
 </Callout>
 
 ## Exports
@@ -518,22 +511,22 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-| Type                     | Description                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `CreateStoreOptions`     | Options object for `createStore()`.                                               |
-| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                  |
-| `StoreUpdater`           | Updater function type `(current: T) => T`.                                        |
-| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`. |
-| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                  |
-| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                          |
-| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory.                        |
-| `StoreValidatorIssue`    | Issue object with `{ message: string, path: string }`.                            |
-| `ValidationErrorDetails` | Details for `VALIDATION` errors: `{ operation, issues }`.                         |
-| `DefinitionErrorDetails` | Details for `DEFINITION` errors: `{ vendor? }`.                                   |
+| Type                     | Description                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `CreateStoreOptions`     | Options object for `createStore()`.                                                |
+| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                   |
+| `StoreUpdater`           | Updater function type `(current: T) => T`.                                         |
+| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.  |
+| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                   |
+| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                           |
+| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory.                         |
+| `StoreValidatorIssue`    | Issue object with `{ message: string, path: string }`.                             |
+| `ValidationErrorDetails` | Details for `VALIDATION` errors: `{ operation, issues }`.                          |
+| `DefinitionErrorDetails` | Details for `DEFINITION` errors: `{ vendor? }`.                                    |
 | `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`. |
 | `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                |
-| `PlatformEnv`            | Injectable platform environment for testing path helpers.                         |
-| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                            |
+| `PlatformEnv`            | Injectable platform environment for testing path helpers.                          |
+| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                             |
 
 ## Design
 

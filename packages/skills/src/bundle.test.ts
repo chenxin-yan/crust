@@ -1,16 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	mkdir,
-	readdir,
-	readFile,
-	rm,
-	stat,
-	symlink,
-	writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { Crust } from "@crustjs/core";
+
 import { installSkillBundle, loadBundleFiles } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
 import { generateSkill } from "./generate.ts";
@@ -147,9 +141,7 @@ describe("loadBundleFiles", () => {
 			`${JSON.stringify({ name: "funnel-builder", version: "0.0.0" }, null, "\t")}\n`,
 		);
 
-		await expect(loadBundleFiles(dir)).rejects.toThrow(
-			/reserved file "crust\.json"/,
-		);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/reserved file "crust\.json"/);
 	});
 
 	it("survives an internal directory symlink cycle without unbounded recursion", async () => {
@@ -204,20 +196,14 @@ describe("loadBundleFiles", () => {
 	it("rejects frontmatter with no top-level description field", async () => {
 		const dir = join(tmpDir, "no-description-key");
 		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\n---\n# Bundle\n",
-		);
+		await writeFile(join(dir, "SKILL.md"), "---\nname: funnel-builder\n---\n# Bundle\n");
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
 	});
 
 	it("rejects empty frontmatter values", async () => {
 		const dir = join(tmpDir, "empty-values");
 		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: ""\ndescription: ""\n---\n',
-		);
+		await writeFile(join(dir, "SKILL.md"), '---\nname: ""\ndescription: ""\n---\n');
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
 	});
 
@@ -375,9 +361,7 @@ describe("installSkillBundle", () => {
 		const manifest = await readInstalledManifest(canonicalDir);
 		expect(manifest).toEqual({ version: "1.0.0", kind: "bundle" });
 
-		const written = JSON.parse(
-			await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"),
-		);
+		const written = JSON.parse(await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"));
 		expect(written.name).toBe("funnel-builder");
 		expect(written.description).toBe("Build a sales funnel");
 		expect(written.version).toBe("1.0.0");
@@ -424,6 +408,111 @@ describe("installSkillBundle", () => {
 		);
 		const agent = result.agents[0] as AgentResult;
 		expect(agent.status).toBe("up-to-date");
+	});
+
+	it("force: true rewrites same-version bundle content", async () => {
+		const firstSource = join(tmpDir, "first-bundle");
+		const secondSource = join(tmpDir, "second-bundle");
+		await mkdir(firstSource, { recursive: true });
+		await mkdir(secondSource, { recursive: true });
+		await writeFile(
+			join(firstSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Initial bundle\n---\n\nInitial content\n",
+		);
+		await writeFile(
+			join(secondSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Forced bundle\n---\n\nForced content\n",
+		);
+
+		await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: firstSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "copy",
+			}),
+		);
+
+		const skillPath = join(tmpDir, ".claude", "skills", "funnel-builder", "SKILL.md");
+		const canonicalPath = join(tmpDir, ".crust", "skills", "funnel-builder", "SKILL.md");
+		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
+
+		const result = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: secondSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				force: true,
+				installMode: "copy",
+			}),
+		);
+
+		const agent = result.agents[0] as AgentResult;
+		expect(agent.status).toBe("updated");
+		expect(agent.previousVersion).toBe(BUNDLE_VERSION);
+
+		const agentContent = await readFile(skillPath, "utf-8");
+		expect(agentContent).toContain("Forced content");
+		expect(agentContent).not.toContain("Initial content");
+
+		const canonicalContent = await readFile(canonicalPath, "utf-8");
+		expect(canonicalContent).toContain("Forced content");
+		expect(canonicalContent).not.toContain("Initial content");
+	});
+
+	it("force: true rewrites same-version bundle content in symlink mode", async () => {
+		if (process.platform === "win32") {
+			return;
+		}
+
+		const firstSource = join(tmpDir, "first-symlink-bundle");
+		const secondSource = join(tmpDir, "second-symlink-bundle");
+		await mkdir(firstSource, { recursive: true });
+		await mkdir(secondSource, { recursive: true });
+		await writeFile(
+			join(firstSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Initial bundle\n---\n\nInitial content\n",
+		);
+		await writeFile(
+			join(secondSource, "SKILL.md"),
+			"---\nname: funnel-builder\ndescription: Forced bundle\n---\n\nForced content\n",
+		);
+
+		const first = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: firstSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				installMode: "symlink",
+			}),
+		);
+		const outputDir = (first.agents[0] as AgentResult).outputDir;
+		expect((await lstat(outputDir)).isSymbolicLink()).toBe(true);
+
+		const skillPath = join(outputDir, "SKILL.md");
+		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
+
+		const result = await withCwd(tmpDir, () =>
+			installSkillBundle({
+				sourceDir: secondSource,
+				agents: ["claude-code"],
+				scope: "project",
+				version: BUNDLE_VERSION,
+				force: true,
+				installMode: "symlink",
+			}),
+		);
+
+		const agent = result.agents[0] as AgentResult;
+		expect(agent.status).toBe("updated");
+		expect(agent.previousVersion).toBe(BUNDLE_VERSION);
+
+		const forcedContent = await readFile(skillPath, "utf-8");
+		expect(forcedContent).toContain("Forced content");
+		expect(forcedContent).not.toContain("Initial content");
 	});
 
 	it("agents: [] validates the bundle before returning", async () => {

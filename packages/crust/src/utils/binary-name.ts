@@ -6,11 +6,7 @@ import { basename, join } from "node:path";
  *
  * Priority: explicit name > package.json name > entry filename
  */
-export function resolveBaseName(
-	name: string | undefined,
-	entry: string,
-	cwd: string,
-): string {
+export function resolveBaseName(name: string | undefined, entry: string, cwd: string): string {
 	if (name) {
 		return name;
 	}

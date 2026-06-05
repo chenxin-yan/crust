@@ -19,8 +19,9 @@ command handler to receive typed, transformed `args` / `flags`.
     `field()` factory that builds a `FieldDef` from any Standard Schema.
     You do not need `@crustjs/validate` for stores.
 
-  Reach for `@crustjs/validate` only for command-level `arg()` / `flag()` /
-  `commandValidator()`.
+Reach for `@crustjs/validate` only for command-level `arg()` / `flag()` /
+`commandValidator()`.
+
 </Callout>
 
 ## Install
@@ -135,11 +136,9 @@ import * as v from "valibot";
 const serve = new Crust("serve")
   .meta({ description: "Start the dev server" })
   .args([
-    arg(
-      "port",
-      v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(1)),
-      { description: "Port to listen on" },
-    ),
+    arg("port", v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(1)), {
+      description: "Port to listen on",
+    }),
     arg("host", v.optional(v.string(), "localhost")),
   ])
   .flags({
@@ -160,10 +159,9 @@ const serve = new Crust("serve")
 </Tabs>
 
 <Callout type="info" title="Parser grammar lives in Crust options">
-  Descriptions, aliases, and flag `type` are Crust metadata, not schema
-  metadata. For flags, `type` declares CLI grammar/token ownership — boolean
-  flags do not consume a value, while string and number flags consume `--flag
-  value` / `--flag=value`. Schemas decide requiredness, defaults, and
+  Descriptions, aliases, and flag `type` are Crust metadata, not schema metadata. For flags, `type`
+  declares CLI grammar/token ownership — boolean flags do not consume a value, while string and
+  number flags consume `--flag value` / `--flag=value`. Schemas decide requiredness, defaults, and
   transformations by validating the parsed value afterwards.
 </Callout>
 
@@ -214,11 +212,7 @@ throwing, or to runtime-check whether an object implements Standard
 Schema v1:
 
 ```ts
-import {
-  isStandardSchema,
-  validateStandard,
-  validateStandardSync,
-} from "@crustjs/validate";
+import { isStandardSchema, validateStandard, validateStandardSync } from "@crustjs/validate";
 
 const result = await validateStandard(schema, value);
 if (result.ok) {

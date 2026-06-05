@@ -4,7 +4,9 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { z } from "zod";
+
 import { CrustStoreError } from "./errors.ts";
 import { field } from "./field.ts";
 import { createStore } from "./store.ts";
@@ -237,10 +239,7 @@ describe("store.read", () => {
 
 	it("should include optional fields when persisted", async () => {
 		const filePath = join(tempDir, "config.json");
-		await writeFile(
-			filePath,
-			JSON.stringify({ theme: "dark", verbose: true, token: "abc123" }),
-		);
+		await writeFile(filePath, JSON.stringify({ theme: "dark", verbose: true, token: "abc123" }));
 
 		const store = createStore({
 			dirPath: tempDir,
@@ -355,10 +354,7 @@ describe("store.read", () => {
 
 	it("should coerce persisted number and boolean strings on read", async () => {
 		const filePath = join(tempDir, "config.json");
-		await writeFile(
-			filePath,
-			JSON.stringify({ retries: "42", enabled: "true" }),
-		);
+		await writeFile(filePath, JSON.stringify({ retries: "42", enabled: "true" }));
 
 		const fields = {
 			retries: { type: "number", default: 0 },
@@ -1129,9 +1125,7 @@ describe("FieldDef.validate contract", () => {
 			name: {
 				type: "string",
 				default: "ok",
-				validate: ((_v: string) => ({ ok: false, value: "bad" }) as never) as (
-					v: string,
-				) => void,
+				validate: ((_v: string) => ({ ok: false, value: "bad" }) as never) as (v: string) => void,
 			},
 		} as const satisfies FieldsDef;
 
@@ -1163,9 +1157,7 @@ describe("FieldDef.validate contract", () => {
 				default: "x",
 				// Legacy `{ ok, issues }` return shape — a caller bug.
 				validate: ((_v: string) =>
-					({ ok: false, issues: [{ message: "bad", path: "" }] }) as never) as (
-					v: string,
-				) => void,
+					({ ok: false, issues: [{ message: "bad", path: "" }] }) as never) as (v: string) => void,
 			},
 		} as const satisfies FieldsDef;
 
@@ -1180,9 +1172,7 @@ describe("FieldDef.validate contract", () => {
 		}
 
 		expect(caught).toBeInstanceOf(TypeError);
-		expect((caught as TypeError).message).toContain(
-			"FieldDef.validate must return void",
-		);
+		expect((caught as TypeError).message).toContain("FieldDef.validate must return void");
 		// Critically: it is NOT a CrustStoreError("VALIDATION").
 		expect(caught).not.toBeInstanceOf(CrustStoreError);
 	});

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { red } from "../colors.ts";
 import { bold } from "../modifiers.ts";
 import { orderedList, taskList, unorderedList } from "./lists.ts";
@@ -145,9 +146,7 @@ describe("orderedList", () => {
 	});
 
 	it("aligns multiline with double-digit markers", () => {
-		const items = Array.from({ length: 10 }, (_, i) =>
-			i === 0 ? "line1\nline2" : `item${i + 1}`,
-		);
+		const items = Array.from({ length: 10 }, (_, i) => (i === 0 ? "line1\nline2" : `item${i + 1}`));
 		const result = orderedList(items);
 		const lines = result.split("\n");
 		// Max marker "10." width 3 + gap 1 = 4 continuation indent
@@ -222,9 +221,7 @@ describe("taskList", () => {
 	});
 
 	it("aligns multiline item continuation", () => {
-		const result = taskList([
-			{ text: "first line\nsecond line", checked: true },
-		]);
+		const result = taskList([{ text: "first line\nsecond line", checked: true }]);
 		// marker "[x]" width 3 + gap 1 = 4 continuation indent
 		expect(result).toBe("[x] first line\n    second line");
 	});

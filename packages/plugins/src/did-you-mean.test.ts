@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { Crust } from "@crustjs/core";
+
 import {
 	type AutoCompletePluginOptions,
 	autoCompletePlugin,
@@ -82,9 +84,7 @@ describe("didYouMeanPlugin", () => {
 	it("suggests the canonical name when the input matches an alias", async () => {
 		const app = new Crust("app")
 			.use(didYouMeanPlugin())
-			.command("issue", (cmd) =>
-				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
-			)
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}))
 			.command("version", (cmd) => cmd.run(() => {}));
 
 		// "issuess" is closest to the alias "issues" (distance 1) than to
@@ -102,9 +102,7 @@ describe("didYouMeanPlugin", () => {
 	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
 		const app = new Crust("app")
 			.use(didYouMeanPlugin())
-			.command("issue", (cmd) =>
-				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
-			);
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}));
 
 		await app.execute({ argv: ["isue"] });
 
@@ -131,9 +129,7 @@ describe("didYouMeanPlugin", () => {
 	it("lists only canonical names under 'Available commands'", async () => {
 		const app = new Crust("app")
 			.use(didYouMeanPlugin())
-			.command("issue", (cmd) =>
-				cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
-			)
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}))
 			.command("version", (cmd) => cmd.run(() => {}));
 
 		await app.execute({ argv: ["completely-unknown"] });
@@ -146,9 +142,7 @@ describe("didYouMeanPlugin", () => {
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
 			.use(didYouMeanPlugin({ mode: "help" }))
-			.command("issue", (cmd) =>
-				cmd.meta({ aliases: ["issues"] }).run(() => {}),
-			);
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).run(() => {}));
 
 		// Both the canonical "issue" and the alias "issues" are within
 		// Levenshtein distance 3 of "issuee". The first suggestion line

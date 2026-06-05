@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { scaffold } from "@crustjs/create";
+
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
 import pluginsPackage from "../../plugins/package.json";
@@ -116,9 +118,7 @@ describe("scaffold", () => {
 	it("generates package.json with correct name and dependencies", async () => {
 		await scaffoldBase(TEST_DIR, { name: "my-awesome-cli" });
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 
 		expect(pkg.name).toBe("my-awesome-cli");
 		expect(pkg.version).toBe("0.0.0");
@@ -142,15 +142,9 @@ describe("scaffold", () => {
 	});
 
 	it("generates runtime distribution package.json when selected", async () => {
-		await scaffoldProject(
-			TEST_DIR,
-			{ name: "runtime-cli" },
-			{ distribution: "runtime" },
-		);
+		await scaffoldProject(TEST_DIR, { name: "runtime-cli" }, { distribution: "runtime" });
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 
 		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
 		expect(pkg.files).toEqual(["dist"]);
@@ -172,9 +166,7 @@ describe("scaffold", () => {
 	it("generates package.json with generic description and no author", async () => {
 		await scaffoldBase(TEST_DIR, { name: "minimal-cli" });
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 
 		expect(pkg.name).toBe("minimal-cli");
 		expect(pkg.description).toBe("A CLI built with Crust");
@@ -184,9 +176,7 @@ describe("scaffold", () => {
 	it("generates tsconfig.json with strict mode and bundler resolution", async () => {
 		await scaffoldBase(TEST_DIR, { name: "my-cli" });
 
-		const tsconfig = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "tsconfig.json"), "utf-8"),
-		);
+		const tsconfig = JSON.parse(readFileSync(resolve(TEST_DIR, "tsconfig.json"), "utf-8"));
 
 		expect(tsconfig.compilerOptions.strict).toBe(true);
 		expect(tsconfig.compilerOptions.moduleResolution).toBe("bundler");
@@ -198,10 +188,7 @@ describe("scaffold", () => {
 	it("generates a valid CLI entry file with Crust builder API", async () => {
 		await scaffoldBase(TEST_DIR, { name: "test-cli" });
 
-		const cliContent = readFileSync(
-			resolve(TEST_DIR, "src", "cli.ts"),
-			"utf-8",
-		);
+		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
 
 		// No shebang — compiled binary is standalone
 		expect(cliContent.startsWith("import")).toBe(true);
@@ -229,10 +216,7 @@ describe("scaffold", () => {
 		await scaffoldBase(TEST_DIR, { name: "compile-test-cli" });
 
 		// Verify it parses without syntax errors by checking structure
-		const cliContent = readFileSync(
-			resolve(TEST_DIR, "src", "cli.ts"),
-			"utf-8",
-		);
+		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
 
 		expect(cliContent).toContain("import {");
 		expect(cliContent).toContain("const cli = new Crust(");
@@ -252,22 +236,11 @@ describe("scaffold", () => {
 
 		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
 		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(
-			true,
-		);
+		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(true);
 
-		const appContent = readFileSync(
-			resolve(TEST_DIR, "src", "app.ts"),
-			"utf-8",
-		);
-		const cliContent = readFileSync(
-			resolve(TEST_DIR, "src", "cli.ts"),
-			"utf-8",
-		);
-		const greetContent = readFileSync(
-			resolve(TEST_DIR, "src", "commands", "greet.ts"),
-			"utf-8",
-		);
+		const appContent = readFileSync(resolve(TEST_DIR, "src", "app.ts"), "utf-8");
+		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
+		const greetContent = readFileSync(resolve(TEST_DIR, "src", "commands", "greet.ts"), "utf-8");
 
 		expect(appContent).toContain('new Crust("modular-cli")');
 		expect(appContent).toContain("inherit: true");
@@ -288,13 +261,9 @@ describe("scaffold", () => {
 		);
 
 		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(
-			true,
-		);
+		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(true);
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 		expect(pkg.bin["modular-runtime-cli"]).toBe("dist/cli.js");
 		expect(pkg.dependencies).toEqual(EXPECTED_CRUST_DEPENDENCIES);
 	});
@@ -315,18 +284,14 @@ describe("scaffold", () => {
 		// Scaffold over it
 		await scaffoldBase(TEST_DIR, { name: "overwrite-cli" });
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 		expect(pkg.name).toBe("overwrite-cli");
 	});
 
 	it("sets bin entry to match project name", async () => {
 		await scaffoldBase(TEST_DIR, { name: "my-custom-bin" });
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 		expect(pkg.bin["my-custom-bin"]).toBe("dist/cli");
 	});
 

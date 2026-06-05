@@ -6,9 +6,8 @@ description: Shared low-level utilities for the Crust ecosystem (pre-stable).
 import { Callout } from "fumadocs-ui/components/callout";
 
 <Callout type="warn" title="Pre-stable">
-	**Status: pre-stable (`0.0.1`).** Public surface may change without notice
-	until `0.1.0`. Pin to an exact version if depending externally — `bun add
-	@crustjs/utils@0.0.1`.
+  **Status: pre-stable (`0.0.1`).** Public surface may change without notice until `0.1.0`. Pin to
+  an exact version if depending externally — `bun add @crustjs/utils@0.0.1`.
 </Callout>
 
 Internal de-duplication primitives shared across `@crustjs/*` packages.
@@ -23,13 +22,13 @@ bun add @crustjs/utils
 
 ## Exports
 
-| Export                | Description                                                                     |
-| --------------------- | ------------------------------------------------------------------------------- |
+| Export                | Description                                                                      |
+| --------------------- | -------------------------------------------------------------------------------- |
 | `resolveSourceDir`    | Resolve a source directory descriptor (file URL / absolute / relative) to a path |
-| `BaseValueType`       | Shared primitive type literals: `"string" \| "number" \| "boolean"`         |
-| `ResolvePrimitive`    | Map primitive type literals to TypeScript primitives                            |
+| `BaseValueType`       | Shared primitive type literals: `"string" \| "number" \| "boolean"`              |
+| `ResolvePrimitive`    | Map primitive type literals to TypeScript primitives                             |
 | `tryCoerceNumber`     | Coerce a string with `Number(raw)`, returning `undefined` only for `NaN`         |
-| `coerceBooleanString` | Coerce Crust boolean strings; only `"true"` and `"1"` are truthy               |
+| `coerceBooleanString` | Coerce Crust boolean strings; only `"true"` and `"1"` are truthy                 |
 
 ## `resolveSourceDir`
 
@@ -86,11 +85,11 @@ const dir = resolveSourceDir("templates/base");
 
 `resolveSourceDir` throws a descriptive `Error` in three cases:
 
-| Trigger                                                               | Error includes                                          |
-| --------------------------------------------------------------------- | ------------------------------------------------------- |
-| URL with non-`file:` protocol                                         | The offending protocol (`got "https:"`, etc.)           |
-| Relative string path with `process.argv[1]` unset                     | The input + suggestion to use an absolute path or URL   |
-| Relative string path but no `package.json` found walking up           | The input, the entrypoint, and the same suggestion     |
+| Trigger                                                     | Error includes                                        |
+| ----------------------------------------------------------- | ----------------------------------------------------- |
+| URL with non-`file:` protocol                               | The offending protocol (`got "https:"`, etc.)         |
+| Relative string path with `process.argv[1]` unset           | The input + suggestion to use an absolute path or URL |
+| Relative string path but no `package.json` found walking up | The input, the entrypoint, and the same suggestion    |
 
 ## Type primitives
 
@@ -131,13 +130,17 @@ describing the consumer(s) you'd add to the dependency graph.
 ## Internal subpath: `@crustjs/utils/schema`
 
 <Callout type="warn" title="Internal — do not import">
-	Standard Schema helpers consumed by `@crustjs/validate` and
-	`@crustjs/store`. **Not part of the public Crust API** — may change in any
-	release without a deprecation cycle. Use `@crustjs/validate` instead.
+  Standard Schema helpers consumed by `@crustjs/validate` and `@crustjs/store`. **Not part of the
+  public Crust API** — may change in any release without a deprecation cycle. Use
+  `@crustjs/validate` instead.
 </Callout>
 
 Lives under `@crustjs/utils/schema` only so the shared Standard Schema
 boundary code used by `@crustjs/validate` and `@crustjs/store` resolves for
-external consumers. The subpath is core-free: it depends on the Standard Schema
-spec package, not `@crustjs/core`, and does not wrap errors in package-specific
-Crust error classes.
+external consumers. `@standard-schema/spec` is an **optional peer dependency**
+of `@crustjs/utils` rather than a hard dependency, so consumers that use only
+the type primitives or `resolveSourceDir` do not install it; packages that
+import this subpath (`@crustjs/validate`, `@crustjs/store`) declare
+`@standard-schema/spec` directly. The subpath is core-free: it does not depend
+on `@crustjs/core` and does not wrap errors in package-specific Crust error
+classes.

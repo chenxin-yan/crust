@@ -31,10 +31,7 @@ function formatDefaultSuffix(value: unknown): string {
 	return dim(`[default: ${formatDefaultValue(value)}]`);
 }
 
-function formatDescription(
-	description: string | undefined,
-	defaultValue: unknown,
-): string {
+function formatDescription(description: string | undefined, defaultValue: unknown): string {
 	if (defaultValue === undefined) {
 		return description ?? "";
 	}
@@ -83,11 +80,7 @@ function formatDescriptionWithChoices(
 	return `${base} ${suffix}`;
 }
 
-function formatUsage(
-	meta: CommandMeta,
-	command: CommandNode,
-	path: string[],
-): string {
+function formatUsage(meta: CommandMeta, command: CommandNode, path: string[]): string {
 	if (meta.usage) return green(meta.usage);
 
 	const usageParts: string[] = [green(path.join(" "))];
@@ -175,10 +168,7 @@ function formatArgsSection(command: CommandNode): string[] {
  * label overflows the column rather than truncating — truncating aliases
  * would hide which alternative names exist, defeating the point.
  */
-function formatCommandLabel(
-	name: string,
-	aliases: readonly string[] | undefined,
-): string {
+function formatCommandLabel(name: string, aliases: readonly string[] | undefined): string {
 	const styledName = green(name);
 	if (!aliases || aliases.length === 0) return styledName;
 	return `${styledName} (${aliases.join(", ")})`;

@@ -35,8 +35,4 @@ export type {
 	ValidationResult,
 } from "./types.ts";
 // ── Standard Schema execution helpers ───────────────────────────────────────
-export {
-	isStandardSchema,
-	validateStandard,
-	validateStandardSync,
-} from "./validate.ts";
+export { isStandardSchema, validateStandard, validateStandardSync } from "./validate.ts";

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
+
 import { Crust, CrustError } from "@crustjs/core";
 import { z } from "zod";
+
 import { commandValidator } from "./command.ts";
-import { arg, flag } from "./schema.ts";
 import type { InferValidatedArgs } from "./schema-types.ts";
+import { arg, flag } from "./schema.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-		? true
-		: false;
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 function capture<T>() {
 	const box: { value: T | undefined } = { value: undefined };
@@ -106,9 +106,7 @@ describe("commandValidator — raw schema-backed runtime", () => {
 	});
 
 	it("surfaces validation errors for missing required schema values", async () => {
-		const app = new Crust("hello")
-			.args([arg("name", z.string())])
-			.run(commandValidator(() => {}));
+		const app = new Crust("hello").args([arg("name", z.string())]).run(commandValidator(() => {}));
 		await app.execute({ argv: [] });
 		expect(process.exitCode).toBe(1);
 		process.exitCode = 0;

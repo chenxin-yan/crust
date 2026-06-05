@@ -11,9 +11,9 @@ The `didYouMeanPlugin` catches `COMMAND_NOT_FOUND` errors and provides "Did you 
 import { Crust } from "@crustjs/core";
 import { didYouMeanPlugin } from "@crustjs/plugins";
 
-const main = new Crust("my-cli")
-  .use(didYouMeanPlugin())
-  .run(() => { /* ... */ });
+const main = new Crust("my-cli").use(didYouMeanPlugin()).run(() => {
+  /* ... */
+});
 
 await main.execute();
 ```
@@ -32,9 +32,9 @@ Available commands: build, dev, deploy
 Prints the error to stderr and sets exit code to 1:
 
 ```ts
-didYouMeanPlugin()
+didYouMeanPlugin();
 // or
-didYouMeanPlugin({ mode: "error" })
+didYouMeanPlugin({ mode: "error" });
 ```
 
 Output (to stderr):
@@ -50,7 +50,7 @@ Available commands: build, dev, deploy
 Prints the suggestion and the parent command's help text to stdout:
 
 ```ts
-didYouMeanPlugin({ mode: "help" })
+didYouMeanPlugin({ mode: "help" });
 ```
 
 Output (to stdout):
@@ -92,7 +92,7 @@ The `didYouMeanPlugin` wraps the middleware chain in a try/catch. Place it **bef
 new Crust("my-cli")
   .use(versionPlugin("1.0.0"))
   .use(didYouMeanPlugin({ mode: "help" }))
-  .use(helpPlugin())
+  .use(helpPlugin());
 ```
 
 ## Non-Matching Errors
@@ -103,7 +103,7 @@ The plugin only handles `COMMAND_NOT_FOUND` errors. All other errors are re-thro
 
 ```ts
 interface DidYouMeanPluginOptions {
-  mode?: "error" | "help";  // Default: "error"
+  mode?: "error" | "help"; // Default: "error"
 }
 
 function didYouMeanPlugin(options?: DidYouMeanPluginOptions): CrustPlugin;

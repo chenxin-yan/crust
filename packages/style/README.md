@@ -85,14 +85,7 @@ through the `*Code` factories. The pre-built `*Code` exports are still
 available for callers that prefer pure data:
 
 ```ts
-import {
-  applyStyle,
-  composeStyles,
-  bold,
-  red,
-  bgYellow,
-  fgCode,
-} from "@crustjs/style";
+import { applyStyle, composeStyles, bold, red, bgYellow, fgCode } from "@crustjs/style";
 
 // Mix top-level chainables and AnsiPair factories freely
 const danger = composeStyles(bold, red, bgYellow);
@@ -131,9 +124,9 @@ captured references re-resolve the active color mode on every call:
 import { setGlobalColorMode, style, bold } from "@crustjs/style";
 
 setGlobalColorMode("always");
-const myBold = style.bold;          // forwarder, dynamic
+const myBold = style.bold; // forwarder, dynamic
 setGlobalColorMode("never");
-myBold("x");                        // honors the new mode
+myBold("x"); // honors the new mode
 ```
 
 **Sub-chain captures snapshot.** `const myBoldRed = style.bold.red`
@@ -141,8 +134,8 @@ locks to the chainable resolved at access time. To stay dynamic, capture
 the leaf forwarder and chain at the call site:
 
 ```ts
-const fmt = style.bold;             // dynamic forwarder
-fmt.red("x");                       // re-resolves on every chain access
+const fmt = style.bold; // dynamic forwarder
+fmt.red("x"); // re-resolves on every chain access
 ```
 
 This matches chalk and ansis.
@@ -184,7 +177,7 @@ console.log(fg("royal", "rebeccapurple"));
 
 // rgb() / hsl() strings
 console.log(fg("ocean", "rgb(0, 128, 255)"));
-console.log(bg("sun",   "hsl(45, 100%, 50%)"));
+console.log(bg("sun", "hsl(45, 100%, 50%)"));
 
 // Numeric literal
 console.log(fg("red", 0xff0000));
@@ -215,14 +208,14 @@ type NamedColor = "aliceblue" | "antiquewhite" | /* …146 more… */ | "yellowg
 **Strict inline literals.** Inline string literals are checked against a `StrictColorString` subset — named CSS colors, `#rrggbb`/`#rgb`/`#rrggbbaa` hex, and `rgb()` / `rgba()` / `hsl()` / `hsla()` / `hwb()` / `lab()` / `lch()` / `oklab()` / `oklch()` / `color()` / `color-mix()` function-notation strings. Typos like `fg("x", "rebbecapurple")` and unrecognized literals like `fg("x", "not-a-color")` fail at compile time.
 
 ```ts
-fg("ok",  "rebeccapurple");        // ✅ valid named color
-fg("ok",  "#ff0000");              // ✅ valid hex
-fg("ok",  "oklch(60% 0.2 240)");   // ✅ valid CSS function
-fg("bad", "rebbecapurple");        // ❌ compile error
-fg("bad", "ff0000");               // ❌ missing `#`
+fg("ok", "rebeccapurple"); // ✅ valid named color
+fg("ok", "#ff0000"); // ✅ valid hex
+fg("ok", "oklch(60% 0.2 240)"); // ✅ valid CSS function
+fg("bad", "rebbecapurple"); // ❌ compile error
+fg("bad", "ff0000"); // ❌ missing `#`
 ```
 
-Dynamic values (`string`, `ColorString`, `ColorInput`) keep flowing through unchanged — e.g. theme tokens loaded from JSON or `process.env`. Template-literal types validate the *shape* only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and throw `TypeError` at runtime via `Bun.color()`. Invalid inputs raise `TypeError` (`Invalid color input: ...`); validation runs **before** any empty-text short-circuit, so `fg("", c as string)` still throws on bad colors.
+Dynamic values (`string`, `ColorString`, `ColorInput`) keep flowing through unchanged — e.g. theme tokens loaded from JSON or `process.env`. Template-literal types validate the _shape_ only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and throw `TypeError` at runtime via `Bun.color()`. Invalid inputs raise `TypeError` (`Invalid color input: ...`); validation runs **before** any empty-text short-circuit, so `fg("", c as string)` still throws on bad colors.
 
 **Building your own strict wrappers.** To relay the same strict checking through a wrapper, parameterise it with `CheckedColorInput<T>`:
 
@@ -230,7 +223,7 @@ Dynamic values (`string`, `ColorString`, `ColorInput`) keep flowing through unch
 import { fg, type CheckedColorInput, type ColorInputCandidate } from "@crustjs/style";
 
 function paint<const T extends ColorInputCandidate>(input: CheckedColorInput<T>) {
-  return fg("x", input);
+	return fg("x", input);
 }
 
 paint("rebeccapurple"); // ✅
@@ -279,12 +272,12 @@ The earlier `rgb` / `bgRgb` / `hex` / `bgHex` (and their `*Code` pair-factory va
 
 `fg` / `bg` are capability-aware: the resolved color depth determines which `Bun.color()` format is emitted on every call. The standalone exports re-resolve on every call, while instances created with `createStyle()` capture the depth at construction time.
 
-| Resolved depth | Output | Detection (in `"auto"` mode) |
-| --- | --- | --- |
-| `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
-| `"256"` | `Bun.color(input, "ansi-256")` | `TERM` contains `256color` |
-| `"16"` | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value |
-| `"none"` | `text` returned unchanged | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"` |
+| Resolved depth | Output                                                                    | Detection (in `"auto"` mode)                                                             |
+| -------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `"truecolor"`  | `Bun.color(input, "ansi-16m")`                                            | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"`        | `Bun.color(input, "ansi-256")`                                            | `TERM` contains `256color`                                                               |
+| `"16"`         | In-package RGB → 16-color quantizer (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg) | Any other TTY value                                                                      |
+| `"none"`       | `text` returned unchanged                                                 | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
 
 The `"16"` row uses an in-package quantizer (same algorithm as `ansi-styles` / `chalk`) pending an upstream Bun fix ([oven-sh/bun#22161](https://github.com/oven-sh/bun/issues/22161)).
 
@@ -296,7 +289,7 @@ Use `resolveColorDepth(mode, overrides?)` to inspect the resolved tier directly,
 import { resolveColorDepth, style } from "@crustjs/style";
 
 resolveColorDepth("auto"); // "truecolor" | "256" | "16" | "none"
-style.colorDepth;          // depth currently used by the runtime style
+style.colorDepth; // depth currently used by the runtime style
 ```
 
 Invalid color inputs (e.g., `fg("hello", "not-a-color")`) raise `TypeError` at every depth — including `"none"` — so user bugs are not silently masked when colors are off.
@@ -367,14 +360,14 @@ Inject capability overrides for predictable test output:
 
 ```ts
 const testStyle = createStyle({
-  mode: "auto",
-  overrides: { isTTY: true, noColor: undefined },
+	mode: "auto",
+	overrides: { isTTY: true, noColor: undefined },
 });
 
 // Include truecolor overrides for dynamic color testing
 const truecolorStyle = createStyle({
-  mode: "auto",
-  overrides: { isTTY: true, noColor: undefined, colorTerm: "truecolor" },
+	mode: "auto",
+	overrides: { isTTY: true, noColor: undefined, colorTerm: "truecolor" },
 });
 ```
 
@@ -383,13 +376,7 @@ const truecolorStyle = createStyle({
 ANSI-aware text measurement and layout:
 
 ```ts
-import {
-  visibleWidth,
-  wrapText,
-  padStart,
-  padEnd,
-  center,
-} from "@crustjs/style";
+import { visibleWidth, wrapText, padStart, padEnd, center } from "@crustjs/style";
 
 // Strip ANSI escape sequences (Bun built-in)
 Bun.stripANSI("\x1b[1mhello\x1b[22m"); // "hello"
@@ -402,8 +389,8 @@ wrapText("a long line of styled text", 20);
 wrapText("force break mode", 10, { wordBreak: false });
 
 // ANSI-safe padding and alignment
-padStart("42", 6);   // "    42"
-padEnd("name", 10);  // "name      "
+padStart("42", 6); // "    42"
+padEnd("name", 10); // "name      "
 center("title", 20); // "       title        "
 ```
 
@@ -427,8 +414,8 @@ orderedList(["first", "second", "third"]);
 // 3. third
 
 taskList([
-  { text: "Write tests", checked: true },
-  { text: "Update docs", checked: false },
+	{ text: "Write tests", checked: true },
+	{ text: "Update docs", checked: false },
 ]);
 // [x] Write tests
 // [ ] Update docs
@@ -442,11 +429,11 @@ Lists support `indent` for nesting and custom markers.
 import { table } from "@crustjs/style";
 
 table(
-  ["Name", "Version", "Status"],
-  [
-    ["core", "1.2.0", "stable"],
-    ["style", "0.1.0", "new"],
-  ],
+	["Name", "Version", "Status"],
+	[
+		["core", "1.2.0", "stable"],
+		["style", "0.1.0", "new"],
+	],
 );
 // | Name  | Version | Status |
 // | ----- | ------- | ------ |
@@ -480,11 +467,11 @@ Override specific slots while inheriting defaults:
 import { createMarkdownTheme } from "@crustjs/style";
 
 const theme = createMarkdownTheme({
-  style: { mode: "always" },
-  overrides: {
-    heading1: (text) => `>>> ${text.toUpperCase()} <<<`,
-    strong: (text) => `**${text}**`,
-  },
+	style: { mode: "always" },
+	overrides: {
+		heading1: (text) => `>>> ${text.toUpperCase()} <<<`,
+		strong: (text) => `**${text}**`,
+	},
 });
 ```
 
@@ -492,16 +479,16 @@ const theme = createMarkdownTheme({
 
 The `MarkdownTheme` interface covers 30 GFM slots:
 
-| Category | Slots |
-| --- | --- |
-| Headings | `heading1` through `heading6` |
-| Text | `text`, `emphasis`, `strong`, `strongEmphasis`, `strikethrough` |
-| Code | `inlineCode`, `codeFence`, `codeInfo`, `codeText` |
-| Links | `linkText`, `linkUrl`, `autolink` |
-| Lists | `listMarker`, `orderedListMarker`, `taskChecked`, `taskUnchecked` |
-| Blockquotes | `blockquoteMarker`, `blockquoteText` |
-| Tables | `tableHeader`, `tableCell`, `tableBorder` |
-| Other | `thematicBreak`, `imageAltText`, `imageUrl` |
+| Category    | Slots                                                             |
+| ----------- | ----------------------------------------------------------------- |
+| Headings    | `heading1` through `heading6`                                     |
+| Text        | `text`, `emphasis`, `strong`, `strongEmphasis`, `strikethrough`   |
+| Code        | `inlineCode`, `codeFence`, `codeInfo`, `codeText`                 |
+| Links       | `linkText`, `linkUrl`, `autolink`                                 |
+| Lists       | `listMarker`, `orderedListMarker`, `taskChecked`, `taskUnchecked` |
+| Blockquotes | `blockquoteMarker`, `blockquoteText`                              |
+| Tables      | `tableHeader`, `tableCell`, `tableBorder`                         |
+| Other       | `thematicBreak`, `imageAltText`, `imageUrl`                       |
 
 Theme slots are parser-agnostic `string => string` functions. Markdown parsing and AST handling belong to a separate consumer package — `@crustjs/style` provides the presentation layer only.
 

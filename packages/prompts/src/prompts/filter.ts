@@ -74,19 +74,11 @@ interface FilterState<T> {
 /**
  * Re-run the fuzzy filter on the current query and update results + cursor.
  */
-function refilter<T>(
-	state: FilterState<T>,
-	maxVisible: number,
-): FilterState<T> {
+function refilter<T>(state: FilterState<T>, maxVisible: number): FilterState<T> {
 	const results = fuzzyFilter(state.query, state.choices);
 	// Reset list cursor to 0 when results change (query was edited)
 	const listCursor = 0;
-	const scrollOffset = calculateScrollOffset(
-		listCursor,
-		0,
-		results.length,
-		maxVisible,
-	);
+	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
 	return { ...state, results, listCursor, scrollOffset };
 }
 
@@ -96,10 +88,7 @@ function refilter<T>(
 
 function createHandleKey<T>(
 	maxVisible: number,
-): (
-	key: KeypressEvent,
-	state: FilterState<T>,
-) => FilterState<T> | SubmitResult<T> {
+): (key: KeypressEvent, state: FilterState<T>) => FilterState<T> | SubmitResult<T> {
 	return (key, state) => {
 		// Enter — submit the currently highlighted item
 		if (key.name === "return") {
@@ -115,8 +104,7 @@ function createHandleKey<T>(
 		if (key.name === "up") {
 			if (state.results.length === 0) return state;
 			const totalItems = state.results.length;
-			const newCursor =
-				state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
+			const newCursor = state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
 			const newScrollOffset = calculateScrollOffset(
 				newCursor,
 				state.scrollOffset,
@@ -134,8 +122,7 @@ function createHandleKey<T>(
 		if (key.name === "down") {
 			if (state.results.length === 0) return state;
 			const totalItems = state.results.length;
-			const newCursor =
-				state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
+			const newCursor = state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
 			const newScrollOffset = calculateScrollOffset(
 				newCursor,
 				state.scrollOffset,
@@ -173,11 +160,7 @@ function createHandleKey<T>(
 /**
  * Highlight matched characters in a label using the theme's filterMatch style.
  */
-function highlightMatches(
-	label: string,
-	indices: readonly number[],
-	theme: PromptTheme,
-): string {
+function highlightMatches(label: string, indices: readonly number[], theme: PromptTheme): string {
 	if (indices.length === 0) return label;
 
 	const indexSet = new Set(indices);
@@ -356,9 +339,7 @@ export async function filter<T>(options: FilterOptions<T>): Promise<T> {
 	// Find initial cursor position from default value
 	let initialListCursor = 0;
 	if (options.default !== undefined) {
-		const idx = initialResults.findIndex(
-			(result) => result.item.value === options.default,
-		);
+		const idx = initialResults.findIndex((result) => result.item.value === options.default);
 		if (idx !== -1) {
 			initialListCursor = idx;
 		}
@@ -385,13 +366,7 @@ export async function filter<T>(options: FilterOptions<T>): Promise<T> {
 		initialState,
 		theme,
 		render: (state, resolvedTheme) =>
-			renderFilter(
-				state,
-				resolvedTheme,
-				options.message,
-				options.placeholder,
-				maxVisible,
-			),
+			renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 		handleKey: createHandleKey<T>(maxVisible),
 		renderSubmitted: (state, value, resolvedTheme) =>
 			renderSubmitted(

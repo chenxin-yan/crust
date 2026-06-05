@@ -1,10 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type {
-	StandardSchema,
-	ValidationIssue,
-	ValidationResult,
-} from "./types.ts";
+
+import type { StandardSchema, ValidationIssue, ValidationResult } from "./types.ts";
 import {
 	failure,
 	isStandardSchema,
@@ -42,9 +40,7 @@ function transformSchema<T>(output: T): StandardSchema<unknown, T> {
 }
 
 /** Create a sync Standard Schema that always fails with the given issues. */
-function failingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
+function failingSchema(issues: StandardSchemaV1.Issue[]): StandardSchema<unknown, never> {
 	return {
 		"~standard": {
 			version: 1,
@@ -66,9 +62,7 @@ function asyncPassthroughSchema<T = unknown>(): StandardSchema<T, T> {
 }
 
 /** Create an async Standard Schema that resolves to failure. */
-function asyncFailingSchema(
-	issues: StandardSchemaV1.Issue[],
-): StandardSchema<unknown, never> {
+function asyncFailingSchema(issues: StandardSchemaV1.Issue[]): StandardSchema<unknown, never> {
 	return {
 		"~standard": {
 			version: 1,
@@ -165,11 +159,7 @@ describe("normalizeStandardPath", () => {
 	});
 
 	it("handles mixed bare keys and PathSegment objects", () => {
-		expect(normalizeStandardPath(["items", { key: 0 }, "name"])).toEqual([
-			"items",
-			0,
-			"name",
-		]);
+		expect(normalizeStandardPath(["items", { key: 0 }, "name"])).toEqual(["items", 0, "name"]);
 	});
 
 	it("handles symbol keys", () => {
@@ -190,18 +180,12 @@ describe("normalizeStandardPath", () => {
 describe("normalizeStandardIssues", () => {
 	it("normalizes root-level issue without path", () => {
 		const issues: StandardSchemaV1.Issue[] = [{ message: "Invalid input" }];
-		expect(normalizeStandardIssues(issues)).toEqual([
-			{ message: "Invalid input", path: "" },
-		]);
+		expect(normalizeStandardIssues(issues)).toEqual([{ message: "Invalid input", path: "" }]);
 	});
 
 	it("normalizes issue with string path", () => {
-		const issues: StandardSchemaV1.Issue[] = [
-			{ message: "Required", path: ["name"] },
-		];
-		expect(normalizeStandardIssues(issues)).toEqual([
-			{ message: "Required", path: "name" },
-		]);
+		const issues: StandardSchemaV1.Issue[] = [{ message: "Required", path: ["name"] }];
+		expect(normalizeStandardIssues(issues)).toEqual([{ message: "Required", path: "name" }]);
 	});
 
 	it("normalizes issue with nested path", () => {
@@ -214,9 +198,7 @@ describe("normalizeStandardIssues", () => {
 	});
 
 	it("normalizes issue with numeric path (array index)", () => {
-		const issues: StandardSchemaV1.Issue[] = [
-			{ message: "Invalid item", path: ["items", 0] },
-		];
+		const issues: StandardSchemaV1.Issue[] = [{ message: "Invalid item", path: ["items", 0] }];
 		expect(normalizeStandardIssues(issues)).toEqual([
 			{ message: "Invalid item", path: "items[0]" },
 		]);
@@ -232,9 +214,7 @@ describe("normalizeStandardIssues", () => {
 	});
 
 	it("prepends prefix to issue paths", () => {
-		const issues: StandardSchemaV1.Issue[] = [
-			{ message: "Required", path: ["name"] },
-		];
+		const issues: StandardSchemaV1.Issue[] = [{ message: "Required", path: ["name"] }];
 		expect(normalizeStandardIssues(issues, ["flags"])).toEqual([
 			{ message: "Required", path: "flags.name" },
 		]);
@@ -329,9 +309,7 @@ describe("ValidationResult discriminant", () => {
 	});
 
 	it("discriminates failure via ok property", () => {
-		const result: ValidationResult<number> = failure([
-			{ message: "bad", path: "" },
-		]);
+		const result: ValidationResult<number> = failure([{ message: "bad", path: "" }]);
 		if (!result.ok) {
 			expect(result.issues).toHaveLength(1);
 		} else {
@@ -382,15 +360,11 @@ describe("validateStandard", () => {
 	});
 
 	it("returns failure for invalid async schema", async () => {
-		const schema = asyncFailingSchema([
-			{ message: "Expected string", path: ["name"] },
-		]);
+		const schema = asyncFailingSchema([{ message: "Expected string", path: ["name"] }]);
 		const result = await validateStandard(schema, 123);
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.issues).toEqual([
-				{ message: "Expected string", path: "name" },
-			]);
+			expect(result.issues).toEqual([{ message: "Expected string", path: "name" }]);
 		}
 	});
 
@@ -399,9 +373,7 @@ describe("validateStandard", () => {
 		const result = await validateStandard(schema, null, ["flags", "config"]);
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.issues).toEqual([
-				{ message: "Required", path: "flags.config.value" },
-			]);
+			expect(result.issues).toEqual([{ message: "Required", path: "flags.config.value" }]);
 		}
 	});
 
@@ -429,9 +401,7 @@ describe("validateStandard", () => {
 	});
 
 	it("handles PathSegment objects in issue paths", async () => {
-		const schema = failingSchema([
-			{ message: "Bad", path: [{ key: "items" }, { key: 0 }] },
-		]);
+		const schema = failingSchema([{ message: "Bad", path: [{ key: "items" }, { key: 0 }] }]);
 		const result = await validateStandard(schema, {});
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -477,9 +447,7 @@ describe("validateStandardSync", () => {
 		const result = validateStandardSync(schema, null, ["flags", "config"]);
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.issues).toEqual([
-				{ message: "Required", path: "flags.config.value" },
-			]);
+			expect(result.issues).toEqual([{ message: "Required", path: "flags.config.value" }]);
 		}
 	});
 

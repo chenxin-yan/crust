@@ -14,10 +14,7 @@ export function isStandardSchema(value: unknown): value is StandardSchema {
 	// Standard Schema v1 spec only requires the `~standard` shape; the host
 	// value may be an object (Zod, Valibot) or a function (Effect's wrapper
 	// extends a callable class). Accept both.
-	if (
-		(typeof value !== "object" || value === null) &&
-		typeof value !== "function"
-	) {
+	if ((typeof value !== "object" || value === null) && typeof value !== "function") {
 		return false;
 	}
 	const candidate = value as Record<string, unknown>;

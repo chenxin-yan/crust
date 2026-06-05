@@ -60,10 +60,7 @@ interface ConfirmState {
 // Keypress handler
 // ────────────────────────────────────────────────────────────────────────────
 
-function handleKey(
-	key: KeypressEvent,
-	state: ConfirmState,
-): ConfirmState | SubmitResult<boolean> {
+function handleKey(key: KeypressEvent, state: ConfirmState): ConfirmState | SubmitResult<boolean> {
 	// Enter — submit current value
 	if (key.name === "return") {
 		return submit(state.value);
@@ -213,17 +210,9 @@ export async function confirm(options: ConfirmOptions): Promise<boolean> {
 	return runPrompt<ConfirmState, boolean>({
 		initialState,
 		theme,
-		render: (state, t) =>
-			renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
+		render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
 		handleKey,
 		renderSubmitted: (state, value, t) =>
-			renderSubmitted(
-				state,
-				value,
-				t,
-				options.message,
-				activeLabel,
-				inactiveLabel,
-			),
+			renderSubmitted(state, value, t, options.message, activeLabel, inactiveLabel),
 	});
 }

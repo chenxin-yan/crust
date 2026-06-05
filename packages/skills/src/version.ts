@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+
 import type { InstallStatus, SkillKind } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -85,9 +86,7 @@ export type InstalledManifestStatus =
  * Legacy `crust.json` files (written before the `kind` field was added) lack it;
  * those are normalized to `"generated"` and reported as `status: "ok"`.
  */
-export async function inspectInstalledManifest(
-	dir: string,
-): Promise<InstalledManifestStatus> {
+export async function inspectInstalledManifest(dir: string): Promise<InstalledManifestStatus> {
 	let raw: string;
 	try {
 		raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
@@ -149,9 +148,7 @@ export async function inspectInstalledManifest(
  * @param dir - Absolute path to the skill directory
  * @returns The installed manifest, or `null` if the file is missing/malformed/lacks a version/has an unrecognized kind
  */
-export async function readInstalledManifest(
-	dir: string,
-): Promise<InstalledSkillManifest | null> {
+export async function readInstalledManifest(dir: string): Promise<InstalledSkillManifest | null> {
 	const result = await inspectInstalledManifest(dir);
 	return result.status === "ok" ? result.manifest : null;
 }
@@ -165,9 +162,7 @@ export async function readInstalledManifest(
  * @param dir - Absolute path to the skill directory
  * @returns The version string if found, or `null` if the file is missing or malformed
  */
-export async function readInstalledVersion(
-	dir: string,
-): Promise<string | null> {
+export async function readInstalledVersion(dir: string): Promise<string | null> {
 	const manifest = await readInstalledManifest(dir);
 	return manifest?.version ?? null;
 }
@@ -187,10 +182,7 @@ export interface VersionCheckResult {
  * @param newVersion - The version being installed
  * @returns The installation status and the currently installed version (if any)
  */
-export async function checkVersion(
-	dir: string,
-	newVersion: string,
-): Promise<VersionCheckResult> {
+export async function checkVersion(dir: string, newVersion: string): Promise<VersionCheckResult> {
 	const installed = await readInstalledVersion(dir);
 
 	if (installed === null) {

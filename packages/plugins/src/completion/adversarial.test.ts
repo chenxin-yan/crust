@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { Crust } from "@crustjs/core";
+
 import { completionPlugin } from "./index.ts";
 import type { CompletionSpec } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -31,9 +33,7 @@ describe("walker · validation", () => {
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad")
-			.flags({ "a;rm": { type: "boolean" } } as never)
-			.run(() => {});
+		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } } as never).run(() => {});
 		expect(() => walkCommandNode(cli._node)).toThrow(/invalid flag name/);
 	});
 
@@ -46,9 +46,7 @@ describe("walker · validation", () => {
 				},
 			})
 			.run(() => {});
-		expect(() => walkCommandNode(cli._node)).toThrow(
-			/unsupported choice value/,
-		);
+		expect(() => walkCommandNode(cli._node)).toThrow(/unsupported choice value/);
 	});
 
 	it("rejects choice values containing single quotes", () => {
@@ -57,9 +55,7 @@ describe("walker · validation", () => {
 				target: { type: "string", choices: ["a", "it's", "c"] },
 			})
 			.run(() => {});
-		expect(() => walkCommandNode(cli._node)).toThrow(
-			/unsupported choice value/,
-		);
+		expect(() => walkCommandNode(cli._node)).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", () => {
@@ -68,9 +64,7 @@ describe("walker · validation", () => {
 			.run(() => {});
 		const spec = walkCommandNode(cli._node);
 		// Newlines and CR collapse to spaces during normalisation.
-		expect(spec.root.description).toBe(
-			"first line second line still same line",
-		);
+		expect(spec.root.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break
 		// out of an emitted comment line.
 		expect(spec.root.description).not.toMatch(/[\r\n]/);
@@ -88,28 +82,31 @@ describe("renderBash / renderZsh / renderFish · header injection", () => {
 		["bash", renderBash],
 		["zsh", renderZsh],
 		["fish", renderFish],
-	] as const)("%s strips newlines from `version` so the header stays a single comment line", (_shell, render) => {
-		// Without sanitisation, an embedded `\n` would terminate the
-		// `# ...` comment line and turn the rest into executable shell
-		// when the script is `eval`'d (the documented install path). The
-		// invariant we care about is: the embedded text remains *inside*
-		// the comment line, not that the textual payload disappears
-		// (the textual payload is inert because it's commented out).
-		const evil = "1.0\necho ATTACK #";
-		const out = render(minimal, "x", evil);
-		const headerLine = out.split("\n").find((l) => l.includes("v1.0"));
-		expect(headerLine).toBeDefined();
-		// The full payload is on the *same* line as `v1.0` (i.e. inside
-		// the comment), not on a follow-up line.
-		expect(headerLine).toContain("ATTACK");
-		// And no second comment-less line containing `echo ATTACK` exists
-		// (which would happen if the newline survived).
-		const nonCommentLines = out
-			.split("\n")
-			.filter((l) => l.length > 0 && !l.startsWith("#"))
-			.filter((l) => l.includes("ATTACK"));
-		expect(nonCommentLines).toEqual([]);
-	});
+	] as const)(
+		"%s strips newlines from `version` so the header stays a single comment line",
+		(_shell, render) => {
+			// Without sanitisation, an embedded `\n` would terminate the
+			// `# ...` comment line and turn the rest into executable shell
+			// when the script is `eval`'d (the documented install path). The
+			// invariant we care about is: the embedded text remains *inside*
+			// the comment line, not that the textual payload disappears
+			// (the textual payload is inert because it's commented out).
+			const evil = "1.0\necho ATTACK #";
+			const out = render(minimal, "x", evil);
+			const headerLine = out.split("\n").find((l) => l.includes("v1.0"));
+			expect(headerLine).toBeDefined();
+			// The full payload is on the *same* line as `v1.0` (i.e. inside
+			// the comment), not on a follow-up line.
+			expect(headerLine).toContain("ATTACK");
+			// And no second comment-less line containing `echo ATTACK` exists
+			// (which would happen if the newline survived).
+			const nonCommentLines = out
+				.split("\n")
+				.filter((l) => l.length > 0 && !l.startsWith("#"))
+				.filter((l) => l.includes("ATTACK"));
+			expect(nonCommentLines).toEqual([]);
+		},
+	);
 });
 
 // ── --no- negation ───────────────────────────────────────────────────────
@@ -193,9 +190,7 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 	});
 
 	async function complete(words: string[]): Promise<string[]> {
-		const compWords = words
-			.map((w, i) => `COMP_WORDS[${i}]=${shq(w)}`)
-			.join("\n");
+		const compWords = words.map((w, i) => `COMP_WORDS[${i}]=${shq(w)}`).join("\n");
 		const cword = words.length - 1;
 		const driver = `
 set -e
@@ -294,9 +289,7 @@ describe("completionPlugin · --output-dir traversal", () => {
 			stderrChunks.push(args.map((a) => String(a)).join(" "));
 		};
 		try {
-			const cli = new Crust("real")
-				.use(completionPlugin({ binName: "../pwn" }))
-				.run(() => {});
+			const cli = new Crust("real").use(completionPlugin({ binName: "../pwn" })).run(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
 			console.error = origError;
@@ -312,9 +305,7 @@ describe("completionPlugin · --output-dir traversal", () => {
 		// and nothing escapes.
 		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
 		try {
-			const cli = new Crust("good")
-				.use(completionPlugin({ version: "1" }))
-				.run(() => {});
+			const cli = new Crust("good").use(completionPlugin({ version: "1" })).run(() => {});
 			await cli.execute({
 				argv: ["completion", "bash", "--output-dir", tmp],
 			});
@@ -370,9 +361,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 		// `[build, deploy]`, NOT on `seen_subcommand_from deploy`. The
 		// relevant rule includes `'build'` then `'deploy'` then a leaf
 		// block (empty for the leaf).
-		expect(out).toMatch(
-			/-n '__mycli_path_is \\'build\\' \\'deploy\\' \\'\\''.*-l 'fast'/,
-		);
+		expect(out).toMatch(/-n '__mycli_path_is \\'build\\' \\'deploy\\' \\'\\''.*-l 'fast'/);
 		// Top-level deploy's `slow` flag is gated on the depth-1 path
 		// `[deploy]`. Its block is empty (no children).
 		expect(out).toMatch(/-n '__mycli_path_is \\'deploy\\' \\'\\''.*-l 'slow'/);

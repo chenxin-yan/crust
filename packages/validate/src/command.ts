@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { ArgsDef, CrustCommandContext, FlagsDef } from "@crustjs/core";
+
 import { buildValidatedRunner } from "./middleware.ts";
 import type { CommandValidatorHandler } from "./schema-types.ts";
 import type { ValidatedContext } from "./types.ts";
@@ -53,15 +54,10 @@ import type { ValidatedContext } from "./types.ts";
  *   }));
  * ```
  */
-export function commandValidator<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
->(
+export function commandValidator<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	handler: CommandValidatorHandler<A, F>,
 ): (context: CrustCommandContext<A, F>) => Promise<void> {
 	return buildValidatedRunner(
-		handler as (
-			ctx: ValidatedContext<unknown, unknown>,
-		) => void | Promise<void>,
+		handler as (ctx: ValidatedContext<unknown, unknown>) => void | Promise<void>,
 	) as (context: CrustCommandContext<A, F>) => Promise<void>;
 }

@@ -75,6 +75,4 @@ export interface ValidationFailure {
  * - `ok: true` → `ValidationSuccess<T>` with transformed `value`
  * - `ok: false` → `ValidationFailure` with normalized `issues`
  */
-export type ValidationResult<T = unknown> =
-	| ValidationSuccess<T>
-	| ValidationFailure;
+export type ValidationResult<T = unknown> = ValidationSuccess<T> | ValidationFailure;

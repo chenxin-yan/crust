@@ -71,11 +71,7 @@ function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	return spinnerType;
 }
 
-function renderFrame(
-	frame: string,
-	message: string,
-	theme: ProgressTheme,
-): string {
+function renderFrame(frame: string, message: string, theme: ProgressTheme): string {
 	return `${ERASE_LINE}${CURSOR_TO_START}${theme.spinner(frame)} ${theme.message(message)}`;
 }
 
@@ -144,9 +140,7 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 		updateMessage(message: string) {
 			if (finished) return;
 			currentMessage = message;
-			process.stderr.write(
-				renderFrame(frames[frameIndex] as string, currentMessage, theme),
-			);
+			process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
 		},
 	};
 
@@ -155,9 +149,7 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 
 	timerId = setInterval(() => {
 		frameIndex = (frameIndex + 1) % frames.length;
-		process.stderr.write(
-			renderFrame(frames[frameIndex] as string, currentMessage, theme),
-		);
+		process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
 	}, interval);
 
 	sigintHandler = () => {

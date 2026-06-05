@@ -94,9 +94,7 @@ function choiceIndex<T>(
 	choices: readonly NormalizedChoice<T>[],
 	item: { readonly label: string; readonly value: T },
 ): number {
-	return choices.findIndex(
-		(choice) => choice.label === item.label && choice.value === item.value,
-	);
+	return choices.findIndex((choice) => choice.label === item.label && choice.value === item.value);
 }
 
 function validateSelection(
@@ -120,26 +118,14 @@ function validateSelection(
 	return null;
 }
 
-function refilter<T>(
-	state: MultifilterState<T>,
-	maxVisible: number,
-): MultifilterState<T> {
+function refilter<T>(state: MultifilterState<T>, maxVisible: number): MultifilterState<T> {
 	const results = fuzzyFilter(state.query, state.choices);
 	const listCursor = 0;
-	const scrollOffset = calculateScrollOffset(
-		listCursor,
-		0,
-		results.length,
-		maxVisible,
-	);
+	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
 	return { ...state, results, listCursor, scrollOffset, error: null };
 }
 
-function highlightMatches(
-	label: string,
-	indices: readonly number[],
-	theme: PromptTheme,
-): string {
+function highlightMatches(label: string, indices: readonly number[], theme: PromptTheme): string {
 	if (indices.length === 0) return label;
 
 	const indexSet = new Set(indices);
@@ -172,10 +158,7 @@ function createHandleKey<T>(
 	required?: boolean,
 	min?: number,
 	max?: number,
-): (
-	key: KeypressEvent,
-	state: MultifilterState<T>,
-) => MultifilterState<T> | SubmitResult<T[]> {
+): (key: KeypressEvent, state: MultifilterState<T>) => MultifilterState<T> | SubmitResult<T[]> {
 	return (key, state) => {
 		if (key.name === "return") {
 			const error = validateSelection(state.selected.size, required, min, max);
@@ -209,8 +192,7 @@ function createHandleKey<T>(
 		if (key.name === "up") {
 			if (state.results.length === 0) return state;
 			const totalItems = state.results.length;
-			const listCursor =
-				state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
+			const listCursor = state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
 			const scrollOffset = calculateScrollOffset(
 				listCursor,
 				state.scrollOffset,
@@ -223,8 +205,7 @@ function createHandleKey<T>(
 		if (key.name === "down") {
 			if (state.results.length === 0) return state;
 			const totalItems = state.results.length;
-			const listCursor =
-				state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
+			const listCursor = state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
 			const scrollOffset = calculateScrollOffset(
 				listCursor,
 				state.scrollOffset,
@@ -276,10 +257,7 @@ function renderMultifilter<T>(
 		queryLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
 	}
 
-	const lines: string[] = [
-		formatPromptLine(prefix, msg, queryLine),
-		theme.hint(HINT_LINE),
-	];
+	const lines: string[] = [formatPromptLine(prefix, msg, queryLine), theme.hint(HINT_LINE)];
 
 	const totalResults = state.results.length;
 	if (totalResults === 0 && state.query.length > 0) {
@@ -304,9 +282,7 @@ function renderMultifilter<T>(
 		const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
 		const isActive = resultIndex === state.listCursor;
 		const isChecked = choiceIdx !== -1 ? state.selected.has(choiceIdx) : false;
-		const checkbox = isChecked
-			? theme.success(CHECKBOX_CHECKED)
-			: CHECKBOX_UNCHECKED;
+		const checkbox = isChecked ? theme.success(CHECKBOX_CHECKED) : CHECKBOX_UNCHECKED;
 		const label = highlightMatches(result.item.label, result.indices, theme);
 		const hintText = choice?.hint ? ` ${theme.hint(choice.hint)}` : "";
 
@@ -365,9 +341,7 @@ function renderSubmitted<T>(
  * In non-interactive environments (no TTY), the `default` values are returned
  * automatically if provided.
  */
-export async function multifilter<T>(
-	options: MultifilterOptions<T>,
-): Promise<T[]> {
+export async function multifilter<T>(options: MultifilterOptions<T>): Promise<T[]> {
 	if (options.initial !== undefined) {
 		return [...options.initial];
 	}
@@ -393,20 +367,13 @@ export async function multifilter<T>(
 
 	let listCursor = 0;
 	if (options.default && options.default.length > 0) {
-		const idx = results.findIndex(
-			(result) => result.item.value === options.default?.[0],
-		);
+		const idx = results.findIndex((result) => result.item.value === options.default?.[0]);
 		if (idx !== -1) {
 			listCursor = idx;
 		}
 	}
 
-	const scrollOffset = calculateScrollOffset(
-		listCursor,
-		0,
-		results.length,
-		maxVisible,
-	);
+	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
 
 	const initialState: MultifilterState<T> = {
 		query: "",
@@ -423,27 +390,9 @@ export async function multifilter<T>(
 		initialState,
 		theme,
 		render: (state, resolvedTheme) =>
-			renderMultifilter(
-				state,
-				resolvedTheme,
-				options.message,
-				options.placeholder,
-				maxVisible,
-			),
-		handleKey: createHandleKey<T>(
-			maxVisible,
-			options.required,
-			options.min,
-			options.max,
-		),
+			renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
+		handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
 		renderSubmitted: (state, value, resolvedTheme) =>
-			renderSubmitted(
-				state,
-				value,
-				resolvedTheme,
-				options.message,
-				choices,
-				state.selected,
-			),
+			renderSubmitted(state, value, resolvedTheme, options.message, choices, state.selected),
 	});
 }

@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { CrustError } from "@crustjs/core";
+
 import {
 	type ArgDef$,
 	type ArgOptions,
@@ -31,10 +32,7 @@ function validateArgArrayShape(
 	}
 
 	if (!variadic && multiple) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label}: array schema requires { variadic: true }`,
-		);
+		throw new CrustError("DEFINITION", `${label}: array schema requires { variadic: true }`);
 	}
 }
 
@@ -98,9 +96,7 @@ export function arg<
 	Name extends string,
 	S extends StandardSchema,
 	const Variadic extends true | undefined = undefined,
-	const Type extends NonNullable<ArgOptions["type"]> = NonNullable<
-		ArgOptions["type"]
-	>,
+	const Type extends NonNullable<ArgOptions["type"]> = NonNullable<ArgOptions["type"]>,
 >(
 	name: Name,
 	schema: S,
@@ -122,16 +118,9 @@ export function arg<
 	Name extends string,
 	S extends StandardSchema,
 	const Variadic extends true | undefined = undefined,
->(
-	name: Name,
-	schema: S,
-	options?: ArgOptions & { variadic?: Variadic },
-): unknown {
+>(name: Name, schema: S, options?: ArgOptions & { variadic?: Variadic }): unknown {
 	if (!name.trim()) {
-		throw new CrustError(
-			"DEFINITION",
-			"arg(): name is required and must be a non-empty string",
-		);
+		throw new CrustError("DEFINITION", "arg(): name is required and must be a non-empty string");
 	}
 	if (!isStandardSchema(schema)) {
 		throw new CrustError(
@@ -201,10 +190,7 @@ export function flag<
 	const Multiple extends true | undefined = undefined,
 >(
 	schema: S,
-	options: Omit<
-		FlagOptions,
-		"short" | "aliases" | "inherit" | "type" | "multiple"
-	> & {
+	options: Omit<FlagOptions, "short" | "aliases" | "inherit" | "type" | "multiple"> & {
 		short?: Short;
 		aliases?: Aliases;
 		inherit?: Inherit;
@@ -233,9 +219,7 @@ export function flag<
 	}
 	if (
 		options === undefined ||
-		(options.type !== "string" &&
-			options.type !== "number" &&
-			options.type !== "boolean")
+		(options.type !== "string" && options.type !== "number" && options.type !== "boolean")
 	) {
 		throw new CrustError(
 			"DEFINITION",
@@ -246,9 +230,7 @@ export function flag<
 	const multiple = options.multiple === true;
 
 	const short: string | undefined = options.short;
-	const aliases: string[] | undefined = options.aliases
-		? [...options.aliases]
-		: undefined;
+	const aliases: string[] | undefined = options.aliases ? [...options.aliases] : undefined;
 	const inherit: true | undefined = options.inherit ? true : undefined;
 
 	const def = {

@@ -8,6 +8,7 @@
 // fail this file at compile time.
 
 import { describe, expect, it } from "bun:test";
+
 import { bgCode, bg as colorBg, fg as colorFg, fgCode } from "./color.ts";
 import { createStyle } from "./createStyle.ts";
 import type { ColorInput, ColorString, NamedColor } from "./index.ts";
@@ -21,47 +22,29 @@ import { bg, fg } from "./runtimeExports.ts";
 type Assert<T extends true> = T;
 
 // `NamedColor` includes the canonical CSS spec entries.
-type _NamedColorIncludesRebeccaPurple = Assert<
-	"rebeccapurple" extends NamedColor ? true : false
->;
+type _NamedColorIncludesRebeccaPurple = Assert<"rebeccapurple" extends NamedColor ? true : false>;
 type _NamedColorIncludesRed = Assert<"red" extends NamedColor ? true : false>;
-type _NamedColorExcludesTransparent = Assert<
-	"transparent" extends NamedColor ? false : true
->;
+type _NamedColorExcludesTransparent = Assert<"transparent" extends NamedColor ? false : true>;
 
 // Every ColorString known literal accepts.
-type _NamedAccepted = Assert<
-	"rebeccapurple" extends ColorString ? true : false
->;
+type _NamedAccepted = Assert<"rebeccapurple" extends ColorString ? true : false>;
 type _HexAccepted = Assert<"#ff0000" extends ColorString ? true : false>;
 type _ShortHexAccepted = Assert<"#f00" extends ColorString ? true : false>;
 
 // ColorString preserves the string fallback (LiteralUnion behavior).
-type _StringFallback = Assert<
-	"any-old-string" extends ColorString ? true : false
->;
-type _RgbStringFallback = Assert<
-	"rgb(0, 128, 255)" extends ColorString ? true : false
->;
-type _HslStringFallback = Assert<
-	"hsl(0, 100%, 50%)" extends ColorString ? true : false
->;
+type _StringFallback = Assert<"any-old-string" extends ColorString ? true : false>;
+type _RgbStringFallback = Assert<"rgb(0, 128, 255)" extends ColorString ? true : false>;
+type _HslStringFallback = Assert<"hsl(0, 100%, 50%)" extends ColorString ? true : false>;
 
 // ColorInput accepts every documented branch.
 type _NumberBranch = Assert<0xff0000 extends ColorInput ? true : false>;
 type _Tuple3Branch = Assert<[255, 0, 0] extends ColorInput ? true : false>;
 type _Tuple4Branch = Assert<[255, 0, 0, 128] extends ColorInput ? true : false>;
-type _ObjectBranch = Assert<
-	{ r: 255; g: 0; b: 0 } extends ColorInput ? true : false
->;
-type _ObjectAlphaBranch = Assert<
-	{ r: 255; g: 0; b: 0; a: 128 } extends ColorInput ? true : false
->;
+type _ObjectBranch = Assert<{ r: 255; g: 0; b: 0 } extends ColorInput ? true : false>;
+type _ObjectAlphaBranch = Assert<{ r: 255; g: 0; b: 0; a: 128 } extends ColorInput ? true : false>;
 
 // ColorString is structurally a subset of ColorInput.
-type _ColorStringIsColorInput = Assert<
-	ColorString extends ColorInput ? true : false
->;
+type _ColorStringIsColorInput = Assert<ColorString extends ColorInput ? true : false>;
 
 // Sanity: `boolean` is NOT assignable to ColorInput.
 type _BooleanRejected = Assert<true extends ColorInput ? false : true>;
@@ -88,15 +71,11 @@ describe("ColorInput — every branch round-trips through fg()", () => {
 	});
 
 	it("accepts a 3-tuple", () => {
-		expect(fg("x", [255, 0, 0], "truecolor")).toBe(
-			"\x1b[38;2;255;0;0mx\x1b[39m",
-		);
+		expect(fg("x", [255, 0, 0], "truecolor")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 	});
 
 	it("accepts a `{ r, g, b }` object", () => {
-		expect(fg("x", { r: 255, g: 0, b: 0 }, "truecolor")).toBe(
-			"\x1b[38;2;255;0;0mx\x1b[39m",
-		);
+		expect(fg("x", { r: 255, g: 0, b: 0 }, "truecolor")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 	});
 
 	it("accepts a packed number", () => {

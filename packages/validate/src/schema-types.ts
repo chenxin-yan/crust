@@ -7,6 +7,7 @@
 // runtime and enables the strict-mode `HasAllSchemas` compile-time check.
 
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "@crustjs/core";
+
 import type { StandardSchema, ValidatedContext } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -18,9 +19,7 @@ import type { StandardSchema, ValidatedContext } from "./types.ts";
  * `FlagDef`. Survives `{ ...def }` spread and `Object.freeze`, so the
  * schema is available at runtime via `def[VALIDATED_SCHEMA]`.
  */
-export const VALIDATED_SCHEMA: unique symbol = Symbol.for(
-	"crustjs.validate.schema",
-);
+export const VALIDATED_SCHEMA: unique symbol = Symbol.for("crustjs.validate.schema");
 export type VALIDATED_SCHEMA = typeof VALIDATED_SCHEMA;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -74,9 +73,7 @@ export type ArgDef$<
 	readonly required?: true;
 	readonly variadic: Variadic;
 	readonly [VALIDATED_SCHEMA]: S;
-} & (Type extends ValueType
-	? { readonly type: Type }
-	: { readonly type?: never });
+} & (Type extends ValueType ? { readonly type: Type } : { readonly type?: never });
 
 /**
  * Common shape for both single- and multi-value flag defs.
@@ -110,9 +107,7 @@ export type FlagDef$<
 	Multiple extends true | undefined = undefined,
 > = FlagDefBase$<S, Short, Aliases, Inherit> & {
 	readonly type: Type;
-} & (Multiple extends true
-		? { readonly multiple: true }
-		: { readonly multiple?: never });
+} & (Multiple extends true ? { readonly multiple: true } : { readonly multiple?: never });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public option types for arg() / flag()
@@ -162,8 +157,7 @@ export interface FlagOptions {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Infer the Standard Schema output type from `S`. */
-export type InferSchemaOutput<S> =
-	S extends StandardSchema<infer _I, infer O> ? O : never;
+export type InferSchemaOutput<S> = S extends StandardSchema<infer _I, infer O> ? O : never;
 
 type InferValidatedArgValue<D> = D extends {
 	readonly [VALIDATED_SCHEMA]: infer S;
@@ -183,7 +177,7 @@ type InferValidatedArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	? Head extends { readonly name: infer N extends string }
 		? { [K in N]: InferValidatedArgValue<Head> } & InferValidatedArgsTuple<Tail>
 		: InferValidatedArgsTuple<Tail>
-	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
+	: // oxlint-disable-next-line typescript/no-empty-object-type -- empty base case for recursive intersection
 		{};
 
 /**
@@ -230,7 +224,7 @@ type AllFlagsHaveSchema<F extends FlagsDef> = string extends keyof F
 					}
 						? true
 						: false;
-				}[keyof F] extends true
+			  }[keyof F] extends true
 			? true
 			: false;
 
@@ -239,11 +233,7 @@ type AllFlagsHaveSchema<F extends FlagsDef> = string extends keyof F
  * `commandValidator()` uses this to enforce strict mode at compile time.
  */
 export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
-	AllArgsHaveSchema<A> extends true
-		? AllFlagsHaveSchema<F> extends true
-			? true
-			: false
-		: false;
+	AllArgsHaveSchema<A> extends true ? (AllFlagsHaveSchema<F> extends true ? true : false) : false;
 
 // ────────────────────────────────────────────────────────────────────────────
 // commandValidator handler type
@@ -258,9 +248,6 @@ export type HasAllSchemas<A extends ArgsDef, F extends FlagsDef> =
 export type CommandValidatorHandler<A extends ArgsDef, F extends FlagsDef> =
 	HasAllSchemas<A, F> extends true
 		? (
-				context: ValidatedContext<
-					InferValidatedArgs<A>,
-					InferValidatedFlags<F>
-				>,
+				context: ValidatedContext<InferValidatedArgs<A>, InferValidatedFlags<F>>,
 			) => void | Promise<void>
 		: never;

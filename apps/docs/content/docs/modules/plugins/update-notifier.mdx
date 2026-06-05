@@ -40,25 +40,25 @@ You are responsible for passing `packageName` and `currentVersion` — typically
 
 ### Options
 
-| Option           | Type                                                                  | Default                        | Description                                                                                 |
-| ---------------- | --------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| `currentVersion` | `string`                                                              | _(required)_                   | The current version of your CLI package.                                                    |
-| `packageName`    | `string`                                                              | _(required)_                   | The npm package name to check for updates.                                                  |
-| `timeoutMs`      | `number`                                                              | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.                       |
-| `registryUrl`    | `string`                                                              | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                                    |
-| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`                        | `"auto"`                       | Package manager used when building the default update command.                              |
-| `installScope`   | `"auto" \| "local" \| "global"`                                       | `"auto"`                       | Install scope used when building the default update command.                                |
-| `updateCommand`  | `string \| ((packageName, packageManager, installScope) => string)`   | inferred                       | Override the command shown in the update notice. Recommended when runtime inference is insufficient. |
-| `cache`          | `UpdateNotifierCacheConfig`                                           | none                           | Optional cache configuration for cross-run persistence and dedupe.                          |
+| Option           | Type                                                                | Default                        | Description                                                                                          |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `currentVersion` | `string`                                                            | _(required)_                   | The current version of your CLI package.                                                             |
+| `packageName`    | `string`                                                            | _(required)_                   | The npm package name to check for updates.                                                           |
+| `timeoutMs`      | `number`                                                            | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.                                |
+| `registryUrl`    | `string`                                                            | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                                             |
+| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`                      | `"auto"`                       | Package manager used when building the default update command.                                       |
+| `installScope`   | `"auto" \| "local" \| "global"`                                     | `"auto"`                       | Install scope used when building the default update command.                                         |
+| `updateCommand`  | `string \| ((packageName, packageManager, installScope) => string)` | inferred                       | Override the command shown in the update notice. Recommended when runtime inference is insufficient. |
+| `cache`          | `UpdateNotifierCacheConfig`                                         | none                           | Optional cache configuration for cross-run persistence and dedupe.                                   |
 
 ### Cache Configuration
 
 When providing `cache`, it accepts an object with the following properties:
 
-| Property     | Type                         | Default            | Description                                                  |
-| ------------ | ---------------------------- | ------------------ | ------------------------------------------------------------ |
-| `adapter`    | `UpdateNotifierCacheAdapter` | _(required)_       | Persistence adapter with `read` and `write` methods.         |
-| `intervalMs` | `number`                     | `86_400_000` (24h) | Minimum interval in milliseconds between network checks.     |
+| Property     | Type                         | Default            | Description                                              |
+| ------------ | ---------------------------- | ------------------ | -------------------------------------------------------- |
+| `adapter`    | `UpdateNotifierCacheAdapter` | _(required)_       | Persistence adapter with `read` and `write` methods.     |
+| `intervalMs` | `number`                     | `86_400_000` (24h) | Minimum interval in milliseconds between network checks. |
 
 ## Optional Persistence with `@crustjs/store`
 
@@ -128,9 +128,8 @@ updateNotifierPlugin({
 `write` receives a single argument (`state`). If you pass a function with two parameters, TypeScript will report a signature mismatch.
 
 <Callout type="info">
-  Version comparison uses standard semver (`major.minor.patch`). Prerelease
-  suffixes are stripped before comparison — `1.2.3-beta.1` is treated as
-  `1.2.3`.
+  Version comparison uses standard semver (`major.minor.patch`). Prerelease suffixes are stripped
+  before comparison — `1.2.3-beta.1` is treated as `1.2.3`.
 </Callout>
 
 ## Types
@@ -168,19 +167,15 @@ interface UpdateNotifierCacheAdapter {
     | null
     | undefined
   >;
-  write(
-    state: {
-      lastCheckedAt: number;
-      latestVersion?: string;
-      lastNotifiedVersion?: string;
-    },
-  ): Promise<void>;
+  write(state: {
+    lastCheckedAt: number;
+    latestVersion?: string;
+    lastNotifiedVersion?: string;
+  }): Promise<void>;
 }
 
 type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 type UpdateNotifierInstallScope = "local" | "global";
 
-function updateNotifierPlugin(
-  options: UpdateNotifierPluginOptions,
-): CrustPlugin;
+function updateNotifierPlugin(options: UpdateNotifierPluginOptions): CrustPlugin;
 ```

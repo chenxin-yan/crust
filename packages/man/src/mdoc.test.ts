@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
+
 import { renderManPageMdoc } from "./mdoc.ts";
 
 describe("renderManPageMdoc", () => {
@@ -75,11 +77,7 @@ describe("renderManPageMdoc", () => {
 					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
 					.run(() => {}),
 			)
-			.command(
-				new Crust("version")
-					.meta({ description: "Show version" })
-					.run(() => {}),
-			);
+			.command(new Crust("version").meta({ description: "Show version" }).run(() => {}));
 
 		const { root } = await app.prepareCommandTree();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -103,11 +101,7 @@ describe("renderManPageMdoc", () => {
 		// but never appear in published man pages.
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
-			.command(
-				new Crust("build")
-					.meta({ description: "Build the project" })
-					.run(() => {}),
-			)
+			.command(new Crust("build").meta({ description: "Build the project" }).run(() => {}))
 			.command(
 				new Crust("__complete")
 					.meta({ description: "Internal completion entrypoint", hidden: true })
@@ -124,9 +118,7 @@ describe("renderManPageMdoc", () => {
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
 			.command(
-				new Crust("__complete")
-					.meta({ hidden: true, description: "Internal" })
-					.run(() => {}),
+				new Crust("__complete").meta({ hidden: true, description: "Internal" }).run(() => {}),
 			)
 			.run(() => {});
 

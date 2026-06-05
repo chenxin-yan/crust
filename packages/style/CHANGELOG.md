@@ -13,7 +13,6 @@
   removed in v1.0.0.
 
   ### Added
-
   - `fg(text, input)` / `bg(text, input)` — apply a foreground or
     background color from anything `Bun.color()` accepts. Output adapts to
     the resolved `ColorDepth` (see _Fallback_ below).
@@ -56,7 +55,6 @@
 
   `fg`, `bg`, `fgCode`, and `bgCode` accept any input `Bun.color()`
   understands:
-
   - Hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`)
   - Named CSS colors (`"red"`, `"rebeccapurple"`)
   - `rgb()` / `rgba()` strings (`"rgb(0, 128, 255)"`)
@@ -76,7 +74,6 @@
   | `"256"`        | `TERM` contains `256color`                                                               |
   | `"16"`         | Any other TTY value                                                                      |
   | `"none"`       | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
-
   - Standalone `fg` / `bg` resolve depth on every call through the runtime
     `style` facade, so `setGlobalColorMode("never")`, `NO_COLOR=1`, and
     changes to `TERM` / `COLORTERM` continue to gate emission as expected.
@@ -88,7 +85,6 @@
     exactly as before; they don't participate in depth fallback.
 
   ### Compatibility
-
   - All deprecated exports keep their original behavior, signatures, and
     error contracts.
   - Truecolor escape bytes from `fg` / `fgCode` for the same input are
@@ -98,7 +94,6 @@
     `colorDepth === "truecolor"`.
 
   ### Public API removed
-
   - `resolveColorCapability(mode, overrides?)` and
     `resolveTrueColorCapability(mode, overrides?)` have been removed in
     favor of `resolveColorDepth(mode, overrides?)`. They were thin
@@ -120,7 +115,6 @@
   simultaneously a function, a chain root, and an `AnsiPair`.
 
   ### Added
-
   - **Chainable getters carry `open` / `close`**: every `ChainableStyleFn`
     (e.g. `style.bold`, `style.bold.red`, top-level `bold`) now extends
     `AnsiPair`. `composeStyles(bold, red, bgYellow)` and
@@ -145,7 +139,6 @@
     honor later `setGlobalColorMode()` flips.
 
   ### Behavior changes
-
   - **`fg("", "garbage")` now throws** `TypeError: Invalid color input: "garbage"`.
     The color is validated before any empty-text short-circuit, so callers
     can no longer accidentally mask invalid color bugs by passing empty
@@ -163,7 +156,6 @@
     to `"16"` instead of `"none"`).
 
   ### Improved
-
   - **Hyperlink error messages echo the bad value**: `Invalid hyperlink URL: "https://example.com/with space" must contain only printable ASCII characters without spaces.`
   - **JSDoc filled in** for `setGlobalColorMode`, `getGlobalColorMode`,
     `link`, `linkCode`, `fgCode`, `bgCode`. The `setGlobalColorMode` doc
@@ -172,7 +164,6 @@
     time (matching chalk / ansis).
 
   ### Caveats
-
   - Captured sub-chains snapshot at access time. To stay dynamic, capture
     the leaf and chain at the call site (`const fmt = style.bold; fmt.red("x")`).
   - `chain.open + text + chain.close` matches `chain(text)` only when
@@ -186,7 +177,6 @@
   Inline string literals passed to `fg` / `bg` / `fgCode` / `bgCode` (and
   the corresponding `style.fg` / `style.bg` / chain `.fg` / `.bg` methods)
   are now validated at compile time against a `StrictColorString` subset:
-
   - 148 CSS named colors (e.g. `"rebeccapurple"`)
   - `#rrggbb` / `#rgb` / `#rrggbbaa` hex
   - CSS color-function notation: `rgb()`, `rgba()`, `hsl()`, `hsla()`,
@@ -214,7 +204,6 @@
   signature — no function overloads and no runtime change. New helper
   types are exported for users who want to build their own strict
   wrappers:
-
   - `StrictColorString` — the literal subset
   - `CssColorFunctionString` — color-function template branch
   - `NonStringColorInput` — non-string `ColorInput` branches
@@ -246,7 +235,6 @@
   `@crustjs/plugins` now includes `noColorPlugin()`, which adds `--color` and `--no-color` to a Crust CLI and applies the override for the current run.
 
   **Breaking:** The capability resolver exports have been renamed for symmetry with the new `resolveModifierCapability`:
-
   - `resolveCapability` → `resolveColorCapability`
   - `resolveTrueColor` → `resolveTrueColorCapability`
 

@@ -122,9 +122,7 @@ function indentMultiline(text: string, contentIndent: number): string {
 	}
 
 	const padding = " ".repeat(contentIndent);
-	return lines
-		.map((line, idx) => (idx === 0 ? line : padding + line))
-		.join("\n");
+	return lines.map((line, idx) => (idx === 0 ? line : padding + line)).join("\n");
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -151,10 +149,7 @@ function indentMultiline(text: string, contentIndent: number): string {
  * // "- first\n  second line"
  * ```
  */
-export function unorderedList(
-	items: string[],
-	options?: UnorderedListOptions,
-): string {
+export function unorderedList(items: string[], options?: UnorderedListOptions): string {
 	const marker = options?.marker ?? "\u2022";
 	const markerGap = options?.markerGap ?? 1;
 	const indent = options?.indent ?? 0;
@@ -200,10 +195,7 @@ export function unorderedList(
  * // " 1. a\n 2. b\n ... \n10. j"
  * ```
  */
-export function orderedList(
-	items: string[],
-	options?: OrderedListOptions,
-): string {
+export function orderedList(items: string[], options?: OrderedListOptions): string {
 	const start = options?.start ?? 1;
 	const markerGap = options?.markerGap ?? 1;
 	const indent = options?.indent ?? 0;
@@ -257,10 +249,7 @@ export function orderedList(
  * // "[x] Buy milk\n[ ] Write tests"
  * ```
  */
-export function taskList(
-	items: TaskListItem[],
-	options?: TaskListOptions,
-): string {
+export function taskList(items: TaskListItem[], options?: TaskListOptions): string {
 	const checkedMarker = options?.checkedMarker ?? "[x]";
 	const uncheckedMarker = options?.uncheckedMarker ?? "[ ]";
 	const markerGap = options?.markerGap ?? 1;
@@ -270,10 +259,7 @@ export function taskList(
 	const gap = " ".repeat(markerGap);
 
 	// Use the wider marker width for consistent alignment
-	const markerWidth = Math.max(
-		visibleWidth(checkedMarker),
-		visibleWidth(uncheckedMarker),
-	);
+	const markerWidth = Math.max(visibleWidth(checkedMarker), visibleWidth(uncheckedMarker));
 	const contentIndent = indent + markerWidth + markerGap;
 
 	return items

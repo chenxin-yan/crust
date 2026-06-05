@@ -78,11 +78,7 @@ export function parseHex(hex: string): [r: number, g: number, b: number] {
 		const r = digits.charAt(0);
 		const g = digits.charAt(1);
 		const b = digits.charAt(2);
-		return [
-			Number.parseInt(r + r, 16),
-			Number.parseInt(g + g, 16),
-			Number.parseInt(b + b, 16),
-		];
+		return [Number.parseInt(r + r, 16), Number.parseInt(g + g, 16), Number.parseInt(b + b, 16)];
 	}
 
 	const longMatch = HEX_LONG.exec(hex);
@@ -95,9 +91,7 @@ export function parseHex(hex: string): [r: number, g: number, b: number] {
 		];
 	}
 
-	throw new TypeError(
-		`Invalid hex color: "${hex}". Expected format: "#RGB" or "#RRGGBB".`,
-	);
+	throw new TypeError(`Invalid hex color: "${hex}". Expected format: "#RGB" or "#RRGGBB".`);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

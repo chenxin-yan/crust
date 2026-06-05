@@ -8,26 +8,23 @@ Walks the subcommand tree to find the target command for the given argv. Subcomm
 ## Signature
 
 ```ts
-function resolveCommand(
-  command: CommandNode,
-  argv: string[],
-): CommandRoute;
+function resolveCommand(command: CommandNode, argv: string[]): CommandRoute;
 ```
 
 ## Parameters
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type          | Description                           |
+| --------- | ------------- | ------------------------------------- |
 | `command` | `CommandNode` | The root command node to resolve from |
-| `argv` | `string[]` | The argv array to resolve against |
+| `argv`    | `string[]`    | The argv array to resolve against     |
 
 ## Returns
 
 ```ts
 interface CommandRoute {
-  command: CommandNode;    // The resolved (sub)command
-  argv: string[];           // Remaining argv after subcommand names consumed
-  commandPath: string[];    // Full command path (e.g., ["my-cli", "build"])
+  command: CommandNode; // The resolved (sub)command
+  argv: string[]; // Remaining argv after subcommand names consumed
+  commandPath: string[]; // Full command path (e.g., ["my-cli", "build"])
 }
 ```
 
@@ -39,10 +36,10 @@ The error includes structured details:
 
 ```ts
 interface CommandNotFoundErrorDetails {
-  input: string;              // The unknown subcommand name
-  available: string[];         // Canonical sibling names (aliases live on parentCommand.subCommands)
-  commandPath: string[];       // Path to the parent command
-  parentCommand: CommandNode;  // The parent command node
+  input: string; // The unknown subcommand name
+  available: string[]; // Canonical sibling names (aliases live on parentCommand.subCommands)
+  commandPath: string[]; // Path to the parent command
+  parentCommand: CommandNode; // The parent command node
 }
 ```
 
@@ -64,10 +61,7 @@ interface CommandNotFoundErrorDetails {
 ```ts
 import { Crust, resolveCommand } from "@crustjs/core";
 
-const app = new Crust("my-cli")
-  .command("build", (cmd) =>
-    cmd.run(() => {})
-  );
+const app = new Crust("my-cli").command("build", (cmd) => cmd.run(() => {}));
 
 const route = resolveCommand(app._node, ["build", "--minify"]);
 // route.command.meta.name === "build"
@@ -89,10 +83,9 @@ const route = resolveCommand(app._node, ["create", "component", "Button"]);
 If a sibling declares `meta.aliases`, the resolver matches them after the canonical name. `commandPath` always records the canonical name regardless of which spelling the user typed.
 
 ```ts
-const app = new Crust("my-cli")
-  .command("issue", (cmd) =>
-    cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
-  );
+const app = new Crust("my-cli").command("issue", (cmd) =>
+  cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
+);
 
 resolveCommand(app._node, ["i"]).commandPath;
 // ["my-cli", "issue"] — canonical, not the alias the user typed

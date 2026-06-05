@@ -18,14 +18,14 @@ import { input, password, confirm, select } from "@crustjs/prompts";
 const name = await input({ message: "Project name?" });
 const useTS = await confirm({ message: "Use TypeScript?" });
 const fw = await select({
-  message: "Framework",
-  choices: ["react", "vue", "svelte"],
+	message: "Framework",
+	choices: ["react", "vue", "svelte"],
 });
 const secret = await password({
-  message: "Enter password:",
-  validate: (v) => {
-    if (v.length < 8) throw new Error("Must be at least 8 characters");
-  },
+	message: "Enter password:",
+	validate: (v) => {
+		if (v.length < 8) throw new Error("Must be at least 8 characters");
+	},
 });
 ```
 
@@ -47,8 +47,8 @@ import { input } from "@crustjs/prompts";
 import { z } from "zod";
 
 const port = await input({
-  message: "Port?",
-  validate: z.coerce.number().int().min(1).max(65535),
+	message: "Port?",
+	validate: z.coerce.number().int().min(1).max(65535),
 });
 //    ^? number
 ```
@@ -57,9 +57,7 @@ const port = await input({
 import { input } from "@crustjs/prompts";
 import { Schema } from "effect";
 
-const Email = Schema.standardSchemaV1(
-  Schema.String.pipe(Schema.pattern(/.+@.+/)),
-);
+const Email = Schema.standardSchemaV1(Schema.String.pipe(Schema.pattern(/.+@.+/)));
 
 const email = await input({ message: "Email?", validate: Email });
 //    ^? string

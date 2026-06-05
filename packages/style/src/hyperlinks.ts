@@ -39,9 +39,7 @@ function serializeParams(options?: HyperlinkOptions): string {
 
 	assertPrintableAscii(id, "hyperlink id");
 	if (id.includes(":") || id.includes(";")) {
-		throw new TypeError(
-			'Invalid hyperlink id: ":" and ";" are reserved by the OSC 8 format.',
-		);
+		throw new TypeError('Invalid hyperlink id: ":" and ";" are reserved by the OSC 8 format.');
 	}
 
 	return `id=${id}`;
@@ -99,10 +97,6 @@ export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
  * console.log(link("page 1", "https://example.com/p1", { id: "intro" }));
  * ```
  */
-export function link(
-	text: string,
-	url: string,
-	options?: HyperlinkOptions,
-): string {
+export function link(text: string, url: string, options?: HyperlinkOptions): string {
 	return applyStyle(text, linkCode(url, options));
 }

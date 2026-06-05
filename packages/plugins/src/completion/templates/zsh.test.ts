@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import type { CompletionSpec } from "../spec.ts";
 import { renderZsh } from "./zsh.ts";
 
@@ -207,9 +208,7 @@ echo OK
 		]);
 		const code = await proc.exited;
 		if (code !== 0) {
-			throw new Error(
-				`zsh failed: code=${code}\nstdout:\n${out}\nstderr:\n${err}`,
-			);
+			throw new Error(`zsh failed: code=${code}\nstdout:\n${out}\nstderr:\n${err}`);
 		}
 		expect(out).toContain("OK");
 	});

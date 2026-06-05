@@ -10,10 +10,7 @@ This is a pure parse+coerce function — it never throws for missing required va
 ## Signature
 
 ```ts
-function parseArgs<
-  A extends ArgsDef = ArgsDef,
-  F extends FlagsDef = FlagsDef,
->(
+function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
   command: CommandNode,
   argv: string[],
 ): ParseResult<A, F>;
@@ -21,18 +18,18 @@ function parseArgs<
 
 ## Parameters
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type          | Description                                                                                                                                          |
+| --------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `command` | `CommandNode` | The command node whose definitions drive parsing. Uses `command.effectiveFlags` for flag parsing and `command.args` for positional argument parsing. |
-| `argv` | `string[]` | The argument array to parse (typically `process.argv.slice(2)`) |
+| `argv`    | `string[]`    | The argument array to parse (typically `process.argv.slice(2)`)                                                                                      |
 
 ## Returns
 
 ```ts
 interface ParseResult<A, F> {
-  args: InferArgs<A>;     // Resolved positional arguments
-  flags: InferFlags<F>;   // Resolved flags
-  rawArgs: string[];       // Everything after the `--` separator
+  args: InferArgs<A>; // Resolved positional arguments
+  flags: InferFlags<F>; // Resolved flags
+  rawArgs: string[]; // Everything after the `--` separator
 }
 ```
 
@@ -55,12 +52,12 @@ interface ParseResult<A, F> {
 
 ### Type Coercion
 
-| Definition Type | Parser Behavior |
-| --- | --- |
-| `"string"` | Kept as-is |
-| `"number"` | Coerced via `Number()`. Throws `PARSE` if `NaN` |
-| `"boolean"` | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected |
-| omitted | Positional args only: kept as the raw string token (or raw string array for variadic args). Flags must declare `type` because parser grammar determines whether `--flag value` is consumed. |
+| Definition Type | Parser Behavior                                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"string"`      | Kept as-is                                                                                                                                                                                  |
+| `"number"`      | Coerced via `Number()`. Throws `PARSE` if `NaN`                                                                                                                                             |
+| `"boolean"`     | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected                                                                            |
+| omitted         | Positional args only: kept as the raw string token (or raw string array for variadic args). Flags must declare `type` because parser grammar determines whether `--flag value` is consumed. |
 
 Raw mode is automatic when a positional arg is defined without a `type`. The
 `arg()` helper in [`@crustjs/validate`](/docs/modules/validate) uses this mode
@@ -105,14 +102,10 @@ parseArgs(cmd, ["file.txt", "--", "--verbose"]);
 ```ts
 import { Crust, parseArgs } from "@crustjs/core";
 
-const cmd = new Crust("example")
-  .args([
-    { name: "file", type: "string", required: true },
-  ])
-  .flags({
-    output: { type: "string", default: "dist", short: "o" },
-    verbose: { type: "boolean", short: "v" },
-  });
+const cmd = new Crust("example").args([{ name: "file", type: "string", required: true }]).flags({
+  output: { type: "string", default: "dist", short: "o" },
+  verbose: { type: "boolean", short: "v" },
+});
 
 const result = parseArgs(cmd._node, ["input.ts", "-o", "build", "--verbose"]);
 // result.args.file === "input.ts"

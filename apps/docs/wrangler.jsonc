@@ -7,7 +7,7 @@
   "routes": [
     {
       "pattern": "crustjs.com",
-      "custom_domain": true
-    }
-  ]
+      "custom_domain": true,
+    },
+  ],
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { Crust, parseArgs, resolveCommand } from "@crustjs/core";
 
 describe("crust integration", () => {
@@ -10,9 +11,7 @@ describe("crust integration", () => {
 			} as const);
 
 		// Access the internal node to test parseArgs directly
-		const node = (
-			app as unknown as { _node: import("@crustjs/core").CommandNode }
-		)._node;
+		const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
 		const result = parseArgs(node, ["src/index.ts", "-o", "build"]);
 		expect((result.args as Record<string, unknown>).file).toBe("src/index.ts");
 		expect((result.flags as Record<string, unknown>).output).toBe("build");
@@ -21,9 +20,7 @@ describe("crust integration", () => {
 	it("resolveCommand works with Crust builder", () => {
 		const app = new Crust("root").command("sub", (cmd) => cmd.run(() => {}));
 
-		const node = (
-			app as unknown as { _node: import("@crustjs/core").CommandNode }
-		)._node;
+		const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
 		const result = resolveCommand(node, ["sub", "--flag"]);
 		expect(result.command.meta.name).toBe("sub");
 		expect(result.argv).toEqual(["--flag"]);

@@ -229,8 +229,7 @@ export function validateCommandTree(root: CommandNode): void {
 			const parsed = parseArgs(command, createValidationArgv(command));
 			validateParsed(command, parsed);
 		} catch (error) {
-			const message =
-				error instanceof Error ? error.message : "Unknown validation error";
+			const message = error instanceof Error ? error.message : "Unknown validation error";
 			throw new CrustError(
 				"DEFINITION",
 				`Command "${path.join(" ")}" failed runtime validation: ${message}`,

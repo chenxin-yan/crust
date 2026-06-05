@@ -33,6 +33,8 @@ Common root commands:
 
 ```sh
 bun run build
+bun run lint
+bun run format
 bun run check
 bun run check:types
 bun run test
@@ -82,6 +84,8 @@ Useful commands:
 ```sh
 bun run dev:docs
 bun run build:docs
+bun run lint apps/docs
+bun run format apps/docs
 bun run check apps/docs
 bun run check:types --filter=./apps/docs
 ```
@@ -91,7 +95,7 @@ Update docs when you change public APIs, commands, flags, generated output, or r
 ## Code Style
 
 - Use TypeScript and ESM consistently with the existing codebase.
-- Let Biome handle formatting and linting.
+- Let Oxlint and Oxfmt handle linting and formatting.
 - Follow existing naming and file layout patterns instead of introducing new structure without a strong reason.
 - Keep changes minimal and targeted.
 

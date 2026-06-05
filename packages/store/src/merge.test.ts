@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { applyFieldDefaults } from "./merge.ts";
 import type { FieldsDef } from "./types.ts";
 

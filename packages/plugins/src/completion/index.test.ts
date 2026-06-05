@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { Crust } from "@crustjs/core";
+
 import { completionPlugin } from "./index.ts";
 
 let stdoutBuf: Buffer[];
@@ -85,9 +87,7 @@ describe("completionPlugin", () => {
 		await app.execute({ argv: ["completion", "bash"] });
 		expect(Object.keys(app._node.subCommands)).toContain("completion");
 		const completionNode = app._node.subCommands.completion;
-		expect(completionNode?.meta.description).toBe(
-			"Generate shell tab-completion scripts",
-		);
+		expect(completionNode?.meta.description).toBe("Generate shell tab-completion scripts");
 	});
 
 	it("exposes options: command name override", async () => {

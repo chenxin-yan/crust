@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { validateCommandTree } from "./validation.ts";
 
@@ -27,9 +28,7 @@ describe("validateCommandTree", () => {
 		};
 		node.effectiveFlags = { ...node.localFlags };
 
-		expect(() => validateCommandTree(node)).toThrow(
-			'Command "root" failed runtime validation',
-		);
+		expect(() => validateCommandTree(node)).toThrow('Command "root" failed runtime validation');
 	});
 
 	it("validates nested subcommands", () => {
@@ -128,9 +127,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
 
-		expect(() => validateCommandTree(node)).toThrow(
-			'Command "sub" failed runtime validation',
-		);
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
@@ -145,9 +142,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
 
-		expect(() => validateCommandTree(node)).toThrow(
-			'Command "sub" failed runtime validation',
-		);
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
@@ -159,9 +154,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 			"no-verbose": { type: "boolean" },
 		};
 
-		expect(() => validateCommandTree(node)).toThrow(
-			'Command "sub" failed runtime validation',
-		);
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("no-");
 	});
 
@@ -304,9 +297,7 @@ describe("validateCommandTree — alias collisions", () => {
 			build: makeRunnable("build"),
 			compile: makeRunnable("compile", ["build"]),
 		};
-		expect(() => validateCommandTree(root)).toThrow(
-			/collides with sibling canonical name "build"/,
-		);
+		expect(() => validateCommandTree(root)).toThrow(/collides with sibling canonical name "build"/);
 	});
 
 	it("detects an alias colliding with another sibling's alias", () => {
@@ -315,9 +306,7 @@ describe("validateCommandTree — alias collisions", () => {
 			issue: makeRunnable("issue", ["i"]),
 			info: makeRunnable("info", ["i"]),
 		};
-		expect(() => validateCommandTree(root)).toThrow(
-			/collides with alias of sibling "issue"/,
-		);
+		expect(() => validateCommandTree(root)).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("detects shape-invalid aliases (whitespace)", () => {
@@ -325,9 +314,7 @@ describe("validateCommandTree — alias collisions", () => {
 		root.subCommands = {
 			issue: makeRunnable("issue", ["my issue"]),
 		};
-		expect(() => validateCommandTree(root)).toThrow(
-			/must not contain whitespace/,
-		);
+		expect(() => validateCommandTree(root)).toThrow(/must not contain whitespace/);
 	});
 
 	it("walks into nested subtrees", () => {
@@ -338,8 +325,6 @@ describe("validateCommandTree — alias collisions", () => {
 		const root = createCommandNode("app");
 		root.subCommands = { issue };
 
-		expect(() => validateCommandTree(root)).toThrow(
-			/collides with alias of sibling "create"/,
-		);
+		expect(() => validateCommandTree(root)).toThrow(/collides with alias of sibling "create"/);
 	});
 });

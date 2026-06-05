@@ -18,7 +18,7 @@ try {
   parseArgs(cmd._node, ["--unknown"]);
 } catch (error) {
   if (error instanceof CrustError) {
-    console.log(error.code);    // "PARSE"
+    console.log(error.code); // "PARSE"
     console.log(error.message); // 'Unknown flag "--unknown"'
   }
 }
@@ -52,10 +52,10 @@ The `COMMAND_NOT_FOUND` error includes structured details for building helpful e
 
 ```ts
 interface CommandNotFoundErrorDetails {
-  input: string;              // What the user typed
-  available: string[];         // Valid subcommand names
-  commandPath: string[];       // Path to the parent command
-  parentCommand: CommandNode;  // The parent command node
+  input: string; // What the user typed
+  available: string[]; // Valid subcommand names
+  commandPath: string[]; // Path to the parent command
+  parentCommand: CommandNode; // The parent command node
 }
 ```
 
@@ -131,11 +131,11 @@ Crust catches command definition mistakes through three complementary layers. Ea
 
 When you use `.flags()` and `.args()` with literal types, TypeScript catches structural issues **before your code runs**. The error appears as a red squiggle on the exact offending arg or flag.
 
-| Check | Type Utility | Branded Error Property | Example |
-| --- | --- | --- | --- |
-| Only last arg can be variadic | `ValidateVariadicArgs` | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
-| No alias collisions | `ValidateFlagAliases` | `FIX_ALIAS_COLLISION` | Two flags both use `short: "v"` |
-| No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX` | Flag named `no-cache` or alias `no-store` |
+| Check                            | Type Utility              | Branded Error Property  | Example                                               |
+| -------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
+| Only last arg can be variadic    | `ValidateVariadicArgs`    | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
+| No alias collisions              | `ValidateFlagAliases`     | `FIX_ALIAS_COLLISION`   | Two flags both use `short: "v"`                       |
+| No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX`         | Flag named `no-cache` or alias `no-store`             |
 
 These checks are **bypassed** when types are widened (e.g. `as any`, dynamic construction, or non-const generics). The runtime layers below serve as defense-in-depth.
 
@@ -145,35 +145,35 @@ Even without TypeScript or when types are erased, Crust validates definitions at
 
 **`.flags()` throws `CrustError("DEFINITION")`:**
 
-| Check | Error Message |
-| --- | --- |
+| Check                       | Error Message                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
 | Flag name starts with `no-` | `Flag "--no-cache" must not use "no-" prefix; define "cache" and negate with "--no-cache"` |
-| Alias starts with `no-` | `Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)` |
+| Alias starts with `no-`     | `Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)`        |
 
 **Constructor throws `CrustError("DEFINITION")`:**
 
-| Check | Error Message |
-| --- | --- |
+| Check      | Error Message                          |
+| ---------- | -------------------------------------- |
 | Empty name | `meta.name must be a non-empty string` |
 
 **`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
 
-| Check | Code | Error Message |
-| --- | --- | --- |
+| Check                                         | Code         | Error Message                                                       |
+| --------------------------------------------- | ------------ | ------------------------------------------------------------------- |
 | Alias collision (alias->name or alias->alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
-| `no-` prefixed flag name (defense-in-depth) | `DEFINITION` | `Flag "--no-cache" must not use "no-" prefix...` |
-| `no-` prefixed alias (defense-in-depth) | `DEFINITION` | `Alias "--no-store" on "--cache" must not use "no-" prefix...` |
-| Unknown flag (strict mode) | `PARSE` | `Unknown flag "--unknown"` |
-| Invalid number coercion | `PARSE` | `Expected number for --port, got "abc"` |
-| Boolean value assignment (`--flag=true`) | `PARSE` | `Failed to parse command arguments` |
-| Negating an alias (`--no-loud`) | `PARSE` | `Cannot negate alias "--no-loud"; use "--no-verbose" instead` |
+| `no-` prefixed flag name (defense-in-depth)   | `DEFINITION` | `Flag "--no-cache" must not use "no-" prefix...`                    |
+| `no-` prefixed alias (defense-in-depth)       | `DEFINITION` | `Alias "--no-store" on "--cache" must not use "no-" prefix...`      |
+| Unknown flag (strict mode)                    | `PARSE`      | `Unknown flag "--unknown"`                                          |
+| Invalid number coercion                       | `PARSE`      | `Expected number for --port, got "abc"`                             |
+| Boolean value assignment (`--flag=true`)      | `PARSE`      | `Failed to parse command arguments`                                 |
+| Negating an alias (`--no-loud`)               | `PARSE`      | `Cannot negate alias "--no-loud"; use "--no-verbose" instead`       |
 
 **`validateParsed` throws `CrustError("VALIDATION")`:**
 
-| Check | Error Message |
-| --- | --- |
+| Check                     | Error Message                        |
+| ------------------------- | ------------------------------------ |
 | Missing required argument | `Missing required argument "<name>"` |
-| Missing required flag | `Missing required flag "--config"` |
+| Missing required flag     | `Missing required flag "--config"`   |
 
 `validateParsed` is called after middleware, so plugins like `helpPlugin` can intercept `--help` before these errors are surfaced.
 

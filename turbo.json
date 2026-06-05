@@ -7,8 +7,10 @@
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
 			"outputs": ["dist/**", "!.dist/cache/**"]
 		},
-		"//#check": {},
-		"//#check:fix": { "cache": false },
+		"//#lint": {},
+		"//#lint:fix": { "cache": false },
+		"//#format": {},
+		"//#format:fix": { "cache": false },
 		"test": {
 			"dependsOn": ["^build"]
 		},

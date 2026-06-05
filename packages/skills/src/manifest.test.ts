@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 
@@ -240,9 +242,7 @@ describe("buildManifest", () => {
 		it("normalizes a boolean arg with default", () => {
 			const cmd = makeCommand({
 				meta: { name: "toggle" },
-				args: [
-					{ name: "enabled", type: "boolean", default: false },
-				] as ArgDef[],
+				args: [{ name: "enabled", type: "boolean", default: false }] as ArgDef[],
 				run() {},
 			});
 
@@ -531,11 +531,7 @@ describe("buildManifest", () => {
 			const node = buildManifest(root);
 			const groupNode = node.children[0];
 
-			expect(groupNode?.children.map((c) => c.name)).toEqual([
-				"alpha",
-				"beta",
-				"zeta",
-			]);
+			expect(groupNode?.children.map((c) => c.name)).toEqual(["alpha", "beta", "zeta"]);
 		});
 
 		it("correctly marks runnable vs group commands in deep trees", () => {
@@ -626,9 +622,7 @@ describe("buildManifest", () => {
 			const node = buildManifest(root._node);
 			const child = node.children[0];
 
-			expect(child?.instructions).toEqual([
-				"Read the environment carefully before execution.",
-			]);
+			expect(child?.instructions).toEqual(["Read the environment carefully before execution."]);
 		});
 	});
 
@@ -752,11 +746,7 @@ describe("buildManifest", () => {
 			expect(cloneNode?.args[1]?.required).toBe(false);
 			expect(cloneNode?.flags).toHaveLength(3);
 			// Flags sorted: bare, branch, depth
-			expect(cloneNode?.flags.map((f) => f.name)).toEqual([
-				"bare",
-				"branch",
-				"depth",
-			]);
+			expect(cloneNode?.flags.map((f) => f.name)).toEqual(["bare", "branch", "depth"]);
 			expect(cloneNode?.flags[1]?.short).toBe("b");
 			expect(cloneNode?.flags[1]?.aliases).toEqual([]);
 
@@ -770,11 +760,7 @@ describe("buildManifest", () => {
 			expect(remoteNode?.children[0]?.name).toBe("add");
 			expect(remoteNode?.children[0]?.path).toEqual(["git", "remote", "add"]);
 			expect(remoteNode?.children[1]?.name).toBe("remove");
-			expect(remoteNode?.children[1]?.path).toEqual([
-				"git",
-				"remote",
-				"remove",
-			]);
+			expect(remoteNode?.children[1]?.path).toEqual(["git", "remote", "remove"]);
 		});
 	});
 

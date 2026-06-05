@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { red } from "../colors.ts";
 import { bold } from "../modifiers.ts";
 import { center, padEnd, padStart } from "./pad.ts";

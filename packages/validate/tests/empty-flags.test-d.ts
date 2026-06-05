@@ -12,6 +12,7 @@
 
 import { Crust } from "@crustjs/core";
 import { z } from "zod";
+
 import { arg, commandValidator } from "../src/index.ts";
 
 const cmd = new Crust("noop")

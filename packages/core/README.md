@@ -16,15 +16,15 @@ bun add @crustjs/core
 import { Crust } from "@crustjs/core";
 
 const app = new Crust("greet")
-  .meta({ description: "Say hello" })
-  .args([{ name: "name", type: "string", default: "world" }] as const)
-  .flags({
-    loud: { type: "boolean", description: "Shout it", alias: "l" },
-  })
-  .run(({ args, flags }) => {
-    const msg = `Hello, ${args.name}!`;
-    console.log(flags.loud ? msg.toUpperCase() : msg);
-  });
+	.meta({ description: "Say hello" })
+	.args([{ name: "name", type: "string", default: "world" }] as const)
+	.flags({
+		loud: { type: "boolean", description: "Shout it", alias: "l" },
+	})
+	.run(({ args, flags }) => {
+		const msg = `Hello, ${args.name}!`;
+		console.log(flags.loud ? msg.toUpperCase() : msg);
+	});
 
 app.execute();
 ```
@@ -33,12 +33,12 @@ app.execute();
 
 Flags and positional arguments support six built-in `type` literals:
 
-- `"string"`  — raw string token
-- `"number"`  — coerced via `Number(raw)`
+- `"string"` — raw string token
+- `"number"` — coerced via `Number(raw)`
 - `"boolean"` — toggle (`--flag` / `--no-flag`)
-- `"url"`     — `new URL(raw)` → `URL` instance
-- `"path"`    — `~` expanded, resolved to an absolute `string`
-- `"json"`    — `JSON.parse(raw)` → `unknown`
+- `"url"` — `new URL(raw)` → `URL` instance
+- `"path"` — `~` expanded, resolved to an absolute `string`
+- `"json"` — `JSON.parse(raw)` → `unknown`
 
 For formats that aren't built in, attach a synchronous `parse` to a `type: "string"` flag or arg. The inferred type flows from `ReturnType<parse>`:
 

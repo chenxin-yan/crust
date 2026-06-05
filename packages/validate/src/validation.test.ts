@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+
 import { CrustError } from "@crustjs/core";
+
 import type { ValidationIssue } from "./types.ts";
 import {
 	formatPath,
@@ -131,9 +133,7 @@ describe("renderBulletList", () => {
 	});
 
 	it("renders issues without paths (root-level)", () => {
-		const issues: ValidationIssue[] = [
-			{ path: "", message: "Invalid input type" },
-		];
+		const issues: ValidationIssue[] = [{ path: "", message: "Invalid input type" }];
 		const result = renderBulletList("Validation failed", issues);
 		expect(result).toBe("Validation failed\n  - Invalid input type");
 	});
@@ -150,17 +150,13 @@ describe("renderBulletList", () => {
 	});
 
 	it("renders single issue", () => {
-		const issues: ValidationIssue[] = [
-			{ path: "flags.count", message: "Expected number" },
-		];
+		const issues: ValidationIssue[] = [{ path: "flags.count", message: "Expected number" }];
 		const result = renderBulletList("Error", issues);
 		expect(result).toBe("Error\n  - flags.count: Expected number");
 	});
 
 	it("renders with custom prefix", () => {
-		const issues: ValidationIssue[] = [
-			{ path: "args[0]", message: "Too short" },
-		];
+		const issues: ValidationIssue[] = [{ path: "args[0]", message: "Too short" }];
 		const result = renderBulletList("Custom prefix message", issues);
 		expect(result).toBe("Custom prefix message\n  - args[0]: Too short");
 	});
@@ -177,9 +173,7 @@ describe("renderBulletList", () => {
 
 describe("throwValidationError", () => {
 	it("throws CrustError with VALIDATION code", () => {
-		const issues: ValidationIssue[] = [
-			{ path: "flags.verbose", message: "Expected boolean" },
-		];
+		const issues: ValidationIssue[] = [{ path: "flags.verbose", message: "Expected boolean" }];
 		expect(() => throwValidationError(issues)).toThrow(CrustError);
 		try {
 			throwValidationError(issues);
@@ -208,9 +202,7 @@ describe("throwValidationError", () => {
 	});
 
 	it("formats message with custom prefix", () => {
-		const issues: ValidationIssue[] = [
-			{ path: "flags.count", message: "Expected number" },
-		];
+		const issues: ValidationIssue[] = [{ path: "flags.count", message: "Expected number" }];
 		try {
 			throwValidationError(issues, "Schema validation error");
 			expect.unreachable("should have thrown");

@@ -8,18 +8,15 @@ Validates a previously-parsed result against its command's required-value constr
 ## Signature
 
 ```ts
-function validateParsed(
-  command: CommandNode,
-  parsed: ParseResult,
-): void;
+function validateParsed(command: CommandNode, parsed: ParseResult): void;
 ```
 
 ## Parameters
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `command` | `CommandNode` | The command node whose definitions drive validation |
-| `parsed` | `ParseResult` | The parse result from [`parseArgs()`](/docs/api/parse-args) |
+| Parameter | Type          | Description                                                 |
+| --------- | ------------- | ----------------------------------------------------------- |
+| `command` | `CommandNode` | The command node whose definitions drive validation         |
+| `parsed`  | `ParseResult` | The parse result from [`parseArgs()`](/docs/api/parse-args) |
 
 ## Returns
 

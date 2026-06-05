@@ -13,6 +13,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+
 import { CrustStoreError } from "./errors.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -81,11 +82,9 @@ export async function readJson(filePath: string): Promise<unknown | undefined> {
 	try {
 		return JSON.parse(raw);
 	} catch (err: unknown) {
-		throw new CrustStoreError(
-			"PARSE",
-			`Malformed JSON in config file: ${filePath}`,
-			{ path: filePath },
-		).withCause(err);
+		throw new CrustStoreError("PARSE", `Malformed JSON in config file: ${filePath}`, {
+			path: filePath,
+		}).withCause(err);
 	}
 }
 
@@ -129,14 +128,10 @@ export async function writeJson(
 		// created (or undefined if the directory already existed).
 		createdDir = await mkdir(dir, { recursive: true, mode: directoryMode });
 	} catch (err: unknown) {
-		throw new CrustStoreError(
-			"IO",
-			`Failed to create config directory: ${dir}`,
-			{
-				path: filePath,
-				operation: "write",
-			},
-		).withCause(err);
+		throw new CrustStoreError("IO", `Failed to create config directory: ${dir}`, {
+			path: filePath,
+			operation: "write",
+		}).withCause(err);
 	}
 
 	// Enforce `directoryMode` exactly when we created the directory. mkdir's `mode`
@@ -167,14 +162,10 @@ export async function writeJson(
 		// Best-effort cleanup of temp file
 		await cleanupTempFile(tempPath);
 
-		throw new CrustStoreError(
-			"IO",
-			`Failed to write config file: ${filePath}`,
-			{
-				path: filePath,
-				operation: "write",
-			},
-		).withCause(err);
+		throw new CrustStoreError("IO", `Failed to write config file: ${filePath}`, {
+			path: filePath,
+			operation: "write",
+		}).withCause(err);
 	}
 
 	try {
@@ -183,14 +174,10 @@ export async function writeJson(
 		// Best-effort cleanup of temp file
 		await cleanupTempFile(tempPath);
 
-		throw new CrustStoreError(
-			"IO",
-			`Failed to finalize config file: ${filePath}`,
-			{
-				path: filePath,
-				operation: "write",
-			},
-		).withCause(err);
+		throw new CrustStoreError("IO", `Failed to finalize config file: ${filePath}`, {
+			path: filePath,
+			operation: "write",
+		}).withCause(err);
 	}
 }
 
@@ -216,14 +203,10 @@ export async function deleteJson(filePath: string): Promise<void> {
 			return;
 		}
 
-		throw new CrustStoreError(
-			"IO",
-			`Failed to delete config file: ${filePath}`,
-			{
-				path: filePath,
-				operation: "delete",
-			},
-		).withCause(err);
+		throw new CrustStoreError("IO", `Failed to delete config file: ${filePath}`, {
+			path: filePath,
+			operation: "delete",
+		}).withCause(err);
 	}
 }
 

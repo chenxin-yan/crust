@@ -61,21 +61,10 @@ export { table } from "./blocks/tables.ts";
 export { resolveColorDepth } from "./capability.ts";
 // Style primitives — Dynamic colors (depth-aware) powered by `Bun.color()`
 export { bgCode, fgCode } from "./color.ts";
-export {
-	createStyle,
-	getGlobalColorMode,
-	setGlobalColorMode,
-	style,
-} from "./createStyle.ts";
+export { createStyle, getGlobalColorMode, setGlobalColorMode, style } from "./createStyle.ts";
 // Deprecated truecolor pair factories + hex parser — superseded by
 // `fgCode` / `bgCode`. Will be removed in v1.0.0.
-export {
-	bgHexCode,
-	bgRgbCode,
-	hexCode,
-	parseHex,
-	rgbCode,
-} from "./dynamicColors.ts";
+export { bgHexCode, bgRgbCode, hexCode, parseHex, rgbCode } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
 export type { NamedColor } from "./namedColors.ts";
@@ -141,15 +130,8 @@ export type { WrapOptions } from "./text/wrap.ts";
 export { wrapText } from "./text/wrap.ts";
 // Markdown theme
 export type { CreateMarkdownThemeOptions } from "./theme/createMarkdownTheme.ts";
-export {
-	createMarkdownTheme,
-	defaultTheme,
-} from "./theme/createMarkdownTheme.ts";
-export type {
-	MarkdownTheme,
-	PartialMarkdownTheme,
-	ThemeSlotFn,
-} from "./theme/markdownTheme.ts";
+export { createMarkdownTheme, defaultTheme } from "./theme/createMarkdownTheme.ts";
+export type { MarkdownTheme, PartialMarkdownTheme, ThemeSlotFn } from "./theme/markdownTheme.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,

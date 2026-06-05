@@ -1,12 +1,9 @@
-import {
-  createRootRoute,
-  HeadContent,
-  Outlet,
-  Scripts,
-} from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 import type * as React from "react";
+
 import { buildSiteJsonLd, siteConfig } from "@/lib/seo";
+
 import appCss from "@/styles/app.css?url";
 
 const siteScripts = buildSiteJsonLd();

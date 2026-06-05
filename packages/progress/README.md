@@ -18,13 +18,13 @@ bun add @crustjs/progress
 import { spinner } from "@crustjs/progress";
 
 const result = await spinner({
-  message: "Fetching data...",
-  task: async ({ updateMessage }) => {
-    await fetchStepOne();
-    updateMessage("Processing...");
-    await fetchStepTwo();
-    return { ok: true };
-  },
+	message: "Fetching data...",
+	task: async ({ updateMessage }) => {
+		await fetchStepOne();
+		updateMessage("Processing...");
+		await fetchStepTwo();
+		return { ok: true };
+	},
 });
 ```
 
@@ -37,9 +37,9 @@ import { createTheme, setTheme } from "@crustjs/progress";
 import { cyan, green } from "@crustjs/style";
 
 setTheme(
-  createTheme({
-    spinner: cyan,
-    success: green,
-  }),
+	createTheme({
+		spinner: cyan,
+		success: green,
+	}),
 );
 ```

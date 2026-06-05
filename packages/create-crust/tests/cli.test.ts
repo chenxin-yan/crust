@@ -1,11 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,10 +8,7 @@ const builtCliPath = join(packageRoot, "dist", "index.js");
 const tempRoots: string[] = [];
 
 function makeTempRoot(label: string): string {
-	const dir = join(
-		tmpdir(),
-		`${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-	);
+	const dir = join(tmpdir(), `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(dir, { recursive: true });
 	tempRoots.push(dir);
 	return dir;
@@ -150,9 +141,7 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Aborted.");
-		expect(readFileSync(join(projectDir, "sentinel.txt"), "utf-8")).toBe(
-			"keep me",
-		);
+		expect(readFileSync(join(projectDir, "sentinel.txt"), "utf-8")).toBe("keep me");
 		expect(existsSync(join(projectDir, "package.json"))).toBe(false);
 	}, 30_000);
 

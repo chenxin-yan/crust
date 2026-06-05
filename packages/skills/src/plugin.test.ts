@@ -3,8 +3,10 @@ import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
 import type { CrustPlugin } from "@crustjs/core";
 import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";
 import { skillPlugin } from "./plugin.ts";
@@ -78,13 +80,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		const manifestPath = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"no-auto-install",
-			"crust.json",
-		);
+		const manifestPath = join(tmpDir, ".agents", "skills", "no-auto-install", "crust.json");
 
 		expect(await exists(manifestPath)).toBe(false);
 	});
@@ -119,22 +115,12 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		const skillPath = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"instruction-test",
-			"SKILL.md",
-		);
+		const skillPath = join(tmpDir, ".agents", "skills", "instruction-test", "SKILL.md");
 		const content = await readFile(skillPath, "utf-8");
 
 		expect(content).toContain("## General Guidance");
-		expect(content).toContain(
-			"- Prefer readonly commands before mutating state.",
-		);
-		expect(content).toContain(
-			"- Ask for confirmation before destructive actions.",
-		);
+		expect(content).toContain("- Prefer readonly commands before mutating state.");
+		expect(content).toContain("- Ask for confirmation before destructive actions.");
 	});
 
 	it("renders plugin-provided markdown instructions into SKILL.md", async () => {
@@ -169,13 +155,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		const skillPath = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"markdown-instruction-test",
-			"SKILL.md",
-		);
+		const skillPath = join(tmpDir, ".agents", "skills", "markdown-instruction-test", "SKILL.md");
 		const content = await readFile(skillPath, "utf-8");
 
 		expect(content).toContain("## General Guidance");
@@ -226,18 +206,8 @@ describe("skillPlugin auto-update", () => {
 				}),
 			);
 
-		const legacyCanonicalDir = join(
-			tmpDir,
-			".crust",
-			"skills",
-			"use-legacy-migration-test",
-		);
-		const legacySkillDir = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"use-legacy-migration-test",
-		);
+		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-legacy-migration-test");
+		const legacySkillDir = join(tmpDir, ".agents", "skills", "use-legacy-migration-test");
 		await mkdir(legacyCanonicalDir, { recursive: true });
 		await mkdir(legacySkillDir, { recursive: true });
 		await writeFile(
@@ -251,12 +221,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		const currentSkillDir = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"legacy-migration-test",
-		);
+		const currentSkillDir = join(tmpDir, ".agents", "skills", "legacy-migration-test");
 		expect(await readInstalledVersion(currentSkillDir)).toBe("1.0.0");
 		expect(await exists(legacySkillDir)).toBe(false);
 		expect(await exists(legacyCanonicalDir)).toBe(false);
@@ -433,10 +398,7 @@ describe("skillPlugin auto-update", () => {
 
 		const logs: string[] = [];
 		const originalLog = console.log;
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
@@ -455,12 +417,8 @@ describe("skillPlugin auto-update", () => {
 		}
 
 		expect(logs.some((line) => line.includes("No changes."))).toBe(true);
-		expect(
-			logs.some((line) => line.includes("Agents supporting universal skills:")),
-		).toBe(false);
-		expect(
-			logs.some((line) => line.includes('Installed "no-change-test"')),
-		).toBe(false);
+		expect(logs.some((line) => line.includes("Agents supporting universal skills:"))).toBe(false);
+		expect(logs.some((line) => line.includes('Installed "no-change-test"'))).toBe(false);
 	});
 
 	it("runs manual skill update command", async () => {
@@ -527,12 +485,7 @@ describe("skillPlugin auto-update", () => {
 				}),
 			);
 
-			const skillDir = join(
-				homedir(),
-				".agents",
-				"skills",
-				"manual-home-update-test",
-			);
+			const skillDir = join(homedir(), ".agents", "skills", "manual-home-update-test");
 			expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
 
 			await withCwd(homedir(), () =>
@@ -542,13 +495,10 @@ describe("skillPlugin auto-update", () => {
 			expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 		} finally {
 			console.log = originalLog;
-			await rm(
-				join(homedir(), ".agents", "skills", "manual-home-update-test"),
-				{
-					recursive: true,
-					force: true,
-				},
-			);
+			await rm(join(homedir(), ".agents", "skills", "manual-home-update-test"), {
+				recursive: true,
+				force: true,
+			});
 			await rm(join(homedir(), ".crust", "skills", "manual-home-update-test"), {
 				recursive: true,
 				force: true,
@@ -605,9 +555,7 @@ describe("skillPlugin auto-update", () => {
 			});
 		}
 
-		expect(
-			logs.some((line) => line.includes("No updates needed (global).")),
-		).toBe(true);
+		expect(logs.some((line) => line.includes("No updates needed (global)."))).toBe(true);
 		expect(logs.some((line) => line.includes("(project)"))).toBe(false);
 	});
 
@@ -640,9 +588,7 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		await withCwd(tmpDir, () =>
-			app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
 		const skillPath = join(
 			tmpDir,
@@ -654,12 +600,8 @@ describe("skillPlugin auto-update", () => {
 		const content = await readFile(skillPath, "utf-8");
 
 		expect(content).toContain("## General Guidance");
-		expect(content).toContain(
-			"- Prefer readonly commands before mutating state.",
-		);
-		expect(content).toContain(
-			"- Ask for confirmation before destructive actions.",
-		);
+		expect(content).toContain("- Prefer readonly commands before mutating state.");
+		expect(content).toContain("- Ask for confirmation before destructive actions.");
 	});
 
 	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {
@@ -686,18 +628,10 @@ describe("skillPlugin auto-update", () => {
 			}),
 		);
 
-		const projectSkillDir = join(
-			tmpDir,
-			".agents",
-			"skills",
-			"fallback-scope-test",
-		);
+		const projectSkillDir = join(tmpDir, ".agents", "skills", "fallback-scope-test");
 		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -713,9 +647,7 @@ describe("skillPlugin auto-update", () => {
 
 		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
 
-		await withCwd(tmpDir, () =>
-			app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-		);
+		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
 		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
 	});
@@ -872,9 +804,7 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		const { stderr, exitCode } = await captureSetupError(() =>
-			app.execute({ argv: [] }),
-		);
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/collides with the main skill name/);
 		expect(exitCode).toBe(1);
@@ -903,9 +833,7 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		const { stderr, exitCode } = await captureSetupError(() =>
-			app.execute({ argv: [] }),
-		);
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/duplicate name "funnel-builder"/);
 		expect(exitCode).toBe(1);
@@ -929,9 +857,7 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		const { stderr, exitCode } = await captureSetupError(() =>
-			app.execute({ argv: [] }),
-		);
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/is not a valid skill name/);
 		expect(exitCode).toBe(1);
@@ -958,9 +884,7 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		const { stderr, exitCode } = await captureSetupError(() =>
-			app.execute({ argv: [] }),
-		);
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/must be a non-empty string when set/);
 		expect(exitCode).toBe(1);
@@ -977,7 +901,7 @@ describe("skillPlugin customSkills validation", () => {
 					customSkills: [
 						{
 							name: "funnel-builder",
-							// biome-ignore lint/suspicious/noExplicitAny: deliberate type-violation for negative test
+							// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
 							sourceDir: 42 as any,
 							version: "1.0.0",
 						},
@@ -985,9 +909,7 @@ describe("skillPlugin customSkills validation", () => {
 				}),
 			);
 
-		const { stderr, exitCode } = await captureSetupError(() =>
-			app.execute({ argv: [] }),
-		);
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/must be a string or URL/);
 		expect(exitCode).toBe(1);
@@ -1071,10 +993,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 		// The mismatch warning surfaces with both names so the bundle author
 		// can see exactly what disagreed.
 		expect(
-			warnings.some(
-				(line) =>
-					line.includes("pricing-toolkit") && line.includes("funnel-builder"),
-			),
+			warnings.some((line) => line.includes("pricing-toolkit") && line.includes("funnel-builder")),
 		).toBe(true);
 	});
 });
@@ -1249,9 +1168,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		// First bundle stayed at its previous version.
 		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
 		// Warning surfaced naming the failed bundle.
-		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
-			true,
-		);
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 	});
 
 	it("skips bundle auto-update when autoUpdate is false", async () => {
@@ -1325,10 +1242,7 @@ describe("skillPlugin customSkills auto-update", () => {
 				}),
 			);
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -1359,9 +1273,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		// Exactly one warning naming the failed bundle — only the `skill
 		// update` subcommand ran. If the auto-update setup hook also ran,
 		// there would be two warnings.
-		const funnelWarnings = warnings.filter((line) =>
-			line.includes("[funnel-builder]"),
-		);
+		const funnelWarnings = warnings.filter((line) => line.includes("[funnel-builder]"));
 		expect(funnelWarnings.length).toBe(1);
 	});
 
@@ -1556,10 +1468,7 @@ describe("skillPlugin customSkills interactive command", () => {
 				}),
 			);
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -1602,10 +1511,7 @@ describe("skillPlugin customSkills interactive command", () => {
 				}),
 			);
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -1625,15 +1531,11 @@ describe("skillPlugin customSkills interactive command", () => {
 		}
 
 		// Main heading uses original "Installed <name>" form.
-		expect(
-			logs.some((line) => line.includes('Installed "sequential-output-host"')),
-		).toBe(true);
+		expect(logs.some((line) => line.includes('Installed "sequential-output-host"'))).toBe(true);
 		// Bundle heading mentions the bundle keyword and bundle name.
-		expect(
-			logs.some(
-				(line) => line.includes("bundle") && line.includes('"funnel-builder"'),
-			),
-		).toBe(true);
+		expect(logs.some((line) => line.includes("bundle") && line.includes('"funnel-builder"'))).toBe(
+			true,
+		);
 	});
 
 	it("--all honors explicit --scope flag over defaultScope", async () => {
@@ -1657,10 +1559,7 @@ describe("skillPlugin customSkills interactive command", () => {
 				}),
 			);
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -1673,9 +1572,7 @@ describe("skillPlugin customSkills interactive command", () => {
 		const origLog = console.log;
 		console.log = () => {};
 		try {
-			await withCwd(tmpDir, () =>
-				app.execute({ argv: ["skill", "--all", "--scope", "global"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "--all", "--scope", "global"] }));
 		} finally {
 			if (originalIsTTY) {
 				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
@@ -1714,10 +1611,7 @@ describe("skillPlugin customSkills interactive command", () => {
 				}),
 			);
 
-		const originalIsTTY = Object.getOwnPropertyDescriptor(
-			process.stdin,
-			"isTTY",
-		);
+		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: false,
 			configurable: true,
@@ -1748,9 +1642,7 @@ describe("skillPlugin customSkills interactive command", () => {
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		await expect(stat(funnelDir)).rejects.toThrow();
 		// Warning surfaced naming the failed bundle.
-		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
-			true,
-		);
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 		// Exit code is non-zero so CI/scripts notice the partial failure.
 		expect(process.exitCode).toBe(1);
 		process.exitCode = origExitCode;
@@ -1833,9 +1725,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 		const origLog = console.log;
 		console.log = () => {};
 		try {
-			await withCwd(tmpDir, () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 		} finally {
 			console.log = origLog;
 		}
@@ -1895,9 +1785,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 			logs.push(args.join(" "));
 		};
 		try {
-			await withCwd(tmpDir, () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 		} finally {
 			console.log = origLog;
 		}
@@ -1961,9 +1849,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 		const origExitCode = process.exitCode;
 		process.exitCode = 0;
 		try {
-			await withCwd(tmpDir, () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 		} finally {
 			console.log = origLog;
 			console.warn = origWarn;
@@ -1973,9 +1859,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 		// Second bundle updated despite first entry's failure.
 		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
 		// Failure was logged with the bundle name.
-		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(
-			true,
-		);
+		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 		// Non-zero exit so automation notices the partial failure.
 		expect(process.exitCode).toBe(1);
 		process.exitCode = origExitCode;

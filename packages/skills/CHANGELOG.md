@@ -7,7 +7,6 @@
 - 0dc69b1: Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSourceDir`, and switch validated helpers to explicit Standard Schema-backed validation.
 
   **`@crustjs/utils` (new, `0.0.1`)** — Pre-stable; public surface may change without notice until `0.1.0`. Pin to an exact version if depending externally.
-
   - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
   - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
   - `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
@@ -15,7 +14,6 @@
   **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
   **`@crustjs/core`, `@crustjs/validate`, `@crustjs/store` — raw schema-backed validation.** Vendor-specific schema introspection is removed; validated helpers now use Standard Schema validation over parsed values. `arg()`, `flag()`, and `field()` no longer infer type, requiredness, descriptions, multiplicity, or defaults from Zod/Effect internals. Missing values are passed to validation as `undefined`, so schema `.optional()` and `.default()` behavior applies naturally at runtime.
-
   - Validated positional args can omit parser `type`; they validate the raw positional string (or string array for variadic args) through the schema.
   - Validated CLI flags must declare parser `type` because it defines CLI grammar/token ownership: boolean flags do not consume a value, while string/number flags consume `--flag value` / `--flag=value`. Schemas validate and transform after parsing.
   - Descriptions must now be supplied through Crust options.
@@ -23,7 +21,6 @@
   - This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
   **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
-
   - `"Template URL must use file: protocol, got ..."` / `"Bundle URL must use file: protocol, got ..."` → `"sourceDir URL must use file: protocol, got ..."`
   - `"Could not resolve relative template path ..."` / `"Could not resolve relative bundle path ..."` → `"Could not resolve relative sourceDir ..."` (both `process.argv[1]` unset and missing-`package.json` variants)
 
@@ -55,20 +52,20 @@
   import pkg from "./package.json" with { type: "json" };
 
   new Crust("my-cli")
-    .meta({ description: "My CLI" })
-    .use(
-      skillPlugin({
-        version: pkg.version,
-        customSkills: [
-          {
-            name: "funnel-builder",
-            sourceDir: "skills/funnel-builder",
-            version: pkg.version,
-          },
-        ],
-      }),
-    )
-    .run(() => {});
+  	.meta({ description: "My CLI" })
+  	.use(
+  		skillPlugin({
+  			version: pkg.version,
+  			customSkills: [
+  				{
+  					name: "funnel-builder",
+  					sourceDir: "skills/funnel-builder",
+  					version: pkg.version,
+  				},
+  			],
+  		}),
+  	)
+  	.run(() => {});
   ```
 
   `CustomSkillConfig.sourceDir` accepts a `URL` (`file:` protocol), an
@@ -82,7 +79,6 @@
   `installMode`.
 
   Setup-time validation enforces:
-
   - Each `name` satisfies `isValidSkillName`.
   - No `name` collides with the main skill's name.
   - All `name` values are unique within the array.
@@ -112,17 +108,17 @@
 
   ```ts
   skillPlugin({
-    version: pkg.version,
-    customSkills: [
-      // Inherits `version: pkg.version` from the plugin.
-      { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
-      // Explicit override for an independently-versioned bundle.
-      {
-        name: "vendored-toolkit",
-        sourceDir: "skills/vendored-toolkit",
-        version: "0.3.0",
-      },
-    ],
+  	version: pkg.version,
+  	customSkills: [
+  		// Inherits `version: pkg.version` from the plugin.
+  		{ name: "funnel-builder", sourceDir: "skills/funnel-builder" },
+  		// Explicit override for an independently-versioned bundle.
+  		{
+  			name: "vendored-toolkit",
+  			sourceDir: "skills/vendored-toolkit",
+  			version: "0.3.0",
+  		},
+  	],
   });
   ```
 
@@ -156,9 +152,9 @@
   import pkg from "./package.json" with { type: "json" };
 
   await installSkillBundle({
-    sourceDir: "skills/funnel-builder",
-    agents: ["claude-code"],
-    version: pkg.version,
+  	sourceDir: "skills/funnel-builder",
+  	agents: ["claude-code"],
+  	version: pkg.version,
   });
   ```
 
@@ -207,7 +203,6 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
   keep their current behavior. Callers that omit `agents` (or pass
   `agents: undefined`, which is common from object spread) now trigger the
   defaults above:
-
   - `generateSkill` performs filesystem I/O via `detectInstalledAgents()` to
     probe `PATH` for installed agent CLIs.
   - `uninstallSkill` and `skillStatus` do not probe `PATH`; they iterate the
@@ -221,10 +216,10 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
   const universal = getUniversalAgents();
   const additional = await detectInstalledAgents();
   await generateSkill({
-    command,
-    meta,
-    agents: [...universal, ...additional],
-    scope: "global",
+  	command,
+  	meta,
+  	agents: [...universal, ...additional],
+  	scope: "global",
   });
 
   // After — same result, no manual composition
@@ -347,7 +342,6 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
 ### Patch Changes
 
 - 3a13f2b: Add canonical `.crust/skills` store with configurable symlink/copy install strategy.
-
   - Skill bundles are now rendered once to a canonical store (`.crust/skills/` for project scope, `~/.crust/skills/` for global scope) and then installed into agent-specific paths via symlink or copy.
   - Add `installMode` option (`"auto"` | `"symlink"` | `"copy"`) to `GenerateOptions` and `SkillPluginOptions`. Default `"auto"` creates symlinks with fallback to copy; `"symlink"` requires symlinks or fails; `"copy"` writes full copies.
   - Add `resolveCanonicalSkillPath()` export for resolving the canonical store path.
@@ -355,7 +349,6 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
   - Export new `SkillInstallMode` type from package root.
 
 - 42b05c7: Replace spawn-based agent detection with non-executing PATH lookup to prevent unrelated IDE CLIs from launching during normal CLI startup.
-
   - Replace `checkCommandAvailable`/`runCommand` (which spawned `<cmd> --version`, `<cmd> -v`, `<cmd> version`) with `isCommandOnPath()` — a pure filesystem PATH scan using `fs.accessSync` with `X_OK`. This eliminates the bare `version` positional arg that caused Electron-based IDEs (Antigravity, Kiro) to open on macOS.
   - Remove `detectInstalledAgents()` from `autoUpdateSkills` and `buildSkillUpdateCommand`. Auto-update and `skill update` now check all known agents via `skillStatus()` (filesystem-only), avoiding any PATH probing during normal CLI startup.
   - Keep `detectInstalledAgents()` only for the interactive `skill` command UX, now backed by the safe PATH lookup.
@@ -365,9 +358,7 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
 ### Patch Changes
 
 - b8ebfa4: Refine skill plugin ergonomics and tighten core public API boundaries.
-
   - `@crustjs/skills`:
-
     - `skillPlugin` now uses `command?: string` (default: `"skill"`) instead of `boolean | string`.
     - `skillPlugin` option `scope` was replaced with `defaultScope`.
     - Interactive scope selection now prompts for `project`/`global` only when `defaultScope` is not provided; non-interactive fallback is `global`.
@@ -379,13 +370,11 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
     - High-level `Crust` builder usage is now the recommended path for command construction.
 
 - 0944e0e: Normalize universal agent messaging in `skill` command output.
-
   - Auto-update messages now report universal targets as `Universal` instead of enumerating each supported universal agent.
   - Install and overwrite success output now prints a single `Universal -> <path>` entry for universal installs.
   - Remove output now reports `Removed from Universal` (and combines with additional agents when applicable).
 
 - cd33d3f: Strengthen generated skill guidance to reduce CLI command hallucinations.
-
   - `SKILL.md` now explicitly requires reading the mapped command doc before giving command-specific answers.
   - Generated command docs now include an authority section stating that only documented flags/options/aliases/defaults are supported.
   - Rendering and e2e tests were updated to enforce the stricter verification contract.
@@ -434,13 +423,11 @@ rawKind? }`. Pass `force: true` to overwrite, or uninstall the existing
 ### Patch Changes
 
 - f7d68ea: Support non-interactive mode for the `skill` command.
-
   - Detect TTY and conditionally pass `initial` to prompts so the command works in CI/piped environments.
   - In non-interactive mode, install skills to all detected agents automatically.
   - In non-interactive mode, skip conflict overwrite (safe default).
 
 - 8c87b69: Refactor skill plugin: remove `autoInstall`, keep auto-update, polish UI.
-
   - Remove `autoInstall` option — the plugin now only auto-updates already-installed skills. First-time installation should be done via the interactive `skill` subcommand or programmatically using the exported primitives (`detectInstalledAgents`, `skillStatus`, `generateSkill`).
   - Move auto-update logic from middleware to setup phase, making it independent of plugin registration order.
   - Add scope-aware agent detection: `detectInstalledAgents()` now respects the configured scope (`global` or `project`) with fallback from project to global roots.

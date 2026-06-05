@@ -11,6 +11,7 @@
 //      both the message and these snapshots in the same change.
 
 import { afterEach, describe, expect, it } from "bun:test";
+
 import {
 	applyStyle,
 	bg,
@@ -54,9 +55,7 @@ describe("ChainableStyleFn extends AnsiPair", () => {
 
 	it("composeStyles accepts chainables as AnsiPair", () => {
 		const composed = composeStyles(always.bold, always.red, always.bgYellow);
-		expect(applyStyle("hi", composed)).toBe(
-			"\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m",
-		);
+		expect(applyStyle("hi", composed)).toBe("\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m");
 	});
 
 	it("top-level imports (bold, red) carry open/close", () => {
@@ -106,9 +105,7 @@ describe("fg/bg as chain methods", () => {
 	});
 
 	it("appends a background color to an existing chain", () => {
-		expect(always.bold.bg("#330000")("err")).toBe(
-			"\x1b[1m\x1b[48;2;51;0;0merr\x1b[49m\x1b[22m",
-		);
+		expect(always.bold.bg("#330000")("err")).toBe("\x1b[1m\x1b[48;2;51;0;0merr\x1b[49m\x1b[22m");
 	});
 
 	it("can chain after a dynamic color (fg(...).italic.underline)", () => {
@@ -118,22 +115,16 @@ describe("fg/bg as chain methods", () => {
 	});
 
 	it("style.fg(input) acts as a chain root (1-arg form)", () => {
-		expect(always.fg("#00aaff")("dynamic")).toBe(
-			"\x1b[38;2;0;170;255mdynamic\x1b[39m",
-		);
+		expect(always.fg("#00aaff")("dynamic")).toBe("\x1b[38;2;0;170;255mdynamic\x1b[39m");
 	});
 
 	it("style.fg(text, input) still works as direct call (2-arg form)", () => {
-		expect(always.fg("text", "#00aaff")).toBe(
-			"\x1b[38;2;0;170;255mtext\x1b[39m",
-		);
+		expect(always.fg("text", "#00aaff")).toBe("\x1b[38;2;0;170;255mtext\x1b[39m");
 	});
 
 	it("composes via composeStyles with chain-root dynamic colors", () => {
 		const composed = composeStyles(always.bold, always.fg("#00aaff"));
-		expect(applyStyle("hi", composed)).toBe(
-			"\x1b[1m\x1b[38;2;0;170;255mhi\x1b[39m\x1b[22m",
-		);
+		expect(applyStyle("hi", composed)).toBe("\x1b[1m\x1b[38;2;0;170;255mhi\x1b[39m\x1b[22m");
 	});
 
 	it("invalid input still throws via the chain root", () => {
@@ -222,9 +213,9 @@ describe("Error messages — locked via snapshots", () => {
 	it("linkCode rejects ID with reserved char (no echo, message names char)", () => {
 		// The reserved-char message is intentionally short — the constraint
 		// (`":"` and `";"` are reserved by OSC 8) is the actionable part.
-		expect(() =>
-			linkCode("https://example.com", { id: "has;reserved" }),
-		).toThrow('":" and ";" are reserved by the OSC 8 format.');
+		expect(() => linkCode("https://example.com", { id: "has;reserved" })).toThrow(
+			'":" and ";" are reserved by the OSC 8 format.',
+		);
 	});
 });
 
@@ -272,16 +263,12 @@ describe("top-level chainables — full surface", () => {
 
 	it("top-level `bold.fg('#f00')('x')` chain root works", () => {
 		setGlobalColorMode("always");
-		expect(bold.fg("#ff0000")("x")).toBe(
-			"\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m",
-		);
+		expect(bold.fg("#ff0000")("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
 	});
 
 	it("top-level chain `bold.red.bgYellow('hi')` composes", () => {
 		setGlobalColorMode("always");
-		expect(bold.red.bgYellow("hi")).toBe(
-			"\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m",
-		);
+		expect(bold.red.bgYellow("hi")).toBe("\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m");
 	});
 });
 
@@ -344,16 +331,12 @@ describe("setGlobalColorMode — capture semantics", () => {
 describe("style.link validates URLs even when hyperlinks are suppressed", () => {
 	it("throws on bad URL with hyperlinks disabled (mode='never')", () => {
 		const s = createStyle({ mode: "never" });
-		expect(() => s.link("docs", "https://example.com/with space")).toThrow(
-			/Invalid hyperlink URL/,
-		);
+		expect(() => s.link("docs", "https://example.com/with space")).toThrow(/Invalid hyperlink URL/);
 	});
 
 	it("throws on bad URL with hyperlinks enabled (mode='always')", () => {
 		const s = createStyle({ mode: "always" });
-		expect(() => s.link("docs", "https://example.com/with space")).toThrow(
-			/Invalid hyperlink URL/,
-		);
+		expect(() => s.link("docs", "https://example.com/with space")).toThrow(/Invalid hyperlink URL/);
 	});
 
 	it("returns text only (no escapes) when valid URL but disabled", () => {

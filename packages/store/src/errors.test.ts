@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { CrustStoreError } from "./errors.ts";
 
 describe("CrustStoreError", () => {
@@ -148,14 +149,10 @@ describe("CrustStoreError", () => {
 	});
 
 	it("should narrow to VALIDATION with .is()", () => {
-		const err: CrustStoreError = new CrustStoreError(
-			"VALIDATION",
-			"validation failed",
-			{
-				operation: "write",
-				issues: [{ message: "bad value", path: "theme" }],
-			},
-		);
+		const err: CrustStoreError = new CrustStoreError("VALIDATION", "validation failed", {
+			operation: "write",
+			issues: [{ message: "bad value", path: "theme" }],
+		});
 
 		expect(err.is("VALIDATION")).toBe(true);
 		expect(err.is("PATH")).toBe(false);

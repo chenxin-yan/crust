@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -44,10 +46,7 @@ const baseMeta: SkillMeta = {
 /**
  * Finds a rendered file by path from the result array.
  */
-function findFile(
-	files: RenderedFile[],
-	path: string,
-): RenderedFile | undefined {
+function findFile(files: RenderedFile[], path: string): RenderedFile | undefined {
 	return files.find((f) => f.path === path);
 }
 
@@ -247,9 +246,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			// Should not contain the runnable usage section
-			expect(skill?.content).not.toContain(
-				"root command is directly executable",
-			);
+			expect(skill?.content).not.toContain("root command is directly executable");
 		});
 
 		it("includes command-reference workflow instructions", () => {
@@ -265,24 +262,16 @@ describe("renderSkill", () => {
 			expect(skill?.content).not.toContain(
 				"This table maps each command to its documentation file.",
 			);
-			expect(skill?.content).not.toContain(
-				"Read only the files you need for the current task",
-			);
-			expect(skill?.content).toContain(
-				"You must find the command that best matches",
-			);
+			expect(skill?.content).not.toContain("Read only the files you need for the current task");
+			expect(skill?.content).toContain("You must find the command that best matches");
 			expect(skill?.content).toContain(
 				"You must check the `Type` column before suggesting execution",
 			);
 			expect(skill?.content).toContain(
 				"You must read a command's file before answering a command-specific question or suggesting that command",
 			);
-			expect(skill?.content).toContain(
-				"You must treat the command file as the source of truth",
-			);
-			expect(skill?.content).toContain(
-				"say it is not documented instead of guessing",
-			);
+			expect(skill?.content).toContain("You must treat the command file as the source of truth");
+			expect(skill?.content).toContain("say it is not documented instead of guessing");
 		});
 
 		it("includes when-to-use guidance", () => {
@@ -307,12 +296,8 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain("## General Guidance");
-			expect(skill?.content).toContain(
-				"- Prefer readonly commands before making changes.",
-			);
-			expect(skill?.content).toContain(
-				"- Ask for confirmation before destructive actions.",
-			);
+			expect(skill?.content).toContain("- Prefer readonly commands before making changes.");
+			expect(skill?.content).toContain("- Ask for confirmation before destructive actions.");
 		});
 
 		it("renders top-level instructions from a markdown string", () => {
@@ -328,9 +313,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill?.content).toContain("## General Guidance");
-			expect(skill?.content).toContain(
-				"Read the command docs before answering.",
-			);
+			expect(skill?.content).toContain("Read the command docs before answering.");
 			expect(skill?.content).toContain("## Response Policy");
 			expect(skill?.content).toContain("- Prefer exact documented flags.");
 		});
@@ -396,9 +379,7 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 
 			// Should be wrapped in double quotes with internal quotes escaped
-			expect(skill?.content).toContain(
-				'description: "Deploy: the \\"app\\" to {production}"',
-			);
+			expect(skill?.content).toContain('description: "Deploy: the \\"app\\" to {production}"');
 		});
 
 		it("does not quote YAML values that are safe plain scalars", () => {
@@ -431,9 +412,7 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain(
-				"compatibility: Requires test-cli on PATH",
-			);
+			expect(skill?.content).toContain("compatibility: Requires test-cli on PATH");
 		});
 
 		it("renders disable-model-invocation when true", () => {
@@ -467,9 +446,7 @@ describe("renderSkill", () => {
 
 			// The value contains special YAML chars (* and parentheses),
 			// so it gets escaped with double quotes
-			expect(skill?.content).toContain(
-				'allowed-tools: "Bash(test-cli *) Read Grep"',
-			);
+			expect(skill?.content).toContain('allowed-tools: "Bash(test-cli *) Read Grep"');
 		});
 
 		it("omits optional fields when not provided", () => {
@@ -687,15 +664,9 @@ describe("renderSkill", () => {
 			const copy = findFile(files, "commands/copy.md");
 
 			expect(copy?.content).toContain("## Arguments");
-			expect(copy?.content).toContain(
-				"| `source` | string | Yes | Source path |",
-			);
-			expect(copy?.content).toContain(
-				"| `dest` | string | No | Destination path |",
-			);
-			expect(copy?.content).toContain(
-				"| `extras...` | string | No | Extra files |",
-			);
+			expect(copy?.content).toContain("| `source` | string | Yes | Source path |");
+			expect(copy?.content).toContain("| `dest` | string | No | Destination path |");
+			expect(copy?.content).toContain("| `extras...` | string | No | Extra files |");
 		});
 
 		it("renders argument default values", () => {
@@ -856,12 +827,8 @@ describe("renderSkill", () => {
 			const deploy = findFile(files, "commands/deploy.md");
 
 			expect(deploy?.content).toContain("## Command Instructions");
-			expect(deploy?.content).toContain(
-				"- Prefer preview flags before executing changes.",
-			);
-			expect(deploy?.content).toContain(
-				"- Call out risky production operations explicitly.",
-			);
+			expect(deploy?.content).toContain("- Prefer preview flags before executing changes.");
+			expect(deploy?.content).toContain("- Call out risky production operations explicitly.");
 		});
 
 		it("includes command authority instructions in leaf command files", () => {
@@ -1059,9 +1026,7 @@ describe("renderSkill", () => {
 
 			expect(parentFile?.content).toContain("## Usage");
 			expect(parentFile?.content).toContain("## Flags");
-			expect(parentFile?.content).toContain(
-				"## Command Documentation Authority",
-			);
+			expect(parentFile?.content).toContain("## Command Documentation Authority");
 			expect(parentFile?.content).toContain("## Subcommands");
 		});
 
@@ -1179,7 +1144,7 @@ describe("renderSkill", () => {
 			const linkRegex = /\]\(([^)]+)\)/g;
 			const links: string[] = [];
 			let match: RegExpExecArray | null = null;
-			// biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop pattern
+			// oxlint-disable-next-line no-cond-assign -- standard regex exec loop pattern
 			while ((match = linkRegex.exec(skillContent)) !== null) {
 				const target = match[1];
 				if (target && !target.startsWith("http") && !target.startsWith("#")) {
@@ -1214,9 +1179,7 @@ describe("renderSkill", () => {
 			};
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
-			const commandFiles = files
-				.filter((f) => f.path.startsWith("commands/"))
-				.map((f) => f.path);
+			const commandFiles = files.filter((f) => f.path.startsWith("commands/")).map((f) => f.path);
 
 			for (const cmdPath of commandFiles) {
 				expect(skill?.content).toContain(cmdPath);
@@ -1361,12 +1324,8 @@ describe("renderSkill", () => {
 			const skill = findFile(files, "SKILL.md");
 			expect(skill?.content).toContain("name: git");
 			expect(skill?.content).toContain('version: "2.0.0"');
-			expect(skill?.content).toContain(
-				"[commands/clone.md](commands/clone.md)",
-			);
-			expect(skill?.content).toContain(
-				"[commands/remote.md](commands/remote.md)",
-			);
+			expect(skill?.content).toContain("[commands/clone.md](commands/clone.md)");
+			expect(skill?.content).toContain("[commands/remote.md](commands/remote.md)");
 
 			// Verify clone leaf command has args and flags
 			const cloneFile = findFile(files, "commands/clone.md");
@@ -1374,9 +1333,7 @@ describe("renderSkill", () => {
 			expect(cloneFile?.content).toContain("## Arguments");
 			expect(cloneFile?.content).toContain("## Flags");
 			expect(cloneFile?.content).toContain("`--branch`, `-b`");
-			expect(cloneFile?.content).toContain(
-				"git clone <url> [directory] [options]",
-			);
+			expect(cloneFile?.content).toContain("git clone <url> [directory] [options]");
 
 			// Verify remote is rendered as group (has children) but also runnable
 			const remoteFile = findFile(files, "commands/remote.md");
@@ -1470,9 +1427,7 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const testContent = expectTextContent(
-				findFile(files, "commands/test.md"),
-			);
+			const testContent = expectTextContent(findFile(files, "commands/test.md"));
 
 			// Pipe should be escaped inside table cells
 			expect(testContent).toContain("Use enable \\| disable to toggle");
@@ -1506,9 +1461,7 @@ describe("renderSkill", () => {
 			const test = findFile(files, "commands/test.md");
 
 			// Outside tables, the raw description is preserved as-is
-			expect(test?.content).toContain(
-				"Use `--flag` to enable | disable features",
-			);
+			expect(test?.content).toContain("Use `--flag` to enable | disable features");
 		});
 
 		it("escapes pipe characters in arg description within table cells", () => {

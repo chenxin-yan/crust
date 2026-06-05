@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+
 import { Crust } from "@crustjs/core";
+
 import {
 	fetchLatestVersion,
 	isNewerVersion,
@@ -14,9 +16,7 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Helper to mock globalThis.fetch without type errors from `preconnect`. */
-function mockFetch(
-	fn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>,
-) {
+function mockFetch(fn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>) {
 	globalThis.fetch = Object.assign(mock(fn), {
 		preconnect: globalThis.fetch.preconnect,
 	});
@@ -204,11 +204,7 @@ describe("fetchLatestVersion", () => {
 			),
 		);
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBe("2.0.0");
 	});
 
@@ -223,11 +219,7 @@ describe("fetchLatestVersion", () => {
 			);
 		});
 
-		await fetchLatestVersion(
-			"@scope/my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		await fetchLatestVersion("@scope/my-cli", "https://registry.npmjs.org", 5000);
 		expect(capturedUrl).toBe("https://registry.npmjs.org/%40scope%2Fmy-cli");
 	});
 
@@ -247,9 +239,7 @@ describe("fetchLatestVersion", () => {
 	});
 
 	it("returns null on non-OK response", async () => {
-		mockFetch(() =>
-			Promise.resolve(new Response("Not Found", { status: 404 })),
-		);
+		mockFetch(() => Promise.resolve(new Response("Not Found", { status: 404 })));
 
 		const result = await fetchLatestVersion(
 			"nonexistent-package",
@@ -262,24 +252,14 @@ describe("fetchLatestVersion", () => {
 	it("returns null on network error", async () => {
 		mockFetch(() => Promise.reject(new Error("Network failure")));
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
 	it("returns null when dist-tags is missing", async () => {
-		mockFetch(() =>
-			Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-		);
+		mockFetch(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 })));
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
@@ -292,11 +272,7 @@ describe("fetchLatestVersion", () => {
 			),
 		);
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
@@ -309,22 +285,14 @@ describe("fetchLatestVersion", () => {
 			),
 		);
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
 	it("returns null on malformed JSON response", async () => {
 		mockFetch(() => Promise.resolve(new Response("not json", { status: 200 })));
 
-		const result = await fetchLatestVersion(
-			"my-cli",
-			"https://registry.npmjs.org",
-			5000,
-		);
+		const result = await fetchLatestVersion("my-cli", "https://registry.npmjs.org", 5000);
 		expect(result).toBeNull();
 	});
 
@@ -335,9 +303,7 @@ describe("fetchLatestVersion", () => {
 					// Listen for abort and reject like a real fetch would
 					if (init?.signal) {
 						init.signal.addEventListener("abort", () => {
-							reject(
-								new DOMException("The operation was aborted.", "AbortError"),
-							);
+							reject(new DOMException("The operation was aborted.", "AbortError"));
 						});
 					}
 				}),
@@ -481,9 +447,7 @@ describe("updateNotifierPlugin middleware", () => {
 			: (cacheAdapter ?? memoryCache);
 		const pluginOptions = {
 			...rest,
-			...(resolvedAdapter
-				? { cache: { adapter: resolvedAdapter, intervalMs } }
-				: {}),
+			...(resolvedAdapter ? { cache: { adapter: resolvedAdapter, intervalMs } } : {}),
 		};
 		const plugin = updateNotifierPlugin(pluginOptions);
 
@@ -493,9 +457,7 @@ describe("updateNotifierPlugin middleware", () => {
 
 		let commandRan = false;
 		const stateMap = overrides?.state ?? new Map<string, unknown>();
-		const rootCommand = makeCommand(
-			overrides?.commandName ?? options.packageName,
-		);
+		const rootCommand = makeCommand(overrides?.commandName ?? options.packageName);
 
 		const context = {
 			argv: [] as readonly string[],
@@ -509,10 +471,7 @@ describe("updateNotifierPlugin middleware", () => {
 			commandRan = true;
 		};
 
-		await plugin.middleware(
-			context as Parameters<typeof plugin.middleware>[0],
-			next,
-		);
+		await plugin.middleware(context as Parameters<typeof plugin.middleware>[0], next);
 
 		return { plugin, ran: commandRan, state: stateMap };
 	}
@@ -756,9 +715,7 @@ describe("updateNotifierPlugin middleware", () => {
 					new Promise<Response>((_resolve, reject) => {
 						if (init?.signal) {
 							init.signal.addEventListener("abort", () => {
-								reject(
-									new DOMException("The operation was aborted.", "AbortError"),
-								);
+								reject(new DOMException("The operation was aborted.", "AbortError"));
 							});
 						}
 					}),
@@ -787,9 +744,7 @@ describe("updateNotifierPlugin middleware", () => {
 					new Promise<Response>((_resolve, reject) => {
 						if (init?.signal) {
 							init.signal.addEventListener("abort", () => {
-								reject(
-									new DOMException("The operation was aborted.", "AbortError"),
-								);
+								reject(new DOMException("The operation was aborted.", "AbortError"));
 							});
 						}
 					}),
@@ -1005,8 +960,7 @@ describe("updateNotifierPlugin middleware", () => {
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
-				updateCommand: (_name, packageManager, installScope) =>
-					`${packageManager}:${installScope}`,
+				updateCommand: (_name, packageManager, installScope) => `${packageManager}:${installScope}`,
 			});
 
 			expect(getOutput()).toContain("npm:global");
@@ -1150,9 +1104,7 @@ describe("updateNotifierPlugin middleware", () => {
 			// Command must run before notice
 			expect(executionOrder).toContain("command");
 			expect(executionOrder).toContain("notice");
-			expect(executionOrder.indexOf("command")).toBeLessThan(
-				executionOrder.indexOf("notice"),
-			);
+			expect(executionOrder.indexOf("command")).toBeLessThan(executionOrder.indexOf("notice"));
 		});
 
 		it("calls next() even if notifier work would fail", async () => {
@@ -1209,9 +1161,7 @@ describe("updateNotifierPlugin middleware", () => {
 			const otherPlugin = {
 				name: "test-other",
 				async middleware(
-					_ctx: Parameters<
-						NonNullable<import("@crustjs/core").CrustPlugin["middleware"]>
-					>[0],
+					_ctx: Parameters<NonNullable<import("@crustjs/core").CrustPlugin["middleware"]>>[0],
 					next: () => Promise<void>,
 				) {
 					await next();

@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { Crust } from "@crustjs/core";
 import {
 	didYouMeanPlugin,
@@ -17,6 +18,7 @@ import {
 	updateNotifierPlugin,
 	versionPlugin,
 } from "@crustjs/plugins";
+
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
 
@@ -40,19 +42,13 @@ beforeEach(() => {
 	originalExitCode = process.exitCode;
 
 	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stdoutChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 	console.error = (...args: unknown[]) => {
-		stderrChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(
-			args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-		);
+		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
 	};
 });
 
@@ -112,9 +108,7 @@ describe("crust CLI entry point", () => {
 		it("should have correct meta", () => {
 			const app = makeCrustApp();
 			expect(app._node.meta.name).toBe("@crustjs/crust");
-			expect(app._node.meta.description).toBe(
-				"CLI tooling for the Crust framework",
-			);
+			expect(app._node.meta.description).toBe("CLI tooling for the Crust framework");
 		});
 
 		it("should use plugins for root behavior", () => {
@@ -144,9 +138,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 			expect(output).toContain("Compile your CLI to a standalone executable");
-			expect(output).toContain(
-				"Publish staged npm packages created by crust build --package",
-			);
+			expect(output).toContain("Publish staged npm packages created by crust build --package");
 		});
 
 		it("should show --help and --version in options", async () => {

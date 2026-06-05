@@ -463,10 +463,7 @@ type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
  * Collects aliases from every flag *except* flag K.
  * Used to detect alias→alias duplicates across different flags.
  */
-type AliasesExcluding<
-	F extends Record<string, unknown>,
-	K extends keyof F & string,
-> = {
+type AliasesExcluding<F extends Record<string, unknown>, K extends keyof F & string> = {
 	[J in Exclude<keyof F & string, K>]: ExtractAllAliases<F[J]>;
 }[Exclude<keyof F & string, K>];
 
@@ -475,10 +472,7 @@ type AliasesExcluding<
  * that collide with another flag's name or another flag's alias,
  * or `never` when K's aliases are all unique.
  */
-type CollidingAliases<
-	F extends Record<string, unknown>,
-	K extends keyof F & string,
-> =
+type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & string> =
 	| (ExtractAllAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
 	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
@@ -512,10 +506,7 @@ export type ValidateFlagAliases<F extends Record<string, unknown>> = {
  * Collects aliases from inherited flags, excluding those whose keys the
  * child overrides (intentional override — child redefines a flag by name).
  */
-type InheritedAliasesExcluding<
-	I extends Record<string, unknown>,
-	OverrideKeys extends string,
-> = {
+type InheritedAliasesExcluding<I extends Record<string, unknown>, OverrideKeys extends string> = {
 	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAllAliases<I[K]>;
 }[Exclude<keyof I & string, OverrideKeys>];
 
@@ -633,19 +624,21 @@ export type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
  *     '{ readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }'.
  * ```
  */
-export type ValidateVariadicArgs<A extends readonly object[]> =
-	A extends readonly [infer Head, ...infer Tail extends readonly object[]]
-		? Tail extends readonly [unknown, ...unknown[]]
-			? Head extends { variadic: true }
-				? readonly [
-						Head & {
-							readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-						},
-						...ValidateVariadicArgs<Tail>,
-					]
-				: readonly [Head, ...ValidateVariadicArgs<Tail>]
-			: readonly [Head]
-		: A;
+export type ValidateVariadicArgs<A extends readonly object[]> = A extends readonly [
+	infer Head,
+	...infer Tail extends readonly object[],
+]
+	? Tail extends readonly [unknown, ...unknown[]]
+		? Head extends { variadic: true }
+			? readonly [
+					Head & {
+						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+					},
+					...ValidateVariadicArgs<Tail>,
+				]
+			: readonly [Head, ...ValidateVariadicArgs<Tail>]
+		: readonly [Head]
+	: A;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Flag inheritance utility types
@@ -681,10 +674,9 @@ export type InheritableFlags<F extends FlagsDef> = {
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-export type MergeFlags<
-	Parent extends FlagsDef,
-	Local extends FlagsDef,
-> = Simplify<Omit<Parent, keyof Local> & Local>;
+export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
+	Omit<Parent, keyof Local> & Local
+>;
 
 /**
  * Computes the effective flags for a command by filtering the inherited flags
@@ -706,9 +698,7 @@ export type MergeFlags<
 export type EffectiveFlags<
 	Inherited extends FlagsDef,
 	Local extends FlagsDef,
-> = string extends keyof Inherited
-	? Local
-	: MergeFlags<InheritableFlags<Inherited>, Local>;
+> = string extends keyof Inherited ? Local : MergeFlags<InheritableFlags<Inherited>, Local>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
@@ -758,7 +748,7 @@ type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	...infer Tail extends readonly ArgDef[],
 ]
 	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
-	: // biome-ignore lint/complexity/noBannedTypes: empty base case for recursive intersection
+	: // oxlint-disable-next-line typescript/no-empty-object-type -- empty base case for recursive intersection
 		{};
 
 /** Flattens an intersection of objects into a single object type for readability */
@@ -777,9 +767,7 @@ type Simplify<T> = { [K in keyof T]: T[K] };
  * // Result = { port: number; name: string; files: string[] }
  * ```
  */
-export type InferArgs<A> = A extends ArgsDef
-	? Simplify<InferArgsTuple<A>>
-	: Record<string, never>;
+export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Record<string, never>;
 
 /**
  * Infer the resolved type for a single FlagDef:
@@ -906,10 +894,7 @@ export interface CommandMeta {
  * Generic parameters flow from the command definition to provide
  * strongly-typed `args` and `flags` objects.
  */
-export interface ParseResult<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-> {
+export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
 	/** Resolved positional arguments, keyed by arg name */
 	args: InferArgs<A>;
 	/** Resolved flags, keyed by flag name */

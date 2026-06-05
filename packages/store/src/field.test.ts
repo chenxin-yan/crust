@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { z } from "zod";
+
 import { CrustStoreError } from "./errors.ts";
 import { field } from "./field.ts";
 
@@ -42,7 +44,7 @@ describe("field() — raw schema-backed runtime shape", () => {
 	});
 
 	it("throws CrustStoreError DEFINITION for non-Standard-Schema input", () => {
-		// biome-ignore lint/suspicious/noExplicitAny: testing runtime guard
+		// oxlint-disable-next-line typescript/no-explicit-any -- testing runtime guard
 		expect(() => field({} as any)).toThrow(CrustStoreError);
 	});
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import * as codes from "./ansiCodes.ts";
 import { bg, bgCode, fg, fgCode } from "./color.ts";
 import { applyStyle, composeStyles } from "./styleEngine.ts";
@@ -110,9 +111,7 @@ describe("fg", () => {
 	});
 
 	it("applies truecolor foreground from `rgb()`", () => {
-		expect(fg("ocean", "rgb(0, 128, 255)")).toBe(
-			"\x1b[38;2;0;128;255mocean\x1b[39m",
-		);
+		expect(fg("ocean", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mocean\x1b[39m");
 	});
 
 	it("applies truecolor foreground from numeric input", () => {
@@ -120,9 +119,7 @@ describe("fg", () => {
 	});
 
 	it("applies truecolor foreground from `[r, g, b]`", () => {
-		expect(fg("ocean", [0, 128, 255])).toBe(
-			"\x1b[38;2;0;128;255mocean\x1b[39m",
-		);
+		expect(fg("ocean", [0, 128, 255])).toBe("\x1b[38;2;0;128;255mocean\x1b[39m");
 	});
 
 	it('returns `""` for empty text after validating input', () => {
@@ -144,9 +141,7 @@ describe("fg", () => {
 	it("byte-identical foreground escape to legacy `(0, 128, 255)`", () => {
 		// The pre-redesign API produced "\x1b[38;2;0;128;255mhello\x1b[39m" for
 		// rgb("hello", 0, 128, 255). The new fg helper must match exactly.
-		expect(fg("hello", [0, 128, 255])).toBe(
-			"\x1b[38;2;0;128;255mhello\x1b[39m",
-		);
+		expect(fg("hello", [0, 128, 255])).toBe("\x1b[38;2;0;128;255mhello\x1b[39m");
 	});
 });
 
@@ -174,9 +169,7 @@ describe("bg", () => {
 	});
 
 	it("byte-identical background escape to legacy `bgRgb`", () => {
-		expect(bg("hello", [0, 128, 255])).toBe(
-			"\x1b[48;2;0;128;255mhello\x1b[49m",
-		);
+		expect(bg("hello", [0, 128, 255])).toBe("\x1b[48;2;0;128;255mhello\x1b[49m");
 	});
 });
 
@@ -207,9 +200,7 @@ describe("nesting with static styles", () => {
 		const outer = applyStyle(`A ${inner} B`, codes.bgBlue);
 
 		// bg close (49m) matches bgBlue close (49m), so bgBlue reopens
-		expect(outer).toBe(
-			"\x1b[44mA \x1b[48;2;255;128;0minner\x1b[49m\x1b[44m B\x1b[49m",
-		);
+		expect(outer).toBe("\x1b[44mA \x1b[48;2;255;128;0minner\x1b[49m\x1b[44m B\x1b[49m");
 	});
 });
 
@@ -227,9 +218,7 @@ describe("composeStyles round-trip", () => {
 
 	it("dynamic fg composed with a static modifier", () => {
 		const boldDynamic = composeStyles(codes.bold, fgCode([128, 64, 32]));
-		expect(applyStyle("text", boldDynamic)).toBe(
-			"\x1b[1m\x1b[38;2;128;64;32mtext\x1b[39m\x1b[22m",
-		);
+		expect(applyStyle("text", boldDynamic)).toBe("\x1b[1m\x1b[38;2;128;64;32mtext\x1b[39m\x1b[22m");
 	});
 });
 
@@ -352,9 +341,7 @@ describe("bg — depth fallback", () => {
 	it('depth="truecolor" emits ansi-16m background', () => {
 		const fgOpen = Bun.color("#00ff88", "ansi-16m") as string;
 		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(bg("hello", "#00ff88", "truecolor")).toBe(
-			`${expectedOpen}hello\x1b[49m`,
-		);
+		expect(bg("hello", "#00ff88", "truecolor")).toBe(`${expectedOpen}hello\x1b[49m`);
 	});
 
 	it('depth="256" emits ansi-256 background (38; → 48; swap)', () => {
@@ -374,7 +361,7 @@ describe("bg — depth fallback", () => {
 		// Invariant: regardless of input color, the bg open must start with
 		// a background SGR introducer. Catches the regression where a `38;`
 		// → `48;` rewrite would no-op on compact `\x1b[3Xm` sequences.
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
+		// oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences
 		const bgSgr = /^\x1b\[(?:4[0-7]|10[0-7])m/;
 		for (const input of [
 			"#000000",

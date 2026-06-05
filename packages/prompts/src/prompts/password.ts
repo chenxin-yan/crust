@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
@@ -263,9 +264,7 @@ export function password(
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;
-export function password<Output>(
-	options: PasswordOptions<Output>,
-): Promise<Output | string>;
+export function password<Output>(options: PasswordOptions<Output>): Promise<Output | string>;
 export async function password<Output>(
 	options: PasswordOptions<Output> = {},
 ): Promise<Output | string> {
@@ -295,7 +294,6 @@ export async function password<Output>(
 		theme,
 		render: (state, t) => renderPassword(state, t, options.message, mask),
 		handleKey: createHandleKey<Output>(options.validate),
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message, mask),
+		renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),
 	});
 }

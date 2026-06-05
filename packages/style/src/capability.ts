@@ -2,12 +2,7 @@
 // Capability — Terminal color support detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type {
-	CapabilityOverrides,
-	ColorDepth,
-	ColorMode,
-	TrueColorOverrides,
-} from "./types.ts";
+import type { CapabilityOverrides, ColorDepth, ColorMode, TrueColorOverrides } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -15,47 +10,32 @@ import type {
 
 function readTTY(overrides: CapabilityOverrides | undefined): boolean {
 	const hasOverride = overrides !== undefined && "isTTY" in overrides;
-	return hasOverride
-		? (overrides.isTTY ?? false)
-		: (process.stdout?.isTTY ?? false);
+	return hasOverride ? (overrides.isTTY ?? false) : (process.stdout?.isTTY ?? false);
 }
 
-function readNoColor(
-	overrides: CapabilityOverrides | undefined,
-): string | undefined {
+function readNoColor(overrides: CapabilityOverrides | undefined): string | undefined {
 	const hasOverride = overrides !== undefined && "noColor" in overrides;
 	return hasOverride ? overrides.noColor : process.env.NO_COLOR;
 }
 
-function readColorTerm(
-	overrides: TrueColorOverrides | undefined,
-): string | undefined {
+function readColorTerm(overrides: TrueColorOverrides | undefined): string | undefined {
 	const hasOverride = overrides !== undefined && "colorTerm" in overrides;
 	return hasOverride ? overrides.colorTerm : process.env.COLORTERM;
 }
 
-function readTerm(
-	overrides: TrueColorOverrides | undefined,
-): string | undefined {
+function readTerm(overrides: TrueColorOverrides | undefined): string | undefined {
 	const hasOverride = overrides !== undefined && "term" in overrides;
 	return hasOverride ? overrides.term : process.env.TERM;
 }
 
 function isTrueColorTerm(term: string): boolean {
 	const lower = term.toLowerCase();
-	return (
-		lower.includes("24bit") ||
-		lower.includes("truecolor") ||
-		lower.endsWith("-direct")
-	);
+	return lower.includes("24bit") || lower.includes("truecolor") || lower.endsWith("-direct");
 }
 
 // Single source of truth for truecolor detection: covers both the
 // `COLORTERM` exact-match heuristic and the `TERM` substring heuristic.
-function detectsTruecolor(
-	colorTerm: string | undefined,
-	term: string | undefined,
-): boolean {
+function detectsTruecolor(colorTerm: string | undefined, term: string | undefined): boolean {
 	if (colorTerm !== undefined) {
 		const lower = colorTerm.toLowerCase();
 		if (lower === "truecolor" || lower === "24bit") {

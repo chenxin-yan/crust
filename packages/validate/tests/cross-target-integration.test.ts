@@ -40,29 +40,21 @@ import { throwValidationError } from "../src/validation.ts";
 // `field(schema, opts?)` factory in `makeFieldDef`.
 
 /** Async per-field validator: throws Error on failure (mirrors old `field`). */
-function field<S extends StandardSchema>(
-	schema: S,
-): (value: unknown) => Promise<void> {
+function field<S extends StandardSchema>(schema: S): (value: unknown) => Promise<void> {
 	return async (value: unknown) => {
 		const result = await validateStandard(schema, value);
 		if (!result.ok) {
-			const messages = result.issues.map((i) =>
-				i.path ? `${i.path}: ${i.message}` : i.message,
-			);
+			const messages = result.issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message));
 			throw new Error(messages.join("; "));
 		}
 	};
 }
 /** Sync per-field validator (mirrors old `fieldSync`). */
-function fieldSync<S extends StandardSchema>(
-	schema: S,
-): (value: unknown) => void {
+function fieldSync<S extends StandardSchema>(schema: S): (value: unknown) => void {
 	return (value: unknown) => {
 		const result = validateStandardSync(schema, value);
 		if (!result.ok) {
-			const messages = result.issues.map((i) =>
-				i.path ? `${i.path}: ${i.message}` : i.message,
-			);
+			const messages = result.issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message));
 			throw new Error(messages.join("; "));
 		}
 	};
@@ -89,10 +81,7 @@ function promptValidator<S extends StandardSchema>(
 }
 const parsePromptValue = parseValue;
 /** Sync mirror of the old parsePromptValueSync helper. */
-function parsePromptValueSync<S extends StandardSchema>(
-	schema: S,
-	value: unknown,
-): unknown {
+function parsePromptValueSync<S extends StandardSchema>(schema: S, value: unknown): unknown {
 	const result = validateStandardSync(schema, value as never);
 	if (result.ok) return result.value;
 	return throwValidationError(result.issues, "Validation failed");
@@ -104,12 +93,7 @@ function parsePromptValueSync<S extends StandardSchema>(
 function toStandard<A, I>(s: Schema.Schema<A, I, never>): StandardSchema<I, A> {
 	return Schema.standardSchemaV1(s) as unknown as StandardSchema<I, A>;
 }
-function effectArg<
-	Name extends string,
-	A,
-	I,
-	const Variadic extends true | undefined = undefined,
->(
+function effectArg<Name extends string, A, I, const Variadic extends true | undefined = undefined>(
 	name: Name,
 	schema: Schema.Schema<A, I, never>,
 	options?: Parameters<typeof arg>[2] & { variadic?: Variadic },
@@ -610,9 +594,7 @@ describe("consistent issue path formatting across targets", () => {
 				expect(err).toBeInstanceOf(CrustStoreError);
 				const storeErr = err as CrustStoreError<"VALIDATION">;
 				expect(storeErr.is("VALIDATION")).toBe(true);
-				const paths = storeErr.details.issues.map(
-					(i: { message: string; path: string }) => i.path,
-				);
+				const paths = storeErr.details.issues.map((i: { message: string; path: string }) => i.path);
 				expect(paths).toContain("host");
 				expect(paths).toContain("port");
 			}
@@ -648,9 +630,7 @@ describe("consistent issue path formatting across targets", () => {
 		});
 
 		it("store: field-level array validation catches invalid arrays", async () => {
-			const itemsSchema = z
-				.array(z.string().min(1, "item cannot be empty"))
-				.min(1);
+			const itemsSchema = z.array(z.string().min(1, "item cannot be empty")).min(1);
 
 			const store = createStore({
 				dirPath: tempDir,
@@ -963,9 +943,7 @@ describe("error shape consistency across targets", () => {
 
 		// Standard core
 		const coreResult = await validateStandard(objectSchema, invalidInput);
-		const corePaths = !coreResult.ok
-			? coreResult.issues.map((i) => i.path)
-			: [];
+		const corePaths = !coreResult.ok ? coreResult.issues.map((i) => i.path) : [];
 
 		// Prompt parsePromptValue
 		let promptPaths: string[] = [];
@@ -987,9 +965,7 @@ describe("error shape consistency across targets", () => {
 
 		// Standard core
 		const coreResult = await validateStandard(objectSchema, invalidInput);
-		const coreMessages = !coreResult.ok
-			? coreResult.issues.map((i) => i.message)
-			: [];
+		const coreMessages = !coreResult.ok ? coreResult.issues.map((i) => i.message) : [];
 
 		// Prompt parsePromptValue
 		let promptMessages: string[] = [];
@@ -1064,9 +1040,7 @@ describe("error shape consistency across targets", () => {
 		} catch (err) {
 			const storeErr = err as CrustStoreError<"VALIDATION">;
 			expect(storeErr.is("VALIDATION")).toBe(true);
-			const paths = storeErr.details.issues.map(
-				(i: { message: string; path: string }) => i.path,
-			);
+			const paths = storeErr.details.issues.map((i: { message: string; path: string }) => i.path);
 			expect(paths).toContain("name");
 			expect(paths).toContain("age");
 		}
@@ -1236,14 +1210,14 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 			}),
 		);
 		await app.execute({ argv: ["dark"] });
-		const commandTheme = (received.value?.args as { theme: string }).theme;
+		if (!received.value) {
+			throw new Error("Expected command validator to capture args");
+		}
+		const commandTheme = (received.value.args as { theme: string }).theme;
 		expect(commandTheme).toBe("dark");
 
 		// 2. Prompt validation: retries arrives as a prompted value
-		const retries = await parsePromptValue(
-			z.coerce.number().int().positive(),
-			"5",
-		);
+		const retries = await parsePromptValue(z.coerce.number().int().positive(), "5");
 		expect(retries).toBe(5);
 
 		// 3. Store validation: combine and persist with per-field validators
@@ -1294,10 +1268,7 @@ describe("full lifecycle: command + prompt + store with shared Zod schema", () =
 
 		// 2. Prompt rejects invalid retries
 		try {
-			await parsePromptValue(
-				z.number().int().positive("retries must be positive"),
-				-1,
-			);
+			await parsePromptValue(z.number().int().positive("retries must be positive"), -1);
 			expect.unreachable("Prompt should have thrown");
 		} catch (err) {
 			expect((err as CrustError).code).toBe("VALIDATION");

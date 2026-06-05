@@ -9,7 +9,7 @@
  * style state across wrap boundaries.
  */
 const ANSI_SEQUENCE =
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape detection requires matching control characters
+	// oxlint-disable-next-line no-control-regex -- ANSI escape detection requires matching control characters
 	/[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/;
 
 /**
@@ -101,11 +101,7 @@ export interface WrapOptions {
  * // "\x1b[1mhello\x1b[22m\n\x1b[1mworld\x1b[22m"
  * ```
  */
-export function wrapText(
-	text: string,
-	width: number,
-	options?: WrapOptions,
-): string {
+export function wrapText(text: string, width: number, options?: WrapOptions): string {
 	if (width <= 0) {
 		return text;
 	}
@@ -200,10 +196,7 @@ function wrapLine(
 				lines.push(beforeSpace + closeSeq);
 
 				// Reopen styles on next line using the snapshot from the space position
-				const reopenSeq =
-					lastSpaceStyleSnapshot.length > 0
-						? lastSpaceStyleSnapshot.join("")
-						: "";
+				const reopenSeq = lastSpaceStyleSnapshot.length > 0 ? lastSpaceStyleSnapshot.join("") : "";
 				currentLine = reopenSeq + afterSpace;
 				currentWidth = currentWidth - lastSpaceWidth;
 
@@ -217,8 +210,7 @@ function wrapLine(
 					// Still overflows — force break (degenerate case)
 					const closeSeq2 = activeStyles.length > 0 ? "\x1b[0m" : "";
 					lines.push(currentLine + closeSeq2);
-					const reopenSeq2 =
-						activeStyles.length > 0 ? activeStyles.join("") : "";
+					const reopenSeq2 = activeStyles.length > 0 ? activeStyles.join("") : "";
 					currentLine = reopenSeq2 + char;
 					currentWidth = charWidth;
 				} else {
@@ -258,7 +250,7 @@ function wrapLine(
 	if (currentLine.length > 0) {
 		// Only close if we have active styles and there's visible content
 		const hasVisibleContent = currentLine.replace(
-			// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape detection requires matching control characters
+			// oxlint-disable-next-line no-control-regex -- ANSI escape detection requires matching control characters
 			/[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g,
 			"",
 		);

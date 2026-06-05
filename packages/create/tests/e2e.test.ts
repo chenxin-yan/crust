@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import { scaffold } from "../src/scaffold.ts";
 import { runSteps } from "../src/steps.ts";
 
@@ -20,9 +15,7 @@ describe("end-to-end scaffold + runSteps", () => {
 	let destDir: string;
 
 	beforeEach(() => {
-		tempDir = resolve(
-			`.tmp-test-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-		);
+		tempDir = resolve(`.tmp-test-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		templateDir = join(tempDir, "template");
 		destDir = join(tempDir, "output");
 
@@ -32,10 +25,7 @@ describe("end-to-end scaffold + runSteps", () => {
 		// - src/index.ts (interpolation in nested dir)
 		mkdirSync(join(templateDir, "src"), { recursive: true });
 
-		writeFileSync(
-			join(templateDir, "_gitignore"),
-			"node_modules\ndist\n.env\n",
-		);
+		writeFileSync(join(templateDir, "_gitignore"), "node_modules\ndist\n.env\n");
 
 		writeFileSync(
 			join(templateDir, "package.json"),
@@ -53,9 +43,7 @@ describe("end-to-end scaffold + runSteps", () => {
 
 		writeFileSync(
 			join(templateDir, "src/index.ts"),
-			["// {{description}}", 'console.log("Welcome to {{name}}!");', ""].join(
-				"\n",
-			),
+			["// {{description}}", 'console.log("Welcome to {{name}}!");', ""].join("\n"),
 		);
 	});
 
@@ -87,14 +75,10 @@ describe("end-to-end scaffold + runSteps", () => {
 		// Verify dotfile renaming: _gitignore → .gitignore
 		expect(existsSync(join(destDir, ".gitignore"))).toBe(true);
 		expect(existsSync(join(destDir, "_gitignore"))).toBe(false);
-		expect(readFileSync(join(destDir, ".gitignore"), "utf-8")).toBe(
-			"node_modules\ndist\n.env\n",
-		);
+		expect(readFileSync(join(destDir, ".gitignore"), "utf-8")).toBe("node_modules\ndist\n.env\n");
 
 		// Verify package.json interpolation
-		const pkg = JSON.parse(
-			readFileSync(join(destDir, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(join(destDir, "package.json"), "utf-8"));
 		expect(pkg.name).toBe("my-awesome-cli");
 		expect(pkg.description).toBe("A blazing-fast CLI tool");
 		expect(pkg.version).toBe("0.0.1"); // static value preserved
@@ -103,9 +87,7 @@ describe("end-to-end scaffold + runSteps", () => {
 		// Verify src/index.ts interpolation
 		const indexContent = readFileSync(join(destDir, "src/index.ts"), "utf-8");
 		expect(indexContent).toContain("// A blazing-fast CLI tool");
-		expect(indexContent).toContain(
-			'console.log("Welcome to my-awesome-cli!");',
-		);
+		expect(indexContent).toContain('console.log("Welcome to my-awesome-cli!");');
 
 		// ── Step 2: Run post-scaffold steps (git-init) ──────────────────────
 		await runSteps([{ type: "git-init", commit: "Initial commit" }], destDir);
@@ -114,10 +96,9 @@ describe("end-to-end scaffold + runSteps", () => {
 		expect(existsSync(join(destDir, ".git"))).toBe(true);
 
 		// Verify the initial commit was created with the correct message
-		const gitLog = Bun.spawnSync(
-			["git", "log", "--oneline", "-1", "--format=%s"],
-			{ cwd: destDir },
-		);
+		const gitLog = Bun.spawnSync(["git", "log", "--oneline", "-1", "--format=%s"], {
+			cwd: destDir,
+		});
 		expect(gitLog.exitCode).toBe(0);
 		expect(gitLog.stdout.toString().trim()).toBe("Initial commit");
 
