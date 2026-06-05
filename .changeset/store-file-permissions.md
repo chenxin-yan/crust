@@ -20,9 +20,9 @@ Windows. When omitted, behavior is unchanged (platform default).
 
 ```ts
 createStore({
-  dirPath: configDir("my-cli"),
-  name: "auth",
-  fields: { token: { type: "string" } },
-  access: "private",
+	dirPath: configDir("my-cli"),
+	name: "auth",
+	fields: { token: { type: "string" } },
+	access: "private",
 });
 ```

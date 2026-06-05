@@ -3,15 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { randomUUID } from "node:crypto";
-import {
-	chmod,
-	mkdir,
-	readFile,
-	rename,
-	rm,
-	unlink,
-	writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { CrustStoreError } from "./errors.ts";
@@ -140,14 +132,10 @@ export async function writeJson(
 		try {
 			await chmod(dir, directoryMode);
 		} catch (err: unknown) {
-			throw new CrustStoreError(
-				"IO",
-				`Failed to set permissions on config directory: ${dir}`,
-				{
-					path: filePath,
-					operation: "write",
-				},
-			).withCause(err);
+			throw new CrustStoreError("IO", `Failed to set permissions on config directory: ${dir}`, {
+				path: filePath,
+				operation: "write",
+			}).withCause(err);
 		}
 	}
 

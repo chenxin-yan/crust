@@ -7,12 +7,7 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
-import {
-	deleteJson,
-	readJson,
-	type WriteJsonOptions,
-	writeJson,
-} from "./persistence.ts";
+import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
 	FieldDef,
@@ -33,9 +28,7 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
 	return typeof r === "object" && r !== null && "value" in r && !("ok" in r);
 }
 
-function resolveWriteOptions(
-	access: CreateStoreOptions<FieldsDef>["access"],
-): WriteJsonOptions {
+function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): WriteJsonOptions {
 	if (access === "private") return { fileMode: 0o600, directoryMode: 0o700 };
 	if (access === undefined || access === "default") return {};
 

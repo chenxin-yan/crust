@@ -131,13 +131,13 @@ const store = createStore(options);
 
 #### Options
 
-| Option         | Type        | Required | Description                                                                                  |
-| -------------- | ----------- | -------- | -------------------------------------------------------------------------------------------- |
-| `dirPath`      | `string`    | Yes      | Absolute directory path where the JSON file is stored.                                       |
-| `name`         | `string`    | No       | Store name used as filename (default `"config"` → `config.json`).                            |
-| `fields`       | `FieldsDef` | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation. |
-| `pruneUnknown` | `boolean`   | No       | Drop unknown persisted keys on read (default `true`).                                        |
-| `access`       | `"default" \| "private" \| { file?: number; directory?: number }` | No | Persistence visibility. Use `"private"` for owner-only secret stores, or pass explicit Unix permission bits. |
+| Option         | Type                                                              | Required | Description                                                                                                  |
+| -------------- | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `dirPath`      | `string`                                                          | Yes      | Absolute directory path where the JSON file is stored.                                                       |
+| `name`         | `string`                                                          | No       | Store name used as filename (default `"config"` → `config.json`).                                            |
+| `fields`       | `FieldsDef`                                                       | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation.                 |
+| `pruneUnknown` | `boolean`                                                         | No       | Drop unknown persisted keys on read (default `true`).                                                        |
+| `access`       | `"default" \| "private" \| { file?: number; directory?: number }` | No       | Persistence visibility. Use `"private"` for owner-only secret stores, or pass explicit Unix permission bits. |
 
 #### Securing secrets
 
@@ -145,10 +145,10 @@ Config/state stores that hold tokens or API keys should not be world-readable. P
 
 ```ts
 const auth = createStore({
-  dirPath: configDir("my-cli"),
-  name: "auth",
-  fields: { token: { type: "string" } },
-  access: "private",
+	dirPath: configDir("my-cli"),
+	name: "auth",
+	fields: { token: { type: "string" } },
+	access: "private",
 });
 
 await auth.write({ token: "secret" }); // auth.json is 0600 even under a permissive umask
@@ -158,24 +158,24 @@ await auth.write({ token: "secret" }); // auth.json is 0600 even under a permiss
 
 The built-in string presets are intentionally small:
 
-| Access | File | Directory | Use case |
-| ------ | ---- | --------- | -------- |
+| Access                | File                                                  | Directory                                             | Use case                                                                  |
+| --------------------- | ----------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
 | omitted / `"default"` | Platform default, usually `0644` after a common umask | Platform default, usually `0755` after a common umask | Non-secret stores where the user's environment should decide permissions. |
-| `"private"` | `0600` | `0700` | Secret-bearing stores such as tokens, API keys, and local auth state. |
+| `"private"`           | `0600`                                                | `0700`                                                | Secret-bearing stores such as tokens, API keys, and local auth state.     |
 
 Advanced callers can provide explicit permission bits without adding more named presets:
 
 ```ts
 const store = createStore({
-  dirPath: configDir("my-cli"),
-  name: "auth",
-  fields: { token: { type: "string" } },
-  // Owner-only secret store (same as access: "private")
-  access: { file: 0o600, directory: 0o700 },
-  // Group-readable store; group ownership is managed outside @crustjs/store
-  // access: { file: 0o640, directory: 0o750 },
-  // World-readable non-secret store
-  // access: { file: 0o644, directory: 0o755 },
+	dirPath: configDir("my-cli"),
+	name: "auth",
+	fields: { token: { type: "string" } },
+	// Owner-only secret store (same as access: "private")
+	access: { file: 0o600, directory: 0o700 },
+	// Group-readable store; group ownership is managed outside @crustjs/store
+	// access: { file: 0o640, directory: 0o750 },
+	// World-readable non-secret store
+	// access: { file: 0o644, directory: 0o755 },
 });
 ```
 
