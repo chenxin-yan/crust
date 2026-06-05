@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/utils",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "Shared low-level utilities for the Crust ecosystem (pre-stable)",
 	"type": "module",
 	"license": "MIT",
