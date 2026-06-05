@@ -1,5 +1,11 @@
 # @crustjs/man
 
+## 0.1.2
+
+### Patch Changes
+
+- @crustjs/core@0.0.19
+
 ## 0.1.1
 
 ### Patch Changes
@@ -18,6 +24,7 @@
   across every consumer (help, did-you-mean, man, completion).
 
   A cross-consumer audit found three gaps:
+
   - `helpPlugin` rendered output omitted the `choices` list for both flags
     and positional args, so users could not discover valid values from
     `--help` without resorting to shell completion or source-reading.
@@ -34,6 +41,7 @@
     silently fell through to file completion in bash/fish.
 
   Changes:
+
   - `helpPlugin` renders `[choices: a, b, c]` after the description for
     every flag and arg that declares a `choices` list, composed with
     `[default: ...]` when both are present.
@@ -56,6 +64,7 @@
     original predicate.
 
   Core / docs:
+
   - `CommandMeta.hidden` JSDoc now enumerates every tooling surface the
     flag affects (help, completion, did-you-mean, man, skills) and is
     explicit that there is intentionally no analogous `FlagDef.hidden` —

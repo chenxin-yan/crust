@@ -1,5 +1,11 @@
 # @crustjs/plugins
 
+## 0.1.2
+
+### Patch Changes
+
+- @crustjs/core@0.0.19
+
 ## 0.1.1
 
 ### Patch Changes
@@ -29,15 +35,15 @@
   import { completionPlugin } from "@crustjs/plugins";
 
   new Crust("my-cli")
-  	.use(completionPlugin({ version: "1.0.0" }))
-  	.command("build", (cmd) =>
-  		cmd
-  			.flags({
-  				target: { type: "string", choices: ["browser", "bun", "node"] },
-  			})
-  			.run(() => {}),
-  	)
-  	.run(() => {});
+    .use(completionPlugin({ version: "1.0.0" }))
+    .command("build", (cmd) =>
+      cmd
+        .flags({
+          target: { type: "string", choices: ["browser", "bun", "node"] },
+        })
+        .run(() => {})
+    )
+    .run(() => {});
   ```
 
   ```sh
@@ -50,6 +56,7 @@
   ```
 
   Highlights:
+
   - **All three shells from one walk.** The bash template ships a Cobra-style
     init shim so it works on systems without the `bash-completion` package
     (macOS default bash, Alpine, NixOS without the package), handles the
@@ -89,6 +96,7 @@
     inline.
 
   Limitations (v1):
+
   - No dynamic value completion (per-flag/per-arg `complete?:` callbacks);
     intentionally deferred to a future minor bump. Adding them is
     non-breaking, so v1 ships pure-static today and grows into a hybrid later.
@@ -98,6 +106,7 @@
   across every consumer (help, did-you-mean, man, completion).
 
   A cross-consumer audit found three gaps:
+
   - `helpPlugin` rendered output omitted the `choices` list for both flags
     and positional args, so users could not discover valid values from
     `--help` without resorting to shell completion or source-reading.
@@ -114,6 +123,7 @@
     silently fell through to file completion in bash/fish.
 
   Changes:
+
   - `helpPlugin` renders `[choices: a, b, c]` after the description for
     every flag and arg that declares a `choices` list, composed with
     `[default: ...]` when both are present.
@@ -136,6 +146,7 @@
     original predicate.
 
   Core / docs:
+
   - `CommandMeta.hidden` JSDoc now enumerates every tooling surface the
     flag affects (help, completion, did-you-mean, man, skills) and is
     explicit that there is intentionally no analogous `FlagDef.hidden` —
@@ -192,6 +203,7 @@
   `@crustjs/plugins` now includes `noColorPlugin()`, which adds `--color` and `--no-color` to a Crust CLI and applies the override for the current run.
 
   **Breaking:** The capability resolver exports have been renamed for symmetry with the new `resolveModifierCapability`:
+
   - `resolveCapability` → `resolveColorCapability`
   - `resolveTrueColor` → `resolveTrueColorCapability`
 
@@ -212,6 +224,7 @@
 ### Patch Changes
 
 - 285ac24: Add colorful styling and defaults to help output
+
   - Style help output with ANSI colors for usage, sections, and tokens using `@crustjs/style`
   - Show default values for flags in help text
   - Display boolean negation flags (--no-<name>) for boolean options

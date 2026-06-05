@@ -1,5 +1,12 @@
 # create-crust
 
+## 0.0.31
+
+### Patch Changes
+
+- @crustjs/core@0.0.19
+- @crustjs/create@0.0.7
+
 ## 0.0.30
 
 ### Patch Changes
@@ -106,6 +113,7 @@
   `create-crust` now asks whether you plan to distribute as standalone binaries or as a Bun runtime package, then scaffolds layered templates for the selected combination.
 
   Changes:
+
   - Added a new `Distribution mode` prompt during scaffolding
   - Refactored templates into composable layers: `base` + style variant (`minimal` / `modular`) + distribution variant (`binary` / `runtime`)
   - `Standalone binaries` mode keeps Crust packages in `devDependencies` and enables `prepack`
@@ -172,6 +180,7 @@
 ### Patch Changes
 
 - 55b588b: Update scaffold template path resolution to be package-root based for better generator DX.
+
   - In `@crustjs/create`, relative string `template` paths now resolve from the nearest package root discovered from `process.argv[1]` (instead of `process.cwd()`).
   - Absolute string paths are treated as-is, and `file:` URL templates remain supported.
   - Added coverage for package-root resolution and explicit error cases when no package root can be found.

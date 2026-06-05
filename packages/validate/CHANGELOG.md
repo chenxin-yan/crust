@@ -1,5 +1,13 @@
 # @crustjs/validate
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [e298f11]
+  - @crustjs/utils@0.0.3
+  - @crustjs/core@0.0.19
+
 ## 0.1.1
 
 ### Patch Changes
@@ -7,6 +15,7 @@
 - 0dc69b1: Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSourceDir`, and switch validated helpers to explicit Standard Schema-backed validation.
 
   **`@crustjs/utils` (new, `0.0.1`)** — Pre-stable; public surface may change without notice until `0.1.0`. Pin to an exact version if depending externally.
+
   - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
   - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
   - `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
@@ -14,6 +23,7 @@
   **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
   **`@crustjs/core`, `@crustjs/validate`, `@crustjs/store` — raw schema-backed validation.** Vendor-specific schema introspection is removed; validated helpers now use Standard Schema validation over parsed values. `arg()`, `flag()`, and `field()` no longer infer type, requiredness, descriptions, multiplicity, or defaults from Zod/Effect internals. Missing values are passed to validation as `undefined`, so schema `.optional()` and `.default()` behavior applies naturally at runtime.
+
   - Validated positional args can omit parser `type`; they validate the raw positional string (or string array for variadic args) through the schema.
   - Validated CLI flags must declare parser `type` because it defines CLI grammar/token ownership: boolean flags do not consume a value, while string/number flags consume `--flag value` / `--flag=value`. Schemas validate and transform after parsing.
   - Descriptions must now be supplied through Crust options.
@@ -21,6 +31,7 @@
   - This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
   **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
+
   - `"Template URL must use file: protocol, got ..."` / `"Bundle URL must use file: protocol, got ..."` → `"sourceDir URL must use file: protocol, got ..."`
   - `"Could not resolve relative template path ..."` / `"Could not resolve relative bundle path ..."` → `"Could not resolve relative sourceDir ..."` (both `process.argv[1]` unset and missing-`package.json` variants)
 
@@ -86,11 +97,11 @@
   import { z } from "zod";
 
   const store = createStore({
-  	dirPath: configDir("my-cli"),
-  	fields: {
-  		theme: field(z.enum(["light", "dark"]).default("light")),
-  		port: field(z.number().int().min(1).default(3000)),
-  	},
+    dirPath: configDir("my-cli"),
+    fields: {
+      theme: field(z.enum(["light", "dark"]).default("light")),
+      port: field(z.number().int().min(1).default(3000)),
+    },
   });
   ```
 
@@ -120,6 +131,7 @@
   The package now exports exactly eight functions from a single root entry: `arg`, `flag`, `commandValidator`, `field`, `parseValue`, `validateStandard`, `validateStandardSync`, `isStandardSchema`.
 
   ## Breaking
+
   - **Subpath removal.** `@crustjs/validate/zod`, `@crustjs/validate/effect`, and `@crustjs/validate/standard` are gone. Replace all three with `@crustjs/validate`. Effect users wrap raw schemas once with `Schema.standardSchemaV1(...)` before passing them — the auto-wrap shim in the old `/effect` barrel was removed.
   - **`effect` peer dependency removed.** `@crustjs/validate` now imports nothing from `effect` at runtime. Users install `effect` themselves at their preferred version (≥ 3.14.2 to keep AST introspection working).
   - **Helper renames and removals.** `parsePromptValue` → `parseValue`. `parsePromptValueSync`, `promptValidator`, and `fieldSync` are removed (use `validateStandardSync` directly, pass schemas to `input({ validate: schema })` per TP-013, or rely on the new async `field()` validate respectively).
@@ -131,10 +143,20 @@
   ```ts
   // 0.1.x
   import { arg, flag, commandValidator } from "@crustjs/validate/zod";
-  import { promptValidator, parsePromptValue, field } from "@crustjs/validate/standard";
+  import {
+    promptValidator,
+    parsePromptValue,
+    field,
+  } from "@crustjs/validate/standard";
 
   // 0.2.0
-  import { arg, flag, commandValidator, field, parseValue } from "@crustjs/validate";
+  import {
+    arg,
+    flag,
+    commandValidator,
+    field,
+    parseValue,
+  } from "@crustjs/validate";
   // promptValidator → pass the schema directly to input({ validate: schema }).
   ```
 
@@ -161,6 +183,7 @@
   arguments, flags, prompts, and store fields against your schema.
 
   ## What's new
+
   - **Single entry point**: `arg`, `flag`, `commandValidator`,
     `promptValidator`, `field`, and friends are all importable from
     `@crustjs/validate` directly. No more guessing which subpath to use.
@@ -233,6 +256,7 @@
   The `arg()` / `flag()` introspection-conflict checks no longer fire.
   Specifically, none of the following throw any more — explicit options
   always win silently:
+
   - `explicit type "X" conflicts with schema-inferred type "Y"`
   - `explicit required: true conflicts with schema that accepts undefined`
   - `explicit required: false conflicts with schema that does not accept undefined`

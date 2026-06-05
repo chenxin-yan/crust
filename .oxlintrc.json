@@ -9,6 +9,8 @@
 		"**/node_modules/",
 		"**/dist/",
 		"**/.turbo/",
+		".changeset/",
+		"**/CHANGELOG.md",
 		".pi/",
 		".worktrees/",
 		"apps/docs/.source/",

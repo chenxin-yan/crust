@@ -1,5 +1,46 @@
 # @crustjs/store
 
+## 0.2.0
+
+### Minor Changes
+
+- 87c371f: Add an `access` option to `createStore` for controlling persistence visibility.
+
+  Config/state stores that hold secrets (tokens, API keys) can now be persisted
+  owner-only on Unix without relying on the process `umask` by setting
+  `access: "private"`. This maps to `0600` for the persisted file and `0700` for
+  the parent directory when the store creates it. The only built-in presets are
+  `"default"` and `"private"`; advanced callers can pass explicit Unix permission
+  bits with `access: { file, directory }` for group-readable or public non-secret
+  stores.
+
+  The requested file bits are enforced exactly on the temp file before the atomic
+  rename, so the persisted file is never momentarily group/other-readable.
+  Directory bits are applied only when a write creates the directory;
+  pre-existing directories are left untouched. Permission bits are a no-op on
+  Windows. When omitted, behavior is unchanged (platform default).
+
+  ```ts
+  createStore({
+    dirPath: configDir("my-cli"),
+    name: "auth",
+    fields: { token: { type: "string" } },
+    access: "private",
+  });
+  ```
+
+### Patch Changes
+
+- e298f11: Stop forcing `@standard-schema/spec` onto consumers that only use the dependency-free utilities.
+
+  `@crustjs/utils` declared `@standard-schema/spec` as a hard `dependency`, but it is only referenced by the `@crustjs/utils/schema` subpath. Consumers that use only the type primitives or `resolveSourceDir` (`@crustjs/core`, `@crustjs/create`, `@crustjs/skills`) were forced to install `@standard-schema/spec` they never reference — a ~72% install-size increase on `@crustjs/core`.
+
+  - **`@crustjs/utils`** — `@standard-schema/spec` moves from `dependencies` to an optional `peerDependency`. `@crustjs/utils` now propagates no runtime dependencies. Consumers of the `@crustjs/utils/schema` subpath must provide `@standard-schema/spec` themselves (it is a types-only, zero-runtime package, so an optional peer is sufficient).
+  - **`@crustjs/store`** — adds `@standard-schema/spec` as a direct dependency, since it consumes the Standard Schema type aliases re-exported from `@crustjs/utils/schema`. `@crustjs/validate` already declared it directly. No public API change to either package.
+
+- Updated dependencies [e298f11]
+  - @crustjs/utils@0.0.3
+
 ## 0.1.1
 
 ### Patch Changes
@@ -7,6 +48,7 @@
 - 0dc69b1: Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSourceDir`, and switch validated helpers to explicit Standard Schema-backed validation.
 
   **`@crustjs/utils` (new, `0.0.1`)** — Pre-stable; public surface may change without notice until `0.1.0`. Pin to an exact version if depending externally.
+
   - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
   - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
   - `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
@@ -14,6 +56,7 @@
   **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
   **`@crustjs/core`, `@crustjs/validate`, `@crustjs/store` — raw schema-backed validation.** Vendor-specific schema introspection is removed; validated helpers now use Standard Schema validation over parsed values. `arg()`, `flag()`, and `field()` no longer infer type, requiredness, descriptions, multiplicity, or defaults from Zod/Effect internals. Missing values are passed to validation as `undefined`, so schema `.optional()` and `.default()` behavior applies naturally at runtime.
+
   - Validated positional args can omit parser `type`; they validate the raw positional string (or string array for variadic args) through the schema.
   - Validated CLI flags must declare parser `type` because it defines CLI grammar/token ownership: boolean flags do not consume a value, while string/number flags consume `--flag value` / `--flag=value`. Schemas validate and transform after parsing.
   - Descriptions must now be supplied through Crust options.
@@ -21,6 +64,7 @@
   - This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
   **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
+
   - `"Template URL must use file: protocol, got ..."` / `"Bundle URL must use file: protocol, got ..."` → `"sourceDir URL must use file: protocol, got ..."`
   - `"Could not resolve relative template path ..."` / `"Could not resolve relative bundle path ..."` → `"Could not resolve relative sourceDir ..."` (both `process.argv[1]` unset and missing-`package.json` variants)
 
@@ -83,11 +127,11 @@
   import { z } from "zod";
 
   const store = createStore({
-  	dirPath: configDir("my-cli"),
-  	fields: {
-  		theme: field(z.enum(["light", "dark"]).default("light")),
-  		port: field(z.number().int().min(1).default(3000)),
-  	},
+    dirPath: configDir("my-cli"),
+    fields: {
+      theme: field(z.enum(["light", "dark"]).default("light")),
+      port: field(z.number().int().min(1).default(3000)),
+    },
   });
   ```
 
@@ -114,6 +158,7 @@
   and `patch`. On `read`, the schema still validates the persisted value
   but its transform output is discarded — the returned value matches what
   is on disk.
+
   - `field(z.string().transform(s => s.trim()))` now writes the **trimmed**
     value to disk on `store.write({ name: "  hi  " })`. Same for `update`
     and `patch`.
@@ -134,6 +179,7 @@
 
   Concrete: a store with `field(z.string().transform(s => s.trim()))` that
   has `{ name: "  hi  " }` on disk will:
+
   1. `await store.read()` → `{ name: "  hi  " }` (untouched)
   2. `await store.write({ name: "  hi  " })` → file becomes `{ name: "hi" }`
 
@@ -174,6 +220,7 @@
 "VALIDATION"` could not distinguish a caller bug from a bad config value.
 
   The guard now runs **outside** the `try` block, so:
+
   - Buggy validators returning a value surface as `TypeError` (programming
     error, propagates up).
   - User code that legitimately throws `TypeError` from inside their
@@ -203,16 +250,16 @@
   ```ts
   // Before
   input({
-  	message: "Email?",
-  	validate: (v) => v.includes("@") || "Must contain @",
+    message: "Email?",
+    validate: (v) => v.includes("@") || "Must contain @",
   });
 
   // After
   input({
-  	message: "Email?",
-  	validate: (v) => {
-  		if (!v.includes("@")) throw new Error("Must contain @");
-  	},
+    message: "Email?",
+    validate: (v) => {
+      if (!v.includes("@")) throw new Error("Must contain @");
+    },
   });
   ```
 
