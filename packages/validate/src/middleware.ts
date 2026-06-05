@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { CrustCommandContext } from "@crustjs/core";
+
 import { VALIDATED_SCHEMA } from "./schema-types.ts";
 import type {
 	StandardSchema,
@@ -68,33 +69,23 @@ export function buildValidatedRunner(
 		const validatedArgs: Record<string, unknown> = {};
 
 		for (const def of argDefs) {
-			const schema = (def as unknown as Record<symbol, unknown>)[
-				VALIDATED_SCHEMA
-			] as StandardSchema | undefined;
+			const schema = (def as unknown as Record<symbol, unknown>)[VALIDATED_SCHEMA] as
+				| StandardSchema
+				| undefined;
 			if (!schema) {
-				validatedArgs[def.name] = (context.args as Record<string, unknown>)[
-					def.name
-				];
+				validatedArgs[def.name] = (context.args as Record<string, unknown>)[def.name];
 				continue;
 			}
 
 			const rawValue = (context.args as Record<string, unknown>)[def.name];
 
 			if (def.variadic) {
-				const items = Array.isArray(rawValue)
-					? rawValue
-					: rawValue === undefined
-						? []
-						: [rawValue];
+				const items = Array.isArray(rawValue) ? rawValue : rawValue === undefined ? [] : [rawValue];
 
 				const transformed: unknown[] = [];
 				for (let i = 0; i < items.length; i++) {
 					const value = items[i];
-					const result = await validateValue(schema, value, [
-						"args",
-						def.name,
-						i,
-					]);
+					const result = await validateValue(schema, value, ["args", def.name, i]);
 					if (!result.ok) {
 						issues.push(...result.issues);
 						continue;
@@ -119,9 +110,9 @@ export function buildValidatedRunner(
 		const validatedFlags: Record<string, unknown> = {};
 
 		for (const [name, def] of Object.entries(flagDefs)) {
-			const schema = (def as unknown as Record<symbol, unknown>)[
-				VALIDATED_SCHEMA
-			] as StandardSchema | undefined;
+			const schema = (def as unknown as Record<symbol, unknown>)[VALIDATED_SCHEMA] as
+				| StandardSchema
+				| undefined;
 			if (!schema) {
 				// Skip flags without schema metadata — they may be injected by
 				// plugins (e.g. helpPlugin's `--help`). Compile-time

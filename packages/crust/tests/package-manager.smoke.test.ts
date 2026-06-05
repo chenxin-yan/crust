@@ -1,21 +1,14 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import {
-	chmodSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
 import { Crust } from "@crustjs/core";
+
 import { buildCommand } from "../src/commands/build.ts";
 
 const packageManager = process.env.CRUST_SMOKE_PM;
-const testRoot = join(
-	tmpdir(),
-	`crust-smoke-${packageManager ?? "skip"}-${Date.now()}`,
-);
+const testRoot = join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-${Date.now()}`);
 const sampleDir = join(testRoot, "sample");
 const stageDir = join(sampleDir, "dist", "npm");
 const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
@@ -41,9 +34,7 @@ function resolveHostTarget(): string {
 		return "windows-x64";
 	}
 
-	throw new Error(
-		`Unsupported smoke-test host: ${process.platform}-${process.arch}`,
-	);
+	throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
 }
 
 function hasCommand(command: string): boolean {
@@ -145,15 +136,11 @@ describe("package manager smoke", () => {
 			throw new Error(`${packageManager} is required for this smoke test.`);
 		}
 		if (!hasCommand("npm")) {
-			throw new Error(
-				"npm is required to pack staged directories for smoke tests.",
-			);
+			throw new Error("npm is required to pack staged directories for smoke tests.");
 		}
 
 		await stageSampleCli();
-		const manifest = JSON.parse(
-			readFileSync(join(stageDir, "manifest.json"), "utf-8"),
-		) as {
+		const manifest = JSON.parse(readFileSync(join(stageDir, "manifest.json"), "utf-8")) as {
 			root: { name: string };
 			packages: Array<{ name: string; dir: string }>;
 		};
@@ -162,9 +149,7 @@ describe("package manager smoke", () => {
 			throw new Error("Expected exactly one staged platform package.");
 		}
 		const rootTarball = await packStageDir(resolve(stageDir, "root"));
-		const platformTarball = await packStageDir(
-			resolve(stageDir, platformPackage.dir),
-		);
+		const platformTarball = await packStageDir(resolve(stageDir, platformPackage.dir));
 
 		mkdirSync(installDir, { recursive: true });
 		writeFileSync(

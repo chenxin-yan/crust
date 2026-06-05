@@ -13,11 +13,7 @@ export { assertStandardSchema, isStandardSchema } from "./assertions.ts";
 
 // ── Issue normalization ─────────────────────────────────────────────────────
 export type { ValidationIssue } from "./issues.ts";
-export {
-	formatPath,
-	normalizeStandardIssues,
-	normalizeStandardPath,
-} from "./issues.ts";
+export { formatPath, normalizeStandardIssues, normalizeStandardPath } from "./issues.ts";
 
 // ── Standard Schema type aliases ────────────────────────────────────────────
 export type { InferInput, InferOutput, StandardSchema } from "./types.ts";

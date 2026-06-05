@@ -7,7 +7,6 @@
 - 0dc69b1: Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSourceDir`, and switch validated helpers to explicit Standard Schema-backed validation.
 
   **`@crustjs/utils` (new, `0.0.1`)** — Pre-stable; public surface may change without notice until `0.1.0`. Pin to an exact version if depending externally.
-
   - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
   - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
   - `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
@@ -15,7 +14,6 @@
   **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
   **`@crustjs/core`, `@crustjs/validate`, `@crustjs/store` — raw schema-backed validation.** Vendor-specific schema introspection is removed; validated helpers now use Standard Schema validation over parsed values. `arg()`, `flag()`, and `field()` no longer infer type, requiredness, descriptions, multiplicity, or defaults from Zod/Effect internals. Missing values are passed to validation as `undefined`, so schema `.optional()` and `.default()` behavior applies naturally at runtime.
-
   - Validated positional args can omit parser `type`; they validate the raw positional string (or string array for variadic args) through the schema.
   - Validated CLI flags must declare parser `type` because it defines CLI grammar/token ownership: boolean flags do not consume a value, while string/number flags consume `--flag value` / `--flag=value`. Schemas validate and transform after parsing.
   - Descriptions must now be supplied through Crust options.
@@ -23,7 +21,6 @@
   - This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
   **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
-
   - `"Template URL must use file: protocol, got ..."` / `"Bundle URL must use file: protocol, got ..."` → `"sourceDir URL must use file: protocol, got ..."`
   - `"Could not resolve relative template path ..."` / `"Could not resolve relative bundle path ..."` → `"Could not resolve relative sourceDir ..."` (both `process.argv[1]` unset and missing-`package.json` variants)
 
@@ -86,11 +83,11 @@
   import { z } from "zod";
 
   const store = createStore({
-    dirPath: configDir("my-cli"),
-    fields: {
-      theme: field(z.enum(["light", "dark"]).default("light")),
-      port: field(z.number().int().min(1).default(3000)),
-    },
+  	dirPath: configDir("my-cli"),
+  	fields: {
+  		theme: field(z.enum(["light", "dark"]).default("light")),
+  		port: field(z.number().int().min(1).default(3000)),
+  	},
   });
   ```
 
@@ -117,7 +114,6 @@
   and `patch`. On `read`, the schema still validates the persisted value
   but its transform output is discarded — the returned value matches what
   is on disk.
-
   - `field(z.string().transform(s => s.trim()))` now writes the **trimmed**
     value to disk on `store.write({ name: "  hi  " })`. Same for `update`
     and `patch`.
@@ -138,7 +134,6 @@
 
   Concrete: a store with `field(z.string().transform(s => s.trim()))` that
   has `{ name: "  hi  " }` on disk will:
-
   1. `await store.read()` → `{ name: "  hi  " }` (untouched)
   2. `await store.write({ name: "  hi  " })` → file becomes `{ name: "hi" }`
 
@@ -179,7 +174,6 @@
 "VALIDATION"` could not distinguish a caller bug from a bad config value.
 
   The guard now runs **outside** the `try` block, so:
-
   - Buggy validators returning a value surface as `TypeError` (programming
     error, propagates up).
   - User code that legitimately throws `TypeError` from inside their
@@ -209,16 +203,16 @@
   ```ts
   // Before
   input({
-    message: "Email?",
-    validate: (v) => v.includes("@") || "Must contain @",
+  	message: "Email?",
+  	validate: (v) => v.includes("@") || "Must contain @",
   });
 
   // After
   input({
-    message: "Email?",
-    validate: (v) => {
-      if (!v.includes("@")) throw new Error("Must contain @");
-    },
+  	message: "Email?",
+  	validate: (v) => {
+  		if (!v.includes("@")) throw new Error("Must contain @");
+  	},
   });
   ```
 
@@ -251,7 +245,6 @@
 ### Patch Changes
 
 - e9a591a: Redesign store to use fields-based API with per-field validation
-
   - Replaced `defaults` option with `fields` containing `type`, `default` (optional), and `validate` (optional)
   - Fields without `default` are typed as `T | undefined` and skip validation when undefined
   - Fields with `default` are typed as their primitive type (guaranteed present)

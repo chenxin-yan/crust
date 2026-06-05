@@ -1,19 +1,11 @@
-import {
-	parseArgs as nodeParseArgs,
-	type ParseArgsOptionDescriptor,
-} from "node:util";
+import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
+
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
+
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
-import type {
-	ArgDef,
-	ArgsDef,
-	FlagDef,
-	FlagsDef,
-	ParseResult,
-	ValueType,
-} from "./types.ts";
+import type { ArgDef, ArgsDef, FlagDef, FlagsDef, ParseResult, ValueType } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -148,10 +140,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
 	if (type === "number") {
 		const num = tryCoerceNumber(value);
 		if (num === undefined) {
-			throw new CrustError(
-				"PARSE",
-				`Expected number for ${label}, got "${value}"`,
-			);
+			throw new CrustError("PARSE", `Expected number for ${label}, got "${value}"`);
 		}
 		return num;
 	}
@@ -172,11 +161,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
  * Runs *before* any `parse` transform so the user-facing comparison is on
  * the raw token, not the post-`parse` value.
  */
-function validateChoice(
-	raw: string,
-	choices: readonly string[],
-	label: string,
-): void {
+function validateChoice(raw: string, choices: readonly string[], label: string): void {
 	if (!choices.includes(raw)) {
 		throw new CrustError(
 			"PARSE",
@@ -195,13 +180,9 @@ function invokeParse(
 	try {
 		return parse(raw);
 	} catch (err) {
-		const location =
-			index === undefined ? label : `${label} element [${index}]`;
+		const location = index === undefined ? label : `${label} element [${index}]`;
 		const reason = err instanceof Error ? err.message : String(err);
-		throw new CrustError(
-			"PARSE",
-			`Failed to parse ${location}: ${reason}`,
-		).withCause(err);
+		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
 }
 
@@ -243,9 +224,7 @@ function resolveDefault(
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
-			return defaultValue.map((v, i) =>
-				invokeParse(parse, String(v), label, i),
-			);
+			return defaultValue.map((v, i) => invokeParse(parse, String(v), label, i));
 		}
 		return invokeParse(parse, String(defaultValue), label);
 	}
@@ -267,10 +246,7 @@ function resolveDefault(
  * `CrustError("CONFIG", …)` for each offender. Called at the top of
  * {@link parseArgs} so misconfigured commands fail fast.
  */
-function validateAsyncParse(
-	flagsDef: FlagsDef | undefined,
-	argsDef: ArgsDef | undefined,
-): void {
+function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | undefined): void {
 	if (flagsDef) {
 		for (const [name, def] of Object.entries(flagsDef)) {
 			const parse = (def as { parse?: (raw: string) => unknown }).parse;
@@ -368,11 +344,7 @@ function resolveAliases(
 
 		const value = parsedValues[key];
 		const existing = canonical[canonicalName];
-		if (
-			existing !== undefined &&
-			Array.isArray(existing) &&
-			Array.isArray(value)
-		) {
+		if (existing !== undefined && Array.isArray(existing) && Array.isArray(value)) {
 			existing.push(...value);
 		} else {
 			canonical[canonicalName] = value as ParsedFlagValue;
@@ -404,10 +376,7 @@ function resolveFlags(
 			continue;
 		}
 
-		resolved[name] = resolveDefault(
-			def as Parameters<typeof resolveDefault>[0],
-			`--${name}`,
-		);
+		resolved[name] = resolveDefault(def as Parameters<typeof resolveDefault>[0], `--${name}`);
 	}
 
 	return resolved;
@@ -438,10 +407,7 @@ function validateRequiredFlags(
  * This is a pure parse+coerce function — it never throws for missing required
  * values. Use {@link validateParsed} to enforce required constraints.
  */
-function resolveArgs(
-	argsDef: ArgsDef | undefined,
-	positionals: string[],
-): Record<string, unknown> {
+function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Record<string, unknown> {
 	if (!argsDef) return {};
 
 	const resolved: Record<string, unknown> = {};
@@ -467,10 +433,7 @@ function resolveArgs(
 			resolved[name] = coerceOne(positionals[index] as string);
 			index++;
 		} else {
-			resolved[name] = resolveDefault(
-				def as Parameters<typeof resolveDefault>[0],
-				label,
-			);
+			resolved[name] = resolveDefault(def as Parameters<typeof resolveDefault>[0], label);
 		}
 	}
 
@@ -537,10 +500,10 @@ function validateCanonicalNegationUsage(
  * @returns Parsed args, flags, and rawArgs (everything after `--`)
  * @throws {CrustError} On unknown flags, type coercion failure, or alias collisions
  */
-export function parseArgs<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
->(command: CommandNode, argv: string[]) {
+export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
+	command: CommandNode,
+	argv: string[],
+) {
 	const argsDef = command.args as ArgsDef | undefined;
 	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
 
@@ -548,8 +511,7 @@ export function parseArgs<
 	// never sees a Promise where a value was expected.
 	validateAsyncParse(flagsDef, argsDef);
 
-	const { options: parseOptions, aliasToName } =
-		buildParseArgsOptionDescriptor(flagsDef);
+	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
 
 	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
 
@@ -568,16 +530,10 @@ export function parseArgs<
 		if (error instanceof Error) {
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
 			if (unknownMatch) {
-				throw new CrustError(
-					"PARSE",
-					`Unknown flag "${unknownMatch[1]}"`,
-				).withCause(error);
+				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`).withCause(error);
 			}
 		}
-		throw new CrustError(
-			"PARSE",
-			"Failed to parse command arguments",
-		).withCause(error);
+		throw new CrustError("PARSE", "Failed to parse command arguments").withCause(error);
 	}
 
 	const rawArgs: string[] = [];
@@ -591,9 +547,7 @@ export function parseArgs<
 				continue;
 			}
 			if (token.kind === "positional") {
-				(afterSeparator ? rawArgs : preSeparatorPositionals).push(
-					token.value ?? "",
-				);
+				(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value ?? "");
 			}
 		}
 	} else {
@@ -623,10 +577,7 @@ export function parseArgs<
  * @param parsed - The parse result from {@link parseArgs}
  * @throws {CrustError} On missing required args or flags
  */
-export function validateParsed(
-	command: CommandNode,
-	parsed: ParseResult,
-): void {
+export function validateParsed(command: CommandNode, parsed: ParseResult): void {
 	const argsDef = command.args as ArgsDef | undefined;
 	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
 

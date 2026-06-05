@@ -11,11 +11,11 @@ Subcommands let you organize your CLI into a tree of nested commands, like `git 
 
 Use the pattern that matches how the subcommand is defined:
 
-| Pattern | Use when | Notes |
-| --- | --- | --- |
-| `.command(name, cb)` | The subcommand is defined inline | Best default for small or nested command trees |
-| `.sub(name)` + `.command(builder)` | The subcommand lives in another file or should inherit parent flags | Best default for modular CLIs |
-| `new Crust(name)` + `.command(builder)` | The subcommand is intentionally standalone | Does not inherit parent flags |
+| Pattern                                 | Use when                                                            | Notes                                          |
+| --------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- |
+| `.command(name, cb)`                    | The subcommand is defined inline                                    | Best default for small or nested command trees |
+| `.sub(name)` + `.command(builder)`      | The subcommand lives in another file or should inherit parent flags | Best default for modular CLIs                  |
+| `new Crust(name)` + `.command(builder)` | The subcommand is intentionally standalone                          | Does not inherit parent flags                  |
 
 ## Inline Subcommands
 
@@ -34,7 +34,7 @@ const main = new Crust("my-cli")
       .flags({ minify: { type: "boolean", default: true } })
       .run(({ flags }) => {
         console.log(`Building... (minify: ${flags.minify})`);
-      })
+      }),
   )
   .command("dev", (cmd) =>
     cmd
@@ -42,7 +42,7 @@ const main = new Crust("my-cli")
       .flags({ port: { type: "number", default: 3000, short: "p" } })
       .run(({ flags }) => {
         console.log(`Dev server on port ${flags.port}`);
-      })
+      }),
   );
 
 await main.execute();
@@ -68,17 +68,13 @@ A command can declare alternative names — short or long forms that resolve to 
 import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
 
-const main = new Crust("my-cli")
-  .use(helpPlugin())
-  .command("issue", (cmd) =>
-    cmd
-      .meta({ description: "Manage issues", aliases: ["issues", "i"] })
-      .command("list", (sub) =>
-        sub.meta({ description: "List open issues" }).run(() => {
-          console.log("open issues…");
-        }),
-      ),
-  );
+const main = new Crust("my-cli").use(helpPlugin()).command("issue", (cmd) =>
+  cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).command("list", (sub) =>
+    sub.meta({ description: "List open issues" }).run(() => {
+      console.log("open issues…");
+    }),
+  ),
+);
 
 await main.execute();
 ```
@@ -120,13 +116,9 @@ Set `hidden: true` on a subcommand's `meta()` to omit it from the default `--hel
 
 ```ts
 const app = new Crust("my-cli")
-  .command("build", (cmd) =>
-    cmd.meta({ description: "Build the project" }).run(() => {}),
-  )
+  .command("build", (cmd) => cmd.meta({ description: "Build the project" }).run(() => {}))
   .command("__complete", (cmd) =>
-    cmd
-      .meta({ hidden: true, description: "Internal completion entrypoint" })
-      .run(() => {}),
+    cmd.meta({ hidden: true, description: "Internal completion entrypoint" }).run(() => {}),
   );
 ```
 
@@ -137,27 +129,26 @@ const app = new Crust("my-cli")
 Subcommands can be nested arbitrarily deep:
 
 ```ts
-const main = new Crust("my-cli")
-  .command("create", (create) =>
-    create
-      .meta({ description: "Create resources" })
-      .command("component", (cmd) =>
-        cmd
-          .meta({ description: "Create a component" })
-          .args([{ name: "name", type: "string", required: true }])
-          .run(({ args }) => {
-            console.log(`Creating component: ${args.name}`);
-          })
-      )
-      .command("plugin", (cmd) =>
-        cmd
-          .meta({ description: "Create a plugin" })
-          .args([{ name: "name", type: "string", required: true }])
-          .run(({ args }) => {
-            console.log(`Creating plugin: ${args.name}`);
-          })
-      )
-  );
+const main = new Crust("my-cli").command("create", (create) =>
+  create
+    .meta({ description: "Create resources" })
+    .command("component", (cmd) =>
+      cmd
+        .meta({ description: "Create a component" })
+        .args([{ name: "name", type: "string", required: true }])
+        .run(({ args }) => {
+          console.log(`Creating component: ${args.name}`);
+        }),
+    )
+    .command("plugin", (cmd) =>
+      cmd
+        .meta({ description: "Create a plugin" })
+        .args([{ name: "name", type: "string", required: true }])
+        .run(({ args }) => {
+          console.log(`Creating plugin: ${args.name}`);
+        }),
+    ),
+);
 ```
 
 ```sh
@@ -172,9 +163,17 @@ A command with subcommands but no `.run()` handler is a **container command**. I
 ```ts
 const main = new Crust("my-cli")
   .meta({ description: "My CLI tool" })
-  .command("build", (cmd) => cmd.run(() => { /* ... */ }))
-  .command("dev", (cmd) => cmd.run(() => { /* ... */ }));
-  // No .run() on main — this is a container
+  .command("build", (cmd) =>
+    cmd.run(() => {
+      /* ... */
+    }),
+  )
+  .command("dev", (cmd) =>
+    cmd.run(() => {
+      /* ... */
+    }),
+  );
+// No .run() on main — this is a container
 ```
 
 When a user runs a container command directly (e.g., `my-cli` with no subcommand), the help plugin automatically shows help with the available subcommands.
@@ -182,14 +181,23 @@ When a user runs a container command directly (e.g., `my-cli` with no subcommand
 ## Commands with Both `.run()` and Subcommands
 
 A command can have both `.run()` and subcommands. In this case:
+
 - If the first argument matches a subcommand name, it routes to that subcommand
 - Otherwise, the arguments are treated as positionals for the parent command
 
 ```ts
 const main = new Crust("my-cli")
   .args([{ name: "file", type: "string" }])
-  .command("build", (cmd) => cmd.run(() => { /* ... */ }))
-  .command("dev", (cmd) => cmd.run(() => { /* ... */ }))
+  .command("build", (cmd) =>
+    cmd.run(() => {
+      /* ... */
+    }),
+  )
+  .command("dev", (cmd) =>
+    cmd.run(() => {
+      /* ... */
+    }),
+  )
   .run(({ args }) => {
     // Runs when no subcommand matches
     console.log(`Processing file: ${args.file}`);
@@ -208,19 +216,21 @@ Use `.sub()` when the subcommand lives in another file or should inherit parent 
 ```ts title="shared.ts"
 import { Crust } from "@crustjs/core";
 
-export const app = new Crust("my-cli")
-  .flags({ verbose: { type: "boolean", short: "v", inherit: true } });
+export const app = new Crust("my-cli").flags({
+  verbose: { type: "boolean", short: "v", inherit: true },
+});
 ```
 
 ```ts title="commands/deploy.ts"
 import { app } from "../shared.ts";
 
-export const deployCmd = app.sub("deploy")
+export const deployCmd = app
+  .sub("deploy")
   .meta({ description: "Deploy to production" })
   .flags({ env: { type: "string", required: true } })
   .run(({ flags }) => {
     flags.verbose; // boolean | undefined — inherited and typed!
-    flags.env;     // string
+    flags.env; // string
   });
 ```
 
@@ -229,10 +239,7 @@ import { app } from "./shared.ts";
 import { deployCmd } from "./commands/deploy.ts";
 import { helpPlugin } from "@crustjs/plugins";
 
-await app
-  .use(helpPlugin())
-  .command(deployCmd)
-  .execute();
+await app.use(helpPlugin()).command(deployCmd).execute();
 ```
 
 `.sub()` creates a child builder pre-typed with the parent's inheritable flags. See the [`.sub()` reference](/docs/api/crust#subname) for details.

@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	accessSync,
-	chmodSync,
-	mkdirSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+
 import {
 	AGENT_LABELS,
 	ALL_AGENTS,
@@ -129,8 +124,7 @@ describe("detectInstalledAgents", () => {
 
 	it("detects additional agents by command availability", async () => {
 		const result = await detectInstalledAgents({
-			commandChecker: async (command) =>
-				command === "claude" || command === "windsurf",
+			commandChecker: async (command) => command === "claude" || command === "windsurf",
 		});
 		expect(result).toContain("claude-code");
 		expect(result).toContain("windsurf");
@@ -235,10 +229,7 @@ describe("PATH-based detection (default commandChecker)", () => {
 		for (const name of ["claude", "windsurf", "goose"]) {
 			const fakeBin = join(tmpDir, name);
 			// Script that would create a marker file if actually executed
-			writeFileSync(
-				fakeBin,
-				`#!/bin/sh\ntouch "${join(tmpDir, `${name}-was-executed`)}"`,
-			);
+			writeFileSync(fakeBin, `#!/bin/sh\ntouch "${join(tmpDir, `${name}-was-executed`)}"`);
 			chmodSync(fakeBin, 0o755);
 		}
 

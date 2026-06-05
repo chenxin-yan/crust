@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
@@ -127,9 +128,7 @@ function createHandleKey<Output>(
 		// Enter — submit
 		if (key.name === "return") {
 			const submitValue =
-				state.value === "" && defaultValue !== undefined
-					? defaultValue
-					: state.value;
+				state.value === "" && defaultValue !== undefined ? defaultValue : state.value;
 
 			if (validate) {
 				if (isStandardSchema(validate)) {
@@ -204,9 +203,7 @@ function renderInput(
 	// Default hint shown after header when value is empty and default exists
 	// (only when placeholder is explicitly set, to avoid redundancy)
 	const defaultHint =
-		defaultValue !== undefined &&
-		placeholder !== undefined &&
-		state.value === ""
+		defaultValue !== undefined && placeholder !== undefined && state.value === ""
 			? ` ${theme.hint(`(${defaultValue})`)}`
 			: "";
 
@@ -303,12 +300,8 @@ export function input(
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;
-export function input<Output>(
-	options: InputOptions<Output>,
-): Promise<Output | string>;
-export async function input<Output>(
-	options: InputOptions<Output> = {},
-): Promise<Output | string> {
+export function input<Output>(options: InputOptions<Output>): Promise<Output | string>;
+export async function input<Output>(options: InputOptions<Output> = {}): Promise<Output | string> {
 	// Short-circuit: return initial value immediately without rendering.
 	// When `validate` is a Standard Schema we MUST parse the short-circuit
 	// value through it so the `Promise<Output>` overload stays sound — a raw
@@ -342,15 +335,8 @@ export async function input<Output>(
 		initialState,
 		theme,
 		render: (state, t) =>
-			renderInput(
-				state,
-				t,
-				options.message,
-				options.placeholder,
-				options.default,
-			),
+			renderInput(state, t, options.message, options.placeholder, options.default),
 		handleKey: createHandleKey<Output>(options.validate, options.default),
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message),
+		renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
 	});
 }

@@ -75,10 +75,7 @@ export function createCommandNode(name: string): CommandNode {
  * @param local - The current command's locally-defined flags.
  * @returns A new `FlagsDef` containing inherited+local merged flags.
  */
-export function computeEffectiveFlags(
-	inherited: FlagsDef,
-	local: FlagsDef,
-): FlagsDef {
+export function computeEffectiveFlags(inherited: FlagsDef, local: FlagsDef): FlagsDef {
 	const result: Record<string, FlagDef> = {};
 
 	// Copy only inheritable flags from parent

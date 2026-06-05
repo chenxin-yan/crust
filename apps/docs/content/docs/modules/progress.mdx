@@ -47,12 +47,12 @@ await spinner({
 });
 ```
 
-| Option    | Type                                   | Default  | Description                                       |
-| --------- | -------------------------------------- | -------- | ------------------------------------------------- |
-| `message` | `string`                               | —        | Message displayed alongside the spinner           |
-| `task`    | `(controller: SpinnerController) => Promise<T>` | — | Async task to run and wrap with spinner output    |
-| `spinner` | `SpinnerType`                          | `"dots"` | Animation style or custom `{ frames, interval }`  |
-| `theme`   | `PartialProgressTheme`                 | —        | Per-call theme overrides                          |
+| Option    | Type                                            | Default  | Description                                      |
+| --------- | ----------------------------------------------- | -------- | ------------------------------------------------ |
+| `message` | `string`                                        | —        | Message displayed alongside the spinner          |
+| `task`    | `(controller: SpinnerController) => Promise<T>` | —        | Async task to run and wrap with spinner output   |
+| `spinner` | `SpinnerType`                                   | `"dots"` | Animation style or custom `{ frames, interval }` |
+| `theme`   | `PartialProgressTheme`                          | —        | Per-call theme overrides                         |
 
 ### `SpinnerController`
 

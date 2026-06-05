@@ -5,6 +5,7 @@
 
 import { Crust } from "@crustjs/core";
 import * as Schema from "effect/Schema";
+
 import {
 	type ArgDef,
 	type ArgOptions,
@@ -22,9 +23,7 @@ import type { StandardSchema } from "../src/types.ts";
 // ─────────────────────────────────────────────────────────────────────────────
 
 type EffectAsStandardSchema<S> =
-	S extends Schema.Schema<infer A, infer I>
-		? StandardSchema<I, A>
-		: StandardSchema;
+	S extends Schema.Schema<infer A, infer I> ? StandardSchema<I, A> : StandardSchema;
 
 const earg = <
 	Name extends string,
@@ -37,9 +36,7 @@ const earg = <
 ) =>
 	arg(
 		name,
-		Schema.standardSchemaV1(
-			schema as Parameters<typeof Schema.standardSchemaV1>[0],
-		),
+		Schema.standardSchemaV1(schema as Parameters<typeof Schema.standardSchemaV1>[0]),
 		options,
 	) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
 
@@ -57,9 +54,7 @@ const eflag = <
 	},
 ) =>
 	flag(
-		Schema.standardSchemaV1(
-			schema as Parameters<typeof Schema.standardSchemaV1>[0],
-		),
+		Schema.standardSchemaV1(schema as Parameters<typeof Schema.standardSchemaV1>[0]),
 		options,
 	) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
 
@@ -68,16 +63,11 @@ const eflag = <
 // ─────────────────────────────────────────────────────────────────────────────
 
 new Crust("demo")
-	.args([
-		earg("env", Schema.Literal("dev", "staging", "prod")),
-		earg("count", Schema.Number),
-	])
+	.args([earg("env", Schema.Literal("dev", "staging", "prod")), earg("count", Schema.Number)])
 	.flags({
 		force: eflag(Schema.UndefinedOr(Schema.Boolean), { type: "boolean" }),
 		replicas: eflag(
-			Schema.UndefinedOr(
-				Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
-			),
+			Schema.UndefinedOr(Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1))),
 			{ type: "number" },
 		),
 	})

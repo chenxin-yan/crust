@@ -28,9 +28,7 @@ function normalizeRegistry(registry) {
 
 function getRegistryUrl() {
 	return normalizeRegistry(
-		process.env.npm_config_registry ??
-			process.env.NPM_CONFIG_REGISTRY ??
-			DEFAULT_REGISTRY,
+		process.env.npm_config_registry ?? process.env.NPM_CONFIG_REGISTRY ?? DEFAULT_REGISTRY,
 	);
 }
 
@@ -87,9 +85,7 @@ function getInternalDependencyNames(pkg, workspaceNames) {
 		...pkg.optionalDependencies,
 	};
 
-	return new Set(
-		Object.keys(allDeps).filter((dependency) => workspaceNames.has(dependency)),
-	);
+	return new Set(Object.keys(allDeps).filter((dependency) => workspaceNames.has(dependency)));
 }
 
 function sortPackagesForPublish(packages) {
@@ -142,14 +138,11 @@ function sortPackagesForPublish(packages) {
 }
 
 async function fetchPackageMetadata(pkgName, registryUrl) {
-	const response = await fetch(
-		`${registryUrl}/${encodeURIComponent(pkgName)}`,
-		{
-			headers: {
-				accept: "application/vnd.npm.install-v1+json, application/json",
-			},
+	const response = await fetch(`${registryUrl}/${encodeURIComponent(pkgName)}`, {
+		headers: {
+			accept: "application/vnd.npm.install-v1+json, application/json",
 		},
-	);
+	});
 
 	if (response.status === 404) {
 		return null;
@@ -167,10 +160,7 @@ async function fetchPackageMetadata(pkgName, registryUrl) {
 async function findPackagesToPublish(packages, registryUrl) {
 	const metadataByName = new Map(
 		await Promise.all(
-			packages.map(async (pkg) => [
-				pkg.name,
-				await fetchPackageMetadata(pkg.name, registryUrl),
-			]),
+			packages.map(async (pkg) => [pkg.name, await fetchPackageMetadata(pkg.name, registryUrl)]),
 		),
 	);
 
@@ -193,21 +183,16 @@ async function runCommand(args, cwd) {
 
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
-		throw new Error(
-			`${args.join(" ")} failed in ${cwd} with exit code ${exitCode}`,
-		);
+		throw new Error(`${args.join(" ")} failed in ${cwd} with exit code ${exitCode}`);
 	}
 }
 
 async function tagExists(tag) {
-	const proc = Bun.spawn(
-		["git", "rev-parse", "-q", "--verify", `refs/tags/${tag}`],
-		{
-			cwd: ROOT_DIR,
-			stdout: "ignore",
-			stderr: "ignore",
-		},
-	);
+	const proc = Bun.spawn(["git", "rev-parse", "-q", "--verify", `refs/tags/${tag}`], {
+		cwd: ROOT_DIR,
+		stdout: "ignore",
+		stderr: "ignore",
+	});
 	return (await proc.exited) === 0;
 }
 
@@ -222,9 +207,7 @@ async function main() {
 	const packagesToPublish = await findPackagesToPublish(packages, registryUrl);
 
 	console.log(`Registry: ${registryUrl}`);
-	console.log(
-		`Publish order: ${packages.map((pkg) => `${pkg.name}@${pkg.version}`).join(" -> ")}`,
-	);
+	console.log(`Publish order: ${packages.map((pkg) => `${pkg.name}@${pkg.version}`).join(" -> ")}`);
 
 	if (packagesToPublish.length === 0) {
 		console.log("No unpublished package versions found.");
@@ -242,9 +225,7 @@ async function main() {
 	}
 
 	for (const pkg of packagesToPublish) {
-		console.log(
-			`\nPublishing ${pkg.name}@${pkg.version} from ${pkg.relativeDir}`,
-		);
+		console.log(`\nPublishing ${pkg.name}@${pkg.version} from ${pkg.relativeDir}`);
 		await runCommand([process.execPath, "run", "publish"], pkg.dir);
 	}
 

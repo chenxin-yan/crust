@@ -13,11 +13,7 @@ Register plugins with `.use()`:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import {
-  helpPlugin,
-  versionPlugin,
-  didYouMeanPlugin,
-} from "@crustjs/plugins";
+import { helpPlugin, versionPlugin, didYouMeanPlugin } from "@crustjs/plugins";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
@@ -48,8 +44,8 @@ Plugins execute in the order they're registered. Each middleware wraps the next 
 ```ts
 new Crust("my-cli")
   .use(versionPlugin("1.0.0")) // Runs first, can intercept early
-  .use(didYouMeanPlugin())     // Runs second, catches routing errors
-  .use(helpPlugin())           // Runs third, handles --help
+  .use(didYouMeanPlugin()) // Runs second, catches routing errors
+  .use(helpPlugin()); // Runs third, handles --help
 ```
 
 A typical order is: **version** -> **did-you-mean** -> **help**.
@@ -133,8 +129,8 @@ const myPlugin: CrustPlugin = {
 ```
 
 <Callout type="warn">
-  Always call `next()` unless you intentionally want to prevent the command from
-  running (e.g., when the help plugin intercepts `--help`).
+  Always call `next()` unless you intentionally want to prevent the command from running (e.g., when
+  the help plugin intercepts `--help`).
 </Callout>
 
 ## Writing a Custom Plugin
@@ -160,9 +156,7 @@ function timingPlugin(): CrustPlugin {
 Use it like any other plugin:
 
 ```ts
-new Crust("my-cli")
-  .use(timingPlugin())
-  .use(helpPlugin())
+new Crust("my-cli").use(timingPlugin()).use(helpPlugin());
 ```
 
 ### Plugin State
@@ -204,11 +198,11 @@ The full middleware context:
 
 ```ts
 interface MiddlewareContext {
-  readonly argv: readonly string[];      // Raw argv
-  readonly rootCommand: CommandNode;     // Root command node
-  readonly state: PluginState;           // Plugin state store
-  route: CommandRoute | null;            // Resolved route (null if routing failed)
-  input: ParseResult | null;            // Parsed input (null if parsing failed)
+  readonly argv: readonly string[]; // Raw argv
+  readonly rootCommand: CommandNode; // Root command node
+  readonly state: PluginState; // Plugin state store
+  route: CommandRoute | null; // Resolved route (null if routing failed)
+  input: ParseResult | null; // Parsed input (null if parsing failed)
 }
 ```
 

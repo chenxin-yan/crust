@@ -75,10 +75,7 @@ function findAliasMatch(
  * @returns The resolved command, argv, and the command path
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
  */
-export function resolveCommand(
-	command: CommandNode,
-	argv: string[],
-): CommandRoute {
+export function resolveCommand(command: CommandNode, argv: string[]): CommandRoute {
 	const path = [command.meta.name];
 
 	let current: CommandNode = command;
@@ -127,16 +124,12 @@ export function resolveCommand(
 		// `details.available` lists canonical sibling names only; consumers
 		// that want alias-aware matching (e.g. didYouMeanPlugin) read aliases
 		// directly from `details.parentCommand.subCommands`.
-		throw new CrustError(
-			"COMMAND_NOT_FOUND",
-			`Unknown command "${candidate}".`,
-			{
-				input: candidate,
-				available: Object.keys(subCommands),
-				commandPath: [...path],
-				parentCommand: current,
-			},
-		);
+		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+			input: candidate,
+			available: Object.keys(subCommands),
+			commandPath: [...path],
+			parentCommand: current,
+		});
 	}
 
 	return {

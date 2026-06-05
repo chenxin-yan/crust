@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
 import { resolveSourceDir } from "./source.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -75,12 +76,8 @@ describe("resolveSourceDir", () => {
 		it("treats process.argv[1] pointing at a directory the same as pointing at a file inside it", async () => {
 			const fakeEntryFile = join(SELF_DIR, "index.ts");
 			const fakeEntryDir = SELF_DIR;
-			const fromFile = await withArgv1(fakeEntryFile, async () =>
-				resolveSourceDir("x/y"),
-			);
-			const fromDir = await withArgv1(fakeEntryDir, async () =>
-				resolveSourceDir("x/y"),
-			);
+			const fromFile = await withArgv1(fakeEntryFile, async () => resolveSourceDir("x/y"));
+			const fromDir = await withArgv1(fakeEntryDir, async () => resolveSourceDir("x/y"));
 			expect(fromFile).toBe(fromDir);
 		});
 	});
@@ -100,12 +97,8 @@ describe("resolveSourceDir", () => {
 			const original = process.argv[1];
 			process.argv.length = 1;
 			try {
-				expect(() => resolveSourceDir("x/y")).toThrow(
-					/process\.argv\[1\] is not set/,
-				);
-				expect(() => resolveSourceDir("x/y")).toThrow(
-					/absolute path or a file: URL/,
-				);
+				expect(() => resolveSourceDir("x/y")).toThrow(/process\.argv\[1\] is not set/);
+				expect(() => resolveSourceDir("x/y")).toThrow(/absolute path or a file: URL/);
 			} finally {
 				if (original !== undefined) process.argv[1] = original;
 			}
@@ -114,13 +107,9 @@ describe("resolveSourceDir", () => {
 		it("throws a descriptive error when no walkable package.json is found", async () => {
 			// /tmp typically has no package.json walking up from it.
 			await withArgv1("/tmp/no-pkg-here.js", async () => {
-				expect(() => resolveSourceDir("rel/path")).toThrow(
-					/no package\.json was found/,
-				);
+				expect(() => resolveSourceDir("rel/path")).toThrow(/no package\.json was found/);
 				expect(() => resolveSourceDir("rel/path")).toThrow(/rel\/path/);
-				expect(() => resolveSourceDir("rel/path")).toThrow(
-					/\/tmp\/no-pkg-here\.js/,
-				);
+				expect(() => resolveSourceDir("rel/path")).toThrow(/\/tmp\/no-pkg-here\.js/);
 			});
 		});
 	});

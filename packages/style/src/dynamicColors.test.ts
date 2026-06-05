@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import * as codes from "./ansiCodes.ts";
 import {
 	bgHex,
@@ -206,17 +207,13 @@ describe("nesting with static styles", () => {
 		const outer = applyStyle(`A ${inner} B`, codes.bgBlue);
 
 		// bgRgb close (49m) matches bgBlue close (49m), so bgBlue reopens
-		expect(outer).toBe(
-			"\x1b[44mA \x1b[48;2;255;128;0minner\x1b[49m\x1b[44m B\x1b[49m",
-		);
+		expect(outer).toBe("\x1b[44mA \x1b[48;2;255;128;0minner\x1b[49m\x1b[44m B\x1b[49m");
 	});
 
 	it("truecolor fg and bg composed with composeStyles", () => {
 		const fgBg = composeStyles(rgbCode(255, 0, 0), bgRgbCode(0, 0, 255));
 		const result = applyStyle("styled", fgBg);
-		expect(result).toBe(
-			"\x1b[38;2;255;0;0m\x1b[48;2;0;0;255mstyled\x1b[49m\x1b[39m",
-		);
+		expect(result).toBe("\x1b[38;2;255;0;0m\x1b[48;2;0;0;255mstyled\x1b[49m\x1b[39m");
 	});
 
 	it("truecolor composed with static modifier", () => {

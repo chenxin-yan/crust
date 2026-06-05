@@ -1,5 +1,6 @@
 import { CrustError } from "@crustjs/core";
 import { formatPath } from "@crustjs/utils/schema";
+
 import type { ValidationIssue } from "./types.ts";
 
 interface IssueInput {
@@ -40,9 +41,7 @@ export function normalizeIssue(issue: IssueInput): ValidationIssue {
 /**
  * Normalize an array of provider issues into canonical form.
  */
-export function normalizeIssues(
-	issues: readonly IssueInput[],
-): ValidationIssue[] {
+export function normalizeIssues(issues: readonly IssueInput[]): ValidationIssue[] {
 	return issues.map(normalizeIssue);
 }
 
@@ -80,10 +79,7 @@ function renderIssueLine(issue: ValidationIssue): string {
  * // => "Validation failed\n  - flags.verbose: Expected boolean, received string\n  - args[0]: Required"
  * ```
  */
-export function renderBulletList(
-	prefix: string,
-	issues: readonly ValidationIssue[],
-): string {
+export function renderBulletList(prefix: string, issues: readonly ValidationIssue[]): string {
 	if (issues.length === 0) return prefix;
 	const lines = issues.map(renderIssueLine);
 	return `${prefix}\n${lines.join("\n")}`;

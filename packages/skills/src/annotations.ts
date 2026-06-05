@@ -1,5 +1,6 @@
 import type { CommandNode } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+
 import { normalizeInstructionList } from "./instructions.ts";
 
 /**
@@ -10,7 +11,7 @@ export interface SkillCommandAnnotations {
 	instructions?: string[];
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: Crust is generic; we only need the _node accessor
+// oxlint-disable-next-line typescript/no-explicit-any -- Crust is generic; we only need the _node accessor
 type SkillCommandTarget = CommandNode | Crust<any, any, any>;
 
 const SKILL_COMMAND_ANNOTATIONS = Symbol("crust.skill.commandAnnotations");
@@ -66,9 +67,7 @@ export function annotate<T extends SkillCommandTarget>(
 export function getSkillCommandAnnotations(
 	command: CommandNode,
 ): SkillCommandAnnotations | undefined {
-	const annotations = (command as AnnotatedCommandNode)[
-		SKILL_COMMAND_ANNOTATIONS
-	];
+	const annotations = (command as AnnotatedCommandNode)[SKILL_COMMAND_ANNOTATIONS];
 
 	if (!annotations?.instructions || annotations.instructions.length === 0) {
 		return undefined;

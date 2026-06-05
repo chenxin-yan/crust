@@ -82,10 +82,11 @@ export function detectPackageManager(cwd?: string): PackageManager {
  */
 export function isInGitRepo(cwd?: string): boolean {
 	try {
-		const result = Bun.spawnSync(
-			["git", "rev-parse", "--is-inside-work-tree"],
-			{ cwd: cwd ?? process.cwd(), stdout: "ignore", stderr: "ignore" },
-		);
+		const result = Bun.spawnSync(["git", "rev-parse", "--is-inside-work-tree"], {
+			cwd: cwd ?? process.cwd(),
+			stdout: "ignore",
+			stderr: "ignore",
+		});
 		return result.exitCode === 0;
 	} catch {
 		return false;

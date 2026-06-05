@@ -54,8 +54,7 @@ export interface CrustErrorDetailsMap {
  * ```
  */
 export type CrustErrorCode = keyof CrustErrorDetailsMap;
-export type CrustErrorDetails<C extends CrustErrorCode> =
-	CrustErrorDetailsMap[C];
+export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C];
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustError — Custom error class
@@ -80,9 +79,7 @@ export type CrustErrorDetails<C extends CrustErrorCode> =
  * }
  * ```
  */
-export class CrustError<
-	C extends CrustErrorCode = CrustErrorCode,
-> extends Error {
+export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
 	/** Machine-readable error code for programmatic handling */
 	readonly code: C;
 	/** Structured payload for programmatic handling */

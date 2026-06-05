@@ -8,8 +8,8 @@ import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 <Callout>
-  If you're starting a new project, the easiest way is `bun create crust
-  my-cli`. See the [Quick Start](/docs/quick-start) guide.
+  If you're starting a new project, the easiest way is `bun create crust my-cli`. See the [Quick
+  Start](/docs/quick-start) guide.
 </Callout>
 
 ## Install
@@ -70,11 +70,9 @@ Use this when your CLI is small and you want everything in one place.
 
 import { Crust } from "@crustjs/core";
 
-const main = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .run(() => {
-    console.log("Hello from my CLI!");
-  });
+const main = new Crust("my-cli").meta({ description: "My CLI tool" }).run(() => {
+  console.log("Hello from my CLI!");
+});
 
 await main.execute();
 ```
@@ -91,17 +89,15 @@ Use this when your CLI grows and you want commands in separate files.
 ```ts title="src/app.ts"
 import { Crust } from "@crustjs/core";
 
-export const app = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .flags({
-    greet: {
-      type: "string",
-      description: "Greeting to use",
-      default: "Hello",
-      short: "g",
-      inherit: true,
-    },
-  });
+export const app = new Crust("my-cli").meta({ description: "My CLI tool" }).flags({
+  greet: {
+    type: "string",
+    description: "Greeting to use",
+    default: "Hello",
+    short: "g",
+    inherit: true,
+  },
+});
 ```
 
 ```ts title="src/commands/greet.ts"
@@ -131,11 +127,7 @@ import pkg from "../package.json";
 import { app } from "./app.ts";
 import { greetCmd } from "./commands/greet.ts";
 
-await app
-  .use(versionPlugin(pkg.version))
-  .use(helpPlugin())
-  .command(greetCmd)
-  .execute();
+await app.use(versionPlugin(pkg.version)).use(helpPlugin()).command(greetCmd).execute();
 ```
 
 ```sh

@@ -78,8 +78,7 @@ export interface MultiselectOptions<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_VISIBLE = 10;
-const HINT_LINE =
-	"(Space to toggle, a to toggle all, i to invert, Enter to confirm)";
+const HINT_LINE = "(Space to toggle, a to toggle all, i to invert, Enter to confirm)";
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -131,10 +130,7 @@ function createHandleKey<T>(
 	required?: boolean,
 	min?: number,
 	max?: number,
-): (
-	key: KeypressEvent,
-	state: MultiselectState<T>,
-) => MultiselectState<T> | SubmitResult<T[]> {
+): (key: KeypressEvent, state: MultiselectState<T>) => MultiselectState<T> | SubmitResult<T[]> {
 	return (key, state) => {
 		const totalItems = state.choices.length;
 
@@ -264,9 +260,7 @@ function renderMultiselect<T>(
 
 		const isActive = choiceIndex === state.cursor;
 		const isChecked = state.selected.has(choiceIndex);
-		const checkbox = isChecked
-			? theme.success(CHECKBOX_CHECKED)
-			: CHECKBOX_UNCHECKED;
+		const checkbox = isChecked ? theme.success(CHECKBOX_CHECKED) : CHECKBOX_UNCHECKED;
 		const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
 
 		if (isActive) {
@@ -363,9 +357,7 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-export async function multiselect<T>(
-	options: MultiselectOptions<T>,
-): Promise<T[]> {
+export async function multiselect<T>(options: MultiselectOptions<T>): Promise<T[]> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return [...options.initial];
@@ -402,22 +394,9 @@ export async function multiselect<T>(
 	return runPrompt<MultiselectState<T>, T[]>({
 		initialState,
 		theme,
-		render: (state, t) =>
-			renderMultiselect(state, t, options.message, maxVisible),
-		handleKey: createHandleKey<T>(
-			maxVisible,
-			options.required,
-			options.min,
-			options.max,
-		),
+		render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
+		handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
 		renderSubmitted: (state, value, t) =>
-			renderSubmitted(
-				state,
-				value,
-				t,
-				options.message,
-				choices,
-				state.selected,
-			),
+			renderSubmitted(state, value, t, options.message, choices, state.selected),
 	});
 }

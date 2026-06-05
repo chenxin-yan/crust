@@ -1,12 +1,5 @@
 {
   "title": "API Reference",
   "icon": "FileCode",
-  "pages": [
-    "crust",
-    "parse-args",
-    "validate-parsed",
-    "resolve-command",
-    "types",
-    "errors"
-  ]
+  "pages": ["crust", "parse-args", "validate-parsed", "resolve-command", "types", "errors"]
 }

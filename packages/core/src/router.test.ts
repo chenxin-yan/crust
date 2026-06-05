@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
@@ -15,8 +16,7 @@ function makeNode(config: {
 	subCommands?: Record<string, CommandNode>;
 	run?: (ctx: unknown) => void | Promise<void>;
 }): CommandNode {
-	const meta =
-		typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;
@@ -196,12 +196,7 @@ describe("resolveCommand", () => {
 				subCommands: { generate: generateCmd },
 			});
 
-			const result = resolveCommand(root, [
-				"generate",
-				"command",
-				"my-cmd",
-				"--verbose",
-			]);
+			const result = resolveCommand(root, ["generate", "command", "my-cmd", "--verbose"]);
 
 			expect(result.command.meta.name).toBe("command");
 			expect(result.argv).toEqual(["my-cmd", "--verbose"]);
@@ -243,9 +238,7 @@ describe("resolveCommand", () => {
 		it("throws error for unknown subcommand when parent has no run()", () => {
 			const root = createRootWithSubcommands(); // no run()
 
-			expect(() => resolveCommand(root, ["unknown"])).toThrow(
-				'Unknown command "unknown"',
-			);
+			expect(() => resolveCommand(root, ["unknown"])).toThrow('Unknown command "unknown"');
 		});
 
 		it("throws CrustError with structured details", () => {
@@ -431,12 +424,7 @@ describe("resolveCommand", () => {
 			const result = resolveCommand(root, argv);
 
 			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual([
-				"src/index.ts",
-				"--entry",
-				"main.ts",
-				"--minify",
-			]);
+			expect(result.argv).toEqual(["src/index.ts", "--entry", "main.ts", "--minify"]);
 		});
 	});
 
@@ -596,12 +584,7 @@ describe("resolveCommand — CommandNode tree", () => {
 			root.meta.description = "Crust CLI";
 			root.subCommands = { generate: generateNode };
 
-			const result = resolveCommand(root, [
-				"generate",
-				"command",
-				"my-cmd",
-				"--verbose",
-			]);
+			const result = resolveCommand(root, ["generate", "command", "my-cmd", "--verbose"]);
 
 			expect(result.command.meta.name).toBe("command");
 			expect(result.argv).toEqual(["my-cmd", "--verbose"]);
@@ -631,9 +614,7 @@ describe("resolveCommand — CommandNode tree", () => {
 		it("throws error for unknown subcommand when parent node has no run()", () => {
 			const root = createNodeRootWithSubcommands();
 
-			expect(() => resolveCommand(root, ["unknown"])).toThrow(
-				'Unknown command "unknown"',
-			);
+			expect(() => resolveCommand(root, ["unknown"])).toThrow('Unknown command "unknown"');
 		});
 
 		it("throws CrustError with structured details for CommandNode", () => {
@@ -653,9 +634,7 @@ describe("resolveCommand — CommandNode tree", () => {
 					commandPath: ["crust"],
 				});
 				// parentCommand should be the CommandNode
-				expect(
-					(crustError.details as { parentCommand: CommandNode }).parentCommand,
-				).toBe(root);
+				expect((crustError.details as { parentCommand: CommandNode }).parentCommand).toBe(root);
 			}
 		});
 	});
@@ -688,12 +667,7 @@ describe("resolveCommand — CommandNode tree", () => {
 			const result = resolveCommand(root, argv);
 
 			expect(result.command.meta.name).toBe("build");
-			expect(result.argv).toEqual([
-				"src/index.ts",
-				"--entry",
-				"main.ts",
-				"--minify",
-			]);
+			expect(result.argv).toEqual(["src/index.ts", "--entry", "main.ts", "--minify"]);
 		});
 
 		it("handles subcommand node followed by -- separator", () => {
@@ -771,10 +745,7 @@ describe("resolveCommand — aliases", () => {
 		root.subCommands = { issue };
 
 		expect(resolveCommand(root, ["i"]).commandPath).toEqual(["app", "issue"]);
-		expect(resolveCommand(root, ["issues"]).commandPath).toEqual([
-			"app",
-			"issue",
-		]);
+		expect(resolveCommand(root, ["issues"]).commandPath).toEqual(["app", "issue"]);
 	});
 
 	it("reports only canonical names in COMMAND_NOT_FOUND details.available", () => {
@@ -797,14 +768,8 @@ describe("resolveCommand — aliases", () => {
 		// `available` lists canonical sibling names in insertion order. Aliases
 		// stay reachable via `details.parentCommand.subCommands[name].meta.aliases`
 		// for consumers (e.g. didYouMeanPlugin) that want alias-aware matching.
-		expect(caught.details.available).toEqual([
-			"issue",
-			"pull-request",
-			"version",
-		]);
-		expect(
-			caught.details.parentCommand.subCommands.issue?.meta.aliases,
-		).toEqual(["issues", "i"]);
+		expect(caught.details.available).toEqual(["issue", "pull-request", "version"]);
+		expect(caught.details.parentCommand.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 
 	it("prefers a canonical name over an alias when both could match", () => {

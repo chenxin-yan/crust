@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { type SpinnerController, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
@@ -430,10 +431,7 @@ describe("spinner — cleanup", () => {
 		let registeredSigint: (() => void) | undefined;
 		let removedSigint: (() => void) | undefined;
 
-		process.once = ((
-			event: string | symbol,
-			listener: (...args: [] | [unknown]) => void,
-		) => {
+		process.once = ((event: string | symbol, listener: (...args: [] | [unknown]) => void) => {
 			if (event === "SIGINT") {
 				registeredSigint = listener as () => void;
 			}

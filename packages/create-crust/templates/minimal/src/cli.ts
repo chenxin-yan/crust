@@ -1,5 +1,6 @@
 import { Crust } from "@crustjs/core";
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+
 import pkg from "../package.json";
 
 const cli = new Crust("{{name}}")

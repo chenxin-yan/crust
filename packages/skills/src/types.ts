@@ -618,11 +618,10 @@ export interface StatusResult {
  * });
  * ```
  */
-export interface CustomSkillConfig
-	extends Pick<
-		InstallSkillBundleOptions,
-		"sourceDir" | "scope" | "installMode"
-	> {
+export interface CustomSkillConfig extends Pick<
+	InstallSkillBundleOptions,
+	"sourceDir" | "scope" | "installMode"
+> {
 	/**
 	 * Skill name used by the plugin for collision detection, status lookups,
 	 * and uninstall paths.

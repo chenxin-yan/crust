@@ -1,5 +1,6 @@
 import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
+
 import { renderHelp } from "./help.ts";
 
 export interface DidYouMeanPluginOptions {
@@ -19,11 +20,7 @@ function levenshtein(a: string, b: string): number {
 		let prev = i;
 		for (let j = 1; j <= bLen; j++) {
 			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-			const val = Math.min(
-				(row[j] as number) + 1,
-				prev + 1,
-				(row[j - 1] as number) + cost,
-			);
+			const val = Math.min((row[j] as number) + 1, prev + 1, (row[j - 1] as number) + cost);
 			row[j - 1] = prev;
 			prev = val;
 		}
@@ -54,10 +51,7 @@ function levenshtein(a: string, b: string): number {
  * shortcut is intentionally omitted: with aliases in the candidate set,
  * any 1–2 char alias would falsely match every typo as distance 0.
  */
-function findSuggestions(
-	input: string,
-	subCommands: Record<string, CommandNode>,
-): string[] {
+function findSuggestions(input: string, subCommands: Record<string, CommandNode>): string[] {
 	const best = new Map<string, number>();
 
 	const score = (text: string): number | null => {
@@ -88,9 +82,7 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export function didYouMeanPlugin(
-	options: DidYouMeanPluginOptions = {},
-): CrustPlugin {
+export function didYouMeanPlugin(options: DidYouMeanPluginOptions = {}): CrustPlugin {
 	const mode = options.mode ?? "error";
 
 	return {
@@ -104,10 +96,7 @@ export function didYouMeanPlugin(
 				if (!error.is("COMMAND_NOT_FOUND")) throw error;
 
 				const details = error.details;
-				const suggestions = findSuggestions(
-					details.input,
-					details.parentCommand.subCommands,
-				);
+				const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
 
 				let message = `Unknown command "${details.input}".`;
 				if (suggestions.length > 0) {
@@ -126,8 +115,7 @@ export function didYouMeanPlugin(
 				// facing, so filter the same way `findSuggestions` does — internal
 				// commands stay invocable but never surface in this list.
 				const visibleAvailable = details.available.filter(
-					(canonical) =>
-						details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
+					(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
 				);
 				if (visibleAvailable.length > 0) {
 					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { z } from "zod";
+
 import { input } from "./input.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -29,7 +31,7 @@ function setupMocks(): void {
 		configurable: true,
 	});
 
-	// biome-ignore lint/suspicious/noExplicitAny: mocking process.stdin methods for testing
+	// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 	(process.stdin as any).setRawMode = (mode: boolean) => {
 		Object.defineProperty(process.stdin, "isRaw", {
 			value: mode,
@@ -594,9 +596,7 @@ describe("input — non-TTY", () => {
 			configurable: true,
 		});
 
-		await expect(input({ message: "Name?" })).rejects.toThrow(
-			"interactive terminal",
-		);
+		await expect(input({ message: "Name?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
@@ -636,9 +636,7 @@ describe("input — non-TTY", () => {
 			configurable: true,
 		});
 
-		await expect(input({ message: "Name?" })).rejects.toThrow(
-			"interactive terminal",
-		);
+		await expect(input({ message: "Name?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
@@ -804,8 +802,7 @@ describe("input — schema validation", () => {
 		// hard-coded string, so this can't accidentally pass when zod's default
 		// messages change.
 		const schema = z.string().min(3);
-		const expectedMessage =
-			schema.safeParse("a").error?.issues[0]?.message ?? "";
+		const expectedMessage = schema.safeParse("a").error?.issues[0]?.message ?? "";
 		expect(expectedMessage).not.toBe("");
 
 		const promise = input({ message: "Code?", validate: schema });

@@ -82,10 +82,7 @@ export type CssColorFunctionString =
  * variable references) must reach `fg` / `bg` through a widened
  * `string` / {@link ColorString} / {@link ColorInput} value.
  */
-export type StrictColorString =
-	| NamedColor
-	| `#${string}`
-	| CssColorFunctionString;
+export type StrictColorString = NamedColor | `#${string}` | CssColorFunctionString;
 
 /**
  * Non-string branches of {@link ColorInput} (numbers, channel tuples,
@@ -290,16 +287,12 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 * style.fg("rebeccapurple").italic`accent ${value}`;
 	 * ```
 	 */
-	fg<const T extends ColorInputCandidate>(
-		input: CheckedColorInput<T>,
-	): ChainableStyleFn;
+	fg<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
 	/**
 	 * Append a depth-aware background color to the chain. Mirrors
 	 * {@link ChainableStyleFn.fg}.
 	 */
-	bg<const T extends ColorInputCandidate>(
-		input: CheckedColorInput<T>,
-	): ChainableStyleFn;
+	bg<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
 }
 
 /**
@@ -337,11 +330,7 @@ export interface StyleInstance extends StyleMethodMap {
 	readonly apply: (text: string, pair: AnsiPair) => string;
 
 	/** Wrap text in an OSC 8 hyperlink when link styling is enabled. */
-	readonly link: (
-		text: string,
-		url: string,
-		options?: HyperlinkOptions,
-	) => string;
+	readonly link: (text: string, url: string, options?: HyperlinkOptions) => string;
 
 	// ── Dynamic colors ──
 
@@ -367,13 +356,8 @@ export interface StyleInstance extends StyleMethodMap {
 	 * ```
 	 */
 	readonly fg: {
-		<const T extends ColorInputCandidate>(
-			input: CheckedColorInput<T>,
-		): ChainableStyleFn;
-		<const T extends ColorInputCandidate>(
-			text: string,
-			input: CheckedColorInput<T>,
-		): string;
+		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
+		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
 	};
 
 	/**
@@ -382,13 +366,8 @@ export interface StyleInstance extends StyleMethodMap {
 	 * chain-root forms.
 	 */
 	readonly bg: {
-		<const T extends ColorInputCandidate>(
-			input: CheckedColorInput<T>,
-		): ChainableStyleFn;
-		<const T extends ColorInputCandidate>(
-			text: string,
-			input: CheckedColorInput<T>,
-		): string;
+		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
+		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
 	};
 
 	// ── Deprecated dynamic-color helpers ───────────────────────────────

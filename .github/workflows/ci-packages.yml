@@ -11,7 +11,8 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
-      - "biome.json"
+      - ".oxlintrc.json"
+      - ".oxfmtrc.json"
       - "tsconfig*.json"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
@@ -41,7 +42,9 @@ jobs:
             turbo-packages-${{ runner.os }}-
 
       - name: Lint and format check (packages)
-        run: bun run check packages
+        run: |
+          bun run lint packages
+          bun run format packages
 
       - name: Build, type check, and test (packages)
         run: bun turbo run build check:types test --filter='./packages/*'

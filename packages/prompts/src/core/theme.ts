@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, cyan, dim, green, red } from "@crustjs/style";
+
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

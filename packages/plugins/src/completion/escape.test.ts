@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import {
 	assertSafeBinName,
 	assertSafeChoiceValue,
@@ -66,15 +67,7 @@ describe("assertSafeBinName", () => {
 
 describe("assertSafeChoiceValue", () => {
 	it("accepts realistic choice values", () => {
-		for (const v of [
-			"browser",
-			"us-east-1",
-			"node@20",
-			"text/plain",
-			"1.0.0",
-			"a:b",
-			"a+b",
-		]) {
+		for (const v of ["browser", "us-east-1", "node@20", "text/plain", "1.0.0", "a:b", "a+b"]) {
 			expect(assertSafeChoiceValue(v)).toBe(v);
 		}
 	});
@@ -91,9 +84,7 @@ describe("assertSafeChoiceValue", () => {
 		["empty", ""],
 		["leading hyphen is treated as flag-ish", "-bad"],
 	])("rejects %s", (_label, value) => {
-		expect(() => assertSafeChoiceValue(value)).toThrow(
-			/unsupported choice value/,
-		);
+		expect(() => assertSafeChoiceValue(value)).toThrow(/unsupported choice value/);
 	});
 });
 

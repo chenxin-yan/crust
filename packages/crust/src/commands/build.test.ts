@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import { Crust, parseArgs } from "@crustjs/core";
+
 import type { BunTarget } from "../../src/commands/build.ts";
 import {
 	buildCommand,
@@ -26,9 +28,7 @@ import {
  */
 function makeBuildNode() {
 	const app = new Crust("test").command(buildCommand);
-	const node = (
-		app as unknown as { _node: import("@crustjs/core").CommandNode }
-	)._node;
+	const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
 	const buildNode = node.subCommands.build;
 	if (!buildNode) throw new Error("build subcommand not found");
 	return buildNode;
@@ -42,9 +42,7 @@ describe("buildCommand definition", () => {
 	it("has correct meta", () => {
 		const node = makeBuildNode();
 		expect(node.meta.name).toBe("build");
-		expect(node.meta.description).toBe(
-			"Compile your CLI to a standalone executable",
-		);
+		expect(node.meta.description).toBe("Compile your CLI to a standalone executable");
 	});
 
 	it("has correct default flag values", () => {
@@ -107,12 +105,7 @@ describe("buildCommand definition", () => {
 
 	it("defines --env-file as a repeatable string flag", () => {
 		const node = makeBuildNode();
-		const result = parseArgs(node, [
-			"--env-file",
-			".env",
-			"--env-file",
-			".env.local",
-		]);
+		const result = parseArgs(node, ["--env-file", ".env", "--env-file", ".env.local"]);
 		expect(result.flags["env-file"]).toEqual([".env", ".env.local"]);
 	});
 
@@ -125,19 +118,12 @@ describe("buildCommand definition", () => {
 
 	it("rejects removed --distribute flag", () => {
 		const node = makeBuildNode();
-		expect(() => parseArgs(node, ["--distribute"])).toThrow(
-			'Unknown flag "--distribute"',
-		);
+		expect(() => parseArgs(node, ["--distribute"])).toThrow('Unknown flag "--distribute"');
 	});
 
 	it("defines --target/-t as repeatable string flag", () => {
 		const node = makeBuildNode();
-		const result = parseArgs(node, [
-			"--target",
-			"linux-x64",
-			"--target",
-			"darwin-arm64",
-		]);
+		const result = parseArgs(node, ["--target", "linux-x64", "--target", "darwin-arm64"]);
 		expect(result.flags.target).toEqual(["linux-x64", "darwin-arm64"]);
 	});
 
@@ -175,9 +161,7 @@ describe("env file helpers", () => {
 	});
 
 	it("throws when an env-file is missing", () => {
-		expect(() => resolveEnvFilePaths(tmpDir, [".env.missing"])).toThrow(
-			/Env file not found/,
-		);
+		expect(() => resolveEnvFilePaths(tmpDir, [".env.missing"])).toThrow(/Env file not found/);
 	});
 });
 
@@ -251,9 +235,7 @@ describe("resolveTarget", () => {
 
 describe("resolveBaseName", () => {
 	it("uses --name when provided", () => {
-		expect(resolveBaseName("my-tool", "/test/src/cli.ts", "/test")).toBe(
-			"my-tool",
-		);
+		expect(resolveBaseName("my-tool", "/test/src/cli.ts", "/test")).toBe("my-tool");
 	});
 
 	describe("with package.json", () => {
@@ -268,36 +250,24 @@ describe("resolveBaseName", () => {
 		});
 
 		it("falls back to package.json name", () => {
-			writeFileSync(
-				join(tmpDir, "package.json"),
-				JSON.stringify({ name: "my-cli-app" }),
-			);
-			expect(
-				resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir),
-			).toBe("my-cli-app");
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "my-cli-app" }));
+			expect(resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toBe("my-cli-app");
 		});
 
 		it("strips scope prefix from package.json name", () => {
-			writeFileSync(
-				join(tmpDir, "package.json"),
-				JSON.stringify({ name: "@scope/my-cli" }),
-			);
-			expect(
-				resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir),
-			).toBe("my-cli");
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "@scope/my-cli" }));
+			expect(resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toBe("my-cli");
 		});
 	});
 
 	it("falls back to entry filename", () => {
-		expect(
-			resolveBaseName(undefined, "/nonexistent/src/main.ts", "/nonexistent"),
-		).toBe("main");
+		expect(resolveBaseName(undefined, "/nonexistent/src/main.ts", "/nonexistent")).toBe("main");
 	});
 
 	it("strips file extension from entry filename", () => {
-		expect(
-			resolveBaseName(undefined, "/nonexistent/src/app.cli.ts", "/nonexistent"),
-		).toBe("app.cli");
+		expect(resolveBaseName(undefined, "/nonexistent/src/app.cli.ts", "/nonexistent")).toBe(
+			"app.cli",
+		);
 	});
 });
 
@@ -341,10 +311,7 @@ describe("resolveOutfile", () => {
 		});
 
 		it("falls back to package.json name when no --outfile or --name", () => {
-			writeFileSync(
-				join(tmpDir, "package.json"),
-				JSON.stringify({ name: "my-cli-app" }),
-			);
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "my-cli-app" }));
 			const result = resolveOutfile(
 				undefined,
 				undefined,
@@ -356,10 +323,7 @@ describe("resolveOutfile", () => {
 		});
 
 		it("strips scope prefix from package.json name", () => {
-			writeFileSync(
-				join(tmpDir, "package.json"),
-				JSON.stringify({ name: "@scope/my-cli" }),
-			);
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "@scope/my-cli" }));
 			const result = resolveOutfile(
 				undefined,
 				undefined,
@@ -374,26 +338,14 @@ describe("resolveOutfile", () => {
 	it("falls back to entry filename when no --outfile, --name, or package.json", () => {
 		const noPackageCwd = "/nonexistent/path/for/test";
 		const testEntry = "/nonexistent/path/for/test/src/main.ts";
-		const result = resolveOutfile(
-			undefined,
-			undefined,
-			testEntry,
-			noPackageCwd,
-			"dist",
-		);
+		const result = resolveOutfile(undefined, undefined, testEntry, noPackageCwd, "dist");
 		expect(result).toBe(resolve(noPackageCwd, "dist", "main"));
 	});
 
 	it("strips file extension from entry filename", () => {
 		const noPackageCwd = "/nonexistent/path/for/test";
 		const testEntry = "/nonexistent/path/for/test/src/app.cli.ts";
-		const result = resolveOutfile(
-			undefined,
-			undefined,
-			testEntry,
-			noPackageCwd,
-			"dist",
-		);
+		const result = resolveOutfile(undefined, undefined, testEntry, noPackageCwd, "dist");
 		expect(result).toBe(resolve(noPackageCwd, "dist", "app.cli"));
 	});
 
@@ -416,36 +368,36 @@ describe("resolveTargetOutfile", () => {
 	const cwd = "/test/project";
 
 	it("produces dist/<name>-<target> for non-Windows targets", () => {
-		expect(
-			resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "dist"),
-		).toBe(resolve(cwd, "dist", "my-cli-bun-linux-x64-baseline"));
+		expect(resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-cli-bun-linux-x64-baseline"),
+		);
 	});
 
 	it("produces dist/<name>-<target> for darwin targets", () => {
-		expect(
-			resolveTargetOutfile("my-cli", "bun-darwin-arm64", cwd, "dist"),
-		).toBe(resolve(cwd, "dist", "my-cli-bun-darwin-arm64"));
+		expect(resolveTargetOutfile("my-cli", "bun-darwin-arm64", cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-cli-bun-darwin-arm64"),
+		);
 	});
 
 	it("appends .exe for Windows targets", () => {
-		expect(
-			resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd, "dist"),
-		).toBe(resolve(cwd, "dist", "my-cli-bun-windows-x64-baseline.exe"));
-		expect(
-			resolveTargetOutfile("my-cli", "bun-windows-arm64", cwd, "dist"),
-		).toBe(resolve(cwd, "dist", "my-cli-bun-windows-arm64.exe"));
+		expect(resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-cli-bun-windows-x64-baseline.exe"),
+		);
+		expect(resolveTargetOutfile("my-cli", "bun-windows-arm64", cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-cli-bun-windows-arm64.exe"),
+		);
 	});
 
 	it("works with scoped-stripped names", () => {
-		expect(
-			resolveTargetOutfile("my-tool", "bun-linux-arm64", cwd, "dist"),
-		).toBe(resolve(cwd, "dist", "my-tool-bun-linux-arm64"));
+		expect(resolveTargetOutfile("my-tool", "bun-linux-arm64", cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-tool-bun-linux-arm64"),
+		);
 	});
 
 	it("uses custom outdir when provided", () => {
-		expect(
-			resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "out"),
-		).toBe(resolve(cwd, "out", "my-cli-bun-linux-x64-baseline"));
+		expect(resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "out")).toBe(
+			resolve(cwd, "out", "my-cli-bun-linux-x64-baseline"),
+		);
 	});
 });
 
@@ -458,18 +410,14 @@ describe("getBinaryFilename", () => {
 		expect(getBinaryFilename("my-cli", "bun-linux-x64-baseline")).toBe(
 			"my-cli-bun-linux-x64-baseline",
 		);
-		expect(getBinaryFilename("my-cli", "bun-darwin-arm64")).toBe(
-			"my-cli-bun-darwin-arm64",
-		);
+		expect(getBinaryFilename("my-cli", "bun-darwin-arm64")).toBe("my-cli-bun-darwin-arm64");
 	});
 
 	it("appends .exe for Windows targets", () => {
 		expect(getBinaryFilename("my-cli", "bun-windows-x64-baseline")).toBe(
 			"my-cli-bun-windows-x64-baseline.exe",
 		);
-		expect(getBinaryFilename("my-cli", "bun-windows-arm64")).toBe(
-			"my-cli-bun-windows-arm64.exe",
-		);
+		expect(getBinaryFilename("my-cli", "bun-windows-arm64")).toBe("my-cli-bun-windows-arm64.exe");
 	});
 });
 
@@ -593,10 +541,7 @@ describe("generateCmdResolver", () => {
 	});
 
 	it("generates error stub when no Windows targets built", () => {
-		const unixOnly: BunTarget[] = [
-			"bun-linux-x64-baseline",
-			"bun-darwin-arm64",
-		];
+		const unixOnly: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
 		const content = generateCmdResolver("my-cli", unixOnly);
 		expect(content).toContain("No Windows binary was built");
 	});

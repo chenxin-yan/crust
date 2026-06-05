@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { scaffold } from "../src/scaffold.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,10 +60,7 @@ function readOutputFile(relativePath: string): string {
 
 describe("scaffold", () => {
 	it("scaffolds a simple template with text files and interpolation", async () => {
-		createTemplateFile(
-			"package.json",
-			'{ "name": "{{name}}", "description": "{{description}}" }',
-		);
+		createTemplateFile("package.json", '{ "name": "{{name}}", "description": "{{description}}" }');
 		createTemplateFile("src/index.ts", "// {{name}} - {{description}}");
 
 		const result = await scaffold({
@@ -85,9 +77,7 @@ describe("scaffold", () => {
 		expect(readOutputFile("package.json")).toBe(
 			'{ "name": "my-app", "description": "A cool CLI" }',
 		);
-		expect(readOutputFile(join("src", "index.ts"))).toBe(
-			"// my-app - A cool CLI",
-		);
+		expect(readOutputFile(join("src", "index.ts"))).toBe("// my-app - A cool CLI");
 	});
 
 	it("renames dotfiles: _gitignore becomes .gitignore", async () => {
@@ -135,12 +125,8 @@ describe("scaffold", () => {
 
 		expect(result.files).toContain(join("__tests__", "foo.test.ts"));
 		expect(result.files).toContain(join("__mocks__", "bar.ts"));
-		expect(readOutputFile(join("__tests__", "foo.test.ts"))).toBe(
-			"test('foo', () => {})",
-		);
-		expect(readOutputFile(join("__mocks__", "bar.ts"))).toBe(
-			"export default {}",
-		);
+		expect(readOutputFile(join("__tests__", "foo.test.ts"))).toBe("test('foo', () => {})");
+		expect(readOutputFile(join("__mocks__", "bar.ts"))).toBe("export default {}");
 	});
 
 	it("throws when conflict is 'abort' and dest is non-empty", async () => {
@@ -199,9 +185,7 @@ describe("scaffold", () => {
 
 	it("copies binary files without interpolation", async () => {
 		// Create a binary file with null bytes (simulating an image)
-		const binaryData = Buffer.from([
-			0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a, 0x0a,
-		]);
+		const binaryData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
 		createTemplateBinaryFile("assets/image.png", binaryData);
 
 		// Also create a text file with {{var}} to show binary skips interpolation
@@ -276,10 +260,7 @@ describe("scaffold", () => {
 		// First scaffold: base template
 		const baseTemplateDir = join(tempDir, "template-base");
 		mkdirSync(baseTemplateDir, { recursive: true });
-		writeFileSync(
-			join(baseTemplateDir, "package.json"),
-			'{ "name": "{{name}}" }',
-		);
+		writeFileSync(join(baseTemplateDir, "package.json"), '{ "name": "{{name}}" }');
 		writeFileSync(join(baseTemplateDir, "README.md"), "# {{name}}");
 
 		await scaffold({
@@ -292,14 +273,8 @@ describe("scaffold", () => {
 		// Second scaffold: overlay template (adds/overwrites)
 		const overlayTemplateDir = join(tempDir, "template-overlay");
 		mkdirSync(join(overlayTemplateDir, "src"), { recursive: true });
-		writeFileSync(
-			join(overlayTemplateDir, "src/index.ts"),
-			"// {{name}} entry",
-		);
-		writeFileSync(
-			join(overlayTemplateDir, "tsconfig.json"),
-			'{ "strict": true }',
-		);
+		writeFileSync(join(overlayTemplateDir, "src/index.ts"), "// {{name}} entry");
+		writeFileSync(join(overlayTemplateDir, "tsconfig.json"), '{ "strict": true }');
 
 		const result = await scaffold({
 			template: overlayTemplateDir,
@@ -316,20 +291,12 @@ describe("scaffold", () => {
 		expect(existsSync(join(destDir, "tsconfig.json"))).toBe(true);
 
 		// Verify content from first scaffold is preserved
-		expect(readFileSync(join(destDir, "package.json"), "utf-8")).toBe(
-			'{ "name": "my-project" }',
-		);
-		expect(readFileSync(join(destDir, "README.md"), "utf-8")).toBe(
-			"# my-project",
-		);
+		expect(readFileSync(join(destDir, "package.json"), "utf-8")).toBe('{ "name": "my-project" }');
+		expect(readFileSync(join(destDir, "README.md"), "utf-8")).toBe("# my-project");
 
 		// Verify content from second scaffold is correct
-		expect(readFileSync(join(destDir, "src/index.ts"), "utf-8")).toBe(
-			"// my-project entry",
-		);
-		expect(readFileSync(join(destDir, "tsconfig.json"), "utf-8")).toBe(
-			'{ "strict": true }',
-		);
+		expect(readFileSync(join(destDir, "src/index.ts"), "utf-8")).toBe("// my-project entry");
+		expect(readFileSync(join(destDir, "tsconfig.json"), "utf-8")).toBe('{ "strict": true }');
 
 		// The result only contains files from the second scaffold call
 		expect(result.files).toContain(join("src", "index.ts"));
@@ -337,10 +304,7 @@ describe("scaffold", () => {
 	});
 
 	it("preserves nested directory structure", async () => {
-		createTemplateFile(
-			"src/components/Button.tsx",
-			"<button>{{label}}</button>",
-		);
+		createTemplateFile("src/components/Button.tsx", "<button>{{label}}</button>");
 		createTemplateFile("src/utils/helpers.ts", "export const APP = '{{name}}'");
 		createTemplateFile("public/index.html", "<h1>{{name}}</h1>");
 
@@ -355,12 +319,8 @@ describe("scaffold", () => {
 		expect(readOutputFile(join("src", "components", "Button.tsx"))).toBe(
 			"<button>Click me</button>",
 		);
-		expect(readOutputFile(join("src", "utils", "helpers.ts"))).toBe(
-			"export const APP = 'my-app'",
-		);
-		expect(readOutputFile(join("public", "index.html"))).toBe(
-			"<h1>my-app</h1>",
-		);
+		expect(readOutputFile(join("src", "utils", "helpers.ts"))).toBe("export const APP = 'my-app'");
+		expect(readOutputFile(join("public", "index.html"))).toBe("<h1>my-app</h1>");
 	});
 
 	it("resolves template from a file: URL", async () => {

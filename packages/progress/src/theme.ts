@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, green, magenta, red } from "@crustjs/style";
+
 import type { PartialProgressTheme, ProgressTheme } from "./types.ts";
 
 export const defaultTheme: ProgressTheme = {
@@ -28,9 +29,7 @@ export function getTheme(): ProgressTheme {
 	return { ...defaultTheme, ...globalOverrides };
 }
 
-export function resolveTheme(
-	progressTheme?: PartialProgressTheme,
-): ProgressTheme {
+export function resolveTheme(progressTheme?: PartialProgressTheme): ProgressTheme {
 	if (!globalOverrides && !progressTheme) return defaultTheme;
 	return {
 		...defaultTheme,

@@ -1,4 +1,5 @@
 import { $ } from "bun";
+
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
 
@@ -28,10 +29,7 @@ import { detectPackageManager } from "./utils.ts";
  * );
  * ```
  */
-export async function runSteps(
-	steps: PostScaffoldStep[],
-	cwd: string,
-): Promise<void> {
+export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<void> {
 	for (const step of steps) {
 		switch (step.type) {
 			case "install":
@@ -113,9 +111,7 @@ async function runOpenEditor(cwd: string): Promise<void> {
 
 		// If it exited immediately with a non-zero code, the editor likely wasn't found
 		if (raceResult.kind === "exited" && raceResult.code !== 0) {
-			console.warn(
-				`Warning: could not open editor "${editor}" (exit code ${raceResult.code})`,
-			);
+			console.warn(`Warning: could not open editor "${editor}" (exit code ${raceResult.code})`);
 		}
 	} catch {
 		console.warn(`Warning: could not open editor "${editor}"`);
@@ -148,17 +144,11 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * are not already set at any level (local, global, system).
  */
 async function ensureGitIdentity(cwd: string): Promise<void> {
-	const hasName =
-		Bun.spawnSync(["git", "config", "user.name"], { cwd }).exitCode === 0;
-	const hasEmail =
-		Bun.spawnSync(["git", "config", "user.email"], { cwd }).exitCode === 0;
+	const hasName = Bun.spawnSync(["git", "config", "user.name"], { cwd }).exitCode === 0;
+	const hasEmail = Bun.spawnSync(["git", "config", "user.email"], { cwd }).exitCode === 0;
 
 	if (!hasName) {
-		await spawnChecked(
-			["git", "config", "user.name", "Crust"],
-			cwd,
-			"git config user.name",
-		);
+		await spawnChecked(["git", "config", "user.name", "Crust"], cwd, "git config user.name");
 	}
 	if (!hasEmail) {
 		await spawnChecked(
@@ -172,11 +162,7 @@ async function ensureGitIdentity(cwd: string): Promise<void> {
 /**
  * Spawn a process and throw a descriptive error if it exits non-zero.
  */
-async function spawnChecked(
-	cmd: string[],
-	cwd: string,
-	label: string,
-): Promise<void> {
+async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
 	const proc = Bun.spawn(cmd, {
 		cwd,
 		stdout: "ignore",

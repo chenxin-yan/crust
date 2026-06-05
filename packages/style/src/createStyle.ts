@@ -8,12 +8,7 @@ import {
 	resolveHyperlinkCapability,
 	resolveModifierCapability,
 } from "./capability.ts";
-import {
-	bg as bgDirect,
-	bgPairAtDepth,
-	fg as fgDirect,
-	fgPairAtDepth,
-} from "./color.ts";
+import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
 import {
 	bgHex as bgHexDirect,
 	bgRgb as bgRgbDirect,
@@ -103,9 +98,7 @@ function buildChainableStyleFactory(
 	function makeKey(steps: readonly ChainStep[]): string {
 		// Cache key: registered names use the name; dynamic pairs use the
 		// open code (small enough, unique per pair).
-		return steps
-			.map((s) => (s.kind === "named" ? s.name : `~${s.pair.open}`))
-			.join("|");
+		return steps.map((s) => (s.kind === "named" ? s.name : `~${s.pair.open}`)).join("|");
 	}
 
 	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
@@ -119,10 +112,7 @@ function buildChainableStyleFactory(
 		//   chain(text)                          — direct
 		//   chain`tagged ${value} template`      — tagged template
 		//   chain(undefined | null)               — defensive (returns "")
-		const styleFn = ((
-			first?: string | TemplateStringsArray,
-			...rest: unknown[]
-		) => {
+		const styleFn = ((first?: string | TemplateStringsArray, ...rest: unknown[]) => {
 			// Tagged template: first arg is a TemplateStringsArray (array-like
 			// with a `.raw` property). Interleave with `${...}` values.
 			if (
@@ -138,12 +128,7 @@ function buildChainableStyleFactory(
 				}
 				return applyChain(text, steps, modifiersEnabled, colorsEnabled);
 			}
-			return applyChain(
-				first as string,
-				steps,
-				modifiersEnabled,
-				colorsEnabled,
-			);
+			return applyChain(first as string, steps, modifiersEnabled, colorsEnabled);
 		}) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
@@ -225,9 +210,7 @@ function buildStyleMethods(
 	const methods = {} as { [K in StyleMethodName]: ChainableStyleFn };
 
 	for (const methodName of styleMethodNames) {
-		methods[methodName] = createChainableStyle([
-			{ kind: "named", name: methodName },
-		]);
+		methods[methodName] = createChainableStyle([{ kind: "named", name: methodName }]);
 	}
 
 	return methods;
@@ -274,10 +257,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	const colorDepth: ColorDepth = resolveColorDepth(mode, options?.overrides);
 	const colorsEnabled = colorDepth !== "none";
 	const trueColorEnabled = colorDepth === "truecolor";
-	const hyperlinksEnabled = resolveHyperlinkCapability(
-		mode,
-		options?.overrides,
-	);
+	const hyperlinksEnabled = resolveHyperlinkCapability(mode, options?.overrides);
 	const enabled = modifiersEnabled || colorsEnabled;
 	const createChainableStyle = buildChainableStyleFactory(
 		modifiersEnabled,
@@ -304,8 +284,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		},
 
 		link: hyperlinksEnabled
-			? (text: string, url: string, hyperlinkOptions) =>
-					linkDirect(text, url, hyperlinkOptions)
+			? (text: string, url: string, hyperlinkOptions) => linkDirect(text, url, hyperlinkOptions)
 			: (text: string, url: string, hyperlinkOptions) => {
 					// Validate even when emission is disabled so callers can't
 					// silently smuggle malformed URLs/IDs through non-TTY paths.
@@ -319,10 +298,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		// Two call shapes (see StyleInstance.fg JSDoc):
 		//   fg(input)        → ChainableStyleFn (chain root)
 		//   fg(text, input)  → string (direct)
-		fg: ((
-			textOrInput: string | ColorInput,
-			maybeInput?: ColorInput,
-		): string | ChainableStyleFn => {
+		fg: ((textOrInput: string | ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
@@ -335,10 +311,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			return fgDirect(textOrInput as string, maybeInput, colorDepth);
 		}) as StyleInstance["fg"],
 
-		bg: ((
-			textOrInput: string | ColorInput,
-			maybeInput?: ColorInput,
-		): string | ChainableStyleFn => {
+		bg: ((textOrInput: string | ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
@@ -359,13 +332,11 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		// depth-aware output.
 
 		rgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) =>
-					rgbDirect(text, r, g, b)
+			? (text: string, r: number, g: number, b: number) => rgbDirect(text, r, g, b)
 			: (text: string, _r: number, _g: number, _b: number) => text,
 
 		bgRgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) =>
-					bgRgbDirect(text, r, g, b)
+			? (text: string, r: number, g: number, b: number) => bgRgbDirect(text, r, g, b)
 			: (text: string, _r: number, _g: number, _b: number) => text,
 
 		hex: trueColorEnabled
@@ -509,12 +480,7 @@ const FORWARDED_METHODS = [
 ] as const;
 
 // Members that read a value off the current runtime style on every access.
-const FORWARDED_GETTERS = [
-	"enabled",
-	"colorsEnabled",
-	"trueColorEnabled",
-	"colorDepth",
-] as const;
+const FORWARDED_GETTERS = ["enabled", "colorsEnabled", "trueColorEnabled", "colorDepth"] as const;
 
 /**
  * Build a `ChainableStyleFn` whose calls and chain accesses forward to
@@ -537,14 +503,12 @@ const FORWARDED_GETTERS = [
  *
  * @internal
  */
-export function createForwardingChainable(
-	name: StyleMethodName,
-): ChainableStyleFn {
+export function createForwardingChainable(name: StyleMethodName): ChainableStyleFn {
 	// Forward (...args) so tagged-template calls work (the runtime
 	// instance's chainable dispatcher detects TemplateStringsArray on its
 	// own).
 	const fn = ((...args: unknown[]) =>
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+		// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 		(getRuntimeStyle()[name] as any)(...args)) as ChainableStyleFn;
 
 	// Child chain methods (bold, red, bgYellow, ...) — each property
@@ -555,7 +519,7 @@ export function createForwardingChainable(
 			configurable: false,
 			enumerable: true,
 			get() {
-				// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+				// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 				return (getRuntimeStyle()[name] as any)[childName];
 			},
 		});
@@ -568,7 +532,7 @@ export function createForwardingChainable(
 		configurable: false,
 		enumerable: true,
 		value: (input: ColorInput): ChainableStyleFn =>
-			// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+			// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 			(getRuntimeStyle()[name] as any).fg(input) as ChainableStyleFn,
 		writable: false,
 	});
@@ -576,7 +540,7 @@ export function createForwardingChainable(
 		configurable: false,
 		enumerable: true,
 		value: (input: ColorInput): ChainableStyleFn =>
-			// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding
+			// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 			(getRuntimeStyle()[name] as any).bg(input) as ChainableStyleFn,
 		writable: false,
 	});
@@ -620,7 +584,7 @@ function createRuntimeStyleFacade(): StyleInstance {
 			configurable: false,
 			enumerable: true,
 			value: (...args: unknown[]) => {
-				// biome-ignore lint/suspicious/noExplicitAny: dynamic forwarding preserves the runtime instance signature
+				// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding preserves the runtime instance signature
 				return (getRuntimeStyle()[key] as any)(...args);
 			},
 			writable: false,

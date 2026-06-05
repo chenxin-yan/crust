@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import * as codes from "./ansiCodes.ts";
 import { resolveColorDepth } from "./capability.ts";
-import {
-	createStyle,
-	getGlobalColorMode,
-	setGlobalColorMode,
-	style,
-} from "./createStyle.ts";
+import { createStyle, getGlobalColorMode, setGlobalColorMode, style } from "./createStyle.ts";
 import { bold, red } from "./index.ts";
 import { composeStyles } from "./styleEngine.ts";
 
@@ -176,11 +172,7 @@ describe("resolveColorDepth", () => {
 			).toBe("none");
 		});
 
-		it.each([
-			"DUMB",
-			"Dumb",
-			"dUmB",
-		])('TTY + TERM=%s (case-insensitive) → "none"', (term) => {
+		it.each(["DUMB", "Dumb", "dUmB"])('TTY + TERM=%s (case-insensitive) → "none"', (term) => {
 			expect(
 				resolveColorDepth("auto", {
 					isTTY: true,
@@ -276,9 +268,7 @@ describe("createStyle — always mode", () => {
 	});
 
 	it("last color in chain takes precedence", () => {
-		expect(s.red.blue("text")).toBe(
-			"\x1b[31m\x1b[34mtext\x1b[39m\x1b[31m\x1b[39m",
-		);
+		expect(s.red.blue("text")).toBe("\x1b[31m\x1b[34mtext\x1b[39m\x1b[31m\x1b[39m");
 	});
 
 	it("apply() applies arbitrary pair", () => {
@@ -287,9 +277,7 @@ describe("createStyle — always mode", () => {
 
 	it("apply() works with composed styles", () => {
 		const boldRed = composeStyles(codes.bold, codes.red);
-		expect(s.apply("error", boldRed)).toBe(
-			"\x1b[1m\x1b[31merror\x1b[39m\x1b[22m",
-		);
+		expect(s.apply("error", boldRed)).toBe("\x1b[1m\x1b[31merror\x1b[39m\x1b[22m");
 	});
 
 	it("handles empty string", () => {
@@ -300,9 +288,7 @@ describe("createStyle — always mode", () => {
 	it("preserves nesting behavior", () => {
 		const inner = s.blue("sky");
 		const outer = s.red(`roses ${inner} are red`);
-		expect(outer).toBe(
-			"\x1b[31mroses \x1b[34msky\x1b[39m\x1b[31m are red\x1b[39m",
-		);
+		expect(outer).toBe("\x1b[31mroses \x1b[34msky\x1b[39m\x1b[31m are red\x1b[39m");
 	});
 });
 
@@ -448,7 +434,7 @@ describe("createStyle — instance immutability", () => {
 	it("prevents property reassignment", () => {
 		const s = createStyle({ mode: "always" });
 		expect(() => {
-			// biome-ignore lint/suspicious/noExplicitAny: testing immutability
+			// oxlint-disable-next-line typescript/no-explicit-any -- testing immutability
 			(s as any).bold = () => "hacked";
 		}).toThrow();
 	});
@@ -488,7 +474,7 @@ describe("createStyle — structural equivalence", () => {
 		const neverResult = never.bold(`hello ${never.red("world")} end`);
 
 		// Strip ANSI from always result to compare structural equivalence
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escape sequences
+		// oxlint-disable-next-line no-control-regex -- stripping ANSI escape sequences
 		const stripped = alwaysResult.replace(/\x1b\[\d+m/g, "");
 		expect(stripped).toBe(neverResult);
 	});
@@ -541,9 +527,7 @@ describe("createStyle — dynamic colors always mode", () => {
 	});
 
 	it("bg emits truecolor ANSI codes from `[r, g, b]`", () => {
-		expect(s.bg("text", [0, 128, 255])).toBe(
-			"\x1b[48;2;0;128;255mtext\x1b[49m",
-		);
+		expect(s.bg("text", [0, 128, 255])).toBe("\x1b[48;2;0;128;255mtext\x1b[49m");
 	});
 
 	it("fg emits truecolor ANSI codes from hex string", () => {
@@ -704,10 +688,7 @@ describe("runtime style cache — TERM/COLORTERM invalidation", () => {
 	const originalTerm = process.env.TERM;
 	const originalColorTerm = process.env.COLORTERM;
 
-	function restoreVar(
-		name: "TERM" | "COLORTERM",
-		original: string | undefined,
-	) {
+	function restoreVar(name: "TERM" | "COLORTERM", original: string | undefined) {
 		if (original === undefined) {
 			delete process.env[name];
 		} else {

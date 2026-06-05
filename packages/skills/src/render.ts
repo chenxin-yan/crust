@@ -7,13 +7,7 @@ import {
 	normalizeInstructionList,
 	normalizeMarkdownBlock,
 } from "./instructions.ts";
-import type {
-	ManifestArg,
-	ManifestFlag,
-	ManifestNode,
-	RenderedFile,
-	SkillMeta,
-} from "./types.ts";
+import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Text escaping helpers
@@ -72,10 +66,7 @@ function escapeTableCell(value: string): string {
  * // files contains RenderedFile[] with paths like "SKILL.md", "commands/serve.md"
  * ```
  */
-export function renderSkill(
-	manifest: ManifestNode,
-	meta: SkillMeta,
-): RenderedFile[] {
+export function renderSkill(manifest: ManifestNode, meta: SkillMeta): RenderedFile[] {
 	const files: RenderedFile[] = [];
 
 	// Collect all command nodes from the tree (including the root)
@@ -180,11 +171,7 @@ function relativePath(from: string, to: string): string {
  * Renders the `SKILL.md` entrypoint file with YAML frontmatter and
  * lazy-load instructions directing agents to supporting files.
  */
-function renderSkillMd(
-	manifest: ManifestNode,
-	meta: SkillMeta,
-	allNodes: ManifestNode[],
-): string {
+function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: ManifestNode[]): string {
 	const lines: string[] = [];
 
 	// YAML frontmatter
@@ -233,9 +220,7 @@ function renderSkillMd(
 	lines.push(
 		"2. You must check the `Type` column before suggesting execution: `runnable` and `runnable, group` commands can be executed, while `group` commands are organizational only.",
 	);
-	lines.push(
-		"3. You should read only the linked file or files you need from `commands/`.",
-	);
+	lines.push("3. You should read only the linked file or files you need from `commands/`.");
 	lines.push(
 		"4. You must read a command's file before answering a command-specific question or suggesting that command.",
 	);
@@ -405,23 +390,11 @@ function renderAgentInstructions(node: ManifestNode): string[] {
 		return [];
 	}
 
-	return [
-		"## Command Instructions",
-		"",
-		...renderInstructionList(instructions),
-		"",
-	];
+	return ["## Command Instructions", "", ...renderInstructionList(instructions), ""];
 }
 
 function renderRunnableCommandSections(node: ManifestNode): string[] {
-	const lines = [
-		"## Usage",
-		"",
-		"```",
-		node.usage ?? buildUsageLine(node),
-		"```",
-		"",
-	];
+	const lines = ["## Usage", "", "```", node.usage ?? buildUsageLine(node), "```", ""];
 
 	if (node.args.length > 0) {
 		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
@@ -549,9 +522,7 @@ function renderInstructionList(instructions: string[]): string[] {
 	return instructions.map((instruction) => `- ${instruction}`);
 }
 
-function renderTopLevelInstructions(
-	instructions: string | string[] | undefined,
-): string[] {
+function renderTopLevelInstructions(instructions: string | string[] | undefined): string[] {
 	if (typeof instructions === "string") {
 		return normalizeMarkdownBlock(instructions);
 	}
@@ -593,10 +564,7 @@ function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
 /**
  * Finds a node in the manifest tree by its full path.
  */
-function findNode(
-	root: ManifestNode,
-	path: string[],
-): ManifestNode | undefined {
+function findNode(root: ManifestNode, path: string[]): ManifestNode | undefined {
 	if (arraysEqual(root.path, path)) {
 		return root;
 	}

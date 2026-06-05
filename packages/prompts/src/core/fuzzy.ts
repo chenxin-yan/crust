@@ -108,12 +108,7 @@ export function fuzzyMatch(query: string, candidate: string): FuzzyMatchResult {
 			// Word boundary bonus (character after a separator)
 			if (candIdx > 0) {
 				const prevChar = candidate[candIdx - 1];
-				if (
-					prevChar === " " ||
-					prevChar === "-" ||
-					prevChar === "_" ||
-					prevChar === "."
-				) {
+				if (prevChar === " " || prevChar === "-" || prevChar === "_" || prevChar === ".") {
 					score += WORD_BOUNDARY_BONUS;
 				}
 			}

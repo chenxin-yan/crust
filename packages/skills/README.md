@@ -25,17 +25,17 @@ import { generateSkill } from "@crustjs/skills";
 import { rootCommand } from "./commands.ts";
 
 const result = await generateSkill({
-  command: rootCommand,
-  meta: {
-    name: "my-cli",
-    description: "CLI tool for managing widgets",
-    version: "1.0.0",
-  },
-  agents: ["opencode", "claude-code"],
+	command: rootCommand,
+	meta: {
+		name: "my-cli",
+		description: "CLI tool for managing widgets",
+		version: "1.0.0",
+	},
+	agents: ["opencode", "claude-code"],
 });
 
 for (const agent of result.agents) {
-  console.log(`${agent.agent}: ${agent.status} -> ${agent.outputDir}`);
+	console.log(`${agent.agent}: ${agent.status} -> ${agent.outputDir}`);
 }
 ```
 
@@ -48,26 +48,26 @@ import { Crust } from "@crustjs/core";
 import { skillPlugin } from "@crustjs/skills";
 
 const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
-  .use(
-    skillPlugin({
-      version: "1.0.0",
-      instructions: `
+	.meta({ description: "My CLI" })
+	.use(
+		skillPlugin({
+			version: "1.0.0",
+			instructions: `
 Prefer readonly commands before mutating project state.
 
 ## Response Policy
 
 - Read the relevant command doc before suggesting flags.
 `,
-      // autoUpdate: true (default) — silently updates installed skills
-      // command: "skill" (default) — registers "my-cli skill" subcommand
-      // defaultScope: "global" | "project" — skip scope prompt when set
-      // installMode: "auto" | "symlink" | "copy" (default: "auto")
-    }),
-  )
-  .run(() => {
-    console.log("hello");
-  });
+			// autoUpdate: true (default) — silently updates installed skills
+			// command: "skill" (default) — registers "my-cli skill" subcommand
+			// defaultScope: "global" | "project" — skip scope prompt when set
+			// installMode: "auto" | "symlink" | "copy" (default: "auto")
+		}),
+	)
+	.run(() => {
+		console.log("hello");
+	});
 
 await app.execute();
 ```
@@ -89,29 +89,29 @@ import { skillPlugin } from "@crustjs/skills";
 import pkg from "./package.json" with { type: "json" };
 
 const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
-  .use(
-    skillPlugin({
-      version: pkg.version,
-      customSkills: [
-        // Inherits `version: pkg.version` from the plugin — the typical
-        // case when the bundle ships in the same package as the CLI.
-        {
-          name: "funnel-builder",
-          // Resolved against the nearest package.json walking up from
-          // process.argv[1] — same rules as installSkillBundle().
-          sourceDir: "skills/funnel-builder",
-        },
-        // Explicit override for an independently-versioned bundle.
-        {
-          name: "vendored-toolkit",
-          sourceDir: "skills/vendored-toolkit",
-          version: "0.3.0",
-        },
-      ],
-    }),
-  )
-  .run(() => {});
+	.meta({ description: "My CLI" })
+	.use(
+		skillPlugin({
+			version: pkg.version,
+			customSkills: [
+				// Inherits `version: pkg.version` from the plugin — the typical
+				// case when the bundle ships in the same package as the CLI.
+				{
+					name: "funnel-builder",
+					// Resolved against the nearest package.json walking up from
+					// process.argv[1] — same rules as installSkillBundle().
+					sourceDir: "skills/funnel-builder",
+				},
+				// Explicit override for an independently-versioned bundle.
+				{
+					name: "vendored-toolkit",
+					sourceDir: "skills/vendored-toolkit",
+					version: "0.3.0",
+				},
+			],
+		}),
+	)
+	.run(() => {});
 
 await app.execute();
 ```
@@ -161,29 +161,27 @@ opt out, or an explicit array to scope the install.
 import { Crust } from "@crustjs/core";
 import { generateSkill } from "@crustjs/skills";
 
-export const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
-  .run(async (ctx) => {
-    // Defaults to universal + agents detected on PATH. Idempotent: targets
-    // that already match the current version are returned as `up-to-date`.
-    const result = await generateSkill({
-      command: ctx.command,
-      meta: {
-        name: ctx.command.meta.name,
-        description: ctx.command.meta.description ?? "",
-        version: "1.0.0",
-      },
-      scope: "global",
-    });
+export const app = new Crust("my-cli").meta({ description: "My CLI" }).run(async (ctx) => {
+	// Defaults to universal + agents detected on PATH. Idempotent: targets
+	// that already match the current version are returned as `up-to-date`.
+	const result = await generateSkill({
+		command: ctx.command,
+		meta: {
+			name: ctx.command.meta.name,
+			description: ctx.command.meta.description ?? "",
+			version: "1.0.0",
+		},
+		scope: "global",
+	});
 
-    const changed = result.agents.filter((a) => a.status !== "up-to-date");
-    if (changed.length > 0) {
-      console.log(`Installed or updated skills for ${changed.length} target(s).`);
-    }
-  });
+	const changed = result.agents.filter((a) => a.status !== "up-to-date");
+	if (changed.length > 0) {
+		console.log(`Installed or updated skills for ${changed.length} target(s).`);
+	}
+});
 
 if (import.meta.main) {
-  await app.execute();
+	await app.execute();
 }
 ```
 
@@ -208,14 +206,14 @@ import { Crust } from "@crustjs/core";
 
 // Export the command — used by skill generation.
 export const rootCommand = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .run(({ args }) => {
-    console.log("Hello from my-cli!");
-  });
+	.meta({ description: "My CLI tool" })
+	.run(({ args }) => {
+		console.log("Hello from my-cli!");
+	});
 
 // Only execute when run directly — not when imported for generation.
 if (import.meta.main) {
-  await rootCommand.execute();
+	await rootCommand.execute();
 }
 ```
 
@@ -235,35 +233,35 @@ import { Crust } from "@crustjs/core";
 import { annotate, skillPlugin } from "@crustjs/skills";
 
 const deploy = annotate(
-  new Crust("deploy")
-    .meta({ description: "Deploy the application" })
-    .flags({
-      "dry-run": { type: "boolean", description: "Preview changes only" },
-    })
-    .run(() => {
-      // ...
-    }),
-  [
-    "Prefer `--dry-run` before executing deployment changes.",
-    "Ask for confirmation before production deployments.",
-  ],
+	new Crust("deploy")
+		.meta({ description: "Deploy the application" })
+		.flags({
+			"dry-run": { type: "boolean", description: "Preview changes only" },
+		})
+		.run(() => {
+			// ...
+		}),
+	[
+		"Prefer `--dry-run` before executing deployment changes.",
+		"Ask for confirmation before production deployments.",
+	],
 );
 
 const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
-  .use(
-    skillPlugin({
-      version: "1.0.0",
-      instructions: `
+	.meta({ description: "My CLI" })
+	.use(
+		skillPlugin({
+			version: "1.0.0",
+			instructions: `
 Read command docs before suggesting exact flags.
 
 ## Answer Style
 
 - Prefer exact syntax copied from the relevant command file.
 `,
-    }),
-  )
-  .command(deploy);
+		}),
+	)
+	.command(deploy);
 ```
 
 This pattern lets `crust skills generate` import the command definition without triggering `app.execute()`.
@@ -321,18 +319,18 @@ The `meta.name` must be a valid skill name — lowercase alphanumeric with hyphe
 import { generateSkill } from "@crustjs/skills";
 
 const result = await generateSkill({
-  command: rootCommand,
-  meta: {
-    name: "my-cli",
-    description: "My CLI tool",
-    version: "1.0.0",
-    instructions: ["Prefer readonly commands before making changes."],
-  },
-  agents: ["opencode"],
-  scope: "project", // default: "global"
-  installMode: "auto", // default: "auto" — symlink first, fallback to copy
-  clean: true, // default: true — removes existing skill dir first
-  force: false, // default: false — set true to rewrite same-version output or overwrite conflicts
+	command: rootCommand,
+	meta: {
+		name: "my-cli",
+		description: "My CLI tool",
+		version: "1.0.0",
+		instructions: ["Prefer readonly commands before making changes."],
+	},
+	agents: ["opencode"],
+	scope: "project", // default: "global"
+	installMode: "auto", // default: "auto" — symlink first, fallback to copy
+	clean: true, // default: true — removes existing skill dir first
+	force: false, // default: false — set true to rewrite same-version output or overwrite conflicts
 });
 
 // result.agents — per-agent install results
@@ -360,8 +358,8 @@ const manifest = buildManifest(rootCommand);
 const files = renderSkill(manifest, { name: "my-cli", description: "My CLI" });
 
 for (const file of files) {
-  console.log(file.path); // e.g. "SKILL.md", "commands/serve.md"
-  console.log(file.content); // markdown content
+	console.log(file.path); // e.g. "SKILL.md", "commands/serve.md"
+	console.log(file.content); // markdown content
 }
 ```
 
@@ -402,15 +400,15 @@ The `SkillMeta` object controls the generated `SKILL.md` frontmatter. Beyond the
 
 ```ts
 const meta: SkillMeta = {
-  name: "my-cli",
-  description: "CLI tool for managing widgets",
-  version: "1.0.0",
+	name: "my-cli",
+	description: "CLI tool for managing widgets",
+	version: "1.0.0",
 
-  // Optional fields — emitted in SKILL.md YAML frontmatter when set
-  allowedTools: "Bash(my-cli *) Read Grep", // Pre-approved tools (avoids per-use prompts)
-  license: "MIT", // License name or reference
-  compatibility: "Requires my-cli on PATH", // Environment requirements (max 500 chars)
-  disableModelInvocation: false, // true = agent won't auto-load; user must invoke manually
+	// Optional fields — emitted in SKILL.md YAML frontmatter when set
+	allowedTools: "Bash(my-cli *) Read Grep", // Pre-approved tools (avoids per-use prompts)
+	license: "MIT", // License name or reference
+	compatibility: "Requires my-cli on PATH", // Environment requirements (max 500 chars)
+	disableModelInvocation: false, // true = agent won't auto-load; user must invoke manually
 };
 ```
 
@@ -448,11 +446,11 @@ skills/my-cli/
 
 ### File Details
 
-| File               | Purpose                                                                                                                                                                                            |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SKILL.md`         | Agent entrypoint with YAML frontmatter and an embedded command reference table listing every command path, type (runnable/group), and documentation link.                                       |
-| `commands/*.md`    | Per-command reference files. Leaf commands include usage, arguments, flags, defaults, and aliases. Group commands list subcommands with links.                                                     |
-| `crust.json`       | Crust-specific JSON metadata: name, description, and version. Also serves as an ownership marker — its presence indicates the skill was generated by Crust. |
+| File            | Purpose                                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SKILL.md`      | Agent entrypoint with YAML frontmatter and an embedded command reference table listing every command path, type (runnable/group), and documentation link.   |
+| `commands/*.md` | Per-command reference files. Leaf commands include usage, arguments, flags, defaults, and aliases. Group commands list subcommands with links.              |
+| `crust.json`    | Crust-specific JSON metadata: name, description, and version. Also serves as an ownership marker — its presence indicates the skill was generated by Crust. |
 
 ## Conflict Detection
 
@@ -485,26 +483,24 @@ uninstall the existing skill first.
 import { generateSkill, SkillConflictError } from "@crustjs/skills";
 
 try {
-  await generateSkill({ command, meta, agents });
+	await generateSkill({ command, meta, agents });
 } catch (err) {
-  if (!(err instanceof SkillConflictError)) throw err;
+	if (!(err instanceof SkillConflictError)) throw err;
 
-  if (err.details.kindMismatch) {
-    const { existing, attempted } = err.details.kindMismatch;
-    console.error(
-      `Cannot install ${attempted} skill at ${err.details.outputDir} — ` +
-        `existing skill was installed as ${existing}.`,
-    );
-  } else if (err.details.manifestMalformed) {
-    console.error(
-      `crust.json at ${err.details.outputDir} is malformed: ` +
-        `${err.details.manifestMalformed.reason}.`,
-    );
-  } else {
-    console.error(
-      `${err.details.outputDir} exists but was not created by Crust.`,
-    );
-  }
+	if (err.details.kindMismatch) {
+		const { existing, attempted } = err.details.kindMismatch;
+		console.error(
+			`Cannot install ${attempted} skill at ${err.details.outputDir} — ` +
+				`existing skill was installed as ${existing}.`,
+		);
+	} else if (err.details.manifestMalformed) {
+		console.error(
+			`crust.json at ${err.details.outputDir} is malformed: ` +
+				`${err.details.manifestMalformed.reason}.`,
+		);
+	} else {
+		console.error(`${err.details.outputDir} exists but was not created by Crust.`);
+	}
 }
 ```
 
@@ -557,11 +553,11 @@ import { installSkillBundle } from "@crustjs/skills";
 import pkg from "./package.json" with { type: "json" };
 
 await installSkillBundle({
-  // Resolved relative to the nearest package.json walking up from
-  // process.argv[1]. You can also pass an absolute string or a file: URL.
-  sourceDir: "skills/funnel-builder",
-  agents: ["claude-code", "opencode"],
-  version: pkg.version,
+	// Resolved relative to the nearest package.json walking up from
+	// process.argv[1]. You can also pass an absolute string or a file: URL.
+	sourceDir: "skills/funnel-builder",
+	agents: ["claude-code", "opencode"],
+	version: pkg.version,
 });
 ```
 
@@ -585,9 +581,9 @@ publishes multiple bundles with independent versions:
 
 ```ts
 await installSkillBundle({
-  sourceDir: "skills/funnel-builder",
-  agents: ["claude-code"],
-  version: "2.0.0",
+	sourceDir: "skills/funnel-builder",
+	agents: ["claude-code"],
+	version: "2.0.0",
 });
 ```
 
@@ -599,15 +595,15 @@ await installSkillBundle({
 
 ### Options
 
-| Option        | Type                                | Default     | Description                                                                                                       |
-| ------------- | ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `sourceDir`   | `string \| URL`                     | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.          |
-| `agents`      | `AgentTarget[]`                     | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`). |
-| `version`     | `string`                            | — required | Recorded in `crust.json` and compared on subsequent installs.                                |
-| `scope`       | `"global" \| "project"`             | `"global"`  | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                  |
-| `installMode` | `"auto" \| "symlink" \| "copy"`     | `"auto"`    | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.            |
-| `clean`       | `boolean`                           | `true`      | Remove the existing skill directory before writing.                                                               |
-| `force`       | `boolean`                           | `false`     | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.    |
+| Option        | Type                            | Default    | Description                                                                                                         |
+| ------------- | ------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------- |
+| `sourceDir`   | `string \| URL`                 | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.            |
+| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`). |
+| `version`     | `string`                        | — required | Recorded in `crust.json` and compared on subsequent installs.                                                       |
+| `scope`       | `"global" \| "project"`         | `"global"` | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                    |
+| `installMode` | `"auto" \| "symlink" \| "copy"` | `"auto"`   | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.              |
+| `clean`       | `boolean`                       | `true`     | Remove the existing skill directory before writing.                                                                 |
+| `force`       | `boolean`                       | `false`    | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.     |
 
 ### What gets copied
 
@@ -640,9 +636,9 @@ Two gotchas trip up bundle authors who publish to npm:
 
    ```json
    {
-     "name": "acme-skills",
-     "version": "1.0.0",
-     "files": ["dist", "skills"]
+   	"name": "acme-skills",
+   	"version": "1.0.0",
+   	"files": ["dist", "skills"]
    }
    ```
 
@@ -655,9 +651,9 @@ Two gotchas trip up bundle authors who publish to npm:
    import skillsPkg from "acme-skills/package.json" with { type: "json" };
 
    await installSkillBundle({
-     sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
-     agents: ["claude-code"],
-     version: skillsPkg.version,
+   	sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
+   	agents: ["claude-code"],
+   	version: skillsPkg.version,
    });
    ```
 

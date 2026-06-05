@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import type { CompletionSpec } from "../spec.ts";
 import { renderBash } from "./bash.ts";
 
@@ -19,9 +20,7 @@ async function runBashCompletion(
 	fnName: string,
 	words: string[],
 ): Promise<string[]> {
-	const compWordsLines = words
-		.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`)
-		.join("\n");
+	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
 	const driver = `
 set -e
@@ -189,8 +188,7 @@ describe("renderBash · behavioural subprocess tests", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	const runCompletion = (words: string[]) =>
-		runBashCompletion(scriptPath, "_mycli", words);
+	const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
 
 	it("scenario 1 — top-level subcommand: `mycli <TAB>` lists build and deploy", async () => {
 		const completions = await runCompletion(["mycli", ""]);
@@ -224,13 +222,7 @@ describe("renderBash · behavioural subprocess tests", () => {
 	});
 
 	it("scenario 3b — nested flag with choices: `mycli deploy prod --env <TAB>`", async () => {
-		const completions = await runCompletion([
-			"mycli",
-			"deploy",
-			"prod",
-			"--env",
-			"",
-		]);
+		const completions = await runCompletion(["mycli", "deploy", "prod", "--env", ""]);
 		expect(completions.sort()).toEqual(["dev", "prod", "staging"]);
 	});
 
@@ -316,8 +308,7 @@ describe("renderBash · multi-positional choices", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	const runCompletion = (words: string[]) =>
-		runBashCompletion(scriptPath, "_mp", words);
+	const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mp", words);
 
 	it("slot 0 of `mp two` offers the first arg's choices", async () => {
 		const completions = await runCompletion(["mp", "two", ""]);
@@ -353,13 +344,7 @@ describe("renderBash · multi-positional choices", () => {
 	it("intervening flags do not count toward the positional slot index", async () => {
 		// `--unknown=x` and `--foo bar` between positionals should be
 		// skipped; slot 1 should still offer the second arg's choices.
-		const completions = await runCompletion([
-			"mp",
-			"two",
-			"alpha",
-			"--unknown=x",
-			"",
-		]);
+		const completions = await runCompletion(["mp", "two", "alpha", "--unknown=x", ""]);
 		expect(completions).toContain("gamma");
 		expect(completions).toContain("delta");
 	});
@@ -453,10 +438,7 @@ describe("renderBash — url/path/json value-flag handling", () => {
 		// Slot 0 (path) is NOT in the suppression case — only 1 and 2 are.
 		const suppressBlock = script
 			.split("\n")
-			.slice(
-				script.split("\n").findIndex((l) => l.includes("compopt +o default")) -
-					4,
-			)
+			.slice(script.split("\n").findIndex((l) => l.includes("compopt +o default")) - 4)
 			.slice(0, 12)
 			.join("\n");
 		expect(suppressBlock).toMatch(/\b1\)\s*\n\s*compopt \+o default/);

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { createCrustProject } from "../src/create-project.ts";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-create-project-test");
@@ -65,9 +66,7 @@ describe("createCrustProject", () => {
 		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
 		expect(runSteps).not.toHaveBeenCalled();
 
-		const pkg = JSON.parse(
-			readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"),
-		);
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 		expect(pkg.name).toBe("skip-install-cli");
 	});
 });

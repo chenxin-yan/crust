@@ -1,14 +1,5 @@
-import {
-	bashDoubleQuoteInner,
-	bashSingleQuote,
-	sanitizeForComment,
-} from "../escape.ts";
-import type {
-	CompletionArg,
-	CompletionCommand,
-	CompletionFlag,
-	CompletionSpec,
-} from "../spec.ts";
+import { bashDoubleQuoteInner, bashSingleQuote, sanitizeForComment } from "../escape.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
 
 /**
  * Pure-static bash completion script renderer.
@@ -122,11 +113,7 @@ interface BashCase {
  * surfaced as additional `case` keys that resolve to the same `cmd_path`,
  * matching the router's alias-aware behaviour.
  */
-function collectPathCases(
-	parentPath: string,
-	parent: CompletionCommand,
-	out: BashCase[],
-): void {
+function collectPathCases(parentPath: string, parent: CompletionCommand, out: BashCase[]): void {
 	for (const sub of parent.subCommands) {
 		const newPath = parentPath === "" ? sub.name : `${parentPath}:${sub.name}`;
 		const subcmds = subcmdWordlist(sub);
@@ -192,8 +179,7 @@ function collectValueTypeCases(
 ): void {
 	for (const flag of node.flags) {
 		if (flag.valueCompletion === undefined) continue;
-		const kind: ValueTypeCase["kind"] =
-			flag.valueCompletion === "files" ? "path" : "suppress";
+		const kind: ValueTypeCase["kind"] = flag.valueCompletion === "files" ? "path" : "suppress";
 		for (const spelling of flagSpellings(flag)) {
 			out.push({ key: `${cmdPath}|${spelling}`, kind });
 		}
@@ -210,11 +196,7 @@ function collectValueTypeCases(
  * (long, short, alias) gets its own branch so the lookup is constant-time
  * regardless of how the user wrote the flag.
  */
-function collectChoiceCases(
-	cmdPath: string,
-	node: CompletionCommand,
-	out: ChoiceCase[],
-): void {
+function collectChoiceCases(cmdPath: string, node: CompletionCommand, out: ChoiceCase[]): void {
 	for (const flag of node.flags) {
 		if (flag.choices === undefined) continue;
 		// Choice values are validated to a safe character set, so we can
@@ -374,11 +356,7 @@ function valueFlagWordlist(node: CompletionCommand): string {
  * @param version  Free-form version string for the header comment;
  *                 control characters are stripped before emission.
  */
-export function renderBash(
-	spec: CompletionSpec,
-	binName: string,
-	version: string,
-): string {
+export function renderBash(spec: CompletionSpec, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
@@ -416,13 +394,13 @@ export function renderBash(
 	// bash_completionsV2.go lines 48–54.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\tcur="${COMP_WORDS[COMP_CWORD]}"');
 	lines.push(
-		// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+		// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 		'\tif (( COMP_CWORD > 0 )); then prev="${COMP_WORDS[COMP_CWORD-1]}"; else prev=""; fi',
 	);
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\twords=("${COMP_WORDS[@]}")');
 	lines.push("\tcword=$COMP_CWORD");
 	lines.push("}");
@@ -457,7 +435,7 @@ export function renderBash(
 	lines.push("\tlocal end_of_options=0");
 	lines.push("");
 	lines.push("\twhile (( i < cword )); do");
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal w="${words[$i]}"');
 	// `--` terminator: stop subcommand routing for the rest of the line.
 	lines.push('\t\tif [[ "$w" == "--" ]]; then');
@@ -474,9 +452,7 @@ export function renderBash(
 	lines.push("\t\t\tlocal candidate");
 	lines.push("\t\t\tlocal _was_value_flag=0");
 	lines.push("\t\t\tfor candidate in $valueFlags; do");
-	lines.push(
-		'\t\t\t\tif [[ "$candidate" == "$w" ]]; then _was_value_flag=1; break; fi',
-	);
+	lines.push('\t\t\t\tif [[ "$candidate" == "$w" ]]; then _was_value_flag=1; break; fi');
 	lines.push("\t\t\tdone");
 	lines.push("\t\t\tif (( _was_value_flag )); then ((i+=2)); else ((i++)); fi");
 	lines.push("\t\t\tcontinue");
@@ -506,9 +482,9 @@ export function renderBash(
 	// `--name=value` partial: split, look up, offer either choice values
 	// or fall through to default (file) completion.
 	lines.push('\tif [[ "$cur" == --*=* ]]; then');
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal _value="${cur#*=}"');
 	if (choiceCases.length > 0) {
 		// `compgen -P` prefixes every candidate with `${_flag}=` so bash's
@@ -533,7 +509,7 @@ export function renderBash(
 			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
 			if (c.kind === "path") {
 				lines.push(
-					// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+					// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 					'\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )',
 				);
 			} else {
@@ -554,9 +530,7 @@ export function renderBash(
 		lines.push('\tcase "$cmd_path|$prev" in');
 		for (const c of choiceCases) {
 			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
-			lines.push(
-				`\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)}" -- "$cur") )`,
-			);
+			lines.push(`\t\t\tCOMPREPLY=( $(compgen -W "${bashDoubleQuoteInner(c.values)}" -- "$cur") )`);
 			lines.push("\t\t\treturn");
 			lines.push("\t\t\t;;");
 		}
@@ -595,8 +569,7 @@ export function renderBash(
 	lines.push('\tif [[ "$cur" == -* ]]; then');
 	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
 	lines.push("\telse");
-	const needsPosWalk =
-		argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
+	const needsPosWalk = argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
 	if (needsPosWalk) {
 		// Count completed positional tokens between the resolved command
 		// path and the cursor. Token classes we *skip*:
@@ -609,7 +582,7 @@ export function renderBash(
 		lines.push("\t\tlocal _pidx_j=$i");
 		lines.push("\t\tlocal _pidx_skip_next=0");
 		lines.push("\t\twhile (( _pidx_j < cword )); do");
-		// biome-ignore lint/suspicious/noTemplateCurlyInString: bash variable expansion
+		// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 		lines.push('\t\t\tlocal _pidx_w="${words[$_pidx_j]}"');
 		lines.push("\t\t\tif (( _pidx_skip_next )); then");
 		lines.push("\t\t\t\t_pidx_skip_next=0");
@@ -624,9 +597,7 @@ export function renderBash(
 		lines.push('\t\t\tif [[ "$_pidx_w" == -* ]]; then');
 		lines.push("\t\t\t\tlocal _pidx_cand");
 		lines.push("\t\t\t\tfor _pidx_cand in $valueFlags; do");
-		lines.push(
-			'\t\t\t\t\tif [[ "$_pidx_cand" == "$_pidx_w" ]]; then _pidx_skip_next=1; break; fi',
-		);
+		lines.push('\t\t\t\t\tif [[ "$_pidx_cand" == "$_pidx_w" ]]; then _pidx_skip_next=1; break; fi');
 		lines.push("\t\t\t\tdone");
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
@@ -653,10 +624,7 @@ export function renderBash(
 				lines.push(`\t\t\t\t\t\tpos_choices="${bashDoubleQuoteInner(values)}"`);
 				lines.push("\t\t\t\t\t\t;;");
 			});
-			if (
-				entry.variadicFrom !== undefined &&
-				entry.variadicValues !== undefined
-			) {
+			if (entry.variadicFrom !== undefined && entry.variadicValues !== undefined) {
 				lines.push("\t\t\t\t\t*)");
 				lines.push(
 					`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then pos_choices="${bashDoubleQuoteInner(entry.variadicValues)}"; fi`,
@@ -698,9 +666,7 @@ export function renderBash(
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.
 		lines.push("\t\tif (( pos_idx == 0 )); then");
-		lines.push(
-			'\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )',
-		);
+		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )');
 		lines.push("\t\telse");
 		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices" -- "$cur") )');
 		lines.push("\t\tfi");

@@ -7,6 +7,7 @@ import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
+
 import {
 	AGENT_LABELS,
 	detectInstalledAgents,
@@ -17,12 +18,7 @@ import {
 } from "./agents.ts";
 import { installSkillBundle } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	generateSkill,
-	isValidSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
 	CustomSkillConfig,
@@ -52,9 +48,7 @@ function isInstallMode(value: unknown): value is SkillInstallMode {
 function parseScopeFlag(rawScope: string | undefined): Scope | undefined {
 	if (rawScope === undefined) return undefined;
 	if (!isScope(rawScope)) {
-		throw new Error(
-			`Invalid --scope value: ${String(rawScope)}. Expected "project" or "global".`,
-		);
+		throw new Error(`Invalid --scope value: ${String(rawScope)}. Expected "project" or "global".`);
 	}
 	return rawScope;
 }
@@ -104,9 +98,7 @@ function formatInstallOutput(
 	const universalSet = new Set(getUniversalAgents());
 	const output: Array<{ label: string; outputDir: string }> = [];
 
-	const firstUniversalResult = results.find((result) =>
-		universalSet.has(result.agent),
-	);
+	const firstUniversalResult = results.find((result) => universalSet.has(result.agent));
 	if (firstUniversalResult) {
 		output.push({
 			label: "Universal",
@@ -137,10 +129,7 @@ function formatInstallOutput(
  *
  * The returned `name` is the canonical raw CLI name (e.g. `"my-cli"`).
  */
-function deriveSkillMeta(
-	command: CommandNode,
-	options: SkillPluginOptions,
-): SkillMeta {
+function deriveSkillMeta(command: CommandNode, options: SkillPluginOptions): SkillMeta {
 	return {
 		name: command.meta.name,
 		description: command.meta.description ?? "",
@@ -200,9 +189,7 @@ function validateCustomSkillsConfig(
 		}
 
 		if (typeof entry.name !== "string" || entry.name.length === 0) {
-			throw new Error(
-				`skillPlugin: customSkills[${i}].name must be a non-empty string.`,
-			);
+			throw new Error(`skillPlugin: customSkills[${i}].name must be a non-empty string.`);
 		}
 
 		if (!isValidSkillName(entry.name)) {
@@ -238,10 +225,7 @@ function validateCustomSkillsConfig(
 			);
 		}
 
-		if (
-			typeof entry.sourceDir !== "string" &&
-			!(entry.sourceDir instanceof URL)
-		) {
+		if (typeof entry.sourceDir !== "string" && !(entry.sourceDir instanceof URL)) {
 			throw new Error(
 				`skillPlugin: customSkills[${i}].sourceDir (for "${entry.name}") ` +
 					`must be a string or URL, got ${typeof entry.sourceDir}.`,
@@ -267,10 +251,7 @@ function validateCustomSkillsConfig(
 }
 
 /** Resolves the effective scope for a custom-skill auto-update sweep. */
-function resolveCustomSkillScopes(
-	entry: CustomSkillConfig,
-	options: SkillPluginOptions,
-): Scope[] {
+function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillPluginOptions): Scope[] {
 	// When the entry declares an explicit scope, only that scope is checked.
 	// Otherwise, fall through to plugin defaultScope, else mirror main-skill
 	// behavior (check both project + global, deduped via resolveEffectiveScope).
@@ -279,11 +260,7 @@ function resolveCustomSkillScopes(
 		return [resolveEffectiveScope(explicit)];
 	}
 	return [
-		...new Set(
-			(["project", "global"] as Scope[]).map((scope) =>
-				resolveEffectiveScope(scope),
-			),
-		),
+		...new Set((["project", "global"] as Scope[]).map((scope) => resolveEffectiveScope(scope))),
 	];
 }
 
@@ -319,9 +296,7 @@ async function autoUpdateCustomSkill(
 		const needsUpdate = status.agents.filter((a) => {
 			if (!a.installed) return false;
 			const expectedOutputDir = resolveAgentPath(a.agent, scope, entry.name);
-			return (
-				a.version !== effectiveVersion || a.outputDir !== expectedOutputDir
-			);
+			return a.version !== effectiveVersion || a.outputDir !== expectedOutputDir;
 		});
 
 		if (needsUpdate.length === 0) {
@@ -388,9 +363,7 @@ function needsSkillReconciliation(
 	}
 
 	const expectedOutputDir = resolveAgentPath(agent, scope, meta.name);
-	return (
-		entry.version !== meta.version || entry.outputDir !== expectedOutputDir
-	);
+	return entry.version !== meta.version || entry.outputDir !== expectedOutputDir;
 }
 
 /**
@@ -420,11 +393,7 @@ async function autoUpdateSkills(
 	const meta = deriveSkillMeta(rootCmd, options);
 
 	const scopesToCheck: Scope[] = [
-		...new Set(
-			(["project", "global"] as Scope[]).map((scope) =>
-				resolveEffectiveScope(scope),
-			),
-		),
+		...new Set((["project", "global"] as Scope[]).map((scope) => resolveEffectiveScope(scope))),
 	];
 
 	for (const scope of scopesToCheck) {
@@ -574,10 +543,7 @@ export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
 
 			// Validate customSkills config up front so misconfiguration surfaces
 			// at setup rather than at first auto-update or interactive run.
-			const customSkills = validateCustomSkillsConfig(
-				rootCmd.meta.name,
-				options.customSkills,
-			);
+			const customSkills = validateCustomSkillsConfig(rootCmd.meta.name, options.customSkills);
 
 			actions.addSubCommand(
 				rootCmd,
@@ -639,9 +605,7 @@ async function reconcileBundleInteractively(opts: {
 		const e = statusMap.get(agent);
 		return e?.installed === true;
 	});
-	const installedAgents = additionalAgents.filter((agent) =>
-		installedAgentSet.has(agent),
-	);
+	const installedAgents = additionalAgents.filter((agent) => installedAgentSet.has(agent));
 
 	const choices: Array<{
 		label: string;
@@ -662,9 +626,7 @@ async function reconcileBundleInteractively(opts: {
 			hint: universalDir,
 		});
 
-		const agentLabels = universalAgents
-			.map((agent) => AGENT_LABELS[agent])
-			.join(", ");
+		const agentLabels = universalAgents.map((agent) => AGENT_LABELS[agent]).join(", ");
 		if (isInteractive && !installAll) {
 			console.log(dim(`Agents supporting universal skills: ${agentLabels}`));
 		}
@@ -681,8 +643,7 @@ async function reconcileBundleInteractively(opts: {
 	}
 
 	const universalInstalled =
-		universalAgents.length > 0 &&
-		universalAgents.every((agent) => installedAgentSet.has(agent));
+		universalAgents.length > 0 && universalAgents.every((agent) => installedAgentSet.has(agent));
 	const defaultSelections: Array<AgentTarget | typeof UNIVERSAL_GROUP> = [
 		...installedAgents.filter((agent) => !universalAgents.includes(agent)),
 	];
@@ -705,9 +666,7 @@ async function reconcileBundleInteractively(opts: {
 					});
 
 		const selected = new Set<AgentTarget>(
-			selectedValues.filter(
-				(value): value is AgentTarget => value !== UNIVERSAL_GROUP,
-			),
+			selectedValues.filter((value): value is AgentTarget => value !== UNIVERSAL_GROUP),
 		);
 		if (selectedValues.includes(UNIVERSAL_GROUP)) {
 			for (const agent of universalAgents) {
@@ -717,18 +676,14 @@ async function reconcileBundleInteractively(opts: {
 		selectedAgents = [...selected];
 	}
 
-	const toInstall = selectedAgents.filter(
-		(agent) => !installedAgentSet.has(agent),
-	);
+	const toInstall = selectedAgents.filter((agent) => !installedAgentSet.has(agent));
 	const toUpdate = selectedAgents.filter((agent) => {
 		const e = statusMap.get(agent);
 		if (!e?.installed) return false;
 		const expectedOutputDir = resolveAgentPath(agent, scope, entry.name);
 		return e.version !== effectiveVersion || e.outputDir !== expectedOutputDir;
 	});
-	const toUninstall = [...installedAgentSet].filter(
-		(agent) => !selectedAgents.includes(agent),
-	);
+	const toUninstall = [...installedAgentSet].filter((agent) => !selectedAgents.includes(agent));
 
 	const agentsToInstall = [...toInstall, ...toUpdate];
 
@@ -747,9 +702,7 @@ async function reconcileBundleInteractively(opts: {
 					}),
 			});
 
-			console.log(
-				`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`,
-			);
+			console.log(`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`);
 			for (const line of formatInstallOutput(result.agents)) {
 				console.log(dim(`  ${line.label} → ${line.outputDir}`));
 			}
@@ -762,8 +715,7 @@ async function reconcileBundleInteractively(opts: {
 					? true
 					: await confirm({
 							message:
-								`"${err.details.outputDir}" already exists${kindMismatchSuffix}. ` +
-								`Overwrite?`,
+								`"${err.details.outputDir}" already exists${kindMismatchSuffix}. ` + `Overwrite?`,
 							default: false,
 						});
 
@@ -782,16 +734,12 @@ async function reconcileBundleInteractively(opts: {
 							}),
 					});
 
-					console.log(
-						`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`,
-					);
+					console.log(`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`);
 					for (const line of formatInstallOutput(result.agents)) {
 						console.log(dim(`  ${line.label} → ${line.outputDir}`));
 					}
 				} else {
-					console.log(
-						dim(`\nSkipped ${AGENT_LABELS[err.details.agent]} [${entry.name}]`),
-					);
+					console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]} [${entry.name}]`));
 				}
 			} else {
 				throw err;
@@ -810,15 +758,11 @@ async function reconcileBundleInteractively(opts: {
 				}),
 		});
 
-		const removedAgents = result.agents
-			.filter((a) => a.status === "removed")
-			.map((a) => a.agent);
+		const removedAgents = result.agents.filter((a) => a.status === "removed").map((a) => a.agent);
 		const removed = formatAgentLabels(removedAgents);
 
 		if (removed.length > 0) {
-			console.log(
-				`\n${bold(`Removed bundle "${entry.name}" from ${removed.join(", ")}`)}`,
-			);
+			console.log(`\n${bold(`Removed bundle "${entry.name}" from ${removed.join(", ")}`)}`);
 		}
 	}
 
@@ -857,8 +801,7 @@ function buildSkillCommand(
 			},
 			all: {
 				type: "boolean",
-				description:
-					"Install for all detected agents non-interactively (universal + detected)",
+				description: "Install for all detected agents non-interactively (universal + detected)",
 			},
 		})
 		.run(async (ctx) => {
@@ -868,9 +811,7 @@ function buildSkillCommand(
 			// `--scope` always wins when set; `--all` skips only the interactive
 			// prompt fallback, falling back to `defaultScope` or `"global"`.
 			const scope = installAll
-				? (parseScopeFlag(ctx.flags.scope) ??
-					options.defaultScope ??
-					DEFAULT_SKILL_SCOPE)
+				? (parseScopeFlag(ctx.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 				: await resolveScopeForCommand(ctx.flags.scope, options);
 
 			// Detect installed agents
@@ -888,14 +829,10 @@ function buildSkillCommand(
 
 			// Build multiselect choices with status hints and pre-selection
 			const installedAgentSet = new Set<AgentTarget>(
-				status.agents
-					.filter((entry) => entry.installed)
-					.map((entry) => entry.agent),
+				status.agents.filter((entry) => entry.installed).map((entry) => entry.agent),
 			);
 			const detectedAdditionalSet = new Set(detectedAgents);
-			const statusMap = new Map(
-				status.agents.map((entry) => [entry.agent, entry]),
-			);
+			const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 			const additionalAgents = allAdditionalAgents.filter((agent) => {
 				if (detectedAdditionalSet.has(agent)) {
 					return true;
@@ -903,9 +840,7 @@ function buildSkillCommand(
 				const entry = statusMap.get(agent);
 				return entry?.installed === true;
 			});
-			const installedAgents = additionalAgents.filter((agent) =>
-				installedAgentSet.has(agent),
-			);
+			const installedAgents = additionalAgents.filter((agent) => installedAgentSet.has(agent));
 
 			const choices: Array<{
 				label: string;
@@ -926,13 +861,9 @@ function buildSkillCommand(
 					hint: universalDir,
 				});
 
-				const agentLabels = universalAgents
-					.map((agent) => AGENT_LABELS[agent])
-					.join(", ");
+				const agentLabels = universalAgents.map((agent) => AGENT_LABELS[agent]).join(", ");
 				if (isInteractive && !installAll) {
-					console.log(
-						dim(`Agents supporting universal skills: ${agentLabels}`),
-					);
+					console.log(dim(`Agents supporting universal skills: ${agentLabels}`));
 				}
 			}
 
@@ -974,9 +905,7 @@ function buildSkillCommand(
 							});
 
 				const selected = new Set<AgentTarget>(
-					selectedValues.filter(
-						(value): value is AgentTarget => value !== UNIVERSAL_GROUP,
-					),
+					selectedValues.filter((value): value is AgentTarget => value !== UNIVERSAL_GROUP),
 				);
 				if (selectedValues.includes(UNIVERSAL_GROUP)) {
 					for (const agent of universalAgents) {
@@ -987,19 +916,12 @@ function buildSkillCommand(
 			}
 
 			// Compute diff
-			const toInstall = selectedAgents.filter(
-				(agent) => !installedAgentSet.has(agent),
-			);
+			const toInstall = selectedAgents.filter((agent) => !installedAgentSet.has(agent));
 			const toUpdate = selectedAgents.filter((agent) => {
 				const entry = statusMap.get(agent);
-				return (
-					entry !== undefined &&
-					needsSkillReconciliation(agent, scope, meta, entry)
-				);
+				return entry !== undefined && needsSkillReconciliation(agent, scope, meta, entry);
 			});
-			const toUninstall = [...installedAgentSet].filter(
-				(agent) => !selectedAgents.includes(agent),
-			);
+			const toUninstall = [...installedAgentSet].filter((agent) => !selectedAgents.includes(agent));
 
 			const agentsToGenerate = [...toInstall, ...toUpdate];
 
@@ -1047,9 +969,7 @@ function buildSkillCommand(
 									}),
 							});
 
-							console.log(
-								`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`,
-							);
+							console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
 							for (const line of formatInstallOutput(result.agents)) {
 								console.log(dim(`  ${line.label} → ${line.outputDir}`));
 							}
@@ -1216,23 +1136,12 @@ function buildSkillUpdateCommand(
 					});
 					const bundleNeedsUpdate = bundleStatus.agents.filter((a) => {
 						if (!a.installed) return false;
-						const expectedOutputDir = resolveAgentPath(
-							a.agent,
-							entryScope,
-							entry.name,
-						);
-						return (
-							a.version !== entryEffectiveVersion ||
-							a.outputDir !== expectedOutputDir
-						);
+						const expectedOutputDir = resolveAgentPath(a.agent, entryScope, entry.name);
+						return a.version !== entryEffectiveVersion || a.outputDir !== expectedOutputDir;
 					});
 
 					if (bundleNeedsUpdate.length === 0) {
-						console.log(
-							dim(
-								`No updates needed [${entry.name}] (${entryEffectiveScope}).`,
-							),
-						);
+						console.log(dim(`No updates needed [${entry.name}] (${entryEffectiveScope}).`));
 						continue;
 					}
 

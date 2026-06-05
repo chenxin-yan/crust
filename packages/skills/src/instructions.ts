@@ -4,9 +4,7 @@
  * Each element (or the single string) is split on newlines, so a value like
  * `"Line1\nLine2"` produces two separate items. Arrays preserve caller order.
  */
-export function normalizeInstructionList(
-	input: string | string[] | undefined,
-): string[] {
+export function normalizeInstructionList(input: string | string[] | undefined): string[] {
 	if (input === undefined) {
 		return [];
 	}

@@ -2,12 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	detectPackageManager,
-	getGitUser,
-	isGitInstalled,
-	isInGitRepo,
-} from "./utils.ts";
+
+import { detectPackageManager, getGitUser, isGitInstalled, isInGitRepo } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // detectPackageManager()

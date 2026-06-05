@@ -1,14 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	chmod,
-	lstat,
-	mkdir,
-	readdir,
-	readFile,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
+
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
 
@@ -138,11 +131,7 @@ async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
  */
 async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 	if (process.platform === "win32") {
-		await writeFile(
-			join(dir, `${name}.cmd`),
-			"@echo off\r\nexit /b 0\r\n",
-			"utf-8",
-		);
+		await writeFile(join(dir, `${name}.cmd`), "@echo off\r\nexit /b 0\r\n", "utf-8");
 		return;
 	}
 	const filePath = join(dir, name);
@@ -188,9 +177,7 @@ function nestedCommand(): CommandNode {
 					}),
 					remove: makeCommand({
 						meta: { name: "remove", description: "Remove a remote" },
-						args: [
-							{ name: "name", type: "string", required: true },
-						] as ArgDef[],
+						args: [{ name: "name", type: "string", required: true }] as ArgDef[],
 						run() {},
 					}),
 				},
@@ -798,14 +785,8 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const claudeSkill = join(
-				(first.agents[0] as AgentResult).outputDir,
-				"SKILL.md",
-			);
-			const opencodeSkill = join(
-				(first.agents[1] as AgentResult).outputDir,
-				"SKILL.md",
-			);
+			const claudeSkill = join((first.agents[0] as AgentResult).outputDir, "SKILL.md");
+			const opencodeSkill = join((first.agents[1] as AgentResult).outputDir, "SKILL.md");
 
 			// Manually corrupt one agent copy to simulate partial staleness.
 			await writeFile(opencodeSkill, "manually edited\n", "utf-8");
@@ -877,10 +858,7 @@ describe("generateSkill", () => {
 			);
 
 			// Write a stale file
-			const staleFile = join(
-				(first.agents[0] as AgentResult).outputDir,
-				"stale-file.txt",
-			);
+			const staleFile = join((first.agents[0] as AgentResult).outputDir, "stale-file.txt");
 			await writeFile(staleFile, "stale content", "utf-8");
 
 			// Second generation — different version to trigger update
@@ -897,9 +875,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const files = await listFiles(
-				(result.agents[0] as AgentResult).outputDir,
-			);
+			const files = await listFiles((result.agents[0] as AgentResult).outputDir);
 			expect(files).not.toContain("stale-file.txt");
 		});
 
@@ -919,10 +895,7 @@ describe("generateSkill", () => {
 			);
 
 			// Write an extra file
-			const extraFile = join(
-				(first.agents[0] as AgentResult).outputDir,
-				"extra.txt",
-			);
+			const extraFile = join((first.agents[0] as AgentResult).outputDir, "extra.txt");
 			await writeFile(extraFile, "extra content", "utf-8");
 
 			// Second generation with clean: false and new version
@@ -940,9 +913,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const files = await listFiles(
-				(result.agents[0] as AgentResult).outputDir,
-			);
+			const files = await listFiles((result.agents[0] as AgentResult).outputDir);
 			expect(files).toContain("extra.txt");
 		});
 	});
@@ -1079,9 +1050,7 @@ describe("generateSkill", () => {
 
 			// Strip `kind` from canonical crust.json to simulate a pre-`kind`-field install
 			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
-			const legacyManifest = JSON.parse(
-				await readText(join(canonicalDir, CRUST_MANIFEST)),
-			);
+			const legacyManifest = JSON.parse(await readText(join(canonicalDir, CRUST_MANIFEST)));
 			delete legacyManifest.kind;
 			await writeFile(
 				join(canonicalDir, CRUST_MANIFEST),
@@ -1253,9 +1222,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, "SKILL.md"),
-			);
+			const content = await readText(join((result.agents[0] as AgentResult).outputDir, "SKILL.md"));
 			expect(content).toContain("---");
 			expect(content).toContain("name: my-cli");
 			expect(content).toContain("description: A simple CLI tool");
@@ -1282,7 +1249,7 @@ describe("generateSkill", () => {
 
 			const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
 			let match: RegExpExecArray | null;
-			// biome-ignore lint/suspicious/noAssignInExpressions: regex exec loop pattern
+			// oxlint-disable-next-line no-cond-assign -- regex exec loop pattern
 			while ((match = linkPattern.exec(skill)) !== null) {
 				const linked = match[2];
 				if (linked?.startsWith("commands/")) {
@@ -1306,12 +1273,7 @@ describe("generateSkill", () => {
 			);
 
 			const addCmd = await readText(
-				join(
-					(result.agents[0] as AgentResult).outputDir,
-					"commands",
-					"remote",
-					"add.md",
-				),
+				join((result.agents[0] as AgentResult).outputDir, "commands", "remote", "add.md"),
 			);
 			expect(addCmd).toContain("git remote add");
 			expect(addCmd).toContain("Add a remote");
@@ -1332,11 +1294,7 @@ describe("generateSkill", () => {
 			);
 
 			const remote = await readText(
-				join(
-					(result.agents[0] as AgentResult).outputDir,
-					"commands",
-					"remote.md",
-				),
+				join((result.agents[0] as AgentResult).outputDir, "commands", "remote.md"),
 			);
 			expect(remote).toContain("Manage remotes");
 			expect(remote).toContain("Subcommands");
@@ -1409,9 +1367,7 @@ describe("generateSkill", () => {
 				}),
 			);
 
-			const files = await listFiles(
-				(result.agents[0] as AgentResult).outputDir,
-			);
+			const files = await listFiles((result.agents[0] as AgentResult).outputDir);
 			expect(files).toContain("commands/level1/level2/level3.md");
 		});
 
@@ -1740,10 +1696,7 @@ describe("generateSkill", () => {
 		it("ignores a legacy manual directory and installs to the new path", async () => {
 			const legacySkillDir = join(tmpDir, ".agents", "skills", "use-my-cli");
 			await mkdir(legacySkillDir, { recursive: true });
-			await writeFile(
-				join(legacySkillDir, "SKILL.md"),
-				"# Manual legacy skill",
-			);
+			await writeFile(join(legacySkillDir, "SKILL.md"), "# Manual legacy skill");
 
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
@@ -1761,9 +1714,7 @@ describe("generateSkill", () => {
 			expect((result.agents[0] as AgentResult).outputDir).toBe(
 				join(tmpDir, ".agents", "skills", "my-cli"),
 			);
-			expect(await readText(join(legacySkillDir, "SKILL.md"))).toBe(
-				"# Manual legacy skill",
-			);
+			expect(await readText(join(legacySkillDir, "SKILL.md"))).toBe("# Manual legacy skill");
 		});
 
 		it("migrates a legacy Crust install to the new path", async () => {
@@ -1875,13 +1826,11 @@ describe("uninstallSkill", () => {
 		await mkdir(legacySkillDir, { recursive: true });
 		await writeFile(
 			join(legacyCanonicalDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
-				"\n",
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
 		);
 		await writeFile(
 			join(legacySkillDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
-				"\n",
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
 		);
 
 		const result = await withCwd(tmpDir, () =>
@@ -1971,13 +1920,11 @@ describe("skillStatus", () => {
 		await mkdir(legacySkillDir, { recursive: true });
 		await writeFile(
 			join(legacyCanonicalDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
-				"\n",
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
 		);
 		await writeFile(
 			join(legacySkillDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") +
-				"\n",
+			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
 		);
 
 		const status = await withCwd(tmpDir, () =>
@@ -2007,9 +1954,7 @@ describe("skillStatus", () => {
 		);
 
 		expect(status.agents[0]?.installed).toBe(false);
-		expect(status.agents[0]?.outputDir).toBe(
-			join(tmpDir, ".claude", "skills", "my-cli"),
-		);
+		expect(status.agents[0]?.outputDir).toBe(join(tmpDir, ".claude", "skills", "my-cli"));
 	});
 });
 

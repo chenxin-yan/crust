@@ -1,26 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
 import * as codes from "./ansiCodes.ts";
-import {
-	bgRed,
-	black,
-	blue,
-	cyan,
-	gray,
-	green,
-	magenta,
-	red,
-	white,
-	yellow,
-} from "./colors.ts";
-import {
-	bold,
-	dim,
-	hidden,
-	inverse,
-	italic,
-	strikethrough,
-	underline,
-} from "./modifiers.ts";
+import { bgRed, black, blue, cyan, gray, green, magenta, red, white, yellow } from "./colors.ts";
+import { bold, dim, hidden, inverse, italic, strikethrough, underline } from "./modifiers.ts";
 import { applyStyle, composeStyles } from "./styleEngine.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -304,9 +286,7 @@ describe("integration — composable nesting", () => {
 		const outer = red(`roses ${inner} are red`);
 
 		// After blue's close (39m), red reopens (31m)
-		expect(outer).toBe(
-			"\x1b[31mroses \x1b[34msky\x1b[39m\x1b[31m are red\x1b[39m",
-		);
+		expect(outer).toBe("\x1b[31mroses \x1b[34msky\x1b[39m\x1b[31m are red\x1b[39m");
 	});
 
 	it("modifier wrapping modifier with shared close", () => {
@@ -346,7 +326,7 @@ describe("AnsiPair structure", () => {
 			codes.bgBlue,
 		];
 
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences
+		// oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences
 		const ansiPattern = /^\x1b\[\d+m$/;
 		for (const p of pairs) {
 			expect(typeof p.open).toBe("string");

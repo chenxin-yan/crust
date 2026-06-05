@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test";
-
 // ────────────────────────────────────────────────────────────────────────────
 // Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────

@@ -4,11 +4,7 @@ import {
 	zshDescribeField,
 	zshSingleQuote,
 } from "../escape.ts";
-import type {
-	CompletionCommand,
-	CompletionFlag,
-	CompletionSpec,
-} from "../spec.ts";
+import type { CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
 
 /**
  * Pure-static zsh completion script renderer.
@@ -102,10 +98,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// alternation expanding to one option per spelling. We
 		// single-quote-wrap each piece so flag names with `-` survive
 		// shell tokenisation cleanly.
-		const mutex = [
-			...allShort.map((s) => `-${s}`),
-			...allLong.map((l) => `--${l}`),
-		].join(" ");
+		const mutex = [...allShort.map((s) => `-${s}`), ...allLong.map((l) => `--${l}`)].join(" ");
 		const altGroup = [
 			...allShort.map((s) => `-${s}`),
 			...allLong.map((l) => `--${l}${flag.takesValue ? "=" : ""}`),
@@ -143,11 +136,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 			const headPrefix = flag.multiple === true ? "" : `(${negMutex})`;
 			const repeatBrace = flag.multiple === true ? "*" : "";
 			specs.push(
-				[
-					zshSingleQuote(headPrefix),
-					`${repeatBrace}{${negAlt}}`,
-					zshSingleQuote(negDesc),
-				].join(""),
+				[zshSingleQuote(headPrefix), `${repeatBrace}{${negAlt}}`, zshSingleQuote(negDesc)].join(""),
 			);
 		}
 	}
@@ -244,14 +233,10 @@ function renderHelper(
 		out.push("\t\t\tsubcmds=(");
 		for (const sub of node.subCommands) {
 			const desc = zshDescribeField(sub.description ?? "");
-			out.push(
-				`\t\t\t\t${zshSingleQuote(`${zshDescribeField(sub.name)}:${desc}`)}`,
-			);
+			out.push(`\t\t\t\t${zshSingleQuote(`${zshDescribeField(sub.name)}:${desc}`)}`);
 			if (sub.aliases !== undefined) {
 				for (const alias of sub.aliases) {
-					out.push(
-						`\t\t\t\t${zshSingleQuote(`${zshDescribeField(alias)}:${desc}`)}`,
-					);
+					out.push(`\t\t\t\t${zshSingleQuote(`${zshDescribeField(alias)}:${desc}`)}`);
 				}
 			}
 		}
@@ -311,11 +296,7 @@ function renderHelper(
  *                 {@link assertSafeBinName}.
  * @param version  Free-form version string for the header comment.
  */
-export function renderZsh(
-	spec: CompletionSpec,
-	binName: string,
-	version: string,
-): string {
+export function renderZsh(spec: CompletionSpec, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 

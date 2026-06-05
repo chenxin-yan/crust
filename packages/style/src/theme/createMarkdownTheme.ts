@@ -76,9 +76,7 @@ export interface CreateMarkdownThemeOptions {
  * });
  * ```
  */
-export function createMarkdownTheme(
-	options?: CreateMarkdownThemeOptions,
-): MarkdownTheme {
+export function createMarkdownTheme(options?: CreateMarkdownThemeOptions): MarkdownTheme {
 	const styleInstance = createStyle(options?.style);
 	const base = buildDefaultMarkdownTheme(styleInstance);
 	const overrides = options?.overrides;

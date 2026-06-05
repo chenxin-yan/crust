@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
+
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
@@ -94,9 +95,7 @@ export function createStore<const F extends FieldsDef>(
 		return value;
 	}
 
-	function normalizeStateTypes(
-		state: InferStoreConfig<F>,
-	): InferStoreConfig<F> {
+	function normalizeStateTypes(state: InferStoreConfig<F>): InferStoreConfig<F> {
 		const record = state as Record<string, unknown>;
 		const normalized: Record<string, unknown> = { ...record };
 
@@ -138,8 +137,7 @@ export function createStore<const F extends FieldsDef>(
 			try {
 				result = await def.validate(value as never);
 			} catch (cause) {
-				const message =
-					cause instanceof Error ? cause.message : "Validation failed";
+				const message = cause instanceof Error ? cause.message : "Validation failed";
 				issues.push({ message, path: key });
 				continue;
 			}
@@ -174,8 +172,7 @@ export function createStore<const F extends FieldsDef>(
 					try {
 						recheck = await def.validate(transformed as never);
 					} catch (cause) {
-						const message =
-							cause instanceof Error ? cause.message : "re-validation failed";
+						const message = cause instanceof Error ? cause.message : "re-validation failed";
 						issues.push({
 							message: `read-unstable transform: ${message}`,
 							path: key,
@@ -190,8 +187,7 @@ export function createStore<const F extends FieldsDef>(
 					// different value than the one we'd persist now.
 					if (
 						recheck !== undefined &&
-						(!isFieldValueResult(recheck) ||
-							!Bun.deepEquals(recheck.value, transformed))
+						(!isFieldValueResult(recheck) || !Bun.deepEquals(recheck.value, transformed))
 					) {
 						issues.push({
 							message: `read-unstable transform: output would be transformed again on re-read`,
@@ -262,9 +258,7 @@ export function createStore<const F extends FieldsDef>(
 	// update — Read current (raw), apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(
-		updater: StoreUpdater<InferStoreConfig<F>>,
-	): Promise<void> {
+	async function update(updater: StoreUpdater<InferStoreConfig<F>>): Promise<void> {
 		const current = await readRaw();
 		const updated = updater(current);
 		const normalized = normalizeStateTypes(updated);

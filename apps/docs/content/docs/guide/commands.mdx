@@ -14,11 +14,9 @@ Use the `Crust` class to create a command:
 ```ts
 import { Crust } from "@crustjs/core";
 
-const serve = new Crust("serve")
-  .meta({ description: "Start the development server" })
-  .run(() => {
-    console.log("Server started!");
-  });
+const serve = new Crust("serve").meta({ description: "Start the development server" }).run(() => {
+  console.log("Server started!");
+});
 ```
 
 The command name is set via the constructor. Use `.meta()` to set `description` and `usage` — the `description` is optional but recommended as it appears in help output.
@@ -28,11 +26,10 @@ The command name is set via the constructor. Use `.meta()` to set `description` 
 Set metadata with `.meta()`:
 
 ```ts
-new Crust("serve")
-  .meta({
-    description: "Start the dev server",    // Shown in help text
-    usage: "serve [port] [options]",        // Overrides auto-generated usage
-  })
+new Crust("serve").meta({
+  description: "Start the dev server", // Shown in help text
+  usage: "serve [port] [options]", // Overrides auto-generated usage
+});
 ```
 
 See the [Crust builder reference](/docs/api/crust#metameta) for the full list of metadata fields.
@@ -43,9 +40,7 @@ The `.run()` method sets the command's main logic. It receives a `CrustCommandCo
 
 ```ts
 new Crust("greet")
-  .args([
-    { name: "name", type: "string", required: true },
-  ])
+  .args([{ name: "name", type: "string", required: true }])
   .flags({
     loud: { type: "boolean", short: "l" },
   })
@@ -54,17 +49,16 @@ new Crust("greet")
     // flags.loud is typed as `boolean | undefined`
     // rawArgs contains everything after `--`
     console.log(`Hello, ${args.name}!`);
-  })
+  });
 ```
 
 The handler can be `async`:
 
 ```ts
-new Crust("fetch")
-  .run(async () => {
-    const data = await fetch("https://api.example.com/data");
-    console.log(await data.json());
-  })
+new Crust("fetch").run(async () => {
+  const data = await fetch("https://api.example.com/data");
+  console.log(await data.json());
+});
 ```
 
 ## Running Commands
@@ -75,11 +69,9 @@ Call `.execute()` to run the CLI. It parses `process.argv`, resolves subcommands
 import { Crust } from "@crustjs/core";
 import { helpPlugin } from "@crustjs/plugins";
 
-const main = new Crust("my-cli")
-  .use(helpPlugin())
-  .run(() => {
-    console.log("Running!");
-  });
+const main = new Crust("my-cli").use(helpPlugin()).run(() => {
+  console.log("Running!");
+});
 
 await main.execute();
 ```
@@ -95,8 +87,7 @@ await main.execute({ argv: ["--help"] });
 Each method on the `Crust` builder returns a new instance — the original builder is never mutated. This makes commands safe to share and compose:
 
 ```ts
-const base = new Crust("test")
-  .flags({ verbose: { type: "boolean" } });
+const base = new Crust("test").flags({ verbose: { type: "boolean" } });
 
 const a = base.run(() => console.log("A"));
 const b = base.run(() => console.log("B"));
@@ -104,7 +95,8 @@ const b = base.run(() => console.log("B"));
 ```
 
 <Callout>
-  Plugins can still inject flags during the setup phase via the `addFlag` action. This is the only sanctioned way to modify a command's flags after creation.
+  Plugins can still inject flags during the setup phase via the `addFlag` action. This is the only
+  sanctioned way to modify a command's flags after creation.
 </Callout>
 
 ## Type Inference
@@ -123,11 +115,11 @@ const cmd = new Crust("example")
     count: { type: "number", required: true },
   })
   .run(({ args, flags }) => {
-    args.port;    // number (has default -> guaranteed)
-    args.host;    // string (required -> guaranteed)
+    args.port; // number (has default -> guaranteed)
+    args.host; // string (required -> guaranteed)
     flags.verbose; // boolean | undefined
-    flags.output;  // string (has default -> guaranteed)
-    flags.count;   // number (required -> guaranteed)
+    flags.output; // string (has default -> guaranteed)
+    flags.count; // number (required -> guaranteed)
   });
 ```
 

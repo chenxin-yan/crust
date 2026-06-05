@@ -51,16 +51,16 @@ API_TOKEN=super-secret
 ```
 
 <Callout type="warn">
-  `PUBLIC_*` values are embedded in the binary and are therefore public. Never
-  put secrets behind a `PUBLIC_*` prefix.
+  `PUBLIC_*` values are embedded in the binary and are therefore public. Never put secrets behind a
+  `PUBLIC_*` prefix.
 </Callout>
 
 ## Public vs Secret Values
 
-| Type of value | Where it should live |
-| --- | --- |
-| Secret API keys, tokens, credentials | Runtime env |
-| Deployment-specific private config | Runtime env |
+| Type of value                                                   | Where it should live                |
+| --------------------------------------------------------------- | ----------------------------------- |
+| Secret API keys, tokens, credentials                            | Runtime env                         |
+| Deployment-specific private config                              | Runtime env                         |
 | Public API origin, public feature switches, public build labels | Build-time constants via `PUBLIC_*` |
 
 ## Recommended App Pattern
@@ -83,11 +83,11 @@ export const config = {
 
 ## Scenarios
 
-| Scenario | Recommended approach |
-| --- | --- |
-| CLI needs a secret API token at runtime | Read `process.env.API_TOKEN` at runtime |
-| Binary needs a public API origin baked in | Use `PUBLIC_API_ORIGIN` in Bun's cwd env or with `crust build --env-file ...` |
-| Build should differ by environment | Pass one or more explicit `--env-file` values |
+| Scenario                                            | Recommended approach                                                                      |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| CLI needs a secret API token at runtime             | Read `process.env.API_TOKEN` at runtime                                                   |
+| Binary needs a public API origin baked in           | Use `PUBLIC_API_ORIGIN` in Bun's cwd env or with `crust build --env-file ...`             |
+| Build should differ by environment                  | Pass one or more explicit `--env-file` values                                             |
 | Plugin setup depends on env during validation/build | Pass the same `--env-file` values to `crust build` so the validation subprocess sees them |
 
 For Bun's full runtime `.env` rules, see [Bun environment variables](https://bun.com/docs/runtime/env) and [Bun single-file executables](https://bun.com/docs/bundler/executables). For Crust-specific build behavior, see [Building & Distribution](/docs/guide/build).

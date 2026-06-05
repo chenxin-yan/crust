@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+
 import { getSkillCommandAnnotations } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
@@ -114,14 +115,12 @@ function normalizeArg(arg: ArgDef): ManifestArg {
  * {@link ManifestFlag} nodes. Flags are sorted alphabetically by name
  * for deterministic output.
  */
-function normalizeFlags(
-	flagsDef: Record<string, FlagDef> | undefined,
-): ManifestFlag[] {
+function normalizeFlags(flagsDef: Record<string, FlagDef> | undefined): ManifestFlag[] {
 	if (!flagsDef) return [];
 
 	const keys = Object.keys(flagsDef).sort();
 	return keys.map((key) => {
-		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so value is guaranteed
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- key comes from Object.keys so value is guaranteed
 		return normalizeFlag(key, flagsDef[key]!);
 	});
 }
@@ -167,7 +166,7 @@ function normalizeChildren(
 ): ManifestNode[] {
 	const keys = Object.keys(subCommands).sort();
 	return keys.map((key) => {
-		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so value is guaranteed
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- key comes from Object.keys so value is guaranteed
 		return buildNode(subCommands[key]!, parentPath);
 	});
 }
@@ -180,9 +179,7 @@ function normalizeChildren(
  * token on the command line, so they collapse to `"string"` at the
  * manifest layer until we extend the manifest schema for them.
  */
-function manifestType(
-	type: string | undefined,
-): "string" | "number" | "boolean" {
+function manifestType(type: string | undefined): "string" | "number" | "boolean" {
 	if (type === "number" || type === "boolean") return type;
 	return "string";
 }

@@ -35,10 +35,10 @@ Runtime context passed to `preRun`, `run`, and `postRun` hooks on the `Crust` bu
 
 ```ts
 interface CrustCommandContext<A extends ArgsDef, F extends FlagsDef> {
-  args: InferArgs<A>;       // Resolved positional arguments
-  flags: InferFlags<F>;     // Resolved flags
-  rawArgs: string[];         // Arguments after `--`
-  command: CommandNode;      // The resolved command node
+  args: InferArgs<A>; // Resolved positional arguments
+  flags: InferFlags<F>; // Resolved flags
+  rawArgs: string[]; // Arguments after `--`
+  command: CommandNode; // The resolved command node
 }
 ```
 
@@ -48,11 +48,11 @@ Metadata describing a command:
 
 ```ts
 interface CommandMeta {
-  name: string;                  // Command name (required)
-  description?: string;          // Help text description
-  usage?: string;                // Custom usage string
-  aliases?: readonly string[];   // Alternative names
-  hidden?: boolean;              // Omit from default --help output
+  name: string; // Command name (required)
+  description?: string; // Help text description
+  usage?: string; // Custom usage string
+  aliases?: readonly string[]; // Alternative names
+  hidden?: boolean; // Omit from default --help output
 }
 ```
 
@@ -103,13 +103,13 @@ Each variant constrains `default` to match its `type`. Boolean toggle fields (`r
 ```ts
 // String variant (Number and Boolean follow the same shape, minus `choices`)
 interface StringArgDef {
-  name: string;                  // Argument name
-  type: "string";                // Type discriminant
-  description?: string;          // Help text
-  default?: string;              // Default value (type-safe)
-  required?: true;               // Error if missing
-  variadic?: true;               // Collect remaining into array
-  choices?: readonly string[];   // Static enum of valid values (string only)
+  name: string; // Argument name
+  type: "string"; // Type discriminant
+  description?: string; // Help text
+  default?: string; // Default value (type-safe)
+  required?: true; // Error if missing
+  variadic?: true; // Collect remaining into array
+  choices?: readonly string[]; // Static enum of valid values (string only)
 }
 ```
 
@@ -118,9 +118,7 @@ interface StringArgDef {
 A static enum of valid values for the argument. Type: `readonly string[]`. Default: `undefined`. Only available on string-typed args (`StringArgDef`); not supported on number or boolean variants.
 
 ```ts
-args: [
-  { name: "target", type: "string", choices: ["browser", "bun", "node"] },
-] as const
+args: [{ name: "target", type: "string", choices: ["browser", "bun", "node"] }] as const;
 ```
 
 **Validated at parse time.** Passing a value outside `choices` throws `CrustError("PARSE", …)` before any `parse` transform runs. Shell-completion plugins also consume `choices` to emit value candidates.
@@ -141,10 +139,18 @@ Defines a single named flag. Discriminated union by `type` and `multiple`:
 
 ```ts
 type FlagDef =
-  | StringFlagDef | NumberFlagDef | BooleanFlagDef
-  | UrlFlagDef    | PathFlagDef   | JsonFlagDef            // single-value
-  | StringMultiFlagDef | NumberMultiFlagDef | BooleanMultiFlagDef
-  | UrlMultiFlagDef    | PathMultiFlagDef   | JsonMultiFlagDef; // multi-value
+  | StringFlagDef
+  | NumberFlagDef
+  | BooleanFlagDef
+  | UrlFlagDef
+  | PathFlagDef
+  | JsonFlagDef // single-value
+  | StringMultiFlagDef
+  | NumberMultiFlagDef
+  | BooleanMultiFlagDef
+  | UrlMultiFlagDef
+  | PathMultiFlagDef
+  | JsonMultiFlagDef; // multi-value
 ```
 
 Flags always declare `type` because it defines CLI grammar/token ownership:
@@ -158,28 +164,28 @@ Single-value variants use `multiple?: never` (field absent); multi-value variant
 ```ts
 // Single-value string flag
 interface StringFlagDef {
-  type: "string";                // Type discriminant
-  description?: string;          // Help text
-  default?: string;              // Default value (type-safe)
-  required?: true;               // Error if missing
-  short?: string;                // Single-character short form (-x)
-  aliases?: string[];            // Additional aliases (single-char or long)
-  multiple?: never;              // Absent for single-value flags
-  inherit?: true;                // Inherited by subcommands
-  choices?: readonly string[];   // Static enum of valid values (string only)
+  type: "string"; // Type discriminant
+  description?: string; // Help text
+  default?: string; // Default value (type-safe)
+  required?: true; // Error if missing
+  short?: string; // Single-character short form (-x)
+  aliases?: string[]; // Additional aliases (single-char or long)
+  multiple?: never; // Absent for single-value flags
+  inherit?: true; // Inherited by subcommands
+  choices?: readonly string[]; // Static enum of valid values (string only)
 }
 
 // Multi-value string flag
 interface StringMultiFlagDef {
-  type: "string";                // Type discriminant
-  description?: string;          // Help text
-  default?: string[];            // Default array value (type-safe)
-  required?: true;               // Error if missing
-  short?: string;                // Single-character short form (-x)
-  aliases?: string[];            // Additional aliases (single-char or long)
-  multiple: true;                // Collect repeated values into array
-  inherit?: true;                // Inherited by subcommands
-  choices?: readonly string[];   // Static enum of valid values (string only)
+  type: "string"; // Type discriminant
+  description?: string; // Help text
+  default?: string[]; // Default array value (type-safe)
+  required?: true; // Error if missing
+  short?: string; // Single-character short form (-x)
+  aliases?: string[]; // Additional aliases (single-char or long)
+  multiple: true; // Collect repeated values into array
+  inherit?: true; // Inherited by subcommands
+  choices?: readonly string[]; // Static enum of valid values (string only)
 }
 // Number variants follow the same pattern.
 // Boolean variants additionally support `noNegate`:
@@ -193,7 +199,7 @@ interface BooleanFlagDef {
   aliases?: string[];
   multiple?: never;
   inherit?: true;
-  noNegate?: true;            // Hide the --no-{name} negation label
+  noNegate?: true; // Hide the --no-{name} negation label
 }
 ```
 
@@ -252,8 +258,8 @@ type InheritableFlags<F extends FlagsDef> = {
 Merges parent flags with local flags, where local keys override parent keys:
 
 ```ts
-type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> =
-  Omit<Parent, keyof Local> & Local;
+type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Omit<Parent, keyof Local> &
+  Local;
 ```
 
 ### `EffectiveFlags<Inherited, Local>`
@@ -261,8 +267,10 @@ type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> =
 Computes the effective flags for a command by filtering inherited flags (only those with `inherit: true`) and merging with local flags:
 
 ```ts
-type EffectiveFlags<Inherited extends FlagsDef, Local extends FlagsDef> =
-  MergeFlags<InheritableFlags<Inherited>, Local>;
+type EffectiveFlags<Inherited extends FlagsDef, Local extends FlagsDef> = MergeFlags<
+  InheritableFlags<Inherited>,
+  Local
+>;
 ```
 
 This is the type-level counterpart of the runtime `computeEffectiveFlags()` function.
@@ -279,17 +287,17 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 
 **Resolution rules:**
 
-| Definition | Inferred Type |
-| --- | --- |
-| `{ type: "string" }` | `string \| undefined` |
-| `{ type: "string", required: true }` | `string` |
-| `{ type: "string", default: "hi" }` | `string` |
-| `{ type: "number" }` | `number \| undefined` |
-| `{ type: "number", default: 3000 }` | `number` |
-| `{ type: "string", variadic: true }` | `string[]` |
-| `{ type: "string", variadic: true, required: true }` | `string[]` |
-| `{ name: "x" }` (no `type`) | `unknown` |
-| `{ name: "x", variadic: true }` (no `type`) | `unknown[]` |
+| Definition                                           | Inferred Type         |
+| ---------------------------------------------------- | --------------------- |
+| `{ type: "string" }`                                 | `string \| undefined` |
+| `{ type: "string", required: true }`                 | `string`              |
+| `{ type: "string", default: "hi" }`                  | `string`              |
+| `{ type: "number" }`                                 | `number \| undefined` |
+| `{ type: "number", default: 3000 }`                  | `number`              |
+| `{ type: "string", variadic: true }`                 | `string[]`            |
+| `{ type: "string", variadic: true, required: true }` | `string[]`            |
+| `{ name: "x" }` (no `type`)                          | `unknown`             |
+| `{ name: "x", variadic: true }` (no `type`)          | `unknown[]`           |
 
 Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
 
@@ -305,14 +313,14 @@ type InferFlags<F> = F extends FlagsDef ? /* resolved types */ : Record<string, 
 
 **Resolution rules:**
 
-| Definition | Inferred Type |
-| --- | --- |
-| `{ type: "string" }` | `string \| undefined` |
-| `{ type: "string", required: true }` | `string` |
-| `{ type: "string", default: "hi" }` | `string` |
-| `{ type: "boolean" }` | `boolean \| undefined` |
-| `{ type: "string", multiple: true }` | `string[] \| undefined` |
-| `{ type: "string", multiple: true, required: true }` | `string[]` |
+| Definition                                           | Inferred Type           |
+| ---------------------------------------------------- | ----------------------- |
+| `{ type: "string" }`                                 | `string \| undefined`   |
+| `{ type: "string", required: true }`                 | `string`                |
+| `{ type: "string", default: "hi" }`                  | `string`                |
+| `{ type: "boolean" }`                                | `boolean \| undefined`  |
+| `{ type: "string", multiple: true }`                 | `string[] \| undefined` |
+| `{ type: "string", multiple: true, required: true }` | `string[]`              |
 
 ## Parse Types
 
@@ -322,9 +330,9 @@ Output of `parseArgs`:
 
 ```ts
 interface ParseResult<A extends ArgsDef, F extends FlagsDef> {
-  args: InferArgs<A>;     // Resolved positional arguments
-  flags: InferFlags<F>;   // Resolved flags
-  rawArgs: string[];       // Arguments after `--`
+  args: InferArgs<A>; // Resolved positional arguments
+  flags: InferFlags<F>; // Resolved flags
+  rawArgs: string[]; // Arguments after `--`
 }
 ```
 
@@ -336,9 +344,9 @@ Output of `resolveCommand`:
 
 ```ts
 interface CommandRoute {
-  command: CommandNode;    // The resolved command
-  argv: string[];           // Remaining argv
-  commandPath: string[];    // Full command path
+  command: CommandNode; // The resolved command
+  argv: string[]; // Remaining argv
+  commandPath: string[]; // Full command path
 }
 ```
 
@@ -419,7 +427,7 @@ type ValueType = "string" | "number" | "boolean" | "url" | "path" | "json";
 
 The three formatted built-ins resolve to:
 
-- `"url"`  — [`URL`](https://developer.mozilla.org/docs/Web/API/URL) instance via `new URL(raw)`
+- `"url"` — [`URL`](https://developer.mozilla.org/docs/Web/API/URL) instance via `new URL(raw)`
 - `"path"` — absolute `string` via `path.resolve(process.cwd(), expand(raw))`
 - `"json"` — `unknown` via `JSON.parse(raw)`
 
@@ -430,14 +438,19 @@ See [Types](/docs/guide/types) for semantics, error modes, and shell-completion 
 Maps a `ValueType` literal to its runtime TypeScript type. Delegates to `ResolvePrimitive<T>` from `@crustjs/utils` for the three base types.
 
 ```ts
-type Resolve<T extends ValueType> =
-  T extends "string"  ? string :
-  T extends "number"  ? number :
-  T extends "boolean" ? boolean :
-  T extends "url"     ? URL :
-  T extends "path"    ? string :
-  T extends "json"    ? unknown :
-  never;
+type Resolve<T extends ValueType> = T extends "string"
+  ? string
+  : T extends "number"
+    ? number
+    : T extends "boolean"
+      ? boolean
+      : T extends "url"
+        ? URL
+        : T extends "path"
+          ? string
+          : T extends "json"
+            ? unknown
+            : never;
 ```
 
 ### `ResolveBaseType<F>`
@@ -445,10 +458,11 @@ type Resolve<T extends ValueType> =
 Resolves the inferred runtime type for a flag/arg definition. When a `parse` escape hatch is declared, the inferred type is `ReturnType<typeof parse>`; otherwise it delegates to `Resolve<F["type"]>`.
 
 ```ts
-type ResolveBaseType<F> =
-  F extends { parse: (raw: string) => infer R } ? R :
-  F extends { type: infer T extends ValueType } ? Resolve<T> :
-  never;
+type ResolveBaseType<F> = F extends { parse: (raw: string) => infer R }
+  ? R
+  : F extends { type: infer T extends ValueType }
+    ? Resolve<T>
+    : never;
 ```
 
 ## Compile-Time Validation Types

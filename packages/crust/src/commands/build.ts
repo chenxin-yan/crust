@@ -1,11 +1,9 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-	Crust,
-	VALIDATION_FORCE_EXIT_ENV,
-	VALIDATION_MODE_ENV,
-} from "@crustjs/core";
+
+import { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
+
 import { resolveBaseName } from "../utils/binary-name.ts";
 import { generateManPageFromEntry } from "../utils/generate-man.ts";
 
@@ -118,10 +116,9 @@ export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
  * Maps each Bun compile target to its `process.platform-process.arch` key
  * used by JS-based package resolvers and related tooling.
  */
-export const TARGET_PLATFORM_MAP: Record<BunTarget, string> =
-	Object.fromEntries(
-		SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].platformKey]),
-	) as Record<BunTarget, string>;
+export const TARGET_PLATFORM_MAP: Record<BunTarget, string> = Object.fromEntries(
+	SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].platformKey]),
+) as Record<BunTarget, string>;
 
 /**
  * Resolve a user-provided target string to a valid Bun compile target.
@@ -144,13 +141,8 @@ export function resolveTarget(input: string): BunTarget {
 		return aliased;
 	}
 
-	const validTargets = [
-		...Object.keys(TARGET_ALIASES),
-		...SUPPORTED_TARGETS,
-	].join(", ");
-	throw new Error(
-		`Unknown target "${input}"\n  Valid targets: ${validTargets}`,
-	);
+	const validTargets = [...Object.keys(TARGET_ALIASES), ...SUPPORTED_TARGETS].join(", ");
+	throw new Error(`Unknown target "${input}"\n  Valid targets: ${validTargets}`);
 }
 
 /**
@@ -243,10 +235,7 @@ export function getBinaryFilename(baseName: string, target: BunTarget): string {
  * @param targets - The list of targets that were built
  * @returns The shell resolver script as a string
  */
-export function generateResolver(
-	baseName: string,
-	targets: readonly BunTarget[],
-): string {
+export function generateResolver(baseName: string, targets: readonly BunTarget[]): string {
 	// Build case entries for only the targets that were built (excluding Windows)
 	const caseEntries: string[] = [];
 	for (const target of targets) {
@@ -308,10 +297,7 @@ exec "$bin_path" "$@"
  * @param targets - The list of targets that were built
  * @returns The .cmd resolver script as a string
  */
-export function generateCmdResolver(
-	baseName: string,
-	targets: readonly BunTarget[],
-): string {
+export function generateCmdResolver(baseName: string, targets: readonly BunTarget[]): string {
 	const windowsTargets = targets.filter((t) => t.startsWith("bun-windows"));
 
 	// If no Windows targets were built, generate a stub that tells the user
@@ -322,16 +308,10 @@ export function generateCmdResolver(
 	const windowsX64Target = windowsTargets.find(
 		(t): t is BunTarget => t === "bun-windows-x64-baseline",
 	);
-	const windowsArm64Target = windowsTargets.find(
-		(t): t is BunTarget => t === "bun-windows-arm64",
-	);
+	const windowsArm64Target = windowsTargets.find((t): t is BunTarget => t === "bun-windows-arm64");
 
-	const x64Filename = windowsX64Target
-		? getBinaryFilename(baseName, windowsX64Target)
-		: "";
-	const arm64Filename = windowsArm64Target
-		? getBinaryFilename(baseName, windowsArm64Target)
-		: "";
+	const x64Filename = windowsX64Target ? getBinaryFilename(baseName, windowsX64Target) : "";
+	const arm64Filename = windowsArm64Target ? getBinaryFilename(baseName, windowsArm64Target) : "";
 
 	// Build architecture dispatch lines.
 	// CMD expands %var% at parse-time, so we cannot test a variable
@@ -408,10 +388,7 @@ export function writeResolver(
 // Build helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-export function resolveEnvFilePaths(
-	cwd: string,
-	envFiles: string[] | undefined,
-): string[] {
+export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined): string[] {
 	if (!envFiles || envFiles.length === 0) {
 		return [];
 	}
@@ -515,9 +492,7 @@ export async function execBuild(
 
 	if (exitCode !== 0) {
 		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
-		throw new Error(
-			`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`,
-		);
+		throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
 	}
 }
 
@@ -541,21 +516,18 @@ export async function validateEntrypoint(
 	envFiles: readonly string[] = [],
 ): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
-	const proc = Bun.spawn(
-		[process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry],
-		{
-			env: {
-				...process.env,
-				[VALIDATION_MODE_ENV]: "1",
-				// Stop after validation; entrypoint code after `execute()` must not run.
-				[VALIDATION_FORCE_EXIT_ENV]: "1",
-				BUN_BE_BUN: "1",
-			},
-			cwd: process.cwd(),
-			stdout: "ignore",
-			stderr: "pipe",
+	const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
+		env: {
+			...process.env,
+			[VALIDATION_MODE_ENV]: "1",
+			// Stop after validation; entrypoint code after `execute()` must not run.
+			[VALIDATION_FORCE_EXIT_ENV]: "1",
+			BUN_BE_BUN: "1",
 		},
-	);
+		cwd: process.cwd(),
+		stdout: "ignore",
+		stderr: "pipe",
+	});
 
 	const stderrPromise = new Response(proc.stderr).text();
 
@@ -641,8 +613,7 @@ export const buildCommand = new Crust("build")
 		},
 		name: {
 			type: "string",
-			description:
-				"Binary name (defaults to package.json name or entry filename)",
+			description: "Binary name (defaults to package.json name or entry filename)",
 			short: "n",
 		},
 		minify: {
@@ -665,22 +636,19 @@ export const buildCommand = new Crust("build")
 		},
 		resolver: {
 			type: "string",
-			description:
-				"Filename for the resolver script (multi-target builds, no extension)",
+			description: "Filename for the resolver script (multi-target builds, no extension)",
 			default: "cli",
 			short: "r",
 		},
 		validate: {
 			type: "boolean",
-			description:
-				"Validate command runtime rules before compiling (disable with --no-validate)",
+			description: "Validate command runtime rules before compiling (disable with --no-validate)",
 			default: true,
 		},
 		"env-file": {
 			type: "string",
 			multiple: true,
-			description:
-				"Explicit env file(s) used for build-time constants; repeatable",
+			description: "Explicit env file(s) used for build-time constants; repeatable",
 		},
 		package: {
 			type: "boolean",
@@ -765,50 +733,23 @@ export const buildCommand = new Crust("build")
 
 		if (targets.length === 1) {
 			// Single-target build: one binary, no resolver
-			const outfilePath = resolveOutfile(
-				flags.outfile,
-				flags.name,
-				entryPath,
-				cwd,
-				flags.outdir,
-			);
+			const outfilePath = resolveOutfile(flags.outfile, flags.name, entryPath, cwd, flags.outdir);
 
-			console.log(
-				`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`,
-			);
-			await execBuild(
-				entryPath,
-				outfilePath,
-				flags.minify,
-				targets[0],
-				envFiles,
-			);
+			console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
+			await execBuild(entryPath, outfilePath, flags.minify, targets[0], envFiles);
 			console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		} else {
 			// Multi-target build: multiple binaries + shell/CMD resolvers
 			const baseName = resolveBaseName(flags.name, entryPath, cwd);
 
-			console.log(
-				`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`,
-			);
+			console.log(`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`);
 
 			const results: string[] = [];
 			for (const target of targets) {
-				const targetOutfile = resolveTargetOutfile(
-					baseName,
-					target,
-					cwd,
-					flags.outdir,
-				);
+				const targetOutfile = resolveTargetOutfile(baseName, target, cwd, flags.outdir);
 
 				console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-				await execBuild(
-					entryPath,
-					targetOutfile,
-					flags.minify,
-					target,
-					envFiles,
-				);
+				await execBuild(entryPath, targetOutfile, flags.minify, target, envFiles);
 				results.push(targetOutfile);
 			}
 
@@ -816,15 +757,11 @@ export const buildCommand = new Crust("build")
 			const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
 			writeResolver(resolverPath, baseName, targets);
 
-			console.log(
-				`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`,
-			);
+			console.log(`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`);
 			for (const r of results) {
 				console.log(`  ${r}`);
 			}
-			console.log(
-				`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`,
-			);
+			console.log(`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`);
 		}
 	});
 

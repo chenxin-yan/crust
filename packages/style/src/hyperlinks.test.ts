@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { createStyle, link, linkCode, setGlobalColorMode } from "./index.ts";
 
 describe("hyperlinks", () => {
@@ -19,9 +20,7 @@ describe("hyperlinks", () => {
 	});
 
 	it("rejects URLs containing spaces", () => {
-		expect(() => linkCode("https://example.com/foo bar")).toThrow(
-			/Invalid hyperlink URL/,
-		);
+		expect(() => linkCode("https://example.com/foo bar")).toThrow(/Invalid hyperlink URL/);
 	});
 
 	it("wraps text in OSC 8 sequences", () => {

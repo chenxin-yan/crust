@@ -145,10 +145,10 @@ The `CustomSkillConfig` shape:
 
 ```ts
 interface CustomSkillConfig {
-  name: string;                          // unique; must match SKILL.md frontmatter
-  sourceDir: string | URL;               // file:// URL, absolute path, or bare relative
-  version?: string;                      // inherits plugin `version` when omitted
-  scope?: "global" | "project";          // overrides plugin defaultScope
+  name: string; // unique; must match SKILL.md frontmatter
+  sourceDir: string | URL; // file:// URL, absolute path, or bare relative
+  version?: string; // inherits plugin `version` when omitted
+  scope?: "global" | "project"; // overrides plugin defaultScope
   installMode?: "auto" | "symlink" | "copy";
 }
 ```
@@ -227,9 +227,7 @@ try {
       `${outputDir}: existing ${kindMismatch.existing} blocks ${kindMismatch.attempted} install`,
     );
   } else if (manifestMalformed) {
-    console.error(
-      `${outputDir}: malformed crust.json (${manifestMalformed.reason})`,
-    );
+    console.error(`${outputDir}: malformed crust.json (${manifestMalformed.reason})`);
   } else {
     console.error(`${outputDir}: not created by Crust`);
   }
@@ -276,11 +274,9 @@ import { Crust } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
 const deploy = annotate(
-  new Crust("deploy")
-    .meta({ description: "Deploy the application" })
-    .run(() => {
-      // ...
-    }),
+  new Crust("deploy").meta({ description: "Deploy the application" }).run(() => {
+    // ...
+  }),
   [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",
@@ -409,12 +405,11 @@ contents change. Wiring it to the consuming package's `package.json`
 `version` is the typical pattern.
 
 <Callout type="info" title="`metadata.version` in SKILL.md is not read">
-  The Agent Skills spec lets bundle authors record a version under
-  `metadata.version` in their SKILL.md frontmatter. Crust intentionally does
-  **not** read that field — the `version` option you pass to
-  `installSkillBundle()` is the sole source of truth for `crust.json` and update
-  detection. If you keep a `metadata.version` in your SKILL.md for spec
-  compliance, keep it in sync with the value you pass here.
+  The Agent Skills spec lets bundle authors record a version under `metadata.version` in their
+  SKILL.md frontmatter. Crust intentionally does **not** read that field — the `version` option you
+  pass to `installSkillBundle()` is the sole source of truth for `crust.json` and update detection.
+  If you keep a `metadata.version` in your SKILL.md for spec compliance, keep it in sync with the
+  value you pass here.
 </Callout>
 
 ### Options
@@ -422,12 +417,12 @@ contents change. Wiring it to the consuming package's `package.json`
 | Option        | Type                            | Default    | Description                                                                                                                        |
 | ------------- | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `sourceDir`   | `string \| URL`                 | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.                           |
-| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`).                 |
+| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`).                |
 | `version`     | `string`                        | — required | Recorded in `crust.json` and compared on subsequent installs. Typically wired to the consuming package's `package.json` `version`. |
 | `scope`       | `"global" \| "project"`         | `"global"` | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                                   |
 | `installMode` | `"auto" \| "symlink" \| "copy"` | `"auto"`   | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.                             |
 | `clean`       | `boolean`                       | `true`     | Remove the existing skill directory before writing.                                                                                |
-| `force`       | `boolean`                       | `false`    | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.                     |
+| `force`       | `boolean`                       | `false`    | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.                    |
 
 Crust copies bundle files as raw bytes, so supporting assets such as images,
 fonts, or scripts round-trip unchanged. `SKILL.md` is also parsed as UTF-8 to
@@ -465,9 +460,7 @@ Two gotchas trip up bundle authors who publish to npm:
    import skillsPkg from "acme-skills/package.json" with { type: "json" };
 
    await installSkillBundle({
-     sourceDir: new URL(
-       import.meta.resolve("acme-skills/skills/funnel-builder"),
-     ),
+     sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
      agents: ["claude-code"],
      version: skillsPkg.version,
    });

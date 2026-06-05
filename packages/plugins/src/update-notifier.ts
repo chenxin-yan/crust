@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
+
 import type { CrustPlugin } from "@crustjs/core";
 import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
 
@@ -205,11 +206,7 @@ export function parseSemver(version: string): SemverParts | null {
 	const minor = Number(rawMinor);
 	const patch = Number(rawPatch);
 
-	if (
-		!Number.isFinite(major) ||
-		!Number.isFinite(minor) ||
-		!Number.isFinite(patch)
-	) {
+	if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
 		return null;
 	}
 
@@ -299,8 +296,7 @@ function normalizeNotifierState(
 	if (!input || typeof input !== "object") return { ...EMPTY_NOTIFIER_STATE };
 
 	const lastCheckedAt =
-		typeof input.lastCheckedAt === "number" &&
-		Number.isFinite(input.lastCheckedAt)
+		typeof input.lastCheckedAt === "number" && Number.isFinite(input.lastCheckedAt)
 			? input.lastCheckedAt
 			: 0;
 	const latestVersion =
@@ -308,8 +304,7 @@ function normalizeNotifierState(
 			? input.latestVersion
 			: undefined;
 	const lastNotifiedVersion =
-		typeof input.lastNotifiedVersion === "string" &&
-		input.lastNotifiedVersion.length > 0
+		typeof input.lastNotifiedVersion === "string" && input.lastNotifiedVersion.length > 0
 			? input.lastNotifiedVersion
 			: undefined;
 
@@ -334,14 +329,10 @@ function detectPackageManager(): UpdateNotifierPackageManager {
 		if (userAgent.startsWith("npm")) return "npm";
 	}
 
-	const detectedFromExecPath = detectPackageManagerFromExecPath(
-		process.env.npm_execpath,
-	);
+	const detectedFromExecPath = detectPackageManagerFromExecPath(process.env.npm_execpath);
 	if (detectedFromExecPath) return detectedFromExecPath;
 
-	const detectedFromRuntime = detectPackageManagerFromExecPath(
-		process.execPath,
-	);
+	const detectedFromRuntime = detectPackageManagerFromExecPath(process.execPath);
 	if (detectedFromRuntime) return detectedFromRuntime;
 
 	return "npm";
@@ -352,19 +343,14 @@ function detectInstallScopeFromEnvironment(): UpdateNotifierInstallScope {
 	if (explicitGlobal === "true") return "global";
 	if (explicitGlobal === "false") return "local";
 
-	const candidatePaths = [
-		process.argv[0],
-		process.argv[1],
-		process.env.npm_execpath,
-	];
+	const candidatePaths = [process.argv[0], process.argv[1], process.env.npm_execpath];
 
 	const globalRoots = [process.env.BUN_INSTALL, process.env.PNPM_HOME];
 
 	if (
 		globalRoots.some(
 			(rootPath) =>
-				rootPath &&
-				candidatePaths.some((pathValue) => isPathWithin(rootPath, pathValue)),
+				rootPath && candidatePaths.some((pathValue) => isPathWithin(rootPath, pathValue)),
 		)
 	) {
 		return "global";
@@ -392,10 +378,7 @@ function detectPackageManagerFromExecPath(
 	return null;
 }
 
-function isPathWithin(
-	parentPath: string,
-	childPath: string | undefined,
-): boolean {
+function isPathWithin(parentPath: string, childPath: string | undefined): boolean {
 	if (!childPath) return false;
 
 	const resolvedParent = resolve(parentPath);
@@ -410,8 +393,7 @@ function isLikelyLocalInstallPath(pathValue: string | undefined): boolean {
 	const normalizedPath = pathValue.replaceAll("\\", "/").toLowerCase();
 	const cwd = process.cwd().replaceAll("\\", "/").toLowerCase();
 	return (
-		(normalizedPath.includes("/node_modules/.bin/") ||
-			normalizedPath.includes("/node_modules/")) &&
+		(normalizedPath.includes("/node_modules/.bin/") || normalizedPath.includes("/node_modules/")) &&
 		normalizedPath.startsWith(cwd)
 	);
 }
@@ -486,11 +468,7 @@ function resolveUpdateCommand(
 	if (typeof override === "function") {
 		return override(packageName, detectedPackageManager, detectedInstallScope);
 	}
-	return defaultUpdateCommand(
-		packageName,
-		detectedPackageManager,
-		detectedInstallScope,
-	);
+	return defaultUpdateCommand(packageName, detectedPackageManager, detectedInstallScope);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -528,9 +506,7 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export function updateNotifierPlugin(
-	options: UpdateNotifierPluginOptions,
-): CrustPlugin {
+export function updateNotifierPlugin(options: UpdateNotifierPluginOptions): CrustPlugin {
 	const {
 		currentVersion,
 		packageName,
@@ -581,11 +557,7 @@ export function updateNotifierPlugin(
 						isNewerVersion(currentVersion, state.latestVersion) &&
 						state.lastNotifiedVersion !== state.latestVersion
 					) {
-						emitUpdateNotice(
-							currentVersion,
-							state.latestVersion,
-							resolvedUpdateCommand,
-						);
+						emitUpdateNotice(currentVersion, state.latestVersion, resolvedUpdateCommand);
 						await cacheAdapter.write({
 							...state,
 							lastNotifiedVersion: state.latestVersion,
@@ -595,11 +567,7 @@ export function updateNotifierPlugin(
 				}
 
 				// ── Network check: fetch latest version ──────────────────
-				const latestVersion = await fetchLatestVersion(
-					packageName,
-					registryUrl,
-					timeoutMs,
-				);
+				const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
 
 				if (latestVersion === null) {
 					// Soft failure — update timestamp to avoid retrying too soon
@@ -622,11 +590,7 @@ export function updateNotifierPlugin(
 					isNewerVersion(currentVersion, latestVersion) &&
 					state.lastNotifiedVersion !== latestVersion
 				) {
-					emitUpdateNotice(
-						currentVersion,
-						latestVersion,
-						resolvedUpdateCommand,
-					);
+					emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand);
 					nextState.lastNotifiedVersion = latestVersion;
 				}
 
@@ -684,10 +648,7 @@ function emitUpdateNotice(
 	const commandLine = `Run ${cyan(updateCommand)}`;
 
 	// Determine content width from the longest visible line
-	const contentWidth = Math.max(
-		visibleWidth(versionLine),
-		visibleWidth(commandLine),
-	);
+	const contentWidth = Math.max(visibleWidth(versionLine), visibleWidth(commandLine));
 	const innerWidth = contentWidth + PADDING * 2;
 
 	const border = BOX_HORIZONTAL.repeat(innerWidth);

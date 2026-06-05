@@ -62,11 +62,7 @@ export interface TableOptions {
 /**
  * Compute the maximum visible width for each column across headers and rows.
  */
-function computeColumnWidths(
-	headers: string[],
-	rows: string[][],
-	minWidth: number,
-): number[] {
+function computeColumnWidths(headers: string[], rows: string[][], minWidth: number): number[] {
 	const columnCount = headers.length;
 	const widths: number[] = new Array(columnCount).fill(minWidth) as number[];
 
@@ -92,11 +88,7 @@ function computeColumnWidths(
 /**
  * Align a cell value within the given width using the specified alignment.
  */
-function alignCell(
-	value: string,
-	width: number,
-	alignment: ColumnAlignment,
-): string {
+function alignCell(value: string, width: number, alignment: ColumnAlignment): string {
 	switch (alignment) {
 		case "right":
 			return padStart(value, width);
@@ -177,11 +169,7 @@ function formatSeparator(
  * // "| Bob   | 25  |"
  * ```
  */
-export function table(
-	headers: string[],
-	rows: string[][],
-	options?: TableOptions,
-): string {
+export function table(headers: string[], rows: string[][], options?: TableOptions): string {
 	const alignments = options?.align ?? [];
 	const minColumnWidth = options?.minColumnWidth ?? 0;
 	const cellPadding = options?.cellPadding ?? 1;
@@ -193,20 +181,14 @@ export function table(
 	const lines: string[] = [];
 
 	// Header row
-	lines.push(
-		formatRow(headers, columnWidths, alignments, cellPadding, borderChar),
-	);
+	lines.push(formatRow(headers, columnWidths, alignments, cellPadding, borderChar));
 
 	// Separator row
-	lines.push(
-		formatSeparator(columnWidths, cellPadding, separatorChar, borderChar),
-	);
+	lines.push(formatSeparator(columnWidths, cellPadding, separatorChar, borderChar));
 
 	// Data rows
 	for (const row of rows) {
-		lines.push(
-			formatRow(row, columnWidths, alignments, cellPadding, borderChar),
-		);
+		lines.push(formatRow(row, columnWidths, alignments, cellPadding, borderChar));
 	}
 
 	return lines.join("\n");

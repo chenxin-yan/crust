@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
 import type { FlagsDef } from "./types.ts";
 

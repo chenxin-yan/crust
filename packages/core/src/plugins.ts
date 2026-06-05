@@ -45,11 +45,7 @@ export interface SetupActions {
 	 * @param name - The subcommand name (used for routing)
 	 * @param command - The subcommand node to register
 	 */
-	addSubCommand(
-		parent: CommandTarget,
-		name: string,
-		command: CommandTarget,
-	): void;
+	addSubCommand(parent: CommandTarget, name: string, command: CommandTarget): void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -73,16 +69,10 @@ export interface MiddlewareContext extends BaseContext {
 }
 
 export type Next = () => Promise<void>;
-export type PluginMiddleware = (
-	context: MiddlewareContext,
-	next: Next,
-) => void | Promise<void>;
+export type PluginMiddleware = (context: MiddlewareContext, next: Next) => void | Promise<void>;
 
 export interface CrustPlugin {
 	name?: string;
-	setup?: (
-		context: SetupContext,
-		actions: SetupActions,
-	) => void | Promise<void>;
+	setup?: (context: SetupContext, actions: SetupActions) => void | Promise<void>;
 	middleware?: PluginMiddleware;
 }

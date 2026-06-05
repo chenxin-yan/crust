@@ -79,14 +79,14 @@ The string branch uses the standard `string & {}` autocomplete pattern so editor
 `fg`, `bg`, `fgCode`, and `bgCode` (plus their `style.fg` / `style.bg` / chain `.fg` / `.bg` counterparts) check inline string literals against a stricter `StrictColorString` subset — named CSS colors, `#rrggbb` / `#rgb` / `#rrggbbaa` hex, and CSS color-function notation (`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()`, `color-mix()`). Typos and arbitrary literals fail at compile time:
 
 ```ts
-fg("ok",  "rebeccapurple");      // ✅ valid named color
-fg("ok",  "#ff0000");            // ✅ valid hex
-fg("ok",  "oklch(60% 0.2 240)"); // ✅ valid CSS function
-fg("bad", "rebbecapurple");      // ❌ compile error
-fg("bad", "not-a-color");        // ❌ compile error
+fg("ok", "rebeccapurple"); // ✅ valid named color
+fg("ok", "#ff0000"); // ✅ valid hex
+fg("ok", "oklch(60% 0.2 240)"); // ✅ valid CSS function
+fg("bad", "rebbecapurple"); // ❌ compile error
+fg("bad", "not-a-color"); // ❌ compile error
 ```
 
-Dynamic `string` / `ColorString` / `ColorInput` values keep flowing through unchanged for theme tokens loaded from JSON, environment variables, or arbitrary user input — the strict check only fires on inline literals. Template-literal types validate the *shape* only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and raise `TypeError` at runtime via `Bun.color()`. The helper types `StrictColorString`, `CssColorFunctionString`, `NonStringColorInput`, `ColorInputCandidate`, and `CheckedColorInput<T>` are exported from `@crustjs/style` for users who want to build their own strict wrappers.
+Dynamic `string` / `ColorString` / `ColorInput` values keep flowing through unchanged for theme tokens loaded from JSON, environment variables, or arbitrary user input — the strict check only fires on inline literals. Template-literal types validate the _shape_ only; structurally-valid-looking but semantically-bogus literals like `"#"` or `"rgb(banana)"` still type-check and raise `TypeError` at runtime via `Bun.color()`. The helper types `StrictColorString`, `CssColorFunctionString`, `NonStringColorInput`, `ColorInputCandidate`, and `CheckedColorInput<T>` are exported from `@crustjs/style` for users who want to build their own strict wrappers.
 
 ##### Building your own strict wrappers
 
@@ -136,8 +136,7 @@ A naive wrapper like `<T extends NamedColor>(c: T) => fg("x", c)` will not compi
 | `center(text, width, char?)`      | Center-align to visible width                    |
 
 <Callout type="info">
-  To strip ANSI escape sequences from a string, use Bun's built-in
-  `Bun.stripANSI(text)` function.
+  To strip ANSI escape sequences from a string, use Bun's built-in `Bun.stripANSI(text)` function.
 </Callout>
 
 ### Block Helpers
@@ -277,14 +276,7 @@ pre-built `*Code` exports are still available for callers that prefer
 pure data:
 
 ```ts
-import {
-  applyStyle,
-  composeStyles,
-  bold,
-  red,
-  bgYellow,
-  fgCode,
-} from "@crustjs/style";
+import { applyStyle, composeStyles, bold, red, bgYellow, fgCode } from "@crustjs/style";
 
 const danger = composeStyles(bold, red, bgYellow);
 console.log(applyStyle("DANGER", danger));
@@ -302,13 +294,12 @@ style.fg("rebeccapurple").italic.underline("emphasis");
 ```
 
 <Callout type="warn">
-  `chain.open + text + chain.close` matches `chain(text)` byte-for-byte *only*
-  when adjacent chain steps have distinct close codes. When two adjacent steps
-  share a close code (e.g. `bold` and `dim` both close with `\x1b[22m`),
-  `applyStyle` re-opens the outer style after each shared close to prevent
-  bleed; that re-open is part of `chain(text)` but not of the cached
-  `chain.close`. Use `chain(text)` for emission and reserve `chain.open` /
-  `chain.close` for `composeStyles` / `applyStyle`.
+  `chain.open + text + chain.close` matches `chain(text)` byte-for-byte *only* when adjacent chain
+  steps have distinct close codes. When two adjacent steps share a close code (e.g. `bold` and `dim`
+  both close with `\x1b[22m`), `applyStyle` re-opens the outer style after each shared close to
+  prevent bleed; that re-open is part of `chain(text)` but not of the cached `chain.close`. Use
+  `chain(text)` for emission and reserve `chain.open` / `chain.close` for `composeStyles` /
+  `applyStyle`.
 </Callout>
 
 ### Dynamic Colors
@@ -340,13 +331,7 @@ console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 Pair factories work with `applyStyle` and `composeStyles`:
 
 ```ts
-import {
-  fgCode,
-  bgCode,
-  applyStyle,
-  composeStyles,
-  boldCode,
-} from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
 
 const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
@@ -368,11 +353,10 @@ console.log(s.bg("text", "rebeccapurple"));
 In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
 
 <Callout type="info">
-  The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code`
-  pair-factory variants, plus matching `style.*` instance methods) still ship
-  and behave exactly as before, but are marked `@deprecated` and will be removed
-  in v1.0.0. IDEs and `tsc` surface the deprecation with a one-line replacement
-  hint at every call site — prefer `fg` / `bg` for new code.
+  The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-factory variants,
+  plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked
+  `@deprecated` and will be removed in v1.0.0. IDEs and `tsc` surface the deprecation with a
+  one-line replacement hint at every call site — prefer `fg` / `bg` for new code.
 </Callout>
 
 ### Color Depth & Auto-Fallback
@@ -409,34 +393,23 @@ Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensive
 ### Hyperlinks (OSC 8)
 
 ```ts
-import {
-  createStyle,
-  linkCode,
-  composeStyles,
-  applyStyle,
-  underlineCode,
-} from "@crustjs/style";
+import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
 
 console.log(s.link("Crust docs", "https://crustjs.com"));
-console.log(
-  s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }),
-);
+console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
 
-const underlinedLink = composeStyles(
-  linkCode("https://crustjs.com"),
-  underlineCode,
-);
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
 console.log(applyStyle("Visit Crust", underlinedLink));
 ```
 
 In `"auto"` mode, hyperlinks are emitted when stdout is a TTY. They are not disabled by `NO_COLOR`, since OSC 8 links are not color sequences. In `"never"` mode, link helpers return plain text.
 
 <Callout type="info">
-  Terminal support for OSC 8 varies by emulator. Many modern terminals support
-  it, but there is no reliable cross-terminal capability probe yet, so
-  unsupported terminals may simply show plain text without clickable behavior.
+  Terminal support for OSC 8 varies by emulator. Many modern terminals support it, but there is no
+  reliable cross-terminal capability probe yet, so unsupported terminals may simply show plain text
+  without clickable behavior.
 </Callout>
 
 ### Text Layout

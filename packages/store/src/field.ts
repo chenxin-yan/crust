@@ -14,6 +14,7 @@ import {
 	normalizeStandardIssues,
 	type StandardSchema,
 } from "@crustjs/utils/schema";
+
 import { CrustStoreError } from "./errors.ts";
 import type { FIELD_SCHEMA_OUTPUT } from "./types.ts";
 
@@ -70,9 +71,7 @@ function makeValidator<S extends StandardSchema>(
 		const result = await schema["~standard"].validate(value);
 		if (result.issues) {
 			const normalized = normalizeStandardIssues(result.issues);
-			const messages = normalized.map((i) =>
-				i.path ? `${i.path}: ${i.message}` : i.message,
-			);
+			const messages = normalized.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message));
 			throw new Error(messages.join("; "));
 		}
 		return { value: result.value };
@@ -111,9 +110,7 @@ type SchemaFieldDefWithOptions<
  * schema `.default()` does not narrow the inferred TypeScript type. Pass
  * `field(schema, { default: x })` explicitly to narrow.
  */
-type SchemaFieldDef<S extends StandardSchema> = RawSchemaFieldDef<
-	InferOutput<S>
->;
+type SchemaFieldDef<S extends StandardSchema> = RawSchemaFieldDef<InferOutput<S>>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // field() — overloads

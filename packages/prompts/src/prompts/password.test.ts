@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { z } from "zod";
+
 import { password } from "./password.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -29,7 +31,7 @@ function setupMocks(): void {
 		configurable: true,
 	});
 
-	// biome-ignore lint/suspicious/noExplicitAny: mocking process.stdin methods for testing
+	// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 	(process.stdin as any).setRawMode = (mode: boolean) => {
 		Object.defineProperty(process.stdin, "isRaw", {
 			value: mode,
@@ -373,8 +375,7 @@ describe("password — validation", () => {
 		const promise = password({
 			message: "Password?",
 			validate: (v) => {
-				if (v.length < 4)
-					throw new Error("Password must be at least 4 characters");
+				if (v.length < 4) throw new Error("Password must be at least 4 characters");
 			},
 		});
 
@@ -503,9 +504,7 @@ describe("password — non-TTY", () => {
 			configurable: true,
 		});
 
-		await expect(password({ message: "Password?" })).rejects.toThrow(
-			"interactive terminal",
-		);
+		await expect(password({ message: "Password?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("returns initial value in non-TTY environment", async () => {

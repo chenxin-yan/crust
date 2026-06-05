@@ -94,9 +94,7 @@ function findNearestPackageRoot(startPath: string): string | null {
 export function resolveSourceDir(input: string | URL): string {
 	if (input instanceof URL) {
 		if (input.protocol !== "file:") {
-			throw new Error(
-				`sourceDir URL must use file: protocol, got "${input.protocol}".`,
-			);
+			throw new Error(`sourceDir URL must use file: protocol, got "${input.protocol}".`);
 		}
 		return fileURLToPath(input);
 	}

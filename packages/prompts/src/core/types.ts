@@ -123,9 +123,7 @@ export type ValidateFn<T> = (value: T) => void | Promise<void>;
  * `PasswordOptions`; not re-exported from the package root because callers
  * can derive it from those option types when needed.
  */
-export type PromptValidate<Output> =
-	| ValidateFn<string>
-	| StandardSchemaV1<unknown, Output>;
+export type PromptValidate<Output> = ValidateFn<string> | StandardSchemaV1<unknown, Output>;
 
 /**
  * Type guard: discriminate the polymorphic `validate` slot.
@@ -151,9 +149,6 @@ export function isStandardSchema<Output>(
 		}
 	)["~standard"];
 	return (
-		!!std &&
-		typeof std === "object" &&
-		std.version === 1 &&
-		typeof std.validate === "function"
+		!!std && typeof std === "object" && std.version === 1 && typeof std.validate === "function"
 	);
 }

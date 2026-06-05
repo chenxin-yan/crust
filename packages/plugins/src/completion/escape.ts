@@ -96,12 +96,7 @@ export function assertSafeBinName(binName: string): string {
 	if (binName.length === 0) {
 		throw new Error("completion plugin: binName must not be empty");
 	}
-	if (
-		binName.includes("/") ||
-		binName.includes("\\") ||
-		binName === ".." ||
-		binName === "."
-	) {
+	if (binName.includes("/") || binName.includes("\\") || binName === ".." || binName === ".") {
 		throw new Error(
 			`completion plugin: invalid binName ${JSON.stringify(binName)} — ` +
 				`path separators and "."/".." are not allowed (used as a filename in --output-dir mode).`,
@@ -127,7 +122,7 @@ export function sanitizeFreeText(value: string): string {
 	// for alignment; everything else — including LF and CR — collapses
 	// to a single space so callers can safely embed values in shell
 	// comment lines and shell-quoted strings.
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: deliberately match controls
+	// oxlint-disable-next-line no-control-regex -- deliberately match controls
 	return value.replace(/[\x00-\x08\x0A-\x1F\x7F]/g, " ");
 }
 

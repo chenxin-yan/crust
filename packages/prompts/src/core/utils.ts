@@ -39,11 +39,7 @@ export function formatHeader(prefix: string, message?: string): string {
  * @param value - Optional themed submitted value string
  * @returns Formatted submitted line
  */
-export function formatSubmitted(
-	prefix: string,
-	message?: string,
-	value?: string,
-): string {
+export function formatSubmitted(prefix: string, message?: string, value?: string): string {
 	const parts = [prefix];
 	if (message) parts.push(message);
 	if (value) parts.push(value);
@@ -162,9 +158,7 @@ export interface NormalizedChoice<T> {
  * // => [{ label: "HTTP", value: 80 }]
  * ```
  */
-export function normalizeChoices<T>(
-	choices: readonly Choice<T>[],
-): NormalizedChoice<T>[] {
+export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[] {
 	return choices.map((choice) => {
 		if (typeof choice === "string") {
 			return { label: choice, value: choice as T };

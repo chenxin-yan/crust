@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import {
 	assertTTY,
 	CancelledError,
@@ -84,9 +85,7 @@ describe("assertTTY", () => {
 			configurable: true,
 		});
 
-		expect(() => assertTTY()).toThrow(
-			"Prompts require an interactive terminal (TTY)",
-		);
+		expect(() => assertTTY()).toThrow("Prompts require an interactive terminal (TTY)");
 	});
 
 	it("does not throw when stdin is a TTY", () => {
@@ -159,7 +158,7 @@ describe("runPrompt", () => {
 		});
 
 		// Mock setRawMode since the test runner stdin is not a real TTY
-		// biome-ignore lint/suspicious/noExplicitAny: mocking process.stdin methods for testing
+		// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 		(process.stdin as any).setRawMode = (mode: boolean) => {
 			Object.defineProperty(process.stdin, "isRaw", {
 				value: mode,
@@ -297,8 +296,7 @@ describe("runPrompt", () => {
 			handleKey: () => submit("final"),
 			initialState: { value: "test" },
 			theme: defaultTheme,
-			renderSubmitted: (_state, value, theme) =>
-				`${theme.success("done")} ${value}`,
+			renderSubmitted: (_state, value, theme) => `${theme.success("done")} ${value}`,
 		};
 
 		const promise = runPrompt(config);
@@ -476,7 +474,7 @@ describe("HandleKeyResult discrimination", () => {
 			writable: true,
 			configurable: true,
 		});
-		// biome-ignore lint/suspicious/noExplicitAny: mocking process.stdin methods for testing
+		// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 		(process.stdin as any).setRawMode = (mode: boolean) => {
 			Object.defineProperty(process.stdin, "isRaw", {
 				value: mode,

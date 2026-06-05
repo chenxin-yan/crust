@@ -7,7 +7,6 @@
 - 0dc69b1: Introduce `@crustjs/utils`, fold in `@crustjs/schema-utils`, dedupe `resolveSourceDir`, and switch validated helpers to explicit Standard Schema-backed validation.
 
   **`@crustjs/utils` (new, `0.0.1`)** — Pre-stable; public surface may change without notice until `0.1.0`. Pin to an exact version if depending externally.
-
   - `resolveSourceDir(input: string | URL): string` for three-mode source-directory resolution (`file:` URL via `fileURLToPath`, absolute path via `path.resolve`, or relative path resolved from the nearest `package.json` walking up from `process.argv[1]`).
   - `@crustjs/utils/schema` subpath exposes Standard Schema boundary assertions, issue normalization, and type aliases (`assertStandardSchema`, `isStandardSchema`, `formatPath`, `normalizeStandardIssues`, `normalizeStandardPath`, plus `StandardSchema` / `InferInput` / `InferOutput` / `ValidationIssue`). Internal-only — **not part of the public Crust API** and may change without a deprecation cycle. Use `@crustjs/validate` instead.
   - `@crustjs/utils/schema` is core-free shared infrastructure; package-specific APIs wrap errors at their own boundaries.
@@ -15,7 +14,6 @@
   **`@crustjs/schema-utils` removed.** The standalone workspace package is gone; its surface lives at `@crustjs/utils/schema`. The published `@crustjs/schema-utils@0.0.1` artifact on npm will be deprecated separately.
 
   **`@crustjs/core`, `@crustjs/validate`, `@crustjs/store` — raw schema-backed validation.** Vendor-specific schema introspection is removed; validated helpers now use Standard Schema validation over parsed values. `arg()`, `flag()`, and `field()` no longer infer type, requiredness, descriptions, multiplicity, or defaults from Zod/Effect internals. Missing values are passed to validation as `undefined`, so schema `.optional()` and `.default()` behavior applies naturally at runtime.
-
   - Validated positional args can omit parser `type`; they validate the raw positional string (or string array for variadic args) through the schema.
   - Validated CLI flags must declare parser `type` because it defines CLI grammar/token ownership: boolean flags do not consume a value, while string/number flags consume `--flag value` / `--flag=value`. Schemas validate and transform after parsing.
   - Descriptions must now be supplied through Crust options.
@@ -23,7 +21,6 @@
   - This is a public behavior change for metadata-driven parser/help/store consumers: add explicit Crust metadata (`type`, `multiple`, `description`, `default`, etc.) where that metadata is still needed.
 
   **`@crustjs/create`, `@crustjs/skills` — internal dedup onto `resolveSourceDir`.** Public signatures and behavior of `createProject()` and `installSkillBundle()` are unchanged, but the wording of three thrown `Error` messages now comes from the shared helper:
-
   - `"Template URL must use file: protocol, got ..."` / `"Bundle URL must use file: protocol, got ..."` → `"sourceDir URL must use file: protocol, got ..."`
   - `"Could not resolve relative template path ..."` / `"Could not resolve relative bundle path ..."` → `"Could not resolve relative sourceDir ..."` (both `process.argv[1]` unset and missing-`package.json` variants)
 
@@ -34,7 +31,6 @@
 - d08439a: Internal refactor: `ValueType`, `ResolvePrimitive`, and number coercion now use shared `@crustjs/utils` primitives with no consumer-visible behavior change.
 - c4d2b22: Extend `ValueType` with `"url"`, `"path"`, and `"json"` (resolving to `URL`, absolute `string`, and `unknown`). Add a `parse?: (raw: string) => unknown` escape hatch on `StringFlagDef`/`StringMultiFlagDef`/`StringArgDef`; every non-string variant declares `parse?: never`, so misuse is rejected at compile time. Async `parse` functions are rejected at command setup via a new `CONFIG` error code. Fix: when `parse` is set and argv is absent but `default` is present, `parse(String(default))` now runs so the runtime value matches the inferred type. **Behavior change:** `choices` on string flags/args is now enforced at parse time (previously hint-only); raw argv is validated against `choices` before any `parse` transform runs.
 - c4d2b22: Review-driven follow-ups to the value-type and parse-escape-hatch work:
-
   - `type: "path"` flag/arg defaults now run through `coercePath` so omitting the flag yields the same absolute path users get when they pass it on the command line (`{ type: "path", default: "./dist" }` previously returned the raw relative string).
   - `choices` is now validated against `default` values in both the parse and non-parse default branches, mirroring argv-side enforcement so `{ choices: ["a","b"], default: "z" }` can't be silently accepted while `--flag z` throws.
   - Re-export the documented `Resolve<T>` and `ResolveBaseType<F>` type helpers from `@crustjs/core` so consumers can `import type { Resolve, ResolveBaseType } from "@crustjs/core"` as the API reference shows.
@@ -50,7 +46,6 @@
 - b87e0ee: Add `choices` to `FlagDef`/`ArgDef` and `hidden` to `CommandMeta`.
 
   Two purely-additive optional fields on the `@crustjs/core` public type surface:
-
   - **`choices?: readonly string[]`** on string-typed flag and arg variants
     (`StringFlagDef`, `StringMultiFlagDef`, `StringArgDef`) — a static enum of
     valid values for the flag/arg.
@@ -94,7 +89,7 @@
 
   ```ts
   new Crust("my-cli").command("issue", (cmd) =>
-    cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+  	cmd.meta({ aliases: ["issues", "i"] }).run(() => {}),
   );
   // my-cli issue, my-cli issues, and my-cli i all route to the same command
   ```
@@ -107,7 +102,6 @@
   across every consumer (help, did-you-mean, man, completion).
 
   A cross-consumer audit found three gaps:
-
   - `helpPlugin` rendered output omitted the `choices` list for both flags
     and positional args, so users could not discover valid values from
     `--help` without resorting to shell completion or source-reading.
@@ -124,7 +118,6 @@
     silently fell through to file completion in bash/fish.
 
   Changes:
-
   - `helpPlugin` renders `[choices: a, b, c]` after the description for
     every flag and arg that declares a `choices` list, composed with
     `[default: ...]` when both are present.
@@ -147,7 +140,6 @@
     original predicate.
 
   Core / docs:
-
   - `CommandMeta.hidden` JSDoc now enumerates every tooling surface the
     flag affects (help, completion, did-you-mean, man, skills) and is
     explicit that there is intentionally no analogous `FlagDef.hidden` —
@@ -200,9 +192,7 @@
 ### Patch Changes
 
 - b8ebfa4: Refine skill plugin ergonomics and tighten core public API boundaries.
-
   - `@crustjs/skills`:
-
     - `skillPlugin` now uses `command?: string` (default: `"skill"`) instead of `boolean | string`.
     - `skillPlugin` option `scope` was replaced with `defaultScope`.
     - Interactive scope selection now prompts for `project`/`global` only when `defaultScope` is not provided; non-interactive fallback is `global`.

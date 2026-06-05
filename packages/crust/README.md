@@ -14,12 +14,12 @@ bun add -d @crustjs/crust
 
 The `crust` binary provides three distinct workflows:
 
-| Command                    | Description                                    |
-| -------------------------- | ---------------------------------------------- |
-| `crust build`              | Compile raw standalone Bun executable(s)       |
-| `crust build --man`        | Also write `mdoc(7)` to `<outdir>/man/<name>.1` |
-| `crust build --package`    | Stage per-platform npm packages in `dist/npm`  |
-| `crust publish`            | Publish an existing staged `dist/npm` manifest |
+| Command                 | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `crust build`           | Compile raw standalone Bun executable(s)        |
+| `crust build --man`     | Also write `mdoc(7)` to `<outdir>/man/<name>.1` |
+| `crust build --package` | Stage per-platform npm packages in `dist/npm`   |
+| `crust publish`         | Publish an existing staged `dist/npm` manifest  |
 
 ### `crust build`
 
@@ -58,19 +58,19 @@ crust build --env-file .env --env-file .env.local       # Repeatable env files
 
 #### Flags
 
-| Flag         | Alias | Type        | Default             | Description                                                |
-| ------------ | ----- | ----------- | ------------------- | ---------------------------------------------------------- |
-| `--entry`    | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                                            |
-| `--outfile`  | `-o`  | `"string"`  | —                   | Output file path (single-target builds only)               |
-| `--name`     | `-n`  | `"string"`  | package.json `name` | Base binary name                                           |
-| `--minify`   | —     | `"boolean"` | `true`              | Minify the output                                          |
-| `--target`   | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable                             |
-| `--outdir`   | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
-| `--resolver` | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
-| `--env-file` | —     | `"string"`  | —                   | Explicit env file(s) used for build-time constants         |
-| `--validate` | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
-| `--package` | —   | `"boolean"` | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
-| `--stage-dir` | —    | `"string"`  | `dist/npm`          | Staging directory used with `--package`                    |
+| Flag          | Alias | Type        | Default             | Description                                                |
+| ------------- | ----- | ----------- | ------------------- | ---------------------------------------------------------- |
+| `--entry`     | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                                            |
+| `--outfile`   | `-o`  | `"string"`  | —                   | Output file path (single-target builds only)               |
+| `--name`      | `-n`  | `"string"`  | package.json `name` | Base binary name                                           |
+| `--minify`    | —     | `"boolean"` | `true`              | Minify the output                                          |
+| `--target`    | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable                             |
+| `--outdir`    | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
+| `--resolver`  | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
+| `--env-file`  | —     | `"string"`  | —                   | Explicit env file(s) used for build-time constants         |
+| `--validate`  | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
+| `--package`   | —     | `"boolean"` | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
+| `--stage-dir` | —     | `"string"`  | `dist/npm`          | Staging directory used with `--package`                    |
 
 #### Output
 
@@ -166,14 +166,14 @@ crust publish --stage-dir .crust/npm --tag next
 
 #### Flags
 
-| Flag          | Type        | Default    | Description                                          |
-| ------------- | ----------- | ---------- | ---------------------------------------------------- |
-| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`      |
-| `--tag`       | `"string"`  | —          | npm dist-tag passed to `bun publish`                 |
-| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`             |
+| Flag          | Type        | Default    | Description                                           |
+| ------------- | ----------- | ---------- | ----------------------------------------------------- |
+| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`       |
+| `--tag`       | `"string"`  | —          | npm dist-tag passed to `bun publish`                  |
+| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`              |
 | `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing   |
 | `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publish |
-| `--registry`  | `"string"`  | —          | Override the npm registry URL                        |
+| `--registry`  | `"string"`  | —          | Override the npm registry URL                         |
 
 `crust publish` does not rebuild or restage anything. It reads `manifest.json`, verifies the staged package metadata, publishes platform packages first, and publishes `root/` last.
 

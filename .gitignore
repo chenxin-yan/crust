@@ -37,31 +37,3 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
-
-# Taskplane runtime artifacts (machine-specific, do not commit)
-.pi/batch-state.json
-.pi/batch-history.json
-.pi/lane-state-*
-.pi/merge-result-*
-.pi/merge-request-*
-.pi/worker-conversation-*
-.pi/orch-logs/
-.pi/orch-abort-signal
-.pi/settings.json
-.pi/runtime/
-.pi/diagnostics/
-.pi/telemetry/
-.pi/verification/
-.pi/orchestrator/
-.pi/mailbox/
-.pi/agents/orch-*
-.pi/supervisor/cyan-*-summary.md
-.pi/supervisor/events.jsonl
-.pi/supervisor/actions.jsonl
-.pi/supervisor/lock.json
-.taskplane-tasks/
-.worktrees/
-
-# Pi project-local packages (if using pi install -l)
-.pi/npm/
-

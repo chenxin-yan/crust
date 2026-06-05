@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
+
 import { CrustStoreError } from "./errors.ts";
 import {
 	cacheDir,
@@ -134,23 +135,17 @@ describe("configDir", () => {
 
 		it("should fall back to ~/.config when XDG_CONFIG_HOME is not set", () => {
 			const env = linuxEnv();
-			expect(configDir("my-cli", env)).toBe(
-				join("/home/testuser", ".config", "my-cli"),
-			);
+			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
 
 		it("should fall back to ~/.config when XDG_CONFIG_HOME is empty", () => {
 			const env = linuxEnv({ XDG_CONFIG_HOME: "" });
-			expect(configDir("my-cli", env)).toBe(
-				join("/home/testuser", ".config", "my-cli"),
-			);
+			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
 
 		it("should fall back to ~/.config when XDG_CONFIG_HOME is whitespace", () => {
 			const env = linuxEnv({ XDG_CONFIG_HOME: "   " });
-			expect(configDir("my-cli", env)).toBe(
-				join("/home/testuser", ".config", "my-cli"),
-			);
+			expect(configDir("my-cli", env)).toBe(join("/home/testuser", ".config", "my-cli"));
 		});
 	});
 
@@ -162,16 +157,12 @@ describe("configDir", () => {
 
 		it("should fall back to ~/.config (XDG default)", () => {
 			const env = darwinEnv();
-			expect(configDir("my-cli", env)).toBe(
-				join("/Users/testuser", ".config", "my-cli"),
-			);
+			expect(configDir("my-cli", env)).toBe(join("/Users/testuser", ".config", "my-cli"));
 		});
 
 		it("should use custom homedir", () => {
 			const env = darwinEnv({ homedir: "/Users/custom" });
-			expect(configDir("app", env)).toBe(
-				join("/Users/custom", ".config", "app"),
-			);
+			expect(configDir("app", env)).toBe(join("/Users/custom", ".config", "app"));
 		});
 	});
 
@@ -243,23 +234,17 @@ describe("dataDir", () => {
 
 		it("should fall back to ~/.local/share when XDG_DATA_HOME is not set", () => {
 			const env = linuxEnv();
-			expect(dataDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "share", "my-cli"),
-			);
+			expect(dataDir("my-cli", env)).toBe(join("/home/testuser", ".local", "share", "my-cli"));
 		});
 
 		it("should fall back to ~/.local/share when XDG_DATA_HOME is empty", () => {
 			const env = linuxEnv({ XDG_DATA_HOME: "" });
-			expect(dataDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "share", "my-cli"),
-			);
+			expect(dataDir("my-cli", env)).toBe(join("/home/testuser", ".local", "share", "my-cli"));
 		});
 
 		it("should fall back to ~/.local/share when XDG_DATA_HOME is whitespace", () => {
 			const env = linuxEnv({ XDG_DATA_HOME: "   " });
-			expect(dataDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "share", "my-cli"),
-			);
+			expect(dataDir("my-cli", env)).toBe(join("/home/testuser", ".local", "share", "my-cli"));
 		});
 	});
 
@@ -271,9 +256,7 @@ describe("dataDir", () => {
 
 		it("should fall back to ~/.local/share (XDG default)", () => {
 			const env = darwinEnv();
-			expect(dataDir("my-cli", env)).toBe(
-				join("/Users/testuser", ".local", "share", "my-cli"),
-			);
+			expect(dataDir("my-cli", env)).toBe(join("/Users/testuser", ".local", "share", "my-cli"));
 		});
 	});
 
@@ -344,23 +327,17 @@ describe("stateDir", () => {
 
 		it("should fall back to ~/.local/state when XDG_STATE_HOME is not set", () => {
 			const env = linuxEnv();
-			expect(stateDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "state", "my-cli"),
-			);
+			expect(stateDir("my-cli", env)).toBe(join("/home/testuser", ".local", "state", "my-cli"));
 		});
 
 		it("should fall back to ~/.local/state when XDG_STATE_HOME is empty", () => {
 			const env = linuxEnv({ XDG_STATE_HOME: "" });
-			expect(stateDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "state", "my-cli"),
-			);
+			expect(stateDir("my-cli", env)).toBe(join("/home/testuser", ".local", "state", "my-cli"));
 		});
 
 		it("should fall back to ~/.local/state when XDG_STATE_HOME is whitespace", () => {
 			const env = linuxEnv({ XDG_STATE_HOME: "   " });
-			expect(stateDir("my-cli", env)).toBe(
-				join("/home/testuser", ".local", "state", "my-cli"),
-			);
+			expect(stateDir("my-cli", env)).toBe(join("/home/testuser", ".local", "state", "my-cli"));
 		});
 	});
 
@@ -372,9 +349,7 @@ describe("stateDir", () => {
 
 		it("should fall back to ~/.local/state (XDG default)", () => {
 			const env = darwinEnv();
-			expect(stateDir("my-cli", env)).toBe(
-				join("/Users/testuser", ".local", "state", "my-cli"),
-			);
+			expect(stateDir("my-cli", env)).toBe(join("/Users/testuser", ".local", "state", "my-cli"));
 		});
 	});
 
@@ -445,23 +420,17 @@ describe("cacheDir", () => {
 
 		it("should fall back to ~/.cache when XDG_CACHE_HOME is not set", () => {
 			const env = linuxEnv();
-			expect(cacheDir("my-cli", env)).toBe(
-				join("/home/testuser", ".cache", "my-cli"),
-			);
+			expect(cacheDir("my-cli", env)).toBe(join("/home/testuser", ".cache", "my-cli"));
 		});
 
 		it("should fall back to ~/.cache when XDG_CACHE_HOME is empty", () => {
 			const env = linuxEnv({ XDG_CACHE_HOME: "" });
-			expect(cacheDir("my-cli", env)).toBe(
-				join("/home/testuser", ".cache", "my-cli"),
-			);
+			expect(cacheDir("my-cli", env)).toBe(join("/home/testuser", ".cache", "my-cli"));
 		});
 
 		it("should fall back to ~/.cache when XDG_CACHE_HOME is whitespace", () => {
 			const env = linuxEnv({ XDG_CACHE_HOME: "   " });
-			expect(cacheDir("my-cli", env)).toBe(
-				join("/home/testuser", ".cache", "my-cli"),
-			);
+			expect(cacheDir("my-cli", env)).toBe(join("/home/testuser", ".cache", "my-cli"));
 		});
 	});
 
@@ -473,9 +442,7 @@ describe("cacheDir", () => {
 
 		it("should fall back to ~/.cache (XDG default)", () => {
 			const env = darwinEnv();
-			expect(cacheDir("my-cli", env)).toBe(
-				join("/Users/testuser", ".cache", "my-cli"),
-			);
+			expect(cacheDir("my-cli", env)).toBe(join("/Users/testuser", ".cache", "my-cli"));
 		});
 	});
 
@@ -627,12 +594,8 @@ describe("resolveStorePath", () => {
 
 		it("should accept valid name characters", () => {
 			expect(resolveStorePath("/tmp/dir", "auth")).toEndWith("auth.json");
-			expect(resolveStorePath("/tmp/dir", "my-store")).toEndWith(
-				"my-store.json",
-			);
-			expect(resolveStorePath("/tmp/dir", "cache_v2")).toEndWith(
-				"cache_v2.json",
-			);
+			expect(resolveStorePath("/tmp/dir", "my-store")).toEndWith("my-store.json");
+			expect(resolveStorePath("/tmp/dir", "cache_v2")).toEndWith("cache_v2.json");
 		});
 	});
 
@@ -640,33 +603,25 @@ describe("resolveStorePath", () => {
 		it("should compose configDir + resolveStorePath", () => {
 			const dir = configDir("my-cli", linuxEnv());
 			const path = resolveStorePath(dir, "auth");
-			expect(path).toBe(
-				join("/home/testuser", ".config", "my-cli", "auth.json"),
-			);
+			expect(path).toBe(join("/home/testuser", ".config", "my-cli", "auth.json"));
 		});
 
 		it("should compose dataDir + resolveStorePath", () => {
 			const dir = dataDir("my-cli", linuxEnv());
 			const path = resolveStorePath(dir);
-			expect(path).toBe(
-				join("/home/testuser", ".local", "share", "my-cli", "config.json"),
-			);
+			expect(path).toBe(join("/home/testuser", ".local", "share", "my-cli", "config.json"));
 		});
 
 		it("should compose stateDir + resolveStorePath", () => {
 			const dir = stateDir("my-cli", linuxEnv());
 			const path = resolveStorePath(dir, "history");
-			expect(path).toBe(
-				join("/home/testuser", ".local", "state", "my-cli", "history.json"),
-			);
+			expect(path).toBe(join("/home/testuser", ".local", "state", "my-cli", "history.json"));
 		});
 
 		it("should compose cacheDir + resolveStorePath", () => {
 			const dir = cacheDir("my-cli", linuxEnv());
 			const path = resolveStorePath(dir, "tokens");
-			expect(path).toBe(
-				join("/home/testuser", ".cache", "my-cli", "tokens.json"),
-			);
+			expect(path).toBe(join("/home/testuser", ".cache", "my-cli", "tokens.json"));
 		});
 	});
 });

@@ -7,9 +7,7 @@ function readStyleMethodPairs(): Omit<typeof codes, "reset"> {
 	return pairs;
 }
 
-const styleMethodPairs: Omit<typeof codes, "reset"> = Object.freeze(
-	readStyleMethodPairs(),
-);
+const styleMethodPairs: Omit<typeof codes, "reset"> = Object.freeze(readStyleMethodPairs());
 
 export type StyleMethodName = keyof typeof styleMethodPairs;
 

@@ -16,11 +16,8 @@ export const siteConfig = {
   siteName: "CrustJS CLI Framework",
   siteUrl: "https://crustjs.com",
   titleTemplate: (page?: string) =>
-    page
-      ? `${page} | CrustJS CLI Framework`
-      : "CrustJS - TypeScript CLI Framework for Bun",
-  defaultDescription:
-    "A TypeScript-first, Bun-native CLI framework with composable modules.",
+    page ? `${page} | CrustJS CLI Framework` : "CrustJS - TypeScript CLI Framework for Bun",
+  defaultDescription: "A TypeScript-first, Bun-native CLI framework with composable modules.",
   twitterCard: "summary" as const,
   githubUrl: "https://github.com/chenxin-yan/crust",
   npmUrl: "https://www.npmjs.com/org/crustjs",
@@ -85,11 +82,7 @@ export function buildSiteJsonLd(): HeadScript[] {
         name: "CrustJS",
         url: siteConfig.siteUrl,
         logo: absoluteUrl("/favicon-96x96.png"),
-        sameAs: [
-          siteConfig.githubUrl,
-          siteConfig.npmUrl,
-          siteConfig.discordUrl,
-        ],
+        sameAs: [siteConfig.githubUrl, siteConfig.npmUrl, siteConfig.discordUrl],
       }),
     },
     {

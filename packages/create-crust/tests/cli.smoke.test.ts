@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
 const builtCliPath = resolve(import.meta.dir, "..", "dist", "index.js");
-const smokeRoot = join(
-	process.env.RUNNER_TEMP ?? tmpdir(),
-	"create-crust-smoke",
-);
+const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const sampleDir = join(smokeRoot, "smoke-cli");
 
 interface CommandResult {
@@ -64,12 +61,7 @@ function formatFailure(
 	].join("\n\n");
 }
 
-function assertSuccess(
-	label: string,
-	command: string[],
-	cwd: string,
-	result: CommandResult,
-): void {
+function assertSuccess(label: string, command: string[], cwd: string, result: CommandResult): void {
 	if (result.exitCode !== 0) {
 		throw new Error(formatFailure(label, command, cwd, result));
 	}
@@ -119,97 +111,84 @@ afterAll(() => {
 	}
 });
 
-describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")(
-	"create-crust smoke test",
-	() => {
-		it("scaffolds, installs, type-checks, and builds a generated project", async () => {
-			rmSync(smokeRoot, { recursive: true, force: true });
-			mkdirSync(smokeRoot, { recursive: true });
+describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test", () => {
+	it("scaffolds, installs, type-checks, and builds a generated project", async () => {
+		rmSync(smokeRoot, { recursive: true, force: true });
+		mkdirSync(smokeRoot, { recursive: true });
 
-			if (!existsSync(builtCliPath)) {
-				throw new Error(
-					`Built CLI not found at ${builtCliPath}. Run the package build before test:smoke.`,
-				);
-			}
-
-			const scaffoldCommand = [
-				process.execPath,
-				builtCliPath,
-				sampleDir,
-				"--template",
-				"minimal",
-				"--distribution",
-				"binary",
-				"--install",
-				"--no-git",
-			];
-			const scaffold = await run(scaffoldCommand, smokeRoot, {
-				BUN_BE_BUN: "1",
-				npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
-			});
-
-			assertSuccess(
-				"create-crust scaffold",
-				scaffoldCommand,
-				smokeRoot,
-				scaffold,
+		if (!existsSync(builtCliPath)) {
+			throw new Error(
+				`Built CLI not found at ${builtCliPath}. Run the package build before test:smoke.`,
 			);
-			expect(existsSync(join(sampleDir, "package.json"))).toBe(true);
-			expect(existsSync(join(sampleDir, "tsconfig.json"))).toBe(true);
-			expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
-			expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
-			expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
-			expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
+		}
 
-			const checkTypesCommand = npmArgv(["run", "check:types"]);
-			const checkTypes = await run(checkTypesCommand, sampleDir);
-			assertSuccess(
-				"generated project type-check",
-				checkTypesCommand,
-				sampleDir,
-				checkTypes,
-			);
+		const scaffoldCommand = [
+			process.execPath,
+			builtCliPath,
+			sampleDir,
+			"--template",
+			"minimal",
+			"--distribution",
+			"binary",
+			"--install",
+			"--no-git",
+		];
+		const scaffold = await run(scaffoldCommand, smokeRoot, {
+			BUN_BE_BUN: "1",
+			npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
+		});
 
-			// Call the installed entry directly: npm may not link a .bin shim for
-			// the optional-deps meta package, and registry layout may be bin/crust.js
-			// (staged publish) or dist/cli.js (see packages/crust package.json "files").
-			const crustCli = resolveInstalledCrustCli(sampleDir);
-			const buildCommand = crustBuildArgv(crustCli);
+		assertSuccess("create-crust scaffold", scaffoldCommand, smokeRoot, scaffold);
+		expect(existsSync(join(sampleDir, "package.json"))).toBe(true);
+		expect(existsSync(join(sampleDir, "tsconfig.json"))).toBe(true);
+		expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
+		expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
+		expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
+		expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
-			// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
-			// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
-			const buildTmpDir = join(sampleDir, ".smoke-tmp");
-			const buildBunCache = join(sampleDir, ".smoke-bun-cache");
-			if (process.platform === "win32") {
-				mkdirSync(buildTmpDir, { recursive: true });
-				mkdirSync(buildBunCache, { recursive: true });
-			}
-			const buildExtraEnv: Record<string, string> | undefined =
-				process.platform === "win32"
-					? {
-							TEMP: buildTmpDir,
-							TMP: buildTmpDir,
-							BUN_INSTALL_CACHE_DIR: buildBunCache,
-						}
-					: undefined;
+		const checkTypesCommand = npmArgv(["run", "check:types"]);
+		const checkTypes = await run(checkTypesCommand, sampleDir);
+		assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
 
-			const build = await run(buildCommand, sampleDir, buildExtraEnv);
-			assertSuccess("generated project build", buildCommand, sampleDir, build);
+		// Call the installed entry directly: npm may not link a .bin shim for
+		// the optional-deps meta package, and registry layout may be bin/crust.js
+		// (staged publish) or dist/cli.js (see packages/crust package.json "files").
+		const crustCli = resolveInstalledCrustCli(sampleDir);
+		const buildCommand = crustBuildArgv(crustCli);
 
-			const binaryName = basename(sampleDir);
-			const distEntries = readdirSync(join(sampleDir, "dist"));
+		// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
+		// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
+		const buildTmpDir = join(sampleDir, ".smoke-tmp");
+		const buildBunCache = join(sampleDir, ".smoke-bun-cache");
+		if (process.platform === "win32") {
+			mkdirSync(buildTmpDir, { recursive: true });
+			mkdirSync(buildBunCache, { recursive: true });
+		}
+		const buildExtraEnv: Record<string, string> | undefined =
+			process.platform === "win32"
+				? {
+						TEMP: buildTmpDir,
+						TMP: buildTmpDir,
+						BUN_INSTALL_CACHE_DIR: buildBunCache,
+					}
+				: undefined;
 
-			expect(distEntries.length).toBeGreaterThan(0);
-			expect(
-				distEntries.includes("cli") ||
-					distEntries.includes("cli.cmd") ||
-					distEntries.includes("cli.exe") ||
-					distEntries.includes(binaryName) ||
-					distEntries.includes(`${binaryName}.exe`) ||
-					distEntries.some((entry) => entry.startsWith(`${binaryName}-bun-`)),
-			).toBe(true);
+		const build = await run(buildCommand, sampleDir, buildExtraEnv);
+		assertSuccess("generated project build", buildCommand, sampleDir, build);
 
-			cleanupSmokeRoot = true;
-		}, 180_000);
-	},
-);
+		const binaryName = basename(sampleDir);
+		const distEntries = readdirSync(join(sampleDir, "dist"));
+
+		expect(distEntries.length).toBeGreaterThan(0);
+		expect(
+			distEntries.includes("cli") ||
+				distEntries.includes("cli.cmd") ||
+				distEntries.includes("cli.exe") ||
+				distEntries.includes(binaryName) ||
+				distEntries.includes(`${binaryName}.exe`) ||
+				distEntries.some((entry) => entry.startsWith(`${binaryName}-bun-`)),
+		).toBe(true);
+
+		cleanupSmokeRoot = true;
+	}, 180_000);
+});

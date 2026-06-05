@@ -4,12 +4,10 @@
 
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
+
 import { resolveSourceDir } from "@crustjs/utils";
-import {
-	installRenderedSkill,
-	isValidSkillName,
-	resolveSkillName,
-} from "./generate.ts";
+
+import { installRenderedSkill, isValidSkillName, resolveSkillName } from "./generate.ts";
 import type {
 	InstallSkillBundleOptions,
 	InstallSkillBundleResult,
@@ -128,14 +126,8 @@ function parseFrontmatterScalar(raw: string): string {
  * symlinks pointing outside the bundle root are reliably rejected. Includes
  * a `sep` boundary check to prevent `/canonical-foo` from matching `/canonical`.
  */
-function assertInsideRoot(
-	realPath: string,
-	canonicalRoot: string,
-	originalPath: string,
-): void {
-	const rootWithSep = canonicalRoot.endsWith(sep)
-		? canonicalRoot
-		: canonicalRoot + sep;
+function assertInsideRoot(realPath: string, canonicalRoot: string, originalPath: string): void {
+	const rootWithSep = canonicalRoot.endsWith(sep) ? canonicalRoot : canonicalRoot + sep;
 	if (realPath !== canonicalRoot && !realPath.startsWith(rootWithSep)) {
 		throw new Error(
 			`Bundle path traversal rejected: "${originalPath}" resolves to "${realPath}", ` +
@@ -190,14 +182,7 @@ async function collectBundleEntries(
 				continue;
 			}
 			visitedDirs.add(realPath);
-			collected.push(
-				...(await collectBundleEntries(
-					absPath,
-					canonicalRoot,
-					relPath,
-					visitedDirs,
-				)),
-			);
+			collected.push(...(await collectBundleEntries(absPath, canonicalRoot, relPath, visitedDirs)));
 		} else if (realStat.isFile()) {
 			collected.push({ relPath, absPath });
 		}
@@ -239,37 +224,27 @@ export interface LoadedBundle {
  *
  * @internal Exported for unit testing.
  */
-export async function loadBundleFiles(
-	sourceDir: string | URL,
-): Promise<LoadedBundle> {
+export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBundle> {
 	const resolved = resolveSourceDir(sourceDir);
 
 	let canonicalRoot: string;
 	try {
 		canonicalRoot = await realpath(resolved);
 	} catch (err) {
-		throw new Error(
-			`Bundle source directory "${resolved}" does not exist or is not accessible.`,
-			{ cause: err },
-		);
+		throw new Error(`Bundle source directory "${resolved}" does not exist or is not accessible.`, {
+			cause: err,
+		});
 	}
 
 	const rootStat = await stat(canonicalRoot);
 	if (!rootStat.isDirectory()) {
-		throw new Error(
-			`Bundle source path "${canonicalRoot}" is not a directory.`,
-		);
+		throw new Error(`Bundle source path "${canonicalRoot}" is not a directory.`);
 	}
 
 	// Seed the visited set with the canonical root itself so a child symlink
 	// pointing back to root (e.g. `loop -> .`) is rejected on first descent.
 	const visitedDirs = new Set<string>([canonicalRoot]);
-	const collected = await collectBundleEntries(
-		canonicalRoot,
-		canonicalRoot,
-		"",
-		visitedDirs,
-	);
+	const collected = await collectBundleEntries(canonicalRoot, canonicalRoot, "", visitedDirs);
 
 	const skillMd = collected.find((f) => f.relPath === SKILL_MD);
 	if (!skillMd) {

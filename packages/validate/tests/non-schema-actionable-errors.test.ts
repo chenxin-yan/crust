@@ -7,7 +7,9 @@
 // regression test lives in `packages/store/src/field.test.ts`.
 
 import { describe, expect, it } from "bun:test";
+
 import { CrustError } from "@crustjs/core";
+
 import { parseValue } from "../src/index.ts";
 
 const NOT_A_SCHEMA: unknown = { foo: "bar" };

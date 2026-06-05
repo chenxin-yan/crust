@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { Crust, type CrustPlugin } from "@crustjs/core";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
+
 import { didYouMeanPlugin } from "./did-you-mean.ts";
 import { helpPlugin, renderHelp } from "./help.ts";
 import { noColorPlugin } from "./no-color.ts";
@@ -91,9 +93,7 @@ describe("built-in plugins", () => {
 					default: ".",
 				},
 			] as const)
-			.command("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }),
-			)._node;
+			.command("build", (cmd) => cmd.meta({ description: "Build the project" }))._node;
 
 		const output = renderHelp(command);
 		const plain = stripAnsi(output);
@@ -168,12 +168,8 @@ describe("built-in plugins", () => {
 
 		expect(verboseLine).toBeDefined();
 		expect(portLine).toBeDefined();
-		expect(verboseLine?.indexOf("Enable verbose logging")).toBe(
-			portLine?.indexOf("Port number"),
-		);
-		expect(lines).toContain(
-			'  [dir]              Output directory [default: "."]',
-		);
+		expect(verboseLine?.indexOf("Enable verbose logging")).toBe(portLine?.indexOf("Port number"));
+		expect(lines).toContain('  [dir]              Output directory [default: "."]');
 	});
 
 	it("renderHelp preserves non-finite numeric defaults", () => {
@@ -190,9 +186,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("help plugin renders generated help for no-run command", async () => {
-		const app = new Crust("app")
-			.use(helpPlugin())
-			.command("build", (cmd) => cmd.run(() => {}));
+		const app = new Crust("app").use(helpPlugin()).command("build", (cmd) => cmd.run(() => {}));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -296,9 +290,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.use(helpPlugin())
 			.command("create", (cmd) =>
-				cmd
-					.args([{ name: "name", type: "string", required: true }] as const)
-					.run(() => {}),
+				cmd.args([{ name: "name", type: "string", required: true }] as const).run(() => {}),
 			);
 
 		await app.execute({ argv: ["create", "--help"] });
@@ -418,13 +410,11 @@ describe("built-in plugins", () => {
 	it("version plugin only triggers on root command", async () => {
 		let ran = false;
 
-		const app = new Crust("app")
-			.use(versionPlugin("1.0.0"))
-			.command("build", (cmd) =>
-				cmd.run(() => {
-					ran = true;
-				}),
-			);
+		const app = new Crust("app").use(versionPlugin("1.0.0")).command("build", (cmd) =>
+			cmd.run(() => {
+				ran = true;
+			}),
+		);
 
 		await app.execute({ argv: ["build"] });
 
@@ -447,9 +437,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin with function value", async () => {
-		const app = new Crust("app")
-			.use(versionPlugin(() => "3.5.0"))
-			.run(() => {});
+		const app = new Crust("app").use(versionPlugin(() => "3.5.0")).run(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -516,9 +504,7 @@ describe("built-in plugins", () => {
 
 		const lines = stripAnsi(renderHelp(command)).split("\n");
 		const issueLine = lines.find((line) => line.includes("issue (issues, i)"));
-		const buildLine = lines.find((line) =>
-			line.match(/^\s+build\s+Build the project$/),
-		);
+		const buildLine = lines.find((line) => line.match(/^\s+build\s+Build the project$/));
 
 		expect(issueLine).toBeDefined();
 		expect(buildLine).toBeDefined();
@@ -532,9 +518,7 @@ describe("built-in plugins", () => {
 
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
 		const command = new Crust("app")
-			.command("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }).run(() => {}),
-			)
+			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).run(() => {}))
 			.command("__complete", (cmd) =>
 				cmd
 					.meta({
@@ -583,9 +567,7 @@ describe("built-in plugins", () => {
 		// subcommand with aliases should still render `name (a, b)`.
 		const command = new Crust("app")
 			.command("issue", (cmd) =>
-				cmd
-					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
-					.run(() => {}),
+				cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).run(() => {}),
 			)
 			.command("__complete", (cmd) =>
 				cmd
@@ -608,9 +590,7 @@ describe("built-in plugins", () => {
 		let didRun = false;
 		const app = new Crust("app")
 			.use(helpPlugin())
-			.command("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }).run(() => {}),
-			)
+			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).run(() => {}))
 			.command("__complete", (cmd) =>
 				cmd.meta({ hidden: true, description: "Internal" }).run(() => {
 					didRun = true;

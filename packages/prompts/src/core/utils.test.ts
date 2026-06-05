@@ -1,10 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import {
-	formatHeader,
-	formatPromptLine,
-	formatSubmitted,
-	normalizeChoices,
-} from "./utils.ts";
+
+import { formatHeader, formatPromptLine, formatSubmitted, normalizeChoices } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatHeader
@@ -74,9 +70,7 @@ describe("formatPromptLine", () => {
 	});
 
 	it("appends suffix after prefix when message is undefined", () => {
-		expect(formatPromptLine("○", undefined, "Alice", " (default)")).toBe(
-			"○ (default) Alice",
-		);
+		expect(formatPromptLine("○", undefined, "Alice", " (default)")).toBe("○ (default) Alice");
 	});
 
 	it("handles empty content with message", () => {
@@ -124,9 +118,10 @@ describe("normalizeChoices", () => {
 	});
 
 	it("handles mixed string and object choices", () => {
-		const choices: Array<
-			string | { label: string; value: string; hint?: string }
-		> = ["plain", { label: "Fancy", value: "fancy", hint: "with hint" }];
+		const choices: Array<string | { label: string; value: string; hint?: string }> = [
+			"plain",
+			{ label: "Fancy", value: "fancy", hint: "with hint" },
+		];
 
 		const result = normalizeChoices(choices);
 
@@ -143,9 +138,7 @@ describe("normalizeChoices", () => {
 	});
 
 	it("preserves hint property on object choices", () => {
-		const result = normalizeChoices([
-			{ label: "Option A", value: "a", hint: "first option" },
-		]);
+		const result = normalizeChoices([{ label: "Option A", value: "a", hint: "first option" }]);
 
 		expect(result[0]?.hint).toBe("first option");
 	});

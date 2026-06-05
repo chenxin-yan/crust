@@ -222,14 +222,14 @@ canonical filenames the helpers consume directly.
 
 What the generated scripts offer after the cursor moves past a value-taking flag or positional argument depends on the declared `type`:
 
-| `type` | Bash | Zsh | Fish |
-| ------ | ---- | --- | ---- |
-| `"string"` (no `choices`) | Files (via `complete -o default`) | `_files` | Files (default) |
-| `"path"`  | Files (`compgen -f`, explicit) | `_files`, explicit | `(__fish_complete_path)` |
-| `"url"`   | **No completion** — file fallback suppressed | No completion | No completion |
-| `"json"`  | **No completion** — file fallback suppressed | No completion | No completion |
-| any `choices` | Static value list | Static value list | Static value list |
-| `"boolean"` | n/a (no value taken) | n/a | n/a |
+| `type`                    | Bash                                         | Zsh                | Fish                     |
+| ------------------------- | -------------------------------------------- | ------------------ | ------------------------ |
+| `"string"` (no `choices`) | Files (via `complete -o default`)            | `_files`           | Files (default)          |
+| `"path"`                  | Files (`compgen -f`, explicit)               | `_files`, explicit | `(__fish_complete_path)` |
+| `"url"`                   | **No completion** — file fallback suppressed | No completion      | No completion            |
+| `"json"`                  | **No completion** — file fallback suppressed | No completion      | No completion            |
+| any `choices`             | Static value list                            | Static value list  | Static value list        |
+| `"boolean"`               | n/a (no value taken)                         | n/a                | n/a                      |
 
 This matches what each value type actually points at: `path` arguments are filesystem paths, while `url` and `json` arguments are not, so file completion would be misleading.
 

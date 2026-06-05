@@ -16,9 +16,7 @@ bun add @crustjs/utils
 ```ts
 import { resolveSourceDir } from "@crustjs/utils";
 
-const templateDir = resolveSourceDir(
-  new URL("../templates/base", import.meta.url),
-);
+const templateDir = resolveSourceDir(new URL("../templates/base", import.meta.url));
 ```
 
 Resolves a source directory descriptor to an absolute filesystem path. It is
@@ -40,10 +38,10 @@ from arbitrary directories.
 
 ```ts
 import {
-  coerceBooleanString,
-  tryCoerceNumber,
-  type BaseValueType,
-  type ResolvePrimitive,
+	coerceBooleanString,
+	tryCoerceNumber,
+	type BaseValueType,
+	type ResolvePrimitive,
 } from "@crustjs/utils";
 ```
 

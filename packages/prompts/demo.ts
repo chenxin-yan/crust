@@ -4,15 +4,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { spinner } from "../progress/src/index.ts";
-import {
-	confirm,
-	filter,
-	input,
-	multifilter,
-	multiselect,
-	password,
-	select,
-} from "./src/index.ts";
+import { confirm, filter, input, multifilter, multiselect, password, select } from "./src/index.ts";
 
 async function main() {
 	console.log("\n=== @crustjs/prompts Demo ===\n");
@@ -100,15 +92,7 @@ async function main() {
 	// ── 11. Multiselect ───────────────────────────────────────────────────
 	const toppings = await multiselect({
 		message: "Select pizza toppings",
-		choices: [
-			"Cheese",
-			"Pepperoni",
-			"Mushrooms",
-			"Olives",
-			"Onions",
-			"Peppers",
-			"Pineapple",
-		],
+		choices: ["Cheese", "Pepperoni", "Mushrooms", "Olives", "Onions", "Peppers", "Pineapple"],
 		required: true,
 	});
 	console.log(`  -> Toppings: ${toppings.join(", ")}\n`);

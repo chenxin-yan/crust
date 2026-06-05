@@ -44,9 +44,7 @@ interface FieldDefBase<V> {
 	 *
 	 * @param value - The field value to validate.
 	 */
-	validate?: (
-		value: V,
-	) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
+	validate?: (value: V) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
 
 	/** Internal marker: validate missing values as `undefined` for schema-backed fields. */
 	validateMissing?: true;

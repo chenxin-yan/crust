@@ -15,57 +15,57 @@ bun add @crustjs/core
 
 ### Classes
 
-| Class | Description |
-| --- | --- |
+| Class                      | Description                                                          |
+| -------------------------- | -------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust) | Chainable builder for defining CLI commands with full type inference |
 
 ### Functions
 
-| Function | Description |
-| --- | --- |
-| [`parseArgs`](/docs/api/parse-args) | Parse argv against a command's arg/flag definitions |
-| [`resolveCommand`](/docs/api/resolve-command) | Resolve a subcommand from an argv array |
-| `createCommandNode` | Create a fresh CommandNode (for downstream packages) |
-| `computeEffectiveFlags` | Merge inherited + local flags at runtime |
+| Function                                      | Description                                          |
+| --------------------------------------------- | ---------------------------------------------------- |
+| [`parseArgs`](/docs/api/parse-args)           | Parse argv against a command's arg/flag definitions  |
+| [`resolveCommand`](/docs/api/resolve-command) | Resolve a subcommand from an argv array              |
+| `createCommandNode`                           | Create a fresh CommandNode (for downstream packages) |
+| `computeEffectiveFlags`                       | Merge inherited + local flags at runtime             |
 
 ### Constants
 
-| Constant | Description |
-| --- | --- |
-| `VALIDATION_MODE_ENV` | Environment variable name for build-time validation mode |
+| Constant                    | Description                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_MODE_ENV`       | Environment variable name for build-time validation mode                                                          |
 | `VALIDATION_FORCE_EXIT_ENV` | Companion env var that makes validation mode call `process.exit()` (set by `crust build`'s validation subprocess) |
 
 ### Types
 
-| Type | Description |
-| --- | --- |
-| `CommandNode` | Internal command tree node |
-| `CrustCommandContext<A, F>` | Runtime context passed to lifecycle hooks |
-| `CommandMeta` | Command metadata (name, description, usage, aliases, hidden) |
-| `ArgDef` | Positional argument definition |
-| `ArgsDef` | Tuple of argument definitions |
-| `FlagDef` | Named flag definition |
-| `FlagsDef` | Record of flag definitions |
-| `InferArgs<A>` | Infer resolved arg types from definitions |
-| `InferFlags<F>` | Infer resolved flag types from definitions |
-| `EffectiveFlags<I, L>` | Compute effective flags from inherited + local |
-| `InheritableFlags<F>` | Pick only inheritable flags |
-| `MergeFlags<P, L>` | Merge parent + local flags |
-| `ParseResult<A, F>` | Output of `parseArgs` |
-| `CommandRoute` | Output of `resolveCommand` |
-| `CrustPlugin` | Plugin interface |
-| `SetupContext` | Context passed to plugin setup hooks |
-| `SetupActions` | Actions available during plugin setup |
-| `MiddlewareContext` | Context passed to plugin middleware |
-| `PluginMiddleware` | Middleware function type |
-| `CrustError` | Typed error class |
-| `CrustErrorCode` | Error code union |
-| `ValueType` | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
-| `Resolve<T>` | Maps a `ValueType` literal to its runtime TypeScript type |
-| `ResolveBaseType<F>` | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>` |
-| `ValidateFlagAliases<F>` | Compile-time alias collision check |
-| `ValidateNoPrefixedFlags<F>` | Compile-time no- prefix check |
-| `ValidateVariadicArgs<A>` | Compile-time variadic position check |
+| Type                         | Description                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `CommandNode`                | Internal command tree node                                                                 |
+| `CrustCommandContext<A, F>`  | Runtime context passed to lifecycle hooks                                                  |
+| `CommandMeta`                | Command metadata (name, description, usage, aliases, hidden)                               |
+| `ArgDef`                     | Positional argument definition                                                             |
+| `ArgsDef`                    | Tuple of argument definitions                                                              |
+| `FlagDef`                    | Named flag definition                                                                      |
+| `FlagsDef`                   | Record of flag definitions                                                                 |
+| `InferArgs<A>`               | Infer resolved arg types from definitions                                                  |
+| `InferFlags<F>`              | Infer resolved flag types from definitions                                                 |
+| `EffectiveFlags<I, L>`       | Compute effective flags from inherited + local                                             |
+| `InheritableFlags<F>`        | Pick only inheritable flags                                                                |
+| `MergeFlags<P, L>`           | Merge parent + local flags                                                                 |
+| `ParseResult<A, F>`          | Output of `parseArgs`                                                                      |
+| `CommandRoute`               | Output of `resolveCommand`                                                                 |
+| `CrustPlugin`                | Plugin interface                                                                           |
+| `SetupContext`               | Context passed to plugin setup hooks                                                       |
+| `SetupActions`               | Actions available during plugin setup                                                      |
+| `MiddlewareContext`          | Context passed to plugin middleware                                                        |
+| `PluginMiddleware`           | Middleware function type                                                                   |
+| `CrustError`                 | Typed error class                                                                          |
+| `CrustErrorCode`             | Error code union                                                                           |
+| `ValueType`                  | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
+| `Resolve<T>`                 | Maps a `ValueType` literal to its runtime TypeScript type                                  |
+| `ResolveBaseType<F>`         | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>`     |
+| `ValidateFlagAliases<F>`     | Compile-time alias collision check                                                         |
+| `ValidateNoPrefixedFlags<F>` | Compile-time no- prefix check                                                              |
+| `ValidateVariadicArgs<A>`    | Compile-time variadic position check                                                       |
 
 ## When to Use
 

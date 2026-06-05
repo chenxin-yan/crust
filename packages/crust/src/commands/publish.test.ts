@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { Crust, parseArgs } from "@crustjs/core";
+
 import {
 	buildPublishCommand,
 	getPublishPlan,
@@ -14,9 +16,7 @@ import type { DistributionManifest } from "../utils/distribute.ts";
 
 function makePublishNode() {
 	const app = new Crust("test").command(publishCommand);
-	const node = (
-		app as unknown as { _node: import("@crustjs/core").CommandNode }
-	)._node;
+	const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
 	const publishNode = node.subCommands.publish;
 	if (!publishNode) throw new Error("publish subcommand not found");
 	return publishNode;
@@ -58,10 +58,7 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 		);
 	}
 
-	writeFileSync(
-		join(tmpDir, "manifest.json"),
-		JSON.stringify(manifest, null, 2),
-	);
+	writeFileSync(join(tmpDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
 
 describe("publishCommand definition", () => {
@@ -124,9 +121,7 @@ describe("publish manifest validation", () => {
 			publishOrder: ["root", "linux-x64", "darwin-arm64"],
 		};
 
-		expect(() => validatePublishManifest(tmpDir, invalid)).toThrow(
-			/root package last/,
-		);
+		expect(() => validatePublishManifest(tmpDir, invalid)).toThrow(/root package last/);
 	});
 
 	it("rejects missing staged directories", () => {
@@ -138,11 +133,7 @@ describe("publish manifest validation", () => {
 
 	it("builds a publish plan in manifest order", () => {
 		const plan = getPublishPlan(tmpDir, manifest, ["bun", "publish"]);
-		expect(plan.map((entry) => entry.relativeDir)).toEqual([
-			"linux-x64",
-			"darwin-arm64",
-			"root",
-		]);
+		expect(plan.map((entry) => entry.relativeDir)).toEqual(["linux-x64", "darwin-arm64", "root"]);
 	});
 
 	it("uses the current executable as bun with BUN_BE_BUN support", () => {

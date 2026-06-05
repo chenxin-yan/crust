@@ -3,7 +3,9 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import * as readline from "node:readline";
+
 import { visibleWidth } from "@crustjs/style";
+
 import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -178,9 +180,7 @@ export function assertTTY(): void {
 /**
  * Check if a handleKey result is a submit action.
  */
-function isSubmit<S, T>(
-	result: HandleKeyResult<S, T>,
-): result is SubmitResult<T> {
+function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T> {
 	return typeof result === "object" && result !== null && SUBMIT in result;
 }
 

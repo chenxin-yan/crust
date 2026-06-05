@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
+
 import { Crust, type CrustPlugin } from "@crustjs/core";
+
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
@@ -10,11 +12,7 @@ import { walkCommandNode } from "./walker.ts";
 /** The set of shells supported by the v1 completion plugin. */
 export type CompletionShell = "bash" | "zsh" | "fish";
 
-const SUPPORTED_SHELLS: readonly CompletionShell[] = [
-	"bash",
-	"zsh",
-	"fish",
-] as const;
+const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as const;
 
 /** Options for {@link completionPlugin}. */
 export interface CompletionPluginOptions {
@@ -99,9 +97,7 @@ function renderForShell(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-export function completionPlugin(
-	options: CompletionPluginOptions = {},
-): CrustPlugin {
+export function completionPlugin(options: CompletionPluginOptions = {}): CrustPlugin {
 	const subcommandName = options.command ?? "completion";
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";
@@ -114,9 +110,7 @@ export function completionPlugin(
 			// loudly during plugin registration rather than at script-emit
 			// time. The walker also re-validates command/flag identifiers
 			// when it builds the spec.
-			const binName = assertSafeBinName(
-				options.binName ?? rootCommand.meta.name,
-			);
+			const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
 			// `version` flows into header comments only; sanitise to drop
 			// control characters (newlines especially) so they cannot break
 			// out of the comment line in the emitted script.
@@ -162,12 +156,7 @@ export function completionPlugin(
 
 					if (outputDir === undefined) {
 						// Print path: emit the requested shell's script to stdout.
-						const script = renderForShell(
-							requestedShell,
-							spec,
-							binName,
-							safeVersion,
-						);
+						const script = renderForShell(requestedShell, spec, binName, safeVersion);
 						process.stdout.write(script);
 						return;
 					}

@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { runSteps } from "../src/steps.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -17,10 +12,7 @@ import { runSteps } from "../src/steps.ts";
 let tempDir: string;
 
 beforeEach(() => {
-	tempDir = join(
-		tmpdir(),
-		`crust-steps-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-	);
+	tempDir = join(tmpdir(), `crust-steps-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(tempDir, { recursive: true });
 });
 
@@ -51,10 +43,9 @@ describe("runSteps", () => {
 			expect(existsSync(join(tempDir, ".git"))).toBe(true);
 
 			// Verify the commit exists with the correct message
-			const result = Bun.spawnSync(
-				["git", "log", "--oneline", "-1", "--format=%s"],
-				{ cwd: tempDir },
-			);
+			const result = Bun.spawnSync(["git", "log", "--oneline", "-1", "--format=%s"], {
+				cwd: tempDir,
+			});
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout.toString().trim()).toBe("Initial commit");
 		});
@@ -104,25 +95,17 @@ describe("runSteps", () => {
 
 	describe("command step", () => {
 		it("runs a simple command successfully", async () => {
-			await runSteps(
-				[{ type: "command", cmd: "echo hello > output.txt" }],
-				tempDir,
-			);
+			await runSteps([{ type: "command", cmd: "echo hello > output.txt" }], tempDir);
 
 			expect(existsSync(join(tempDir, "output.txt"))).toBe(true);
-			expect(readFileSync(join(tempDir, "output.txt"), "utf-8").trim()).toBe(
-				"hello",
-			);
+			expect(readFileSync(join(tempDir, "output.txt"), "utf-8").trim()).toBe("hello");
 		});
 
 		it("uses the provided cwd for the command", async () => {
 			const subDir = join(tempDir, "subdir");
 			mkdirSync(subDir);
 
-			await runSteps(
-				[{ type: "command", cmd: "echo test > file.txt", cwd: subDir }],
-				tempDir,
-			);
+			await runSteps([{ type: "command", cmd: "echo test > file.txt", cwd: subDir }], tempDir);
 
 			// File should be in subDir, not tempDir
 			expect(existsSync(join(subDir, "file.txt"))).toBe(true);
@@ -130,9 +113,9 @@ describe("runSteps", () => {
 		});
 
 		it("throws when command exits with non-zero code", async () => {
-			expect(
-				runSteps([{ type: "command", cmd: "exit 1" }], tempDir),
-			).rejects.toThrow('Command "exit 1" exited with code 1');
+			expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
+				'Command "exit 1" exited with code 1',
+			);
 		});
 
 		it("runs a dynamic Bun Shell command string", async () => {
@@ -141,9 +124,7 @@ describe("runSteps", () => {
 			await runSteps([{ type: "command", cmd }], tempDir);
 
 			expect(existsSync(join(tempDir, "dynamic.txt"))).toBe(true);
-			expect(readFileSync(join(tempDir, "dynamic.txt"), "utf-8").trim()).toBe(
-				"dynamic",
-			);
+			expect(readFileSync(join(tempDir, "dynamic.txt"), "utf-8").trim()).toBe("dynamic");
 		});
 	});
 

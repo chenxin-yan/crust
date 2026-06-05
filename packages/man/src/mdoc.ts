@@ -1,10 +1,4 @@
-import type {
-	ArgDef,
-	CommandMeta,
-	CommandNode,
-	FlagDef,
-	FlagsDef,
-} from "@crustjs/core";
+import type { ArgDef, CommandMeta, CommandNode, FlagDef, FlagsDef } from "@crustjs/core";
 
 const MONTH_NAMES = [
 	"January",
@@ -41,10 +35,7 @@ function formatDefaultSuffix(value: unknown): string {
 	return `[default: ${formatDefaultValue(value)}]`;
 }
 
-function formatDescription(
-	description: string | undefined,
-	defaultValue: unknown,
-): string {
+function formatDescription(description: string | undefined, defaultValue: unknown): string {
 	if (defaultValue === undefined) {
 		return description ?? "";
 	}
@@ -58,11 +49,7 @@ function formatArgToken(arg: ArgDef): string {
 	return arg.required ? `<${base}>` : `[${base}]`;
 }
 
-function formatUsagePlain(
-	meta: CommandMeta,
-	command: CommandNode,
-	path: string[],
-): string {
+function formatUsagePlain(meta: CommandMeta, command: CommandNode, path: string[]): string {
 	if (meta.usage) return meta.usage;
 
 	const parts: string[] = [path.join(" ")];
@@ -181,10 +168,7 @@ function longestFlagWidth(flags: FlagsDef): string {
  * Used for both the `.It Nm` line in SUBCOMMANDS and the column-width
  * calculation so alignment stays consistent.
  */
-function formatSubcommandLabel(
-	name: string,
-	aliases: readonly string[] | undefined,
-): string {
+function formatSubcommandLabel(name: string, aliases: readonly string[] | undefined): string {
 	if (!aliases || aliases.length === 0) return name;
 	return `${name} (${aliases.join(", ")})`;
 }
@@ -244,8 +228,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 
 	const path = [root.meta.name];
 	const usage = formatUsagePlain(root.meta, root, path);
-	const description =
-		root.meta.description?.trim() || "No description provided.";
+	const description = root.meta.description?.trim() || "No description provided.";
 
 	const lines: string[] = [
 		`.Dd ${dd}`,
@@ -277,9 +260,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	if (visibleSubEntries.length > 0) {
 		lines.push(".Sh SUBCOMMANDS");
 		lines.push(`.Bl -tag -width ${longestSubcommandWidth(root)}`);
-		for (const [subName, sub] of visibleSubEntries.sort(([a], [b]) =>
-			a.localeCompare(b),
-		)) {
+		for (const [subName, sub] of visibleSubEntries.sort(([a], [b]) => a.localeCompare(b))) {
 			// `.It Nm <name> (alias1, alias2)` keeps the canonical name marked up
 			// as a name macro while letting aliases ride along as plain text.
 			// Parens and commas are not mdoc macros, so no escaping is needed.
@@ -294,9 +275,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 
-	const flagEntries = Object.entries(root.effectiveFlags).sort(([a], [b]) =>
-		a.localeCompare(b),
-	);
+	const flagEntries = Object.entries(root.effectiveFlags).sort(([a], [b]) => a.localeCompare(b));
 	if (flagEntries.length > 0) {
 		lines.push(".Sh OPTIONS");
 		lines.push(`.Bl -tag -width ${longestFlagWidth(root.effectiveFlags)}`);
@@ -307,11 +286,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			// boolean flags narrow to `undefined` and `formatChoicesSuffix`
 			// renders that as the empty string.
 			const choices = def.type === "string" ? def.choices : undefined;
-			const body = formatDescriptionWithChoices(
-				def.description,
-				def.default,
-				choices,
-			).trim();
+			const body = formatDescriptionWithChoices(def.description, def.default, choices).trim();
 			if (body) {
 				lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 			}
@@ -325,11 +300,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		for (const arg of root.args) {
 			lines.push(`.It Ql ${formatArgToken(arg)}`);
 			const choices = arg.type === "string" ? arg.choices : undefined;
-			const body = formatDescriptionWithChoices(
-				arg.description,
-				arg.default,
-				choices,
-			).trim();
+			const body = formatDescriptionWithChoices(arg.description, arg.default, choices).trim();
 			if (body) {
 				lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 			}

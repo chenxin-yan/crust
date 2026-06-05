@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { blue, red } from "../colors.ts";
 import { bold } from "../modifiers.ts";
 import { visibleWidth } from "./width.ts";

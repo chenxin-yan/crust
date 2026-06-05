@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { CrustError } from "./errors.ts";
 import type { CommandNode } from "./node.ts";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
@@ -15,8 +16,7 @@ function makeNode(config: {
 	subCommands?: Record<string, CommandNode>;
 	run?: (ctx: unknown) => void | Promise<void>;
 }): CommandNode {
-	const meta =
-		typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;
@@ -139,9 +139,7 @@ describe("parseArgs — number flags", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				'Expected number for --port, got "abc"',
-			);
+			expect((err as CrustError).message).toBe('Expected number for --port, got "abc"');
 		}
 	});
 
@@ -152,9 +150,7 @@ describe("parseArgs — number flags", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				'Expected number for --port, got "not-a-number"',
-			);
+			expect((err as CrustError).message).toBe('Expected number for --port, got "not-a-number"');
 		}
 	});
 });
@@ -399,14 +395,7 @@ describe("parseArgs — multiple flags", () => {
 				},
 			},
 		});
-		const result = parseArgs(cmd, [
-			"--file",
-			"a.ts",
-			"-f",
-			"b.ts",
-			"--input",
-			"c.ts",
-		]);
+		const result = parseArgs(cmd, ["--file", "a.ts", "-f", "b.ts", "--input", "c.ts"]);
 		expect(result.flags.file).toEqual(["a.ts", "b.ts", "c.ts"]);
 	});
 });
@@ -499,9 +488,7 @@ describe("parseArgs — required args", () => {
 	it("required arg with a default does not throw when missing", () => {
 		const cmdWithDefault = makeNode({
 			meta: { name: "test" },
-			args: [
-				{ name: "file", type: "string", required: true, default: "index.ts" },
-			],
+			args: [{ name: "file", type: "string", required: true, default: "index.ts" }],
 		});
 		// When default is present, it should be applied even if required
 		// (the default satisfies the requirement)
@@ -544,11 +531,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts", "c.ts"]);
-		expect((result.args as Record<string, unknown>).files).toEqual([
-			"a.ts",
-			"b.ts",
-			"c.ts",
-		]);
+		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts", "c.ts"]);
 	});
 
 	it("variadic with preceding regular arg", () => {
@@ -561,10 +544,7 @@ describe("parseArgs — variadic args", () => {
 		});
 		const result = parseArgs(cmd, ["build", "a.ts", "b.ts"]);
 		expect((result.args as Record<string, unknown>).target).toBe("build");
-		expect((result.args as Record<string, unknown>).files).toEqual([
-			"a.ts",
-			"b.ts",
-		]);
+		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts"]);
 	});
 
 	it("variadic with no remaining args produces empty array", () => {
@@ -596,9 +576,7 @@ describe("parseArgs — variadic args", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				'Expected number for <numbers>, got "abc"',
-			);
+			expect((err as CrustError).message).toBe('Expected number for <numbers>, got "abc"');
 		}
 	});
 
@@ -824,10 +802,7 @@ describe("parseArgs — complex scenarios", () => {
 			"--some-extra-flag",
 		]);
 		expect((result.args as Record<string, unknown>).entry).toBe("main.ts");
-		expect((result.args as Record<string, unknown>).extras).toEqual([
-			"extra1.ts",
-			"extra2.ts",
-		]);
+		expect((result.args as Record<string, unknown>).extras).toEqual(["extra1.ts", "extra2.ts"]);
 		expect(result.flags.output).toBe("./build");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.minify).toBe(false);
@@ -868,9 +843,7 @@ describe("parseArgs — boolean flag value assignment", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				"Failed to parse command arguments",
-			);
+			expect((err as CrustError).message).toBe("Failed to parse command arguments");
 			expect((err as CrustError).cause).toBeInstanceOf(Error);
 			expect(((err as CrustError).cause as Error).message).toContain(
 				"Option '--verbose' does not take an argument",
@@ -885,9 +858,7 @@ describe("parseArgs — boolean flag value assignment", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				"Failed to parse command arguments",
-			);
+			expect((err as CrustError).message).toBe("Failed to parse command arguments");
 			expect((err as CrustError).cause).toBeInstanceOf(Error);
 			expect(((err as CrustError).cause as Error).message).toContain(
 				"Option '--verbose' does not take an argument",
@@ -993,9 +964,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain(
-				'Flag "--no-cache" must not use "no-" prefix',
-			);
+			expect((err as CrustError).message).toContain('Flag "--no-cache" must not use "no-" prefix');
 		}
 	});
 
@@ -1086,9 +1055,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required flag "--config"',
-			);
+			expect((err as CrustError).message).toBe('Missing required flag "--config"');
 		}
 	});
 
@@ -1233,9 +1200,7 @@ describe("validateParsed", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required argument "<file>"',
-			);
+			expect((err as CrustError).message).toBe('Missing required argument "<file>"');
 		}
 	});
 
@@ -1251,9 +1216,7 @@ describe("validateParsed", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required flag "--name"',
-			);
+			expect((err as CrustError).message).toBe('Missing required flag "--name"');
 		}
 	});
 
@@ -1269,9 +1232,7 @@ describe("validateParsed", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("VALIDATION");
-			expect((err as CrustError).message).toBe(
-				'Missing required argument "<files>"',
-			);
+			expect((err as CrustError).message).toBe('Missing required argument "<files>"');
 		}
 	});
 
@@ -1288,9 +1249,7 @@ describe("validateParsed", () => {
 	it("does not throw for required arg with default when missing", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
-			args: [
-				{ name: "file", type: "string", required: true, default: "index.ts" },
-			],
+			args: [{ name: "file", type: "string", required: true, default: "index.ts" }],
 		});
 		const parsed = parseArgs(cmd, []);
 		expect(() => validateParsed(cmd, parsed)).not.toThrow();
@@ -1327,10 +1286,7 @@ describe("parseArgs — raw schema-backed args", () => {
 			args: [{ name: "files", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts"]);
-		expect((result.args as Record<string, unknown>).files).toEqual([
-			"a.ts",
-			"b.ts",
-		]);
+		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts"]);
 	});
 });
 
@@ -1353,9 +1309,7 @@ describe("parseArgs — url/path/json types", () => {
 			meta: "test",
 			flags: { endpoint: { type: "url" } },
 		});
-		expect(() => parseArgs(cmd, ["--endpoint", "not-a-url"])).toThrow(
-			CrustError,
-		);
+		expect(() => parseArgs(cmd, ["--endpoint", "not-a-url"])).toThrow(CrustError);
 	});
 
 	it("parses a path flag into an absolute string (coercion details covered in coercers.test.ts)", () => {
@@ -1571,9 +1525,7 @@ describe("parseArgs — choices enforcement", () => {
 		});
 		const ok = parseArgs(cmd, ["--tags", "a", "--tags", "b"]);
 		expect(ok.flags.tags).toEqual(["a", "b"]);
-		expect(() => parseArgs(cmd, ["--tags", "a", "--tags", "z"])).toThrow(
-			CrustError,
-		);
+		expect(() => parseArgs(cmd, ["--tags", "a", "--tags", "z"])).toThrow(CrustError);
 	});
 });
 
@@ -1603,10 +1555,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 			},
 		});
 		const result = parseArgs(cmd, []);
-		expect(result.flags.dirs).toEqual([
-			`${process.cwd()}/a`,
-			`${process.cwd()}/b`,
-		]);
+		expect(result.flags.dirs).toEqual([`${process.cwd()}/a`, `${process.cwd()}/b`]);
 	});
 
 	it("runs coercePath on a `type: path` arg default when positional is absent", () => {
@@ -1615,9 +1564,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 			args: [{ name: "out", type: "path", default: "./dist" }],
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).out).toBe(
-			`${process.cwd()}/dist`,
-		);
+		expect((result.args as Record<string, unknown>).out).toBe(`${process.cwd()}/dist`);
 	});
 
 	it("validates a non-parse `default` against `choices` when present", () => {

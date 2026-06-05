@@ -1,9 +1,5 @@
 import { CrustError } from "./errors.ts";
-import {
-	type CommandNode,
-	computeEffectiveFlags,
-	createCommandNode,
-} from "./node.ts";
+import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
 import type {
 	CrustPlugin,
@@ -38,10 +34,7 @@ import { validateIncomingAliases } from "./validation.ts";
  * - `A` — positional argument definitions tuple
  * - `F` — the effective (inherited + local merged) flag definitions
  */
-export interface CrustCommandContext<
-	A extends ArgsDef = ArgsDef,
-	F extends FlagsDef = FlagsDef,
-> {
+export interface CrustCommandContext<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
 	/** Resolved positional arguments, keyed by arg name */
 	args: InferArgs<A>;
 	/** Resolved flags, keyed by flag name */
@@ -152,10 +145,7 @@ function isPromptCancelledError(error: unknown): boolean {
 	return error.name === "CancelledError";
 }
 
-function applyInheritedFlagsToSubtree(
-	node: CommandNode,
-	inheritedFlags: FlagsDef,
-): void {
+function applyInheritedFlagsToSubtree(node: CommandNode, inheritedFlags: FlagsDef): void {
 	node.effectiveFlags = computeEffectiveFlags(inheritedFlags, node.localFlags);
 
 	for (const sub of Object.values(node.subCommands)) {
@@ -168,18 +158,13 @@ function createSetupActions(warnings?: string[]): SetupActions {
 	return {
 		addFlag(target, name, def) {
 			if (name in target.effectiveFlags) {
-				warnings?.push(
-					`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`,
-				);
+				warnings?.push(`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`);
 			}
 			target.effectiveFlags[name] = def;
 		},
 		addSubCommand(parent, name, subCommand) {
 			if (!name.trim()) {
-				throw new CrustError(
-					"DEFINITION",
-					"addSubCommand: name must be a non-empty string",
-				);
+				throw new CrustError("DEFINITION", "addSubCommand: name must be a non-empty string");
 			}
 			if (parent.subCommands[name]) {
 				warnings?.push(
@@ -198,9 +183,7 @@ function createSetupActions(warnings?: string[]): SetupActions {
 				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				warnings?.push(
-					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped: ${message}`,
-				);
+				warnings?.push(`Plugin subcommand "${name}" on "${parent.meta.name}" skipped: ${message}`);
 				return;
 			}
 			applyInheritedFlagsToSubtree(subCommand, parent.effectiveFlags);
@@ -229,17 +212,12 @@ async function runMiddlewareChain(
 ): Promise<void> {
 	const stack = plugins
 		.map((plugin) => plugin.middleware)
-		.filter((middleware): middleware is NonNullable<typeof middleware> =>
-			Boolean(middleware),
-		);
+		.filter((middleware): middleware is NonNullable<typeof middleware> => Boolean(middleware));
 	let index = -1;
 
 	const dispatch = async (i: number): Promise<void> => {
 		if (i <= index) {
-			throw new CrustError(
-				"DEFINITION",
-				"Plugin middleware called next() multiple times",
-			);
+			throw new CrustError("DEFINITION", "Plugin middleware called next() multiple times");
 		}
 		index = i;
 
@@ -377,10 +355,7 @@ export class Crust<
 	 */
 	constructor(name: string) {
 		if (!name.trim()) {
-			throw new CrustError(
-				"DEFINITION",
-				"meta.name must be a non-empty string",
-			);
+			throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
 		}
 		this._node = createCommandNode(name);
 		this._inheritedFlags = {};
@@ -393,13 +368,12 @@ export class Crust<
 	static _createChild<I extends FlagsDef>(
 		name: string,
 		inheritedFlags: FlagsDef,
-		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 	): Crust<I, {}, [], EffectiveFlags<I, {}>> {
-		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>>(name);
 		// Override the inherited flags set by constructor (which defaults to {})
-		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags =
-			inheritedFlags;
+		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
 		return instance;
 	}
 
@@ -420,8 +394,7 @@ export class Crust<
 			...nodeOverrides,
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
-		(cloned as { _inheritedFlags: FlagsDef })._inheritedFlags =
-			this._inheritedFlags;
+		(cloned as { _inheritedFlags: FlagsDef })._inheritedFlags = this._inheritedFlags;
 		return cloned;
 	}
 
@@ -516,9 +489,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the handler registered
 	 */
 	run(
-		handler: (
-			ctx: NoInfer<CrustCommandContext<A, Eff>>,
-		) => void | Promise<void>,
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
 	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
@@ -535,9 +506,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the preRun handler registered
 	 */
 	preRun(
-		handler: (
-			ctx: NoInfer<CrustCommandContext<A, Eff>>,
-		) => void | Promise<void>,
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
 	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			preRun: handler as (ctx: unknown) => void | Promise<void>,
@@ -554,9 +523,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the postRun handler registered
 	 */
 	postRun(
-		handler: (
-			ctx: NoInfer<CrustCommandContext<A, Eff>>,
-		) => void | Promise<void>,
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
 	): Crust<Inherited, Local, A, Eff> {
 		return this._clone({
 			postRun: handler as (ctx: unknown) => void | Promise<void>,
@@ -616,19 +583,13 @@ export class Crust<
 	 */
 	sub<N extends string>(
 		name: N,
-		// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>> {
 		if (!name.trim()) {
-			throw new CrustError(
-				"DEFINITION",
-				"Subcommand name must be a non-empty string",
-			);
+			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
 
-		const parentEffective = computeEffectiveFlags(
-			this._inheritedFlags,
-			this._node.localFlags,
-		);
+		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
 		return Crust._createChild<Eff>(name, parentEffective);
 	}
@@ -648,14 +609,14 @@ export class Crust<
 	command<N extends string>(
 		name: N,
 		cb: (
-			// biome-ignore lint/complexity/noBannedTypes: empty initial state for child builder's Local generic
+			// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>>,
 		) => Crust<
-			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
 			any,
-			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
 			any,
-			// biome-ignore lint/suspicious/noExplicitAny: needed for type-erased child builder return
+			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
 			any
 		>,
 	): Crust<Inherited, Local, A, Eff>;
@@ -674,15 +635,15 @@ export class Crust<
 	 * @throws {CrustError} `DEFINITION` if builder name is empty or already registered
 	 */
 	command(
-		// biome-ignore lint/suspicious/noExplicitAny: accepts any Crust builder instance
+		// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust builder instance
 		builder: Crust<any, any, any>,
 	): Crust<Inherited, Local, A, Eff>;
 
 	// Implementation
 	command(
-		// biome-ignore lint/suspicious/noExplicitAny: union of overload parameter types
+		// oxlint-disable-next-line typescript/no-explicit-any -- union of overload parameter types
 		nameOrBuilder: string | Crust<any, any, any>,
-		// biome-ignore lint/suspicious/noExplicitAny: callback parameter from first overload
+		// oxlint-disable-next-line typescript/no-explicit-any -- callback parameter from first overload
 		cb?: (cmd: Crust<any, any, any>) => Crust<any, any, any>,
 	): Crust<Inherited, Local, A, Eff> {
 		if (typeof nameOrBuilder === "string") {
@@ -690,33 +651,21 @@ export class Crust<
 			const name = nameOrBuilder;
 
 			if (!cb) {
-				throw new CrustError(
-					"DEFINITION",
-					"command(name, cb) requires a callback",
-				);
+				throw new CrustError("DEFINITION", "command(name, cb) requires a callback");
 			}
 
 			// Validate name
 			if (!name.trim()) {
-				throw new CrustError(
-					"DEFINITION",
-					"Subcommand name must be a non-empty string",
-				);
+				throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 			}
 
 			// Check for duplicate subcommand
 			if (this._node.subCommands[name]) {
-				throw new CrustError(
-					"DEFINITION",
-					`Subcommand "${name}" is already registered`,
-				);
+				throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
 			}
 
 			// Compute the effective flags for this node (inherited + local merged)
-			const parentEffective = computeEffectiveFlags(
-				this._inheritedFlags,
-				this._node.localFlags,
-			);
+			const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
 			// Create a child builder pre-typed with the parent's effective flags
 			const childBuilder = Crust._createChild<Eff>(name, parentEffective);
@@ -757,17 +706,11 @@ export class Crust<
 		const name = builder._node.meta.name;
 
 		if (!name.trim()) {
-			throw new CrustError(
-				"DEFINITION",
-				"Subcommand name must be a non-empty string",
-			);
+			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
 
 		if (this._node.subCommands[name]) {
-			throw new CrustError(
-				"DEFINITION",
-				`Subcommand "${name}" is already registered`,
-			);
+			throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
 		}
 
 		// Eager alias collision detection for the pre-built builder path.
@@ -780,10 +723,7 @@ export class Crust<
 		// Clone the node to avoid mutating the original builder's _node
 		const childNode = {
 			...builder._node,
-			effectiveFlags: computeEffectiveFlags(
-				builder._inheritedFlags,
-				builder._node.localFlags,
-			),
+			effectiveFlags: computeEffectiveFlags(builder._inheritedFlags, builder._node.localFlags),
 		};
 
 		return this._clone({
@@ -902,8 +842,7 @@ export class Crust<
 					}
 					return { ok: true } as const;
 				} catch (error) {
-					const message =
-						error instanceof Error ? error.message : String(error);
+					const message = error instanceof Error ? error.message : String(error);
 					console.error(message);
 					process.exitCode = 1;
 					return { ok: false, error } as const;
@@ -911,8 +850,7 @@ export class Crust<
 			})();
 
 			// Store for in-process consumers (tests)
-			(globalThis as Record<string, unknown>)[VALIDATION_RESULT_GLOBAL_KEY] =
-				result;
+			(globalThis as Record<string, unknown>)[VALIDATION_RESULT_GLOBAL_KEY] = result;
 			await result;
 
 			// Build validation subprocesses opt in to force-exit so user code
@@ -1018,9 +956,7 @@ export class Crust<
 				return;
 			}
 			if (error instanceof Error) {
-				const wrapped = new CrustError("EXECUTION", error.message).withCause(
-					error,
-				);
+				const wrapped = new CrustError("EXECUTION", error.message).withCause(error);
 				console.error(`Error: ${wrapped.message}`);
 				process.exitCode = 1;
 				return;

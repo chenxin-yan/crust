@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+
 import { CrustError } from "./errors.ts";
 
 /**
@@ -19,9 +20,7 @@ export function coerceUrl(raw: string): URL {
 		// WHATWG-style scheme: ASCII letter followed by letters/digits/+/-/.
 		// then a colon. Matches `http:`, `file:`, `git+ssh:`, etc.
 		const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
-		const hint = hasScheme
-			? ""
-			: " (missing protocol — e.g. https://example.com)";
+		const hint = hasScheme ? "" : " (missing protocol — e.g. https://example.com)";
 		throw new CrustError("PARSE", `Invalid URL "${raw}"${hint}`);
 	}
 }

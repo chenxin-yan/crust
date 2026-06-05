@@ -7,6 +7,7 @@
 // `details.issues`.
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+
 import type { InferOutput, StandardSchema } from "./types.ts";
 import { assertStandardSchema, validateStandard } from "./validate.ts";
 import { throwValidationError } from "./validation.ts";

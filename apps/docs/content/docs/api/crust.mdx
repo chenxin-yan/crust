@@ -13,9 +13,9 @@ new Crust(name: string)
 
 Creates a new root or standalone command builder.
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `name` | `string` | The command name (must be non-empty) |
+| Parameter | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `name`    | `string` | The command name (must be non-empty) |
 
 **Throws:** `CrustError("DEFINITION")` if `name` is empty or whitespace-only.
 
@@ -24,11 +24,9 @@ Creates a new root or standalone command builder.
 ```ts
 import { Crust } from "@crustjs/core";
 
-const app = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .run(() => {
-    console.log("Hello!");
-  });
+const app = new Crust("my-cli").meta({ description: "My CLI tool" }).run(() => {
+  console.log("Hello!");
+});
 
 await app.execute();
 ```
@@ -46,11 +44,10 @@ meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A>
 The command name is already set by the builder source (`new Crust(name)`, `.sub(name)`, or the child builder passed into `.command(name, cb)`), so only `description` and `usage` can be provided here.
 
 ```ts
-new Crust("deploy")
-  .meta({
-    description: "Deploy the application",
-    usage: "deploy [options] <environment>",
-  })
+new Crust("deploy").meta({
+  description: "Deploy the application",
+  usage: "deploy [options] <environment>",
+});
 ```
 
 ### `.flags(defs)`
@@ -66,11 +63,10 @@ flags<const F extends FlagsDef>(
 Validates at both compile time and runtime that flag names/short/aliases don't start with `no-` and aliases don't collide.
 
 ```ts
-new Crust("serve")
-  .flags({
-    port: { type: "number", default: 3000, short: "p" },
-    verbose: { type: "boolean", short: "v", inherit: true },
-  })
+new Crust("serve").flags({
+  port: { type: "number", default: 3000, short: "p" },
+  verbose: { type: "boolean", short: "v", inherit: true },
+});
 ```
 
 Set `inherit: true` on a flag to make it available to subcommands. See [Flag Inheritance](/docs/guide/flags#flag-inheritance).
@@ -88,11 +84,10 @@ args<const NewA extends ArgsDef>(
 Validates at compile time that only the last argument has `variadic: true`.
 
 ```ts
-new Crust("copy")
-  .args([
-    { name: "source", type: "string", required: true },
-    { name: "files", type: "string", variadic: true },
-  ])
+new Crust("copy").args([
+  { name: "source", type: "string", required: true },
+  { name: "files", type: "string", variadic: true },
+]);
 ```
 
 ### `.run(handler)`
@@ -114,7 +109,7 @@ new Crust("greet")
   .run(({ args, flags }) => {
     const msg = `Hello, ${args.name}!`;
     console.log(flags.shout ? msg.toUpperCase() : msg);
-  })
+  });
 ```
 
 ### `.preRun(handler)`
@@ -152,9 +147,7 @@ Plugins are collected from the entire command tree during `.execute()`. Setup ho
 ```ts
 import { helpPlugin, versionPlugin } from "@crustjs/plugins";
 
-new Crust("my-cli")
-  .use(versionPlugin("1.0.0"))
-  .use(helpPlugin())
+new Crust("my-cli").use(versionPlugin("1.0.0")).use(helpPlugin());
 ```
 
 See [Plugins](/docs/guide/plugins) for more.
@@ -176,13 +169,11 @@ Use this for inline subcommands. The callback receives a fresh builder pre-typed
 new Crust("my-cli")
   .flags({ verbose: { type: "boolean", inherit: true } })
   .command("deploy", (cmd) =>
-    cmd
-      .flags({ env: { type: "string", required: true } })
-      .run(({ flags }) => {
-        flags.verbose; // boolean | undefined (inherited)
-        flags.env;     // string (local)
-      })
-  )
+    cmd.flags({ env: { type: "string", required: true } }).run(({ flags }) => {
+      flags.verbose; // boolean | undefined (inherited)
+      flags.env; // string (local)
+    }),
+  );
 ```
 
 **Throws:** `CrustError("DEFINITION")` if name is empty or already registered.
@@ -213,16 +204,11 @@ const standalone = new Crust("doctor").run(() => {
   console.log("doctor");
 });
 
-const inherited = app
-  .sub("deploy")
-  .run(({ flags }) => {
-    flags.verbose; // boolean | undefined
-  });
+const inherited = app.sub("deploy").run(({ flags }) => {
+  flags.verbose; // boolean | undefined
+});
 
-await app
-  .command(standalone)
-  .command(inherited)
-  .execute();
+await app.command(standalone).command(inherited).execute();
 ```
 
 ### `.sub(name)`
@@ -237,15 +223,15 @@ Use this when a subcommand lives in another file or should inherit parent flags.
 
 ```ts
 // shared.ts — root command with shared flags
-export const app = new Crust("my-cli")
-  .flags({ verbose: { type: "boolean", inherit: true } });
+export const app = new Crust("my-cli").flags({ verbose: { type: "boolean", inherit: true } });
 
 // commands/deploy.ts — subcommand in a separate file
-export const deployCmd = app.sub("deploy")
+export const deployCmd = app
+  .sub("deploy")
   .flags({ env: { type: "string", required: true } })
   .run(({ flags }) => {
     flags.verbose; // boolean | undefined — inherited and typed!
-    flags.env;     // string
+    flags.env; // string
   });
 
 // cli.ts — register and execute
@@ -262,8 +248,8 @@ Entry point for CLI execution. Parses `process.argv`, resolves subcommands, runs
 execute(options?: { argv?: string[] }): Promise<void>
 ```
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
+| Option | Type       | Default                 | Description                                  |
+| ------ | ---------- | ----------------------- | -------------------------------------------- |
 | `argv` | `string[]` | `process.argv.slice(2)` | Override the argv array (useful for testing) |
 
 **Execution flow:**
@@ -302,9 +288,9 @@ prepareCommandTree(options?: {
 }): Promise<{ root: CommandNode; warnings: readonly string[] }>
 ```
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `argv` | `readonly string[]` | `[]` | Synthetic argv passed to plugin `setup()` (same as `.execute()`) |
+| Option | Type                | Default | Description                                                      |
+| ------ | ------------------- | ------- | ---------------------------------------------------------------- |
+| `argv` | `readonly string[]` | `[]`    | Synthetic argv passed to plugin `setup()` (same as `.execute()`) |
 
 **Throws** on the same validation failures as build-time tree validation (e.g. invalid flag definitions). Unlike `.execute()`, errors are thrown instead of printing to stderr.
 
@@ -360,10 +346,10 @@ For user-facing env behavior, see [Environment Variables](/docs/guide/environmen
 
 The `Crust` class has three generic parameters:
 
-| Parameter | Description |
-| --- | --- |
+| Parameter   | Description                                                                     |
+| ----------- | ------------------------------------------------------------------------------- |
 | `Inherited` | Flags inherited from the parent command (populated by `.command()` or `.sub()`) |
-| `Local` | Flags defined on this command via `.flags()` |
-| `A` | Positional argument definitions from `.args()` |
+| `Local`     | Flags defined on this command via `.flags()`                                    |
+| `A`         | Positional argument definitions from `.args()`                                  |
 
 The effective flags available in handlers are `EffectiveFlags<Inherited, Local>` — inherited flags (filtered for `inherit: true`) merged with local flags, where local flags override inherited flags with the same key.

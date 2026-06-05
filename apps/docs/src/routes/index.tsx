@@ -7,12 +7,11 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import langTypescript from "shiki/langs/typescript.mjs";
 import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
+
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
-let highlighterPromise: Promise<
-  Awaited<ReturnType<typeof createHighlighterCore>>
-> | null = null;
+let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
 
 function getHighlighter() {
   if (!highlighterPromise) {
@@ -44,28 +43,25 @@ function createFallbackHighlightedCode(code: string) {
   return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
 }
 
-const getHighlightedCode = createServerFn({ method: "GET" }).handler(
-  async () => {
-    try {
-      const highlighter = await getHighlighter();
-      return highlighter.codeToHtml(CODE_EXAMPLE, {
-        lang: "typescript",
-        themes: {
-          light: "gruvbox-light-hard",
-          dark: "gruvbox-dark-hard",
-        },
-        defaultColor: false,
-      });
-    } catch (error) {
-      console.error("[docs] Failed to render highlighted code", error);
-      return FALLBACK_HIGHLIGHTED_CODE;
-    }
-  },
-);
+const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
+  try {
+    const highlighter = await getHighlighter();
+    return highlighter.codeToHtml(CODE_EXAMPLE, {
+      lang: "typescript",
+      themes: {
+        light: "gruvbox-light-hard",
+        dark: "gruvbox-dark-hard",
+      },
+      defaultColor: false,
+    });
+  } catch (error) {
+    console.error("[docs] Failed to render highlighted code", error);
+    return FALLBACK_HIGHLIGHTED_CODE;
+  }
+});
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
-  description:
-    "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
+  description: "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
   canonical: "/",
 });
 
@@ -80,10 +76,7 @@ export const Route = createFileRoute("/")({
     let npmVersions: Record<string, string | null> = {};
 
     try {
-      [highlightedCode, npmVersions] = await Promise.all([
-        getHighlightedCode(),
-        getNpmVersions(),
-      ]);
+      [highlightedCode, npmVersions] = await Promise.all([getHighlightedCode(), getNpmVersions()]);
     } catch (error) {
       console.error("[docs] Failed to load loader data", error);
     }
@@ -757,9 +750,7 @@ function FurnaceHome() {
                 >
                   Build CLIs
                   <br />
-                  <span
-                    style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}
-                  >
+                  <span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
                     with types.
                   </span>
                 </h1>
@@ -774,16 +765,11 @@ function FurnaceHome() {
                     fontWeight: 400,
                   }}
                 >
-                  A TypeScript-first, Bun-native CLI framework with composable
-                  modules.
+                  A TypeScript-first, Bun-native CLI framework with composable modules.
                 </p>
 
                 {/* Install — click to copy */}
-                <button
-                  type="button"
-                  className="fn-mono fn-install-cmd"
-                  onClick={handleCopy}
-                >
+                <button type="button" className="fn-mono fn-install-cmd" onClick={handleCopy}>
                   <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
                   <span>bun create crust my-cli</span>
                   <span
@@ -808,11 +794,7 @@ function FurnaceHome() {
                     flexWrap: "wrap",
                   }}
                 >
-                  <Link
-                    to="/docs/$"
-                    params={{ _splat: "quick-start" }}
-                    className="fn-btn-primary"
-                  >
+                  <Link to="/docs/$" params={{ _splat: "quick-start" }} className="fn-btn-primary">
                     Quick Start
                   </Link>
                   <a
@@ -914,9 +896,7 @@ function FurnaceHome() {
                       >
                         {m.pkg}
                       </code>
-                      <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
-                        {m.desc}
-                      </span>
+                      <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
                     </div>
                     <span className="fn-badge-soon">Coming Soon</span>
                   </div>
@@ -927,12 +907,7 @@ function FurnaceHome() {
               const channel = version ? getReleaseChannel(version) : null;
 
               return (
-                <Link
-                  key={m.pkg}
-                  to="/docs/$"
-                  params={{ _splat: m.doc }}
-                  className="fn-module-row"
-                >
+                <Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
                   <div className="fn-module-info">
                     <code
                       className="fn-mono fn-module-name"
@@ -944,21 +919,13 @@ function FurnaceHome() {
                     >
                       {m.pkg}
                     </code>
-                    {version && (
-                      <span className="fn-badge-version fn-mono">
-                        v{version}
-                      </span>
-                    )}
+                    {version && <span className="fn-badge-version fn-mono">v{version}</span>}
                     {channel && (
-                      <span
-                        className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}
-                      >
+                      <span className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}>
                         {channel}
                       </span>
                     )}
-                    <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>
-                      {m.desc}
-                    </span>
+                    <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
                   </div>
                   <span className="fn-module-arrow">→</span>
                 </Link>

@@ -10,38 +10,30 @@ bun add @crustjs/plugins
 
 ## Plugins
 
-| Plugin | Description |
-| --- | --- |
-| `helpPlugin()` | Adds `--help` / `-h` flag and auto-generates help text |
-| `noColorPlugin()` | Adds `--color` / `--no-color` and controls runtime color output |
-| `versionPlugin(version)` | Adds `--version` / `-v` flag |
-| `didYouMeanPlugin(options?)` | Suggests corrections for mistyped subcommands via Levenshtein matching |
-| `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice |
-| `completionPlugin(options?)` | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts. `path` flags/args emit file-completion candidates; `url` and `json` flags/args explicitly suppress file completion. |
+| Plugin                          | Description                                                                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `helpPlugin()`                  | Adds `--help` / `-h` flag and auto-generates help text                                                                                                                                                      |
+| `noColorPlugin()`               | Adds `--color` / `--no-color` and controls runtime color output                                                                                                                                             |
+| `versionPlugin(version)`        | Adds `--version` / `-v` flag                                                                                                                                                                                |
+| `didYouMeanPlugin(options?)`    | Suggests corrections for mistyped subcommands via Levenshtein matching                                                                                                                                      |
+| `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice                                                                                                                                                 |
+| `completionPlugin(options?)`    | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts. `path` flags/args emit file-completion candidates; `url` and `json` flags/args explicitly suppress file completion. |
 
 ## Usage
 
 ```ts
 import { defineCommand, runMain } from "@crustjs/core";
-import {
-  helpPlugin,
-  versionPlugin,
-  didYouMeanPlugin,
-} from "@crustjs/plugins";
+import { helpPlugin, versionPlugin, didYouMeanPlugin } from "@crustjs/plugins";
 
 const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run() {
-    console.log("Hello!");
-  },
+	meta: { name: "my-cli", description: "My CLI tool" },
+	run() {
+		console.log("Hello!");
+	},
 });
 
 runMain(main, {
-  plugins: [
-    versionPlugin("1.0.0"),
-    didYouMeanPlugin(),
-    helpPlugin(),
-  ],
+	plugins: [versionPlugin("1.0.0"), didYouMeanPlugin(), helpPlugin()],
 });
 ```
 
@@ -64,12 +56,12 @@ import { Crust } from "@crustjs/core";
 import { helpPlugin, noColorPlugin, versionPlugin } from "@crustjs/plugins";
 
 const app = new Crust("my-cli")
-  .use(noColorPlugin())
-  .use(versionPlugin("1.0.0"))
-  .use(helpPlugin())
-  .run(() => {
-    console.log("Hello!");
-  });
+	.use(noColorPlugin())
+	.use(versionPlugin("1.0.0"))
+	.use(helpPlugin())
+	.run(() => {
+		console.log("Hello!");
+	});
 ```
 
 ### Update Notifier
@@ -82,16 +74,14 @@ import { updateNotifierPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const main = defineCommand({
-  meta: { name: "my-cli", description: "My CLI tool" },
-  run() {
-    console.log("Hello!");
-  },
+	meta: { name: "my-cli", description: "My CLI tool" },
+	run() {
+		console.log("Hello!");
+	},
 });
 
 runMain(main, {
-  plugins: [
-    updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version }),
-  ],
+	plugins: [updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version })],
 });
 ```
 
@@ -109,16 +99,16 @@ You are responsible for passing `packageName` and `currentVersion` — typically
 
 #### Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `currentVersion` | `string` | *(required)* | The current version of your CLI package. |
-| `packageName` | `string` | *(required)* | The npm package name to check for updates. |
-| `timeoutMs` | `number` | `5_000` (5s) | Network request timeout. Aborted checks are treated as soft failures. |
-| `registryUrl` | `string` | `"https://registry.npmjs.org"` | Custom npm registry URL. |
-| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"` | `"auto"` | Package manager used when building the default update command. |
-| `installScope` | `"auto" \| "local" \| "global"` | `"auto"` | Install scope used when building the default update command. |
-| `updateCommand` | `string \| ((packageName, packageManager, installScope) => string)` | inferred | Override the command shown in the update notice. Recommended for unusual distribution channels or when runtime inference is insufficient. |
-| `cache` | `{ adapter, intervalMs? }` | none | Optional cache configuration for cross-run persistence and dedupe. |
+| Option           | Type                                                                | Default                        | Description                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `currentVersion` | `string`                                                            | _(required)_                   | The current version of your CLI package.                                                                                                  |
+| `packageName`    | `string`                                                            | _(required)_                   | The npm package name to check for updates.                                                                                                |
+| `timeoutMs`      | `number`                                                            | `5_000` (5s)                   | Network request timeout. Aborted checks are treated as soft failures.                                                                     |
+| `registryUrl`    | `string`                                                            | `"https://registry.npmjs.org"` | Custom npm registry URL.                                                                                                                  |
+| `packageManager` | `"auto" \| "npm" \| "pnpm" \| "yarn" \| "bun"`                      | `"auto"`                       | Package manager used when building the default update command.                                                                            |
+| `installScope`   | `"auto" \| "local" \| "global"`                                     | `"auto"`                       | Install scope used when building the default update command.                                                                              |
+| `updateCommand`  | `string \| ((packageName, packageManager, installScope) => string)` | inferred                       | Override the command shown in the update notice. Recommended for unusual distribution channels or when runtime inference is insufficient. |
+| `cache`          | `{ adapter, intervalMs? }`                                          | none                           | Optional cache configuration for cross-run persistence and dedupe.                                                                        |
 
 #### Optional persistence with `@crustjs/store`
 
@@ -129,19 +119,19 @@ import { stateDir, createStore } from "@crustjs/store";
 import { updateNotifierPlugin } from "@crustjs/plugins";
 
 const store = createStore({
-  dirPath: stateDir("my-cli"), // Replace with your package name
-  name: "update-notifier",
-  fields: {
-    lastCheckedAt: { type: "number", default: 0 },
-    latestVersion: { type: "string" },
-    lastNotifiedVersion: { type: "string" },
-  },
+	dirPath: stateDir("my-cli"), // Replace with your package name
+	name: "update-notifier",
+	fields: {
+		lastCheckedAt: { type: "number", default: 0 },
+		latestVersion: { type: "string" },
+		lastNotifiedVersion: { type: "string" },
+	},
 });
 
 updateNotifierPlugin({
-  packageName: "my-cli",
-  currentVersion: "1.0.0",
-  cache: { adapter: store },
+	packageName: "my-cli",
+	currentVersion: "1.0.0",
+	cache: { adapter: store },
 });
 ```
 
@@ -149,10 +139,10 @@ For a globally installed Bun CLI, you can set the scope directly:
 
 ```ts
 updateNotifierPlugin({
-  packageName: "my-cli",
-  currentVersion: "1.0.0",
-  packageManager: "bun",
-  installScope: "global",
+	packageName: "my-cli",
+	currentVersion: "1.0.0",
+	packageManager: "bun",
+	installScope: "global",
 });
 ```
 
@@ -160,9 +150,9 @@ Or provide an explicit command:
 
 ```ts
 updateNotifierPlugin({
-  packageName: "my-cli",
-  currentVersion: "1.0.0",
-  updateCommand: "bun add -g my-cli@latest",
+	packageName: "my-cli",
+	currentVersion: "1.0.0",
+	updateCommand: "bun add -g my-cli@latest",
 });
 ```
 
@@ -178,14 +168,14 @@ import { completionPlugin } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const app = new Crust("my-cli")
-  .use(completionPlugin({ version: pkg.version }))
-  .command("build", (cmd) =>
-    cmd
-      .meta({ description: "Build artifact" })
-      .flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
-      .run(() => {}),
-  )
-  .run(() => {});
+	.use(completionPlugin({ version: pkg.version }))
+	.command("build", (cmd) =>
+		cmd
+			.meta({ description: "Build artifact" })
+			.flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
+			.run(() => {}),
+	)
+	.run(() => {});
 
 await app.execute();
 ```

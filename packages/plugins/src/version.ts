@@ -2,9 +2,7 @@ import type { CrustPlugin } from "@crustjs/core";
 
 export type VersionValue = string | (() => string);
 
-export function versionPlugin(
-	versionValue: VersionValue = "0.0.0",
-): CrustPlugin {
+export function versionPlugin(versionValue: VersionValue = "0.0.0"): CrustPlugin {
 	return {
 		name: "version",
 		setup(context, actions) {
@@ -26,8 +24,7 @@ export function versionPlugin(
 				return;
 			}
 
-			const version =
-				typeof versionValue === "function" ? versionValue() : versionValue;
+			const version = typeof versionValue === "function" ? versionValue() : versionValue;
 
 			console.log(`${context.rootCommand.meta.name} v${version}`);
 		},

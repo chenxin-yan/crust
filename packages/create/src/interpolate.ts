@@ -15,10 +15,7 @@
  * // => "Hello, world!"
  * ```
  */
-export function interpolate(
-	content: string,
-	context: Record<string, string>,
-): string {
+export function interpolate(content: string, context: Record<string, string>): string {
 	return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => {
 		if (key in context) {
 			return context[key] as string;

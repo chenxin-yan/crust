@@ -4,6 +4,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import { CrustStoreError } from "./errors.ts";
 
 /**
@@ -62,13 +63,9 @@ function validateAppName(appName: string): void {
 	}
 
 	if (appName.includes("/") || appName.includes("\\")) {
-		throw new CrustStoreError(
-			"PATH",
-			"appName must not contain path separators",
-			{
-				path: appName,
-			},
-		);
+		throw new CrustStoreError("PATH", "appName must not contain path separators", {
+			path: appName,
+		});
 	}
 }
 
@@ -92,13 +89,9 @@ function validateName(name: string): void {
 	}
 
 	if (name.endsWith(".json")) {
-		throw new CrustStoreError(
-			"PATH",
-			"name must not include the .json extension",
-			{
-				path: name,
-			},
-		);
+		throw new CrustStoreError("PATH", "name must not include the .json extension", {
+			path: name,
+		});
 	}
 }
 
@@ -152,9 +145,7 @@ function resolveUnixDir(
 ): string {
 	const xdgValue = env.env[xdgEnvVar];
 	const base =
-		xdgValue && xdgValue.trim().length > 0
-			? xdgValue
-			: join(env.homedir, ...fallbackSegments);
+		xdgValue && xdgValue.trim().length > 0 ? xdgValue : join(env.homedir, ...fallbackSegments);
 	return join(base, appName);
 }
 
@@ -203,12 +194,7 @@ export function configDir(appName: string, env?: PlatformEnv): string {
 	switch (resolvedEnv.platform) {
 		case "linux":
 		case "darwin":
-			return resolveUnixDir(
-				resolvedEnv,
-				"XDG_CONFIG_HOME",
-				[".config"],
-				appName,
-			);
+			return resolveUnixDir(resolvedEnv, "XDG_CONFIG_HOME", [".config"], appName);
 
 		case "win32": {
 			const appData = resolvedEnv.env.APPDATA;
@@ -260,12 +246,7 @@ export function dataDir(appName: string, env?: PlatformEnv): string {
 	switch (resolvedEnv.platform) {
 		case "linux":
 		case "darwin":
-			return resolveUnixDir(
-				resolvedEnv,
-				"XDG_DATA_HOME",
-				[".local", "share"],
-				appName,
-			);
+			return resolveUnixDir(resolvedEnv, "XDG_DATA_HOME", [".local", "share"], appName);
 
 		case "win32": {
 			const localAppData = resolvedEnv.env.LOCALAPPDATA;
@@ -317,12 +298,7 @@ export function stateDir(appName: string, env?: PlatformEnv): string {
 	switch (resolvedEnv.platform) {
 		case "linux":
 		case "darwin":
-			return resolveUnixDir(
-				resolvedEnv,
-				"XDG_STATE_HOME",
-				[".local", "state"],
-				appName,
-			);
+			return resolveUnixDir(resolvedEnv, "XDG_STATE_HOME", [".local", "state"], appName);
 
 		case "win32": {
 			const localAppData = resolvedEnv.env.LOCALAPPDATA;

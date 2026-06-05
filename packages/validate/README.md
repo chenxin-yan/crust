@@ -33,15 +33,15 @@ bun add effect   # wrap with `Schema.standardSchemaV1(...)`
 The package exports seven functions and one type group from a single root
 entry. The mental model is uniform: schema in, typed value out.
 
-| Function | Purpose |
-| --- | --- |
-| `arg(name, schema, opts?)` | Define a positional argument |
-| `flag(schema, opts)` | Define a flag; `opts.type` declares CLI grammar |
-| `commandValidator(handler)` | Wrap a Crust handler with full schema validation |
-| `parseValue(schema, value)` | Validate + return typed output (throws on failure) |
-| `validateStandard(schema, value)` | Async low-level primitive (returns a result) |
+| Function                              | Purpose                                            |
+| ------------------------------------- | -------------------------------------------------- |
+| `arg(name, schema, opts?)`            | Define a positional argument                       |
+| `flag(schema, opts)`                  | Define a flag; `opts.type` declares CLI grammar    |
+| `commandValidator(handler)`           | Wrap a Crust handler with full schema validation   |
+| `parseValue(schema, value)`           | Validate + return typed output (throws on failure) |
+| `validateStandard(schema, value)`     | Async low-level primitive (returns a result)       |
 | `validateStandardSync(schema, value)` | Sync low-level primitive (throws on async schemas) |
-| `isStandardSchema(value)` | Runtime type guard for `Standard Schema v1` |
+| `isStandardSchema(value)`             | Runtime type guard for `Standard Schema v1`        |
 
 Crust does not infer metadata from schemas. Use Crust options for
 descriptions and flag parser grammar; schemas decide requiredness,
@@ -55,23 +55,24 @@ import { arg, commandValidator, flag } from "@crustjs/validate";
 import { z } from "zod";
 
 const serve = new Crust("serve")
-  .meta({ description: "Start the dev server" })
-  .args([
-    arg("port", z.coerce.number().int().min(1), { description: "Port to listen on" }),
-    arg("host", z.string().default("localhost")),
-  ])
-  .flags({
-    verbose: flag(
-      z.boolean().default(false),
-      { type: "boolean", short: "v", description: "Enable verbose logging" },
-    ),
-  })
-  .run(
-    commandValidator(({ args, flags }) => {
-      // args.port: number, args.host: string, flags.verbose: boolean
-      console.log(`Listening on ${args.host}:${args.port}`);
-    }),
-  );
+	.meta({ description: "Start the dev server" })
+	.args([
+		arg("port", z.coerce.number().int().min(1), { description: "Port to listen on" }),
+		arg("host", z.string().default("localhost")),
+	])
+	.flags({
+		verbose: flag(z.boolean().default(false), {
+			type: "boolean",
+			short: "v",
+			description: "Enable verbose logging",
+		}),
+	})
+	.run(
+		commandValidator(({ args, flags }) => {
+			// args.port: number, args.host: string, flags.verbose: boolean
+			console.log(`Listening on ${args.host}:${args.port}`);
+		}),
+	);
 ```
 
 ## Quick start — Effect
@@ -86,19 +87,23 @@ import { arg, commandValidator, flag } from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
 new Crust("serve")
-  .args([
-    arg("port", Schema.standardSchemaV1(Schema.NumberFromString), {
-      description: "Port to listen on",
-    }),
-  ])
-  .flags({
-    verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
-      type: "boolean",
-      short: "v",
-      description: "Enable verbose logging",
-    }),
-  })
-  .run(commandValidator(({ args, flags }) => { /* … */ }));
+	.args([
+		arg("port", Schema.standardSchemaV1(Schema.NumberFromString), {
+			description: "Port to listen on",
+		}),
+	])
+	.flags({
+		verbose: flag(Schema.standardSchemaV1(Schema.UndefinedOr(Schema.Boolean)), {
+			type: "boolean",
+			short: "v",
+			description: "Enable verbose logging",
+		}),
+	})
+	.run(
+		commandValidator(({ args, flags }) => {
+			/* … */
+		}),
+	);
 ```
 
 > **Parser grammar lives in Crust options.** Descriptions, aliases, and flag
@@ -111,56 +116,51 @@ helpers into your own project:
 
 ```ts
 import {
-  arg,
-  flag,
-  type ArgDef,
-  type ArgOptions,
-  type FlagDef,
-  type FlagOptions,
-  type StandardSchema,
+	arg,
+	flag,
+	type ArgDef,
+	type ArgOptions,
+	type FlagDef,
+	type FlagOptions,
+	type StandardSchema,
 } from "@crustjs/validate";
 import * as Schema from "effect/Schema";
 
-type EffectAsStandardSchema<S> = S extends Schema.Schema<infer A, infer I>
-  ? StandardSchema<I, A>
-  : StandardSchema;
+type EffectAsStandardSchema<S> =
+	S extends Schema.Schema<infer A, infer I> ? StandardSchema<I, A> : StandardSchema;
 
 export const earg = <
-  Name extends string,
-  S extends Schema.Schema.AnyNoContext,
-  const Variadic extends true | undefined = undefined,
+	Name extends string,
+	S extends Schema.Schema.AnyNoContext,
+	const Variadic extends true | undefined = undefined,
 >(
-  name: Name,
-  schema: S,
-  options?: ArgOptions & { variadic?: Variadic },
+	name: Name,
+	schema: S,
+	options?: ArgOptions & { variadic?: Variadic },
 ) =>
-  arg(
-    name,
-    Schema.standardSchemaV1(
-      schema as Parameters<typeof Schema.standardSchemaV1>[0],
-    ),
-    options,
-  ) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
+	arg(
+		name,
+		Schema.standardSchemaV1(schema as Parameters<typeof Schema.standardSchemaV1>[0]),
+		options,
+	) as unknown as ArgDef<Name, EffectAsStandardSchema<S>, Variadic>;
 
 export const eflag = <
-  S extends Schema.Schema.AnyNoContext,
-  const Short extends string | undefined = undefined,
-  const Aliases extends readonly string[] | undefined = undefined,
-  const Inherit extends true | undefined = undefined,
+	S extends Schema.Schema.AnyNoContext,
+	const Short extends string | undefined = undefined,
+	const Aliases extends readonly string[] | undefined = undefined,
+	const Inherit extends true | undefined = undefined,
 >(
-  schema: S,
-  options: FlagOptions & {
-    short?: Short;
-    aliases?: Aliases;
-    inherit?: Inherit;
-  },
+	schema: S,
+	options: FlagOptions & {
+		short?: Short;
+		aliases?: Aliases;
+		inherit?: Inherit;
+	},
 ) =>
-  flag(
-    Schema.standardSchemaV1(
-      schema as Parameters<typeof Schema.standardSchemaV1>[0],
-    ),
-    options,
-  ) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
+	flag(
+		Schema.standardSchemaV1(schema as Parameters<typeof Schema.standardSchemaV1>[0]),
+		options,
+	) as unknown as FlagDef<EffectAsStandardSchema<S>, Short, Aliases, Inherit>;
 ```
 
 > The cast `schema as Parameters<typeof Schema.standardSchemaV1>[0]` is
@@ -181,12 +181,16 @@ import { arg, commandValidator } from "@crustjs/validate";
 import * as v from "valibot";
 
 new Crust("hi")
-  .args([
-    arg("name", v.pipe(v.string(), v.minLength(1)), {
-      description: "Your name",
-    }),
-  ])
-  .run(commandValidator(({ args }) => { /* args.name: string */ }));
+	.args([
+		arg("name", v.pipe(v.string(), v.minLength(1)), {
+			description: "Your name",
+		}),
+	])
+	.run(
+		commandValidator(({ args }) => {
+			/* args.name: string */
+		}),
+	);
 ```
 
 For positional args, `type` is optional because the token is already owned by
@@ -239,17 +243,13 @@ throwing, or to runtime-check whether an object implements Standard
 Schema v1:
 
 ```ts
-import {
-  isStandardSchema,
-  validateStandard,
-  validateStandardSync,
-} from "@crustjs/validate";
+import { isStandardSchema, validateStandard, validateStandardSync } from "@crustjs/validate";
 
 const result = await validateStandard(schema, value);
 if (result.ok) {
-  console.log(result.value);
+	console.log(result.value);
 } else {
-  console.log(result.issues); // [{ message, path }]
+	console.log(result.issues); // [{ message, path }]
 }
 
 // Sync — throws TypeError if the schema returns a Promise.

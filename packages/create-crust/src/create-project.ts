@@ -1,5 +1,6 @@
 import type { PostScaffoldStep } from "@crustjs/create";
 import { runSteps, scaffold } from "@crustjs/create";
+
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
 import pluginsPackage from "../../plugins/package.json";
@@ -36,8 +37,7 @@ export async function scaffoldCrustProject(
 ): Promise<void> {
 	const { resolvedDir, name, template, distributionMode } = options;
 
-	const styleTemplatePath =
-		template === "minimal" ? "templates/minimal" : "templates/modular";
+	const styleTemplatePath = template === "minimal" ? "templates/minimal" : "templates/modular";
 	const distributionTemplatePath =
 		distributionMode === "binary"
 			? "templates/distribution/binary"

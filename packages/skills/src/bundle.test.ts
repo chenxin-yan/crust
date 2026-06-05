@@ -1,17 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-	lstat,
-	mkdir,
-	readdir,
-	readFile,
-	rm,
-	stat,
-	symlink,
-	writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { Crust } from "@crustjs/core";
+
 import { installSkillBundle, loadBundleFiles } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
 import { generateSkill } from "./generate.ts";
@@ -148,9 +141,7 @@ describe("loadBundleFiles", () => {
 			`${JSON.stringify({ name: "funnel-builder", version: "0.0.0" }, null, "\t")}\n`,
 		);
 
-		await expect(loadBundleFiles(dir)).rejects.toThrow(
-			/reserved file "crust\.json"/,
-		);
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/reserved file "crust\.json"/);
 	});
 
 	it("survives an internal directory symlink cycle without unbounded recursion", async () => {
@@ -205,20 +196,14 @@ describe("loadBundleFiles", () => {
 	it("rejects frontmatter with no top-level description field", async () => {
 		const dir = join(tmpDir, "no-description-key");
 		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\n---\n# Bundle\n",
-		);
+		await writeFile(join(dir, "SKILL.md"), "---\nname: funnel-builder\n---\n# Bundle\n");
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
 	});
 
 	it("rejects empty frontmatter values", async () => {
 		const dir = join(tmpDir, "empty-values");
 		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: ""\ndescription: ""\n---\n',
-		);
+		await writeFile(join(dir, "SKILL.md"), '---\nname: ""\ndescription: ""\n---\n');
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
 	});
 
@@ -376,9 +361,7 @@ describe("installSkillBundle", () => {
 		const manifest = await readInstalledManifest(canonicalDir);
 		expect(manifest).toEqual({ version: "1.0.0", kind: "bundle" });
 
-		const written = JSON.parse(
-			await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"),
-		);
+		const written = JSON.parse(await readFile(join(canonicalDir, CRUST_MANIFEST), "utf-8"));
 		expect(written.name).toBe("funnel-builder");
 		expect(written.description).toBe("Build a sales funnel");
 		expect(written.version).toBe("1.0.0");
@@ -451,20 +434,8 @@ describe("installSkillBundle", () => {
 			}),
 		);
 
-		const skillPath = join(
-			tmpDir,
-			".claude",
-			"skills",
-			"funnel-builder",
-			"SKILL.md",
-		);
-		const canonicalPath = join(
-			tmpDir,
-			".crust",
-			"skills",
-			"funnel-builder",
-			"SKILL.md",
-		);
+		const skillPath = join(tmpDir, ".claude", "skills", "funnel-builder", "SKILL.md");
+		const canonicalPath = join(tmpDir, ".crust", "skills", "funnel-builder", "SKILL.md");
 		expect(await readFile(skillPath, "utf-8")).toContain("Initial content");
 
 		const result = await withCwd(tmpDir, () =>

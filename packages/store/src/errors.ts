@@ -111,8 +111,7 @@ export interface StoreErrorDetailsMap {
 export type StoreErrorCode = keyof StoreErrorDetailsMap;
 
 /** Resolves the details type for a given {@link StoreErrorCode}. */
-export type StoreErrorDetails<C extends StoreErrorCode> =
-	StoreErrorDetailsMap[C];
+export type StoreErrorDetails<C extends StoreErrorCode> = StoreErrorDetailsMap[C];
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustStoreError — Custom error class
@@ -138,9 +137,7 @@ export type StoreErrorDetails<C extends StoreErrorCode> =
  * }
  * ```
  */
-export class CrustStoreError<
-	C extends StoreErrorCode = StoreErrorCode,
-> extends Error {
+export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends Error {
 	/** Machine-readable error code for programmatic handling. */
 	readonly code: C;
 

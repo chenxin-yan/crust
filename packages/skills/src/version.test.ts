@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+
 import {
 	CRUST_MANIFEST,
 	checkVersion,
@@ -58,20 +59,14 @@ describe("readInstalledVersion", () => {
 	});
 
 	it("returns null when crust.json has no version field", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test" }),
-		);
+		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
 
 		const version = await readInstalledVersion(tmpDir);
 		expect(version).toBeNull();
 	});
 
 	it("returns null when version is not a string", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: 123 }),
-		);
+		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test", version: 123 }));
 
 		const version = await readInstalledVersion(tmpDir);
 		expect(version).toBeNull();
@@ -135,10 +130,7 @@ describe("readInstalledManifest", () => {
 	});
 
 	it("returns null when crust.json has no version field", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test" }),
-		);
+		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
 		expect(await readInstalledManifest(tmpDir)).toBeNull();
 	});
 
@@ -183,10 +175,7 @@ describe("inspectInstalledManifest", () => {
 	});
 
 	it("returns status: 'malformed' with reason 'missing-version' when version is absent", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test" }),
-		);
+		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
 		const result = await inspectInstalledManifest(tmpDir);
 		expect(result).toEqual({ status: "malformed", reason: "missing-version" });
 	});

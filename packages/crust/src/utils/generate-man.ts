@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
 import { Crust } from "@crustjs/core";
 import { writeManPage } from "@crustjs/man";
+
 import { resolveBaseName } from "./binary-name.ts";
 
 export interface GenerateManPageFromEntryOptions {
@@ -28,9 +30,7 @@ export async function generateManPageFromEntry(
 
 	const href = pathToFileURL(entryPath).href;
 	const mod = await import(href);
-	const raw =
-		(mod as Record<string, unknown>).app ??
-		(mod as Record<string, unknown>).default;
+	const raw = (mod as Record<string, unknown>).app ?? (mod as Record<string, unknown>).default;
 
 	if (!(raw instanceof Crust)) {
 		throw new Error(

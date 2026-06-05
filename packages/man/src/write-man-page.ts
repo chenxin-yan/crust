@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
 import type { Crust } from "@crustjs/core";
+
 import { renderManPageMdoc } from "./mdoc.ts";
 
 export interface WriteManPageOptions {
@@ -27,18 +29,8 @@ export interface WriteManPageOptions {
  * Freeze and validate the command tree, render an mdoc(7) manual page, and
  * write it to `outfile`.
  */
-export async function writeManPage(
-	options: WriteManPageOptions,
-): Promise<void> {
-	const {
-		app,
-		name,
-		outfile,
-		section = 1,
-		date,
-		argv,
-		logWarnings = true,
-	} = options;
+export async function writeManPage(options: WriteManPageOptions): Promise<void> {
+	const { app, name, outfile, section = 1, date, argv, logWarnings = true } = options;
 
 	const { root, warnings } = await app.prepareCommandTree({ argv });
 
