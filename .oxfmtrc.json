@@ -3,7 +3,14 @@
 	"useTabs": true,
 	"sortImports": true,
 	"sortPackageJson": false,
-	"ignorePatterns": [".changeset/", "**/CHANGELOG.md", ".pi/", ".worktrees/", "apps/docs/.source/", "apps/docs/src/routeTree.gen.ts"],
+	"ignorePatterns": [
+		".changeset/",
+		"**/CHANGELOG.md",
+		".pi/",
+		".worktrees/",
+		"apps/docs/.source/",
+		"apps/docs/src/routeTree.gen.ts"
+	],
 	"overrides": [
 		{
 			"files": ["apps/docs/**"],
