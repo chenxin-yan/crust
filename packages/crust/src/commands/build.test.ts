@@ -55,6 +55,7 @@ describe("buildCommand definition", () => {
 		expect(result.flags["stage-dir"]).toBe("dist/npm");
 		expect(result.flags.resolver).toBe("cli");
 		expect(result.flags.outdir).toBe("dist");
+		expect(result.flags["alias-diagnostics"]).toBe("off");
 		expect(result.flags.outfile).toBeUndefined();
 		expect(result.flags.name).toBeUndefined();
 		expect(result.flags.target).toBeUndefined();
@@ -101,6 +102,19 @@ describe("buildCommand definition", () => {
 		const node = makeBuildNode();
 		const result = parseArgs(node, ["--no-validate"]);
 		expect(result.flags.validate).toBe(false);
+	});
+
+	it("supports --alias-diagnostics for pre-compile validation", () => {
+		const node = makeBuildNode();
+		const result = parseArgs(node, ["--alias-diagnostics", "strict"]);
+		expect(result.flags["alias-diagnostics"]).toBe("strict");
+	});
+
+	it("rejects unknown --alias-diagnostics values", () => {
+		const node = makeBuildNode();
+		expect(() => parseArgs(node, ["--alias-diagnostics", "loud"])).toThrow(
+			/Expected one of: off, warn, strict/,
+		);
 	});
 
 	it("defines --env-file as a repeatable string flag", () => {

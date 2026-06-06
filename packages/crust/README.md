@@ -58,19 +58,21 @@ crust build --env-file .env --env-file .env.local       # Repeatable env files
 
 #### Flags
 
-| Flag          | Alias | Type        | Default             | Description                                                |
-| ------------- | ----- | ----------- | ------------------- | ---------------------------------------------------------- |
-| `--entry`     | `-e`  | `"string"`  | `src/cli.ts`        | Entry file path                                            |
-| `--outfile`   | `-o`  | `"string"`  | —                   | Output file path (single-target builds only)               |
-| `--name`      | `-n`  | `"string"`  | package.json `name` | Base binary name                                           |
-| `--minify`    | —     | `"boolean"` | `true`              | Minify the output                                          |
-| `--target`    | `-t`  | `"string"`  | _(all platforms)_   | Target platform(s); repeatable                             |
-| `--outdir`    | `-d`  | `"string"`  | `dist`              | Output directory for compiled binaries                     |
-| `--resolver`  | `-r`  | `"string"`  | `cli`               | Resolver script filename (multi-target only, no extension) |
-| `--env-file`  | —     | `"string"`  | —                   | Explicit env file(s) used for build-time constants         |
-| `--validate`  | —     | `"boolean"` | `true`              | Pre-compile validation of command definitions              |
-| `--package`   | —     | `"boolean"` | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
-| `--stage-dir` | —     | `"string"`  | `dist/npm`          | Staging directory used with `--package`                    |
+| Flag                  | Alias | Type                              | Default             | Description                                                |
+| --------------------- | ----- | --------------------------------- | ------------------- | ---------------------------------------------------------- |
+| `--entry`             | `-e`  | `"string"`                        | `src/cli.ts`        | Entry file path                                            |
+| `--outfile`           | `-o`  | `"string"`                        | —                   | Output file path (single-target builds only)               |
+| `--name`              | `-n`  | `"string"`                        | package.json `name` | Base binary name                                           |
+| `--minify`            | —     | `"boolean"`                       | `true`              | Minify the output                                          |
+| `--target`            | `-t`  | `"string"`                        | _(all platforms)_   | Target platform(s); repeatable                             |
+| `--outdir`            | `-d`  | `"string"`                        | `dist`              | Output directory for compiled binaries                     |
+| `--resolver`          | `-r`  | `"string"`                        | `cli`               | Resolver script filename (multi-target only, no extension) |
+| `--env-file`          | —     | `"string"`                        | —                   | Explicit env file(s) used for build-time constants         |
+| `--validate`          | —     | `"boolean"`                       | `true`              | Pre-compile validation of command definitions              |
+| `--alias-diagnostics` | —     | `"off"` \| `"warn"` \| `"strict"` | `off`               | Report duplicate command tokens outside sibling namespaces |
+| `--package`           | —     | `"boolean"`                       | `false`             | Stage npm packages in `dist/npm` instead of raw binaries   |
+| `--stage-dir`         | —     | `"string"`                        | `dist/npm`          | Staging directory used with `--package`                    |
+| `--man`               | —     | `"boolean"`                       | `false`             | Write an mdoc(7) man page                                  |
 
 #### Output
 

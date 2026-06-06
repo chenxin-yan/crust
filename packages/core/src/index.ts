@@ -1,6 +1,11 @@
 // Crust builder API
 export type { CrustCommandContext } from "./crust.ts";
-export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./crust.ts";
+export {
+	Crust,
+	VALIDATION_ALIAS_DIAGNOSTICS_ENV,
+	VALIDATION_FORCE_EXIT_ENV,
+	VALIDATION_MODE_ENV,
+} from "./crust.ts";
 // Errors
 export type { CrustErrorCode } from "./errors.ts";
 export { CrustError } from "./errors.ts";
@@ -9,6 +14,7 @@ export type { CommandNode } from "./node.ts";
 
 // Argument & flag parsing
 export { parseArgs, validateParsed } from "./parser.ts";
+export type { AliasDiagnosticsMode, ValidateCommandTreeOptions } from "./validation.ts";
 
 // Plugin runtime contracts
 export type {

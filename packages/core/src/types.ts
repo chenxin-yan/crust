@@ -837,6 +837,11 @@ export interface CommandMeta {
 	 * subcommands). Each alias must also be a non-empty string with no
 	 * whitespace and must not start with `-`.
 	 *
+	 * The default policy is sibling-scoped because command routing resolves
+	 * one level at a time. Ancestor, descendant, and cousin commands may reuse
+	 * the same token unless optional alias diagnostics are enabled during
+	 * `prepareCommandTree()` or `crust build`.
+	 *
 	 * **Display contract.** Help output renders the canonical name with
 	 * aliases inline as `name (a, b, c)`. The canonical `name` is what
 	 * appears in `commandPath`, error messages, and suggestions from

@@ -327,4 +327,66 @@ describe("validateCommandTree — alias collisions", () => {
 
 		expect(() => validateCommandTree(root)).toThrow(/collides with alias of sibling "create"/);
 	});
+
+	it("returns no cross-depth diagnostics by default", () => {
+		const root = createCommandNode("app");
+		const issue = createCommandNode("issue");
+		issue.subCommands = {
+			create: makeRunnable("create", ["issue"]),
+		};
+		root.subCommands = { issue };
+
+		expect(validateCommandTree(root)).toEqual([]);
+	});
+
+	it("warns about ancestor and descendant token reuse when enabled", () => {
+		const root = createCommandNode("app");
+		const issue = createCommandNode("issue");
+		issue.subCommands = {
+			create: makeRunnable("create", ["issue"]),
+		};
+		root.subCommands = { issue };
+
+		const warnings = validateCommandTree(root, { aliasDiagnostics: "warn" });
+
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('Subcommand token "issue" is reused');
+		expect(warnings[0]).toContain("ancestor/descendant commands");
+		expect(warnings[0]).toContain('canonical name at "app issue"');
+		expect(warnings[0]).toContain('alias at "app issue create"');
+	});
+
+	it("warns about token reuse across separate command branches when enabled", () => {
+		const root = createCommandNode("app");
+		const issue = createCommandNode("issue");
+		issue.subCommands = {
+			list: makeRunnable("list", ["ls"]),
+		};
+		const deploy = createCommandNode("deploy");
+		deploy.subCommands = {
+			status: makeRunnable("status", ["ls"]),
+		};
+		root.subCommands = { issue, deploy };
+
+		const warnings = validateCommandTree(root, { aliasDiagnostics: "warn" });
+
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('Subcommand token "ls" is reused');
+		expect(warnings[0]).toContain("separate command branches");
+		expect(warnings[0]).toContain('alias at "app issue list"');
+		expect(warnings[0]).toContain('alias at "app deploy status"');
+	});
+
+	it("throws on cross-depth token reuse in strict mode", () => {
+		const root = createCommandNode("app");
+		const issue = createCommandNode("issue");
+		issue.subCommands = {
+			create: makeRunnable("create", ["issue"]),
+		};
+		root.subCommands = { issue };
+
+		expect(() => validateCommandTree(root, { aliasDiagnostics: "strict" })).toThrow(
+			/Subcommand token "issue" is reused/,
+		);
+	});
 });

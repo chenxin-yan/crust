@@ -21,6 +21,7 @@ import type {
 	ValidateVariadicArgs,
 } from "./types.ts";
 import { validateIncomingAliases } from "./validation.ts";
+import type { AliasDiagnosticsMode as RuntimeAliasDiagnosticsMode } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -113,6 +114,14 @@ export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
  * embedders) take so the host event loop is not terminated.
  */
 export const VALIDATION_FORCE_EXIT_ENV = "CRUST_INTERNAL_VALIDATE_FORCE_EXIT";
+
+/**
+ * Optional companion to {@link VALIDATION_MODE_ENV}. When set to `"warn"` or
+ * `"strict"`, build-time validation also reports command token reuse outside
+ * the sibling namespace. The default is `"off"` to preserve runtime behavior
+ * and avoid extra work unless validation explicitly opts in.
+ */
+export const VALIDATION_ALIAS_DIAGNOSTICS_ENV = "CRUST_INTERNAL_ALIAS_DIAGNOSTICS";
 const EXIT_CODE_CANCELLED = 130;
 
 /** Key for storing validation result on globalThis (for in-process tests) */
@@ -143,6 +152,18 @@ function isPromptCancelledError(error: unknown): boolean {
 	}
 
 	return error.name === "CancelledError";
+}
+
+function normalizeAliasDiagnosticsMode(
+	value: RuntimeAliasDiagnosticsMode | string | undefined,
+): RuntimeAliasDiagnosticsMode {
+	if (value === undefined || value === "off" || value === "warn" || value === "strict") {
+		return value ?? "off";
+	}
+	throw new CrustError(
+		"DEFINITION",
+		`Invalid alias diagnostics mode "${value}". Expected "off", "warn", or "strict".`,
+	);
 }
 
 function applyInheritedFlagsToSubtree(node: CommandNode, inheritedFlags: FlagsDef): void {
@@ -747,8 +768,10 @@ export class Crust<
 	 */
 	async prepareCommandTree(options?: {
 		argv?: readonly string[];
+		aliasDiagnostics?: RuntimeAliasDiagnosticsMode;
 	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
 		const argv = options?.argv ?? [];
+		const aliasDiagnostics = normalizeAliasDiagnosticsMode(options?.aliasDiagnostics);
 		const rootNode = deepCloneCommandNode(this._node);
 
 		const allPlugins = collectPlugins(rootNode);
@@ -779,7 +802,7 @@ export class Crust<
 		freezeTree(rootNode);
 
 		const { validateCommandTree } = await import("./validation.ts");
-		validateCommandTree(rootNode);
+		warnings.push(...validateCommandTree(rootNode, { aliasDiagnostics }));
 
 		return { root: rootNode, warnings };
 	}
@@ -836,7 +859,10 @@ export class Crust<
 			const result = (async () => {
 				try {
 					const { validateCommandTree } = await import("./validation.ts");
-					validateCommandTree(rootNode);
+					const aliasDiagnostics = normalizeAliasDiagnosticsMode(
+						process.env[VALIDATION_ALIAS_DIAGNOSTICS_ENV],
+					);
+					warnings.push(...validateCommandTree(rootNode, { aliasDiagnostics }));
 					for (const warning of warnings) {
 						console.warn(`Warning: ${warning}`);
 					}

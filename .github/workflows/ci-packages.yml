@@ -10,6 +10,7 @@ on:
       - "packages/**"
       - "package.json"
       - "bun.lock"
+      - "scripts/**"
       - "turbo.json"
       - ".oxlintrc.json"
       - ".oxfmtrc.json"
@@ -48,3 +49,6 @@ jobs:
 
       - name: Build, type check, and test (packages)
         run: bun turbo run build check:types test --filter='./packages/*'
+
+      - name: Type-check performance (core)
+        run: bun run typecheck:perf

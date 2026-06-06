@@ -1,0 +1,12 @@
+{
+	"description": "Baseline for @crustjs/core type-check performance fixture. Time metrics are reported but not used for pass/fail because CI runners vary.",
+	"command": "tsc --noEmit --extendedDiagnostics --pretty false -p packages/core/tsconfig.type-perf.json",
+	"thresholds": {
+		"types": 1.25,
+		"instantiations": 1.25
+	},
+	"metrics": {
+		"types": 7851,
+		"instantiations": 34573
+	}
+}

@@ -32,19 +32,21 @@ crust build --env-file .env.production
 
 ## Flags
 
-| Flag          | Alias | Type                    | Default       | Description                                                |
-| ------------- | ----- | ----------------------- | ------------- | ---------------------------------------------------------- |
-| `--entry`     | `-e`  | `"string"`              | `src/cli.ts`  | Entry file path                                            |
-| `--outfile`   | `-o`  | `"string"`              | —             | Output file path (single-target only)                      |
-| `--name`      | `-n`  | `"string"`              | auto-detected | Binary name                                                |
-| `--minify`    | —     | `"boolean"`             | `true`        | Minify the output                                          |
-| `--target`    | `-t`  | `"string"` (repeatable) | all platforms | Target platform(s)                                         |
-| `--outdir`    | `-d`  | `"string"`              | `dist`        | Output directory for compiled binaries                     |
-| `--resolver`  | `-r`  | `"string"`              | `cli`         | Resolver script filename (multi-target only, no extension) |
-| `--env-file`  | —     | `"string"` (repeatable) | —             | Explicit env file(s) used for build-time constants         |
-| `--validate`  | —     | `"boolean"`             | `true`        | Pre-compile validation of command definitions              |
-| `--package`   | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
-| `--stage-dir` | —     | `"string"`              | `dist/npm`    | Directory to stage npm packages when using `--package`     |
+| Flag                  | Alias | Type                              | Default       | Description                                                   |
+| --------------------- | ----- | --------------------------------- | ------------- | ------------------------------------------------------------- |
+| `--entry`             | `-e`  | `"string"`                        | `src/cli.ts`  | Entry file path                                               |
+| `--outfile`           | `-o`  | `"string"`                        | —             | Output file path (single-target only)                         |
+| `--name`              | `-n`  | `"string"`                        | auto-detected | Binary name                                                   |
+| `--minify`            | —     | `"boolean"`                       | `true`        | Minify the output                                             |
+| `--target`            | `-t`  | `"string"` (repeatable)           | all platforms | Target platform(s)                                            |
+| `--outdir`            | `-d`  | `"string"`                        | `dist`        | Output directory for compiled binaries                        |
+| `--resolver`          | `-r`  | `"string"`                        | `cli`         | Resolver script filename (multi-target only, no extension)    |
+| `--env-file`          | —     | `"string"` (repeatable)           | —             | Explicit env file(s) used for build-time constants            |
+| `--validate`          | —     | `"boolean"`                       | `true`        | Pre-compile validation of command definitions                 |
+| `--alias-diagnostics` | —     | `"off"` \| `"warn"` \| `"strict"` | `off`         | Report duplicate command tokens outside the sibling namespace |
+| `--package`           | —     | `"boolean"`                       | `false`       | Stage npm packages in `dist/npm` instead of raw binaries      |
+| `--stage-dir`         | —     | `"string"`                        | `dist/npm`    | Directory to stage npm packages when using `--package`        |
+| `--man`               | —     | `"boolean"`                       | `false`       | Write an mdoc(7) man page                                     |
 
 ## Supported Targets
 
@@ -175,7 +177,7 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 ## Pre-compile Validation
 
-Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
+Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, sibling subcommand alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
 The validation works by spawning the current executable in Bun mode with `CRUST_INTERNAL_VALIDATE_ONLY=1` and the companion `CRUST_INTERNAL_VALIDATE_FORCE_EXIT=1`. When [`.execute()`](/docs/api/crust#executeoptions) detects these env vars, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers, then exits the subprocess so any code after `await app.execute()` in your entrypoint is skipped.
 
@@ -183,12 +185,13 @@ If you pass `--env-file`, the validation subprocess receives the same explicit e
 
 ### What it catches
 
-| Issue                          | Error Code   | Example                                      |
-| ------------------------------ | ------------ | -------------------------------------------- |
-| Flag alias collision           | `DEFINITION` | Two flags share `-v` as alias                |
-| `no-` prefixed flag name       | `DEFINITION` | Flag named `no-cache` instead of `cache`     |
-| `no-` prefixed alias           | `DEFINITION` | Alias `no-store` on a flag                   |
-| Long alias shadowing flag name | `DEFINITION` | Alias `out` when another flag is named `out` |
+| Issue                              | Error Code   | Example                                      |
+| ---------------------------------- | ------------ | -------------------------------------------- |
+| Flag alias collision               | `DEFINITION` | Two flags share `-v` as alias                |
+| Sibling subcommand alias collision | `DEFINITION` | `issue` and `info` both use alias `i`        |
+| `no-` prefixed flag name           | `DEFINITION` | Flag named `no-cache` instead of `cache`     |
+| `no-` prefixed alias               | `DEFINITION` | Alias `no-store` on a flag                   |
+| Long alias shadowing flag name     | `DEFINITION` | Alias `out` when another flag is named `out` |
 
 In addition to hard errors, the validation emits **warnings** for plugin conflicts that are allowed at runtime but may indicate unintentional behavior:
 
@@ -196,6 +199,18 @@ In addition to hard errors, the validation emits **warnings** for plugin conflic
 | --------------------------------------- | ---------------------------------------------------------------------------- |
 | Plugin flag overrides user-defined flag | Plugin calls `addFlag(cmd, "verbose", ...)` but `verbose` already exists     |
 | Plugin subcommand skipped               | Plugin calls `addSubCommand(cmd, "deploy", ...)` but `deploy` already exists |
+
+### Alias diagnostics
+
+By default, subcommand alias conflicts are checked within each sibling namespace only. Ancestor, descendant, and cousin commands may reuse the same command token because routing resolves one level at a time.
+
+For large command trees, use `--alias-diagnostics=warn` to report duplicate command names or aliases outside the sibling namespace:
+
+```sh
+crust build --alias-diagnostics=warn
+```
+
+Use `--alias-diagnostics=strict` in CI if you want those diagnostics to fail the build. This is runtime validation only; it does not add TypeScript type-check cost.
 
 ### Skipping validation
 

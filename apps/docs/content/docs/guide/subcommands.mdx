@@ -96,7 +96,7 @@ COMMANDS:
 
 ### Conflict policy
 
-Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. They must also be non-empty, contain no whitespace, and not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time:
+Alias strings share a namespace with the command's **direct siblings**. An alias must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Aliases must also be non-empty, contain no whitespace, and not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time:
 
 ```ts
 // ❌ Throws: alias "i" collides with sibling canonical name "i"
@@ -108,7 +108,15 @@ new Crust("my-cli")
 // canonical name "i"
 ```
 
-The same check runs during `prepareCommandTree()` for plugin-installed subcommands, so plugins can't sneak conflicting aliases past the policy.
+The same check runs during `prepareCommandTree()` for plugin-installed subcommands. Plugin `addSubCommand` calls that collide are skipped with a warning, matching the behavior for duplicate plugin subcommand names.
+
+Ancestor, descendant, and cousin commands may reuse the same token by default because routing resolves one level at a time. For example, `my-cli issue` and `my-cli project issue` are different command namespaces. If you want a large CLI to avoid that reuse for readability, enable opt-in diagnostics:
+
+```ts
+const { warnings } = await app.prepareCommandTree({ aliasDiagnostics: "warn" });
+```
+
+`crust build --alias-diagnostics=warn` reports the same diagnostics during pre-compile validation, and `strict` turns those diagnostics into `DEFINITION` errors.
 
 ## Hidden Commands
 
@@ -122,7 +130,7 @@ const app = new Crust("my-cli")
   );
 ```
 
-`hidden` affects help rendering only — the command remains directly invocable by name, alias resolution still works, and `didYouMeanPlugin` still suggests it. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion plugins. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
+`hidden` affects user-facing listings only — the command remains directly invocable by name and alias resolution still works, but first-party renderers and `didYouMeanPlugin` omit it from suggestions and available-command lists. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion plugins. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
 
 ## Nested Subcommands
 
@@ -277,13 +285,13 @@ When a user types an unknown subcommand on a container command (no `.run()`), Cr
 ```ts
 {
   input: "buld",                       // What the user typed
-  available: ["build", "dev"],          // Valid subcommands + aliases
+  available: ["build", "dev"],          // Canonical sibling subcommands
   commandPath: ["my-cli"],              // Path to the parent
   parentCommand: main,                  // The parent command node
 }
 ```
 
-If any sibling defines aliases, `available` is a flat list of canonical names followed by each canonical's aliases (in sibling insertion order). For example, `issue` with `aliases: ["issues", "i"]` and `version` produces `available: ["issue", "issues", "i", "version"]`. `didYouMeanPlugin` uses this list to match against alias spellings but always reports the canonical name as its suggestion.
+`available` contains canonical sibling names only. Alias-aware tooling can read `parentCommand.subCommands` from the error details to inspect each sibling's `meta.aliases`. `didYouMeanPlugin` does that so it can match alias spellings while still reporting the canonical name as its suggestion.
 
 The [Did You Mean Plugin](/docs/modules/plugins/did-you-mean) catches these errors and provides "Did you mean?" suggestions.
 

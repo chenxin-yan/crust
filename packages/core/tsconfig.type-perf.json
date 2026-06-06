@@ -1,0 +1,9 @@
+{
+	"extends": "@crustjs/config/tsconfig.base.json",
+	"compilerOptions": {
+		"declaration": false,
+		"isolatedDeclarations": false,
+		"noEmit": true
+	},
+	"include": ["tests/type-perf/fixtures/**/*.ts"]
+}

@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import type { AliasDiagnosticsMode } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import {
@@ -464,6 +465,7 @@ export async function runDistributeBuild(options: {
 	stageDir: string;
 	envFiles?: readonly string[];
 	validate: boolean;
+	aliasDiagnostics?: AliasDiagnosticsMode;
 	/** Write `root/man/<name>.1` in the staged meta-package and set npm `man` / `files`; also mirrors to `<outdir>/man/` */
 	man?: boolean;
 	/** Directory prefix for mirrored man output (default `dist`) */
@@ -479,7 +481,7 @@ export async function runDistributeBuild(options: {
 	}
 
 	if (options.validate) {
-		await validateEntrypoint(entryPath, options.envFiles);
+		await validateEntrypoint(entryPath, options.envFiles, options.aliasDiagnostics);
 	}
 
 	const stageDir = resolve(cwd, options.stageDir);

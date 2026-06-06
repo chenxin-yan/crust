@@ -17,6 +17,10 @@
 		"check:types": {
 			"dependsOn": ["^build"]
 		},
+		"typecheck:perf": {
+			"dependsOn": ["^build"],
+			"cache": false
+		},
 		"publish": {
 			"dependsOn": ["build", "^publish"],
 			"cache": false

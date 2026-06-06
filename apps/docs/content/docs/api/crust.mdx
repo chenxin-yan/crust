@@ -35,18 +35,19 @@ await app.execute();
 
 ### `.meta(meta)`
 
-Set description and usage metadata.
+Set command metadata such as description, usage, aliases, and hidden status.
 
 ```ts
 meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A>
 ```
 
-The command name is already set by the builder source (`new Crust(name)`, `.sub(name)`, or the child builder passed into `.command(name, cb)`), so only `description` and `usage` can be provided here.
+The command name is already set by the builder source (`new Crust(name)`, `.sub(name)`, or the child builder passed into `.command(name, cb)`), so `.meta()` accepts every `CommandMeta` field except `name`.
 
 ```ts
 new Crust("deploy").meta({
   description: "Deploy the application",
   usage: "deploy [options] <environment>",
+  aliases: ["ship"],
 });
 ```
 

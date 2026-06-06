@@ -3,6 +3,17 @@ import type { CommandNode } from "./node.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
 import type { ArgDef, FlagDef } from "./types.ts";
 
+export type AliasDiagnosticsMode = "off" | "warn" | "strict";
+
+export interface ValidateCommandTreeOptions {
+	/**
+	 * Optional cross-depth command-token diagnostics. The default sibling-only
+	 * policy remains the hard validation boundary; this mode reports broader
+	 * reuse that is unambiguous at runtime but can make large CLIs harder to scan.
+	 */
+	aliasDiagnostics?: AliasDiagnosticsMode;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Alias collision policy: aliases share a namespace with canonical names,
 // so a value collides with any sibling's canonical name or alias.
@@ -11,7 +22,7 @@ import type { ArgDef, FlagDef } from "./types.ts";
 // (`validateCommandTree`) reuse these helpers so the policy lives in one
 // place and surfaces as the same `DEFINITION` error shape regardless of
 // how a subcommand was installed (`.command()` vs. plugin-installed via
-// the `addCommand` action / direct `node.subCommands` mutation).
+// the `addSubCommand` action / direct `node.subCommands` mutation).
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -191,6 +202,103 @@ function createValidationArgv(command: CommandNode): string[] {
 	return argv;
 }
 
+type CommandTokenKind = "canonical name" | "alias";
+
+interface CommandTokenOccurrence {
+	token: string;
+	kind: CommandTokenKind;
+	path: string[];
+	parentPath: string[];
+}
+
+function pathLabel(path: readonly string[]): string {
+	return path.join(" ");
+}
+
+function isPrefixPath(prefix: readonly string[], path: readonly string[]): boolean {
+	if (prefix.length >= path.length) return false;
+	return prefix.every((part, index) => path[index] === part);
+}
+
+function relationForOccurrences(occurrences: readonly CommandTokenOccurrence[]): string {
+	for (let i = 0; i < occurrences.length; i++) {
+		for (let j = i + 1; j < occurrences.length; j++) {
+			const left = occurrences[i];
+			const right = occurrences[j];
+			if (!left || !right) continue;
+			if (isPrefixPath(left.path, right.path) || isPrefixPath(right.path, left.path)) {
+				return "ancestor/descendant commands";
+			}
+		}
+	}
+	return "separate command branches";
+}
+
+function formatOccurrence(occurrence: CommandTokenOccurrence): string {
+	return `${occurrence.kind} at "${pathLabel(occurrence.path)}"`;
+}
+
+function collectCommandTokenDiagnostics(root: CommandNode): string[] {
+	const tokens = new Map<string, CommandTokenOccurrence[]>();
+	const stack: Array<{ command: CommandNode; path: string[] }> = [
+		{ command: root, path: [root.meta.name] },
+	];
+	const visited = new Set<CommandNode>();
+
+	while (stack.length > 0) {
+		const item = stack.pop();
+		if (!item) break;
+		const { command, path } = item;
+		if (visited.has(command)) continue;
+		visited.add(command);
+
+		for (const [name, subCommand] of Object.entries(command.subCommands)) {
+			const subPath = [...path, name];
+			const canonicalOccurrence: CommandTokenOccurrence = {
+				token: name,
+				kind: "canonical name",
+				path: subPath,
+				parentPath: path,
+			};
+			const canonicalOccurrences = tokens.get(name) ?? [];
+			canonicalOccurrences.push(canonicalOccurrence);
+			tokens.set(name, canonicalOccurrences);
+
+			for (const alias of subCommand.meta.aliases ?? []) {
+				const aliasOccurrence: CommandTokenOccurrence = {
+					token: alias,
+					kind: "alias",
+					path: subPath,
+					parentPath: path,
+				};
+				const aliasOccurrences = tokens.get(alias) ?? [];
+				aliasOccurrences.push(aliasOccurrence);
+				tokens.set(alias, aliasOccurrences);
+			}
+
+			stack.push({ command: subCommand, path: subPath });
+		}
+	}
+
+	const diagnostics: string[] = [];
+	for (const [token, occurrences] of tokens) {
+		const parentNamespaces = new Set(
+			occurrences.map((occurrence) => pathLabel(occurrence.parentPath)),
+		);
+		if (parentNamespaces.size <= 1) continue;
+
+		diagnostics.push(
+			`Subcommand token "${token}" is reused across ${relationForOccurrences(occurrences)}: ${occurrences
+				.map(formatOccurrence)
+				.join(
+					"; ",
+				)}. Routing remains unambiguous because commands resolve one level at a time, but reuse can make help, completion, and documentation harder to scan.`,
+		);
+	}
+
+	return diagnostics;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // validateCommandTree — Tree validation
 // ────────────────────────────────────────────────────────────────────────────
@@ -211,11 +319,15 @@ function createValidationArgv(command: CommandNode): string[] {
  * @param root - The root command node to validate
  * @throws {CrustError} `DEFINITION` with the full command path on failure
  */
-export function validateCommandTree(root: CommandNode): void {
+export function validateCommandTree(
+	root: CommandNode,
+	options: ValidateCommandTreeOptions = {},
+): readonly string[] {
 	const stack: Array<{ command: CommandNode; path: string[] }> = [
 		{ command: root, path: [root.meta.name] },
 	];
 	const visited = new Set<CommandNode>();
+	const aliasDiagnosticsMode = options.aliasDiagnostics ?? "off";
 
 	while (stack.length > 0) {
 		const item = stack.pop();
@@ -258,4 +370,15 @@ export function validateCommandTree(root: CommandNode): void {
 			});
 		}
 	}
+
+	if (aliasDiagnosticsMode === "off") {
+		return [];
+	}
+
+	const diagnostics = collectCommandTokenDiagnostics(root);
+	if (aliasDiagnosticsMode === "strict" && diagnostics.length > 0) {
+		throw new CrustError("DEFINITION", diagnostics.join("\n"));
+	}
+
+	return diagnostics;
 }

@@ -2393,6 +2393,28 @@ describe("Crust.prepareCommandTree", () => {
 		expect(a.root.meta.name).toBe("cli");
 		expect(b.root.meta.name).toBe("cli");
 	});
+
+	it("can return optional cross-depth alias diagnostics as warnings", async () => {
+		const app = new Crust("cli").command("issue", (issue) =>
+			issue.command("create", (cmd) => cmd.meta({ aliases: ["issue"] }).run(() => {})),
+		);
+
+		const { warnings } = await app.prepareCommandTree({ aliasDiagnostics: "warn" });
+
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('Subcommand token "issue" is reused');
+		expect(warnings[0]).toContain("ancestor/descendant commands");
+	});
+
+	it("can fail optional cross-depth alias diagnostics in strict mode", async () => {
+		const app = new Crust("cli").command("issue", (issue) =>
+			issue.command("create", (cmd) => cmd.meta({ aliases: ["issue"] }).run(() => {})),
+		);
+
+		await expect(app.prepareCommandTree({ aliasDiagnostics: "strict" })).rejects.toThrow(
+			/Subcommand token "issue" is reused/,
+		);
+	});
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

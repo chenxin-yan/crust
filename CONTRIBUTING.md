@@ -49,6 +49,24 @@ bun run check:types
 
 Run `bun run test` when your change affects runtime behavior.
 
+### Type-Check Performance
+
+Crust tracks TypeScript checker cost for `@crustjs/core` with a focused fixture that stresses the builder and type-helper surface. CI runs:
+
+```sh
+bun run typecheck:perf
+```
+
+The gate compares structural TypeScript metrics (`Types` and `Instantiations`) against `packages/core/tests/type-perf/baseline.json`. Wall-clock timings are printed for context but do not fail CI because runner load varies.
+
+If a type-level change intentionally increases the baseline, inspect the `tsc --extendedDiagnostics` output and update it with:
+
+```sh
+bun run typecheck:perf:update
+```
+
+Only update the baseline when the extra checker cost is expected and worth the tradeoff.
+
 ## Working on Packages
 
 The packages in `packages/` are built with `bunup`, tested with `bun test`, and type-checked with `tsc`.

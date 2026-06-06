@@ -1,7 +1,13 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core";
+import {
+	type AliasDiagnosticsMode,
+	Crust,
+	VALIDATION_ALIAS_DIAGNOSTICS_ENV,
+	VALIDATION_FORCE_EXIT_ENV,
+	VALIDATION_MODE_ENV,
+} from "@crustjs/core";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
 import { resolveBaseName } from "../utils/binary-name.ts";
@@ -514,12 +520,14 @@ const VALIDATE_TIMEOUT_MS = 30_000;
 export async function validateEntrypoint(
 	entryPath: string,
 	envFiles: readonly string[] = [],
+	aliasDiagnostics: AliasDiagnosticsMode = "off",
 ): Promise<void> {
 	const absoluteEntry = resolve(entryPath);
 	const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
 		env: {
 			...process.env,
 			[VALIDATION_MODE_ENV]: "1",
+			[VALIDATION_ALIAS_DIAGNOSTICS_ENV]: aliasDiagnostics,
 			// Stop after validation; entrypoint code after `execute()` must not run.
 			[VALIDATION_FORCE_EXIT_ENV]: "1",
 			BUN_BE_BUN: "1",
@@ -645,6 +653,13 @@ export const buildCommand = new Crust("build")
 			description: "Validate command runtime rules before compiling (disable with --no-validate)",
 			default: true,
 		},
+		"alias-diagnostics": {
+			type: "string",
+			description:
+				"Report duplicate command names/aliases outside the sibling namespace during validation",
+			default: "off",
+			choices: ["off", "warn", "strict"],
+		},
 		"env-file": {
 			type: "string",
 			multiple: true,
@@ -682,7 +697,11 @@ export const buildCommand = new Crust("build")
 		}
 
 		if (flags.validate) {
-			await validateEntrypoint(entryPath, envFiles);
+			await validateEntrypoint(
+				entryPath,
+				envFiles,
+				flags["alias-diagnostics"] as AliasDiagnosticsMode,
+			);
 		}
 
 		if (flags.package) {
@@ -702,6 +721,7 @@ export const buildCommand = new Crust("build")
 				stageDir: flags["stage-dir"],
 				envFiles,
 				validate: false,
+				aliasDiagnostics: flags["alias-diagnostics"] as AliasDiagnosticsMode,
 				man: flags.man,
 				outdir: flags.outdir,
 			});
