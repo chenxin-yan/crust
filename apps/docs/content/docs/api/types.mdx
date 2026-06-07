@@ -68,7 +68,7 @@ With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same
 
 **Conflict policy.** Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Each alias must be a non-empty string with no whitespace and must not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time. Plugin-installed subcommands (via the `addSubCommand` setup action) are validated when registered too: a colliding alias is skipped with a warning, mirroring how a colliding canonical name is handled today. `prepareCommandTree()` re-runs the same check against the final tree.
 
-The default policy is sibling-scoped because command routing resolves one level at a time. Ancestor, descendant, and cousin commands may reuse the same token unless you enable optional diagnostics with `prepareCommandTree({ aliasDiagnostics: "warn" | "strict" })` or `crust build --alias-diagnostics=warn`.
+Ancestor and descendant command tokens are checked too, both at runtime and in TypeScript for statically-authored command trees. Commands in separate branches may reuse the same token because routing resolves one level at a time.
 
 **Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
 

@@ -21,7 +21,6 @@ import type {
 	ValidateVariadicArgs,
 } from "./types.ts";
 import { validateIncomingAliases } from "./validation.ts";
-import type { AliasDiagnosticsMode as RuntimeAliasDiagnosticsMode } from "./validation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -45,6 +44,56 @@ export interface CrustCommandContext<A extends ArgsDef = ArgsDef, F extends Flag
 	/** The resolved command node that is being executed */
 	command: CommandNode;
 }
+
+type ExtractCommandAliases<M> = M extends { aliases: infer A }
+	? A extends readonly string[]
+		? string extends A[number]
+			? never
+			: A[number] & string
+		: never
+	: never;
+
+type NextCommandAliases<M, Existing extends string> = M extends { aliases: readonly string[] }
+	? ExtractCommandAliases<M>
+	: Existing;
+
+type CommandTokenCollision<Tokens extends string, Existing extends string> = string extends Tokens
+	? never
+	: string extends Existing
+		? never
+		: Extract<Tokens, Existing>;
+
+type ValidateCommandTokens<Tokens extends string, Existing extends string> =
+	CommandTokenCollision<Tokens, Existing> extends never
+		? unknown
+		: {
+				readonly FIX_COMMAND_TOKEN_COLLISION: `Command token "${CommandTokenCollision<Tokens, Existing>}" already exists on an ancestor command`;
+			};
+
+type CommandTokensOf<C> =
+	C extends Crust<
+		// oxlint-disable typescript/no-explicit-any -- type extraction only
+		any,
+		any,
+		any,
+		any,
+		any,
+		infer Name extends string,
+		infer Aliases extends string
+	>
+		? Name | Aliases
+		: never;
+
+type AnyCrust = Crust<
+	// oxlint-disable typescript/no-explicit-any -- type-erased builder helper
+	any,
+	any,
+	any,
+	any,
+	any,
+	any,
+	any
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers — runtime flag validation
@@ -114,14 +163,6 @@ export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
  * embedders) take so the host event loop is not terminated.
  */
 export const VALIDATION_FORCE_EXIT_ENV = "CRUST_INTERNAL_VALIDATE_FORCE_EXIT";
-
-/**
- * Optional companion to {@link VALIDATION_MODE_ENV}. When set to `"warn"` or
- * `"strict"`, build-time validation also reports command token reuse outside
- * the sibling namespace. The default is `"off"` to preserve runtime behavior
- * and avoid extra work unless validation explicitly opts in.
- */
-export const VALIDATION_ALIAS_DIAGNOSTICS_ENV = "CRUST_INTERNAL_ALIAS_DIAGNOSTICS";
 const EXIT_CODE_CANCELLED = 130;
 
 /** Key for storing validation result on globalThis (for in-process tests) */
@@ -152,18 +193,6 @@ function isPromptCancelledError(error: unknown): boolean {
 	}
 
 	return error.name === "CancelledError";
-}
-
-function normalizeAliasDiagnosticsMode(
-	value: RuntimeAliasDiagnosticsMode | string | undefined,
-): RuntimeAliasDiagnosticsMode {
-	if (value === undefined || value === "off" || value === "warn" || value === "strict") {
-		return value ?? "off";
-	}
-	throw new CrustError(
-		"DEFINITION",
-		`Invalid alias diagnostics mode "${value}". Expected "off", "warn", or "strict".`,
-	);
 }
 
 function applyInheritedFlagsToSubtree(node: CommandNode, inheritedFlags: FlagsDef): void {
@@ -335,6 +364,9 @@ function freezeTree(node: CommandNode): void {
  * - `Local` — flags defined on this command via `.flags()`
  * - `A` — positional argument definitions
  * - `Eff` — effective flags (merged inherited + local flags, computed internally)
+ * - `AncestorTokens` — command names and aliases from ancestors
+ * - `OwnName` — this command's canonical name
+ * - `OwnAliases` — this command's aliases from `.meta({ aliases })`
  *
  * @example
  * ```ts
@@ -353,6 +385,9 @@ export class Crust<
 	Local extends FlagsDef = FlagsDef,
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
+	AncestorTokens extends string = never,
+	OwnName extends string = string,
+	OwnAliases extends string = never,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -374,7 +409,7 @@ export class Crust<
 	 * @param name - The command name.
 	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
 	 */
-	constructor(name: string) {
+	constructor(name: OwnName) {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
 		}
@@ -386,13 +421,13 @@ export class Crust<
 	 * @internal — Create a child builder with pre-populated inherited flags.
 	 * Used by `.command()` to propagate parent flags to the child.
 	 */
-	static _createChild<I extends FlagsDef>(
-		name: string,
+	static _createChild<I extends FlagsDef, AncestorTokens extends string, N extends string>(
+		name: N,
 		inheritedFlags: FlagsDef,
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-	): Crust<I, {}, [], EffectiveFlags<I, {}>> {
+	): Crust<I, {}, [], EffectiveFlags<I, {}>, AncestorTokens, N, never> {
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>>(name);
+		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, AncestorTokens, N, never>(name);
 		// Override the inherited flags set by constructor (which defaults to {})
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
 		return instance;
@@ -438,10 +473,20 @@ export class Crust<
 	 * )
 	 * ```
 	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {
+	meta<const M extends Omit<CommandMeta, "name">>(
+		meta: M & ValidateCommandTokens<ExtractCommandAliases<M>, AncestorTokens | OwnName>,
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, NextCommandAliases<M, OwnAliases>> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<
+			Inherited,
+			Local,
+			A,
+			Eff,
+			AncestorTokens,
+			OwnName,
+			NextCommandAliases<M, OwnAliases>
+		>;
 	}
 
 	/**
@@ -460,7 +505,7 @@ export class Crust<
 	 */
 	flags<const F extends FlagsDef>(
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>> {
+	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, AncestorTokens, OwnName, OwnAliases> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
 
@@ -473,7 +518,15 @@ export class Crust<
 		return this._clone({
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
-		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>>;
+		}) as unknown as Crust<
+			Inherited,
+			F,
+			A,
+			EffectiveFlags<Inherited, F>,
+			AncestorTokens,
+			OwnName,
+			OwnAliases
+		>;
 	}
 
 	/**
@@ -487,13 +540,13 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
-	): Crust<Inherited, Local, NewA, Eff> {
+	): Crust<Inherited, Local, NewA, Eff, AncestorTokens, OwnName, OwnAliases> {
 		// Deep copy arg defs to decouple from caller
 		const copiedArgs = defs.map((def) => ({ ...def })) as unknown as ArgsDef;
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Inherited, Local, NewA, Eff>;
+		}) as unknown as Crust<Inherited, Local, NewA, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -511,10 +564,10 @@ export class Crust<
 	 */
 	run(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -528,10 +581,10 @@ export class Crust<
 	 */
 	preRun(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases> {
 		return this._clone({
 			preRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -545,10 +598,10 @@ export class Crust<
 	 */
 	postRun(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases> {
 		return this._clone({
 			postRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -564,10 +617,10 @@ export class Crust<
 	 * @param plugin - The plugin to register
 	 * @returns A new `Crust` instance with the plugin registered
 	 */
-	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff> {
+	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases> {
 		return this._clone({
 			plugins: [...this._node.plugins, plugin],
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -603,16 +656,16 @@ export class Crust<
 	 * ```
 	 */
 	sub<N extends string>(
-		name: N,
+		name: N & ValidateCommandTokens<N, AncestorTokens | OwnName | OwnAliases>,
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>> {
+	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, AncestorTokens | OwnName | OwnAliases, N, never> {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
 
 		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
-		return Crust._createChild<Eff>(name, parentEffective);
+		return Crust._createChild<Eff, AncestorTokens | OwnName | OwnAliases, N>(name, parentEffective);
 	}
 
 	/**
@@ -627,20 +680,22 @@ export class Crust<
 	 * @returns A new `Crust` instance with the subcommand registered
 	 * @throws {CrustError} `DEFINITION` if name is empty or already registered
 	 */
-	command<N extends string>(
-		name: N,
+	command<N extends string, Child extends AnyCrust>(
+		name: N & ValidateCommandTokens<N, AncestorTokens | OwnName | OwnAliases>,
 		cb: (
 			// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>>,
-		) => Crust<
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any
-		>,
-	): Crust<Inherited, Local, A, Eff>;
+			cmd: Crust<
+				Eff,
+				{},
+				[],
+				EffectiveFlags<Eff, {}>,
+				AncestorTokens | OwnName | OwnAliases,
+				N,
+				never
+			>,
+		) => Child &
+			ValidateCommandTokens<CommandTokensOf<Child>, AncestorTokens | OwnName | OwnAliases>,
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 
 	/**
 	 * Register a pre-built subcommand builder.
@@ -655,18 +710,18 @@ export class Crust<
 	 * @returns A new `Crust` instance with the subcommand registered
 	 * @throws {CrustError} `DEFINITION` if builder name is empty or already registered
 	 */
-	command(
-		// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust builder instance
-		builder: Crust<any, any, any>,
-	): Crust<Inherited, Local, A, Eff>;
+	command<Builder extends AnyCrust>(
+		builder: Builder &
+			ValidateCommandTokens<CommandTokensOf<Builder>, AncestorTokens | OwnName | OwnAliases>,
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 
 	// Implementation
 	command(
 		// oxlint-disable-next-line typescript/no-explicit-any -- union of overload parameter types
-		nameOrBuilder: string | Crust<any, any, any>,
+		nameOrBuilder: string | AnyCrust,
 		// oxlint-disable-next-line typescript/no-explicit-any -- callback parameter from first overload
-		cb?: (cmd: Crust<any, any, any>) => Crust<any, any, any>,
-	): Crust<Inherited, Local, A, Eff> {
+		cb?: (cmd: AnyCrust) => AnyCrust,
+	): Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases> {
 		if (typeof nameOrBuilder === "string") {
 			// ── Inline callback path ──────────────────────────────────────────
 			const name = nameOrBuilder;
@@ -689,7 +744,11 @@ export class Crust<
 			const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
 			// Create a child builder pre-typed with the parent's effective flags
-			const childBuilder = Crust._createChild<Eff>(name, parentEffective);
+			const childBuilder = Crust._createChild<
+				Eff,
+				AncestorTokens | OwnName | OwnAliases,
+				typeof name
+			>(name, parentEffective);
 
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
@@ -719,7 +778,7 @@ export class Crust<
 					...this._node.subCommands,
 					[name]: childNode,
 				},
-			}) as unknown as Crust<Inherited, Local, A, Eff>;
+			}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 		}
 
 		// ── Pre-built builder path ──────────────────────────────────────────
@@ -752,7 +811,7 @@ export class Crust<
 				...this._node.subCommands,
 				[name]: childNode,
 			},
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, AncestorTokens, OwnName, OwnAliases>;
 	}
 
 	/**
@@ -768,10 +827,8 @@ export class Crust<
 	 */
 	async prepareCommandTree(options?: {
 		argv?: readonly string[];
-		aliasDiagnostics?: RuntimeAliasDiagnosticsMode;
 	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
 		const argv = options?.argv ?? [];
-		const aliasDiagnostics = normalizeAliasDiagnosticsMode(options?.aliasDiagnostics);
 		const rootNode = deepCloneCommandNode(this._node);
 
 		const allPlugins = collectPlugins(rootNode);
@@ -802,7 +859,7 @@ export class Crust<
 		freezeTree(rootNode);
 
 		const { validateCommandTree } = await import("./validation.ts");
-		warnings.push(...validateCommandTree(rootNode, { aliasDiagnostics }));
+		validateCommandTree(rootNode);
 
 		return { root: rootNode, warnings };
 	}
@@ -859,10 +916,7 @@ export class Crust<
 			const result = (async () => {
 				try {
 					const { validateCommandTree } = await import("./validation.ts");
-					const aliasDiagnostics = normalizeAliasDiagnosticsMode(
-						process.env[VALIDATION_ALIAS_DIAGNOSTICS_ENV],
-					);
-					warnings.push(...validateCommandTree(rootNode, { aliasDiagnostics }));
+					validateCommandTree(rootNode);
 					for (const warning of warnings) {
 						console.warn(`Warning: ${warning}`);
 					}

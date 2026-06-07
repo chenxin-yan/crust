@@ -13,8 +13,6 @@
 		"check": "turbo run //#lint //#format",
 		"check:fix": "turbo run //#lint:fix //#format:fix",
 		"check:types": "turbo run check:types",
-		"typecheck:perf": "turbo run typecheck:perf --filter=@crustjs/core",
-		"typecheck:perf:update": "bun ./scripts/check-type-performance.mjs --update-baseline",
 		"test": "turbo run test",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun update",

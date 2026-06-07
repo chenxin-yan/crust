@@ -328,7 +328,18 @@ describe("validateCommandTree — alias collisions", () => {
 		expect(() => validateCommandTree(root)).toThrow(/collides with alias of sibling "create"/);
 	});
 
-	it("returns no cross-depth diagnostics by default", () => {
+	it("accepts nested command tokens that do not collide with ancestors", () => {
+		const root = createCommandNode("app");
+		const issue = createCommandNode("issue");
+		issue.subCommands = {
+			create: makeRunnable("create", ["new"]),
+		};
+		root.subCommands = { issue };
+
+		expect(() => validateCommandTree(root)).not.toThrow();
+	});
+
+	it("detects a descendant alias colliding with an ancestor canonical name", () => {
 		const root = createCommandNode("app");
 		const issue = createCommandNode("issue");
 		issue.subCommands = {
@@ -336,27 +347,26 @@ describe("validateCommandTree — alias collisions", () => {
 		};
 		root.subCommands = { issue };
 
-		expect(validateCommandTree(root)).toEqual([]);
+		expect(() => validateCommandTree(root)).toThrow(
+			/Subcommand token "issue" at "app issue create" collides with ancestor canonical name at "app issue"/,
+		);
 	});
 
-	it("warns about ancestor and descendant token reuse when enabled", () => {
+	it("detects a descendant canonical name colliding with an ancestor alias", () => {
 		const root = createCommandNode("app");
 		const issue = createCommandNode("issue");
+		issue.meta.aliases = ["i"];
 		issue.subCommands = {
-			create: makeRunnable("create", ["issue"]),
+			i: makeRunnable("i"),
 		};
 		root.subCommands = { issue };
 
-		const warnings = validateCommandTree(root, { aliasDiagnostics: "warn" });
-
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0]).toContain('Subcommand token "issue" is reused');
-		expect(warnings[0]).toContain("ancestor/descendant commands");
-		expect(warnings[0]).toContain('canonical name at "app issue"');
-		expect(warnings[0]).toContain('alias at "app issue create"');
+		expect(() => validateCommandTree(root)).toThrow(
+			/Subcommand token "i" at "app issue i" collides with ancestor alias at "app issue"/,
+		);
 	});
 
-	it("warns about token reuse across separate command branches when enabled", () => {
+	it("allows the same token in separate command branches", () => {
 		const root = createCommandNode("app");
 		const issue = createCommandNode("issue");
 		issue.subCommands = {
@@ -368,25 +378,6 @@ describe("validateCommandTree — alias collisions", () => {
 		};
 		root.subCommands = { issue, deploy };
 
-		const warnings = validateCommandTree(root, { aliasDiagnostics: "warn" });
-
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0]).toContain('Subcommand token "ls" is reused');
-		expect(warnings[0]).toContain("separate command branches");
-		expect(warnings[0]).toContain('alias at "app issue list"');
-		expect(warnings[0]).toContain('alias at "app deploy status"');
-	});
-
-	it("throws on cross-depth token reuse in strict mode", () => {
-		const root = createCommandNode("app");
-		const issue = createCommandNode("issue");
-		issue.subCommands = {
-			create: makeRunnable("create", ["issue"]),
-		};
-		root.subCommands = { issue };
-
-		expect(() => validateCommandTree(root, { aliasDiagnostics: "strict" })).toThrow(
-			/Subcommand token "issue" is reused/,
-		);
+		expect(() => validateCommandTree(root)).not.toThrow();
 	});
 });

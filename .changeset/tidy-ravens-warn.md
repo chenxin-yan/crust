@@ -3,6 +3,6 @@
 "@crustjs/crust": patch
 ---
 
-Add opt-in runtime diagnostics for command token reuse outside sibling subcommand namespaces.
+Add ancestor command-token conflict checks for subcommands.
 
-Programmatic validation can now call `prepareCommandTree({ aliasDiagnostics: "warn" | "strict" })`, and `crust build` exposes the same check through `--alias-diagnostics=off|warn|strict`.
+Subcommand names and aliases now fail fast when they reuse an ancestor command's name or alias. Statically-authored command trees get TypeScript editor feedback, and runtime validation still covers plugin-installed or otherwise dynamic subcommands.

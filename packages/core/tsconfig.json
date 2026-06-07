@@ -4,6 +4,5 @@
 		"declaration": true,
 		"isolatedDeclarations": true
 	},
-	"include": ["src", "tests"],
-	"exclude": ["tests/type-perf"]
+	"include": ["src", "tests"]
 }

@@ -9,7 +9,6 @@ on:
       - "packages/**"
       - "package.json"
       - "bun.lock"
-      - "scripts/**"
       - "turbo.json"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"

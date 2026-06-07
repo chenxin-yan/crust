@@ -158,10 +158,11 @@ Even without TypeScript or when types are erased, Crust validates definitions at
 
 **`.command()` throws `CrustError("DEFINITION")`:**
 
-| Check                              | Error Message                                                     |
-| ---------------------------------- | ----------------------------------------------------------------- |
-| Sibling subcommand alias collision | `Subcommand "issue" alias "i" collides with sibling canonical...` |
-| Invalid subcommand alias shape     | `Subcommand "issue" alias "-i" must not start with "-"...`        |
+| Check                                 | Error Message                                                     |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| Sibling subcommand alias collision    | `Subcommand "issue" alias "i" collides with sibling canonical...` |
+| Ancestor/descendant command collision | `Subcommand token "issue" at "cli issue create" collides...`      |
+| Invalid subcommand alias shape        | `Subcommand "issue" alias "-i" must not start with "-"...`        |
 
 **`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
 
@@ -186,6 +187,4 @@ Even without TypeScript or when types are erased, Crust validates definitions at
 
 ### 3. Pre-Compile (crust build)
 
-[`crust build`](/docs/guide/build#pre-compile-validation) runs the same definition checks above across the full command tree — including plugin-injected flags and subcommands — before compiling. This catches issues like plugin-introduced alias collisions before shipping a binary.
-
-Subcommand alias conflicts are hard errors within a sibling namespace. Cross-depth or cross-branch token reuse is unambiguous at runtime, so it is opt-in: use `crust build --alias-diagnostics=warn` to report it or `--alias-diagnostics=strict` to fail validation. See the [build guide](/docs/guide/build#pre-compile-validation) for details.
+[`crust build`](/docs/guide/build#pre-compile-validation) runs the same definition checks above across the full command tree — including plugin-injected flags and subcommands — before compiling. This catches issues like plugin-introduced alias collisions before shipping a binary. See the [build guide](/docs/guide/build#pre-compile-validation) for details.

@@ -30,11 +30,10 @@ bun add @crustjs/core
 
 ### Constants
 
-| Constant                           | Description                                                                                                       |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_MODE_ENV`              | Environment variable name for build-time validation mode                                                          |
-| `VALIDATION_FORCE_EXIT_ENV`        | Companion env var that makes validation mode call `process.exit()` (set by `crust build`'s validation subprocess) |
-| `VALIDATION_ALIAS_DIAGNOSTICS_ENV` | Companion env var for opt-in cross-depth command token diagnostics during build-time validation                   |
+| Constant                    | Description                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_MODE_ENV`       | Environment variable name for build-time validation mode                                                          |
+| `VALIDATION_FORCE_EXIT_ENV` | Companion env var that makes validation mode call `process.exit()` (set by `crust build`'s validation subprocess) |
 
 ### Types
 
@@ -54,8 +53,6 @@ bun add @crustjs/core
 | `MergeFlags<P, L>`           | Merge parent + local flags                                                                 |
 | `ParseResult<A, F>`          | Output of `parseArgs`                                                                      |
 | `CommandRoute`               | Output of `resolveCommand`                                                                 |
-| `AliasDiagnosticsMode`       | `"off"`, `"warn"`, or `"strict"` mode for optional cross-depth command token diagnostics   |
-| `ValidateCommandTreeOptions` | Options accepted by runtime command-tree validation                                        |
 | `CrustPlugin`                | Plugin interface                                                                           |
 | `SetupContext`               | Context passed to plugin setup hooks                                                       |
 | `SetupActions`               | Actions available during plugin setup                                                      |

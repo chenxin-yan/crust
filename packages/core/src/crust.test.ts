@@ -8,7 +8,12 @@ import {
 } from "./crust.ts";
 import { CrustError } from "./errors.ts";
 import type { CrustPlugin } from "./plugins.ts";
-import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "./types.ts";
+import type {
+	CommandMeta,
+	FlagsDef,
+	ValidateFlagAliases,
+	ValidateNoPrefixedFlags,
+} from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
@@ -17,6 +22,8 @@ import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "./t
 type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+function typeOnly(_cb: () => void): void {}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constructor
@@ -498,6 +505,41 @@ describe("Crust type-level tests", () => {
 			{ name: "files", type: "string", variadic: true },
 		]);
 		expect(app).toBeDefined();
+	});
+
+	it(".command() with descendant canonical name colliding with ancestor produces compile error", () => {
+		typeOnly(() => {
+			new Crust("cli").command("issue", (issue) =>
+				// @ts-expect-error descendant command name collides with ancestor command name
+				issue.command("issue", (cmd) => cmd.run(() => {})),
+			);
+		});
+
+		expect(true).toBe(true);
+	});
+
+	it(".meta() with descendant alias colliding with ancestor produces compile error", () => {
+		typeOnly(() => {
+			new Crust("cli").command("issue", (issue) =>
+				issue.command("create", (cmd) =>
+					// @ts-expect-error descendant command alias collides with ancestor command name
+					cmd.meta({ aliases: ["issue"] }).run(() => {}),
+				),
+			);
+		});
+
+		expect(true).toBe(true);
+	});
+
+	it(".sub() with descendant name colliding with ancestor produces compile error", () => {
+		typeOnly(() => {
+			const app = new Crust("cli");
+			const issue = app.sub("issue");
+			// @ts-expect-error descendant command name collides with ancestor command name
+			issue.sub("issue");
+		});
+
+		expect(true).toBe(true);
 	});
 
 	it("chaining .flags().args() preserves both generics", () => {
@@ -2393,28 +2435,6 @@ describe("Crust.prepareCommandTree", () => {
 		expect(a.root.meta.name).toBe("cli");
 		expect(b.root.meta.name).toBe("cli");
 	});
-
-	it("can return optional cross-depth alias diagnostics as warnings", async () => {
-		const app = new Crust("cli").command("issue", (issue) =>
-			issue.command("create", (cmd) => cmd.meta({ aliases: ["issue"] }).run(() => {})),
-		);
-
-		const { warnings } = await app.prepareCommandTree({ aliasDiagnostics: "warn" });
-
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0]).toContain('Subcommand token "issue" is reused');
-		expect(warnings[0]).toContain("ancestor/descendant commands");
-	});
-
-	it("can fail optional cross-depth alias diagnostics in strict mode", async () => {
-		const app = new Crust("cli").command("issue", (issue) =>
-			issue.command("create", (cmd) => cmd.meta({ aliases: ["issue"] }).run(() => {})),
-		);
-
-		await expect(app.prepareCommandTree({ aliasDiagnostics: "strict" })).rejects.toThrow(
-			/Subcommand token "issue" is reused/,
-		);
-	});
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2471,7 +2491,9 @@ describe("Crust .command() aliases", () => {
 
 	it("throws DEFINITION on an alias equal to its own canonical name", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) => cmd.meta({ aliases: ["issue"] }).run(() => {})),
+			new Crust("cli").command("issue", (cmd) =>
+				cmd.meta({ aliases: ["issue"] } as Omit<CommandMeta, "name">).run(() => {}),
+			),
 		).toThrow(/must not equal its own canonical name/);
 	});
 
