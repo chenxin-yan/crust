@@ -1,4 +1,4 @@
-import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils";
+import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary

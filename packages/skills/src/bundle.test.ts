@@ -78,8 +78,8 @@ const META: SkillMeta = {
 const BUNDLE_VERSION = "1.0.0";
 
 // Resolution-mode coverage (URL / absolute / relative / failure modes) is
-// owned by `@crustjs/utils` (see packages/utils/src/source.test.ts). The
-// bundle-install pipeline relies on `resolveSourceDir` from `@crustjs/utils`
+// owned by `@crustjs/utils/source` (see packages/utils/src/source.test.ts). The
+// bundle-install pipeline relies on `resolveSourceDir` from `@crustjs/utils/source`
 // and is exercised end-to-end via `loadBundleFiles` and `installSkillBundle`
 // below.
 

@@ -9,7 +9,7 @@
         "@types/bun": "^1.3.14",
         "oxfmt": "^0.53.0",
         "oxlint": "^1.68.0",
-        "turbo": "^2.9.14",
+        "turbo": "^2.9.16",
       },
     },
     "apps/docs": {
@@ -231,7 +231,6 @@
       },
       "peerDependencies": {
         "@standard-schema/spec": "^1.1.0",
-        "typescript": "catalog:",
       },
       "optionalPeers": [
         "@standard-schema/spec",

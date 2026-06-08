@@ -5,7 +5,7 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 
-import { resolveSourceDir } from "@crustjs/utils";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { installRenderedSkill, isValidSkillName, resolveSkillName } from "./generate.ts";
 import type {

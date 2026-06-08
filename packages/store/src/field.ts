@@ -7,7 +7,7 @@
 // `type`, `default`, `array`, and `description` is supplied explicitly through
 // options when needed.
 
-import type { BaseValueType } from "@crustjs/utils";
+import type { BaseValueType } from "@crustjs/utils/primitive";
 import {
 	type InferOutput,
 	isStandardSchema,

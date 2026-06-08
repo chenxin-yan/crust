@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
-import { resolveSourceDir } from "@crustjs/utils";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { interpolate } from "./interpolate.ts";
 import { isBinary } from "./isBinary.ts";

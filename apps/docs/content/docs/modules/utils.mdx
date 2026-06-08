@@ -6,13 +6,12 @@ description: Shared low-level utilities for the Crust ecosystem (pre-stable).
 import { Callout } from "fumadocs-ui/components/callout";
 
 <Callout type="warn" title="Pre-stable">
-  **Status: pre-stable (`0.0.1`).** Public surface may change without notice until `0.1.0`. Pin to
-  an exact version if depending externally — `bun add @crustjs/utils@0.0.1`.
+  **Status: pre-stable.** Public surface may change without notice until `0.1.0`. Pin to an exact
+  version if depending externally.
 </Callout>
 
-Internal de-duplication primitives shared across `@crustjs/*` packages.
-Plugin authors may use these at their own risk; no stability promises are
-made until the package graduates to `0.1.0`.
+Low-level utilities shared across `@crustjs/*` packages. The package intentionally
+has no root export; import from the granular subpaths below.
 
 ## Install
 
@@ -22,13 +21,11 @@ bun add @crustjs/utils
 
 ## Exports
 
-| Export                | Description                                                                      |
-| --------------------- | -------------------------------------------------------------------------------- |
-| `resolveSourceDir`    | Resolve a source directory descriptor (file URL / absolute / relative) to a path |
-| `BaseValueType`       | Shared primitive type literals: `"string" \| "number" \| "boolean"`              |
-| `ResolvePrimitive`    | Map primitive type literals to TypeScript primitives                             |
-| `tryCoerceNumber`     | Coerce a string with `Number(raw)`, returning `undefined` only for `NaN`         |
-| `coerceBooleanString` | Coerce Crust boolean strings; only `"true"` and `"1"` are truthy                 |
+| Subpath                    | Exports                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `@crustjs/utils/source`    | `resolveSourceDir`                                                                      |
+| `@crustjs/utils/primitive` | `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString`           |
+| `@crustjs/utils/schema`    | Standard Schema boundary checks, issue normalization helpers, and portable type aliases |
 
 ## `resolveSourceDir`
 
@@ -55,7 +52,7 @@ Must use the `file:` protocol — typically constructed as
 calling module's location on disk. Resolved via `url.fileURLToPath()`.
 
 ```ts
-import { resolveSourceDir } from "@crustjs/utils";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 const dir = resolveSourceDir(new URL("../templates/base", import.meta.url));
 ```
@@ -99,7 +96,7 @@ import {
   tryCoerceNumber,
   type BaseValueType,
   type ResolvePrimitive,
-} from "@crustjs/utils";
+} from "@crustjs/utils/primitive";
 ```
 
 `BaseValueType` is the canonical primitive vocabulary shared by Crust packages:
@@ -117,8 +114,9 @@ only `"true"` and `"1"` return `true`; every other string returns `false`.
 
 ## Stability
 
-The public surface is intentionally narrow in `0.0.1`. Helpers that have been
-considered but deferred (until ≥2 cross-package consumers exist) include:
+The public surface is intentionally narrow while the package is pre-stable.
+Helpers that have been considered but deferred (until ≥2 cross-package
+consumers exist) include:
 
 - `findNearestPackageRoot` (currently private)
 - `readPackageJson`
@@ -127,20 +125,15 @@ considered but deferred (until ≥2 cross-package consumers exist) include:
 If you have a use case that would benefit from one of these, open an issue
 describing the consumer(s) you'd add to the dependency graph.
 
-## Internal subpath: `@crustjs/utils/schema`
+## `@crustjs/utils/schema`
 
-<Callout type="warn" title="Internal — do not import">
-  Standard Schema helpers consumed by `@crustjs/validate` and `@crustjs/store`. **Not part of the
-  public Crust API** — may change in any release without a deprecation cycle. Use
-  `@crustjs/validate` instead.
-</Callout>
+`@crustjs/utils/schema` is a public low-level subpath for portable Standard
+Schema helpers. It is intentionally provider-agnostic: it does not inspect
+vendor internals, dispatch on `schema["~standard"].vendor`, extract metadata,
+or wrap errors in package-specific Crust error classes.
 
-Lives under `@crustjs/utils/schema` only so the shared Standard Schema
-boundary code used by `@crustjs/validate` and `@crustjs/store` resolves for
-external consumers. `@standard-schema/spec` is an **optional peer dependency**
-of `@crustjs/utils` rather than a hard dependency, so consumers that use only
-the type primitives or `resolveSourceDir` do not install it; packages that
-import this subpath (`@crustjs/validate`, `@crustjs/store`) declare
-`@standard-schema/spec` directly. The subpath is core-free: it does not depend
-on `@crustjs/core` and does not wrap errors in package-specific Crust error
-classes.
+`@standard-schema/spec` is an **optional peer dependency** of `@crustjs/utils`
+rather than a hard dependency, so consumers that use only the primitive or
+source subpaths do not install it. Packages that import this subpath
+(`@crustjs/validate`, `@crustjs/store`) declare `@standard-schema/spec`
+directly.

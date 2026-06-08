@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
  * @returns The absolute path of the nearest enclosing directory containing
  *   `package.json`, or `null` if the filesystem root is reached first.
  *
- * @internal Not exported from the package's public surface in `0.0.1`.
+ * @internal Not exported from the package's public surface.
  *   Promotion to public is tracked as tech debt and will happen when a
  *   standalone external consumer is identified.
  */
@@ -79,7 +79,7 @@ function findNearestPackageRoot(startPath: string): string | null {
  *
  * @example
  * ```ts
- * import { resolveSourceDir } from "@crustjs/utils";
+ * import { resolveSourceDir } from "@crustjs/utils/source";
  *
  * // 1. file: URL — relative to the calling module
  * const a = resolveSourceDir(new URL("../templates/base", import.meta.url));

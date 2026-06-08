@@ -66,7 +66,7 @@ describe("resolveSourceDir", () => {
 			// `packages/utils/src/source.test.ts` lives inside packages/utils/,
 			// which has a package.json. Using this file as the fake argv[1]
 			// must land the resolver at packages/utils/.
-			const fakeEntry = join(SELF_DIR, "index.ts");
+			const fakeEntry = join(SELF_DIR, "source.ts");
 			await withArgv1(fakeEntry, async () => {
 				const resolved = resolveSourceDir("templates/base");
 				expect(resolved.endsWith("/packages/utils/templates/base")).toBe(true);
@@ -74,7 +74,7 @@ describe("resolveSourceDir", () => {
 		});
 
 		it("treats process.argv[1] pointing at a directory the same as pointing at a file inside it", async () => {
-			const fakeEntryFile = join(SELF_DIR, "index.ts");
+			const fakeEntryFile = join(SELF_DIR, "source.ts");
 			const fakeEntryDir = SELF_DIR;
 			const fromFile = await withArgv1(fakeEntryFile, async () => resolveSourceDir("x/y"));
 			const fromDir = await withArgv1(fakeEntryDir, async () => resolveSourceDir("x/y"));
@@ -156,7 +156,7 @@ describe("resolveSourceDir", () => {
 		});
 
 		it("preserves trailing path segments in relative inputs", async () => {
-			const fakeEntry = join(SELF_DIR, "index.ts");
+			const fakeEntry = join(SELF_DIR, "source.ts");
 			await withArgv1(fakeEntry, async () => {
 				const resolved = resolveSourceDir("a/b/c");
 				expect(resolved.endsWith("/packages/utils/a/b/c")).toBe(true);

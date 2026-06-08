@@ -4,6 +4,9 @@ Shared low-level utilities for the Crust ecosystem.
 
 > **Pre-stable.** Public surface may change without notice until `0.1.0`.
 > Pin to an exact version if depending externally.
+>
+> This package intentionally has no root export. Import from the granular
+> subpaths documented below.
 
 ## Install
 
@@ -14,7 +17,7 @@ bun add @crustjs/utils
 ## `resolveSourceDir`
 
 ```ts
-import { resolveSourceDir } from "@crustjs/utils";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 const templateDir = resolveSourceDir(new URL("../templates/base", import.meta.url));
 ```
@@ -42,7 +45,7 @@ import {
 	tryCoerceNumber,
 	type BaseValueType,
 	type ResolvePrimitive,
-} from "@crustjs/utils";
+} from "@crustjs/utils/primitive";
 ```
 
 `BaseValueType` is the shared primitive type vocabulary used by Crust packages:
@@ -53,11 +56,10 @@ TypeScript primitives (`"number"` → `number`, etc.) and distributes over union
 `tryCoerceNumber("")` returns `0`. `coerceBooleanString(raw)` preserves Crust's
 strict boolean string behavior: only `"true"` and `"1"` are truthy.
 
-## Internal subpath: `@crustjs/utils/schema`
+## `@crustjs/utils/schema`
 
-> **Internal — do not import from application code.** Standard Schema helpers
-> used by Crust packages. This subpath is not part of the public Crust API and
-> may change without a deprecation cycle.
+Low-level Standard Schema helpers shared by Crust packages. This public subpath
+is provider-agnostic and intentionally narrow.
 
 The schema subpath exposes only portable Standard Schema utilities:
 
@@ -66,7 +68,7 @@ The schema subpath exposes only portable Standard Schema utilities:
 - type aliases (`StandardSchema`, `InferInput`, `InferOutput`, `ValidationIssue`)
 
 It does not inspect vendor internals, dispatch on `schema["~standard"].vendor`,
-or extract metadata/defaults from schemas. Use `@crustjs/validate` for public
+or extract metadata/defaults from schemas. Use `@crustjs/validate` for higher-level
 schema-backed CLI validation APIs.
 
 `@standard-schema/spec` is an optional peer dependency, so importing this

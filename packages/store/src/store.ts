@@ -2,7 +2,7 @@
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
 
-import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
+import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";

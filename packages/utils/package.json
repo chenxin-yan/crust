@@ -26,14 +26,19 @@
 	"files": [
 		"dist"
 	],
+	"sideEffects": false,
 	"exports": {
-		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+		"./primitive": {
+			"types": "./dist/primitive.d.ts",
+			"import": "./dist/primitive.js"
+		},
+		"./source": {
+			"types": "./dist/source.d.ts",
+			"import": "./dist/source.js"
 		},
 		"./schema": {
-			"import": "./dist/schema/index.js",
-			"types": "./dist/schema/index.d.ts"
+			"types": "./dist/schema/index.d.ts",
+			"import": "./dist/schema/index.js"
 		}
 	},
 	"publishConfig": {
@@ -52,8 +57,7 @@
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@standard-schema/spec": "^1.1.0",
-		"typescript": "catalog:"
+		"@standard-schema/spec": "^1.1.0"
 	},
 	"peerDependenciesMeta": {
 		"@standard-schema/spec": {

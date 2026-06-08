@@ -1,6 +1,6 @@
 import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
 
-import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils";
+import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { CrustError } from "./errors.ts";
