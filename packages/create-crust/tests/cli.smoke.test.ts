@@ -1,11 +1,37 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const builtCliPath = resolve(import.meta.dir, "..", "dist", "index.js");
+const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const sampleDir = join(smokeRoot, "smoke-cli");
+const localPackageDir = join(smokeRoot, "local-packages");
+
+const localDependencyPackages = [
+	{
+		name: "@crustjs/utils",
+		dir: "utils",
+		requiredBuildOutput: "dist/primitive.js",
+	},
+	{
+		name: "@crustjs/style",
+		dir: "style",
+		requiredBuildOutput: "dist/index.js",
+	},
+	{
+		name: "@crustjs/core",
+		dir: "core",
+		requiredBuildOutput: "dist/index.js",
+	},
+	{
+		name: "@crustjs/plugins",
+		dir: "plugins",
+		requiredBuildOutput: "dist/index.js",
+	},
+] as const;
 
 interface CommandResult {
 	exitCode: number;
@@ -105,6 +131,60 @@ function crustBuildArgv(crustCli: string): string[] {
 	return [runner, crustCli, "build", "--target", hostCrustBuildTargetAlias()];
 }
 
+async function packLocalDependencyPackages(): Promise<Record<string, string>> {
+	mkdirSync(localPackageDir, { recursive: true });
+	const specs: Record<string, string> = {};
+
+	for (const pkg of localDependencyPackages) {
+		const packageDir = join(repoRoot, "packages", pkg.dir);
+		const requiredBuildOutput = join(packageDir, pkg.requiredBuildOutput);
+		if (!existsSync(requiredBuildOutput)) {
+			throw new Error(
+				`Built package output not found at ${requiredBuildOutput}. Run the package build before test:smoke.`,
+			);
+		}
+
+		const before = new Set(readdirSync(localPackageDir));
+		const packCommand = [
+			process.execPath,
+			"pm",
+			"pack",
+			"--destination",
+			localPackageDir,
+			"--cwd",
+			packageDir,
+		];
+		const pack = await run(packCommand, repoRoot, { BUN_BE_BUN: "1" });
+		assertSuccess(`pack ${pkg.name}`, packCommand, repoRoot, pack);
+
+		const tarballs = readdirSync(localPackageDir).filter(
+			(entry) => entry.endsWith(".tgz") && !before.has(entry),
+		);
+		if (tarballs.length !== 1) {
+			throw new Error(`Expected one tarball for ${pkg.name}, found ${tarballs.length}.`);
+		}
+		specs[pkg.name] = pathToFileURL(join(localPackageDir, tarballs[0])).href;
+	}
+
+	return specs;
+}
+
+function useLocalDependencyPackages(projectDir: string, specs: Record<string, string>): void {
+	const packageJsonPath = join(projectDir, "package.json");
+	const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+
+	packageJson.devDependencies ??= {};
+	for (const [name, spec] of Object.entries(specs)) {
+		if (packageJson.dependencies?.[name] !== undefined) {
+			packageJson.dependencies[name] = spec;
+		} else {
+			packageJson.devDependencies[name] = spec;
+		}
+	}
+
+	writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, "\t")}\n`);
+}
+
 afterAll(() => {
 	if (cleanupSmokeRoot) {
 		rmSync(smokeRoot, { recursive: true, force: true });
@@ -130,7 +210,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 			"minimal",
 			"--distribution",
 			"binary",
-			"--install",
+			"--no-install",
 			"--no-git",
 		];
 		const scaffold = await run(scaffoldCommand, smokeRoot, {
@@ -143,6 +223,14 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		expect(existsSync(join(sampleDir, "tsconfig.json"))).toBe(true);
 		expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
 		expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
+
+		useLocalDependencyPackages(sampleDir, await packLocalDependencyPackages());
+		const installCommand = npmArgv(["install"]);
+		const install = await run(installCommand, sampleDir, {
+			BUN_BE_BUN: "1",
+			npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
+		});
+		assertSuccess("generated project install", installCommand, sampleDir, install);
 		expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
 		expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
