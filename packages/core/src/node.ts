@@ -1,3 +1,4 @@
+import type { ContextInstance } from "./api.ts";
 import type { CrustPlugin } from "./plugins.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "./types.ts";
 
@@ -24,6 +25,8 @@ export interface CommandNode {
 	args: ArgsDef | undefined;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
+	/** Context providers available to this command */
+	contexts: ContextInstance[];
 	/** Plugins registered via `.use()` */
 	plugins: CrustPlugin[];
 	/** Called before `run()` — useful for initialization */
@@ -52,6 +55,7 @@ export function createCommandNode(name: string): CommandNode {
 		effectiveFlags: {},
 		args: undefined,
 		subCommands: {},
+		contexts: [],
 		plugins: [],
 		preRun: undefined,
 		run: undefined,

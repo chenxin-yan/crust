@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { cli, context, extension } from "./api.ts";
+import { context, Crust, extension } from "./index.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-describe("internal command wrapper API", () => {
+describe("public beta API", () => {
 	it("passes typed command context into inline commands", async () => {
 		const calls: string[] = [];
 		const db = context("db", (options: { url: string }) => ({
@@ -16,13 +16,13 @@ describe("internal command wrapper API", () => {
 			},
 		}));
 
-		const app = cli("my-cli")
-			.use(db({ url: "memory://test" }))
-			.flag("verbose", { type: "boolean", inherit: true })
+		const app = new Crust("my-cli")
+			.context(db({ url: "memory://test" }))
+			.flags({ verbose: { type: "boolean", inherit: true } })
 			.command("deploy", (cmd) =>
 				cmd
-					.arg({ name: "target", type: "string", required: true })
-					.flag("env", { type: "string", default: "prod" })
+					.args([{ name: "target", type: "string", required: true }])
+					.flags({ env: { type: "string", default: "prod" } })
 					.run(({ args, flags, ctx }) => {
 						type _target = Expect<Equal<typeof args.target, string>>;
 						type _env = Expect<Equal<typeof flags.env, string>>;
@@ -43,11 +43,13 @@ describe("internal command wrapper API", () => {
 		const auth = context("auth", () => ({
 			user: "chenxin",
 		}));
-		const app = cli("my-cli").use(auth).flag("verbose", { type: "boolean", inherit: true });
+		const app = new Crust("my-cli")
+			.context(auth)
+			.flags({ verbose: { type: "boolean", inherit: true } });
 
 		const deploy = app
 			.sub("deploy")
-			.arg({ name: "target", type: "string", required: true })
+			.args([{ name: "target", type: "string", required: true }])
 			.run(({ args, flags, ctx }) => {
 				type _target = Expect<Equal<typeof args.target, string>>;
 				type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
@@ -71,12 +73,10 @@ describe("internal command wrapper API", () => {
 				await run(context);
 			});
 
-		const app = cli("my-cli")
-			.extend(version)
-			.run(({ flags, ctx }) => {
-				type _ctx = Expect<Equal<typeof ctx, Readonly<{}>>>;
-				expect((flags as Record<string, unknown>).version).toBe(true);
-			});
+		const app = new Crust("my-cli").extend(version).run(({ flags, ctx }) => {
+			type _ctx = Expect<Equal<typeof ctx, Readonly<{}>>>;
+			expect((flags as Record<string, unknown>).version).toBe(true);
+		});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -88,18 +88,16 @@ describe("internal command wrapper API", () => {
 		const debug = extension("debug").flag("debug", {
 			type: "boolean",
 		});
-		const app = cli("repeat")
-			.extend(debug)
-			.run(({ flags }) => {
-				if ((flags as Record<string, unknown>).debug) {
-					runCount++;
-				}
-			});
+		const app = new Crust("repeat").extend(debug).run(({ flags }) => {
+			if ((flags as Record<string, unknown>).debug) {
+				runCount++;
+			}
+		});
 
 		await app.execute({ argv: ["--debug"] });
 		await app.execute({ argv: ["--debug"] });
 
 		expect(runCount).toBe(2);
-		expect(app._crust._node.effectiveFlags.debug).toBeUndefined();
+		expect(app._node.effectiveFlags.debug).toBeUndefined();
 	});
 });

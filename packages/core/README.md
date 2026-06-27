@@ -2,7 +2,7 @@
 
 The core library for the [Crust](https://crustjs.com) CLI framework.
 
-Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, typed errors, and extension loading.
+Provides command definition, argument/flag parsing, subcommand routing, typed contexts, lifecycle hooks, typed errors, and extension loading.
 
 ## Install
 
@@ -25,6 +25,20 @@ const app = new Crust("greet")
 	});
 
 app.execute();
+```
+
+## Typed contexts
+
+Use `context()` to define shared dependencies and register them on the same `new Crust()` builder:
+
+```ts
+import { context, Crust } from "@crustjs/core";
+
+const config = context("config", () => ({ env: "prod" }));
+
+const app = new Crust("deploy").context(config).run(({ ctx }) => {
+	ctx.config.env; // string
+});
 ```
 
 ## Built-in value types

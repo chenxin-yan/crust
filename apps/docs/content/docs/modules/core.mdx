@@ -1,6 +1,6 @@
 ---
 title: "Core"
-description: Core framework library — command definition, parsing, routing, extensions, and errors.
+description: Core framework library — command definition, parsing, routing, contexts, extensions, and errors.
 ---
 
 The core package provides everything needed to define and run CLI commands. It keeps runtime dependencies minimal and does not depend on schema libraries or Effect.
@@ -21,9 +21,10 @@ bun add @crustjs/core
 
 ### Functions
 
-| Function          | Description                                             |
-| ----------------- | ------------------------------------------------------- |
-| `extension(name)` | Author CLI capabilities for loading through `.extend()` |
+| Function               | Description                                             |
+| ---------------------- | ------------------------------------------------------- |
+| `context(name, setup)` | Define typed command dependencies for `.context()`      |
+| `extension(name)`      | Author CLI capabilities for loading through `.extend()` |
 
 ### Constants
 
@@ -34,29 +35,45 @@ bun add @crustjs/core
 
 ### Types
 
-| Type                         | Description                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `CrustCommandContext<A, F>`  | Runtime context passed to lifecycle hooks                                                  |
-| `CommandMeta`                | Command metadata (name, description, usage, aliases, hidden)                               |
-| `ArgDef`                     | Positional argument definition                                                             |
-| `ArgsDef`                    | Tuple of argument definitions                                                              |
-| `FlagDef`                    | Named flag definition                                                                      |
-| `FlagsDef`                   | Record of flag definitions                                                                 |
-| `InferArgs<A>`               | Infer resolved arg types from definitions                                                  |
-| `InferFlags<F>`              | Infer resolved flag types from definitions                                                 |
-| `EffectiveFlags<I, L>`       | Compute effective flags from inherited + local                                             |
-| `InheritableFlags<F>`        | Pick only inheritable flags                                                                |
-| `MergeFlags<P, L>`           | Merge parent + local flags                                                                 |
-| `ParseResult<A, F>`          | Output of `parseArgs`                                                                      |
-| `Extension`                  | CLI extension builder loaded via `.extend()`                                               |
-| `CrustError`                 | Typed error class                                                                          |
-| `CrustErrorCode`             | Error code union                                                                           |
-| `ValueType`                  | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
-| `Resolve<T>`                 | Maps a `ValueType` literal to its runtime TypeScript type                                  |
-| `ResolveBaseType<F>`         | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>`     |
-| `ValidateFlagAliases<F>`     | Compile-time alias collision check                                                         |
-| `ValidateNoPrefixedFlags<F>` | Compile-time no- prefix check                                                              |
-| `ValidateVariadicArgs<A>`    | Compile-time variadic position check                                                       |
+| Type                             | Description                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `CrustCommandContext<A, F, Ctx>` | Runtime context passed to lifecycle hooks                                                  |
+| `ContextInstance`                | A typed context provider created by `context()`                                            |
+| `ContextFactory`                 | A parameterized context factory created by `context()`                                     |
+| `CommandMeta`                    | Command metadata (name, description, usage, aliases, hidden)                               |
+| `ArgDef`                         | Positional argument definition                                                             |
+| `ArgsDef`                        | Tuple of argument definitions                                                              |
+| `FlagDef`                        | Named flag definition                                                                      |
+| `FlagsDef`                       | Record of flag definitions                                                                 |
+| `InferArgs<A>`                   | Infer resolved arg types from definitions                                                  |
+| `InferFlags<F>`                  | Infer resolved flag types from definitions                                                 |
+| `EffectiveFlags<I, L>`           | Compute effective flags from inherited + local                                             |
+| `InheritableFlags<F>`            | Pick only inheritable flags                                                                |
+| `MergeFlags<P, L>`               | Merge parent + local flags                                                                 |
+| `ParseResult<A, F>`              | Output of `parseArgs`                                                                      |
+| `Extension`                      | CLI extension builder loaded via `.extend()`                                               |
+| `CrustError`                     | Typed error class                                                                          |
+| `CrustErrorCode`                 | Error code union                                                                           |
+| `ValueType`                      | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
+| `Resolve<T>`                     | Maps a `ValueType` literal to its runtime TypeScript type                                  |
+| `ResolveBaseType<F>`             | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>`     |
+| `ValidateFlagAliases<F>`         | Compile-time alias collision check                                                         |
+| `ValidateNoPrefixedFlags<F>`     | Compile-time no- prefix check                                                              |
+| `ValidateVariadicArgs<A>`        | Compile-time variadic position check                                                       |
+
+## Contexts
+
+Use `context()` when multiple commands need shared dependencies without hand-annotating every handler:
+
+```ts
+import { context, Crust } from "@crustjs/core";
+
+const config = context("config", () => ({ env: "prod" }));
+
+const app = new Crust("deploy").context(config).run(({ ctx }) => {
+  ctx.config.env; // string
+});
+```
 
 ## When to Use
 

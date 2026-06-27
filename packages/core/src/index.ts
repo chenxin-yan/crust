@@ -1,12 +1,15 @@
 // v0.1 builder API
 export type {
+	ContextFactory,
+	ContextInstance,
+	ContextMap,
 	Extension,
 	ExtensionFlagOptions,
 	ExtensionOutput,
 	ExtensionRun,
 	ExtensionRunContext,
 } from "./api.ts";
-export { extension } from "./api.ts";
+export { context, extension } from "./api.ts";
 
 // Command context
 export type { CrustCommandContext } from "./crust.ts";

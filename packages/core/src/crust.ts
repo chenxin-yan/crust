@@ -1,4 +1,12 @@
-import { type Extension, getExtensionPlugins } from "./api.ts";
+import {
+	buildContexts,
+	type ContextInstance,
+	type ContextMap,
+	type ContextOutput,
+	type Extension,
+	getExtensionPlugins,
+	type MergeContext,
+} from "./api.ts";
 import { CrustError } from "./errors.ts";
 import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
@@ -35,11 +43,17 @@ import { validateIncomingAliases } from "./validation.ts";
  * - `A` — positional argument definitions tuple
  * - `F` — the effective (inherited + local merged) flag definitions
  */
-export interface CrustCommandContext<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
+export interface CrustCommandContext<
+	A extends ArgsDef = ArgsDef,
+	F extends FlagsDef = FlagsDef,
+	Ctx extends ContextMap = {},
+> {
 	/** Resolved positional arguments, keyed by arg name */
 	args: InferArgs<A>;
 	/** Resolved flags, keyed by flag name */
 	flags: InferFlags<F>;
+	/** Context values registered with `.context()` */
+	ctx: Readonly<Ctx>;
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
 	/** The resolved command node that is being executed */
@@ -280,6 +294,7 @@ function deepCloneCommandNode(node: CommandNode): CommandNode {
 		effectiveFlags: deepCloneFlags(node.effectiveFlags),
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
+		contexts: [...node.contexts],
 		plugins: [...node.plugins],
 		preRun: node.preRun,
 		run: node.run,
@@ -295,6 +310,7 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.localFlags);
 	Object.freeze(node.effectiveFlags);
 	Object.freeze(node.meta);
+	Object.freeze(node.contexts);
 	Object.freeze(node.plugins);
 	if (node.args) Object.freeze(node.args);
 	for (const sub of Object.values(node.subCommands)) {
@@ -333,6 +349,7 @@ export class Crust<
 	Local extends FlagsDef = FlagsDef,
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
+	Ctx extends ContextMap = {},
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -340,6 +357,7 @@ export class Crust<
 		local: Local;
 		args: A;
 		effective: Eff;
+		ctx: Ctx;
 	};
 
 	/** @internal */
@@ -366,15 +384,17 @@ export class Crust<
 	 * @internal — Create a child builder with pre-populated inherited flags.
 	 * Used by `.command()` to propagate parent flags to the child.
 	 */
-	static _createChild<I extends FlagsDef>(
+	static _createChild<I extends FlagsDef, Ctx extends ContextMap = {}>(
 		name: string,
 		inheritedFlags: FlagsDef,
+		contexts: readonly ContextInstance[] = [],
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-	): Crust<I, {}, [], EffectiveFlags<I, {}>> {
+	): Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx> {
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>>(name);
-		// Override the inherited flags set by constructor (which defaults to {})
+		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
+		// Override constructor defaults with parent-provided state.
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
+		(instance._node as { contexts: ContextInstance[] }).contexts = [...contexts];
 		return instance;
 	}
 
@@ -389,6 +409,7 @@ export class Crust<
 			localFlags: { ...this._node.localFlags },
 			effectiveFlags: { ...this._node.effectiveFlags },
 			subCommands: { ...this._node.subCommands },
+			contexts: [...this._node.contexts],
 			plugins: [...this._node.plugins],
 			meta: { ...this._node.meta },
 			args: this._node.args ? [...this._node.args] : undefined,
@@ -418,10 +439,10 @@ export class Crust<
 	 * )
 	 * ```
 	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff> {
+	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -440,7 +461,7 @@ export class Crust<
 	 */
 	flags<const F extends FlagsDef>(
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>> {
+	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
 
@@ -453,7 +474,7 @@ export class Crust<
 		return this._clone({
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
-		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>>;
+		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
 	}
 
 	/**
@@ -467,13 +488,27 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
-	): Crust<Inherited, Local, NewA, Eff> {
+	): Crust<Inherited, Local, NewA, Eff, Ctx> {
 		// Deep copy arg defs to decouple from caller
 		const copiedArgs = defs.map((def) => ({ ...def })) as unknown as ArgsDef;
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Inherited, Local, NewA, Eff>;
+		}) as unknown as Crust<Inherited, Local, NewA, Eff, Ctx>;
+	}
+
+	/**
+	 * Register a typed command context provider.
+	 *
+	 * Contexts are built in registration order for the resolved command and are
+	 * exposed to lifecycle handlers as `ctx`.
+	 */
+	context<const C extends ContextInstance>(
+		context: C,
+	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
+		return this._clone({
+			contexts: [...this._node.contexts, context],
+		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
 	}
 
 	/**
@@ -490,11 +525,11 @@ export class Crust<
 	 * @returns A new `Crust` instance with the handler registered
 	 */
 	run(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -507,11 +542,11 @@ export class Crust<
 	 * @returns A new `Crust` instance with the preRun handler registered
 	 */
 	preRun(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			preRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -524,11 +559,11 @@ export class Crust<
 	 * @returns A new `Crust` instance with the postRun handler registered
 	 */
 	postRun(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff> {
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			postRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -544,10 +579,10 @@ export class Crust<
 	 * @param plugin - The plugin to register
 	 * @returns A new `Crust` instance with the plugin registered
 	 */
-	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff> {
+	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			plugins: [...this._node.plugins, plugin],
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -557,8 +592,8 @@ export class Crust<
 	 * did-you-mean, etc.). They lower into Crust's internal lifecycle without
 	 * exposing the plugin contract as part of the main authoring API.
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff> {
-		return extensions.reduce<Crust<Inherited, Local, A, Eff>>((current, extension) => {
+	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff, Ctx> {
+		return extensions.reduce<Crust<Inherited, Local, A, Eff, Ctx>>((current, extension) => {
 			let extended = current;
 			for (const plugin of getExtensionPlugins(extension)) {
 				extended = extended.use(plugin);
@@ -602,14 +637,14 @@ export class Crust<
 	sub<N extends string>(
 		name: N,
 		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>> {
+	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
 
 		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
-		return Crust._createChild<Eff>(name, parentEffective);
+		return Crust._createChild<Eff, Ctx>(name, parentEffective, this._node.contexts);
 	}
 
 	/**
@@ -628,8 +663,12 @@ export class Crust<
 		name: N,
 		cb: (
 			// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>>,
+			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
 		) => Crust<
+			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
+			any,
+			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
+			any,
 			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
 			any,
 			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
@@ -637,7 +676,7 @@ export class Crust<
 			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
 			any
 		>,
-	): Crust<Inherited, Local, A, Eff>;
+	): Crust<Inherited, Local, A, Eff, Ctx>;
 
 	/**
 	 * Register a pre-built subcommand builder.
@@ -654,16 +693,16 @@ export class Crust<
 	 */
 	command(
 		// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust builder instance
-		builder: Crust<any, any, any>,
-	): Crust<Inherited, Local, A, Eff>;
+		builder: Crust<any, any, any, any, any>,
+	): Crust<Inherited, Local, A, Eff, Ctx>;
 
 	// Implementation
 	command(
 		// oxlint-disable-next-line typescript/no-explicit-any -- union of overload parameter types
-		nameOrBuilder: string | Crust<any, any, any>,
+		nameOrBuilder: string | Crust<any, any, any, any, any>,
 		// oxlint-disable-next-line typescript/no-explicit-any -- callback parameter from first overload
-		cb?: (cmd: Crust<any, any, any>) => Crust<any, any, any>,
-	): Crust<Inherited, Local, A, Eff> {
+		cb?: (cmd: Crust<any, any, any, any, any>) => Crust<any, any, any, any, any>,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
 		if (typeof nameOrBuilder === "string") {
 			// ── Inline callback path ──────────────────────────────────────────
 			const name = nameOrBuilder;
@@ -686,7 +725,7 @@ export class Crust<
 			const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
 
 			// Create a child builder pre-typed with the parent's effective flags
-			const childBuilder = Crust._createChild<Eff>(name, parentEffective);
+			const childBuilder = Crust._createChild<Eff, Ctx>(name, parentEffective, this._node.contexts);
 
 			// Pass the child builder to the callback to let the user configure it
 			const configuredChild = cb(childBuilder);
@@ -716,7 +755,7 @@ export class Crust<
 					...this._node.subCommands,
 					[name]: childNode,
 				},
-			}) as unknown as Crust<Inherited, Local, A, Eff>;
+			}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 		}
 
 		// ── Pre-built builder path ──────────────────────────────────────────
@@ -749,7 +788,7 @@ export class Crust<
 				...this._node.subCommands,
 				[name]: childNode,
 			},
-		}) as unknown as Crust<Inherited, Local, A, Eff>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -924,6 +963,7 @@ export class Crust<
 				const context: CrustCommandContext = {
 					args: parsed.args,
 					flags: parsed.flags,
+					ctx: await buildContexts(resolvedNode.contexts),
 					rawArgs: parsed.rawArgs,
 					command: resolvedNode,
 				};
