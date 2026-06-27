@@ -367,40 +367,32 @@ export class CommandBuilder<
 		return this.clone(next);
 	}
 
+	private withCtx(
+		handler: (ctx: NoInfer<CliCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	): (ctx: CrustCommandContext<A, Eff>) => Promise<void> {
+		const contexts = this.contexts;
+		return async (ctx) => {
+			const commandContext = (await buildContexts(contexts)) as Ctx;
+			await handler({ ...ctx, ctx: commandContext } as CliCommandContext<A, Eff, Ctx>);
+		};
+	}
+
 	run(
 		handler: (ctx: NoInfer<CliCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): CommandBuilder<Inherited, Local, A, Eff, Ctx> {
-		const contexts = this.contexts;
-		return this.clone(
-			this._crust.run(async (ctx) => {
-				const commandContext = (await buildContexts(contexts)) as Ctx;
-				await handler({ ...ctx, ctx: commandContext } as CliCommandContext<A, Eff, Ctx>);
-			}),
-		);
+		return this.clone(this._crust.run(this.withCtx(handler)));
 	}
 
 	preRun(
 		handler: (ctx: NoInfer<CliCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): CommandBuilder<Inherited, Local, A, Eff, Ctx> {
-		const contexts = this.contexts;
-		return this.clone(
-			this._crust.preRun(async (ctx) => {
-				const commandContext = (await buildContexts(contexts)) as Ctx;
-				await handler({ ...ctx, ctx: commandContext } as CliCommandContext<A, Eff, Ctx>);
-			}),
-		);
+		return this.clone(this._crust.preRun(this.withCtx(handler)));
 	}
 
 	postRun(
 		handler: (ctx: NoInfer<CliCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): CommandBuilder<Inherited, Local, A, Eff, Ctx> {
-		const contexts = this.contexts;
-		return this.clone(
-			this._crust.postRun(async (ctx) => {
-				const commandContext = (await buildContexts(contexts)) as Ctx;
-				await handler({ ...ctx, ctx: commandContext } as CliCommandContext<A, Eff, Ctx>);
-			}),
-		);
+		return this.clone(this._crust.postRun(this.withCtx(handler)));
 	}
 
 	command<N extends string>(

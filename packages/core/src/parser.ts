@@ -1,3 +1,5 @@
+import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
+
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
@@ -25,7 +27,7 @@ type ParsedFlagValue = string | boolean | (string | boolean)[] | undefined;
  * Also returns a reverse alias→name mapping for resolving parsed results.
  */
 function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
-	const options: Record<string, true> = {};
+	const options: Record<string, ParseArgsOptionDescriptor> = {};
 	const aliasToName: Record<string, string> = {};
 
 	if (!flagsDef) return { options, aliasToName };
@@ -56,6 +58,15 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			);
 		}
 
+		// All non-boolean types consume the next token as a raw string; the
+		// Crust-level coercion (url/path/json/number) runs in coerceValue.
+		const parseType = def.type === "boolean" ? "boolean" : "string";
+		const opt: ParseArgsOptionDescriptor = { type: parseType };
+
+		if (def.multiple) {
+			opt.multiple = true;
+		}
+
 		// Handle short alias
 		if (def.short) {
 			// Defense-in-depth: reject "no-" prefixed short alias
@@ -75,7 +86,7 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 			}
 			aliasRegistry.set(def.short, name);
 			aliasToName[def.short] = name;
-			options[def.short] = true;
+			opt.short = def.short;
 		}
 
 		// Handle long aliases
@@ -98,156 +109,19 @@ function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
 				}
 				aliasRegistry.set(alias, name);
 				aliasToName[alias] = name;
-				options[alias] = true;
+
+				const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
+				if (def.multiple) {
+					aliasOpt.multiple = true;
+				}
+				options[alias] = aliasOpt;
 			}
 		}
 
-		options[name] = true;
+		options[name] = opt;
 	}
 
 	return { options, aliasToName };
-}
-
-function addParsedValue(
-	values: Record<string, ParsedFlagValue>,
-	key: string,
-	value: string | boolean,
-	flagsDef: FlagsDef,
-	aliasToName: Record<string, string>,
-): void {
-	const canonicalName = aliasToName[key] ?? key;
-	const def = flagsDef[canonicalName];
-	if (!def) return;
-
-	const existing = values[key];
-	if (def.multiple) {
-		if (Array.isArray(existing)) {
-			existing.push(value);
-		} else if (existing !== undefined) {
-			values[key] = [existing, value];
-		} else {
-			values[key] = [value];
-		}
-		return;
-	}
-
-	values[key] = value;
-}
-
-function parseArgv(
-	argv: string[],
-	flagsDef: FlagsDef | undefined,
-	aliasToName: Record<string, string>,
-): {
-	values: Record<string, ParsedFlagValue>;
-	positionals: string[];
-	rawArgs: string[];
-} {
-	const values: Record<string, ParsedFlagValue> = {};
-	const positionals: string[] = [];
-	const rawArgs: string[] = [];
-	const flags = flagsDef ?? {};
-
-	const resolveFlag = (key: string): { canonical: string; def: FlagDef } | null => {
-		const canonical = aliasToName[key] ?? key;
-		const def = flags[canonical];
-		return def ? { canonical, def } : null;
-	};
-
-	let i = 0;
-	while (i < argv.length) {
-		const token = argv[i] as string;
-
-		if (token === "--") {
-			rawArgs.push(...argv.slice(i + 1));
-			break;
-		}
-
-		if (token.startsWith("--no-")) {
-			const assignmentIndex = token.indexOf("=");
-			const rawName =
-				assignmentIndex === -1
-					? token.slice("--no-".length)
-					: token.slice("--no-".length, assignmentIndex);
-
-			if (assignmentIndex !== -1) {
-				throw new CrustError("PARSE", `Unknown flag "--no-${rawName}"`);
-			}
-
-			const resolved = resolveFlag(rawName);
-			if (!resolved || resolved.def.type !== "boolean") {
-				throw new CrustError("PARSE", `Unknown flag "--no-${rawName}"`);
-			}
-			addParsedValue(values, resolved.canonical, false, flags, aliasToName);
-			i++;
-			continue;
-		}
-
-		if (token.startsWith("--") && token.length > 2) {
-			const assignmentIndex = token.indexOf("=");
-			const rawName = assignmentIndex === -1 ? token.slice(2) : token.slice(2, assignmentIndex);
-			const resolved = resolveFlag(rawName);
-			if (!resolved) {
-				throw new CrustError("PARSE", `Unknown flag "--${rawName}"`);
-			}
-
-			if (resolved.def.type === "boolean") {
-				if (assignmentIndex !== -1) {
-					throw new CrustError("PARSE", "Failed to parse command arguments").withCause(
-						new Error(`Option '--${rawName}' does not take an argument`),
-					);
-				}
-				addParsedValue(values, rawName, true, flags, aliasToName);
-				i++;
-				continue;
-			}
-
-			if (assignmentIndex !== -1) {
-				addParsedValue(values, rawName, token.slice(assignmentIndex + 1), flags, aliasToName);
-				i++;
-				continue;
-			}
-
-			const next = argv[i + 1];
-			if (next === undefined || next === "--") {
-				throw new CrustError("PARSE", "Failed to parse command arguments").withCause(
-					new Error(`Option '--${rawName}' expects an argument`),
-				);
-			}
-			addParsedValue(values, rawName, next, flags, aliasToName);
-			i += 2;
-			continue;
-		}
-
-		if (token.startsWith("-") && token.length > 1 && !/^-\d/.test(token)) {
-			const rawName = token.slice(1);
-			const resolved = resolveFlag(rawName);
-			if (!resolved) {
-				throw new CrustError("PARSE", `Unknown flag "-${rawName}"`);
-			}
-
-			if (resolved.def.type === "boolean") {
-				addParsedValue(values, rawName, true, flags, aliasToName);
-				i++;
-				continue;
-			}
-
-			const next = argv[i + 1];
-			if (next === undefined || next === "--") {
-				throw new CrustError("PARSE", "Failed to parse command arguments").withCause(
-					new Error(`Option '-${rawName}' expects an argument`),
-				);
-			}
-			addParsedValue(values, rawName, next, flags, aliasToName);
-			i += 2;
-			continue;
-		}
-
-		positionals.push(token);
-		i++;
-	}
-
-	return { values, positionals, rawArgs };
 }
 
 const ALLOWED_FLAG_TYPES: ReadonlySet<ValueType> = new Set([
@@ -637,14 +511,51 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	// never sees a Promise where a value was expected.
 	validateAsyncParse(flagsDef, argsDef);
 
-	const { aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
+	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
 
 	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
 
-	const parsed = parseArgv(argv, flagsDef, aliasToName);
+	let parsed: ReturnType<typeof nodeParseArgs>;
+
+	try {
+		parsed = nodeParseArgs({
+			args: argv,
+			options: parseOptions,
+			strict: true,
+			allowPositionals: true,
+			allowNegative: true,
+			tokens: true,
+		});
+	} catch (error) {
+		if (error instanceof Error) {
+			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
+			if (unknownMatch) {
+				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`).withCause(error);
+			}
+		}
+		throw new CrustError("PARSE", "Failed to parse command arguments").withCause(error);
+	}
+
+	const rawArgs: string[] = [];
+	const preSeparatorPositionals: string[] = [];
+
+	if (parsed.tokens) {
+		let afterSeparator = false;
+		for (const token of parsed.tokens) {
+			if (token.kind === "option-terminator") {
+				afterSeparator = true;
+				continue;
+			}
+			if (token.kind === "positional") {
+				(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value ?? "");
+			}
+		}
+	} else {
+		preSeparatorPositionals.push(...parsed.positionals);
+	}
 
 	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
-	const resolvedArgs = resolveArgs(argsDef, parsed.positionals);
+	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and
 	// InferFlags<F>, but TypeScript can't verify this statically since values
@@ -652,7 +563,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	return {
 		args: resolvedArgs,
 		flags: resolvedFlags,
-		rawArgs: parsed.rawArgs,
+		rawArgs,
 	} as ParseResult<A, F>;
 }
 
