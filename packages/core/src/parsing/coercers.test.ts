@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
+import { CrustError } from "../errors.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
-import { CrustError } from "./errors.ts";
 
 describe("coerceUrl", () => {
 	it("returns a URL instance for a valid https URL", () => {

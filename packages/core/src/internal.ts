@@ -1,8 +1,8 @@
-export { extensionFromPlugin, getExtensionPlugins } from "./api.ts";
-export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./crust.ts";
-export type { CrustCommandContext } from "./crust.ts";
-export { computeEffectiveFlags, createCommandNode } from "./node.ts";
-export type { CommandNode } from "./node.ts";
+export { extensionFromPlugin, getExtensionPlugins } from "./api/extension.ts";
+export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";
+export type { CrustCommandContext } from "./command/crust.ts";
+export { computeEffectiveFlags, createCommandNode } from "./command/node.ts";
+export type { CommandNode } from "./command/node.ts";
 export type {
 	BaseContext,
 	CrustPlugin,

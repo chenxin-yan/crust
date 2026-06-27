@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { context, Crust, extension } from "./index.ts";
+import { context, Crust, extension } from "../index.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =

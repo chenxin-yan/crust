@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { CrustError } from "./errors.ts";
+import { CrustError } from "../errors.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
-import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.

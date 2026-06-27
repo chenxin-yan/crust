@@ -1,4 +1,4 @@
-import { CrustError } from "./errors.ts";
+import { CrustError } from "../errors.ts";
 import type { CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

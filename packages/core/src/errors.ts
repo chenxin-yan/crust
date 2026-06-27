@@ -1,4 +1,4 @@
-import type { CommandNode } from "./node.ts";
+import type { CommandNode } from "./command/node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustErrorCode — Discriminated error codes

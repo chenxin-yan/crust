@@ -1,7 +1,7 @@
-import { CrustError } from "./errors.ts";
-import type { CommandNode } from "./node.ts";
+import type { CommandNode } from "../command/node.ts";
+import { CrustError } from "../errors.ts";
+import type { ArgDef, FlagDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
-import type { ArgDef, FlagDef } from "./types.ts";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Alias collision policy: aliases share a namespace with canonical names,

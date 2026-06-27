@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { CrustError } from "./errors.ts";
-import type { CommandNode } from "./node.ts";
-import { computeEffectiveFlags, createCommandNode } from "./node.ts";
+import type { CommandNode } from "../command/node.ts";
+import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
+import { CrustError } from "../errors.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
-import type { ArgsDef, CommandMeta, FlagsDef } from "./types.ts";
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.

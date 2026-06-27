@@ -3,21 +3,19 @@ import {
 	type ContextInstance,
 	type ContextMap,
 	type ContextOutput,
-	type Extension,
-	getExtensionPlugins,
 	type MergeContext,
-} from "./api.ts";
-import { CrustError } from "./errors.ts";
-import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
-import { parseArgs, validateParsed } from "./parser.ts";
+} from "../api/context.ts";
+import { type Extension, getExtensionPlugins } from "../api/extension.ts";
+import { CrustError } from "../errors.ts";
+import { parseArgs, validateParsed } from "../parsing/parser.ts";
+import { validateIncomingAliases } from "../parsing/validation.ts";
 import type {
 	CrustPlugin,
 	MiddlewareContext,
 	PluginState,
 	SetupActions,
 	SetupContext,
-} from "./plugins.ts";
-import { resolveCommand } from "./router.ts";
+} from "../plugins.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
@@ -28,8 +26,9 @@ import type {
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
-} from "./types.ts";
-import { validateIncomingAliases } from "./validation.ts";
+} from "../types.ts";
+import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
+import { resolveCommand } from "./router.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -835,7 +834,7 @@ export class Crust<
 
 		freezeTree(rootNode);
 
-		const { validateCommandTree } = await import("./validation.ts");
+		const { validateCommandTree } = await import("../parsing/validation.ts");
 		validateCommandTree(rootNode);
 
 		return { root: rootNode, warnings };
@@ -892,7 +891,7 @@ export class Crust<
 		if (process.env[VALIDATION_MODE_ENV] === "1") {
 			const result = (async () => {
 				try {
-					const { validateCommandTree } = await import("./validation.ts");
+					const { validateCommandTree } = await import("../parsing/validation.ts");
 					validateCommandTree(rootNode);
 					for (const warning of warnings) {
 						console.warn(`Warning: ${warning}`);

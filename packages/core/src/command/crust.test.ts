@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { CrustError } from "../errors.ts";
+import type { CrustPlugin } from "../plugins.ts";
+import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
 import {
 	Crust,
 	type CrustCommandContext,
 	VALIDATION_FORCE_EXIT_ENV,
 	VALIDATION_MODE_ENV,
 } from "./crust.ts";
-import { CrustError } from "./errors.ts";
-import type { CrustPlugin } from "./plugins.ts";
-import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities

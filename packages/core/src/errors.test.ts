@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { createCommandNode } from "./command/node.ts";
 import { CrustError } from "./errors.ts";
-import { createCommandNode } from "./node.ts";
 
 describe("CrustError tagged shape", () => {
 	it("provides a stable tag and static guard", () => {

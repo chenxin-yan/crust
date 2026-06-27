@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import type { FlagsDef } from "../types.ts";
 import { computeEffectiveFlags, createCommandNode } from "./node.ts";
-import type { FlagsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // createCommandNode

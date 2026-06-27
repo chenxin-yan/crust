@@ -1,19 +1,18 @@
 // v0.1 builder API
+export type { ContextFactory, ContextInstance, ContextMap } from "./api/context.ts";
+export { context } from "./api/context.ts";
 export type {
-	ContextFactory,
-	ContextInstance,
-	ContextMap,
 	Extension,
 	ExtensionFlagOptions,
 	ExtensionOutput,
 	ExtensionRun,
 	ExtensionRunContext,
-} from "./api.ts";
-export { context, extension } from "./api.ts";
+} from "./api/extension.ts";
+export { extension } from "./api/extension.ts";
 
 // Command context
-export type { CrustCommandContext } from "./crust.ts";
-export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./crust.ts";
+export type { CrustCommandContext } from "./command/crust.ts";
+export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,

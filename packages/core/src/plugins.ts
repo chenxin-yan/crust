@@ -1,5 +1,5 @@
-import type { CommandNode } from "./node.ts";
-import type { CommandRoute } from "./router.ts";
+import type { CommandNode } from "./command/node.ts";
+import type { CommandRoute } from "./command/router.ts";
 import type { FlagDef, ParseResult } from "./types.ts";
 
 export interface PluginState {

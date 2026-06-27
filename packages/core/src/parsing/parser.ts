@@ -2,10 +2,10 @@ import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node
 
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
+import type { CommandNode } from "../command/node.ts";
+import { CrustError } from "../errors.ts";
+import type { ArgDef, ArgsDef, FlagDef, FlagsDef, ParseResult, ValueType } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
-import { CrustError } from "./errors.ts";
-import type { CommandNode } from "./node.ts";
-import type { ArgDef, ArgsDef, FlagDef, FlagsDef, ParseResult, ValueType } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types

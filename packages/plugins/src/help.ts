@@ -171,7 +171,7 @@ function formatCommandLabel(name: string, aliases: readonly string[] | undefined
 function formatCommandsSection(command: CommandNode): string[] {
 	// Filter out subcommands marked `meta.hidden: true`. Hidden
 	// commands remain resolvable by direct invocation — routing in
-	// `packages/core/src/router.ts` does not consult `meta.hidden`. Filtering
+	// `packages/core/src/command/router.ts` does not consult `meta.hidden`. Filtering
 	// happens after `Object.entries` so insertion order is preserved for the
 	// surviving entries.
 	const visibleEntries = Object.entries(command.subCommands).filter(

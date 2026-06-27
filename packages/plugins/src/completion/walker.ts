@@ -182,7 +182,7 @@ function walkCommand(node: CommandNode): CompletionCommand {
 	const subCommands: CompletionCommand[] = [];
 	for (const subNode of Object.values(node.subCommands)) {
 		// Mirror the help renderer's contract: skip listing-hidden nodes.
-		// Routing in `packages/core/src/router.ts` still resolves them by
+		// Routing in `packages/core/src/command/router.ts` still resolves them by
 		// direct name — they are only invisible to enumeration.
 		if (subNode.meta.hidden === true) continue;
 		subCommands.push(walkCommand(subNode));

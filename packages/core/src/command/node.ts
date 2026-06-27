@@ -1,6 +1,6 @@
-import type { ContextInstance } from "./api.ts";
-import type { CrustPlugin } from "./plugins.ts";
-import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "./types.ts";
+import type { ContextInstance } from "../api/context.ts";
+import type { CrustPlugin } from "../plugins.ts";
+import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandNode — Internal command tree node

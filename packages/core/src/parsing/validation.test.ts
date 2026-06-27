@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { computeEffectiveFlags, createCommandNode } from "./node.ts";
+import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
 import { validateCommandTree } from "./validation.ts";
 
 describe("validateCommandTree", () => {

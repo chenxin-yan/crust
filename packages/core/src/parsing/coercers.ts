@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import { CrustError } from "./errors.ts";
+import { CrustError } from "../errors.ts";
 
 /**
  * Coerce a raw argv string into a {@link URL} instance via the WHATWG
