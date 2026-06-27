@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { Crust, parseArgs } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
+import { parseArgs, type CommandNode } from "@crustjs/core/tooling";
 
 import type { BunTarget } from "../../src/commands/build.ts";
 import {
@@ -28,7 +29,7 @@ import {
  */
 function makeBuildNode() {
 	const app = new Crust("test").command(buildCommand);
-	const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
+	const node = (app as unknown as { _node: CommandNode })._node;
 	const buildNode = node.subCommands.build;
 	if (!buildNode) throw new Error("build subcommand not found");
 	return buildNode;

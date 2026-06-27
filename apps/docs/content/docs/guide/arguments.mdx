@@ -5,7 +5,7 @@ description: Define positional arguments with types, defaults, and validation.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Arguments are positional values passed to your CLI without a flag name. They're defined as an ordered array via `.args()`, and Crust maps them to named, typed values.
+Arguments are positional values passed to your CLI without a flag name. They're defined via `.args()`, and Crust maps them to named, typed values.
 
 ```sh
 my-cli serve 3000 localhost
@@ -41,9 +41,7 @@ Positional arguments accept the same six built-in `type` literals as flags: `str
 Mark an argument as `required` to error when it's missing:
 
 ```ts
-.args([
-  { name: "name", type: "string", required: true },
-])
+.args([{ name: "name", type: "string", required: true }])
 ```
 
 ```sh
@@ -58,9 +56,7 @@ When required is `true`, the inferred type is guaranteed (no `| undefined`).
 Provide a `default` for optional arguments:
 
 ```ts
-.args([
-  { name: "port", type: "number", default: 3000 },
-])
+.args([{ name: "port", type: "number", default: 3000 }])
 ```
 
 When a default is set, the argument is always present in `args` — the inferred type is guaranteed (no `| undefined`).

@@ -9,7 +9,7 @@ Complete reference of all types exported from `@crustjs/core`.
 
 ### `CommandNode`
 
-Internal representation of a single node in the command tree. Built by the `Crust` builder class; exported for downstream packages.
+Internal representation of a single node in the command tree. Built by the CLI builder and exposed through `@crustjs/core/tooling` for read-only tooling integrations.
 
 ```ts
 interface CommandNode {
@@ -18,7 +18,6 @@ interface CommandNode {
   effectiveFlags: FlagsDef;
   args: ArgsDef | undefined;
   subCommands: Record<string, CommandNode>;
-  plugins: CrustPlugin[];
   preRun?: (ctx: unknown) => void | Promise<void>;
   run?: (ctx: unknown) => void | Promise<void>;
   postRun?: (ctx: unknown) => void | Promise<void>;
@@ -26,8 +25,7 @@ interface CommandNode {
 ```
 
 - `localFlags` — Flags defined directly on this command via `.flags()`
-- `effectiveFlags` — Inherited flags merged with local flags (used by the parser and help plugin)
-- `plugins` — Plugins registered via `.use()`
+- `effectiveFlags` — Inherited flags merged with local flags (used by the parser and help extension)
 
 ### `CrustCommandContext<A, F>`
 
@@ -66,9 +64,9 @@ meta: { name: "issue", aliases: ["issues", "i"] }
 
 With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same command node.
 
-**Conflict policy.** Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Each alias must be a non-empty string with no whitespace and must not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time. Plugin-installed subcommands (via the `addCommand` setup action) are validated when registered too: a colliding alias is skipped with a warning, mirroring how a colliding canonical name is handled today. `prepareCommandTree()` re-runs the same check against the final tree.
+**Conflict policy.** Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Each alias must be a non-empty string with no whitespace and must not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time. Extension-contributed subcommands are validated during materialization. `prepareCommandTree()` re-runs the same check against the final tree.
 
-**Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
+**Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMean()` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
 
 #### `hidden`
 
@@ -78,9 +76,9 @@ When `true`, the command is omitted from any tooling that enumerates the command
 meta: { name: "__complete", hidden: true, description: "Internal completion entrypoint" }
 ```
 
-The command is **only hidden from listings**: it stays fully invocable by name (or alias), routing is unchanged, and it can still surface through tooling that looks up specific commands rather than enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
+The command is **only hidden from listings**: it stays fully invocable by name (or alias), routing is unchanged, and it can still surface through tooling that looks up specific commands rather than enumerating the tree (e.g. `didYouMean()` suggestions).
 
-**Tooling contract.** Any renderer or generator that walks `subCommands` to produce a user-facing listing should skip nodes where `meta.hidden === true`. The default `helpPlugin` follows this contract today; first-party generators (man pages, skill descriptors, completion) and any custom renderers should too.
+**Tooling contract.** Any renderer or generator that walks `subCommands` to produce a user-facing listing should skip nodes where `meta.hidden === true`. The default `help()` extension follows this contract today; first-party generators (man pages, skill descriptors, completion) and any custom renderers should too.
 
 Intended for internal/runtime commands such as a `__complete` entrypoint used by shell-completion tooling. Marking a user-facing subcommand as `hidden` is supported but unusual.
 
@@ -348,71 +346,6 @@ interface CommandRoute {
   argv: string[]; // Remaining argv
   commandPath: string[]; // Full command path
 }
-```
-
-## Plugin Types
-
-### `CrustPlugin`
-
-The plugin interface:
-
-```ts
-interface CrustPlugin {
-  name?: string;
-  setup?: (context: SetupContext, actions: SetupActions) => void | Promise<void>;
-  middleware?: PluginMiddleware;
-}
-```
-
-### `SetupContext`
-
-Context available during plugin setup:
-
-```ts
-interface SetupContext {
-  readonly argv: readonly string[];
-  readonly rootCommand: CommandNode;
-  readonly state: PluginState;
-}
-```
-
-### `SetupActions`
-
-Actions available during plugin setup:
-
-```ts
-interface SetupActions {
-  addFlag(command: CommandNode, name: string, def: FlagDef): void;
-  addSubCommand(parent: CommandNode, name: string, command: CommandNode): void;
-}
-```
-
-- `addFlag` — inject a flag into a command's `effectiveFlags` object (`localFlags` is unchanged). If the command already has a flag with the same name, the plugin's flag overrides it. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
-- `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is skipped — user definitions always take priority. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
-
-### `MiddlewareContext`
-
-Context available during middleware execution:
-
-```ts
-interface MiddlewareContext {
-  readonly argv: readonly string[];
-  readonly rootCommand: CommandNode;
-  readonly state: PluginState;
-  route: Readonly<CommandRoute> | null;
-  input: ParseResult | null;
-}
-```
-
-### `PluginMiddleware`
-
-Middleware function type:
-
-```ts
-type PluginMiddleware = (
-  context: MiddlewareContext,
-  next: () => Promise<void>,
-) => void | Promise<void>;
 ```
 
 ## Other Types

@@ -2,7 +2,7 @@
 
 The core library for the [Crust](https://crustjs.com) CLI framework.
 
-Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, and a plugin system.
+Provides command definition, argument/flag parsing, subcommand routing, lifecycle hooks, typed errors, and extension loading.
 
 ## Install
 
@@ -17,13 +17,11 @@ import { Crust } from "@crustjs/core";
 
 const app = new Crust("greet")
 	.meta({ description: "Say hello" })
-	.args([{ name: "name", type: "string", default: "world" }] as const)
-	.flags({
-		loud: { type: "boolean", description: "Shout it", alias: "l" },
-	})
+	.args([{ name: "name", type: "string", default: "world" }])
+	.flags({ loud: { type: "boolean", description: "Shout it", short: "l" } })
 	.run(({ args, flags }) => {
-		const msg = `Hello, ${args.name}!`;
-		console.log(flags.loud ? msg.toUpperCase() : msg);
+		const message = `Hello, ${args.name}!`;
+		console.log(flags.loud ? message.toUpperCase() : message);
 	});
 
 app.execute();

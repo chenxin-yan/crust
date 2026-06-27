@@ -1,5 +1,5 @@
-import type { CommandNode } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { normalizeInstructionList } from "./instructions.ts";
 

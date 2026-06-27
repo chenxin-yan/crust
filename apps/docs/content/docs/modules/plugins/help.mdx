@@ -5,29 +5,29 @@ description: Auto-generate help text for your CLI commands.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The help plugin adds `--help` / `-h` to all commands and auto-generates formatted help output.
+The help extension adds `--help` / `-h` to all commands and auto-generates formatted help output.
 On terminals with color support, the output is colorized automatically; in docs and non-color environments it falls back to plain text.
 
 ## Usage
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
-const main = new Crust("my-cli").use(helpPlugin()).run(() => {
+const main = new Crust("my-cli").extend(help()).run(() => {
   /* ... */
 });
 
 await main.execute();
 ```
 
-No configuration needed. The plugin injects a `--help` flag into every command (including subcommands) during the setup phase.
+No configuration needed. The extension injects a `--help` flag into every command (including subcommands) during materialization.
 
 ## What It Does
 
 ### Flag Injection
 
-During setup, the plugin adds the following flag to the root command and all subcommands recursively:
+During materialization, the extension adds the following flag to the root command and all subcommands recursively:
 
 ```ts
 help: {
@@ -39,7 +39,7 @@ help: {
 
 ### Help Display
 
-The middleware intercepts execution in two cases:
+The extension intercepts execution in two cases:
 
 1. **`--help` is passed** — Renders help and stops execution
 2. **Container command** — A command with subcommands but no `run()` handler automatically shows help
@@ -62,7 +62,7 @@ OPTIONS:
   -v, --version, --no-version    Show version number
 ```
 
-When a command declares [`aliases`](/docs/api/types#commandmeta), they are rendered inline next to the canonical name as `name (alias1, alias2)`. The canonical name is what appears in the path, in error messages, and in `didYouMeanPlugin` suggestions.
+When a command declares [`aliases`](/docs/api/types#commandmeta), they are rendered inline next to the canonical name as `name (alias1, alias2)`. The canonical name is what appears in the path, in error messages, and in `didYouMean()` suggestions.
 
 The help text includes these sections (when applicable):
 
@@ -146,7 +146,7 @@ my-cli create plugin --help # Help for nested subcommand
 ## Type
 
 ```ts
-function helpPlugin(): CrustPlugin;
+function help(): Extension;
 function renderHelp(command: CommandNode, path?: string[]): string;
 ```
 

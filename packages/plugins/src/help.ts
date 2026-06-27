@@ -1,11 +1,5 @@
-import type {
-	ArgDef,
-	CommandMeta,
-	CommandNode,
-	CrustPlugin,
-	FlagDef,
-	FlagsDef,
-} from "@crustjs/core";
+import type { ArgDef, CommandMeta, FlagDef, FlagsDef } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
 const FLAG_COLUMN_WIDTH = 28;

@@ -11,11 +11,10 @@ Subcommands let you organize your CLI into a tree of nested commands, like `git 
 
 Use the pattern that matches how the subcommand is defined:
 
-| Pattern                                 | Use when                                                            | Notes                                          |
-| --------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- |
-| `.command(name, cb)`                    | The subcommand is defined inline                                    | Best default for small or nested command trees |
-| `.sub(name)` + `.command(builder)`      | The subcommand lives in another file or should inherit parent flags | Best default for modular CLIs                  |
-| `new Crust(name)` + `.command(builder)` | The subcommand is intentionally standalone                          | Does not inherit parent flags                  |
+| Pattern                             | Use when                                    | Notes                                          |
+| ----------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| `.command(name, cb)`                | The command tree is defined inline          | Golden path with the strongest inference       |
+| `app.sub(name)` + `.command(child)` | The subcommand lives in another source file | Parent-typed split module with inherited flags |
 
 ## Inline Subcommands
 
@@ -23,11 +22,11 @@ Use `.command(name, cb)` when the subcommand is defined in place:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI tool" })
-  .use(helpPlugin())
+  .extend(help())
   .command("build", (cmd) =>
     cmd
       .meta({ description: "Build the project" })
@@ -66,9 +65,9 @@ A command can declare alternative names — short or long forms that resolve to 
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
-const main = new Crust("my-cli").use(helpPlugin()).command("issue", (cmd) =>
+const main = new Crust("my-cli").extend(help()).command("issue", (cmd) =>
   cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).command("list", (sub) =>
     sub.meta({ description: "List open issues" }).run(() => {
       console.log("open issues…");
@@ -87,7 +86,7 @@ my-cli issues list   # via alias "issues"
 my-cli i list        # via alias "i"
 ```
 
-The canonical name is what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — the alias the user typed is not preserved. Help renders the canonical name with aliases inline:
+The canonical name is what appears in `commandPath`, error messages, and `didYouMean()` suggestions — the alias the user typed is not preserved. Help renders the canonical name with aliases inline:
 
 ```text
 COMMANDS:
@@ -122,7 +121,7 @@ const app = new Crust("my-cli")
   );
 ```
 
-`hidden` affects help rendering only — the command remains directly invocable by name, alias resolution still works, and `didYouMeanPlugin` still suggests it. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion plugins. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
+`hidden` affects help rendering only — the command remains directly invocable by name, alias resolution still works, and `didYouMean()` still suggests it. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion extensions. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
 
 ## Nested Subcommands
 
@@ -211,7 +210,7 @@ my-cli readme.md    # Runs parent command with file="readme.md"
 
 ## File-Splitting Pattern
 
-Use `.sub()` when the subcommand lives in another file or should inherit parent `inherit: true` flags:
+Use `.sub()` when the subcommand lives in another file and must retain the parent app's inherited flags. Keep the base app in a file that imports no command modules; import both the app and commands from the entrypoint.
 
 ```ts title="shared.ts"
 import { Crust } from "@crustjs/core";
@@ -237,38 +236,12 @@ export const deployCmd = app
 ```ts title="cli.ts"
 import { app } from "./shared.ts";
 import { deployCmd } from "./commands/deploy.ts";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
-await app.use(helpPlugin()).command(deployCmd).execute();
+await app.extend(help()).command(deployCmd).execute();
 ```
 
-`.sub()` creates a child builder pre-typed with the parent's inheritable flags. See the [`.sub()` reference](/docs/api/crust#subname) for details.
-
-## Standalone Builders
-
-`.command(builder)` also accepts a standalone builder created with `new Crust(name)`:
-
-```ts
-const app = new Crust("my-cli").flags({
-  verbose: { type: "boolean", inherit: true },
-});
-
-const standalone = new Crust("doctor").run(() => {
-  console.log("doctor");
-});
-
-await app.command(standalone).execute();
-```
-
-This works, but `standalone` is isolated from `app`, so it does **not** inherit `app`'s `inherit: true` flags. If you want inherited flags or parent-aware typing, use `.sub(name)` instead:
-
-```ts
-const deploy = app.sub("deploy").run(({ flags }) => {
-  flags.verbose; // boolean | undefined
-});
-
-await app.command(deploy).execute();
-```
+`.sub()` creates a child builder pre-typed with the parent's inheritable flags. Prefer inline `.command(name, cb)` for most CLIs; use `.sub()` only when splitting command definition files without duplicating handler types.
 
 ## Unknown Subcommands
 
@@ -283,7 +256,7 @@ When a user types an unknown subcommand on a container command (no `.run()`), Cr
 }
 ```
 
-If any sibling defines aliases, `available` is a flat list of canonical names followed by each canonical's aliases (in sibling insertion order). For example, `issue` with `aliases: ["issues", "i"]` and `version` produces `available: ["issue", "issues", "i", "version"]`. `didYouMeanPlugin` uses this list to match against alias spellings but always reports the canonical name as its suggestion.
+If any sibling defines aliases, `available` is a flat list of canonical names followed by each canonical's aliases (in sibling insertion order). For example, `issue` with `aliases: ["issues", "i"]` and `version` produces `available: ["issue", "issues", "i", "version"]`. `didYouMean()` uses this list to match against alias spellings but always reports the canonical name as its suggestion.
 
 The [Did You Mean Plugin](/docs/modules/plugins/did-you-mean) catches these errors and provides "Did you mean?" suggestions.
 

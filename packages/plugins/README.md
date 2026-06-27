@@ -8,40 +8,38 @@ Official plugins for the [Crust](https://crustjs.com) CLI framework.
 bun add @crustjs/plugins
 ```
 
-## Plugins
+## Extensions
 
-| Plugin                          | Description                                                                                                                                                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `helpPlugin()`                  | Adds `--help` / `-h` flag and auto-generates help text                                                                                                                                                      |
-| `noColorPlugin()`               | Adds `--color` / `--no-color` and controls runtime color output                                                                                                                                             |
-| `versionPlugin(version)`        | Adds `--version` / `-v` flag                                                                                                                                                                                |
-| `didYouMeanPlugin(options?)`    | Suggests corrections for mistyped subcommands via Levenshtein matching                                                                                                                                      |
-| `updateNotifierPlugin(options)` | Checks npm for newer versions and displays an update notice                                                                                                                                                 |
-| `completionPlugin(options?)`    | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts. `path` flags/args emit file-completion candidates; `url` and `json` flags/args explicitly suppress file completion. |
+| Extension                 | Description                                                                                                                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `help()`                  | Adds `--help` / `-h` flag and auto-generates help text                                                                                                                                                      |
+| `noColor()`               | Adds `--color` / `--no-color` and controls runtime color output                                                                                                                                             |
+| `version(version)`        | Adds `--version` / `-v` flag                                                                                                                                                                                |
+| `didYouMean(options?)`    | Suggests corrections for mistyped subcommands via Levenshtein matching                                                                                                                                      |
+| `updateNotifier(options)` | Checks npm for newer versions and displays an update notice                                                                                                                                                 |
+| `completion(options?)`    | Adds a `completion <shell>` subcommand that emits bash/zsh/fish tab-completion scripts. `path` flags/args emit file-completion candidates; `url` and `json` flags/args explicitly suppress file completion. |
 
 ## Usage
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
-import { helpPlugin, versionPlugin, didYouMeanPlugin } from "@crustjs/plugins";
+import { Crust } from "@crustjs/core";
+import { didYouMean, help, version } from "@crustjs/plugins";
 
-const main = defineCommand({
-	meta: { name: "my-cli", description: "My CLI tool" },
-	run() {
+const main = new Crust("my-cli")
+	.meta({ description: "My CLI tool" })
+	.extend(version("1.0.0"), didYouMean(), help())
+	.run(() => {
 		console.log("Hello!");
-	},
-});
+	});
 
-runMain(main, {
-	plugins: [versionPlugin("1.0.0"), didYouMeanPlugin(), helpPlugin()],
-});
+await main.execute();
 ```
 
 For **manual pages** (mdoc), use [`@crustjs/man`](https://www.npmjs.com/package/@crustjs/man) or `crust build --man` — see [Man](/docs/modules/man).
 
 ### No Color
 
-The `noColorPlugin()` adds a root `color` boolean flag with default `true`, exposing `--color` and `--no-color`.
+The `noColor()` extension adds a root `color` boolean flag with default `true`, exposing `--color` and `--no-color`.
 
 It follows [no-color.org](https://no-color.org/):
 
@@ -49,40 +47,34 @@ It follows [no-color.org](https://no-color.org/):
 - `--color` overrides `NO_COLOR=1` for the current run
 - Only color is disabled; non-color modifiers such as bold remain available
 
-Register `noColorPlugin()` before plugins that may render output and short-circuit without calling `next()`, such as `helpPlugin()`.
+Register `noColor()` before extensions that may render output, such as `help()`.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { helpPlugin, noColorPlugin, versionPlugin } from "@crustjs/plugins";
+import { help, noColor, version } from "@crustjs/plugins";
 
-const app = new Crust("my-cli")
-	.use(noColorPlugin())
-	.use(versionPlugin("1.0.0"))
-	.use(helpPlugin())
-	.run(() => {
-		console.log("Hello!");
-	});
+const app = new Crust("my-cli").extend(noColor(), version("1.0.0"), help()).run(() => {
+	console.log("Hello!");
+});
 ```
 
 ### Update Notifier
 
-The `updateNotifierPlugin` checks the npm registry for newer versions of your package and displays a notice after command execution when an update is available.
+The `updateNotifier` extension checks the npm registry for newer versions of your package and displays a notice after command execution when an update is available.
 
 ```ts
-import { defineCommand, runMain } from "@crustjs/core";
-import { updateNotifierPlugin } from "@crustjs/plugins";
+import { Crust } from "@crustjs/core";
+import { updateNotifier } from "@crustjs/plugins";
 import pkg from "../package.json";
 
-const main = defineCommand({
-	meta: { name: "my-cli", description: "My CLI tool" },
-	run() {
+const main = new Crust("my-cli")
+	.meta({ description: "My CLI tool" })
+	.extend(updateNotifier({ packageName: pkg.name, currentVersion: pkg.version }))
+	.run(() => {
 		console.log("Hello!");
-	},
-});
+	});
 
-runMain(main, {
-	plugins: [updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version })],
-});
+await main.execute();
 ```
 
 You are responsible for passing `packageName` and `currentVersion` — typically sourced from your `package.json`.
@@ -116,7 +108,7 @@ If you want cross-run cache behavior without forcing `@crustjs/store` as a depen
 
 ```ts
 import { stateDir, createStore } from "@crustjs/store";
-import { updateNotifierPlugin } from "@crustjs/plugins";
+import { updateNotifier } from "@crustjs/plugins";
 
 const store = createStore({
 	dirPath: stateDir("my-cli"), // Replace with your package name
@@ -128,7 +120,7 @@ const store = createStore({
 	},
 });
 
-updateNotifierPlugin({
+updateNotifier({
 	packageName: "my-cli",
 	currentVersion: "1.0.0",
 	cache: { adapter: store },
@@ -138,7 +130,7 @@ updateNotifierPlugin({
 For a globally installed Bun CLI, you can set the scope directly:
 
 ```ts
-updateNotifierPlugin({
+updateNotifier({
 	packageName: "my-cli",
 	currentVersion: "1.0.0",
 	packageManager: "bun",
@@ -149,7 +141,7 @@ updateNotifierPlugin({
 Or provide an explicit command:
 
 ```ts
-updateNotifierPlugin({
+updateNotifier({
 	packageName: "my-cli",
 	currentVersion: "1.0.0",
 	updateCommand: "bun add -g my-cli@latest",
@@ -160,15 +152,15 @@ updateNotifierPlugin({
 
 ### Completion
 
-The `completionPlugin()` adds a `completion <shell>` subcommand that emits a self-contained tab-completion script for **bash**, **zsh**, or **fish**.
+The `completion()` extension adds a `completion <shell>` subcommand that emits a self-contained tab-completion script for **bash**, **zsh**, or **fish**.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { completionPlugin } from "@crustjs/plugins";
+import { completion } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const app = new Crust("my-cli")
-	.use(completionPlugin({ version: pkg.version }))
+	.extend(completion({ version: pkg.version }))
 	.command("build", (cmd) =>
 		cmd
 			.meta({ description: "Build artifact" })

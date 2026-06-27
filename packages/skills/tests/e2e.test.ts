@@ -15,8 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { annotate } from "../src/annotations.ts";
 import { generateSkill } from "../src/generate.ts";

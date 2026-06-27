@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { chmod, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";

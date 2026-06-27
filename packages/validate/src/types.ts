@@ -1,4 +1,4 @@
-import type { CommandNode } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Re-exports — Standard Schema type aliases + normalized validation issue

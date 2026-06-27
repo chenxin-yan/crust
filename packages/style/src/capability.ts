@@ -14,18 +14,15 @@ function readTTY(overrides: CapabilityOverrides | undefined): boolean {
 }
 
 function readNoColor(overrides: CapabilityOverrides | undefined): string | undefined {
-	const hasOverride = overrides !== undefined && "noColor" in overrides;
-	return hasOverride ? overrides.noColor : process.env.NO_COLOR;
+	return overrides !== undefined ? overrides.noColor : process.env.NO_COLOR;
 }
 
 function readColorTerm(overrides: TrueColorOverrides | undefined): string | undefined {
-	const hasOverride = overrides !== undefined && "colorTerm" in overrides;
-	return hasOverride ? overrides.colorTerm : process.env.COLORTERM;
+	return overrides !== undefined ? overrides.colorTerm : process.env.COLORTERM;
 }
 
 function readTerm(overrides: TrueColorOverrides | undefined): string | undefined {
-	const hasOverride = overrides !== undefined && "term" in overrides;
-	return hasOverride ? overrides.term : process.env.TERM;
+	return overrides !== undefined ? overrides.term : process.env.TERM;
 }
 
 function isTrueColorTerm(term: string): boolean {

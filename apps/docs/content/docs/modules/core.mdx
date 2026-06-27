@@ -1,9 +1,9 @@
 ---
 title: "Core"
-description: Core framework library — command definition, parsing, routing, plugins, and errors.
+description: Core framework library — command definition, parsing, routing, extensions, and errors.
 ---
 
-The core package provides everything needed to define and run CLI commands. It has **zero runtime dependencies**.
+The core package provides everything needed to define and run CLI commands. It keeps runtime dependencies minimal and does not depend on schema libraries or Effect.
 
 ## Install
 
@@ -13,20 +13,17 @@ bun add @crustjs/core
 
 ## Exports
 
-### Classes
+### Builders
 
-| Class                      | Description                                                          |
-| -------------------------- | -------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust) | Chainable builder for defining CLI commands with full type inference |
+| Export                     | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| [`Crust`](/docs/api/crust) | Chainable builder for CLI apps and commands with inference |
 
 ### Functions
 
-| Function                                      | Description                                          |
-| --------------------------------------------- | ---------------------------------------------------- |
-| [`parseArgs`](/docs/api/parse-args)           | Parse argv against a command's arg/flag definitions  |
-| [`resolveCommand`](/docs/api/resolve-command) | Resolve a subcommand from an argv array              |
-| `createCommandNode`                           | Create a fresh CommandNode (for downstream packages) |
-| `computeEffectiveFlags`                       | Merge inherited + local flags at runtime             |
+| Function          | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `extension(name)` | Author CLI capabilities for loading through `.extend()` |
 
 ### Constants
 
@@ -39,7 +36,6 @@ bun add @crustjs/core
 
 | Type                         | Description                                                                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `CommandNode`                | Internal command tree node                                                                 |
 | `CrustCommandContext<A, F>`  | Runtime context passed to lifecycle hooks                                                  |
 | `CommandMeta`                | Command metadata (name, description, usage, aliases, hidden)                               |
 | `ArgDef`                     | Positional argument definition                                                             |
@@ -52,12 +48,7 @@ bun add @crustjs/core
 | `InheritableFlags<F>`        | Pick only inheritable flags                                                                |
 | `MergeFlags<P, L>`           | Merge parent + local flags                                                                 |
 | `ParseResult<A, F>`          | Output of `parseArgs`                                                                      |
-| `CommandRoute`               | Output of `resolveCommand`                                                                 |
-| `CrustPlugin`                | Plugin interface                                                                           |
-| `SetupContext`               | Context passed to plugin setup hooks                                                       |
-| `SetupActions`               | Actions available during plugin setup                                                      |
-| `MiddlewareContext`          | Context passed to plugin middleware                                                        |
-| `PluginMiddleware`           | Middleware function type                                                                   |
+| `Extension`                  | CLI extension builder loaded via `.extend()`                                               |
 | `CrustError`                 | Typed error class                                                                          |
 | `CrustErrorCode`             | Error code union                                                                           |
 | `ValueType`                  | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |

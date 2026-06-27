@@ -217,20 +217,18 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 const CODE_EXAMPLE = `import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
-const cli = new Crust("greet")
-  .use(helpPlugin())
+const app = new Crust("greet")
+  .extend(help())
   .args([{ name: "name", type: "string" }])
-  .flags({
-    shout: { type: "boolean", alias: "s" },
-  })
+  .flags({ shout: { type: "boolean", short: "s" } })
   .run(({ args, flags }) => {
     const msg = \`Hello, \${args.name}!\`;
     console.log(flags.shout ? msg.toUpperCase() : msg);
   });
 
-await cli.execute();`;
+await app.execute();`;
 
 const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 

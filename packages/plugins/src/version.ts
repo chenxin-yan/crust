@@ -1,4 +1,4 @@
-import type { CrustPlugin } from "@crustjs/core";
+import type { CrustPlugin } from "@crustjs/core/internal";
 
 export type VersionValue = string | (() => string);
 

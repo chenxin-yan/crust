@@ -5,9 +5,9 @@ description: Generate shell tab-completion scripts for bash, zsh, and fish.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The completion plugin adds a `completion <shell>` subcommand that emits a
+The completion extension adds a `completion <shell>` subcommand that emits a
 tab-completion script for **bash**, **zsh**, or **fish**. The strategy is
-**pure-static**: the plugin walks your live command tree at run time and
+**pure-static**: the extension walks your live command tree at run time and
 prints a self-contained script — no hidden subcommand, no runtime callbacks,
 no shell-out on TAB.
 
@@ -15,18 +15,16 @@ no shell-out on TAB.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { completionPlugin } from "@crustjs/plugins";
+import { completion } from "@crustjs/plugins";
 import pkg from "../package.json";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
-  .use(completionPlugin({ version: pkg.version }))
+  .extend(completion({ version: pkg.version }))
   .command("build", (cmd) =>
     cmd
       .meta({ description: "Build artifact" })
-      .flags({
-        target: { type: "string", choices: ["browser", "bun", "node"] },
-      })
+      .flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
       .run(() => {}),
   )
   .run(() => {});

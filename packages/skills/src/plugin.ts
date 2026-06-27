@@ -2,8 +2,12 @@
 // Plugin layer — skillPlugin with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CommandNode, CrustPlugin } from "@crustjs/core";
-import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import {
+	Crust,
+	VALIDATION_MODE_ENV,
+	type CommandNode,
+	type CrustPlugin,
+} from "@crustjs/core/internal";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";

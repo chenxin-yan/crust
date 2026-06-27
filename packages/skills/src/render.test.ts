@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";

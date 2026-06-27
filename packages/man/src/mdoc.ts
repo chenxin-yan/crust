@@ -1,4 +1,5 @@
-import type { ArgDef, CommandMeta, CommandNode, FlagDef, FlagsDef } from "@crustjs/core";
+import type { ArgDef, CommandMeta, FlagDef, FlagsDef } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 const MONTH_NAMES = [
 	"January",

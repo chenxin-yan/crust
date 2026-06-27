@@ -16,7 +16,8 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust, CrustError, parseArgs } from "@crustjs/core";
+import { Crust, CrustError } from "@crustjs/core";
+import { parseArgs } from "@crustjs/core/tooling";
 import { CrustStoreError, createStore } from "@crustjs/store";
 import * as Schema from "effect/Schema";
 import { z } from "zod";

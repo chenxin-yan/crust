@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 
@@ -9,11 +9,9 @@ describe("renderManPageMdoc", () => {
 	it("includes NAME SYNOPSIS SUBCOMMANDS OPTIONS", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for tests." })
-			.use(helpPlugin())
-			.flags({
-				verbose: { type: "boolean", short: "v", description: "Verbose" },
-			})
-			.command(new Crust("ping").meta({ description: "Ping" }).run(() => {}));
+			.extend(help())
+			.flags({ verbose: { type: "boolean", short: "v", description: "Verbose" } })
+			.command("ping", (cmd) => cmd.meta({ description: "Ping" }).run(() => {}));
 
 		const { root } = await app.prepareCommandTree();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });

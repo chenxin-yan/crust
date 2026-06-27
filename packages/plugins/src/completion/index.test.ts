@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
 
 import { completionPlugin } from "./index.ts";
 
@@ -40,7 +40,7 @@ beforeEach(() => {
 afterEach(() => {
 	process.stdout.write = originalWrite;
 	console.error = originalError;
-	process.exitCode = originalExitCode;
+	process.exitCode = (originalExitCode as number) ?? 0;
 });
 
 function getStdout(): string {
@@ -81,12 +81,9 @@ function buildCli() {
 describe("completionPlugin", () => {
 	it("registers a `completion` subcommand on the root command (after setup)", async () => {
 		const app = buildCli();
-		// Plugin `setup()` runs as part of `execute()`. Run a print-mode
-		// invocation so setup fires and the subcommand becomes visible on
-		// the live command tree, then verify the registration.
-		await app.execute({ argv: ["completion", "bash"] });
-		expect(Object.keys(app._node.subCommands)).toContain("completion");
-		const completionNode = app._node.subCommands.completion;
+		const { root } = await app.prepareCommandTree();
+		expect(Object.keys(root.subCommands)).toContain("completion");
+		const completionNode = root.subCommands.completion;
 		expect(completionNode?.meta.description).toBe("Generate shell tab-completion scripts");
 	});
 
@@ -94,8 +91,8 @@ describe("completionPlugin", () => {
 		const app = new Crust("mycli")
 			.use(completionPlugin({ command: "shell-completion" }))
 			.run(() => {});
-		await app.execute({ argv: ["shell-completion", "bash"] });
-		expect(Object.keys(app._node.subCommands)).toContain("shell-completion");
+		const { root } = await app.prepareCommandTree();
+		expect(Object.keys(root.subCommands)).toContain("shell-completion");
 	});
 
 	it("`mycli completion bash` prints a bash script to stdout", async () => {

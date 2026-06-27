@@ -1,5 +1,5 @@
-import type { CommandNode, CrustPlugin } from "@crustjs/core";
 import { CrustError } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
 
 import { renderHelp } from "./help.ts";
 

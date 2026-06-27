@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CommandNode, FlagsDef } from "@crustjs/core";
+import type { FlagsDef } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { walkCommandNode } from "./walker.ts";
 

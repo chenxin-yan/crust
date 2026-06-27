@@ -5,15 +5,15 @@ description: Add --version / -v to display your CLI's version number.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-The version plugin adds `--version` / `-v` to the root command, printing the CLI name and version.
+The version extension adds `--version` / `-v` to the root command, printing the CLI name and version.
 
 ## Usage
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { versionPlugin } from "@crustjs/plugins";
+import { version } from "@crustjs/plugins";
 
-const main = new Crust("my-cli").use(versionPlugin("1.0.0")).run(() => {
+const main = new Crust("my-cli").extend(version("1.0.0")).run(() => {
   /* ... */
 });
 
@@ -35,7 +35,7 @@ my-cli v1.0.0
 Pass a string literal:
 
 ```ts
-versionPlugin("1.0.0");
+version("1.0.0");
 ```
 
 ### Dynamic Version
@@ -45,7 +45,7 @@ Pass a function that returns the version string. The function is called lazily â
 ```ts
 import pkg from "../package.json";
 
-versionPlugin(() => pkg.version);
+version(() => pkg.version);
 ```
 
 Or read it at import time:
@@ -53,7 +53,7 @@ Or read it at import time:
 ```ts
 import pkg from "../package.json";
 
-versionPlugin(pkg.version);
+version(pkg.version);
 ```
 
 ### Default Version
@@ -61,7 +61,7 @@ versionPlugin(pkg.version);
 If no version is provided, it defaults to `"0.0.0"`:
 
 ```ts
-versionPlugin(); // Outputs: my-cli v0.0.0
+version(); // Outputs: my-cli v0.0.0
 ```
 
 ## Behavior
@@ -85,12 +85,12 @@ The command name comes from `meta.name` of the root command.
 
 ### The `--` Separator
 
-Like the help plugin, `--version` is not recognized after `--`. See [the `--` separator](/docs/guide/arguments#the----separator) for details.
+Like the help extension, `--version` is not recognized after `--`. See [the `--` separator](/docs/guide/arguments#the----separator) for details.
 
 ## Type
 
 ```ts
 type VersionValue = string | (() => string);
 
-function versionPlugin(versionValue?: VersionValue): CrustPlugin;
+function version(versionValue?: VersionValue): Extension;
 ```

@@ -192,15 +192,15 @@ describe("scaffold", () => {
 
 		// No shebang — compiled binary is standalone
 		expect(cliContent.startsWith("import")).toBe(true);
-		// Uses Crust builder
+		// Uses the public Crust builder
 		expect(cliContent).toContain("new Crust(");
 		// Uses execute()
 		expect(cliContent).toContain(".execute()");
-		// Uses help/version plugins
-		expect(cliContent).toContain("helpPlugin");
-		expect(cliContent).toContain("versionPlugin");
+		// Uses help/version extensions
+		expect(cliContent).toContain("help()");
+		expect(cliContent).toContain("version(");
 		expect(cliContent).toContain('import pkg from "../package.json"');
-		expect(cliContent).toContain("versionPlugin(pkg.version)");
+		expect(cliContent).toContain("version(pkg.version)");
 		// Imports from @crustjs/core and @crustjs/plugins
 		expect(cliContent).toContain('"@crustjs/core"');
 		expect(cliContent).toContain('"@crustjs/plugins"');
@@ -219,11 +219,11 @@ describe("scaffold", () => {
 		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
 
 		expect(cliContent).toContain("import {");
-		expect(cliContent).toContain("const cli = new Crust(");
-		expect(cliContent).toContain("await cli.execute()");
-		expect(cliContent).toContain(".use(");
-		expect(cliContent).toContain("versionPlugin(");
-		expect(cliContent).toContain("helpPlugin()");
+		expect(cliContent).toContain("const app = new Crust(");
+		expect(cliContent).toContain("await app.execute()");
+		expect(cliContent).toContain(".extend(");
+		expect(cliContent).toContain("version(");
+		expect(cliContent).toContain("help()");
 		// Has proper structure: name, args, flags, run
 		expect(cliContent).toContain('new Crust("compile-test-cli")');
 		expect(cliContent).toContain(".args([");

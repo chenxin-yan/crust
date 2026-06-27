@@ -4,7 +4,7 @@
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
-import type { CrustPlugin } from "@crustjs/core";
+import type { CrustPlugin } from "@crustjs/core/internal";
 import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";

@@ -5,7 +5,7 @@ description: Define named flags with types, aliases, defaults, multiple values, 
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Flags are named options passed with `--` (long form) or `-` (short form). They're defined as a record via `.flags()`.
+Flags are named options passed with `--` (long form) or `-` short form. They're defined via `.flags()`.
 
 ```sh
 my-cli --port 3000 --verbose -o dist
@@ -71,9 +71,9 @@ Provide a single-character short form with the `short` property, and additional 
 
 ```ts
 .flags({
-  output: { type: "string", short: "o" },                    // -o dist
-  verbose: { type: "boolean", short: "v" },                   // -v
-  target: { type: "string", short: "t", aliases: ["T"] },    // -t or -T
+  output: { type: "string", short: "o" }, // -o dist
+  verbose: { type: "boolean", short: "v" }, // -v
+  target: { type: "string", short: "t", aliases: ["T"] }, // -t or -T
 })
 ```
 
@@ -94,9 +94,7 @@ Provide a single-character short form with the `short` property, and additional 
 Mark a flag as `required` to error when it's missing:
 
 ```ts
-.flags({
-  config: { type: "string", required: true },
-})
+.flags({ config: { type: "string", required: true } })
 ```
 
 ```sh

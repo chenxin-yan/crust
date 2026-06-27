@@ -4,8 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import type { CrustPlugin } from "@crustjs/core";
-import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { Crust, VALIDATION_MODE_ENV, type CrustPlugin } from "@crustjs/core/internal";
 
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";

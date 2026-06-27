@@ -1,9 +1,9 @@
 ---
 title: "Overview"
-description: Official Crust plugins.
+description: Official Crust extensions.
 ---
 
-The plugins package provides official plugins for common CLI features. It depends on `@crustjs/core`.
+The plugins package provides official extensions for common CLI features. It depends on `@crustjs/core`.
 
 ## Install
 
@@ -13,16 +13,16 @@ bun add @crustjs/plugins
 
 ## Exports
 
-### Plugin Factories
+### Extension Factories
 
-| Export                                                            | Description                                              |
-| ----------------------------------------------------------------- | -------------------------------------------------------- |
-| [`helpPlugin()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
-| [`noColorPlugin()`](/docs/modules/plugins/no-color)               | Adds `--color` / `--no-color` runtime color control      |
-| [`versionPlugin()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
-| [`didYouMeanPlugin()`](/docs/modules/plugins/did-you-mean)        | Suggests corrections for mistyped subcommands            |
-| [`updateNotifierPlugin()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
-| [`completionPlugin()`](/docs/modules/plugins/completion)          | Generates bash/zsh/fish tab-completion scripts           |
+| Export                                                      | Description                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
+| [`help()`](/docs/modules/plugins/help)                      | Adds `--help` / `-h` and auto-generates help text        |
+| [`noColor()`](/docs/modules/plugins/no-color)               | Adds `--color` / `--no-color` runtime color control      |
+| [`version()`](/docs/modules/plugins/version)                | Adds `--version` / `-v` to display version               |
+| [`didYouMean()`](/docs/modules/plugins/did-you-mean)        | Suggests corrections for mistyped subcommands            |
+| [`updateNotifier()`](/docs/modules/plugins/update-notifier) | Checks npm for newer versions and displays update notice |
+| [`completion()`](/docs/modules/plugins/completion)          | Generates bash/zsh/fish tab-completion scripts           |
 
 ### Utilities
 
@@ -35,13 +35,13 @@ bun add @crustjs/plugins
 | Type                           | Description                                       |
 | ------------------------------ | ------------------------------------------------- |
 | `VersionValue`                 | `string \| (() => string)` — version plugin input |
-| `DidYouMeanPluginOptions`      | Options for the did-you-mean plugin               |
-| `UpdateNotifierPluginOptions`  | Options for the update notifier plugin            |
+| `DidYouMeanPluginOptions`      | Options for the did-you-mean extension            |
+| `UpdateNotifierPluginOptions`  | Options for the update notifier extension         |
 | `UpdateNotifierCacheConfig`    | Cache configuration for update notifier           |
 | `UpdateNotifierCacheAdapter`   | Cache adapter interface for update notifier       |
 | `UpdateNotifierPackageManager` | Package manager union for update notifier         |
 | `UpdateNotifierInstallScope`   | Install scope union for update notifier           |
-| `CompletionPluginOptions`      | Options for the completion plugin                 |
+| `CompletionPluginOptions`      | Options for the completion extension              |
 | `CompletionShell`              | `"bash" \| "zsh" \| "fish"` shell union           |
 
 Manual pages are provided by [`@crustjs/man`](/docs/modules/man) (build-time mdoc), not by this package.
@@ -49,24 +49,19 @@ Manual pages are provided by [`@crustjs/man`](/docs/modules/man) (build-time mdo
 ## Usage
 
 ```ts
-import {
-  helpPlugin,
-  noColorPlugin,
-  versionPlugin,
-  didYouMeanPlugin,
-  updateNotifierPlugin,
-  completionPlugin,
-} from "@crustjs/plugins";
+import { help, noColor, version, didYouMean, updateNotifier, completion } from "@crustjs/plugins";
 import { Crust } from "@crustjs/core";
 
 const main = new Crust("my-cli")
   .meta({ description: "My CLI" })
-  .use(noColorPlugin())
-  .use(versionPlugin("1.0.0"))
-  .use(didYouMeanPlugin({ mode: "help" }))
-  .use(helpPlugin())
-  .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: "1.0.0" }))
-  .use(completionPlugin({ version: "1.0.0" }))
+  .extend(
+    noColor(),
+    version("1.0.0"),
+    didYouMean({ mode: "help" }),
+    help(),
+    updateNotifier({ packageName: "my-cli", currentVersion: "1.0.0" }),
+    completion({ version: "1.0.0" }),
+  )
   .run(() => {
     console.log("Hello!");
   });
@@ -74,7 +69,7 @@ const main = new Crust("my-cli")
 await main.execute();
 ```
 
-`noColorPlugin()` should be registered before plugins that may render output and short-circuit, such as `helpPlugin()`, so `--color` and `--no-color` can affect their output.
+`noColor()` should be registered before extensions that may render output, such as `help()`, so `--color` and `--no-color` can affect their output.
 
 ## When to Use Directly
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, type CrustPlugin } from "@crustjs/core";
+import { Crust, type CrustPlugin } from "@crustjs/core/internal";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 import { didYouMeanPlugin } from "./did-you-mean.ts";

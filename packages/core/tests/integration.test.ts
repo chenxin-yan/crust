@@ -4,14 +4,14 @@ import type {
 	ArgDef,
 	ArgsDef,
 	CommandMeta,
-	CommandRoute,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
 	ParseResult,
 } from "../src/index";
-import { Crust, parseArgs, resolveCommand } from "../src/index";
+import { Crust } from "../src/index";
 import type { CrustPlugin } from "../src/plugins";
+import { parseArgs, resolveCommand, type CommandRoute } from "../src/tooling";
 import { executeCrust } from "./helpers";
 
 // ────────────────────────────────────────────────────────────────────────────

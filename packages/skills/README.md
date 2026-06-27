@@ -12,18 +12,18 @@ bun add @crustjs/skills
 
 ## Quick Start
 
-### Plugin (recommended)
+### Runtime Extension (`autoUpdate`)
 
-Register `skillPlugin()` on your `Crust` builder with `.use()`. It adds a `skill` subcommand to your CLI that generates and installs skills for the agents you select:
+Register `skill()` on your CLI builder with `.extend()`. It adds a `skill` subcommand to your CLI that generates and installs skills for the agents you select:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { skillPlugin } from "@crustjs/skills";
+import { skill } from "@crustjs/skills";
 
 const app = new Crust("my-cli")
 	.meta({ description: "My CLI" })
-	.use(
-		skillPlugin({
+	.extend(
+		skill({
 			version: "1.0.0",
 			instructions: `
 Prefer readonly commands before mutating project state.
@@ -51,26 +51,26 @@ my-cli skill --all    # install for all universal + detected agents, no prompt
 my-cli skill update   # update outdated installs only
 ```
 
-The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. If the current working directory is the home directory, `project` scope is normalized to `global` so installs, updates, and status checks use the global skill locations. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
+The extension automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. If the current working directory is the home directory, `project` scope is normalized to `global` so installs, updates, and status checks use the global skill locations. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
 
 Generated bundles are written once to a canonical store (`.crust/skills` for project scope, `~/.crust/skills` for global scope) and then installed into agent paths via symlink or copy depending on `installMode`.
 
 #### Hand-authored bundles via `customSkills`
 
-The plugin can also manage **hand-authored** skill bundles alongside the
+The extension can also manage **hand-authored** skill bundles alongside the
 auto-generated command-reference skill. Pass an array of
 `CustomSkillConfig` entries via `customSkills`; each entry is reconciled
 through the same lifecycle as the main skill.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { skillPlugin } from "@crustjs/skills";
+import { skill } from "@crustjs/skills";
 import pkg from "./package.json" with { type: "json" };
 
 const app = new Crust("my-cli")
 	.meta({ description: "My CLI" })
-	.use(
-		skillPlugin({
+	.extend(
+		skill({
 			version: pkg.version,
 			customSkills: [
 				// Inherits `version: pkg.version` from the plugin — the typical

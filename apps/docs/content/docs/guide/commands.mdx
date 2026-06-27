@@ -5,11 +5,11 @@ description: Define CLI commands with full type inference using the Crust builde
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Commands are the building blocks of every Crust CLI. You define them using the chainable `Crust` builder, and Crust handles parsing, validation, and execution.
+Commands are the building blocks of every Crust CLI. You define them with the `Crust` builder, and Crust handles parsing, validation, routing, and execution.
 
 ## Defining a Command
 
-Use the `Crust` class to create a command:
+Use `new Crust(name)` to create an app command:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -41,9 +41,7 @@ The `.run()` method sets the command's main logic. It receives a `CrustCommandCo
 ```ts
 new Crust("greet")
   .args([{ name: "name", type: "string", required: true }])
-  .flags({
-    loud: { type: "boolean", short: "l" },
-  })
+  .flags({ loud: { type: "boolean", short: "l" } })
   .run(({ args, flags, rawArgs }) => {
     // args.name is typed as `string` (required)
     // flags.loud is typed as `boolean | undefined`
@@ -63,13 +61,13 @@ new Crust("fetch").run(async () => {
 
 ## Running Commands
 
-Call `.execute()` to run the CLI. It parses `process.argv`, resolves subcommands, runs plugins and middleware, and executes the matched handler:
+Call `.execute()` to run the CLI. It parses `process.argv`, resolves subcommands, loads extensions, and executes the matched handler:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/plugins";
 
-const main = new Crust("my-cli").use(helpPlugin()).run(() => {
+const main = new Crust("my-cli").extend(help()).run(() => {
   console.log("Running!");
 });
 
@@ -81,23 +79,6 @@ await main.execute();
 ```ts
 await main.execute({ argv: ["--help"] });
 ```
-
-## Immutable Builder
-
-Each method on the `Crust` builder returns a new instance — the original builder is never mutated. This makes commands safe to share and compose:
-
-```ts
-const base = new Crust("test").flags({ verbose: { type: "boolean" } });
-
-const a = base.run(() => console.log("A"));
-const b = base.run(() => console.log("B"));
-// a and b are independent — base is unchanged
-```
-
-<Callout>
-  Plugins can still inject flags during the setup phase via the `addFlag` action. This is the only
-  sanctioned way to modify a command's flags after creation.
-</Callout>
 
 ## Type Inference
 

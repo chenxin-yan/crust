@@ -1,12 +1,7 @@
 #!/usr/bin/env bun
 
 import { Crust } from "@crustjs/core";
-import {
-	didYouMeanPlugin,
-	helpPlugin,
-	updateNotifierPlugin,
-	versionPlugin,
-} from "@crustjs/plugins";
+import { didYouMean, help, updateNotifier, version } from "@crustjs/plugins";
 
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";
@@ -24,15 +19,15 @@ import { publishCommand } from "./commands/publish.ts";
  */
 export const crustApp = new Crust("crust")
 	.meta({ description: pkg.description })
-	.use(versionPlugin(pkg.version))
-	.use(
-		updateNotifierPlugin({
+	.extend(
+		version(pkg.version),
+		updateNotifier({
 			currentVersion: pkg.version,
 			packageName: pkg.name,
 		}),
+		didYouMean({ mode: "help" }),
+		help(),
 	)
-	.use(didYouMeanPlugin({ mode: "help" }))
-	.use(helpPlugin())
 	.command(buildCommand)
 	.command(publishCommand);
 

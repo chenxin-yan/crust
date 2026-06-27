@@ -1,4 +1,5 @@
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "./spec.ts";

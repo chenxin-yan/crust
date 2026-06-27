@@ -2,7 +2,7 @@
 // @crustjs/skills — Public types for agent skill generation
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CommandNode } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Skill metadata — describes the generated skill bundle

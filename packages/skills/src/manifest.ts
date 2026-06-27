@@ -2,7 +2,8 @@
 // Command-tree introspection — builds canonical manifest from CommandNode
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { getSkillCommandAnnotations } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
@@ -23,7 +24,7 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
  *
  * @example
  * ```ts
- * import type { CommandNode } from "@crustjs/core";
+ * import type { CommandNode } from "@crustjs/core/tooling";
  * import { buildManifest } from "@crustjs/skills";
  *
  * // Typically called from a plugin setup hook:

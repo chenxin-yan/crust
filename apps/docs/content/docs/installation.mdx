@@ -43,7 +43,7 @@ bun add -d @crustjs/crust @types/bun typescript
 
 ```ts title="src/cli.ts"
 import { Crust } from "@crustjs/core";
-import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+import { help, version } from "@crustjs/plugins";
 ```
 
 <Callout type="info">
@@ -122,12 +122,12 @@ export const greetCmd = app
 ```ts title="src/cli.ts"
 #!/usr/bin/env bun
 
-import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+import { help, version } from "@crustjs/plugins";
 import pkg from "../package.json";
 import { app } from "./app.ts";
 import { greetCmd } from "./commands/greet.ts";
 
-await app.use(versionPlugin(pkg.version)).use(helpPlugin()).command(greetCmd).execute();
+await app.extend(version(pkg.version), help()).command(greetCmd).execute();
 ```
 
 ```sh

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
-import { Crust, type CrustPlugin } from "@crustjs/core";
+import { Crust, type CrustPlugin } from "@crustjs/core/internal";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";

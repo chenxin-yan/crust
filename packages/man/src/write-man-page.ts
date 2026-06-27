@@ -1,13 +1,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { Crust } from "@crustjs/core";
+import type { CommandNode } from "@crustjs/core/tooling";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 
 export interface WriteManPageOptions {
 	/** Root Crust builder for your CLI. */
-	app: Crust;
+	app: {
+		prepareCommandTree(options?: {
+			argv?: readonly string[];
+		}): Promise<{ root: CommandNode; warnings: readonly string[] }>;
+	};
 	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
 	name: string;
 	/** Output path (e.g. `man/mycli.1`). Parent directories are created. */

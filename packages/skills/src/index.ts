@@ -2,6 +2,12 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { Extension } from "@crustjs/core";
+import { extensionFromPlugin } from "@crustjs/core/internal";
+
+import { skillPlugin } from "./plugin.ts";
+import type { SkillPluginOptions } from "./types.ts";
+
 // Agent detection
 export {
 	detectInstalledAgents,
@@ -27,8 +33,10 @@ export {
 	uninstallSkill,
 } from "./generate.ts";
 
-// Plugin
-export { skillPlugin } from "./plugin.ts";
+// Extension
+export function skill(options: SkillPluginOptions): Extension {
+	return extensionFromPlugin(skillPlugin(options)) as unknown as Extension;
+}
 
 // Types
 export type {

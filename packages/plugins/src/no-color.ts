@@ -1,4 +1,5 @@
-import type { CommandNode, CrustPlugin, FlagDef } from "@crustjs/core";
+import type { FlagDef } from "@crustjs/core";
+import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 const colorFlagDef: FlagDef = {

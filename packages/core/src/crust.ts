@@ -1,3 +1,4 @@
+import { type Extension, getExtensionPlugins } from "./api.ts";
 import { CrustError } from "./errors.ts";
 import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
@@ -550,6 +551,23 @@ export class Crust<
 	}
 
 	/**
+	 * Register one or more CLI extensions.
+	 *
+	 * Extensions are the public capability layer (help, version, completion,
+	 * did-you-mean, etc.). They lower into Crust's internal lifecycle without
+	 * exposing the plugin contract as part of the main authoring API.
+	 */
+	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff> {
+		return extensions.reduce<Crust<Inherited, Local, A, Eff>>((current, extension) => {
+			let extended = current;
+			for (const plugin of getExtensionPlugins(extension)) {
+				extended = extended.use(plugin);
+			}
+			return extended;
+		}, this);
+	}
+
+	/**
 	 * Create a subcommand builder pre-typed with this command's inheritable flags.
 	 *
 	 * This is the factory method for the file-splitting pattern. The returned
@@ -795,7 +813,7 @@ export class Crust<
 	 */
 	async execute(options?: { argv?: string[] }): Promise<void> {
 		const argv = options?.argv ?? process.argv.slice(2);
-		const rootNode = this._node;
+		const rootNode = deepCloneCommandNode(this._node);
 
 		// ── Step 1: Collect all plugins from the tree ──────────────────────
 		const allPlugins = collectPlugins(rootNode);

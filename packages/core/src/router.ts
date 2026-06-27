@@ -124,7 +124,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		// `details.available` lists canonical sibling names only; consumers
 		// that want alias-aware matching (e.g. didYouMeanPlugin) read aliases
 		// directly from `details.parentCommand.subCommands`.
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+		throw CrustError.commandNotFound(`Unknown command "${candidate}".`, {
 			input: candidate,
 			available: Object.keys(subCommands),
 			commandPath: [...path],

@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
 
 import { completionPlugin } from "./index.ts";
 import type { CompletionSpec } from "./spec.ts";

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
 
 import {
 	fetchLatestVersion,
@@ -1161,7 +1161,9 @@ describe("updateNotifierPlugin middleware", () => {
 			const otherPlugin = {
 				name: "test-other",
 				async middleware(
-					_ctx: Parameters<NonNullable<import("@crustjs/core").CrustPlugin["middleware"]>>[0],
+					_ctx: Parameters<
+						NonNullable<import("@crustjs/core/internal").CrustPlugin["middleware"]>
+					>[0],
 					next: () => Promise<void>,
 				) {
 					await next();

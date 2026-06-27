@@ -58,7 +58,7 @@ new Crust("migrate")
 
 ### Hook Context
 
-Each hook receives the same `CrustCommandContext` object:
+Each hook receives the same command context object:
 
 ```ts
 interface CrustCommandContext<A, F> {
@@ -77,18 +77,18 @@ When you call `.execute()`, Crust runs through four phases:
 
 ### 1. Initialization
 
-Plugins are collected from the command tree (root-first, depth-first) and each `setup()` hook runs sequentially. If any `setup()` throws, the lifecycle **aborts immediately**. After setup, the command tree is frozen and plugin warnings are surfaced.
+Crust materializes a fresh runtime tree from the source builder, applies extensions, and prepares typed context providers. The source builder is not mutated or frozen.
 
 ### 2. Routing & Parsing
 
-`resolveCommand()` walks `argv` against the subcommand tree, then `parseArgs()` parses and coerces args and flags for the matched command. Parsing errors (unknown flags, bad types) still pass through the middleware chain. Required-value validation is deferred to after middleware — this allows plugins like `helpPlugin` to intercept `--help` before missing-arg errors are surfaced.
+`resolveCommand()` walks `argv` against the subcommand tree, then the custom parser parses and coerces args and flags for the matched command. Extensions such as `help()` can intercept before required-value errors are surfaced.
 
-### 3. Middleware & Hooks
+### 3. Extensions & Hooks
 
-The middleware chain uses an onion model — each plugin wraps the next, with command hooks at the center:
+Extensions can wrap execution, with command hooks at the center:
 
 ```
-middleware A  →  middleware B  →  preRun → run → postRun
+extension A  →  extension B  →  preRun → run → postRun
 ```
 
 - `preRun()` throws → `run()` is skipped, `postRun()` still runs

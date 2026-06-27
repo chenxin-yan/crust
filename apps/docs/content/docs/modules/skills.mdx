@@ -13,14 +13,14 @@ bun add @crustjs/skills
 
 ## Quick Start
 
-Add `skillPlugin()` to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
+Add the `skill()` extension to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { skillPlugin } from "@crustjs/skills";
+import { skill } from "@crustjs/skills";
 
-const app = new Crust("my-cli").meta({ description: "My CLI tool" }).use(
-  skillPlugin({
+const app = new Crust("my-cli").meta({ description: "My CLI tool" }).extend(
+  skill({
     version: "1.0.0",
     instructions: `
 Read command docs before suggesting exact flags.
@@ -39,10 +39,10 @@ await app.execute();
 This gives you:
 
 - **Auto-detection**: additional (non-universal) agents are detected by probing their CLI commands (for example `<agent> --version`).
-- **Auto-update**: when a user runs any command, the plugin silently updates installed skills if the version has changed.
+- **Auto-update**: when a user runs any command, the extension silently updates installed skills if the version has changed.
 - **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents. A `skill update` subcommand is also available for update-only flows.
 
-## Plugin Options
+## Extension Options
 
 ```ts
 interface SkillPluginOptions {
@@ -86,7 +86,7 @@ If `process.cwd()` is the home directory, project paths collapse to the same glo
 
 ## Interactive Command
 
-By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt. A `skill update` subcommand is also registered for update-only flows (updates installed skills without prompting for agent selection).
+By default, the extension registers a `skill` subcommand that presents a single multiselect prompt. A `skill update` subcommand is also registered for update-only flows (updates installed skills without prompting for agent selection).
 
 The prompt behavior is:
 
@@ -107,8 +107,8 @@ my-cli skill
 
 ### Hand-authored bundles via `customSkills`
 
-The plugin can manage hand-authored skill bundles alongside the auto-
-generated command-reference skill. Each entry follows the same plugin
+The extension can manage hand-authored skill bundles alongside the auto-
+generated command-reference skill. Each entry follows the same extension
 lifecycle as the main skill — auto-update, interactive multiselect, and
 `skill update` — and gets its own multiselect prompt after the main one,
 in array order. See the [`@crustjs/skills` README][skills-custom] for
@@ -118,13 +118,13 @@ the full reference.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { skillPlugin } from "@crustjs/skills";
+import { skill } from "@crustjs/skills";
 import pkg from "./package.json" with { type: "json" };
 
 const app = new Crust("my-cli")
   .meta({ description: "My CLI" })
-  .use(
-    skillPlugin({
+  .extend(
+    skill({
       version: pkg.version,
       customSkills: [
         // Inherits `version: pkg.version` from the plugin.

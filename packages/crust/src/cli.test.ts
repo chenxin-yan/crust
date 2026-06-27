@@ -12,12 +12,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import {
-	didYouMeanPlugin,
-	helpPlugin,
-	updateNotifierPlugin,
-	versionPlugin,
-} from "@crustjs/plugins";
+import { didYouMean, help, updateNotifier, version } from "@crustjs/plugins";
 
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
@@ -86,15 +81,15 @@ const expectedVersion = pkg.version;
 function makeCrustApp() {
 	return new Crust(pkg.name)
 		.meta({ description: pkg.description })
-		.use(versionPlugin(expectedVersion))
-		.use(
-			updateNotifierPlugin({
+		.extend(
+			version(expectedVersion),
+			updateNotifier({
 				currentVersion: expectedVersion,
 				packageName: pkg.name,
 			}),
+			didYouMean({ mode: "help" }),
+			help(),
 		)
-		.use(didYouMeanPlugin({ mode: "help" }))
-		.use(helpPlugin())
 		.command(buildCommand)
 		.command(publishCommand);
 }
@@ -105,24 +100,27 @@ function makeCrustApp() {
 
 describe("crust CLI entry point", () => {
 	describe("root command", () => {
-		it("should have correct meta", () => {
+		it("should have correct meta", async () => {
 			const app = makeCrustApp();
-			expect(app._node.meta.name).toBe("@crustjs/crust");
-			expect(app._node.meta.description).toBe("CLI tooling for the Crust framework");
+			const { root } = await app.prepareCommandTree();
+			expect(root.meta.name).toBe("@crustjs/crust");
+			expect(root.meta.description).toBe("CLI tooling for the Crust framework");
 		});
 
-		it("should use plugins for root behavior", () => {
+		it("should use extensions for root behavior", async () => {
 			const app = makeCrustApp();
-			expect(app._node.run).toBeUndefined();
+			const { root } = await app.prepareCommandTree();
+			expect(root.run).toBeUndefined();
 		});
 
-		it("should have build and publish as subcommands", () => {
+		it("should have build and publish as subcommands", async () => {
 			const app = makeCrustApp();
-			expect(app._node.subCommands).toBeDefined();
-			expect(app._node.subCommands.build).toBeDefined();
-			expect(app._node.subCommands.publish).toBeDefined();
-			expect(app._node.subCommands.build?.meta.name).toBe("build");
-			expect(app._node.subCommands.publish?.meta.name).toBe("publish");
+			const { root } = await app.prepareCommandTree();
+			expect(root.subCommands).toBeDefined();
+			expect(root.subCommands.build).toBeDefined();
+			expect(root.subCommands.publish).toBeDefined();
+			expect(root.subCommands.build?.meta.name).toBe("build");
+			expect(root.subCommands.publish?.meta.name).toBe("publish");
 		});
 	});
 
@@ -205,12 +203,11 @@ describe("crust CLI entry point", () => {
 	});
 
 	describe("self-hosting verification", () => {
-		it("should use Crust builder from @crustjs/core (dogfooding)", () => {
+		it("should use the cli builder from @crustjs/core (dogfooding)", async () => {
 			const app = makeCrustApp();
-			// The app is built with the Crust builder.
-			// Verify it has the expected shape.
-			expect(app._node.meta).toBeDefined();
-			expect(app._node.subCommands).toBeDefined();
+			const { root } = await app.prepareCommandTree();
+			expect(root.meta).toBeDefined();
+			expect(root.subCommands).toBeDefined();
 		});
 
 		it("should have version that matches package.json", () => {
@@ -219,18 +216,18 @@ describe("crust CLI entry point", () => {
 		});
 	});
 
-	describe("update notifier plugin wiring", () => {
-		it("should include updateNotifierPlugin without affecting help output", async () => {
+	describe("update notifier extension wiring", () => {
+		it("should include updateNotifier without affecting help output", async () => {
 			await makeCrustApp().execute({ argv: ["--help"] });
 			const output = getStdout();
 
-			// Help output should still render correctly with updateNotifierPlugin present
+			// Help output should still render correctly with updateNotifier present
 			expect(output).toContain("USAGE:");
 			expect(output).toContain("COMMANDS:");
 			expect(output).toContain("build");
 		});
 
-		it("should include updateNotifierPlugin without affecting version output", async () => {
+		it("should include updateNotifier without affecting version output", async () => {
 			await makeCrustApp().execute({ argv: ["--version"] });
 			const output = getStdout();
 

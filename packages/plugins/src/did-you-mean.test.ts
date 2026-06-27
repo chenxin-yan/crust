@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core/internal";
 
-import {
-	type AutoCompletePluginOptions,
-	autoCompletePlugin,
-	type DidYouMeanPluginOptions,
-	didYouMeanPlugin,
-} from "./index.ts";
+import { didYouMeanPlugin } from "./did-you-mean.ts";
 
 let stderrChunks: string[];
 let stdoutChunks: string[];
@@ -48,33 +43,6 @@ describe("didYouMeanPlugin", () => {
 		expect(stderr).toContain('Unknown command "buld"');
 		expect(stderr).toContain('Did you mean "build"?');
 		expect(process.exitCode).toBe(1);
-	});
-
-	it("deprecated autoCompletePlugin preserves the legacy plugin name", () => {
-		expect(didYouMeanPlugin().name).toBe("did-you-mean");
-		expect(autoCompletePlugin().name).toBe("autocomplete");
-	});
-
-	it("deprecated autoCompletePlugin behaves identically to didYouMeanPlugin at runtime", async () => {
-		const app = new Crust("app")
-			.use(autoCompletePlugin())
-			.command("build", (cmd) => cmd.run(() => {}))
-			.command("test", (cmd) => cmd.run(() => {}));
-
-		await app.execute({ argv: ["buld"] });
-
-		const stderr = stderrChunks.join("\n");
-		expect(stderr).toContain('Unknown command "buld"');
-		expect(stderr).toContain('Did you mean "build"?');
-		expect(process.exitCode).toBe(1);
-	});
-
-	it("deprecated AutoCompletePluginOptions type is structurally compatible with DidYouMeanPluginOptions", () => {
-		// Compile-time alias check: assign in both directions.
-		const a: AutoCompletePluginOptions = { mode: "help" };
-		const b: DidYouMeanPluginOptions = a;
-		const c: AutoCompletePluginOptions = b;
-		expect(c.mode).toBe("help");
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────

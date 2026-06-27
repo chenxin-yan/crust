@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Crust, parseArgs } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
+import { parseArgs, type CommandNode } from "@crustjs/core/tooling";
 
 import {
 	buildPublishCommand,
@@ -16,7 +17,7 @@ import type { DistributionManifest } from "../utils/distribute.ts";
 
 function makePublishNode() {
 	const app = new Crust("test").command(publishCommand);
-	const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
+	const node = (app as unknown as { _node: CommandNode })._node;
 	const publishNode = node.subCommands.publish;
 	if (!publishNode) throw new Error("publish subcommand not found");
 	return publishNode;
