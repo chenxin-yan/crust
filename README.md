@@ -57,8 +57,8 @@ bun run dev
 
 <a href="https://www.star-history.com/?repos=chenxin-yan%2Fcrust&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&theme=dark&legend=top-left&sealed_token=2btA584hqMtMAvkZbCbW2sgnpcoLvxpUd5f22EJKVlydkiNrymE9UW2Up1HicKJj0rU4vprkr40OjmNPeWDN8zwEFmcF0supXxczmXvzbCUGN3wesAEe4IoFVbDwVq3pJ-3ajt_u9CnpujWgUi5Lhu9wv5DALvjBcgZvrMWxqzDl8ZouX4XVBDx9o-B0" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left&sealed_token=2btA584hqMtMAvkZbCbW2sgnpcoLvxpUd5f22EJKVlydkiNrymE9UW2Up1HicKJj0rU4vprkr40OjmNPeWDN8zwEFmcF0supXxczmXvzbCUGN3wesAEe4IoFVbDwVq3pJ-3ajt_u9CnpujWgUi5Lhu9wv5DALvjBcgZvrMWxqzDl8ZouX4XVBDx9o-B0" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chenxin-yan/crust&type=date&legend=top-left&sealed_token=2btA584hqMtMAvkZbCbW2sgnpcoLvxpUd5f22EJKVlydkiNrymE9UW2Up1HicKJj0rU4vprkr40OjmNPeWDN8zwEFmcF0supXxczmXvzbCUGN3wesAEe4IoFVbDwVq3pJ-3ajt_u9CnpujWgUi5Lhu9wv5DALvjBcgZvrMWxqzDl8ZouX4XVBDx9o-B0" />
  </picture>
 </a>
