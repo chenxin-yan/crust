@@ -51,28 +51,22 @@
       "name": "@crustjs/core",
       "version": "0.0.19",
       "dependencies": {
-        "@crustjs/utils": "workspace:*",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
       },
     },
     "packages/create": {
       "name": "@crustjs/create",
       "version": "0.0.7",
       "dependencies": {
-        "@crustjs/utils": "workspace:*",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
       },
     },
     "packages/create-crust": {
@@ -82,17 +76,14 @@
         "create-crust": "dist/index.js",
       },
       "dependencies": {
-        "@crustjs/core": "workspace:*",
-        "@crustjs/create": "workspace:*",
-        "@crustjs/progress": "workspace:*",
-        "@crustjs/prompts": "workspace:*",
+        "@crustjs/core": "workspace:^",
+        "@crustjs/create": "workspace:^",
+        "@crustjs/progress": "workspace:^",
+        "@crustjs/prompts": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
       },
     },
     "packages/crust": {
@@ -109,9 +100,6 @@
         "@crustjs/style": "workspace:*",
         "bunup": "catalog:",
       },
-      "peerDependencies": {
-        "typescript": "catalog:",
-      },
     },
     "packages/man": {
       "name": "@crustjs/man",
@@ -123,15 +111,14 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:*",
-        "typescript": "catalog:",
+        "@crustjs/core": "workspace:~",
       },
     },
     "packages/plugins": {
       "name": "@crustjs/plugins",
       "version": "0.1.2",
       "dependencies": {
-        "@crustjs/style": "workspace:*",
+        "@crustjs/style": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -139,30 +126,26 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:*",
-        "typescript": "catalog:",
+        "@crustjs/core": "workspace:~",
       },
     },
     "packages/progress": {
       "name": "@crustjs/progress",
       "version": "0.0.4",
       "dependencies": {
-        "@crustjs/style": "workspace:*",
+        "@crustjs/style": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
       },
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
       "version": "0.1.0",
       "dependencies": {
-        "@crustjs/progress": "workspace:*",
-        "@crustjs/style": "workspace:*",
+        "@crustjs/progress": "workspace:^",
+        "@crustjs/style": "workspace:^",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
@@ -170,18 +153,15 @@
         "bunup": "catalog:",
         "zod": "^4.0.0",
       },
-      "peerDependencies": {
-        "typescript": "catalog:",
-      },
     },
     "packages/skills": {
       "name": "@crustjs/skills",
       "version": "0.1.2",
       "dependencies": {
-        "@crustjs/progress": "workspace:*",
-        "@crustjs/prompts": "workspace:*",
-        "@crustjs/style": "workspace:*",
-        "@crustjs/utils": "workspace:*",
+        "@crustjs/progress": "workspace:^",
+        "@crustjs/prompts": "workspace:^",
+        "@crustjs/style": "workspace:^",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
@@ -189,15 +169,14 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:*",
-        "typescript": "catalog:",
+        "@crustjs/core": "workspace:~",
       },
     },
     "packages/store": {
       "name": "@crustjs/store",
       "version": "0.2.0",
       "dependencies": {
-        "@crustjs/utils": "workspace:*",
+        "@crustjs/utils": "workspace:^",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
@@ -206,9 +185,6 @@
         "effect": "3.21.2",
         "zod": "^4.0.0",
       },
-      "peerDependencies": {
-        "typescript": "catalog:",
-      },
     },
     "packages/style": {
       "name": "@crustjs/style",
@@ -216,9 +192,6 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "typescript": "catalog:",
       },
     },
     "packages/utils": {
@@ -240,7 +213,7 @@
       "name": "@crustjs/validate",
       "version": "0.1.2",
       "dependencies": {
-        "@crustjs/utils": "workspace:*",
+        "@crustjs/utils": "workspace:^",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
@@ -253,8 +226,7 @@
         "zod": "^4.0.0",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:*",
-        "typescript": "catalog:",
+        "@crustjs/core": "workspace:~",
       },
     },
   },

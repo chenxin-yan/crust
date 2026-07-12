@@ -17,7 +17,7 @@ npm install @crustjs/store
 pnpm add @crustjs/store
 ```
 
-**Requirements:** Bun 1.x or Node 18+. TypeScript 5.x recommended.
+**Requirement:** Bun 1.3.10 or newer.
 
 ## Quick Start
 

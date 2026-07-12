@@ -28,8 +28,8 @@
 	],
 	"exports": {
 		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
 		}
 	},
 	"publishConfig": {
@@ -40,7 +40,9 @@
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
-		"publish": "bun publish --no-git-checks || true"
+		"publish": "bun publish --no-git-checks",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
@@ -52,11 +54,13 @@
 		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:*",
-		"typescript": "catalog:"
+		"@crustjs/core": "workspace:~"
 	},
 	"dependencies": {
-		"@crustjs/utils": "workspace:*",
+		"@crustjs/utils": "workspace:^",
 		"@standard-schema/spec": "^1.1.0"
+	},
+	"engines": {
+		"bun": ">=1.3.10"
 	}
 }

@@ -26,6 +26,7 @@ const METADATA_KEYS = [
 	"keywords",
 	"publishConfig",
 	"funding",
+	"engines",
 ] as const;
 
 type NpmOs = TargetInfo["os"];
@@ -52,6 +53,7 @@ type PublishPackageJson = {
 	keywords?: string[];
 	publishConfig?: Record<string, unknown>;
 	funding?: string | Record<string, unknown> | Array<Record<string, unknown>>;
+	engines?: Record<string, string>;
 };
 
 type UserPackageJson = Omit<PublishPackageJson, "bin"> & {
@@ -384,6 +386,15 @@ function copyRootReadme(cwd: string, rootDir: string): void {
 	}
 }
 
+function copyLicense(cwd: string, packageDirs: readonly string[]): void {
+	const licensePath = join(cwd, "LICENSE");
+	if (!existsSync(licensePath)) return;
+
+	for (const packageDir of packageDirs) {
+		copyFileSync(licensePath, join(packageDir, "LICENSE"));
+	}
+}
+
 export function writeDistributionManifest(
 	stageDir: string,
 	metadata: DistributionMetadata,
@@ -452,6 +463,7 @@ function stageDistributionPackages(
 		);
 	}
 
+	copyLicense(cwd, [rootDir, ...targets.map((target) => target.packageDir)]);
 	writeDistributionManifest(stageDir, metadata, targets);
 }
 

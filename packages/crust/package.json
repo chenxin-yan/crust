@@ -36,7 +36,7 @@
 	"scripts": {
 		"build": "bunup && bun dist/cli.js build --package --entry src/cli.ts --name crust",
 		"build:dev": "bunup && bun dist/cli.js build --entry src/cli.ts --name crust",
-		"publish": "bun dist/cli.js publish --stage-dir dist/npm || true",
+		"publish": "bun dist/cli.js publish --stage-dir dist/npm",
 		"dev": "bun ./src/cli.ts",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit",
@@ -50,7 +50,7 @@
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"
 	},
-	"peerDependencies": {
-		"typescript": "catalog:"
+	"engines": {
+		"bun": ">=1.3.10"
 	}
 }
