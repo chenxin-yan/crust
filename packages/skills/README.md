@@ -12,36 +12,9 @@ bun add @crustjs/skills
 
 ## Quick Start
 
-### CLI (via `@crustjs/crust`)
+### Plugin (recommended)
 
-```sh
-crust skills generate ./src/cli.ts --name my-cli --description "My CLI tool"
-```
-
-### Programmatic API
-
-```ts
-import { generateSkill } from "@crustjs/skills";
-import { rootCommand } from "./commands.ts";
-
-const result = await generateSkill({
-	command: rootCommand,
-	meta: {
-		name: "my-cli",
-		description: "CLI tool for managing widgets",
-		version: "1.0.0",
-	},
-	agents: ["opencode", "claude-code"],
-});
-
-for (const agent of result.agents) {
-	console.log(`${agent.agent}: ${agent.status} -> ${agent.outputDir}`);
-}
-```
-
-### Runtime Plugin (`autoUpdate`)
-
-Register `skillPlugin()` on your `Crust` builder with `.use()`:
+Register `skillPlugin()` on your `Crust` builder with `.use()`. It adds a `skill` subcommand to your CLI that generates and installs skills for the agents you select:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -70,6 +43,12 @@ Prefer readonly commands before mutating project state.
 	});
 
 await app.execute();
+```
+
+```sh
+my-cli skill          # interactive prompt — generate + install for selected agents
+my-cli skill --all    # install for all universal + detected agents, no prompt
+my-cli skill update   # update outdated installs only
 ```
 
 The plugin automatically updates already-installed skills when the version changes, checking both project and global paths for the current working directory. If the current working directory is the home directory, `project` scope is normalized to `global` so installs, updates, and status checks use the global skill locations. First-time installation is done via the interactive `skill` subcommand (or `skill update` for update-only flows), or programmatically using the exported primitives.
@@ -147,6 +126,27 @@ Auto-update on plugin startup is per-skill: only outdated installs are
 rewritten, and a single bundle's failure (e.g. missing `sourceDir`) does
 not abort the others. Pass `autoUpdate: false` to disable startup auto-
 update for both the main skill and all bundles.
+
+### Programmatic API
+
+```ts
+import { generateSkill } from "@crustjs/skills";
+import { rootCommand } from "./commands.ts";
+
+const result = await generateSkill({
+	command: rootCommand,
+	meta: {
+		name: "my-cli",
+		description: "CLI tool for managing widgets",
+		version: "1.0.0",
+	},
+	agents: ["opencode", "claude-code"],
+});
+
+for (const agent of result.agents) {
+	console.log(`${agent.agent}: ${agent.status} -> ${agent.outputDir}`);
+}
+```
 
 ### Programmatic Auto-Install
 
@@ -264,48 +264,21 @@ Read command docs before suggesting exact flags.
 	.command(deploy);
 ```
 
-This pattern lets `crust skills generate` import the command definition without triggering `app.execute()`.
+This pattern lets a generation script import the command definition without triggering `app.execute()`.
 
-## CLI Usage
+## Interactive Command
 
-The `crust skills generate` command is provided by `@crustjs/crust`:
-
-```sh
-crust skills generate <module> [options]
-```
-
-### Arguments
-
-| Argument | Description                                      |
-| -------- | ------------------------------------------------ |
-| `module` | Path to the command module (e.g. `./src/cli.ts`) |
-
-### Flags
-
-| Flag            | Alias | Required | Default   | Description                                    |
-| --------------- | ----- | -------- | --------- | ---------------------------------------------- |
-| `--name`        | `-n`  | Yes      | -         | Skill name (used as directory name)            |
-| `--description` | `-d`  | Yes      | -         | Human-readable description                     |
-| `--version`     | `-V`  | No       | -         | Version string                                 |
-| `--out-dir`     | `-o`  | No       | `.`       | Output directory                               |
-| `--clean`       | -     | No       | `true`    | Remove existing skill directory before writing |
-| `--export`      | `-e`  | No       | `default` | Named export to use from the module            |
-
-### Examples
+By default, the plugin registers a `skill` subcommand that presents a single multiselect prompt for installing or uninstalling skills, plus a `skill update` subcommand for update-only flows. The subcommand name is configurable via the plugin's `command` option.
 
 ```sh
-# Basic generation
-crust skills generate ./src/cli.ts --name my-cli --description "My CLI"
-
-# With version and custom output directory
-crust skills generate ./src/cli.ts -n my-cli -d "My CLI" --version 1.0.0 -o ./dist
-
-# Using a named export instead of the default export
-crust skills generate ./src/cli.ts -n my-cli -d "My CLI" --export rootCommand
-
-# Keep existing files (no clean)
-crust skills generate ./src/cli.ts -n my-cli -d "My CLI" --no-clean
+my-cli skill [flags]
+my-cli skill update [flags]
 ```
+
+| Flag      | Applies to              | Description                                                      |
+| --------- | ----------------------- | ---------------------------------------------------------------- |
+| `--scope` | `skill`, `skill update` | Install scope: `project` or `global`                             |
+| `--all`   | `skill`                 | Install for all universal + detected agents, skipping the prompt |
 
 ## Programmatic API
 
@@ -430,10 +403,10 @@ No manual escaping is needed — pass raw values and the renderer handles the re
 
 ## Output Structure
 
-Generated output goes to `<outDir>/skills/<name>/`:
+Generated output is written to the canonical store — `.crust/skills/<name>/` for project scope, `~/.crust/skills/<name>/` for global — and installed into agent skill paths from there via symlink or copy:
 
 ```
-skills/my-cli/
+.crust/skills/my-cli/
   SKILL.md            # Entrypoint — loaded by the agent
   commands/           # Per-command documentation mirroring the CLI hierarchy
     my-cli.md         # Root command
@@ -510,7 +483,7 @@ When `uninstallSkill()` removes agent install paths, it also checks whether any 
 
 ## Installing Generated Skills
 
-After generating a skill bundle, consumers can install it by copying the skill directory.
+Generated bundles are self-contained, so consumers who receive one (for example, downloaded from a repository) can install it manually by copying the skill directory into an agent's skill path.
 
 ### Universal agents (OpenCode, Codex, Cursor, and others)
 
