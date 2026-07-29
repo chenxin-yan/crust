@@ -3,9 +3,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { Extension } from "@crustjs/core";
-import { extensionFromPlugin } from "@crustjs/core/internal";
 
-import { skillPlugin } from "./plugin.ts";
+import { skillExtension } from "./plugin.ts";
 import type { SkillPluginOptions } from "./types.ts";
 
 // Agent detection
@@ -35,7 +34,7 @@ export {
 
 // Extension
 export function skill(options: SkillPluginOptions): Extension {
-	return extensionFromPlugin(skillPlugin(options)) as unknown as Extension;
+	return skillExtension(options);
 }
 
 // Types

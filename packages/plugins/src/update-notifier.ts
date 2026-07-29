@@ -4,7 +4,7 @@
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
-import type { CrustPlugin } from "@crustjs/core/internal";
+import { type Extension, extension } from "@crustjs/core";
 import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
@@ -286,8 +286,6 @@ export async function fetchLatestVersion(
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Key used in plugin state for process-level dedupe. */
-const DEDUPE_STATE_KEY = "update-notifier:checked";
-
 const EMPTY_NOTIFIER_STATE: UpdateNotifierState = { lastCheckedAt: 0 };
 
 function normalizeNotifierState(
@@ -489,7 +487,7 @@ function resolveUpdateCommand(
  * - Duplicate notifications for the same version are suppressed.
  *
  * @param options - Plugin configuration. `currentVersion` and `packageName` are required.
- * @returns A {@link CrustPlugin} instance.
+ * @returns An Extension registered with `.extend()`.
  *
  * @example
  * ```ts
@@ -506,7 +504,7 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export function updateNotifierPlugin(options: UpdateNotifierPluginOptions): CrustPlugin {
+export function updateNotifierExtension(options: UpdateNotifierPluginOptions): Extension {
 	const {
 		currentVersion,
 		packageName,
@@ -521,22 +519,12 @@ export function updateNotifierPlugin(options: UpdateNotifierPluginOptions): Crus
 	const intervalMs = cache?.intervalMs ?? DEFAULT_INTERVAL_MS;
 	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
 
-	return {
-		name: "update-notifier",
-
-		async middleware(context, next) {
+	return extension("update-notifier", {
+		async intercept(_context, next) {
 			// Always let the command execute first
 			await next();
 
 			try {
-				// ── Process-level dedupe guard ────────────────────────────
-				// Prevents duplicate checks when multiple commands run in
-				// a single process (e.g. subcommands sharing the same plugin).
-				if (context.state.has(DEDUPE_STATE_KEY)) {
-					return;
-				}
-				context.state.set(DEDUPE_STATE_KEY, true);
-
 				// ── Resolve package name ─────────────────────────────────
 				const state = normalizeNotifierState(await cacheAdapter.read());
 				const resolvedUpdateCommand = resolveUpdateCommand(
@@ -597,10 +585,10 @@ export function updateNotifierPlugin(options: UpdateNotifierPluginOptions): Crus
 				await cacheAdapter.write(nextState);
 			} catch {
 				// All notifier internal errors are silently swallowed.
-				// The plugin must never affect command exit codes or output.
+				// The extension must never affect command exit codes or output.
 			}
 		},
-	};
+	});
 }
 
 // ────────────────────────────────────────────────────────────────────────────

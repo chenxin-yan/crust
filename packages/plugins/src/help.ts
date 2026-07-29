@@ -1,11 +1,11 @@
-import type {
-	ArgSnapshot,
-	CommandMeta,
-	CommandSnapshot,
-	FlagDef,
-	FlagSnapshot,
+import {
+	type ArgSnapshot,
+	type CommandMeta,
+	type CommandSnapshot,
+	type Extension,
+	extension,
+	type FlagSnapshot,
 } from "@crustjs/core";
-import { type CommandNode, type CrustPlugin, snapshotCommand } from "@crustjs/core/internal";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
 const FLAG_COLUMN_WIDTH = 28;
@@ -228,46 +228,27 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	return lines.join("\n");
 }
 
-const helpFlagDef: FlagDef = {
-	type: "boolean",
-	short: "h",
-	noNegate: true,
-	inherit: true,
-	description: "Show help",
-};
-
-function injectHelpFlags(
-	command: CommandNode,
-	addFlag: (command: CommandNode, name: string, def: FlagDef) => void,
-): void {
-	addFlag(command, "help", helpFlagDef);
-
-	for (const sub of Object.values(command.subCommands)) {
-		injectHelpFlags(sub, addFlag);
-	}
-}
-
-export function helpPlugin(): CrustPlugin {
-	return {
-		name: "help",
-		setup(context, actions) {
-			injectHelpFlags(context.rootCommand, actions.addFlag);
+export function helpExtension(): Extension {
+	return extension("help", {
+		flags: {
+			help: {
+				type: "boolean",
+				short: "h",
+				noNegate: true,
+				inherit: true,
+				description: "Show help",
+			},
 		},
-		async middleware(context, next) {
-			if (!context.route) {
+		async intercept(context, next) {
+			const shouldShowHelp = context.flags.help === true;
+
+			if (!shouldShowHelp && context.command.hasHandler) {
 				await next();
 				return;
 			}
 
-			const routedCommand = context.route.command;
-			const shouldShowHelp = context.input?.flags.help === true;
-
-			if (!shouldShowHelp && routedCommand.run) {
-				await next();
-				return;
-			}
-
-			console.log(renderHelp(snapshotCommand(routedCommand), context.route.commandPath));
+			// Explicit --help, or a container command without a handler
+			context.stdout(renderHelp(context.command, context.commandPath));
 		},
-	};
+	});
 }

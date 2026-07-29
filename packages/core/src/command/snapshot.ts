@@ -134,7 +134,18 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 		subCommands[name] = snapshotCommand(sub);
 	}
 
+	// Enumerable symbol-keyed annotations (e.g. skills' command annotations)
+	// pass through so annotation-driven tooling can read them off snapshots.
+	// JSON/structuredClone ignore symbol keys, so serializability holds.
+	const annotations: Record<symbol, unknown> = {};
+	for (const sym of Object.getOwnPropertySymbols(node)) {
+		if (Object.getOwnPropertyDescriptor(node, sym)?.enumerable) {
+			annotations[sym] = (node as unknown as Record<symbol, unknown>)[sym];
+		}
+	}
+
 	return Object.freeze({
+		...annotations,
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,

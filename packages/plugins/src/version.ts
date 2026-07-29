@@ -1,32 +1,27 @@
-import type { CrustPlugin } from "@crustjs/core/internal";
+import { type Extension, extension } from "@crustjs/core";
 
 export type VersionValue = string | (() => string);
 
-export function versionPlugin(versionValue: VersionValue = "0.0.0"): CrustPlugin {
-	return {
-		name: "version",
-		setup(context, actions) {
-			actions.addFlag(context.rootCommand, "version", {
+export function versionExtension(versionValue: VersionValue = "0.0.0"): Extension {
+	return extension("version", {
+		flags: {
+			version: {
 				type: "boolean",
 				short: "v",
 				noNegate: true,
 				description: "Show version number",
-			});
+				recursive: false,
+			},
 		},
-		async middleware(context, next) {
-			if (!context.route || context.route.command !== context.rootCommand) {
-				await next();
-				return;
-			}
-
-			if (!context.input?.flags.version) {
+		async intercept(context, next) {
+			// Root invocation with --version only
+			if (context.commandPath.length !== 1 || context.flags.version !== true) {
 				await next();
 				return;
 			}
 
 			const version = typeof versionValue === "function" ? versionValue() : versionValue;
-
-			console.log(`${context.rootCommand.meta.name} v${version}`);
+			context.stdout(`${context.rootCommand.meta.name} v${version}`);
 		},
-	};
+	});
 }

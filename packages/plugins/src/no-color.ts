@@ -1,32 +1,17 @@
-import type { FlagDef } from "@crustjs/core";
-import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
+import { type Extension, extension } from "@crustjs/core";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
-const colorFlagDef: FlagDef = {
-	type: "boolean",
-	inherit: true,
-	description: "Enable colored output",
-};
-
-function injectColorFlag(
-	command: CommandNode,
-	addFlag: (command: CommandNode, name: string, def: FlagDef) => void,
-): void {
-	addFlag(command, "color", colorFlagDef);
-
-	for (const subCommand of Object.values(command.subCommands)) {
-		injectColorFlag(subCommand, addFlag);
-	}
-}
-
-export function noColorPlugin(): CrustPlugin {
-	return {
-		name: "no-color",
-		setup(context, actions) {
-			injectColorFlag(context.rootCommand, actions.addFlag);
+export function noColorExtension(): Extension {
+	return extension("no-color", {
+		flags: {
+			color: {
+				type: "boolean",
+				inherit: true,
+				description: "Enable colored output",
+			},
 		},
-		async middleware(context, next) {
-			const flagValue = context.input?.flags.color;
+		async intercept(context, next) {
+			const flagValue = context.flags.color;
 			if (typeof flagValue !== "boolean") {
 				await next();
 				return;
@@ -41,5 +26,5 @@ export function noColorPlugin(): CrustPlugin {
 				setGlobalColorMode(previousMode);
 			}
 		},
-	};
+	});
 }

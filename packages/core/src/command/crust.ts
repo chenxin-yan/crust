@@ -5,21 +5,20 @@ import {
 	type ContextOutput,
 	type MergeContext,
 } from "../api/context.ts";
-import { type Extension, getExtensionPlugins } from "../api/extension.ts";
+import type {
+	Extension,
+	ExtensionContext,
+	ExtensionErrorHandler,
+	ExtensionIntercept,
+} from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { validateIncomingAliases } from "../parsing/validation.ts";
 import type {
-	CrustPlugin,
-	MiddlewareContext,
-	PluginState,
-	SetupActions,
-	SetupContext,
-} from "../plugins.ts";
-import type {
 	ArgsDef,
 	CommandMeta,
 	EffectiveFlags,
+	FlagDef,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
@@ -78,12 +77,12 @@ function defaultIO(): InvocationIO {
 	};
 }
 
-/** Output of `_prepare`: one cloned, set-up, frozen tree ready to dispatch. */
+/** Output of `_prepare`: one cloned, extension-applied, frozen tree. */
 interface PreparedInvocation {
 	rootNode: CommandNode;
-	allPlugins: CrustPlugin[];
-	state: PluginState;
-	warnings: string[];
+	extensions: readonly Extension[];
+	/** Names of Extension-owned root commands (inputs validated pre-hook) */
+	ownedCommands: ReadonlySet<string>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -159,25 +158,6 @@ const EXIT_CODE_CANCELLED = 130;
 /** Key for storing validation result on globalThis (for in-process tests) */
 const VALIDATION_RESULT_GLOBAL_KEY = "__CRUST_VALIDATE_RESULT__";
 
-/** Create a fresh PluginState (key-value store per execution). */
-function createPluginState(): PluginState {
-	const map = new Map<string, unknown>();
-	return {
-		get<T = unknown>(key: string): T | undefined {
-			return map.get(key) as T | undefined;
-		},
-		has(key: string): boolean {
-			return map.has(key);
-		},
-		set(key: string, value: unknown): void {
-			map.set(key, value);
-		},
-		delete(key: string): boolean {
-			return map.delete(key);
-		},
-	};
-}
-
 function isAbortError(error: unknown): boolean {
 	if (!(error instanceof Error)) {
 		return false;
@@ -194,100 +174,78 @@ function applyInheritedFlagsToSubtree(node: CommandNode, inheritedFlags: FlagsDe
 	}
 }
 
-/** Create SetupActions that work with CommandNode targets. */
-function createSetupActions(warnings?: string[]): SetupActions {
-	return {
-		addFlag(target, name, def) {
-			if (name in target.effectiveFlags) {
-				warnings?.push(`Plugin flag "--${name}" on "${target.meta.name}" overrides existing flag`);
-			}
-			target.effectiveFlags[name] = def;
-		},
-		addSubCommand(parent, name, subCommand) {
-			if (!name.trim()) {
-				throw new CrustError("DEFINITION", "addSubCommand: name must be a non-empty string");
-			}
-			if (parent.subCommands[name]) {
-				warnings?.push(
-					`Plugin subcommand "${name}" on "${parent.meta.name}" skipped (already exists)`,
-				);
-				return;
-			}
-			// Mirror `.command()`'s eager alias collision detection but
-			// downgrade to a warning + skip, consistent with how this action
-			// already handles canonical-name collisions for plugin authors.
-			try {
-				validateIncomingAliases(
-					{ canonicalName: name, aliases: subCommand.meta.aliases },
-					parent.subCommands,
-					name,
-				);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				warnings?.push(`Plugin subcommand "${name}" on "${parent.meta.name}" skipped: ${message}`);
-				return;
-			}
-			applyInheritedFlagsToSubtree(subCommand, parent.effectiveFlags);
-			(parent.subCommands as Record<string, unknown>)[name] = subCommand;
-		},
-	};
-}
-
-/** Run plugin setup() hooks sequentially. */
-async function runSetupHooks(
-	plugins: readonly CrustPlugin[],
-	context: SetupContext,
-	actions: SetupActions,
-): Promise<void> {
-	for (const plugin of plugins) {
-		if (!plugin.setup) continue;
-		await plugin.setup(context, actions);
-	}
-}
-
-/** Run plugin middleware chain, terminating with `terminal`. */
-async function runMiddlewareChain(
-	plugins: readonly CrustPlugin[],
-	context: MiddlewareContext,
-	terminal: () => Promise<void>,
-): Promise<void> {
-	const stack = plugins
-		.map((plugin) => plugin.middleware)
-		.filter((middleware): middleware is NonNullable<typeof middleware> => Boolean(middleware));
-	let index = -1;
-
-	const dispatch = async (i: number): Promise<void> => {
-		if (i <= index) {
-			throw new CrustError("DEFINITION", "Plugin middleware called next() multiple times");
-		}
-		index = i;
-
-		if (i === stack.length) {
-			await terminal();
-			return;
-		}
-
-		const middleware = stack[i];
-		if (!middleware) {
-			throw new CrustError("DEFINITION", "Plugin middleware stack is invalid");
-		}
-
-		await middleware(context, () => dispatch(i + 1));
-	};
-
-	await dispatch(0);
-}
-
 /**
- * Collect all plugins from a CommandNode tree.
- * Root plugins come first, then depth-first through subcommands.
+ * Inject an Extension-owned flag into a node's effective flags (and, when
+ * `recursive`, into every descendant). Name collisions with application or
+ * other Extension definitions are definition errors (ADR-0001).
  */
-function collectPlugins(node: CommandNode): CrustPlugin[] {
-	const plugins: CrustPlugin[] = [...node.plugins];
-	for (const sub of Object.values(node.subCommands)) {
-		plugins.push(...collectPlugins(sub));
+function injectExtensionFlag(
+	node: CommandNode,
+	name: string,
+	def: FlagDef,
+	recursive: boolean,
+	extensionName: string,
+): void {
+	if (name in node.effectiveFlags) {
+		throw new CrustError(
+			"DEFINITION",
+			`Extension "${extensionName}" flag "--${name}" collides with an existing flag on "${node.meta.name}"`,
+			{ subject: "flag", name, reason: "extension-flag-collision" },
+		);
 	}
-	return plugins;
+	// Alias/short collisions are definition errors too (ADR-0001)
+	const incoming = new Set(
+		[def.short, ...(def.aliases ?? [])].filter((alias): alias is string => alias !== undefined),
+	);
+	if (incoming.size > 0) {
+		for (const [existingName, existing] of Object.entries(node.effectiveFlags)) {
+			for (const alias of [existing.short, ...(existing.aliases ?? [])]) {
+				if (alias !== undefined && incoming.has(alias)) {
+					throw new CrustError(
+						"DEFINITION",
+						`Extension "${extensionName}" flag "--${name}" alias "${alias}" collides with flag "--${existingName}" on "${node.meta.name}"`,
+						{ subject: "flag", name, reason: "extension-flag-collision" },
+					);
+				}
+			}
+		}
+	}
+	node.effectiveFlags[name] = def;
+	if (!recursive) return;
+	for (const sub of Object.values(node.subCommands)) {
+		injectExtensionFlag(sub, name, def, true, extensionName);
+	}
+}
+
+/** Attach one Extension's owned root commands to a cloned tree. */
+function applyExtensionCommands(root: CommandNode, ext: Extension): void {
+	for (const builder of ext.commands ?? []) {
+		const name = builder._node.meta.name;
+		if (root.subCommands[name]) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${ext.name}" command "${name}" collides with an existing root command`,
+				{ subject: "command", name, reason: "extension-command-collision" },
+			);
+		}
+		// Alias collisions with existing root commands are definition errors too
+		validateIncomingAliases(
+			{ canonicalName: name, aliases: builder._node.meta.aliases },
+			root.subCommands,
+			name,
+		);
+		const node = deepCloneCommandNode(builder._node);
+		applyInheritedFlagsToSubtree(node, root.effectiveFlags);
+		root.subCommands[name] = node;
+	}
+}
+
+/** Inject one Extension's owned flags across a cloned tree. */
+function applyExtensionFlags(root: CommandNode, ext: Extension): void {
+	for (const [name, defWithScope] of Object.entries(ext.flags ?? {})) {
+		const { recursive = true, ...def } = defWithScope;
+		injectExtensionFlag(root, name, def as FlagDef, recursive, ext.name);
+	}
 }
 
 /**
@@ -347,14 +305,18 @@ function deepCloneCommandNode(node: CommandNode): CommandNode {
 		subCommands[name] = deepCloneCommandNode(sub);
 	}
 
+	// Spread first so enumerable symbol-keyed annotations (e.g. skills'
+	// command annotations) survive the clone; then override every structural
+	// field with a decoupled copy.
 	return {
+		...node,
 		meta: { ...node.meta },
 		localFlags: deepCloneFlags(node.localFlags),
 		effectiveFlags: deepCloneFlags(node.effectiveFlags),
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
 		contexts: [...node.contexts],
-		plugins: [...node.plugins],
+		extensions: [...node.extensions],
 		run: node.run,
 	};
 }
@@ -368,7 +330,7 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.effectiveFlags);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
-	Object.freeze(node.plugins);
+	Object.freeze(node.extensions);
 	if (node.args) Object.freeze(node.args);
 	for (const sub of Object.values(node.subCommands)) {
 		freezeTree(sub);
@@ -471,7 +433,7 @@ export class Crust<
 			effectiveFlags: { ...this._node.effectiveFlags },
 			subCommands: { ...this._node.subCommands },
 			contexts: [...this._node.contexts],
-			plugins: [...this._node.plugins],
+			extensions: [...this._node.extensions],
 			meta: { ...this._node.meta },
 			args: this._node.args ? [...this._node.args] : undefined,
 			...nodeOverrides,
@@ -625,15 +587,9 @@ export class Crust<
 				{ subject: "command", name: this._node.meta.name, reason: "extend-on-child" },
 			);
 		}
-		return extensions.reduce<Crust<Inherited, Local, A, Eff, Ctx>>((current, extension) => {
-			let extended = current;
-			for (const plugin of getExtensionPlugins(extension)) {
-				extended = extended._clone({
-					plugins: [...extended._node.plugins, plugin],
-				}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
-			}
-			return extended;
-		}, this);
+		return this._clone({
+			extensions: [...this._node.extensions, ...extensions],
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -802,7 +758,7 @@ export class Crust<
 
 		// Extensions are application-wide and root-only. A standalone builder
 		// that called .extend() cannot be attached as a subcommand.
-		if (builder._node.plugins.length > 0) {
+		if (builder._node.extensions.length > 0) {
 			throw new CrustError(
 				"DEFINITION",
 				`Subcommand "${name}" carries Extensions: call .extend() on the root builder instead`,
@@ -837,13 +793,33 @@ export class Crust<
 	}
 
 	/**
-	 * Invoke this application programmatically: resolve, parse, run
-	 * middleware and the Command Handler for `argv`.
+	 * Build a frozen, validated copy of the command tree with all Extension
+	 * contributions applied. Does not call Command Handlers.
+	 *
+	 * Unsupported tooling surface (used by man-page/skill generators); moves
+	 * fully behind `@crustjs/core/tooling`.
+	 */
+	async prepareCommandTree(_options?: {
+		argv?: readonly string[];
+	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
+		const prepared = await this._prepare();
+
+		const { validateCommandTree } = await import("../parsing/validation.ts");
+		validateCommandTree(prepared.rootNode);
+
+		return { root: prepared.rootNode, warnings: [] };
+	}
+
+	/**
+	 * Invoke this application programmatically: resolve, parse, run the
+	 * Extension intercept chain and the Command Handler for `argv`.
 	 *
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
-	 * parse, Context, or handler failure without rendering it and without
-	 * changing process status. It resolves with no value after successful
-	 * cleanup. Prompt cancellation surfaces as a standard `AbortError`.
+	 * parse, Context, or handler failure without rendering it (Extension
+	 * `handleError` hooks are a terminal presentation concern and never run
+	 * here) and without changing process status. It resolves with no value
+	 * after successful cleanup. Prompt cancellation surfaces as a standard
+	 * `AbortError`.
 	 *
 	 * @param argv - Arguments to parse (no `process.argv` default — pass them explicitly)
 	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
@@ -857,68 +833,20 @@ export class Crust<
 		},
 	): Promise<void> {
 		const resolvedIO: InvocationIO = { ...defaultIO(), ...io };
-
-		const prepared = await this._prepare(argv);
-
-		for (const warning of prepared.warnings) {
-			resolvedIO.stderr(`Warning: ${warning}`);
-		}
-
+		const prepared = await this._prepare();
 		await this._dispatch(argv, prepared, resolvedIO);
 	}
 
 	/**
-	 * Build a frozen, validated copy of the command tree after running plugin
-	 * `setup()` hooks. Does not mutate this builder or call command handlers.
+	 * Parse `process.argv`, resolve subcommands, run Extension hooks, and
+	 * execute the matched Command Handler.
 	 *
-	 * Use for documentation generators (e.g. man pages) that need the same
-	 * tree shape as runtime, including flags injected by plugins.
-	 *
-	 * @param options - Optional synthetic `argv` passed to `setup()` (defaults to `[]`)
-	 * @returns The cloned root node and any plugin-setup warnings
-	 * @throws {CrustError} When the tree fails validation (same as `execute()`)
-	 */
-	async prepareCommandTree(options?: {
-		argv?: readonly string[];
-	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
-		const argv = options?.argv ?? [];
-		const rootNode = deepCloneCommandNode(this._node);
-
-		const allPlugins = collectPlugins(rootNode);
-		const warnings: string[] = [];
-		const state = createPluginState();
-		const setupContext: SetupContext = {
-			argv: [...argv] as readonly string[],
-			rootCommand: rootNode,
-			state,
-		};
-		const actions = createSetupActions(warnings);
-
-		try {
-			await runSetupHooks(allPlugins, setupContext, actions);
-		} catch (error) {
-			if (error instanceof Error) {
-				throw error;
-			}
-			throw new CrustError("DEFINITION", String(error));
-		}
-
-		freezeTree(rootNode);
-
-		const { validateCommandTree } = await import("../parsing/validation.ts");
-		validateCommandTree(rootNode);
-
-		return { root: rootNode, warnings };
-	}
-
-	/**
-	 * Parse `process.argv`, resolve subcommands, run plugins and middleware,
-	 * and execute the matched command handler.
-	 *
-	 * This is the entry point for CLI execution — call it on the root builder.
+	 * This is the terminal CLI boundary — call it on the root builder. It
+	 * renders a failure once (through the Extension `handleError` chain,
+	 * ending in Core's default renderer), sets `process.exitCode` (`1`, or
+	 * `130` for an `AbortError` cancellation), and resolves.
 	 *
 	 * @param options - Optional overrides (e.g. custom `argv` for testing)
-	 * @returns A promise that resolves when execution completes
 	 */
 	async execute(options?: { argv?: string[] }): Promise<void> {
 		const argv = options?.argv ?? process.argv.slice(2);
@@ -926,8 +854,10 @@ export class Crust<
 
 		let prepared: PreparedInvocation;
 		try {
-			prepared = await this._prepare(argv);
+			prepared = await this._prepare();
 		} catch (error) {
+			// Extension-application failures render directly: the handleError
+			// chain belongs to Extensions that just failed to apply.
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
@@ -937,17 +867,13 @@ export class Crust<
 			process.exitCode = 1;
 			return;
 		}
-		const { rootNode, warnings } = prepared;
 
 		// ── Build-time validation mode ─────────────────────────────────────
 		if (process.env[VALIDATION_MODE_ENV] === "1") {
 			const result = (async () => {
 				try {
 					const { validateCommandTree } = await import("../parsing/validation.ts");
-					validateCommandTree(rootNode);
-					for (const warning of warnings) {
-						console.warn(`Warning: ${warning}`);
-					}
+					validateCommandTree(prepared.rootNode);
 					return { ok: true } as const;
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
@@ -969,93 +895,90 @@ export class Crust<
 			return;
 		}
 
-		// Surface plugin warnings
-		for (const warning of warnings) {
-			console.warn(`Warning: ${warning}`);
-		}
-
 		try {
 			await this._dispatch(argv, prepared, io);
 		} catch (error) {
-			// Render the failure once and set the exit code — the original
-			// error surfaces unwrapped, never converted or re-thrown here.
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
-			const message = error instanceof Error ? error.message : String(error);
-			io.stderr(`Error: ${message}`);
+			// Core always preserves a nonzero failure outcome, regardless of
+			// what Extension handleError hooks do (ADR-0001).
 			process.exitCode = 1;
+			await renderFailure(error, argv, prepared, io);
 		}
 	}
 
 	/**
-	 * Clone the tree, run plugin setup hooks, and freeze the result.
-	 * Throws the original setup failure without rendering it.
+	 * Clone the tree, apply Extension-owned commands and flags, and freeze
+	 * the result. Collisions with application or other Extension definitions
+	 * throw DEFINITION errors; failures propagate unrendered.
 	 */
-	private async _prepare(argv: readonly string[]): Promise<PreparedInvocation> {
+	private async _prepare(): Promise<PreparedInvocation> {
 		const rootNode = deepCloneCommandNode(this._node);
-		const allPlugins = collectPlugins(rootNode);
+		const extensions = this._node.extensions;
 
-		const warnings: string[] = [];
-		const state = createPluginState();
-		const setupContext: SetupContext = {
-			argv: [...argv] as readonly string[],
-			rootCommand: rootNode,
-			state,
-		};
-		const actions = createSetupActions(warnings);
+		// Commands first, then flags, so recursive Extension flags also reach
+		// Extension-contributed commands (e.g. --help on "completion").
+		for (const ext of extensions) {
+			applyExtensionCommands(rootNode, ext);
+		}
+		for (const ext of extensions) {
+			applyExtensionFlags(rootNode, ext);
+		}
 
-		await runSetupHooks(allPlugins, setupContext, actions);
+		const ownedCommands = new Set<string>();
+		for (const ext of extensions) {
+			for (const builder of ext.commands ?? []) {
+				ownedCommands.add(builder._node.meta.name);
+			}
+		}
 
 		freezeTree(rootNode);
 
-		return { rootNode, allPlugins, state, warnings };
+		return { rootNode, extensions, ownedCommands };
 	}
 
 	/**
-	 * Resolve, parse, run middleware and the Command Handler for one
-	 * invocation. Throws the original failure (definition, parse, Context,
-	 * or handler error) without rendering it or touching `process.exitCode`.
+	 * Resolve, parse, run the Extension intercept chain and the Command
+	 * Handler for one invocation. Throws the original failure (definition,
+	 * parse, Context, or handler error) without rendering it or touching
+	 * `process.exitCode`. Routing and syntax failures throw directly —
+	 * intercept hooks never observe them.
 	 */
 	private async _dispatch(
 		argv: readonly string[],
 		prepared: PreparedInvocation,
 		io: InvocationIO,
 	): Promise<void> {
-		const { rootNode, allPlugins, state } = prepared;
+		const { rootNode, extensions, ownedCommands } = prepared;
 
-		const middlewareContext: MiddlewareContext = {
+		// Routing and syntax parsing — failures flow directly to the caller
+		const resolved = resolveCommand(rootNode, [...argv]);
+		// Safe cast: rootNode is always CommandNode, so all resolved descendants are too
+		const resolvedNode = resolved.command as CommandNode;
+		const parsed = parseArgs(resolvedNode, resolved.argv);
+
+		const rootSnapshot = snapshotCommand(rootNode);
+		const extensionContext: ExtensionContext = Object.freeze({
 			argv: [...argv] as readonly string[],
-			rootCommand: rootNode,
-			state,
-			route: null,
-			input: null,
-		};
+			rootCommand: rootSnapshot,
+			command: resolvedNode === rootNode ? rootSnapshot : snapshotCommand(resolvedNode),
+			commandPath: Object.freeze([...resolved.commandPath]),
+			args: parsed.args as Readonly<Record<string, unknown>>,
+			flags: parsed.flags as Readonly<Record<string, unknown>>,
+			rawArgs: parsed.rawArgs,
+			stdout: io.stdout,
+			stderr: io.stderr,
+		});
 
-		let resolvedNode: CommandNode;
-		let parsed: ReturnType<typeof parseArgs>;
-
-		try {
-			// Resolve subcommand
-			const resolved = resolveCommand(rootNode, [...argv]);
-			middlewareContext.route = resolved;
-
-			// Parse remaining argv
-			// Safe cast: rootNode is always CommandNode, so all resolved descendants are too
-			resolvedNode = resolved.command as CommandNode;
-			parsed = parseArgs(resolvedNode, resolved.argv);
-			middlewareContext.input = parsed;
-		} catch (error) {
-			// Route/parse errors pass through middleware before surfacing
-			await runMiddlewareChain(allPlugins, middlewareContext, async () => {
-				throw error;
-			});
-			return;
+		// Extension-owned inputs are validated before the hooks run (ADR-0001)
+		const routedRoot = resolved.commandPath[1];
+		if (routedRoot !== undefined && ownedCommands.has(routedRoot)) {
+			validateParsed(resolvedNode, parsed);
 		}
 
-		// Middleware chain → lifecycle hooks
-		await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+		const terminal = async (): Promise<void> => {
 			validateParsed(resolvedNode, parsed);
 
 			if (!resolvedNode.run) return;
@@ -1070,12 +993,105 @@ export class Crust<
 				flags: parsed.flags,
 				ctx: await buildContexts(resolvedNode.contexts, disposal),
 				rawArgs: parsed.rawArgs,
-				command: snapshotCommand(resolvedNode),
+				command: extensionContext.command,
 				stdout: io.stdout,
 				stderr: io.stderr,
 			};
 
 			await resolvedNode.run(context);
-		});
+		};
+
+		await runInterceptChain(
+			extensions
+				.map((ext) => ext.intercept)
+				.filter((hook): hook is ExtensionIntercept => hook !== undefined),
+			extensionContext,
+			terminal,
+		);
+	}
+}
+
+/** Run the Extension intercept chain, terminating in `terminal`. */
+async function runInterceptChain(
+	hooks: readonly ExtensionIntercept[],
+	context: ExtensionContext,
+	terminal: () => Promise<void>,
+): Promise<void> {
+	let index = -1;
+	const dispatch = async (i: number): Promise<void> => {
+		if (i <= index) {
+			throw new CrustError("DEFINITION", "Extension intercept called next() multiple times", {
+				subject: "extension",
+				reason: "duplicate-next",
+			});
+		}
+		index = i;
+		if (i === hooks.length) {
+			await terminal();
+			return;
+		}
+		await (hooks[i] as ExtensionIntercept)(context, () => dispatch(i + 1));
+	};
+	await dispatch(0);
+}
+
+/**
+ * Render one failure through the Extension handleError chain, ending in
+ * Core's default renderer. Presentation only — the caller has already set
+ * the nonzero exit code.
+ */
+async function renderFailure(
+	error: unknown,
+	argv: readonly string[],
+	prepared: PreparedInvocation,
+	io: InvocationIO,
+): Promise<void> {
+	const renderDefault = (): void => {
+		const message = error instanceof Error ? error.message : String(error);
+		io.stderr(`Error: ${message}`);
+	};
+
+	const handlers = prepared.extensions
+		.map((ext) => ext.handleError)
+		.filter((hook): hook is ExtensionErrorHandler => hook !== undefined);
+	if (handlers.length === 0) {
+		renderDefault();
+		return;
+	}
+
+	// Best-effort context: the failure may predate routing, so the resolved
+	// command falls back to the root snapshot with empty inputs.
+	const rootSnapshot = snapshotCommand(prepared.rootNode);
+	const context: ExtensionContext = Object.freeze({
+		argv: [...argv] as readonly string[],
+		rootCommand: rootSnapshot,
+		command: rootSnapshot,
+		commandPath: Object.freeze([prepared.rootNode.meta.name]),
+		args: Object.freeze({}),
+		flags: Object.freeze({}),
+		rawArgs: [],
+		stdout: io.stdout,
+		stderr: io.stderr,
+	});
+
+	let index = -1;
+	const dispatch = async (i: number): Promise<void> => {
+		// Unlike the intercept chain, duplicate next() is ignored rather than
+		// thrown: the presentation chain must never create new failures.
+		if (i <= index) return;
+		index = i;
+		if (i === handlers.length) {
+			renderDefault();
+			return;
+		}
+		await (handlers[i] as ExtensionErrorHandler)(error, context, () => dispatch(i + 1));
+	};
+
+	try {
+		await dispatch(0);
+	} catch {
+		// The presentation chain itself failed — fall back to the default
+		// rendering of the original failure so it is never lost.
+		renderDefault();
 	}
 }

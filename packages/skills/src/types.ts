@@ -2,7 +2,7 @@
 // @crustjs/skills — Public types for agent skill generation
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CommandNode } from "@crustjs/core/tooling";
+import type { CommandSnapshot } from "@crustjs/core";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Skill metadata — describes the generated skill bundle
@@ -168,7 +168,7 @@ export type SkillKind = "generated" | "bundle";
 /**
  * Describes a single positional argument in the canonical manifest.
  *
- * Normalized from `ArgDef` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `ArgSnapshot` in `@crustjs/core` to a flat, serializable shape.
  */
 export interface ManifestArg {
 	/** Argument name (from `ArgDef.name`) */
@@ -188,7 +188,7 @@ export interface ManifestArg {
 /**
  * Describes a single named flag in the canonical manifest.
  *
- * Normalized from `FlagDef` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `FlagSnapshot` in `@crustjs/core` to a flat, serializable shape.
  */
 export interface ManifestFlag {
 	/** Flag name (the key from `FlagsDef`) */
@@ -297,7 +297,7 @@ export interface RenderedFile {
  */
 export interface GenerateOptions {
 	/** Root command to generate the skill from */
-	command: CommandNode;
+	command: CommandSnapshot;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
 	/**
@@ -447,7 +447,7 @@ export interface InstallSkillBundleOptions {
 	 * When set, the bundle's `SKILL.md` frontmatter `name:` must equal this
 	 * string. A mismatch throws before any filesystem write.
 	 *
-	 * Used by `skillPlugin`'s `customSkills` reconciliation to keep the
+	 * Used by `skill()`'s `customSkills` reconciliation to keep the
 	 * config-level `name` (used for status / uninstall lookups) in lockstep
 	 * with the frontmatter `name` (the canonical install path), preventing
 	 * orphan installs.
@@ -583,7 +583,7 @@ export interface StatusResult {
 
 /**
  * Configuration for a single hand-authored skill bundle managed by
- * {@link skillPlugin} alongside the auto-generated command-reference skill.
+ * `skill()` alongside the auto-generated command-reference skill.
  *
  * Each entry is reconciled through the same plugin lifecycle as the main
  * skill — auto-update on version change, surfaced in the interactive `skill`
@@ -600,10 +600,10 @@ export interface StatusResult {
  *
  * @example
  * ```ts
- * import { skillPlugin } from "@crustjs/skills";
+ * import { skill } from "@crustjs/skills";
  * import pkg from "./package.json" with { type: "json" };
  *
- * skillPlugin({
+ * skill({
  *   version: pkg.version,
  *   customSkills: [
  *     // Inherits `version: pkg.version` from the plugin.

@@ -1,160 +1,109 @@
-import { Crust } from "../command/crust.ts";
 import type { CommandNode } from "../command/node.ts";
-import { type CommandSnapshot, snapshotCommand } from "../command/snapshot.ts";
-import type { CrustPlugin, MiddlewareContext } from "../plugins.ts";
+import type { CommandSnapshot } from "../command/snapshot.ts";
+import { CrustError } from "../errors.ts";
 import type { FlagDef } from "../types.ts";
 import type { Awaitable } from "./context.ts";
 
-export interface ExtensionOutput {
-	write(text: string): void;
-}
+// ────────────────────────────────────────────────────────────────────────────
+// Extension — the public integration contract (ADR-0001)
+// ────────────────────────────────────────────────────────────────────────────
 
-export interface ExtensionRunContext {
+/**
+ * Readonly invocation view passed to Extension hooks.
+ *
+ * Commands cross this boundary as readonly, serializable
+ * {@link CommandSnapshot}s — never as internal command nodes.
+ */
+export interface ExtensionContext {
 	readonly argv: readonly string[];
+	/** Snapshot of the application root, including Extension-contributed flags/commands */
 	readonly rootCommand: CommandSnapshot;
+	/** Snapshot of the resolved command (the root when routing failed) */
 	readonly command: CommandSnapshot;
 	readonly commandPath: readonly string[];
-	readonly args: Record<string, unknown>;
-	readonly flags: Record<string, unknown>;
+	/** Syntax-parsed positional values for the resolved command */
+	readonly args: Readonly<Record<string, unknown>>;
+	/** Syntax-parsed flag values for the resolved command */
+	readonly flags: Readonly<Record<string, unknown>>;
 	readonly rawArgs: readonly string[];
-	readonly output: ExtensionOutput;
+	/** Write a line of standard output (honors io injected via `run()`) */
+	readonly stdout: (text: string) => void;
+	/** Write a line of diagnostic output (honors io injected via `run()`) */
+	readonly stderr: (text: string) => void;
 }
 
-export type ExtensionRun = (context: ExtensionRunContext) => Awaitable<void>;
+export type ExtensionNext = () => Promise<void>;
 
-export interface ExtensionFlagOptions {
-	/**
-	 * When true (default), add this flag to every existing command in the tree.
-	 * Inherited flags still flow to future extension-contributed subcommands.
-	 */
-	recursive?: boolean;
+/**
+ * The one interception primitive. Executes after routing and syntax parsing
+ * but before application value validation and Context construction, so an
+ * Extension can short-circuit (by not calling `next()`) without exposing
+ * nullable parser state. Extension-owned inputs are validated before the
+ * hook; routing and syntax failures flow directly to error handling.
+ */
+export type ExtensionIntercept = (
+	context: ExtensionContext,
+	next: ExtensionNext,
+) => Awaitable<void>;
+
+/**
+ * Presentation-only error hook. Hooks form a chain ending in Core's default
+ * renderer: render the failure yourself, or call `next()` to delegate to the
+ * next handler. Core always preserves a nonzero failure outcome regardless
+ * of what a handler does.
+ */
+export type ExtensionErrorHandler = (
+	error: unknown,
+	context: ExtensionContext,
+	next: ExtensionNext,
+) => Awaitable<void>;
+
+/**
+ * A flag owned by an Extension. `recursive` (default `true`) contributes the
+ * flag to every command in the application; set `false` for a root-only flag.
+ */
+export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
+
+/**
+ * A configured command builder contributed by an Extension. Structural on
+ * purpose (any `Crust` builder satisfies it) so Extension values stay
+ * assignable across separately-bundled type declarations.
+ */
+export interface ExtensionCommand {
+	readonly _node: CommandNode;
 }
 
-function buildExtensionRunContext(context: MiddlewareContext): ExtensionRunContext {
-	const rootSnapshot = snapshotCommand(context.rootCommand);
-	return {
-		argv: context.argv,
-		rootCommand: rootSnapshot,
-		command: context.route?.command ? snapshotCommand(context.route.command) : rootSnapshot,
-		commandPath: context.route?.commandPath ?? [context.rootCommand.meta.name],
-		args: (context.input?.args ?? {}) as Record<string, unknown>,
-		flags: (context.input?.flags ?? {}) as Record<string, unknown>,
-		rawArgs: context.input?.rawArgs ?? [],
-		output: {
-			write(text) {
-				console.log(text);
-			},
-		},
-	};
+export interface ExtensionConfig {
+	/** Flags this Extension owns and contributes to the application */
+	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
+	/** Root commands this Extension owns and contributes to the application */
+	readonly commands?: readonly ExtensionCommand[];
+	readonly intercept?: ExtensionIntercept;
+	readonly handleError?: ExtensionErrorHandler;
 }
 
-function addFlagRecursive(command: CommandNode, name: string, def: FlagDef): void {
-	command.effectiveFlags[name] = def;
-	for (const child of Object.values(command.subCommands)) {
-		addFlagRecursive(child, name, def);
-	}
-}
-
-const extensionPlugins = new WeakMap<ExtensionBuilder, readonly CrustPlugin[]>();
-
-function makeExtensionPlugin(plugin: CrustPlugin): ExtensionBuilder {
-	const builder = new ExtensionBuilder(plugin.name ?? "extension");
-	extensionPlugins.set(builder, [plugin]);
-	return builder;
-}
-
-export class ExtensionBuilder {
-	readonly kind = "extension";
+/**
+ * An application-wide reusable capability. A plain frozen structural value —
+ * see {@link extension}.
+ */
+export interface Extension extends ExtensionConfig {
 	readonly name: string;
-
-	constructor(name: string, plugins: readonly CrustPlugin[] = []) {
-		this.name = name;
-		extensionPlugins.set(this, plugins);
-	}
-
-	private append(plugin: CrustPlugin): ExtensionBuilder {
-		return new ExtensionBuilder(this.name, [...getExtensionPlugins(this), plugin]);
-	}
-
-	flag(name: string, def: FlagDef, options: ExtensionFlagOptions = {}): ExtensionBuilder {
-		const recursive = options.recursive ?? true;
-		return this.append({
-			name: this.name,
-			setup(ctx, actions) {
-				if (recursive) {
-					addFlagRecursive(ctx.rootCommand, name, def);
-					return;
-				}
-				actions.addFlag(ctx.rootCommand, name, def);
-			},
-		});
-	}
-
-	command(
-		name: string,
-		configure: (cmd: Crust<{}, {}, [], {}, {}>) => Crust<any, any, any, any, any>,
-	): ExtensionBuilder {
-		return this.append({
-			name: this.name,
-			setup(ctx, actions) {
-				const command = configure(new Crust(name) as Crust<{}, {}, [], {}, {}>);
-				actions.addSubCommand(ctx.rootCommand, name, command._node);
-			},
-		});
-	}
-
-	wrapRun(wrap: (run: ExtensionRun) => ExtensionRun): ExtensionBuilder {
-		return this.append({
-			name: this.name,
-			async middleware(context, next) {
-				const run = wrap(async () => {
-					await next();
-				});
-				await run(buildExtensionRunContext(context));
-			},
-		});
-	}
-
-	beforeRun(handler: (context: ExtensionRunContext) => Awaitable<void>): ExtensionBuilder {
-		return this.wrapRun((run) => async (context) => {
-			await handler(context);
-			await run(context);
-		});
-	}
-
-	afterRun(handler: (context: ExtensionRunContext) => Awaitable<void>): ExtensionBuilder {
-		return this.wrapRun((run) => async (context) => {
-			await run(context);
-			await handler(context);
-		});
-	}
-
-	onError(
-		handler: (error: unknown, context: ExtensionRunContext) => Awaitable<void>,
-	): ExtensionBuilder {
-		return this.append({
-			name: this.name,
-			async middleware(context, next) {
-				try {
-					await next();
-				} catch (error) {
-					await handler(error, buildExtensionRunContext(context));
-				}
-			},
-		});
-	}
 }
 
-export type Extension = ExtensionBuilder;
-
-export function extension(name: string): ExtensionBuilder {
-	return new ExtensionBuilder(name);
-}
-
-export function extensionFromPlugin(plugin: CrustPlugin): ExtensionBuilder {
-	return makeExtensionPlugin(plugin);
-}
-
-export function getExtensionPlugins(extension: Extension): readonly CrustPlugin[] {
-	return extensionPlugins.get(extension) ?? [];
+/**
+ * Define an Extension.
+ *
+ * Extensions apply to the whole application and own the flags and commands
+ * they contribute; contributed names must not collide with application or
+ * other Extension definitions (collisions are definition errors, surfaced
+ * when the application runs).
+ */
+export function extension(name: string, config: ExtensionConfig = {}): Extension {
+	if (!name.trim()) {
+		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
+			subject: "extension",
+			reason: "empty-name",
+		});
+	}
+	return Object.freeze({ ...config, name });
 }

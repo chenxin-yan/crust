@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
+import { Crust } from "@crustjs/core";
 
-import { didYouMeanPlugin } from "./did-you-mean.ts";
+import { didYouMeanExtension } from "./did-you-mean.ts";
 
 let stderrChunks: string[];
 let stdoutChunks: string[];
@@ -30,10 +30,10 @@ afterEach(() => {
 	process.exitCode = originalExitCode;
 });
 
-describe("didYouMeanPlugin", () => {
+describe("didYouMeanExtension", () => {
 	it("suggests the closest command on a typo (smoke test)", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("build", (cmd) => cmd.handle(() => {}))
 			.command("test", (cmd) => cmd.handle(() => {}));
 
@@ -51,7 +51,7 @@ describe("didYouMeanPlugin", () => {
 
 	it("suggests the canonical name when the input matches an alias", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}))
 			.command("version", (cmd) => cmd.handle(() => {}));
 
@@ -69,7 +69,7 @@ describe("didYouMeanPlugin", () => {
 
 	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}));
 
 		await app.execute({ argv: ["isue"] });
@@ -83,7 +83,7 @@ describe("didYouMeanPlugin", () => {
 		// "issue" via its 1-char alias "i". A short alias must not win simply
 		// because it is a prefix of the input.
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}))
 			.command("install", (cmd) => cmd.handle(() => {}));
 
@@ -96,7 +96,7 @@ describe("didYouMeanPlugin", () => {
 
 	it("lists only canonical names under 'Available commands'", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}))
 			.command("version", (cmd) => cmd.handle(() => {}));
 
@@ -109,7 +109,7 @@ describe("didYouMeanPlugin", () => {
 
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin({ mode: "help" })))
+			.extend(didYouMeanExtension({ mode: "help" }))
 			.command("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).handle(() => {}));
 
 		// Both the canonical "issue" and the alias "issues" are within
@@ -128,7 +128,7 @@ describe("didYouMeanPlugin", () => {
 		// real, invocable command but should not surface in user-facing
 		// error output. A close typo of it must not produce a suggestion.
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("build", (cmd) => cmd.handle(() => {}))
 			.command("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {}));
 
@@ -147,7 +147,7 @@ describe("didYouMeanPlugin", () => {
 		// canonical name. If a hidden command has an alias that's close to
 		// the typo, it still must not leak.
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("build", (cmd) => cmd.handle(() => {}))
 			.command("__complete", (cmd) =>
 				cmd.meta({ hidden: true, aliases: ["__comp"] }).handle(() => {}),
@@ -163,7 +163,7 @@ describe("didYouMeanPlugin", () => {
 
 	it("omits hidden commands from the 'Available commands' fallback list", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("build", (cmd) => cmd.handle(() => {}))
 			.command("test", (cmd) => cmd.handle(() => {}))
 			.command("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {}));

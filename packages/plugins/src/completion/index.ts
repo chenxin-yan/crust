@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
-import { Crust, type CrustPlugin } from "@crustjs/core/internal";
+import { Crust, type Extension, extension } from "@crustjs/core";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -76,15 +76,15 @@ function renderForShell(
 }
 
 /**
- * Build a `CrustPlugin` that registers a `completion <shell>` subcommand
+ * Build an Extension that contributes a `completion <shell>` command
  * which emits a tab-completion script for bash, zsh, or fish.
  *
- * **Strategy: pure-static.** The walk happens lazily inside `run()` (not
- * at `setup()` time) so plugin order is irrelevant — any subcommands or
- * inherited flags added by other plugins are visible by the time we
- * generate the script. The walker projects `rootCommand` to a small
- * `CompletionSpec`; per-shell renderers turn that into a self-contained
- * shell script with no runtime callbacks.
+ * **Strategy: pure-static.** The walk happens lazily in the intercept hook
+ * against the final root snapshot, so registration order is irrelevant —
+ * any commands or inherited flags added by other Extensions are visible by
+ * the time we generate the script. The walker projects the root snapshot to
+ * a small `CompletionSpec`; per-shell renderers turn that into a
+ * self-contained shell script with no runtime callbacks.
  *
  * **Print vs `--output-dir`.**
  * - With no `--output-dir`: print the script for the requested `<shell>`
@@ -97,99 +97,105 @@ function renderForShell(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-export function completionPlugin(options: CompletionPluginOptions = {}): CrustPlugin {
+export function completionExtension(options: CompletionPluginOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";
 
-	return {
-		name: "completion",
-		setup(context, actions) {
+	// The owned command declares the CLI grammar; the work happens in the
+	// intercept hook, which is the only place with access to the final root
+	// snapshot (needed for the lazy walk).
+	const completionCommand = new Crust(subcommandName)
+		.meta({
+			description: "Generate shell tab-completion scripts",
+		})
+		.args([
+			{
+				name: "shell",
+				type: "string",
+				required: true,
+				description: "Shell to generate completion for",
+				choices: SUPPORTED_SHELLS,
+			},
+		] as const)
+		.flags({
+			"output-dir": {
+				type: "string",
+				description:
+					"Write all configured shells' scripts into this directory instead of printing to stdout",
+			},
+		})
+		.handle(() => {
+			// Never reached — the extension intercept short-circuits first.
+		});
+
+	return extension("completion", {
+		commands: [completionCommand],
+		async intercept(context, next) {
+			if (context.commandPath[1] !== subcommandName) {
+				await next();
+				return;
+			}
+
 			const rootCommand = context.rootCommand;
-			// Validate `binName` once, at setup, so misconfigured CLIs fail
-			// loudly during plugin registration rather than at script-emit
-			// time. The walker also re-validates command/flag identifiers
-			// when it builds the spec.
+			// Validate `binName` before emitting anything so misconfigured
+			// CLIs fail loudly. The walker also re-validates command/flag
+			// identifiers when it builds the spec.
 			const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
 			// `version` flows into header comments only; sanitise to drop
 			// control characters (newlines especially) so they cannot break
 			// out of the comment line in the emitted script.
 			const safeVersion = sanitizeFreeText(version);
 
-			// Build the completion subcommand using a fresh `Crust` builder.
-			// The handler closes over `rootCommand` so it can walk the live
-			// tree at run time (lazy walk — see contract above).
-			const node = new Crust(subcommandName)
-				.meta({
-					description: "Generate shell tab-completion scripts",
-				})
-				.args([
-					{
-						name: "shell",
-						type: "string",
-						required: true,
-						description: "Shell to generate completion for",
-						choices: SUPPORTED_SHELLS,
-					},
-				] as const)
-				.flags({
-					"output-dir": {
-						type: "string",
-						description:
-							"Write all configured shells' scripts into this directory instead of printing to stdout",
-					},
-				})
-				.handle(async (ctx) => {
-					const requestedShell = ctx.args.shell as CompletionShell;
-					if (!SUPPORTED_SHELLS.includes(requestedShell)) {
-						// Parser-side `choices` validation normally rejects this path;
-						// keep the guard for direct handler invocation in tests/tools.
-						console.error(
-							`Unsupported shell "${requestedShell}". Supported: ${SUPPORTED_SHELLS.join(", ")}`,
-						);
-						process.exitCode = 1;
-						return;
-					}
+			const requestedShell = context.args.shell as CompletionShell;
+			if (!SUPPORTED_SHELLS.includes(requestedShell)) {
+				// Parser-side `choices` validation normally rejects this path;
+				// keep the guard for direct invocation in tests/tools.
+				context.stderr(
+					`Unsupported shell "${requestedShell}". Supported: ${SUPPORTED_SHELLS.join(", ")}`,
+				);
+				process.exitCode = 1;
+				return;
+			}
 
-					const spec = walkCommandNode(rootCommand);
-					const outputDir = ctx.flags["output-dir"];
+			const spec = walkCommandNode(rootCommand);
+			const outputDir = context.flags["output-dir"] as string | undefined;
 
-					if (outputDir === undefined) {
-						// Print path: emit the requested shell's script to stdout.
-						const script = renderForShell(requestedShell, spec, binName, safeVersion);
-						process.stdout.write(script);
-						return;
-					}
+			if (outputDir === undefined) {
+				// Print path: emit the requested shell's script to stdout.
+				// Written raw (not via context.stdout) so redirection captures
+				// the script byte-for-byte without an added trailing newline.
+				const script = renderForShell(requestedShell, spec, binName, safeVersion);
+				process.stdout.write(script);
+				return;
+			}
 
-					// File path: write **all** configured shells. This matches
-					// the packaging-time use case — distributors generate every
-					// supported file in one invocation regardless of which
-					// shell they nominally requested.
-					const targetDir = resolvePath(outputDir);
-					await mkdir(targetDir, { recursive: true });
-					for (const shell of shells) {
-						const filename = filenameForShell(shell, binName);
-						const script = renderForShell(shell, spec, binName, safeVersion);
-						const targetPath = resolvePath(targetDir, filename);
-						// Defence-in-depth: even though `binName` is validated
-						// upstream (rejects path separators / `..`), verify the
-						// resolved path stays inside `targetDir`. This catches
-						// future regressions in the validator and platform-
-						// specific edge cases (e.g. Windows drive letters).
-						if (
-							targetPath !== targetDir &&
-							!targetPath.startsWith(`${targetDir}/`) &&
-							!targetPath.startsWith(`${targetDir}\\`)
-						) {
-							throw new Error(
-								`completion plugin: refusing to write outside output dir (${targetPath})`,
-							);
-						}
-						await writeFile(targetPath, script, "utf8");
-					}
-				})._node;
-
-			actions.addSubCommand(rootCommand, subcommandName, node);
+			// File path: write **all** configured shells. This matches
+			// the packaging-time use case — distributors generate every
+			// supported file in one invocation regardless of which
+			// shell they nominally requested.
+			const targetDir = resolvePath(outputDir);
+			await mkdir(targetDir, { recursive: true });
+			for (const shell of shells) {
+				const filename = filenameForShell(shell, binName);
+				const script = renderForShell(shell, spec, binName, safeVersion);
+				const targetPath = resolvePath(targetDir, filename);
+				// Defence-in-depth: even though `binName` is validated
+				// upstream (rejects path separators / `..`), verify the
+				// resolved path stays inside `targetDir`. This catches
+				// future regressions in the validator and platform-
+				// specific edge cases (e.g. Windows drive letters).
+				if (
+					targetPath !== targetDir &&
+					!targetPath.startsWith(`${targetDir}/`) &&
+					!targetPath.startsWith(`${targetDir}\\`)
+				) {
+					throw new Error(
+						`completion extension: refusing to write outside output dir (${targetPath})`,
+					);
+				}
+				await writeFile(targetPath, script, "utf8");
+			}
 		},
-	};
+	});
 }

@@ -1,17 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import {
-	Crust,
-	type CrustPlugin,
-	extensionFromPlugin,
-	snapshotCommand,
-} from "@crustjs/core/internal";
+import { Crust, extension } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/internal";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
-import { didYouMeanPlugin } from "./did-you-mean.ts";
-import { helpPlugin, renderHelp } from "./help.ts";
-import { noColorPlugin } from "./no-color.ts";
-import { versionPlugin } from "./version.ts";
+import { didYouMeanExtension } from "./did-you-mean.ts";
+import { helpExtension, renderHelp } from "./help.ts";
+import { noColorExtension } from "./no-color.ts";
+import { versionExtension } from "./version.ts";
 
 let stdoutChunks: string[];
 let stderrChunks: string[];
@@ -51,22 +47,17 @@ function stripAnsi(text: string) {
 	return Bun.stripANSI(text);
 }
 
-function lateSkillPlugin(): CrustPlugin {
-	return {
-		name: "late-skill",
-		setup(ctx, actions) {
-			actions.addSubCommand(
-				ctx.rootCommand,
-				"skill",
-				new Crust("skill")
-					.meta({ description: "Manage agent skills" })
-					.command("update", (cmd) =>
-						cmd.meta({ description: "Update installed skills" }).handle(() => {}),
-					)
-					.handle(() => {})._node,
-			);
-		},
-	};
+function lateSkillExtension() {
+	return extension("late-skill", {
+		commands: [
+			new Crust("skill")
+				.meta({ description: "Manage agent skills" })
+				.command("update", (cmd) =>
+					cmd.meta({ description: "Update installed skills" }).handle(() => {}),
+				)
+				.handle(() => {}),
+		],
+	});
 }
 
 describe("built-in plugins", () => {
@@ -192,7 +183,7 @@ describe("built-in plugins", () => {
 
 	it("help plugin renders generated help for no-run command", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(helpExtension())
 			.command("build", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["--help"] });
@@ -206,10 +197,10 @@ describe("built-in plugins", () => {
 		expect(output).not.toContain("--no-help");
 	});
 
-	it("noColorPlugin injects --color and --no-color into help output", async () => {
+	it("noColorExtension injects --color and --no-color into help output", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(noColorPlugin()))
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(noColorExtension())
+			.extend(helpExtension())
 			.command("build", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["--help"] });
@@ -218,10 +209,8 @@ describe("built-in plugins", () => {
 		expect(output).toContain("--color, --no-color");
 	});
 
-	it("noColorPlugin disables color but preserves modifiers", async () => {
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(noColorPlugin()))
-			.extend(extensionFromPlugin(helpPlugin()));
+	it("noColorExtension disables color but preserves modifiers", async () => {
+		const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 		await app.execute({ argv: ["--help", "--no-color"] });
 
@@ -231,14 +220,12 @@ describe("built-in plugins", () => {
 		expect(output).toContain("\x1b[1mUSAGE:\x1b[22m");
 	});
 
-	it("noColorPlugin overrides NO_COLOR with --color", async () => {
+	it("noColorExtension overrides NO_COLOR with --color", async () => {
 		const previousNoColor = process.env.NO_COLOR;
 		process.env.NO_COLOR = "1";
 
 		try {
-			const app = new Crust("app")
-				.extend(extensionFromPlugin(noColorPlugin()))
-				.extend(extensionFromPlugin(helpPlugin()));
+			const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 			await app.execute({ argv: ["--help", "--color"] });
 
@@ -254,14 +241,12 @@ describe("built-in plugins", () => {
 		}
 	});
 
-	it("noColorPlugin respects NO_COLOR without explicit --color flag", async () => {
+	it("noColorExtension respects NO_COLOR without explicit --color flag", async () => {
 		const previousNoColor = process.env.NO_COLOR;
 		process.env.NO_COLOR = "1";
 
 		try {
-			const app = new Crust("app")
-				.extend(extensionFromPlugin(noColorPlugin()))
-				.extend(extensionFromPlugin(helpPlugin()));
+			const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 			await app.execute({ argv: ["--help"] });
 
@@ -277,22 +262,20 @@ describe("built-in plugins", () => {
 		}
 	});
 
-	it("noColorPlugin restores the prior global color override", async () => {
+	it("noColorExtension restores the prior global color override", async () => {
 		setGlobalColorMode("always");
 
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(noColorPlugin()))
-			.extend(extensionFromPlugin(helpPlugin()));
+		const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 		await app.execute({ argv: ["--help", "--no-color"] });
 
 		expect(getGlobalColorMode()).toBe("always");
 	});
 
-	it("noColorPlugin flag is inherited by subcommands", async () => {
+	it("noColorExtension flag is inherited by subcommands", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(noColorPlugin()))
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(noColorExtension())
+			.extend(helpExtension())
 			.command("build", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["build", "--help"] });
@@ -303,7 +286,7 @@ describe("built-in plugins", () => {
 
 	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(helpExtension())
 			.command("create", (cmd) =>
 				cmd.args([{ name: "name", type: "string", required: true }] as const).handle(() => {}),
 			);
@@ -319,7 +302,7 @@ describe("built-in plugins", () => {
 
 	it("help plugin shows help instead of error when --help is used with missing required flag", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(helpExtension())
 			.command("deploy", (cmd) =>
 				cmd.flags({ target: { type: "string", required: true } }).handle(() => {}),
 			);
@@ -338,7 +321,7 @@ describe("built-in plugins", () => {
 
 		const app = new Crust("app")
 			.meta({ description: "Test app" })
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(helpExtension())
 			.command("build", (cmd) =>
 				cmd.handle((ctx) => {
 					capturedRawArgs = [...ctx.rawArgs];
@@ -353,8 +336,8 @@ describe("built-in plugins", () => {
 
 	it("help plugin supports subcommands injected after its setup", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
-			.extend(extensionFromPlugin(lateSkillPlugin()))
+			.extend(helpExtension())
+			.extend(lateSkillExtension())
 			.handle(() => {});
 
 		await app.execute({ argv: ["skill", "--help"] });
@@ -367,8 +350,8 @@ describe("built-in plugins", () => {
 
 	it("help plugin supports nested subcommands injected after its setup", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
-			.extend(extensionFromPlugin(lateSkillPlugin()))
+			.extend(helpExtension())
+			.extend(lateSkillExtension())
 			.handle(() => {});
 
 		await app.execute({ argv: ["skill", "update", "--help"] });
@@ -381,8 +364,8 @@ describe("built-in plugins", () => {
 
 	it("help plugin supports subcommands injected before its setup", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(lateSkillPlugin()))
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(lateSkillExtension())
+			.extend(helpExtension())
 			.handle(() => {});
 
 		await app.execute({ argv: ["skill", "--help"] });
@@ -394,9 +377,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin handles --version", async () => {
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(versionPlugin("1.2.3")))
-			.handle(() => {});
+		const app = new Crust("app").extend(versionExtension("1.2.3")).handle(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -404,9 +385,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin handles -v alias", async () => {
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(versionPlugin("2.0.0")))
-			.handle(() => {});
+		const app = new Crust("app").extend(versionExtension("2.0.0")).handle(() => {});
 
 		await app.execute({ argv: ["-v"] });
 
@@ -416,7 +395,7 @@ describe("built-in plugins", () => {
 	it("version plugin ignores --version after -- separator", async () => {
 		let ran = false;
 
-		const app = new Crust("app").extend(extensionFromPlugin(versionPlugin("1.0.0"))).handle(() => {
+		const app = new Crust("app").extend(versionExtension("1.0.0")).handle(() => {
 			ran = true;
 		});
 
@@ -429,13 +408,11 @@ describe("built-in plugins", () => {
 	it("version plugin only triggers on root command", async () => {
 		let ran = false;
 
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(versionPlugin("1.0.0")))
-			.command("build", (cmd) =>
-				cmd.handle(() => {
-					ran = true;
-				}),
-			);
+		const app = new Crust("app").extend(versionExtension("1.0.0")).command("build", (cmd) =>
+			cmd.handle(() => {
+				ran = true;
+			}),
+		);
 
 		await app.execute({ argv: ["build"] });
 
@@ -446,8 +423,8 @@ describe("built-in plugins", () => {
 	it("version plugin flag appears in help output", async () => {
 		const app = new Crust("app")
 			.meta({ description: "Test app" })
-			.extend(extensionFromPlugin(versionPlugin("1.0.0")))
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(versionExtension("1.0.0"))
+			.extend(helpExtension())
 			.handle(() => {});
 
 		await app.execute({ argv: ["--help"] });
@@ -458,9 +435,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin with function value", async () => {
-		const app = new Crust("app")
-			.extend(extensionFromPlugin(versionPlugin(() => "3.5.0")))
-			.handle(() => {});
+		const app = new Crust("app").extend(versionExtension(() => "3.5.0")).handle(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -469,7 +444,7 @@ describe("built-in plugins", () => {
 
 	it("didYouMean plugin handles command not found in error mode", async () => {
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.extend(didYouMeanExtension())
 			.command("build", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["buld"] });
@@ -480,7 +455,7 @@ describe("built-in plugins", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────
-	// helpPlugin alias rendering
+	// helpExtension alias rendering
 	// ──────────────────────────────────────────────────────────────────────────────
 
 	it("renderHelp renders aliases inline next to the canonical command name", () => {
@@ -536,7 +511,7 @@ describe("built-in plugins", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
-	// helpPlugin hidden subcommand filtering
+	// helpExtension hidden subcommand filtering
 	// ──────────────────────────────────────────────────────────────────────
 
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
@@ -612,7 +587,7 @@ describe("built-in plugins", () => {
 	it("hidden subcommands remain invocable by direct name", async () => {
 		let didRun = false;
 		const app = new Crust("app")
-			.extend(extensionFromPlugin(helpPlugin()))
+			.extend(helpExtension())
 			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).handle(() => {}))
 			.command("__complete", (cmd) =>
 				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {
@@ -626,7 +601,7 @@ describe("built-in plugins", () => {
 
 	it("renderHelp surfaces flag `choices` as a `[choices: ...]` suffix", () => {
 		// The choices list is declared on the flag definition;
-		// `helpPlugin` must surface it so users can discover the valid
+		// `helpExtension` must surface it so users can discover the valid
 		// values from `--help` without resorting to shell completion or
 		// reading the source.
 		const command = new Crust("app")

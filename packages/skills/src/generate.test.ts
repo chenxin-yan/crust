@@ -3,7 +3,8 @@ import { chmod, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs
 import { delimiter, join } from "node:path";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core/internal";
+import type { CommandSnapshot } from "@crustjs/core";
+import { Crust, snapshotCommand } from "@crustjs/core/internal";
 import type { CommandNode } from "@crustjs/core/tooling";
 
 import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
@@ -145,62 +146,66 @@ async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Simple single-command CLI (leaf, runnable). */
-function simpleCommand(): CommandNode {
-	return makeCommand({
-		meta: { name: "my-cli", description: "A simple CLI tool" },
-		args: [{ name: "file", type: "string", required: true }] as ArgDef[],
-		flags: {
-			verbose: {
-				type: "boolean",
-				description: "Enable verbose output",
-				short: "v",
+function simpleCommand(): CommandSnapshot {
+	return snapshotCommand(
+		makeCommand({
+			meta: { name: "my-cli", description: "A simple CLI tool" },
+			args: [{ name: "file", type: "string", required: true }] as ArgDef[],
+			flags: {
+				verbose: {
+					type: "boolean",
+					description: "Enable verbose output",
+					short: "v",
+				},
 			},
-		},
-		run() {},
-	});
+			run() {},
+		}),
+	);
 }
 
 /** CLI with nested subcommands (git-like). */
-function nestedCommand(): CommandNode {
-	return makeCommand({
-		meta: { name: "git", description: "A distributed VCS" },
-		subCommands: {
-			remote: makeCommand({
-				meta: { name: "remote", description: "Manage remotes" },
-				subCommands: {
-					add: makeCommand({
-						meta: { name: "add", description: "Add a remote" },
-						args: [
-							{ name: "name", type: "string", required: true },
-							{ name: "url", type: "string", required: true },
-						] as ArgDef[],
-						run() {},
-					}),
-					remove: makeCommand({
-						meta: { name: "remove", description: "Remove a remote" },
-						args: [{ name: "name", type: "string", required: true }] as ArgDef[],
-						run() {},
-					}),
-				},
-			}),
-			commit: makeCommand({
-				meta: { name: "commit", description: "Record changes" },
-				flags: {
-					message: {
-						type: "string",
-						description: "Commit message",
-						short: "m",
-						required: true,
+function nestedCommand(): CommandSnapshot {
+	return snapshotCommand(
+		makeCommand({
+			meta: { name: "git", description: "A distributed VCS" },
+			subCommands: {
+				remote: makeCommand({
+					meta: { name: "remote", description: "Manage remotes" },
+					subCommands: {
+						add: makeCommand({
+							meta: { name: "add", description: "Add a remote" },
+							args: [
+								{ name: "name", type: "string", required: true },
+								{ name: "url", type: "string", required: true },
+							] as ArgDef[],
+							run() {},
+						}),
+						remove: makeCommand({
+							meta: { name: "remove", description: "Remove a remote" },
+							args: [{ name: "name", type: "string", required: true }] as ArgDef[],
+							run() {},
+						}),
 					},
-					amend: {
-						type: "boolean",
-						description: "Amend the last commit",
+				}),
+				commit: makeCommand({
+					meta: { name: "commit", description: "Record changes" },
+					flags: {
+						message: {
+							type: "string",
+							description: "Commit message",
+							short: "m",
+							required: true,
+						},
+						amend: {
+							type: "boolean",
+							description: "Amend the last commit",
+						},
 					},
-				},
-				run() {},
-			}),
-		},
-	});
+					run() {},
+				}),
+			},
+		}),
+	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1317,7 +1322,7 @@ describe("generateSkill", () => {
 
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
-					command: cmd,
+					command: snapshotCommand(cmd),
 					meta: {
 						name: "minimal",
 						description: "Bare minimum",
@@ -1357,7 +1362,7 @@ describe("generateSkill", () => {
 
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
-					command: cmd,
+					command: snapshotCommand(cmd),
 					meta: {
 						name: "deep-tool",
 						description: "Test",

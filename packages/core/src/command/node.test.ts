@@ -16,7 +16,7 @@ describe("createCommandNode", () => {
 		expect(node.effectiveFlags).toEqual({});
 		expect(node.args).toBeUndefined();
 		expect(node.subCommands).toEqual({});
-		expect(node.plugins).toEqual([]);
+		expect(node.extensions).toEqual([]);
 		expect(node.run).toBeUndefined();
 	});
 
@@ -30,7 +30,7 @@ describe("createCommandNode", () => {
 		expect(node.effectiveFlags).toEqual({});
 		expect(node.args).toBeUndefined();
 		expect(node.subCommands).toEqual({});
-		expect(node.plugins).toEqual([]);
+		expect(node.extensions).toEqual([]);
 	});
 
 	it("creates independent nodes with separate references", () => {

@@ -1,5 +1,4 @@
-import { type CommandSnapshot, CrustError } from "@crustjs/core";
-import type { CrustPlugin } from "@crustjs/core/internal";
+import { type CommandSnapshot, CrustError, type Extension, extension } from "@crustjs/core";
 
 import { renderHelp } from "./help.ts";
 
@@ -85,47 +84,43 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export function didYouMeanPlugin(options: DidYouMeanPluginOptions = {}): CrustPlugin {
+export function didYouMeanExtension(options: DidYouMeanPluginOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
-	return {
-		name: "did-you-mean",
-		async middleware(_context, next) {
-			try {
+	return extension("did-you-mean", {
+		async handleError(error, context, next) {
+			if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) {
 				await next();
 				return;
-			} catch (error) {
-				if (!(error instanceof CrustError)) throw error;
-				if (!error.is("COMMAND_NOT_FOUND")) throw error;
-
-				const details = error.details;
-				const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
-
-				let message = `Unknown command "${details.input}".`;
-				if (suggestions.length > 0) {
-					message += ` Did you mean "${suggestions[0]}"?`;
-				}
-
-				if (mode === "help") {
-					console.log(message);
-					console.log("");
-					console.log(renderHelp(details.parentCommand, details.commandPath));
-					return;
-				}
-
-				// `details.available` lists every canonical sibling name including
-				// those marked `meta.hidden: true`. The error message is user-
-				// facing, so filter the same way `findSuggestions` does — internal
-				// commands stay invocable but never surface in this list.
-				const visibleAvailable = details.available.filter(
-					(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
-				);
-				if (visibleAvailable.length > 0) {
-					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
-				}
-				console.error(message);
-				process.exitCode = 1;
 			}
+
+			const details = error.details;
+			const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
+
+			let message = `Unknown command "${details.input}".`;
+			if (suggestions.length > 0) {
+				message += ` Did you mean "${suggestions[0]}"?`;
+			}
+
+			if (mode === "help") {
+				context.stdout(message);
+				context.stdout("");
+				context.stdout(renderHelp(details.parentCommand, details.commandPath));
+				return;
+			}
+
+			// `details.available` lists every canonical sibling name including
+			// those marked `meta.hidden: true`. The error message is user-
+			// facing, so filter the same way `findSuggestions` does — internal
+			// commands stay invocable but never surface in this list.
+			const visibleAvailable = details.available.filter(
+				(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
+			);
+			if (visibleAvailable.length > 0) {
+				message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
+			}
+			context.stderr(message);
+			// Core preserves the nonzero exit code — rendering only here.
 		},
-	};
+	});
 }

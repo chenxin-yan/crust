@@ -23,7 +23,7 @@ export interface ParseErrorDetails {
 }
 
 export interface DefinitionErrorDetails {
-	readonly subject?: "arg" | "command" | "context" | "flag" | "middleware" | "plugin";
+	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
 	readonly name?: string;
 	readonly reason?: string;
 }

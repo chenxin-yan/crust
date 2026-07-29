@@ -16,7 +16,7 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core/internal";
+import { Crust, snapshotCommand } from "@crustjs/core/internal";
 import type { CommandNode } from "@crustjs/core/tooling";
 
 import { annotate } from "../src/annotations.ts";
@@ -147,7 +147,7 @@ async function generateForTest(
 ) {
 	const result = await withCwd(tmpDir, () =>
 		generateSkill({
-			command,
+			command: snapshotCommand(command),
 			meta,
 			agents: ["claude-code"],
 			scope: "project",
@@ -833,7 +833,7 @@ describe("E2E: skill generation", () => {
 		it("output is deterministic across multiple agents", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
-					command: buildFixtureCommand(),
+					command: snapshotCommand(buildFixtureCommand()),
 					meta: SKILL_META,
 					agents: ["claude-code", "opencode"],
 					scope: "project",

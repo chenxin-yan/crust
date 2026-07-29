@@ -3,9 +3,9 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
+import { Crust } from "@crustjs/core";
 
-import { completionPlugin } from "./index.ts";
+import { completionExtension } from "./index.ts";
 
 let stdoutBuf: Buffer[];
 let stderrChunks: string[];
@@ -50,7 +50,7 @@ function getStdout(): string {
 function buildCli() {
 	return new Crust("mycli")
 		.meta({ description: "Test CLI" })
-		.extend(extensionFromPlugin(completionPlugin({ version: "1.2.3" })))
+		.extend(completionExtension({ version: "1.2.3" }))
 		.command("build", (cmd) =>
 			cmd
 				.meta({ description: "Build artifact" })
@@ -78,7 +78,7 @@ function buildCli() {
 		.handle(() => {});
 }
 
-describe("completionPlugin", () => {
+describe("completionExtension", () => {
 	it("registers a `completion` subcommand on the root command (after setup)", async () => {
 		const app = buildCli();
 		const { root } = await app.prepareCommandTree();
@@ -89,7 +89,7 @@ describe("completionPlugin", () => {
 
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
-			.extend(extensionFromPlugin(completionPlugin({ command: "shell-completion" })))
+			.extend(completionExtension({ command: "shell-completion" }))
 			.handle(() => {});
 		const { root } = await app.prepareCommandTree();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
@@ -197,12 +197,10 @@ describe("completionPlugin", () => {
 		it("respects the `shells` option to limit which files are written", async () => {
 			const app = new Crust("tinycli")
 				.extend(
-					extensionFromPlugin(
-						completionPlugin({
-							version: "0.1.0",
-							shells: ["bash", "zsh"],
-						}),
-					),
+					completionExtension({
+						version: "0.1.0",
+						shells: ["bash", "zsh"],
+					}),
 				)
 				.handle(() => {});
 			await app.execute({

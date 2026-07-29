@@ -1,16 +1,11 @@
 import type { Extension } from "@crustjs/core";
-import { extensionFromPlugin } from "@crustjs/core/internal";
 
-import { type CompletionPluginOptions, completionPlugin } from "./completion/index.ts";
-import { type DidYouMeanPluginOptions, didYouMeanPlugin } from "./did-you-mean.ts";
-import { helpPlugin } from "./help.ts";
-import { noColorPlugin } from "./no-color.ts";
-import { type UpdateNotifierPluginOptions, updateNotifierPlugin } from "./update-notifier.ts";
-import { type VersionValue, versionPlugin } from "./version.ts";
-
-const fromPlugin = extensionFromPlugin as unknown as (
-	plugin: Parameters<typeof extensionFromPlugin>[0],
-) => Extension;
+import { type CompletionPluginOptions, completionExtension } from "./completion/index.ts";
+import { type DidYouMeanPluginOptions, didYouMeanExtension } from "./did-you-mean.ts";
+import { helpExtension } from "./help.ts";
+import { noColorExtension } from "./no-color.ts";
+import { type UpdateNotifierPluginOptions, updateNotifierExtension } from "./update-notifier.ts";
+import { type VersionValue, versionExtension } from "./version.ts";
 
 export type { CompletionPluginOptions, CompletionShell } from "./completion/index.ts";
 export type { DidYouMeanPluginOptions } from "./did-you-mean.ts";
@@ -25,25 +20,25 @@ export type {
 export type { VersionValue } from "./version.ts";
 
 export function completion(options?: CompletionPluginOptions): Extension {
-	return fromPlugin(completionPlugin(options));
+	return completionExtension(options);
 }
 
 export function didYouMean(options?: DidYouMeanPluginOptions): Extension {
-	return fromPlugin(didYouMeanPlugin(options));
+	return didYouMeanExtension(options);
 }
 
 export function help(): Extension {
-	return fromPlugin(helpPlugin());
+	return helpExtension();
 }
 
 export function noColor(): Extension {
-	return fromPlugin(noColorPlugin());
+	return noColorExtension();
 }
 
 export function updateNotifier(options: UpdateNotifierPluginOptions): Extension {
-	return fromPlugin(updateNotifierPlugin(options));
+	return updateNotifierExtension(options);
 }
 
 export function version(value?: VersionValue): Extension {
-	return fromPlugin(versionPlugin(value));
+	return versionExtension(value);
 }

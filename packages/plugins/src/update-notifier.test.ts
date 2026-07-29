@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
+import { Crust, extension } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/internal";
 
 import {
 	fetchLatestVersion,
@@ -8,7 +9,7 @@ import {
 	parseSemver,
 	type UpdateNotifierCacheAdapter,
 	type UpdateNotifierState,
-	updateNotifierPlugin,
+	updateNotifierExtension,
 } from "./update-notifier.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -319,10 +320,10 @@ describe("fetchLatestVersion", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// updateNotifierPlugin — middleware integration tests
+// updateNotifierExtension — middleware integration tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("updateNotifierPlugin middleware", () => {
+describe("updateNotifierExtension middleware", () => {
 	const originalFetch = globalThis.fetch;
 	const originalProcessArgv = [...process.argv];
 	const originalUserAgent = process.env.npm_config_user_agent;
@@ -398,24 +399,12 @@ describe("updateNotifierPlugin middleware", () => {
 	};
 
 	/** Create a basic command node for testing. */
-	function makeCommand(name = "test-cli") {
-		const node = new Crust(name)._node;
-		node.run = () => {};
-		return node;
-	}
-
-	/** Build a mock PluginState from a Map. */
-	function makePluginState(map: Map<string, unknown>) {
-		return {
-			get: <T = unknown>(key: string) => map.get(key) as T | undefined,
-			has: (key: string) => map.has(key),
-			set: (key: string, value: unknown) => map.set(key, value),
-			delete: (key: string) => map.delete(key),
-		};
+	function makeCommandSnapshot(name = "test-cli") {
+		return snapshotCommand(new Crust(name).handle(() => {})._node);
 	}
 
 	/**
-	 * Helper to invoke the plugin middleware directly with controlled context.
+	 * Helper to invoke the extension intercept directly with controlled context.
 	 */
 	async function runPluginMiddleware(
 		options: {
@@ -437,7 +426,6 @@ describe("updateNotifierPlugin middleware", () => {
 		},
 		overrides?: {
 			commandName?: string;
-			state?: Map<string, unknown>;
 			disableDefaultCache?: boolean;
 		},
 	) {
@@ -449,31 +437,34 @@ describe("updateNotifierPlugin middleware", () => {
 			...rest,
 			...(resolvedAdapter ? { cache: { adapter: resolvedAdapter, intervalMs } } : {}),
 		};
-		const plugin = updateNotifierPlugin(pluginOptions);
+		const plugin = updateNotifierExtension(pluginOptions);
 
-		if (!plugin.middleware) {
-			return { plugin, ran: false, state: new Map<string, unknown>() };
+		if (!plugin.intercept) {
+			return { plugin, ran: false };
 		}
 
 		let commandRan = false;
-		const stateMap = overrides?.state ?? new Map<string, unknown>();
-		const rootCommand = makeCommand(overrides?.commandName ?? options.packageName);
+		const rootCommand = makeCommandSnapshot(overrides?.commandName ?? options.packageName);
 
 		const context = {
 			argv: [] as readonly string[],
 			rootCommand,
-			state: makePluginState(stateMap),
-			route: null,
-			input: null,
+			command: rootCommand,
+			commandPath: [rootCommand.meta.name] as readonly string[],
+			args: {},
+			flags: {},
+			rawArgs: [] as readonly string[],
+			stdout: () => {},
+			stderr: () => {},
 		};
 
 		const next = async () => {
 			commandRan = true;
 		};
 
-		await plugin.middleware(context as Parameters<typeof plugin.middleware>[0], next);
+		await plugin.intercept(context, next);
 
-		return { plugin, ran: commandRan, state: stateMap };
+		return { plugin, ran: commandRan };
 	}
 
 	// ── Update available flow ─────────────────────────────────────────────
@@ -770,30 +761,22 @@ describe("updateNotifierPlugin middleware", () => {
 			const pkgName = uniquePackageName("dedupe-process");
 			mockRegistryResponse("2.0.0");
 
-			// Share state between invocations to simulate same process
-			const sharedState = new Map<string, unknown>();
-
 			// First invocation — should emit notice
-			await runPluginMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-				},
-				{ state: sharedState },
-			);
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
 			expect(getOutput()).toContain("Update available");
 
 			// Clear stderr for second check
 			stderrChunks = [];
 
-			// Second invocation with same state — should be deduped
-			await runPluginMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-				},
-				{ state: sharedState },
-			);
+			// Second invocation against the same cache adapter — deduped via
+			// the persisted lastNotifiedVersion (process-level state is gone)
+			await runPluginMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
 			expect(getOutput()).toBe("");
 		});
 
@@ -1068,20 +1051,23 @@ describe("updateNotifierPlugin middleware", () => {
 
 			const executionOrder: string[] = [];
 
-			const plugin = updateNotifierPlugin({
+			const plugin = updateNotifierExtension({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
 
-			const stateMap = new Map<string, unknown>();
-			const rootCommand = makeCommand(pkgName);
+			const rootCommand = makeCommandSnapshot(pkgName);
 
 			const context = {
 				argv: [] as readonly string[],
 				rootCommand,
-				state: makePluginState(stateMap),
-				route: null,
-				input: null,
+				command: rootCommand,
+				commandPath: [rootCommand.meta.name] as readonly string[],
+				args: {},
+				flags: {},
+				rawArgs: [] as readonly string[],
+				stdout: () => {},
+				stderr: () => {},
 			};
 
 			// Override process.stderr.write to track ordering
@@ -1092,12 +1078,9 @@ describe("updateNotifierPlugin middleware", () => {
 				return true;
 			}) as typeof process.stderr.write;
 
-			await plugin.middleware?.(
-				context as Parameters<NonNullable<typeof plugin.middleware>>[0],
-				async () => {
-					executionOrder.push("command");
-				},
-			);
+			await plugin.intercept?.(context, async () => {
+				executionOrder.push("command");
+			});
 
 			process.stderr.write = prevStderrWrite;
 
@@ -1135,12 +1118,10 @@ describe("updateNotifierPlugin middleware", () => {
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
 				.extend(
-					extensionFromPlugin(
-						updateNotifierPlugin({
-							currentVersion: "1.0.0",
-							packageName: pkgName,
-						}),
-					),
+					updateNotifierExtension({
+						currentVersion: "1.0.0",
+						packageName: pkgName,
+					}),
 				)
 				.handle(() => {
 					commandExecuted = true;
@@ -1159,29 +1140,21 @@ describe("updateNotifierPlugin middleware", () => {
 
 			let commandExecuted = false;
 
-			// Combine with a custom no-op plugin
-			const otherPlugin = {
-				name: "test-other",
-				async middleware(
-					_ctx: Parameters<
-						NonNullable<import("@crustjs/core/internal").CrustPlugin["middleware"]>
-					>[0],
-					next: () => Promise<void>,
-				) {
+			// Combine with a custom no-op extension
+			const otherPlugin = extension("test-other", {
+				async intercept(_ctx, next) {
 					await next();
 				},
-			};
+			});
 
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
-				.extend(extensionFromPlugin(otherPlugin))
+				.extend(otherPlugin)
 				.extend(
-					extensionFromPlugin(
-						updateNotifierPlugin({
-							currentVersion: "1.0.0",
-							packageName: pkgName,
-						}),
-					),
+					updateNotifierExtension({
+						currentVersion: "1.0.0",
+						packageName: pkgName,
+					}),
 				)
 				.handle(() => {
 					commandExecuted = true;
@@ -1201,12 +1174,10 @@ describe("updateNotifierPlugin middleware", () => {
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
 				.extend(
-					extensionFromPlugin(
-						updateNotifierPlugin({
-							currentVersion: "1.0.0",
-							packageName: pkgName,
-						}),
-					),
+					updateNotifierExtension({
+						currentVersion: "1.0.0",
+						packageName: pkgName,
+					}),
 				)
 				.handle(() => {
 					commandExecuted = true;

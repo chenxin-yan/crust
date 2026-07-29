@@ -1,5 +1,4 @@
-import type { ArgDef, FlagDef } from "@crustjs/core";
-import type { CommandNode } from "@crustjs/core/tooling";
+import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "./spec.ts";
@@ -50,12 +49,12 @@ function normaliseDescription(value: string | undefined): string | undefined {
 }
 
 /**
- * Project a single `FlagDef` (keyed by `name` in `effectiveFlags`) onto a
+ * Project a single `FlagDef` (keyed by `name` in the snapshot `flags`) onto a
  * `CompletionFlag`. The walker calls this for every entry of every visible
- * command's `effectiveFlags` map so inherited flags surface at the right
+ * command's `flags` map so inherited flags surface at the right
  * depth.
  */
-function walkFlag(name: string, def: FlagDef): CompletionFlag {
+function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 	assertSafeIdentifier(name, "flag name");
 	const aliases = def.aliases?.filter((alias) => alias.length > 0);
 	if (aliases !== undefined) {
@@ -119,7 +118,7 @@ function walkFlag(name: string, def: FlagDef): CompletionFlag {
 }
 
 /** Project a single `ArgDef` onto a `CompletionArg`. */
-function walkArg(def: ArgDef): CompletionArg {
+function walkArg(def: ArgSnapshot): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const sourceType = def.type;
 	const specType: "string" | "number" | "boolean" =
@@ -154,12 +153,12 @@ function walkArg(def: ArgDef): CompletionArg {
 }
 
 /**
- * Recursively walk a `CommandNode`. Hidden subcommands are filtered out at
+ * Recursively walk a `CommandSnapshot`. Hidden subcommands are filtered out at
  * every level; the calling site (`walkCommandNode`) is responsible for
  * passing in a node that should itself be visible — the root is always
  * visible by construction.
  */
-function walkCommand(node: CommandNode): CompletionCommand {
+function walkCommand(node: CommandSnapshot): CompletionCommand {
 	assertSafeIdentifier(node.meta.name, "command name");
 	const nodeAliases = node.meta.aliases;
 	if (nodeAliases !== undefined) {
@@ -168,15 +167,13 @@ function walkCommand(node: CommandNode): CompletionCommand {
 		}
 	}
 	const flags: CompletionFlag[] = [];
-	for (const [flagName, flagDef] of Object.entries(node.effectiveFlags)) {
+	for (const [flagName, flagDef] of Object.entries(node.flags)) {
 		flags.push(walkFlag(flagName, flagDef));
 	}
 
 	const args: CompletionArg[] = [];
-	if (node.args !== undefined) {
-		for (const argDef of node.args) {
-			args.push(walkArg(argDef));
-		}
+	for (const argDef of node.args) {
+		args.push(walkArg(argDef));
 	}
 
 	const subCommands: CompletionCommand[] = [];
@@ -211,7 +208,7 @@ function walkCommand(node: CommandNode): CompletionCommand {
 }
 
 /**
- * Build a `CompletionSpec` from a root `CommandNode`.
+ * Build a `CompletionSpec` from a root `CommandSnapshot`.
  *
  * This is the single entry point used by the plugin's `run()` handler. It
  * walks lazily — never at `setup()` time — so plugin order is irrelevant
@@ -219,6 +216,6 @@ function walkCommand(node: CommandNode): CompletionCommand {
  * registers; we only see the final tree when the user actually invokes the
  * `completion` subcommand).
  */
-export function walkCommandNode(root: CommandNode): CompletionSpec {
+export function walkCommandNode(root: CommandSnapshot): CompletionSpec {
 	return { root: walkCommand(root) };
 }

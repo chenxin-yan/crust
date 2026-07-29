@@ -64,14 +64,15 @@ describe("public beta API", () => {
 
 	it("loads extensions separately from command context", async () => {
 		let wrapperCalled = false;
-		const version = extension("version")
-			.flag("version", {
-				type: "boolean",
-			})
-			.wrapRun((run) => async (context) => {
+		const version = extension("version", {
+			flags: {
+				version: { type: "boolean" },
+			},
+			async intercept(_context, next) {
 				wrapperCalled = true;
-				await run(context);
-			});
+				await next();
+			},
+		});
 
 		const app = new Crust("my-cli").extend(version).handle(({ flags, ctx }) => {
 			type _ctx = Expect<Equal<typeof ctx, Readonly<{}>>>;
@@ -85,8 +86,10 @@ describe("public beta API", () => {
 
 	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {
 		let runCount = 0;
-		const debug = extension("debug").flag("debug", {
-			type: "boolean",
+		const debug = extension("debug", {
+			flags: {
+				debug: { type: "boolean" },
+			},
 		});
 		const app = new Crust("repeat").extend(debug).handle(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) {

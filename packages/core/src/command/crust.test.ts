@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { extension, extensionFromPlugin } from "../api/extension.ts";
+import { extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { CrustPlugin } from "../plugins.ts";
 import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
 import {
 	Crust,
@@ -56,7 +55,7 @@ describe("Crust constructor", () => {
 		expect(app._node.effectiveFlags).toEqual({});
 		expect(app._node.args).toBeUndefined();
 		expect(app._node.subCommands).toEqual({});
-		expect(app._node.plugins).toEqual([]);
+		expect(app._node.extensions).toEqual([]);
 		expect(app._node.run).toBeUndefined();
 	});
 });
@@ -111,9 +110,9 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		],
 		[
 			".extend()",
-			(a) => a.extend(extensionFromPlugin({ name: "test-plugin" } as CrustPlugin)) as Crust,
+			(a) => a.extend(extension("test-extension")) as Crust,
 			(a) => {
-				expect(a._node.plugins.length).toBe(0);
+				expect(a._node.extensions.length).toBe(0);
 			},
 		],
 		[
@@ -1085,172 +1084,414 @@ describe("Crust .handle() type-level tests", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .extend(extensionFromPlugin()) — Runtime tests
+// .extend() — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .extend(extensionFromPlugin())", () => {
-	it("registers a plugin on the node's plugins array", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-		const app = new Crust("test").extend(extensionFromPlugin(plugin));
+describe("Crust .extend()", () => {
+	it("registers an Extension on the node's extensions array", () => {
+		const ext = extension("test-extension");
+		const app = new Crust("test").extend(ext);
 
-		expect(app._node.plugins.length).toBe(1);
-		expect(app._node.plugins[0]).toBe(plugin);
+		expect(app._node.extensions.length).toBe(1);
+		expect(app._node.extensions[0]).toBe(ext);
 	});
 
-	it("multiple .extend(extensionFromPlugin()) calls chain correctly", () => {
-		const plugin1: CrustPlugin = { name: "plugin-1" };
-		const plugin2: CrustPlugin = { name: "plugin-2" };
-		const plugin3: CrustPlugin = { name: "plugin-3" };
+	it("multiple .extend() calls chain in registration order", () => {
+		const one = extension("one");
+		const two = extension("two");
+		const three = extension("three");
 
+		const app = new Crust("test").extend(one).extend(two, three);
+
+		expect(app._node.extensions.map((e) => e.name)).toEqual(["one", "two", "three"]);
+	});
+
+	it("extension() returns a frozen plain config", () => {
+		const ext = extension("frozen", { flags: { x: { type: "boolean" } } });
+
+		expect(Object.isFrozen(ext)).toBe(true);
+		expect(ext.name).toBe("frozen");
+		expect(ext.flags?.x?.type).toBe("boolean");
+	});
+
+	it("extension() rejects an empty name", () => {
+		expect(() => extension("  ")).toThrow(CrustError);
+	});
+
+	it("preserves flags, args, handler, and subcommands when extending", () => {
 		const app = new Crust("test")
-			.extend(extensionFromPlugin(plugin1))
-			.extend(extensionFromPlugin(plugin2))
-			.extend(extensionFromPlugin(plugin3));
-
-		expect(app._node.plugins.length).toBe(3);
-		expect(app._node.plugins[0]).toBe(plugin1);
-		expect(app._node.plugins[1]).toBe(plugin2);
-		expect(app._node.plugins[2]).toBe(plugin3);
-	});
-
-	it("preserves plugin order (registration order)", () => {
-		const names: string[] = [];
-		const plugin1: CrustPlugin = {
-			name: "first",
-			setup: () => {
-				names.push("first");
-			},
-		};
-		const plugin2: CrustPlugin = {
-			name: "second",
-			setup: () => {
-				names.push("second");
-			},
-		};
-
-		const app = new Crust("test")
-			.extend(extensionFromPlugin(plugin1))
-			.extend(extensionFromPlugin(plugin2));
-
-		expect(app._node.plugins[0]?.name).toBe("first");
-		expect(app._node.plugins[1]?.name).toBe("second");
-	});
-
-	it("plugin setup hook is callable with correct context shape", () => {
-		const plugin: CrustPlugin = {
-			name: "test-plugin",
-			setup: (context, actions) => {
-				expect(context).toBeDefined();
-				expect(context.argv).toBeDefined();
-				expect(context.state).toBeDefined();
-				expect(actions).toBeDefined();
-				expect(typeof actions.addFlag).toBe("function");
-				expect(typeof actions.addSubCommand).toBe("function");
-			},
-		};
-
-		const app = new Crust("test").extend(extensionFromPlugin(plugin));
-
-		// Verify the plugin is stored and its setup is a function
-		expect(app._node.plugins[0]?.setup).toBeDefined();
-		expect(typeof app._node.plugins[0]?.setup).toBe("function");
-	});
-
-	it("plugin with middleware hook is stored correctly", () => {
-		const plugin: CrustPlugin = {
-			name: "middleware-plugin",
-			middleware: async (_ctx, next) => {
-				await next();
-			},
-		};
-
-		const app = new Crust("test").extend(extensionFromPlugin(plugin));
-
-		expect(app._node.plugins[0]?.middleware).toBeDefined();
-		expect(typeof app._node.plugins[0]?.middleware).toBe("function");
-	});
-
-	it("preserves flags, args, and handlers when adding plugin", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-
-		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }])
-			.handle(() => {})
-			.extend(extensionFromPlugin(plugin));
-
-		expect(app._node.localFlags.verbose).toBeDefined();
-		expect(app._node.args?.length).toBe(1);
-		expect(app._node.run).toBeDefined();
-		expect(app._node.plugins.length).toBe(1);
-	});
-
-	it("preserves subcommands when adding plugin", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-
-		const app = new Crust("test")
-			.command("sub", (cmd) => cmd.flags({ output: { type: "string" } }))
-			.extend(extensionFromPlugin(plugin));
-
-		expect(app._node.subCommands.sub).toBeDefined();
-		expect(app._node.plugins.length).toBe(1);
-	});
-
-	it(".extend(extensionFromPlugin()) can be chained with .flags(), .args(), .command(), .handle()", () => {
-		const plugin: CrustPlugin = { name: "test-plugin" };
-
-		const app = new Crust("test")
-			.extend(extensionFromPlugin(plugin))
 			.flags({ verbose: { type: "boolean" } })
 			.args([{ name: "file", type: "string" }])
 			.command("sub", (cmd) => cmd)
-			.handle(() => {});
+			.handle(() => {})
+			.extend(extension("test-extension"));
 
-		expect(app._node.plugins.length).toBe(1);
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
 		expect(app._node.subCommands.sub).toBeDefined();
 		expect(app._node.run).toBeDefined();
+		expect(app._node.extensions.length).toBe(1);
 	});
 
-	it("intermediate builder retains its own plugins independently", () => {
-		const plugin1: CrustPlugin = { name: "plugin-1" };
-		const plugin2: CrustPlugin = { name: "plugin-2" };
+	it("intermediate builder retains its own extensions independently", () => {
+		const one = extension("one");
+		const two = extension("two");
 
-		const base = new Crust("test").extend(extensionFromPlugin(plugin1));
-		const extended = base.extend(extensionFromPlugin(plugin2));
+		const base = new Crust("test").extend(one);
+		const extended = base.extend(two);
 
-		// base should only have plugin1
-		expect(base._node.plugins.length).toBe(1);
-		expect(base._node.plugins[0]).toBe(plugin1);
+		expect(base._node.extensions.map((e) => e.name)).toEqual(["one"]);
+		expect(extended._node.extensions.map((e) => e.name)).toEqual(["one", "two"]);
+	});
+});
 
-		// extended should have both plugins
-		expect(extended._node.plugins.length).toBe(2);
-		expect(extended._node.plugins[0]).toBe(plugin1);
-		expect(extended._node.plugins[1]).toBe(plugin2);
+describe("Extension application at prepare time", () => {
+	it("recursive Extension flags reach every command, including Extension commands", async () => {
+		const seen: Record<string, unknown>[] = [];
+		const debug = extension("debug", {
+			flags: { debug: { type: "boolean", inherit: true } },
+		});
+
+		const app = new Crust("cli").extend(debug).command("sub", (cmd) =>
+			cmd.handle(({ flags }) => {
+				seen.push(flags);
+			}),
+		);
+
+		await app.run(["sub", "--debug"]);
+
+		expect(seen[0]?.debug).toBe(true);
 	});
 
-	it("plugin without name is accepted", () => {
-		const plugin: CrustPlugin = {
-			setup: () => {},
-		};
+	it("non-recursive Extension flags stay on the root", async () => {
+		const version = extension("version", {
+			flags: { version: { type: "boolean", recursive: false } },
+		});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin));
-		expect(app._node.plugins.length).toBe(1);
-		expect(app._node.plugins[0]?.name).toBeUndefined();
+		const app = new Crust("cli").extend(version).command("sub", (cmd) => cmd.handle(() => {}));
+
+		// --version is unknown on the subcommand → PARSE error
+		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({ code: "PARSE" });
 	});
 
-	it("empty plugin object is accepted", () => {
-		const plugin: CrustPlugin = {};
+	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
+		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean" } })
+			.extend(clash)
+			.handle(() => {});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin));
-		expect(app._node.plugins.length).toBe(1);
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
+		const clash = extension("clash", {
+			flags: { loud: { type: "boolean", short: "v" } },
+		});
+		const app = new Crust("cli")
+			.flags({ verbose: { type: "boolean", short: "v" } })
+			.extend(clash)
+			.handle(() => {});
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
+		const a = extension("a", { flags: { shared: { type: "boolean" } } });
+		const b = extension("b", { flags: { shared: { type: "boolean" } } });
+		const app = new Crust("cli").extend(a, b).handle(() => {});
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("Extension commands are routable and their inputs validated before hooks", async () => {
+		const lines: string[] = [];
+		const completion = extension("completion", {
+			commands: [
+				new Crust("completion")
+					.args([{ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] }])
+					.handle(() => {}),
+			],
+			async intercept(context, next) {
+				if (context.commandPath[1] === "completion") {
+					lines.push(`completion:${String(context.args.shell)}`);
+					return; // short-circuit — owned command handled here
+				}
+				await next();
+			},
+		});
+
+		const app = new Crust("cli").extend(completion).handle(() => {});
+
+		await app.run(["completion", "bash"]);
+		expect(lines).toEqual(["completion:bash"]);
+
+		// Owned inputs are checked BEFORE the intercept hook runs: bad choice
+		// values fail at syntax parsing, missing required args at validation
+		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({ code: "PARSE" });
+		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
+	});
+
+	it("Extension command colliding with an application command is a DEFINITION error", async () => {
+		const clash = extension("clash", {
+			commands: [new Crust("sub").handle(() => {})],
+		});
+		const app = new Crust("cli").command("sub", (cmd) => cmd.handle(() => {})).extend(clash);
+
+		await expect(app.run(["sub"])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("does not mutate the source builder across executions", async () => {
+		let runCount = 0;
+		const debug = extension("debug", { flags: { debug: { type: "boolean" } } });
+		const app = new Crust("repeat").extend(debug).handle(({ flags }) => {
+			if ((flags as Record<string, unknown>).debug) runCount++;
+		});
+
+		await app.execute({ argv: ["--debug"] });
+		await app.execute({ argv: ["--debug"] });
+
+		expect(runCount).toBe(2);
+		expect(app._node.effectiveFlags.debug).toBeUndefined();
+	});
+});
+
+describe("Extension intercept chain", () => {
+	it("runs intercepts in registration order around the Command Handler", async () => {
+		const order: string[] = [];
+		const first = extension("first", {
+			async intercept(_context, next) {
+				order.push("first:before");
+				await next();
+				order.push("first:after");
+			},
+		});
+		const second = extension("second", {
+			async intercept(_context, next) {
+				order.push("second:before");
+				await next();
+				order.push("second:after");
+			},
+		});
+
+		const app = new Crust("cli").extend(first, second).handle(() => {
+			order.push("run");
+		});
+
+		await app.run([]);
+
+		expect(order).toEqual(["first:before", "second:before", "run", "second:after", "first:after"]);
+	});
+
+	it("short-circuiting an intercept skips validation and the Command Handler", async () => {
+		let ran = false;
+		const gate = extension("gate", {
+			intercept() {
+				// no next() — short-circuit
+			},
+		});
+
+		// Required arg missing would normally fail validation
+		const app = new Crust("cli")
+			.args([{ name: "file", type: "string", required: true }])
+			.extend(gate)
+			.handle(() => {
+				ran = true;
+			});
+
+		await expect(app.run([])).resolves.toBeUndefined();
+		expect(ran).toBe(false);
+	});
+
+	it("intercept runs before application value validation but after parsing", async () => {
+		const observed: unknown[] = [];
+		const observer = extension("observer", {
+			async intercept(context, next) {
+				observed.push(context.flags.port);
+				await next();
+			},
+		});
+
+		const app = new Crust("cli")
+			.flags({ port: { type: "number", required: true } })
+			.extend(observer)
+			.handle(() => {});
+
+		// Parsed (coerced) value visible in the hook even though validation
+		// later fails on the missing required flag when absent
+		await app.run(["--port", "8080"]);
+		expect(observed).toEqual([8080]);
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "VALIDATION" });
+		expect(observed).toEqual([8080, undefined]);
+	});
+
+	it("routing failures flow directly to the caller — intercepts never observe them", async () => {
+		let intercepted = false;
+		const watcher = extension("watcher", {
+			async intercept(_context, next) {
+				intercepted = true;
+				await next();
+			},
+		});
+
+		const app = new Crust("cli").extend(watcher).command("known", (cmd) => cmd.handle(() => {}));
+
+		await expect(app.run(["unknown"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
+		expect(intercepted).toBe(false);
+	});
+
+	it("intercept receives readonly serializable snapshots and injected io", async () => {
+		const lines: string[] = [];
+		const probe = extension("probe", {
+			async intercept(context, next) {
+				expect(Object.isFrozen(context.rootCommand)).toBe(true);
+				expect(Object.isFrozen(context.command)).toBe(true);
+				expect(() => structuredClone(context.rootCommand)).not.toThrow();
+				context.stdout(`probe:${context.command.meta.name}`);
+				await next();
+			},
+		});
+
+		const app = new Crust("cli").extend(probe).handle(() => {});
+
+		await app.run([], { stdout: (t) => lines.push(t) });
+		expect(lines).toEqual(["probe:cli"]);
+	});
+
+	it("calling next() twice is a DEFINITION error", async () => {
+		const rogue = extension("rogue", {
+			async intercept(_context, next) {
+				await next();
+				await next();
+			},
+		});
+
+		const app = new Crust("cli").extend(rogue).handle(() => {});
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
 // .execute() — Full execution pipeline tests
 // ────────────────────────────────────────────────────────────────────────────
+
+describe("Extension handleError chain", () => {
+	let originalLog: typeof console.log;
+	let originalError: typeof console.error;
+	let originalExitCode: number | string | null | undefined;
+	let stderrChunks: string[];
+
+	beforeEach(() => {
+		originalLog = console.log;
+		originalError = console.error;
+		originalExitCode = process.exitCode;
+		stderrChunks = [];
+		console.error = (...args: unknown[]) => {
+			stderrChunks.push(args.map(String).join(" "));
+		};
+		process.exitCode = 0;
+	});
+
+	afterEach(() => {
+		console.log = originalLog;
+		console.error = originalError;
+		process.exitCode = originalExitCode;
+	});
+
+	const failing = () =>
+		new Crust("cli").handle(() => {
+			throw new Error("boom");
+		});
+
+	it("handlers run in registration order and next() reaches Core's default renderer", async () => {
+		const order: string[] = [];
+		const first = extension("first", {
+			async handleError(_error, _ctx, next) {
+				order.push("first");
+				await next();
+			},
+		});
+		const second = extension("second", {
+			async handleError(_error, _ctx, next) {
+				order.push("second");
+				await next();
+			},
+		});
+
+		await failing().extend(first, second).execute({ argv: [] });
+
+		expect(order).toEqual(["first", "second"]);
+		// Chain end = Core's default renderer
+		expect(stderrChunks.join("\n")).toContain("boom");
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("a handler that renders and returns replaces the default renderer but keeps a nonzero exit", async () => {
+		const lines: string[] = [];
+		const presenter = extension("presenter", {
+			handleError(error, ctx) {
+				ctx.stderr(`pretty: ${(error as Error).message}`);
+				lines.push("rendered");
+			},
+		});
+
+		await failing().extend(presenter).execute({ argv: [] });
+
+		expect(lines).toEqual(["rendered"]);
+		expect(stderrChunks.join("\n")).toContain("pretty: boom");
+		// Default renderer did not run on top
+		expect(stderrChunks.join("\n")).not.toContain("Error: boom");
+		// Core always preserves the nonzero failure outcome (fixes the old
+		// onError-swallows-errors exit-0 bug)
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("a handler that throws falls back to default rendering of the original error", async () => {
+		const broken = extension("broken", {
+			handleError() {
+				throw new Error("renderer exploded");
+			},
+		});
+
+		await failing().extend(broken).execute({ argv: [] });
+
+		expect(stderrChunks.join("\n")).toContain("boom");
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("receives routing failures (COMMAND_NOT_FOUND) with the original error object", async () => {
+		let received: unknown;
+		const catcher = extension("catcher", {
+			handleError(error, ctx) {
+				received = error;
+				ctx.stderr("handled");
+			},
+		});
+
+		const app = new Crust("cli").extend(catcher).command("known", (cmd) => cmd.handle(() => {}));
+
+		await app.execute({ argv: ["unknown"] });
+
+		expect(received).toBeInstanceOf(CrustError);
+		expect((received as CrustError).is("COMMAND_NOT_FOUND")).toBe(true);
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("never runs for run() — the original error propagates unrendered", async () => {
+		let handlerRan = false;
+		const presenter = extension("presenter", {
+			handleError() {
+				handlerRan = true;
+			},
+		});
+
+		await expect(failing().extend(presenter).run([])).rejects.toThrow("boom");
+		expect(handlerRan).toBe(false);
+		expect(stderrChunks).toEqual([]);
+	});
+});
 
 describe("Crust .run()", () => {
 	let originalExitCode: number | string | null | undefined;
@@ -1306,25 +1547,6 @@ describe("Crust .run()", () => {
 		expect(err).toEqual(["to err"]);
 	});
 
-	it("surfaces plugin warnings through the injected stderr callback", async () => {
-		const err: string[] = [];
-		const plugin: CrustPlugin = {
-			name: "warning-plugin",
-			setup: (ctx, actions) => {
-				// Overriding an existing flag emits a setup warning
-				actions.addFlag(ctx.rootCommand, "verbose", { type: "boolean" });
-			},
-		};
-		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.extend(extensionFromPlugin(plugin))
-			.handle(() => {});
-
-		await app.run([], { stderr: (t) => err.push(t) });
-
-		expect(err.some((line) => line.startsWith("Warning:"))).toBe(true);
-	});
-
 	it("parses argv exactly like execute", async () => {
 		let received: unknown;
 		const app = new Crust("test")
@@ -1360,7 +1582,7 @@ describe("Crust .extend() root-only", () => {
 	});
 
 	it("throws DEFINITION when attaching a standalone builder that carries Extensions", () => {
-		const sub = new Crust("sub").extend(extensionFromPlugin({ name: "p" })).handle(() => {});
+		const sub = new Crust("sub").extend(extension("p")).handle(() => {});
 
 		expect(() => new Crust("cli").command(sub)).toThrow(CrustError);
 		try {
@@ -1509,76 +1731,54 @@ describe("Crust .execute()", () => {
 		expect(receivedDir).toBe("custom-dir");
 	});
 
-	it("runs plugin setup before handlers", async () => {
+	it("runs the intercept chain around the handler", async () => {
 		const order: string[] = [];
 
-		const plugin: CrustPlugin = {
-			name: "test-plugin",
-			setup: () => {
-				order.push("setup");
+		const wrap = extension("wrap", {
+			async intercept(_ctx, next) {
+				order.push("intercept:before");
+				await next();
+				order.push("intercept:after");
 			},
-		};
+		});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle(() => {
+		const app = new Crust("test").extend(wrap).handle(() => {
 			order.push("run");
 		});
 
 		await app.execute({ argv: [] });
 
-		expect(order).toEqual(["setup", "run"]);
+		expect(order).toEqual(["intercept:before", "run", "intercept:after"]);
 	});
 
-	it("runs middleware chain", async () => {
+	it("runs multiple intercepts in registration order", async () => {
 		const order: string[] = [];
 
-		const plugin: CrustPlugin = {
-			name: "test-plugin",
-			middleware: async (_ctx, next) => {
-				order.push("middleware:before");
+		const e1 = extension("e1", {
+			async intercept(_ctx, next) {
+				order.push("e1:before");
 				await next();
-				order.push("middleware:after");
+				order.push("e1:after");
 			},
-		};
-
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle(() => {
-			order.push("run");
 		});
-
-		await app.execute({ argv: [] });
-
-		expect(order).toEqual(["middleware:before", "run", "middleware:after"]);
-	});
-
-	it("runs multiple middleware in registration order", async () => {
-		const order: string[] = [];
-
-		const plugin1: CrustPlugin = {
-			name: "p1",
-			middleware: async (_ctx, next) => {
-				order.push("p1:before");
+		const e2 = extension("e2", {
+			async intercept(_ctx, next) {
+				order.push("e2:before");
 				await next();
-				order.push("p1:after");
+				order.push("e2:after");
 			},
-		};
-		const plugin2: CrustPlugin = {
-			name: "p2",
-			middleware: async (_ctx, next) => {
-				order.push("p2:before");
-				await next();
-				order.push("p2:after");
-			},
-		};
+		});
 
 		const app = new Crust("test")
-			.extend(extensionFromPlugin(plugin1))
-			.extend(extensionFromPlugin(plugin2))
+			.extend(e1)
+			.extend(e2)
 			.handle(() => {
 				order.push("run");
 			});
 
 		await app.execute({ argv: [] });
 
-		expect(order).toEqual(["p1:before", "p2:before", "run", "p2:after", "p1:after"]);
+		expect(order).toEqual(["e1:before", "e2:before", "run", "e2:after", "e1:after"]);
 	});
 
 	it("catches errors and sets exitCode", async () => {
@@ -1652,20 +1852,14 @@ describe("Crust .execute()", () => {
 		expect(process.exitCode).toBe(0);
 	});
 
-	it("plugin setup can add flags recognized by parser", async () => {
+	it("Extension-owned flags are recognized by the parser", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const plugin: CrustPlugin = {
-			name: "version-plugin",
-			setup: (ctx, actions) => {
-				actions.addFlag(ctx.rootCommand, "version", {
-					type: "boolean",
-					short: "V",
-				});
-			},
-		};
+		const version = extension("version", {
+			flags: { version: { type: "boolean", short: "V" } },
+		});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle((ctx) => {
+		const app = new Crust("test").extend(version).handle((ctx) => {
 			receivedFlags = ctx.flags;
 		});
 
@@ -1674,36 +1868,25 @@ describe("Crust .execute()", () => {
 		expect(receivedFlags.version).toBe(true);
 	});
 
-	it("plugin-added subcommand trees inherit flags from prior plugins", async () => {
+	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const helpLikePlugin: CrustPlugin = {
-			name: "help-like",
-			setup: (ctx, actions) => {
-				actions.addFlag(ctx.rootCommand, "help", {
-					type: "boolean",
-					inherit: true,
-				});
-			},
-		};
-		const subCommandPlugin: CrustPlugin = {
-			name: "inject-subcommand",
-			setup: (ctx, actions) => {
-				actions.addSubCommand(
-					ctx.rootCommand,
-					"skill",
-					new Crust("skill").command("update", (cmd) =>
-						cmd.handle((runCtx) => {
-							receivedFlags = runCtx.flags as Record<string, unknown>;
-						}),
-					)._node,
-				);
-			},
-		};
+		const helpLike = extension("help-like", {
+			flags: { help: { type: "boolean", inherit: true } },
+		});
+		const skillLike = extension("inject-subcommand", {
+			commands: [
+				new Crust("skill").command("update", (cmd) =>
+					cmd.handle((runCtx) => {
+						receivedFlags = runCtx.flags as Record<string, unknown>;
+					}),
+				),
+			],
+		});
 
 		const app = new Crust("test")
-			.extend(extensionFromPlugin(helpLikePlugin))
-			.extend(extensionFromPlugin(subCommandPlugin))
+			.extend(helpLike)
+			.extend(skillLike)
 			.handle(() => {});
 
 		await app.execute({ argv: ["skill", "update", "--help"] });
@@ -1743,46 +1926,40 @@ describe("Crust .execute()", () => {
 		expect(receivedRawArgs).toEqual(["extra1", "extra2"]);
 	});
 
-	it("middleware receives route and input after resolution", async () => {
-		let middlewareRoute: unknown = null;
-		let middlewareInput: unknown = null;
+	it("intercept receives the resolved command and parsed input", async () => {
+		let interceptedName = "";
+		let interceptedFlags: Record<string, unknown> = {};
 
-		const plugin: CrustPlugin = {
-			name: "inspect",
-			middleware: async (ctx, next) => {
-				middlewareRoute = ctx.route;
-				middlewareInput = ctx.input;
+		const inspect = extension("inspect", {
+			async intercept(ctx, next) {
+				interceptedName = ctx.command.meta.name;
+				interceptedFlags = { ...ctx.flags };
 				await next();
 			},
-		};
+		});
 
 		const app = new Crust("cli")
-			.extend(extensionFromPlugin(plugin))
+			.extend(inspect)
 			.command("sub", (cmd) =>
 				cmd.flags({ output: { type: "string", default: "stdout" } }).handle(() => {}),
 			);
 
 		await app.execute({ argv: ["sub", "--output", "file.txt"] });
 
-		expect(middlewareRoute).toBeDefined();
-		expect((middlewareRoute as { command: { meta: { name: string } } }).command.meta.name).toBe(
-			"sub",
-		);
-		expect(middlewareInput).toBeDefined();
-		expect((middlewareInput as { flags: Record<string, unknown> }).flags.output).toBe("file.txt");
+		expect(interceptedName).toBe("sub");
+		expect(interceptedFlags.output).toBe("file.txt");
 	});
 
-	it("middleware can short-circuit execution", async () => {
+	it("intercept can short-circuit execution", async () => {
 		let handlerRan = false;
 
-		const plugin: CrustPlugin = {
-			name: "short-circuit",
-			middleware: async (_ctx, _next) => {
+		const gate = extension("short-circuit", {
+			intercept: async (_ctx, _next) => {
 				// Don't call next() — short circuit
 			},
-		};
+		});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle(() => {
+		const app = new Crust("test").extend(gate).handle(() => {
 			handlerRan = true;
 		});
 
@@ -1848,31 +2025,27 @@ describe("Crust .execute()", () => {
 		expect(receivedVerbose).toBe(true);
 	});
 
-	it("plugin setup error is caught and sets exitCode", async () => {
-		const plugin: CrustPlugin = {
-			name: "bad-plugin",
-			setup: () => {
-				throw new Error("setup failed");
-			},
-		};
-
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle(() => {});
+	it("Extension apply error is rendered and sets exitCode", async () => {
+		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const app = new Crust("test")
+			.flags({ verbose: { type: "boolean" } })
+			.extend(clash)
+			.handle(() => {});
 
 		await app.execute({ argv: [] });
 
 		expect(process.exitCode).toBe(1);
-		expect(stderrChunks.join("\n")).toContain("setup failed");
+		expect(stderrChunks.join("\n")).toContain("collides");
 	});
 
-	it("treats setup-time prompt cancellation as a silent user abort", async () => {
-		const plugin: CrustPlugin = {
-			name: "cancel-plugin",
-			setup: () => {
+	it("treats intercept-time prompt cancellation as a silent user abort", async () => {
+		const cancel = extension("cancel", {
+			intercept: () => {
 				throw new DOMException("Prompt was cancelled.", "AbortError");
 			},
-		};
+		});
 
-		const app = new Crust("test").extend(extensionFromPlugin(plugin)).handle(() => {});
+		const app = new Crust("test").extend(cancel).handle(() => {});
 
 		await app.execute({ argv: [] });
 
@@ -2345,17 +2518,13 @@ describe("Crust .command(builder)", () => {
 
 describe("Crust.prepareCommandTree", () => {
 	it("returns a frozen tree and does not mutate the builder", async () => {
-		const plugin: CrustPlugin = {
-			name: "doc-test",
-			setup(ctx, actions) {
-				actions.addFlag(ctx.rootCommand, "extra", {
-					type: "boolean",
-					description: "Injected for docs",
-				});
+		const docs = extension("doc-test", {
+			flags: {
+				extra: { type: "boolean", description: "Injected for docs" },
 			},
-		};
+		});
 
-		const app = new Crust("cli").extend(extensionFromPlugin(plugin)).meta({ description: "Test" });
+		const app = new Crust("cli").extend(docs).meta({ description: "Test" });
 
 		expect(app._node.localFlags.extra).toBeUndefined();
 
@@ -2467,37 +2636,17 @@ describe("Crust .command() aliases", () => {
 		expect(() => app.command(conflicting)).toThrow(/collides with alias of sibling "issue"/);
 	});
 
-	it("plugin-installed subcommand with a colliding alias is skipped (warning, not silent shadowing)", async () => {
-		// Mirrors how `addSubCommand` handles a colliding canonical name today.
-		// Without this guard, a plugin could attach an alias that silently
+	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
+		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
-		let pluginRan = false;
-		let userRan = false;
+		const rogue = extension("rogue", {
+			commands: [new Crust("info").meta({ aliases: ["i"] }).handle(() => {})],
+		});
 
-		const rogue: CrustPlugin = {
-			name: "rogue",
-			setup: (ctx, actions) => {
-				actions.addSubCommand(
-					ctx.rootCommand,
-					"info",
-					new Crust("info").meta({ aliases: ["i"] }).handle(() => {
-						pluginRan = true;
-					})._node,
-				);
-			},
-		};
+		const app = new Crust("cli")
+			.extend(rogue)
+			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}));
 
-		const app = new Crust("cli").extend(extensionFromPlugin(rogue)).command("issue", (cmd) =>
-			cmd.meta({ aliases: ["i"] }).handle(() => {
-				userRan = true;
-			}),
-		);
-
-		await app.execute({ argv: ["i"] });
-
-		// The user's command still wins; the plugin's colliding install was
-		// rejected before it could shadow routing.
-		expect(userRan).toBe(true);
-		expect(pluginRan).toBe(false);
+		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 });

@@ -1,5 +1,5 @@
 import type { ContextInstance } from "../api/context.ts";
-import type { CrustPlugin } from "../plugins.ts";
+import type { Extension } from "../api/extension.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Context providers available to this command */
 	contexts: ContextInstance[];
-	/** Plugins registered via `.extend()` (Extensions lower to plugins) */
-	plugins: CrustPlugin[];
+	/** Extensions registered via `.extend()` (root builder only) */
+	extensions: Extension[];
 	/** The Command Handler */
 	run?: (ctx: unknown) => void | Promise<void>;
 }
@@ -52,7 +52,7 @@ export function createCommandNode(name: string): CommandNode {
 		args: undefined,
 		subCommands: {},
 		contexts: [],
-		plugins: [],
+		extensions: [],
 		run: undefined,
 	};
 }

@@ -9,9 +9,7 @@ import type {
 	InferArgs,
 	ParseResult,
 } from "../src/index";
-import { Crust } from "../src/index";
-import { extensionFromPlugin } from "../src/internal";
-import type { CrustPlugin } from "../src/plugins";
+import { Crust, extension } from "../src/index";
 import { parseArgs, resolveCommand, type CommandRoute } from "../src/tooling";
 import { executeCrust } from "./helpers";
 
@@ -467,23 +465,19 @@ describe("integration: .execute() full pipeline with argv override", () => {
 	});
 });
 
-describe("integration: plugin adds flag visible to subcommand handler", () => {
+describe("integration: Extension adds flag visible to subcommand handler", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("plugin-added flag on root is parsed and available to root handler", async () => {
-		const versionPlugin: CrustPlugin = {
-			name: "version-plugin",
-			setup: (ctx, actions) => {
-				actions.addFlag(ctx.rootCommand, "version", {
-					type: "boolean",
-					short: "V",
-				});
+	it("Extension flag on root is parsed and available to root handler", async () => {
+		const versionExtension = extension("version-extension", {
+			flags: {
+				version: { type: "boolean", short: "V", recursive: false },
 			},
-		};
+		});
 
-		const app = new Crust("cli").extend(extensionFromPlugin(versionPlugin)).handle((ctx) => {
+		const app = new Crust("cli").extend(versionExtension).handle((ctx) => {
 			if ((ctx.flags as Record<string, unknown>).version) {
 				console.log("v1.0.0");
 			} else {
@@ -496,26 +490,25 @@ describe("integration: plugin adds flag visible to subcommand handler", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("plugin middleware wraps subcommand execution", async () => {
+	it("Extension intercept wraps subcommand execution", async () => {
 		const order: string[] = [];
 
-		const loggingPlugin: CrustPlugin = {
-			name: "logging",
-			middleware: async (ctx, next) => {
-				order.push(`middleware:before:${ctx.route?.command.meta.name}`);
+		const logging = extension("logging", {
+			async intercept(ctx, next) {
+				order.push(`intercept:before:${ctx.command.meta.name}`);
 				await next();
-				order.push(`middleware:after:${ctx.route?.command.meta.name}`);
+				order.push(`intercept:after:${ctx.command.meta.name}`);
 			},
-		};
+		});
 
-		const app = new Crust("cli").extend(extensionFromPlugin(loggingPlugin)).command("sub", (cmd) =>
+		const app = new Crust("cli").extend(logging).command("sub", (cmd) =>
 			cmd.handle(() => {
 				order.push("sub:run");
 			}),
 		);
 
 		await executeCrust(app, ["sub"]);
-		expect(order).toEqual(["middleware:before:sub", "sub:run", "middleware:after:sub"]);
+		expect(order).toEqual(["intercept:before:sub", "sub:run", "intercept:after:sub"]);
 	});
 });
 
@@ -876,13 +869,12 @@ describe("integration: complex real-world CLI scenario", () => {
 	it("full CLI with global flags, multiple subcommands, plugins, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
-		const auditPlugin: CrustPlugin = {
-			name: "audit",
-			middleware: async (ctx, next) => {
-				order.push(`audit:${ctx.route?.command.meta.name}`);
+		const auditExtension = extension("audit", {
+			async intercept(ctx, next) {
+				order.push(`audit:${ctx.command.meta.name}`);
 				await next();
 			},
-		};
+		});
 
 		const app = new Crust("myctl")
 			.flags({
@@ -893,7 +885,7 @@ describe("integration: complex real-world CLI scenario", () => {
 					inherit: true,
 				},
 			})
-			.extend(extensionFromPlugin(auditPlugin))
+			.extend(auditExtension)
 			.command("deploy", (cmd) =>
 				cmd
 					.flags({

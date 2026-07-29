@@ -3,10 +3,13 @@ export type { ContextFactory, ContextInstance, ContextMap } from "./api/context.
 export { context } from "./api/context.ts";
 export type {
 	Extension,
-	ExtensionFlagOptions,
-	ExtensionOutput,
-	ExtensionRun,
-	ExtensionRunContext,
+	ExtensionCommand,
+	ExtensionConfig,
+	ExtensionContext,
+	ExtensionErrorHandler,
+	ExtensionFlagDef,
+	ExtensionIntercept,
+	ExtensionNext,
 } from "./api/extension.ts";
 export { extension } from "./api/extension.ts";
 

@@ -1,9 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Command-tree introspection — builds canonical manifest from CommandNode
+// Command-tree introspection — builds canonical manifest from CommandSnapshot
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { ArgDef, FlagDef } from "@crustjs/core";
-import type { CommandNode } from "@crustjs/core/tooling";
+import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
 
 import { getSkillCommandAnnotations } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
@@ -24,7 +23,7 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
  *
  * @example
  * ```ts
- * import type { CommandNode } from "@crustjs/core/tooling";
+ * import type { CommandSnapshot } from "@crustjs/core";
  * import { buildManifest } from "@crustjs/skills";
  *
  * // Typically called from a plugin setup hook:
@@ -32,7 +31,7 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
  * // manifest.children contains normalized nodes for subcommands
  * ```
  */
-export function buildManifest(command: CommandNode): ManifestNode {
+export function buildManifest(command: CommandSnapshot): ManifestNode {
 	return buildNode(command, []);
 }
 
@@ -46,12 +45,12 @@ export function buildManifest(command: CommandNode): ManifestNode {
  * @param command - Current command node to process
  * @param parentPath - Path segments from root to (but not including) this node
  */
-function buildNode(command: CommandNode, parentPath: string[]): ManifestNode {
+function buildNode(command: CommandSnapshot, parentPath: string[]): ManifestNode {
 	const name = normalizeName(command.meta.name);
 	const path = [...parentPath, name];
 
 	const args = normalizeArgs(command.args);
-	const flags = normalizeFlags(command.effectiveFlags);
+	const flags = normalizeFlags(command.flags);
 	const children = normalizeChildren(command.subCommands, path);
 	const annotations = getSkillCommandAnnotations(command);
 
@@ -61,7 +60,7 @@ function buildNode(command: CommandNode, parentPath: string[]): ManifestNode {
 		description: command.meta.description,
 		usage: command.meta.usage,
 		instructions: annotations?.instructions,
-		runnable: typeof command.run === "function",
+		runnable: command.hasHandler,
 		args,
 		flags,
 		children,
@@ -82,7 +81,7 @@ function normalizeName(raw: string): string {
  * {@link ManifestArg} nodes. Positional ordering is preserved since
  * `ArgsDef` is an ordered tuple.
  */
-function normalizeArgs(argsDef: readonly ArgDef[] | undefined): ManifestArg[] {
+function normalizeArgs(argsDef: readonly ArgSnapshot[] | undefined): ManifestArg[] {
 	if (!argsDef || argsDef.length === 0) return [];
 
 	// Preserve positional order — args are a tuple, not a record
@@ -90,9 +89,9 @@ function normalizeArgs(argsDef: readonly ArgDef[] | undefined): ManifestArg[] {
 }
 
 /**
- * Converts a single {@link ArgDef} into a {@link ManifestArg}.
+ * Converts a single {@link ArgSnapshot} into a {@link ManifestArg}.
  */
-function normalizeArg(arg: ArgDef): ManifestArg {
+function normalizeArg(arg: ArgSnapshot): ManifestArg {
 	const result: ManifestArg = {
 		name: arg.name,
 		type: manifestType(arg.type),
@@ -116,7 +115,7 @@ function normalizeArg(arg: ArgDef): ManifestArg {
  * {@link ManifestFlag} nodes. Flags are sorted alphabetically by name
  * for deterministic output.
  */
-function normalizeFlags(flagsDef: Record<string, FlagDef> | undefined): ManifestFlag[] {
+function normalizeFlags(flagsDef: Record<string, FlagSnapshot> | undefined): ManifestFlag[] {
 	if (!flagsDef) return [];
 
 	const keys = Object.keys(flagsDef).sort();
@@ -127,12 +126,12 @@ function normalizeFlags(flagsDef: Record<string, FlagDef> | undefined): Manifest
 }
 
 /**
- * Converts a single {@link FlagDef} into a {@link ManifestFlag}.
+ * Converts a single {@link FlagSnapshot} into a {@link ManifestFlag}.
  *
  * @param name - The flag key from the `FlagsDef` record
  * @param flag - The flag definition
  */
-function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
+function normalizeFlag(name: string, flag: FlagSnapshot): ManifestFlag {
 	const result: ManifestFlag = {
 		name,
 		type: manifestType(flag.type),
@@ -162,7 +161,7 @@ function normalizeFlag(name: string, flag: FlagDef): ManifestFlag {
  * @param parentPath - Full path of the parent node
  */
 function normalizeChildren(
-	subCommands: Record<string, CommandNode>,
+	subCommands: Record<string, CommandSnapshot>,
 	parentPath: string[],
 ): ManifestNode[] {
 	const keys = Object.keys(subCommands).sort();
@@ -173,7 +172,7 @@ function normalizeChildren(
 }
 
 /**
- * Map a `FlagDef`/`ArgDef` `type` literal onto the manifest's narrow
+ * Map a `FlagSnapshot`/`ArgSnapshot` `type` literal onto the manifest's narrow
  * `"string" | "number" | "boolean"` union.
  *
  * The string-tokenised built-ins (`"url"`, `"path"`, `"json"`) all consume a string

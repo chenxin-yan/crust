@@ -4,16 +4,12 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-	Crust,
-	VALIDATION_MODE_ENV,
-	type CrustPlugin,
-	extensionFromPlugin,
-} from "@crustjs/core/internal";
+import { Crust, extension } from "@crustjs/core";
+import { VALIDATION_MODE_ENV, snapshotCommand } from "@crustjs/core/internal";
 
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";
-import { skillPlugin } from "./plugin.ts";
+import { skillExtension } from "./plugin.ts";
 import { readInstalledVersion } from "./version.ts";
 
 const FIXTURE_DIR = join(
@@ -31,13 +27,12 @@ const FIXTURE_DIR_SECOND = join(
 	"bundle-second",
 );
 
-function shortCircuitPlugin(): CrustPlugin {
-	return {
-		name: "short-circuit",
-		async middleware() {
-			// Intentionally stop the middleware chain without calling next()
+function shortCircuitExtension() {
+	return extension("short-circuit", {
+		async intercept() {
+			// Intentionally stop the chain without calling next()
 		},
-	};
+	});
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -56,7 +51,7 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-describe("skillPlugin auto-update", () => {
+describe("skill extension auto-update", () => {
 	let tmpDir: string;
 
 	beforeEach(async () => {
@@ -76,12 +71,10 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -96,21 +89,19 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						instructions: [
-							"Prefer readonly commands before mutating state.",
-							"Ask for confirmation before destructive actions.",
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					instructions: [
+						"Prefer readonly commands before mutating state.",
+						"Ask for confirmation before destructive actions.",
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "instruction-test",
 					description: "test",
@@ -136,23 +127,21 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						instructions: `Read the command docs before answering.
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					instructions: `Read the command docs before answering.
 
 ## Response Policy
 
 - Prefer exact documented flags.
 - Quote defaults only when they appear in the command file.`,
-					}),
-				),
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "markdown-instruction-test",
 					description: "test",
@@ -179,18 +168,16 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: { name: "update-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -212,12 +199,10 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-legacy-migration-test");
@@ -246,17 +231,15 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-message-test",
 					description: "test",
@@ -285,24 +268,24 @@ describe("skillPlugin auto-update", () => {
 		expect(stderrOutput.includes("for OpenCode")).toBe(false);
 	});
 
-	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
+	it("auto-updates before a later extension short-circuits (registration order matters)", async () => {
+		// Intercepts run in registration order; registering skills first means
+		// its auto-update work happens before any later short-circuit.
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
 			.handle(() => {})
-			.extend(extensionFromPlugin(shortCircuitPlugin()))
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-					}),
-				),
-			);
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+				}),
+			)
+			.extend(shortCircuitExtension());
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: { name: "order-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -324,18 +307,16 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "validation-test",
 					description: "test",
@@ -363,19 +344,17 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+				}),
 			);
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "no-update-test",
 					description: "test",
@@ -399,17 +378,15 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "no-change-test",
 					description: "test",
@@ -450,18 +427,16 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "manual-update-test",
 					description: "test",
@@ -485,12 +460,10 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
 			);
 
 		const logs: string[] = [];
@@ -502,7 +475,7 @@ describe("skillPlugin auto-update", () => {
 		try {
 			await withCwd(homedir(), () =>
 				generateSkill({
-					command: app._node,
+					command: snapshotCommand(app._node),
 					meta: {
 						name: "manual-home-update-test",
 						description: "test",
@@ -542,12 +515,10 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
 			);
 
 		const logs: string[] = [];
@@ -559,7 +530,7 @@ describe("skillPlugin auto-update", () => {
 		try {
 			await withCwd(homedir(), () =>
 				generateSkill({
-					command: app._node,
+					command: snapshotCommand(app._node),
 					meta: {
 						name: "manual-home-noop-test",
 						description: "test",
@@ -594,22 +565,20 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						instructions: [
-							"Prefer readonly commands before mutating state.",
-							"Ask for confirmation before destructive actions.",
-						],
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					instructions: [
+						"Prefer readonly commands before mutating state.",
+						"Ask for confirmation before destructive actions.",
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "manual-update-instructions-test",
 					description: "test",
@@ -641,17 +610,15 @@ describe("skillPlugin auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "fallback-scope-test",
 					description: "test",
@@ -727,13 +694,11 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [],
+				}),
 			);
 
 		// Empty `customSkills` must be a true no-op: setup completes, no
@@ -759,20 +724,18 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: pathToFileURL(`${FIXTURE_DIR}/`),
-								version: "1.0.0",
-							},
-						],
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: pathToFileURL(`${FIXTURE_DIR}/`),
+							version: "1.0.0",
+						},
+					],
+					autoUpdate: false,
+				}),
 			);
 
 		await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
@@ -783,20 +746,18 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+					autoUpdate: false,
+				}),
 			);
 
 		await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
@@ -808,20 +769,18 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: "some/relative/path",
-								version: "1.0.0",
-							},
-						],
-						autoUpdate: false,
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: "some/relative/path",
+							version: "1.0.0",
+						},
+					],
+					autoUpdate: false,
+				}),
 			);
 
 		// No bundle is installed, so autoUpdate sweep finds nothing and exits.
@@ -833,19 +792,17 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "collide-test",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "collide-test",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -859,24 +816,22 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -890,19 +845,17 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "Invalid Name!",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "Invalid Name!",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -919,19 +872,17 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "",
+						},
+					],
+				}),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -945,20 +896,18 @@ describe("skillPlugin customSkills validation", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
-								sourceDir: 42 as any,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
+							sourceDir: 42 as any,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -1011,24 +960,22 @@ describe("skillPlugin customSkills name mismatch", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								// Config name claims pricing-toolkit, but FIXTURE_DIR's
-								// SKILL.md frontmatter declares funnel-builder. Without
-								// expectedName enforcement, the funnel-builder install
-								// would silently install at v2.0.0 under the wrong
-								// directory.
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							// Config name claims pricing-toolkit, but FIXTURE_DIR's
+							// SKILL.md frontmatter declares funnel-builder. Without
+							// expectedName enforcement, the funnel-builder install
+							// would silently install at v2.0.0 under the wrong
+							// directory.
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		const origExitCode = process.exitCode;
@@ -1089,19 +1036,17 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1132,19 +1077,17 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1195,25 +1138,23 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								// Bogus path — install will throw at resolve time.
-								sourceDir: "/nonexistent/path/to/funnel-builder",
-								version: "2.0.0",
-							},
-							{
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR_SECOND,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							// Bogus path — install will throw at resolve time.
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "2.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		try {
@@ -1248,20 +1189,18 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1291,19 +1230,17 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: "/nonexistent/path/to/funnel-builder",
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1348,17 +1285,15 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "identical-test",
 					description: "test",
@@ -1399,20 +1334,18 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								// version omitted on purpose — must inherit
-								// `version: "2.0.0"` from the plugin.
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							// version omitted on purpose — must inherit
+							// `version: "2.0.0"` from the plugin.
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1440,19 +1373,17 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "0.3.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "0.3.0",
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1482,13 +1413,11 @@ describe("skillPlugin customSkills auto-update", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
+				}),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1522,24 +1451,22 @@ describe("skillPlugin customSkills interactive command", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-							{
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR_SECOND,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1572,19 +1499,17 @@ describe("skillPlugin customSkills interactive command", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1621,20 +1546,18 @@ describe("skillPlugin customSkills interactive command", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1669,26 +1592,24 @@ describe("skillPlugin customSkills interactive command", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								// Bogus path — install rejects at resolve time.
-								sourceDir: "/nonexistent/path/to/funnel-builder",
-								version: "1.0.0",
-							},
-							{
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR_SECOND,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							// Bogus path — install rejects at resolve time.
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "1.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1753,31 +1674,29 @@ describe("skillPlugin customSkills `skill update`", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "2.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "2.0.0",
-							},
-							{
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR_SECOND,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "2.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "2.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		// Pre-install all three at v1.0.0.
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-loop-host",
 					description: "test",
@@ -1826,25 +1745,23 @@ describe("skillPlugin customSkills `skill update`", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: FIXTURE_DIR,
-								version: "1.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "1.0.0",
+						},
+					],
+				}),
 			);
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-noop-host",
 					description: "test",
@@ -1904,25 +1821,23 @@ describe("skillPlugin customSkills `skill update`", () => {
 			.meta({ description: "test" })
 			.handle(() => {})
 			.extend(
-				extensionFromPlugin(
-					skillPlugin({
-						version: "1.0.0",
-						autoUpdate: false,
-						defaultScope: "project",
-						customSkills: [
-							{
-								name: "funnel-builder",
-								sourceDir: "/nonexistent/path/to/funnel-builder",
-								version: "2.0.0",
-							},
-							{
-								name: "pricing-toolkit",
-								sourceDir: FIXTURE_DIR_SECOND,
-								version: "2.0.0",
-							},
-						],
-					}),
-				),
+				skillExtension({
+					version: "1.0.0",
+					autoUpdate: false,
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: "/nonexistent/path/to/funnel-builder",
+							version: "2.0.0",
+						},
+						{
+							name: "pricing-toolkit",
+							sourceDir: FIXTURE_DIR_SECOND,
+							version: "2.0.0",
+						},
+					],
+				}),
 			);
 
 		const warnings: string[] = [];
