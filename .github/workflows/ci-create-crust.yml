@@ -55,7 +55,10 @@ jobs:
             turbo-create-crust-${{ runner.os }}-
 
       - name: Build create-crust dependency subset
-        run: bun turbo run build --filter=./packages/utils --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/create --filter=./packages/crust --filter=./packages/create-crust
+        run: bun turbo run build --filter=./packages/utils --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/create --filter=./packages/create-crust
+
+      - name: Build Crust JavaScript CLI
+        run: bun run --cwd packages/crust bunup
 
       - name: Print tool versions
         run: |
