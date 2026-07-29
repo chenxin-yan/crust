@@ -78,31 +78,15 @@ function handleKey(key: KeypressEvent, state: ConfirmState): ConfirmState | Subm
 		return submit(state.value);
 	}
 
-	// Left/Right arrows toggle between yes/no
-	if (key.name === "left" || key.name === "right") {
+	if (key.name === "left" || key.name === "right" || key.name === "tab") {
 		return { value: !state.value };
 	}
 
-	// h/l (vim-style) toggle
-	if (key.name === "h") {
-		return { value: true };
-	}
-	if (key.name === "l") {
-		return { value: false };
-	}
-
-	// Tab toggles
-	if (key.name === "tab") {
-		return { value: !state.value };
-	}
-
-	// y shortcut — set to true
-	if (key.char === "y" || key.char === "Y") {
+	if (key.name === "h" || key.char === "y" || key.char === "Y") {
 		return { value: true };
 	}
 
-	// n shortcut — set to false
-	if (key.char === "n" || key.char === "N") {
+	if (key.name === "l" || key.char === "n" || key.char === "N") {
 		return { value: false };
 	}
 

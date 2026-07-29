@@ -11,38 +11,13 @@ import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
 	isStandardSchema,
+	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
 	type PromptValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Schema parsing helper
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Run a Standard Schema against a short-circuit value (`initial` / non-TTY
- * `default`) and return the parsed output. Throws on schema rejection so the
- * `Promise<Output>` overload contract holds — short-circuiting can never
- * silently return a raw `string` where the type promises a transformed value.
- */
-async function parseShortCircuit<Output>(
-	schema: StandardSchemaV1<unknown, Output>,
-	value: string,
-	source: "initial" | "default",
-): Promise<Output> {
-	const result = await schema["~standard"].validate(value);
-	// Per spec, success is signalled by `issues === undefined`; an empty
-	// `issues: []` from a non-conformant schema would have no issue to surface,
-	// so we treat it as success rather than displaying a phantom error.
-	if (result.issues?.length) {
-		const message = result.issues[0]?.message || "Validation failed";
-		throw new Error(`${source} value rejected by schema: ${message}`);
-	}
-	return (result as { value: Output }).value;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -267,7 +242,9 @@ function renderSubmitted<Output>(
  * const name = await input({
  *   message: "What is your name?",
  *   placeholder: "John Doe",
- *   validate: (v) => v.length > 0 || "Name cannot be empty",
+ *   validate: (v) => {
+ *     if (v.length === 0) throw new Error("Name cannot be empty");
+ *   },
  * });
  * ```
  *

@@ -2,6 +2,8 @@
 
 Progress indicators for the Crust CLI ecosystem
 
+Theme exports: `defaultTheme`, `createTheme`, and `setTheme`.
+
 ## Install
 
 ```sh

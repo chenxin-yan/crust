@@ -1,21 +1,6 @@
 import type { ArgSnapshot, CommandMeta, FlagSnapshot } from "@crustjs/core";
 import type { CommandSnapshot } from "@crustjs/core";
 
-const MONTH_NAMES = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December",
-] as const;
-
 /** Escape a line so it is not interpreted as an mdoc directive. */
 function escapeMdocBodyLine(line: string): string {
 	if (line.startsWith(".")) {
@@ -32,15 +17,11 @@ function formatDefaultValue(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-function formatDefaultSuffix(value: unknown): string {
-	return `[default: ${formatDefaultValue(value)}]`;
-}
-
 function formatDescription(description: string | undefined, defaultValue: unknown): string {
 	if (defaultValue === undefined) {
 		return description ?? "";
 	}
-	const suffix = formatDefaultSuffix(defaultValue);
+	const suffix = `[default: ${formatDefaultValue(defaultValue)}]`;
 	if (!description) return suffix;
 	return `${description} ${suffix}`;
 }
@@ -59,10 +40,8 @@ function formatUsagePlain(meta: CommandMeta, command: CommandSnapshot, path: str
 		parts.push("<command>");
 	}
 
-	if (command.args.length > 0) {
-		for (const arg of command.args) {
-			parts.push(formatArgToken(arg));
-		}
+	for (const arg of command.args) {
+		parts.push(formatArgToken(arg));
 	}
 
 	if (Object.keys(command.flags).length > 0) {
@@ -145,11 +124,7 @@ function ndOneLine(text: string): string {
 
 /** Single-line `.Nd` argument must not start with `.` (troff directive). */
 function ndArgument(text: string): string {
-	const line = ndOneLine(text);
-	if (line.startsWith(".")) {
-		return `\\&${line}`;
-	}
-	return line;
+	return escapeMdocBodyLine(ndOneLine(text));
 }
 
 function longestFlagWidth(flags: Readonly<Record<string, FlagSnapshot>>): string {
@@ -198,12 +173,19 @@ function resolveDdLine(explicit?: string): string {
 	if (epoch !== undefined) {
 		const sec = Number.parseInt(epoch, 10);
 		if (!Number.isNaN(sec) && sec >= 0) {
-			const d = new Date(sec * 1000);
-			return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+			return new Date(sec * 1000).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+				timeZone: "UTC",
+			});
 		}
 	}
-	const now = new Date();
-	return `${MONTH_NAMES[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+	return new Date().toLocaleDateString("en-US", {
+		month: "long",
+		day: "numeric",
+		year: "numeric",
+	});
 }
 
 export interface RenderManPageMdocOptions {

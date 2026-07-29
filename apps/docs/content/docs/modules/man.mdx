@@ -38,7 +38,7 @@ await writeManPage({
 });
 ```
 
-`section` defaults to `1`. `date` overrides the `.Dd` value. Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then falls back to the current local date.
+`section` defaults to `1`. `date` overrides the `.Dd` value. Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then falls back to the current local date. Generated dates use the English `Month D, YYYY` form expected by mdoc.
 
 ## `renderManPageMdoc(options)`
 

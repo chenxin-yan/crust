@@ -113,6 +113,8 @@ await spinner({
 });
 ```
 
+The public theme exports are `defaultTheme`, `createTheme`, and `setTheme`. Individual spinners resolve global and per-spinner overrides internally.
+
 ## Non-interactive behavior
 
 When `stderr` is not a TTY, `spinner()` does not animate and does not emit cursor-control ANSI sequences. `updateMessage()` still works and updates the message used in the final success or error line.

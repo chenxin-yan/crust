@@ -3,15 +3,14 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
-import { fuzzyFilter } from "../core/fuzzy.ts";
+import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_DOWN_INDICATOR,
-	SCROLL_UP_INDICATOR,
+	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
@@ -21,6 +20,7 @@ import {
 	calculateScrollOffset,
 	formatPromptLine,
 	formatSubmitted,
+	moveCursor,
 	normalizeChoices,
 } from "../core/utils.ts";
 
@@ -75,17 +75,6 @@ interface FilterState<T> {
 	readonly scrollOffset: number;
 }
 
-/**
- * Re-run the fuzzy filter on the current query and update results + cursor.
- */
-function refilter<T>(state: FilterState<T>, maxVisible: number): FilterState<T> {
-	const results = fuzzyFilter(state.query, state.choices);
-	// Reset list cursor to 0 when results change (query was edited)
-	const listCursor = 0;
-	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
-	return { ...state, results, listCursor, scrollOffset };
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Keypress handler — single select
 // ────────────────────────────────────────────────────────────────────────────
@@ -107,37 +96,27 @@ function createHandleKey<T>(
 		// Up arrow — move list cursor up with wrapping
 		if (key.name === "up") {
 			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const newCursor = state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
+			const moved = moveCursor(
+				state.listCursor,
+				state.results.length,
+				-1,
 				state.scrollOffset,
-				totalItems,
 				maxVisible,
 			);
-			return {
-				...state,
-				listCursor: newCursor,
-				scrollOffset: newScrollOffset,
-			};
+			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
 		}
 
 		// Down arrow — move list cursor down with wrapping
 		if (key.name === "down") {
 			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const newCursor = state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
+			const moved = moveCursor(
+				state.listCursor,
+				state.results.length,
+				1,
 				state.scrollOffset,
-				totalItems,
 				maxVisible,
 			);
-			return {
-				...state,
-				listCursor: newCursor,
-				scrollOffset: newScrollOffset,
-			};
+			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
 		}
 
 		// Delegate text-editing keys to shared handler
@@ -160,34 +139,6 @@ function createHandleKey<T>(
 // ────────────────────────────────────────────────────────────────────────────
 // Render
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Highlight matched characters in a label using the theme's filterMatch style.
- */
-function highlightMatches(label: string, indices: readonly number[], theme: PromptTheme): string {
-	if (indices.length === 0) return label;
-
-	const indexSet = new Set(indices);
-	let result = "";
-	let i = 0;
-
-	while (i < label.length) {
-		if (indexSet.has(i)) {
-			// Collect consecutive matched characters for batch styling
-			let matchedChars = "";
-			while (i < label.length && indexSet.has(i)) {
-				matchedChars += label[i];
-				i++;
-			}
-			result += theme.filterMatch(matchedChars);
-		} else {
-			result += label[i];
-			i++;
-		}
-	}
-
-	return result;
-}
 
 function renderFilter<T>(
 	state: FilterState<T>,
@@ -228,7 +179,7 @@ function renderFilter<T>(
 	// Scroll-up indicator
 	const hasScrollUp = state.scrollOffset > 0;
 	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_UP_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	// Render visible results
@@ -250,7 +201,7 @@ function renderFilter<T>(
 	// Scroll-down indicator
 	const hasScrollDown = state.scrollOffset + visibleCount < totalResults;
 	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_DOWN_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	return lines.join("\n");

@@ -11,37 +11,13 @@ import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
 	isStandardSchema,
+	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
 	type PromptValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Schema parsing helper
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Run a Standard Schema against a short-circuit `initial` value and return
- * the parsed output. Throws on schema rejection so the `Promise<Output>`
- * overload contract holds. Note: only the schema's issue message surfaces in
- * the thrown error — the original masked value never appears in the error.
- */
-async function parseShortCircuit<Output>(
-	schema: StandardSchemaV1<unknown, Output>,
-	value: string,
-): Promise<Output> {
-	const result = await schema["~standard"].validate(value);
-	// Per spec, success is signalled by `issues === undefined`; an empty
-	// `issues: []` from a non-conformant schema would have no issue to surface,
-	// so we treat it as success rather than throwing a phantom error.
-	if (result.issues?.length) {
-		const message = result.issues[0]?.message || "Validation failed";
-		throw new Error(`initial value rejected by schema: ${message}`);
-	}
-	return (result as { value: Output }).value;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -236,7 +212,9 @@ function renderSubmitted<Output>(
  * ```ts
  * const secret = await password({
  *   message: "Enter your password:",
- *   validate: (v) => v.length >= 8 || "Password must be at least 8 characters",
+ *   validate: (v) => {
+ *     if (v.length < 8) throw new Error("Password must be at least 8 characters");
+ *   },
  * });
  * ```
  *
@@ -270,7 +248,7 @@ export async function password<Output>(
 	// schema's transformed output type.
 	if (options.initial !== undefined) {
 		if (isStandardSchema(options.validate)) {
-			return parseShortCircuit(options.validate, options.initial);
+			return parseShortCircuit(options.validate, options.initial, "initial");
 		}
 		return options.initial;
 	}

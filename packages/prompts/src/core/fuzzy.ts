@@ -2,6 +2,9 @@
 // Fuzzy — Fuzzy matching algorithm for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { PromptTheme } from "./types.ts";
+import { calculateScrollOffset } from "./utils.ts";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
@@ -175,4 +178,55 @@ export function fuzzyFilter<T>(
 	results.sort((a, b) => b.score - a.score);
 
 	return results;
+}
+
+/** @internal Re-filter a list prompt after its query changes. */
+export function refilter<
+	T,
+	S extends {
+		readonly query: string;
+		readonly choices: readonly { readonly label: string; readonly value: T }[];
+	},
+>(
+	state: S,
+	maxVisible: number,
+): S & {
+	readonly results: FuzzyFilterResult<T>[];
+	readonly listCursor: number;
+	readonly scrollOffset: number;
+	readonly error: null;
+} {
+	const results = fuzzyFilter(state.query, state.choices);
+	const listCursor = 0;
+	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
+	return { ...state, results, listCursor, scrollOffset, error: null };
+}
+
+/** @internal Apply the filter-match style to matched runs in a label. */
+export function highlightMatches(
+	label: string,
+	indices: readonly number[],
+	theme: PromptTheme,
+): string {
+	if (indices.length === 0) return label;
+
+	const indexSet = new Set(indices);
+	let result = "";
+	let i = 0;
+
+	while (i < label.length) {
+		if (indexSet.has(i)) {
+			let matchedChars = "";
+			while (i < label.length && indexSet.has(i)) {
+				matchedChars += label[i];
+				i++;
+			}
+			result += theme.filterMatch(matchedChars);
+		} else {
+			result += label[i];
+			i++;
+		}
+	}
+
+	return result;
 }

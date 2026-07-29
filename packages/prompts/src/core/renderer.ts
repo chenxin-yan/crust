@@ -219,13 +219,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 			return;
 		}
 
-		// TTY check inside the promise so it rejects rather than throwing synchronously
-		try {
-			assertTTY();
-		} catch (err) {
-			reject(err);
-			return;
-		}
+		assertTTY();
 
 		promptActive = true;
 

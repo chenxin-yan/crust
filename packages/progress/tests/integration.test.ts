@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import type { ProgressTheme } from "../src/index.ts";
-import { createTheme, defaultTheme, getTheme, setTheme } from "../src/index.ts";
+import { createTheme } from "../src/index.ts";
 
 describe("createTheme integration", () => {
 	it("returns a valid theme with all slots defined", () => {
@@ -22,19 +22,5 @@ describe("createTheme integration", () => {
 			const result = fn("test");
 			expect(typeof result).toBe("string");
 		}
-	});
-
-	afterEach(() => {
-		setTheme();
-	});
-
-	it("setTheme applies global overrides via getTheme", () => {
-		const globalFn = (text: string) => `(${text})`;
-		setTheme({ spinner: globalFn });
-		const theme = getTheme();
-
-		expect(theme.spinner("x")).toBe("(x)");
-		expect(theme.message).toBe(defaultTheme.message);
-		expect(theme.success).toBe(defaultTheme.success);
 	});
 });

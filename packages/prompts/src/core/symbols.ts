@@ -14,11 +14,8 @@ export const PREFIX_ERROR = "✗";
 /** Cursor indicator for focused items in list-style prompts. */
 export const CURSOR_INDICATOR = "›";
 
-/** Indicator shown when the list can be scrolled upward. */
-export const SCROLL_UP_INDICATOR = "...";
-
-/** Indicator shown when the list can be scrolled downward. */
-export const SCROLL_DOWN_INDICATOR = "...";
+/** Indicator shown when more list items can be scrolled into view. */
+export const SCROLL_INDICATOR = "...";
 
 /** Glyph for a checked checkbox in multiselect prompts. */
 export const CHECKBOX_CHECKED = "●";

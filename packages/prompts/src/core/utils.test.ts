@@ -1,24 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { formatHeader, formatPromptLine, formatSubmitted, normalizeChoices } from "./utils.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// formatHeader
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("formatHeader", () => {
-	it("returns prefix + message when message is provided", () => {
-		expect(formatHeader("○", "Name?")).toBe("○ Name?");
-	});
-
-	it("returns only prefix when message is undefined", () => {
-		expect(formatHeader("○", undefined)).toBe("○");
-	});
-
-	it("returns only prefix when message is empty string", () => {
-		expect(formatHeader("○", "")).toBe("○");
-	});
-});
+import { formatPromptLine, formatSubmitted, moveCursor, normalizeChoices } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // formatSubmitted
@@ -85,6 +67,13 @@ describe("formatPromptLine", () => {
 		const withoutSuffix = formatPromptLine("○", "Name?", "val");
 		const withUndefined = formatPromptLine("○", "Name?", "val", undefined);
 		expect(withoutSuffix).toBe(withUndefined);
+	});
+});
+
+describe("moveCursor", () => {
+	it("wraps and updates the viewport", () => {
+		expect(moveCursor(0, 5, -1, 0, 3)).toEqual({ cursor: 4, scrollOffset: 2 });
+		expect(moveCursor(4, 5, 1, 2, 3)).toEqual({ cursor: 0, scrollOffset: 0 });
 	});
 });
 

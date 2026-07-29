@@ -24,11 +24,6 @@ export function setTheme(theme?: PartialProgressTheme): void {
 	globalOverrides = theme;
 }
 
-export function getTheme(): ProgressTheme {
-	if (!globalOverrides) return defaultTheme;
-	return { ...defaultTheme, ...globalOverrides };
-}
-
 export function resolveTheme(progressTheme?: PartialProgressTheme): ProgressTheme {
 	if (!globalOverrides && !progressTheme) return defaultTheme;
 	return {
