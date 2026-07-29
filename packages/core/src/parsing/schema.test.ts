@@ -1,0 +1,262 @@
+import { describe, expect, it } from "bun:test";
+
+import type { StandardSchema } from "@crustjs/utils/schema";
+
+import { Crust } from "../command/crust.ts";
+import { CrustError } from "../errors.ts";
+
+/** Minimal hand-rolled Standard Schema (no vendor dependency). */
+function schema<Input, Output>(
+	validate: (value: Input) => { value: Output } | { issues: { message: string }[] },
+): StandardSchema<Input, Output> {
+	return {
+		"~standard": {
+			version: 1,
+			vendor: "crust-test",
+			validate: (value: unknown) => validate(value as Input),
+		},
+	} as StandardSchema<Input, Output>;
+}
+
+const port = () =>
+	schema<string | undefined, number>((raw) => {
+		if (raw === undefined) return { issues: [{ message: "port is required" }] };
+		const value = Number(raw);
+		return Number.isInteger(value) && value > 0
+			? { value }
+			: { issues: [{ message: "expected a positive integer" }] };
+	});
+
+describe("Standard Schema on arg definitions", () => {
+	it("passes the raw string token to the schema and hands the output to the handler", async () => {
+		let received: unknown;
+		const app = new Crust("cli")
+			.args([{ name: "port", schema: port() }] as const)
+			.handle(({ args }) => {
+				received = args.port;
+			});
+
+		await app.run(["8080"]);
+		expect(received).toBe(8080);
+	});
+
+	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
+		const app = new Crust("cli").args([{ name: "port", schema: port() }] as const).handle(() => {});
+
+		await expect(app.run([])).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "port is required", path: "args.port" }] },
+		});
+	});
+
+	it("variadic schema args receive the raw string array", async () => {
+		let received: unknown;
+		const upper = schema<string[], string[]>((raw) => ({
+			value: raw.map((s) => s.toUpperCase()),
+		}));
+
+		const app = new Crust("cli")
+			.args([{ name: "files", variadic: true, schema: upper }] as const)
+			.handle(({ args }) => {
+				received = args.files;
+			});
+
+		await app.run(["a.txt", "b.txt"]);
+		expect(received).toEqual(["A.TXT", "B.TXT"]);
+	});
+
+	it("supports async schema validation", async () => {
+		let received: unknown;
+		const asyncUpper = schema<string | undefined, string>((raw) => ({
+			value: String(raw).toUpperCase(),
+		}));
+		const asyncSchema: StandardSchema<string | undefined, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "crust-test",
+				validate: async (value: unknown) =>
+					asyncUpper["~standard"].validate(value as string | undefined),
+			},
+		} as StandardSchema<string | undefined, string>;
+
+		const app = new Crust("cli")
+			.args([{ name: "name", schema: asyncSchema }] as const)
+			.handle(({ args }) => {
+				received = args.name;
+			});
+
+		await app.run(["chenxin"]);
+		expect(received).toBe("CHENXIN");
+	});
+});
+
+describe("Standard Schema on flag definitions", () => {
+	it("string flags consume a token and pass the raw string to the schema", async () => {
+		let received: unknown;
+		const app = new Crust("cli")
+			.flags({ port: { type: "string", schema: port() } })
+			.handle(({ flags }) => {
+				received = flags.port;
+			});
+
+		await app.run(["--port", "9090"]);
+		expect(received).toBe(9090);
+	});
+
+	it("boolean flags do not consume a token and pass the raw boolean to the schema", async () => {
+		let received: unknown;
+		const onOff = schema<boolean | undefined, "on" | "off">((raw) => ({
+			value: raw === true ? "on" : "off",
+		}));
+		const app = new Crust("cli")
+			.flags({ loud: { type: "boolean", schema: onOff } })
+			.handle(({ flags }) => {
+				received = flags.loud;
+			});
+
+		await app.run(["--loud"]);
+		expect(received).toBe("on");
+
+		await app.run([]);
+		expect(received).toBe("off");
+	});
+
+	it("aggregates issues across args and flags into one VALIDATION error", async () => {
+		const app = new Crust("cli")
+			.args([{ name: "input", schema: port() }] as const)
+			.flags({ port: { type: "string", schema: port() } })
+			.handle(() => {});
+
+		try {
+			await app.run(["oops", "--port", "nope"]);
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			const crustError = error as CrustError<"VALIDATION">;
+			expect(crustError.is("VALIDATION")).toBe(true);
+			expect(crustError.details?.issues.map((issue) => issue.path).sort()).toEqual([
+				"args.input",
+				"flags.port",
+			]);
+		}
+	});
+
+	it("--no-<name> negation delivers raw false to a schema boolean flag", async () => {
+		let received: unknown;
+		const probe = schema<boolean | undefined, string>((raw) => ({ value: String(raw) }));
+		const app = new Crust("cli")
+			.flags({ loud: { type: "boolean", schema: probe } })
+			.handle(({ flags }) => {
+				received = flags.loud;
+			});
+
+		await app.run(["--no-loud"]);
+		expect(received).toBe("false");
+	});
+
+	it("multiple schema flags receive the raw value array", async () => {
+		let received: unknown;
+		const csv = schema<string[] | undefined, string>((raw) => ({
+			value: (raw ?? []).join(","),
+		}));
+		const app = new Crust("cli")
+			.flags({ tag: { type: "string", multiple: true, schema: csv } })
+			.handle(({ flags }) => {
+				received = flags.tag;
+			});
+
+		await app.run(["--tag", "a", "--tag", "b"]);
+		expect(received).toBe("a,b");
+	});
+});
+
+describe("schema interaction with Extensions", () => {
+	it("intercepts observe raw values while the handler sees schema outputs", async () => {
+		const { extension } = await import("../api/extension.ts");
+		let interceptSaw: unknown;
+		let handlerSaw: unknown;
+
+		const probe = extension("probe", {
+			async intercept(ctx, next) {
+				interceptSaw = ctx.flags.port;
+				await next();
+			},
+		});
+
+		const app = new Crust("cli")
+			.flags({ port: { type: "string", schema: port() } })
+			.extend(probe)
+			.handle(({ flags }) => {
+				handlerSaw = flags.port;
+			});
+
+		await app.run(["--port", "8080"]);
+
+		expect(interceptSaw).toBe("8080"); // raw, pre-validation
+		expect(handlerSaw).toBe(8080); // schema output
+	});
+
+	it("an intercept short-circuit skips schema validation entirely", async () => {
+		let validated = false;
+		const spy = schema<string | undefined, string>((raw) => {
+			validated = true;
+			return { value: String(raw) };
+		});
+		const { extension } = await import("../api/extension.ts");
+		const gate = extension("gate", { intercept() {} });
+
+		const app = new Crust("cli")
+			.flags({ x: { type: "string", schema: spy } })
+			.extend(gate)
+			.handle(() => {});
+
+		await app.run(["--x", "whatever"]);
+		expect(validated).toBe(false);
+	});
+});
+
+describe("schema type inference", () => {
+	type Expect<T extends true> = T;
+	type Equal<A, B> =
+		(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+	it("the schema output type reaches the Command Handler", () => {
+		new Crust("cli")
+			.args([{ name: "port", schema: port() }] as const)
+			.flags({ tag: { type: "string", schema: port() } })
+			.handle((_ctx) => {
+				type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
+				type _flagOutput = Expect<Equal<(typeof _ctx.flags)["tag"], number>>;
+			});
+		expect(true).toBe(true);
+	});
+});
+
+describe("schema mode exclusivity", () => {
+	it("rejects mixing core value options with a schema on args", () => {
+		expect(() =>
+			new Crust("cli").args([
+				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
+				{ name: "x", schema: port(), default: "5" } as any,
+			]),
+		).toThrow(CrustError);
+	});
+
+	it("rejects a parser type on schema args (raw strings only)", () => {
+		expect(() =>
+			new Crust("cli").args([
+				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
+				{ name: "x", type: "number", schema: port() } as any,
+			]),
+		).toThrow(CrustError);
+	});
+
+	it("rejects mixing core value options with a schema on flags", () => {
+		expect(() =>
+			new Crust("cli").flags({
+				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
+				x: { type: "string", schema: port(), required: true } as any,
+			}),
+		).toThrow(CrustError);
+	});
+});

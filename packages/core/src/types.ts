@@ -1,4 +1,5 @@
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
+import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
@@ -66,6 +67,8 @@ interface ArgDefBase {
 	 * value is still `T[]`, just rejected when it has length 0.
 	 */
 	required?: true;
+	/** Not supported with core value options — see {@link SchemaArgDef} */
+	schema?: never;
 	/**
 	 * When `true`, collects all remaining positional values into an array.
 	 *
@@ -176,6 +179,31 @@ interface RawArgDef extends ArgDefBase {
 	parse?: never;
 }
 
+/**
+ * A positional argument validated by a Standard Schema (exclusive mode).
+ *
+ * The schema receives the raw string token (`string | undefined` when the
+ * argument is absent; `string[]` for variadic args) and exclusively owns
+ * coercion, defaults, requiredness, choices, and validation. Its inferred
+ * output type reaches the Command Handler. Core value options (`type`,
+ * `default`, `required`, `choices`, `parse`) cannot be mixed in.
+ */
+interface SchemaArgDef {
+	/** The argument name (used as the key in the parsed result and in help text) */
+	name: string;
+	/** Human-readable description for help text */
+	description?: string;
+	/** When `true`, collects all remaining raw tokens into a `string[]` for the schema */
+	variadic?: true;
+	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
+	schema: StandardSchema;
+	type?: never;
+	required?: never;
+	default?: never;
+	choices?: never;
+	parse?: never;
+}
+
 export type ArgDef =
 	| StringArgDef
 	| NumberArgDef
@@ -183,6 +211,7 @@ export type ArgDef =
 	| UrlArgDef
 	| PathArgDef
 	| JsonArgDef
+	| SchemaArgDef
 	| RawArgDef;
 
 /** Ordered tuple of positional argument definitions */
@@ -204,6 +233,8 @@ interface FlagDefBase {
 	required?: true;
 	/** When `true`, the flag is inherited by subcommands */
 	inherit?: true;
+	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
+	schema?: never;
 }
 
 // ── Single-value flags ────────────────────────────────────────────────────
@@ -400,6 +431,49 @@ interface JsonMultiFlagDef extends MultiFlagBase {
  * } satisfies FlagsDef;
  * ```
  */
+/** Shared fields for schema-backed flags (exclusive mode) */
+interface SchemaFlagBase {
+	/** Human-readable description for help text */
+	description?: string;
+	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`) */
+	aliases?: string[];
+	/** When `true`, the flag is inherited by subcommands */
+	inherit?: true;
+	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
+	schema: StandardSchema;
+	required?: never;
+	default?: never;
+	choices?: never;
+	parse?: never;
+}
+
+/**
+ * A schema-backed flag that consumes a value token (`--flag value`).
+ * The schema receives the raw string (`string | undefined`, or `string[]`
+ * with `multiple: true`) and exclusively owns coercion, defaults,
+ * requiredness, and validation. `type` declares token consumption only.
+ */
+interface SchemaStringFlagDef extends SchemaFlagBase {
+	type: "string";
+	/** When `true`, the flag is repeatable and the schema receives `string[]` */
+	multiple?: true;
+	noNegate?: never;
+}
+
+/**
+ * A schema-backed toggle flag (no value token). The schema receives the raw
+ * `boolean | undefined` (or `boolean[]` with `multiple: true`).
+ */
+interface SchemaBooleanFlagDef extends SchemaFlagBase {
+	type: "boolean";
+	/** When `true`, the flag is repeatable and the schema receives `boolean[]` */
+	multiple?: true;
+	/** When `true`, disables the auto-generated `--no-<name>` negation */
+	noNegate?: true;
+}
+
 export type FlagDef =
 	| StringFlagDef
 	| NumberFlagDef
@@ -407,6 +481,8 @@ export type FlagDef =
 	| UrlFlagDef
 	| PathFlagDef
 	| JsonFlagDef
+	| SchemaStringFlagDef
+	| SchemaBooleanFlagDef
 	| StringMultiFlagDef
 	| NumberMultiFlagDef
 	| BooleanMultiFlagDef
@@ -717,25 +793,29 @@ export type EffectiveFlags<
  * `required` only gates empty-array validation, not the type.
  */
 type InferArgValue<A extends ArgDef> = A extends {
-	type: infer _T extends ValueType;
+	schema: infer S extends StandardSchema;
 }
-	? A extends { variadic: true }
-		? ResolveBaseType<A>[]
-		: A extends { required: true }
-			? ResolveBaseType<A>
-			: // Narrow on `default` presence, not its type. When `parse` is
-				// present the raw default is a string while `ResolveBaseType<A>`
-				// is the parsed return type, so a typed-default check would miss.
-				// ArgDef's discriminated interfaces already constrain the default
-				// shape at the call site.
-				A extends { default: unknown }
+	? InferOutput<S>
+	: A extends {
+				type: infer _T extends ValueType;
+		  }
+		? A extends { variadic: true }
+			? ResolveBaseType<A>[]
+			: A extends { required: true }
 				? ResolveBaseType<A>
-				: ResolveBaseType<A> | undefined
-	: A extends { variadic: true }
-		? unknown[]
-		: A extends { required: true } | { default: unknown }
-			? unknown
-			: unknown;
+				: // Narrow on `default` presence, not its type. When `parse` is
+					// present the raw default is a string while `ResolveBaseType<A>`
+					// is the parsed return type, so a typed-default check would miss.
+					// ArgDef's discriminated interfaces already constrain the default
+					// shape at the call site.
+					A extends { default: unknown }
+					? ResolveBaseType<A>
+					: ResolveBaseType<A> | undefined
+		: A extends { variadic: true }
+			? unknown[]
+			: A extends { required: true } | { default: unknown }
+				? unknown
+				: unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
@@ -777,23 +857,27 @@ export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Rec
  * - otherwise → `primitive | undefined`
  */
 type InferFlagValue<F extends FlagDef> = F extends {
-	type: infer _T extends ValueType;
+	schema: infer S extends StandardSchema;
 }
-	? F extends { multiple: true }
-		? F extends { required: true }
-			? ResolveBaseType<F>[]
-			: // See InferArgValue: narrow on default presence. With `parse`,
-				// the raw default is `string[]` while ResolveBaseType<F> is the
-				// parsed element type.
-				F extends { default: readonly unknown[] }
+	? InferOutput<S>
+	: F extends {
+				type: infer _T extends ValueType;
+		  }
+		? F extends { multiple: true }
+			? F extends { required: true }
 				? ResolveBaseType<F>[]
-				: ResolveBaseType<F>[] | undefined
-		: F extends { required: true }
-			? ResolveBaseType<F>
-			: F extends { default: unknown }
+				: // See InferArgValue: narrow on default presence. With `parse`,
+					// the raw default is `string[]` while ResolveBaseType<F> is the
+					// parsed element type.
+					F extends { default: readonly unknown[] }
+					? ResolveBaseType<F>[]
+					: ResolveBaseType<F>[] | undefined
+			: F extends { required: true }
 				? ResolveBaseType<F>
-				: ResolveBaseType<F> | undefined
-	: never;
+				: F extends { default: unknown }
+					? ResolveBaseType<F>
+					: ResolveBaseType<F> | undefined
+		: never;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.

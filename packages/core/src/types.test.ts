@@ -500,10 +500,10 @@ describe("FlagDef choices field", () => {
 		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad1: FlagDef = { type: "boolean", choices: ["a", "b"] };
 
+		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad2: FlagDef = {
 			type: "boolean",
 			multiple: true,
-			// @ts-expect-error — `choices` is only supported on string-typed flags
 			choices: ["a", "b"],
 		};
 

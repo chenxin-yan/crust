@@ -13,8 +13,10 @@ import type {
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
+import { applySchemas } from "../parsing/schema.ts";
 import { validateIncomingAliases } from "../parsing/validation.ts";
 import type {
+	ArgDef,
 	ArgsDef,
 	CommandMeta,
 	EffectiveFlags,
@@ -88,6 +90,28 @@ interface PreparedInvocation {
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers — runtime flag validation
 // ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Runtime guard for untyped callers: schema mode is exclusive — the schema
+ * owns coercion, defaults, requiredness, choices, and validation (ADR-0005).
+ * The type system already rejects mixing; this catches plain-JS misuse.
+ */
+function validateSchemaExclusivity(
+	subject: "arg" | "flag",
+	name: string,
+	def: Record<string, unknown>,
+): void {
+	if (def.schema === undefined) return;
+	for (const key of ["default", "required", "choices", "parse"] as const) {
+		if (def[key] !== undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				`${subject} "${name}" mixes core option "${key}" with a schema — the schema exclusively owns coercion, defaults, requiredness, choices, and validation`,
+				{ subject, name, reason: "schema-exclusive" },
+			);
+		}
+	}
+}
 
 /**
  * Runtime guard: reject flag names starting with "no-".
@@ -488,6 +512,9 @@ export class Crust<
 	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
 		// Runtime validation
 		validateNoPrefixFlags(defs);
+		for (const [name, def] of Object.entries(defs)) {
+			validateSchemaExclusivity("flag", name, def as unknown as Record<string, unknown>);
+		}
 
 		// Deep copy flag defs to decouple from caller
 		const copiedFlags: FlagsDef = {};
@@ -513,6 +540,18 @@ export class Crust<
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
 	): Crust<Inherited, Local, NewA, Eff, Ctx> {
+		for (const def of defs) {
+			const record = def as unknown as Record<string, unknown>;
+			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
+			// Schema args receive raw strings: a parser `type` would coerce first
+			if (record.schema !== undefined && record.type !== undefined) {
+				throw new CrustError(
+					"DEFINITION",
+					`arg "${(def as ArgDef).name}" mixes core option "type" with a schema — schema args receive the raw string token`,
+					{ subject: "arg", name: (def as ArgDef).name, reason: "schema-exclusive" },
+				);
+			}
+		}
 		// Deep copy arg defs to decouple from caller
 		const copiedArgs = defs.map((def) => ({ ...def })) as unknown as ArgsDef;
 
@@ -983,14 +1022,18 @@ export class Crust<
 
 			if (!resolvedNode.run) return;
 
+			// Standard Schemas on arg/flag definitions own value validation and
+			// transformation (ADR-0005); the handler receives schema outputs.
+			const validated = await applySchemas(resolvedNode, parsed);
+
 			// Native resource protocol: Context values implementing
 			// Symbol.dispose/asyncDispose are disposed in reverse construction
 			// order after success or failure (`await using` semantics).
 			await using disposal = new AsyncDisposableStack();
 
 			const context: CrustCommandContext = {
-				args: parsed.args,
-				flags: parsed.flags,
+				args: validated.args as CrustCommandContext["args"],
+				flags: validated.flags as CrustCommandContext["flags"],
 				ctx: await buildContexts(resolvedNode.contexts, disposal),
 				rawArgs: parsed.rawArgs,
 				command: extensionContext.command,
