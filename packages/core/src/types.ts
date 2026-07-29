@@ -27,7 +27,7 @@ export type ValueType = BaseValueType | "url" | "path" | "json";
  * three formatted types (`"url"`, `"path"`, `"json"`) to `URL`, `string`,
  * and `unknown` respectively.
  */
-export type Resolve<T extends ValueType> = T extends BaseValueType
+type Resolve<T extends ValueType> = T extends BaseValueType
 	? ResolvePrimitive<T>
 	: T extends "url"
 		? URL
@@ -44,7 +44,7 @@ export type Resolve<T extends ValueType> = T extends BaseValueType
  * variants), the inferred type is `ReturnType<typeof parse>`. Otherwise it
  * delegates to {@link Resolve} on the declared `type`.
  */
-export type ResolveBaseType<F> = F extends {
+type ResolveBaseType<F> = F extends {
 	parse: (raw: string) => infer R;
 }
 	? R

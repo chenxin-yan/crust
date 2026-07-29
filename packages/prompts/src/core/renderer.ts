@@ -32,7 +32,7 @@ export interface KeypressEvent {
  * Symbol used internally to discriminate submit results from state updates.
  * Using a symbol prevents collisions with user-defined state types.
  */
-export const SUBMIT: unique symbol = Symbol("submit");
+const SUBMIT: unique symbol = Symbol("submit");
 
 /**
  * A submit action wrapping the final value.

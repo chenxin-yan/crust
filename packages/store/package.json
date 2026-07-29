@@ -50,7 +50,6 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:",
-		"effect": "3.21.2",
 		"zod": "^4.0.0"
 	},
 	"dependencies": {

@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
 
+import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
@@ -11,8 +12,7 @@ import {
 	TARGET_INFO,
 	type TargetInfo,
 	validateEntrypoint,
-} from "../commands/build.ts";
-import { resolveBaseName } from "./binary-name.ts";
+} from "./build-helpers.ts";
 import { generateManPageFromEntry } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
@@ -395,7 +395,7 @@ function copyLicense(cwd: string, packageDirs: readonly string[]): void {
 	}
 }
 
-export function writeDistributionManifest(
+function writeDistributionManifest(
 	stageDir: string,
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],

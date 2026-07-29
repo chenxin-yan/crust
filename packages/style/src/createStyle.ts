@@ -419,7 +419,7 @@ function buildRuntimeStyle(): StyleInstance {
 	return createStyle({ mode: "auto" });
 }
 
-export function getRuntimeStyle(): StyleInstance {
+function getRuntimeStyle(): StyleInstance {
 	const key = [
 		globalColorMode ?? "auto",
 		process.stdout?.isTTY ?? false,

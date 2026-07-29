@@ -4,21 +4,23 @@ import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 
-import type { BunTarget } from "../../src/commands/build.ts";
 import {
 	buildCommand,
 	generateCmdResolver,
 	generateResolver,
-	getBinaryFilename,
-	resolveBunBuildRunner,
 	resolveEnvFilePaths,
 	resolveOutfile,
-	resolveTarget,
 	resolveTargetOutfile,
-	SUPPORTED_TARGETS,
-	TARGET_ALIASES,
 } from "../../src/commands/build.ts";
 import { resolveBaseName } from "../../src/utils/binary-name.ts";
+import type { BunTarget } from "../../src/utils/build-helpers.ts";
+import {
+	getBinaryFilename,
+	resolveBunBuildRunner,
+	resolveTarget,
+	SUPPORTED_TARGETS,
+	TARGET_ALIASES,
+} from "../../src/utils/build-helpers.ts";
 
 /**
  * Helper to extract the build command's internal node for definition checks.
