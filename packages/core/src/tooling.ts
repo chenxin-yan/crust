@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/core/tooling — explicitly unsupported tooling bridge (ADR-0006)
+// @crustjs/core/tooling — explicitly unsupported tooling bridge
 //
 // Limited to serializable Command Snapshot preparation and the
 // build-validation protocol. No stability guarantees: first-party tooling
