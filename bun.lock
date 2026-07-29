@@ -114,7 +114,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "0.x",
+        "@crustjs/core": "workspace:0.x",
       },
     },
     "packages/man": {
@@ -127,7 +127,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "0.x",
+        "@crustjs/core": "workspace:0.x",
       },
     },
     "packages/progress": {
@@ -170,7 +170,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "0.x",
+        "@crustjs/core": "workspace:0.x",
       },
     },
     "packages/store": {
