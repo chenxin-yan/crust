@@ -24,13 +24,7 @@ export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } 
 export { SkillConflictError } from "./errors.ts";
 
 // Primitives
-export {
-	generateSkill,
-	isValidSkillName,
-	resolveSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+export { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
 
 // Extension
 export function skill(options: SkillOptions): Extension {

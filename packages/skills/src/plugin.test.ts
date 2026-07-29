@@ -10,7 +10,7 @@ import { snapshotCommand, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";
 import { skillExtension } from "./plugin.ts";
-import { readInstalledVersion } from "./version.ts";
+import { readInstalledManifest } from "./version.ts";
 
 const FIXTURE_DIR = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -186,12 +186,12 @@ describe("skill extension auto-update", () => {
 
 		const skillDir = join(tmpDir, ".agents", "skills", "update-test");
 
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
 		// Run plugin with v2.0.0 — should auto-update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("prints auto-update message with Universal label", async () => {
@@ -265,7 +265,7 @@ describe("skill extension auto-update", () => {
 		// Run plugin with v2.0.0 behind a short-circuit — should still update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("does not auto-update during validation mode", async () => {
@@ -304,7 +304,7 @@ describe("skill extension auto-update", () => {
 		}
 
 		// Should still be v1.0.0 — validation mode skips auto-update
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("does not auto-update when autoUpdate is false", async () => {
@@ -338,7 +338,7 @@ describe("skill extension auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		// Should still be v1.0.0 — autoUpdate disabled
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("prints no changes when universal skills are already installed", async () => {
@@ -416,11 +416,11 @@ describe("skill extension auto-update", () => {
 		);
 
 		const skillDir = join(tmpDir, ".agents", "skills", "manual-update-test");
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("reports global scope when updating from the home directory", async () => {
@@ -455,13 +455,13 @@ describe("skill extension auto-update", () => {
 			);
 
 			const skillDir = join(homedir(), ".agents", "skills", "manual-home-update-test");
-			expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
 			await withCwd(homedir(), () =>
 				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
 			);
 
-			expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 		} finally {
 			console.log = originalLog;
 			await rm(join(homedir(), ".agents", "skills", "manual-home-update-test"), {
@@ -598,7 +598,7 @@ describe("skill extension auto-update", () => {
 		);
 
 		const projectSkillDir = join(tmpDir, ".agents", "skills", "fallback-scope-test");
-		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("1.0.0");
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
@@ -614,11 +614,11 @@ describe("skill extension auto-update", () => {
 			}
 		}
 
-		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("1.0.0");
 
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
-		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("2.0.0");
 	});
 });
 
@@ -916,7 +916,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 
 		const warnings: string[] = [];
 		const origWarn = console.warn;
@@ -956,7 +956,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 		}
 
 		// pricing-toolkit must remain at 1.0.0 — the install was rejected.
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 		// No orphan funnel-builder dir was created.
 		await expect(stat(funnelDir)).rejects.toThrow();
 		// The mismatch warning surfaces with both names so the bundle author
@@ -998,7 +998,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		const app = new Crust("bundle-update-host")
 			.meta({ description: "test" })
@@ -1019,7 +1019,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("does not auto-update an up-to-date bundle", async () => {
@@ -1061,7 +1061,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("continues after a per-bundle error so other bundles still update", async () => {
@@ -1078,7 +1078,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const secondDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(secondDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(secondDir))?.version ?? null).toBe("1.0.0");
 
 		// Pre-install funnel-builder at v1.0.0 too so the bogus first entry
 		// triggers a sourceDir resolution error during the install path.
@@ -1092,7 +1092,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
 
 		const originalWrite = process.stderr.write;
 		process.stderr.write = (() => true) as typeof process.stderr.write;
@@ -1133,9 +1133,9 @@ describe("skillPlugin customSkills auto-update", () => {
 		}
 
 		// Second bundle still updated, despite first entry's error.
-		expect(await readInstalledVersion(secondDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(secondDir))?.version ?? null).toBe("2.0.0");
 		// First bundle stayed at its previous version.
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
 		// Warning surfaced naming the failed bundle.
 		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 	});
@@ -1151,7 +1151,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		const app = new Crust("no-auto-update-host")
 			.meta({ description: "test" })
@@ -1173,7 +1173,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("skips bundle auto-update when invoking the skill subcommand", async () => {
@@ -1238,7 +1238,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		}
 
 		// Bundle stayed at v1.0.0 because the bogus sourceDir failed install.
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 		// Exactly one warning naming the failed bundle — only the `skill
 		// update` subcommand ran. If the auto-update setup hook also ran,
 		// there would be two warnings.
@@ -1275,7 +1275,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		const skillDir = join(tmpDir, ".agents", "skills", "identical-test");
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 
 		// No funnel-builder dir was created.
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
@@ -1294,7 +1294,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		// Plugin-level version is bumped to 2.0.0; entry omits `version`, so
 		// it should inherit and trigger a reinstall to 2.0.0.
@@ -1318,7 +1318,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("explicit entry version overrides plugin-level version", async () => {
@@ -1333,7 +1333,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		// Plugin says 2.0.0 but the entry pins itself at 0.3.0 — a vendored
 		// bundle whose cadence is independent of the consuming CLI.
@@ -1358,7 +1358,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		// Bundle now records the explicit override, not the plugin-level
 		// version.
-		expect(await readInstalledVersion(bundleDir)).toBe("0.3.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("0.3.0");
 	});
 
 	it("does not reinstall an inherited-version bundle when plugin version is unchanged", async () => {
@@ -1391,7 +1391,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 });
 
@@ -1457,9 +1457,9 @@ describe("skillPlugin customSkills interactive command", () => {
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 
-		expect(await readInstalledVersion(mainDir)).toBe("1.0.0");
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(mainDir))?.version ?? null).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("prints sequential per-skill output (heading mentions bundle name)", async () => {
@@ -1606,7 +1606,7 @@ describe("skillPlugin customSkills interactive command", () => {
 
 		// Second bundle still installed.
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 		// First bundle was rejected.
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		await expect(stat(funnelDir)).rejects.toThrow();
@@ -1703,9 +1703,9 @@ describe("skillPlugin customSkills `skill update`", () => {
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 
-		expect(await readInstalledVersion(mainDir)).toBe("2.0.0");
-		expect(await readInstalledVersion(funnelDir)).toBe("2.0.0");
-		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(mainDir))?.version ?? null).toBe("2.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("2.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("reports per-skill 'No updates needed' when nothing is outdated", async () => {
@@ -1826,7 +1826,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 		// Second bundle updated despite first entry's failure.
-		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("2.0.0");
 		// Failure was logged with the bundle name.
 		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 		// Non-zero exit so automation notices the partial failure.

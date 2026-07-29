@@ -10,13 +10,7 @@ type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	generateSkill,
-	isValidSkillName,
-	resolveSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
 import { CRUST_MANIFEST } from "./version.ts";
 
@@ -94,9 +88,9 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 
 /**
  * Overrides `process.env.PATH` for the duration of a callback. Also
- * normalizes `process.env.PATHEXT` to `".CMD"` on Windows so the probe in
- * `isCommandOnPath` looks for the same extension that
- * {@link makeFakeExecutable} writes (`name.cmd`), regardless of the host's
+ * normalizes `process.env.PATHEXT` to `".CMD"` on Windows so `Bun.which`
+ * looks for the same extension that {@link makeFakeExecutable} writes
+ * (`name.cmd`), regardless of the host's
  * `PATHEXT` value.
  *
  * Used to deterministically control what `detectInstalledAgents()` returns
@@ -122,15 +116,9 @@ async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
 
 /**
  * Creates a fake executable at `dir/name` that `detectInstalledAgents()`
- * will discover via its non-executing PATH probe. The probe is
- * platform-specific (see `isCommandOnPath` in `agents.ts`):
- *
- * - POSIX: checks `dir/name` with `X_OK`, so we write a shebang script
- *   and `chmod 0o755`.
- * - Windows: checks `dir/name + ext` for each `PATHEXT` entry. Tests rely on
- *   {@link withPath} forcing `PATHEXT=".CMD"`, so this helper writes
- *   `dir/name.cmd`. `X_OK` collapses to `R_OK` on Windows, so no `chmod`
- *   is needed.
+ * will discover via `Bun.which`. On POSIX this writes an executable shebang
+ * script; on Windows it writes `dir/name.cmd` to match the `PATHEXT` set by
+ * {@link withPath}.
  */
 async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 	if (process.platform === "win32") {
@@ -208,29 +196,6 @@ function nestedCommand(): CommandSnapshot {
 		}),
 	);
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// resolveSkillName
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveSkillName", () => {
-	it("returns a plain name unchanged", () => {
-		expect(resolveSkillName("my-cli")).toBe("my-cli");
-	});
-
-	it("preserves a name already starting with use-", () => {
-		expect(resolveSkillName("use-my-cli")).toBe("use-my-cli");
-	});
-
-	it("handles empty string", () => {
-		expect(resolveSkillName("")).toBe("");
-	});
-
-	// NOTE: resolveSkillName is an identity function — it passes through any
-	// string, but only names satisfying isValidSkillName are accepted by
-	// generateSkill. Invalid names (e.g. "@scope/my-cli") are intentionally
-	// not tested here to avoid implying they are supported.
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // isValidSkillName

@@ -2,11 +2,9 @@
 // Markdown renderers — produce distributable skill files from manifest
 // ────────────────────────────────────────────────────────────────────────────
 
-import {
-	hasNormalizedInstructions,
-	normalizeInstructionList,
-	normalizeMarkdownBlock,
-} from "./instructions.ts";
+import { posix } from "node:path";
+
+import { normalizeInstructionList, normalizeMarkdownBlock } from "./instructions.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -23,7 +21,7 @@ import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta }
 function escapeYaml(value: string): string {
 	// Characters that make a plain YAML scalar ambiguous
 	if (/[:#[\]{}&*!|>'"`,@?\\]|^\s|\s$|^---|[\n\r]/.test(value)) {
-		return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r")}"`;
+		return JSON.stringify(value);
 	}
 	return value;
 }
@@ -139,28 +137,7 @@ function commandInvocation(node: ManifestNode): string {
  * Both paths are relative to the skill root (e.g. "commands/remote/add.md").
  */
 function relativePath(from: string, to: string): string {
-	const fromParts = from.split("/").slice(0, -1); // directory of `from`
-	const toParts = to.split("/");
-
-	// Find common prefix length
-	let common = 0;
-	while (
-		common < fromParts.length &&
-		common < toParts.length &&
-		fromParts[common] === toParts[common]
-	) {
-		common++;
-	}
-
-	const ups = fromParts.length - common;
-	const remaining = toParts.slice(common);
-
-	if (ups === 0) {
-		return remaining.join("/");
-	}
-
-	const upSegments = Array.from({ length: ups }, () => "..");
-	return [...upSegments, ...remaining].join("/");
+	return posix.relative(posix.dirname(from), to);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -232,7 +209,7 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 	);
 	lines.push("");
 
-	if (hasNormalizedInstructions(topLevelInstructions)) {
+	if (topLevelInstructions.length > 0) {
 		lines.push("## General Guidance");
 		lines.push("");
 		lines.push(...topLevelInstructions);
@@ -386,7 +363,7 @@ function renderCommandHeading(node: ManifestNode): string[] {
 function renderAgentInstructions(node: ManifestNode): string[] {
 	const instructions = node.instructions ?? [];
 
-	if (!hasNormalizedInstructions(instructions)) {
+	if (instructions.length === 0) {
 		return [];
 	}
 
@@ -565,7 +542,7 @@ function renderNavigation(node: ManifestNode, root: ManifestNode): string[] {
  * Finds a node in the manifest tree by its full path.
  */
 function findNode(root: ManifestNode, path: string[]): ManifestNode | undefined {
-	if (arraysEqual(root.path, path)) {
+	if (root.path.length === path.length && root.path.every((value, i) => value === path[i])) {
 		return root;
 	}
 	for (const child of root.children) {
@@ -573,15 +550,4 @@ function findNode(root: ManifestNode, path: string[]): ManifestNode | undefined 
 		if (found) return found;
 	}
 	return undefined;
-}
-
-/**
- * Compares two string arrays for equality.
- */
-function arraysEqual(a: string[], b: string[]): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) {
-		if (a[i] !== b[i]) return false;
-	}
-	return true;
 }

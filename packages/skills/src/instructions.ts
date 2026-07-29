@@ -29,10 +29,3 @@ export function normalizeMarkdownBlock(input: string | undefined): string[] {
 
 	return content.split(/\r?\n/);
 }
-
-/**
- * Returns true when normalized instruction content has at least one line.
- */
-export function hasNormalizedInstructions(lines: string[]): boolean {
-	return lines.length > 0;
-}

@@ -87,9 +87,23 @@ function resolveAllAgentTargets(provided: AgentTarget[] | undefined): AgentTarge
 	return [...ALL_AGENTS];
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Naming — resolveSkillName and validation
-// ────────────────────────────────────────────────────────────────────────────
+function groupAgentsByOutputDir(
+	agents: AgentTarget[],
+	scope: Scope,
+	name: string,
+): Map<string, AgentTarget[]> {
+	const groups = new Map<string, AgentTarget[]>();
+	for (const agent of agents) {
+		const outputDir = resolveAgentPath(agent, scope, name);
+		const existing = groups.get(outputDir);
+		if (existing) {
+			existing.push(agent);
+		} else {
+			groups.set(outputDir, [agent]);
+		}
+	}
+	return groups;
+}
 
 /**
  * Agent Skills spec name pattern: 1–64 lowercase alphanumeric characters and
@@ -105,25 +119,6 @@ const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  */
 export function isValidSkillName(name: string): boolean {
 	return name.length >= 1 && name.length <= 64 && SKILL_NAME_PATTERN.test(name);
-}
-
-/**
- * Resolves the canonical current skill name.
- *
- * All generated output (directory names, crust.json metadata, SKILL.md content)
- * uses the resolved name directly. Consumers pass the raw CLI name
- * (e.g. `"my-cli"`), and this function returns that same canonical name.
- *
- * @param name - The raw CLI tool name
- * @returns The canonical skill name
- *
- * @example
- * ```ts
- * resolveSkillName("my-cli"); // "my-cli"
- * ```
- */
-export function resolveSkillName(name: string): string {
-	return name;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -173,13 +168,9 @@ export async function generateSkill(options: GenerateOptions): Promise<GenerateR
 	} = options;
 	const agents = await resolveGenerateAgents(options.agents);
 
-	// Resolve the canonical current name — do not mutate the caller's meta object
-	const resolvedName = resolveSkillName(meta.name);
-
-	// Validate resolved name against Agent Skills spec
-	if (!isValidSkillName(resolvedName)) {
+	if (!isValidSkillName(meta.name)) {
 		throw new Error(
-			`Invalid skill name "${resolvedName}": must be 1–64 lowercase ` +
+			`Invalid skill name "${meta.name}": must be 1–64 lowercase ` +
 				`alphanumeric characters and hyphens, no leading/trailing/consecutive ` +
 				`hyphens. Pattern: ${SKILL_NAME_PATTERN.source}`,
 		);
@@ -189,18 +180,13 @@ export async function generateSkill(options: GenerateOptions): Promise<GenerateR
 		return { agents: [] };
 	}
 
-	const resolvedMeta: SkillMeta = {
-		...meta,
-		name: resolvedName,
-	};
-
 	// Build manifest and render files once (shared across all agents)
 	const manifest = buildManifest(command);
-	const renderedFiles = renderSkill(manifest, resolvedMeta);
+	const renderedFiles = renderSkill(manifest, meta);
 
 	return installRenderedSkill({
 		files: renderedFiles,
-		meta: resolvedMeta,
+		meta,
 		agents,
 		scope,
 		clean,
@@ -261,31 +247,16 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	}
 
 	// Append crust.json (kind-aware) and sort for deterministic output
-	const metadataFiles = renderDistributionMetadata(meta, kind);
-	const allFiles: RenderedFile[] = [...files, ...metadataFiles].sort((a, b) =>
+	const allFiles: RenderedFile[] = [...files, renderDistributionMetadata(meta, kind)].sort((a, b) =>
 		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
 	);
 	const allFilePaths = allFiles.map((file) => file.path);
 
-	const groups = new Map<string, AgentResult["agent"][]>();
-	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, meta.name);
-		const existing = groups.get(outputDir);
-		if (existing) {
-			existing.push(agent);
-		} else {
-			groups.set(outputDir, [agent]);
-		}
-	}
+	const groups = groupAgentsByOutputDir(agents, scope, meta.name);
 
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, meta.name);
 	const installStates = new Map<string, ManagedPathState>();
-	for (const [outputDir, groupedAgents] of groups) {
-		const groupedPrimaryAgent = groupedAgents[0];
-		if (!groupedPrimaryAgent) {
-			continue;
-		}
-
+	for (const outputDir of groups.keys()) {
 		installStates.set(outputDir, await inspectManagedPath(outputDir, canonicalOutputDir));
 	}
 	const canonicalInspection = await inspectInstalledManifest(canonicalOutputDir);
@@ -329,10 +300,8 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const groupedPrimaryAgent = groupedAgents[0];
-		if (!groupedPrimaryAgent) {
-			continue;
-		}
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- groups are seeded with an agent
+		const groupedPrimaryAgent = groupedAgents[0]!;
 
 		const state = installStates.get(outputDir);
 		if (!state) {
@@ -412,7 +381,6 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	return { agents: results };
 }
 
-export type { InstallRenderedSkillOptions };
 export { installRenderedSkill };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -428,25 +396,11 @@ export { installRenderedSkill };
 export async function uninstallSkill(options: UninstallOptions): Promise<UninstallResult> {
 	const { name, scope = "global" } = options;
 	const agents = resolveAllAgentTargets(options.agents);
-	const resolvedName = resolveSkillName(name);
-	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
+	const canonicalOutputDir = resolveCanonicalSkillPath(scope, name);
 	const results: UninstallResult["agents"] = [];
-	const groups = new Map<string, AgentResult["agent"][]>();
-	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, resolvedName);
-		const existing = groups.get(outputDir);
-		if (existing) {
-			existing.push(agent);
-		} else {
-			groups.set(outputDir, [agent]);
-		}
-	}
+	const groups = groupAgentsByOutputDir(agents, scope, name);
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const groupedPrimaryAgent = groupedAgents[0];
-		if (!groupedPrimaryAgent) {
-			continue;
-		}
 		const state = await inspectManagedPath(outputDir, canonicalOutputDir);
 		const removed = await removeManagedPath(state);
 
@@ -460,7 +414,7 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
 	}
 
 	const canonicalManifest = await readInstalledManifest(canonicalOutputDir);
-	if (canonicalManifest !== null && !(await hasAnyInstalledAgentPath(resolvedName, scope))) {
+	if (canonicalManifest !== null && !(await hasAnyInstalledAgentPath(name, scope))) {
 		await rm(canonicalOutputDir, { recursive: true, force: true });
 	}
 
@@ -480,25 +434,11 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
 export async function skillStatus(options: StatusOptions): Promise<StatusResult> {
 	const { name, scope = "global" } = options;
 	const agents = resolveAllAgentTargets(options.agents);
-	const resolvedName = resolveSkillName(name);
 	const results: StatusResult["agents"] = [];
-	const groups = new Map<string, AgentResult["agent"][]>();
-	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, resolvedName);
-		const existing = groups.get(outputDir);
-		if (existing) {
-			existing.push(agent);
-		} else {
-			groups.set(outputDir, [agent]);
-		}
-	}
+	const groups = groupAgentsByOutputDir(agents, scope, name);
 
 	for (const [outputDir, groupedAgents] of groups) {
-		const groupedPrimaryAgent = groupedAgents[0];
-		if (!groupedPrimaryAgent) {
-			continue;
-		}
-		const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
+		const canonicalOutputDir = resolveCanonicalSkillPath(scope, name);
 		const state = await inspectManagedPath(outputDir, canonicalOutputDir);
 		const version = state.version;
 		for (const agent of groupedAgents) {
@@ -852,9 +792,9 @@ async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boo
  *
  * @param meta - Skill metadata
  * @param kind - The {@link SkillKind} that produced this bundle
- * @returns Array containing the crust.json rendered file
+ * @returns The crust.json rendered file
  */
-function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile[] {
+function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile {
 	const obj: Record<string, unknown> = {
 		name: meta.name,
 		description: meta.description,
@@ -862,12 +802,10 @@ function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedF
 		kind,
 	};
 
-	return [
-		{
-			path: CRUST_MANIFEST,
-			content: `${JSON.stringify(obj, null, "\t")}\n`,
-		},
-	];
+	return {
+		path: CRUST_MANIFEST,
+		content: `${JSON.stringify(obj, null, "\t")}\n`,
+	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -889,27 +827,9 @@ async function cleanDirectory(dir: string): Promise<void> {
  * in sorted order for deterministic behavior.
  */
 async function writeFiles(baseDir: string, files: RenderedFile[]): Promise<void> {
-	// Collect all unique directories first and create them
-	const dirs = new Set<string>();
 	for (const file of files) {
 		const filePath = join(baseDir, file.path);
-		const dir = dirname(filePath);
-		dirs.add(dir);
-	}
-
-	// Sort directories to create parents before children
-	const sortedDirs = [...dirs].sort();
-	for (const dir of sortedDirs) {
-		await mkdir(dir, { recursive: true });
-	}
-
-	// Write files sequentially in deterministic order (already sorted by caller)
-	for (const file of files) {
-		const filePath = join(baseDir, file.path);
-		if (typeof file.content === "string") {
-			await writeFile(filePath, file.content, "utf-8");
-		} else {
-			await writeFile(filePath, file.content);
-		}
+		await mkdir(dirname(filePath), { recursive: true });
+		await writeFile(filePath, file.content);
 	}
 }

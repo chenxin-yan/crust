@@ -38,7 +38,7 @@ await app.execute();
 
 This gives you:
 
-- **Auto-detection**: additional (non-universal) agents are detected by probing their CLI commands (for example `<agent> --version`).
+- **Auto-detection**: additional (non-universal) agents are detected with Bun's non-executing `PATH` lookup.
 - **Auto-update**: when a user runs any command, the extension silently updates installed skills if the version has changed.
 - **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents. A `skill update` subcommand is also available for update-only flows.
 
@@ -62,7 +62,7 @@ Universal group (single prompt option, shared path):
 
 - `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
 
-Additional agents: 30+ agents detected on `PATH` via `<agent> --version`
+Additional agents: 30+ agents detected with a non-executing `PATH` lookup
 (`claude-code`, `windsurf`, `pi`, `roo`, `goose`, `continue`, etc.). See
 the `AgentTarget` union exported from `@crustjs/skills` for the full list.
 
@@ -267,7 +267,7 @@ const deploy = annotate(
 
 ## Name Validation
 
-Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. `generateSkill()` validates the supplied name and throws a descriptive error if invalid.
+Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. Names are used directly without normalization; `generateSkill()` validates the supplied name and throws a descriptive error if invalid.
 
 Use `isValidSkillName()` to check names before calling `generateSkill()`:
 
