@@ -52,7 +52,7 @@ export interface CrustCommandContext<
 	args: InferArgs<A>;
 	/** Resolved flags, keyed by flag name */
 	flags: InferFlags<F>;
-	/** Context values registered with `.context()` */
+	/** Context values attached with `.provide()` */
 	ctx: Readonly<Ctx>;
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
@@ -308,6 +308,39 @@ function deepCloneFlags(flags: FlagsDef): FlagsDef {
  * Deep-clone a command subtree so plugin `setup()` can run without mutating
  * the original builder graph.
  */
+/**
+ * Recursively merge parent-path Contexts into an attached subtree.
+ *
+ * Builders made with `.sub()` already carry the parent's Context instances —
+ * identical instances are inheritance, not duplicates; a same-name different
+ * instance anywhere on the path is a definition error per the
+ * one-name-per-path rule (ADR-0002).
+ */
+function mergeContextsIntoSubtree(
+	node: CommandNode,
+	parentContexts: readonly ContextInstance[],
+): CommandNode {
+	const merged = [...parentContexts];
+	for (const contextInstance of node.contexts) {
+		if (merged.includes(contextInstance)) continue;
+		if (merged.some((existing) => existing.name === contextInstance.name)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${contextInstance.name}" is already provided on this command path`,
+				{ subject: "context", name: contextInstance.name, reason: "duplicate-context" },
+			);
+		}
+		merged.push(contextInstance);
+	}
+
+	const subCommands: Record<string, CommandNode> = {};
+	for (const [name, sub] of Object.entries(node.subCommands)) {
+		subCommands[name] = mergeContextsIntoSubtree(sub, merged);
+	}
+
+	return { ...node, contexts: merged, subCommands };
+}
+
 function deepCloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};
 	for (const [name, sub] of Object.entries(node.subCommands)) {
@@ -527,14 +560,27 @@ export class Crust<
 	}
 
 	/**
-	 * Register a typed command context provider.
+	 * Attach a Context — a named command dependency — to this command.
 	 *
-	 * Contexts are built in registration order for the resolved command and are
-	 * exposed to lifecycle handlers as `ctx`.
+	 * Contexts are inherited by descendant commands, constructed in
+	 * registration order only for the resolved command path, and exposed to
+	 * the Command Handler as `ctx`. Values implementing `Symbol.dispose` or
+	 * `Symbol.asyncDispose` are disposed in reverse construction order after
+	 * success or failure.
+	 *
+	 * @throws {CrustError} `DEFINITION` when the name is already provided on
+	 *                      this command path
 	 */
-	context<const C extends ContextInstance>(
+	provide<const C extends ContextInstance>(
 		context: C,
 	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
+		if (this._node.contexts.some((existing) => existing.name === context.name)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${context.name}" is already provided on this command path`,
+				{ subject: "context", name: context.name, reason: "duplicate-context" },
+			);
+		}
 		return this._clone({
 			contexts: [...this._node.contexts, context],
 		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
@@ -775,9 +821,10 @@ export class Crust<
 			name,
 		);
 
-		// Clone the node to avoid mutating the original builder's _node
+		// Merge parent-path Contexts into the whole attached subtree (also
+		// clones the node so the original builder's _node is not mutated).
 		const childNode = {
-			...builder._node,
+			...mergeContextsIntoSubtree(builder._node, this._node.contexts),
 			effectiveFlags: computeEffectiveFlags(builder._inheritedFlags, builder._node.localFlags),
 		};
 
@@ -1013,10 +1060,15 @@ export class Crust<
 
 			if (!resolvedNode.run) return;
 
+			// Native resource protocol: Context values implementing
+			// Symbol.dispose/asyncDispose are disposed in reverse construction
+			// order after success or failure (`await using` semantics).
+			await using disposal = new AsyncDisposableStack();
+
 			const context: CrustCommandContext = {
 				args: parsed.args,
 				flags: parsed.flags,
-				ctx: await buildContexts(resolvedNode.contexts),
+				ctx: await buildContexts(resolvedNode.contexts, disposal),
 				rawArgs: parsed.rawArgs,
 				command: snapshotCommand(resolvedNode),
 				stdout: io.stdout,

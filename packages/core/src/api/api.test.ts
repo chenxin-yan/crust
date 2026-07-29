@@ -17,7 +17,7 @@ describe("public beta API", () => {
 		}));
 
 		const app = new Crust("my-cli")
-			.context(db({ url: "memory://test" }))
+			.provide(db({ url: "memory://test" }))
 			.flags({ verbose: { type: "boolean", inherit: true } })
 			.command("deploy", (cmd) =>
 				cmd
@@ -44,7 +44,7 @@ describe("public beta API", () => {
 			user: "chenxin",
 		}));
 		const app = new Crust("my-cli")
-			.context(auth)
+			.provide(auth())
 			.flags({ verbose: { type: "boolean", inherit: true } });
 
 		const deploy = app
