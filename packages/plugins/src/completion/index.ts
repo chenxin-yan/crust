@@ -139,7 +139,7 @@ export function completionPlugin(options: CompletionPluginOptions = {}): CrustPl
 							"Write all configured shells' scripts into this directory instead of printing to stdout",
 					},
 				})
-				.run(async (ctx) => {
+				.handle(async (ctx) => {
 					const requestedShell = ctx.args.shell as CompletionShell;
 					if (!SUPPORTED_SHELLS.includes(requestedShell)) {
 						// Parser-side `choices` validation normally rejects this path;

@@ -16,8 +16,6 @@ function makeCommand(opts: {
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
-	preRun?: () => void;
-	postRun?: () => void;
 	subCommands?: Record<string, CommandNode>;
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
@@ -28,8 +26,6 @@ function makeCommand(opts: {
 		node.effectiveFlags = { ...opts.flags };
 	}
 	if (opts.run) node.run = opts.run;
-	if (opts.preRun) node.preRun = opts.preRun;
-	if (opts.postRun) node.postRun = opts.postRun;
 	if (opts.subCommands) {
 		node.subCommands = opts.subCommands;
 	}
@@ -617,7 +613,7 @@ describe("buildManifest", () => {
 			const deploy = annotate(
 				new Crust("deploy").meta({ description: "Deploy command" }),
 				"Read the environment carefully before execution.",
-			).run(() => {});
+			).handle(() => {});
 			const root = new Crust("app").command(deploy);
 
 			const node = buildManifest(root._node);
@@ -770,19 +766,6 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("edge cases", () => {
-		it("handles command with preRun/postRun but no run as not runnable", () => {
-			const cmd = makeCommand({
-				meta: { name: "hook-only" },
-				preRun() {},
-				postRun() {},
-			});
-
-			const node = buildManifest(cmd);
-
-			// Only `run` determines runnable, not preRun/postRun
-			expect(node.runnable).toBe(false);
-		});
-
 		it("handles deeply nested commands (4 levels)", () => {
 			const deep = makeCommand({
 				meta: { name: "deep" },

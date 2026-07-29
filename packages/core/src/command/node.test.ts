@@ -17,9 +17,7 @@ describe("createCommandNode", () => {
 		expect(node.args).toBeUndefined();
 		expect(node.subCommands).toEqual({});
 		expect(node.plugins).toEqual([]);
-		expect(node.preRun).toBeUndefined();
 		expect(node.run).toBeUndefined();
-		expect(node.postRun).toBeUndefined();
 	});
 
 	it("creates a node with only the name set", () => {

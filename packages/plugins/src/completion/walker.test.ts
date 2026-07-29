@@ -25,9 +25,7 @@ function makeNode(partial: Partial<CommandNode> & { name: string }): CommandNode
 		subCommands: partial.subCommands ?? {},
 		contexts: [],
 		plugins: [],
-		preRun: undefined,
 		run: undefined,
-		postRun: undefined,
 	};
 }
 

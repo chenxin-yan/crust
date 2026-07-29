@@ -23,7 +23,7 @@ describe("public beta API", () => {
 				cmd
 					.args([{ name: "target", type: "string", required: true }])
 					.flags({ env: { type: "string", default: "prod" } })
-					.run(({ args, flags, ctx }) => {
+					.handle(({ args, flags, ctx }) => {
 						type _target = Expect<Equal<typeof args.target, string>>;
 						type _env = Expect<Equal<typeof flags.env, string>>;
 						type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
@@ -50,7 +50,7 @@ describe("public beta API", () => {
 		const deploy = app
 			.sub("deploy")
 			.args([{ name: "target", type: "string", required: true }])
-			.run(({ args, flags, ctx }) => {
+			.handle(({ args, flags, ctx }) => {
 				type _target = Expect<Equal<typeof args.target, string>>;
 				type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
 				type _user = Expect<Equal<typeof ctx.auth.user, string>>;
@@ -73,7 +73,7 @@ describe("public beta API", () => {
 				await run(context);
 			});
 
-		const app = new Crust("my-cli").extend(version).run(({ flags, ctx }) => {
+		const app = new Crust("my-cli").extend(version).handle(({ flags, ctx }) => {
 			type _ctx = Expect<Equal<typeof ctx, Readonly<{}>>>;
 			expect((flags as Record<string, unknown>).version).toBe(true);
 		});
@@ -88,7 +88,7 @@ describe("public beta API", () => {
 		const debug = extension("debug").flag("debug", {
 			type: "boolean",
 		});
-		const app = new Crust("repeat").extend(debug).run(({ flags }) => {
+		const app = new Crust("repeat").extend(debug).handle(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) {
 				runCount++;
 			}

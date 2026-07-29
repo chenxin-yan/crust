@@ -19,7 +19,7 @@ describe("crust integration", () => {
 	});
 
 	it("resolveCommand works with Crust builder", () => {
-		const app = new Crust("root").command("sub", (cmd) => cmd.run(() => {}));
+		const app = new Crust("root").command("sub", (cmd) => cmd.handle(() => {}));
 
 		const node = (app as unknown as { _node: CommandNode })._node;
 		const result = resolveCommand(node, ["sub", "--flag"]);
@@ -30,7 +30,7 @@ describe("crust integration", () => {
 
 	it("Crust.execute() runs command through builder", async () => {
 		let ran = false;
-		const app = new Crust("run-test").run(() => {
+		const app = new Crust("run-test").handle(() => {
 			ran = true;
 		});
 

@@ -209,7 +209,7 @@ describe("scaffold", () => {
 		// Has a positional name argument with string literal type
 		expect(cliContent).toContain('type: "string"');
 		// Has a run function
-		expect(cliContent).toContain(".run(");
+		expect(cliContent).toContain(".handle(");
 	});
 
 	it("generates CLI file that is valid TypeScript (compile check)", async () => {
@@ -228,7 +228,7 @@ describe("scaffold", () => {
 		expect(cliContent).toContain('new Crust("compile-test-cli")');
 		expect(cliContent).toContain(".args([");
 		expect(cliContent).toContain(".flags(");
-		expect(cliContent).toContain(".run(");
+		expect(cliContent).toContain(".handle(");
 	});
 
 	it("generates modular template with file-splitting .sub() pattern", async () => {

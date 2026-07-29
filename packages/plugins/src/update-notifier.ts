@@ -494,12 +494,12 @@ function resolveUpdateCommand(
  * @example
  * ```ts
  * import { Crust } from "@crustjs/core";
- * import { updateNotifierPlugin } from "@crustjs/plugins";
+ * import { updateNotifier } from "@crustjs/plugins";
  * import pkg from "../package.json";
  *
  * const app = new Crust("my-cli").meta({ description: "My awesome CLI" })
- *   .use(updateNotifierPlugin({ packageName: "my-cli", currentVersion: pkg.version }))
- *   .run(() => {
+ *   .extend(updateNotifier({ packageName: "my-cli", currentVersion: pkg.version }))
+ *   .handle(() => {
  *     console.log("Hello!");
  *   });
  *

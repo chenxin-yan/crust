@@ -255,7 +255,7 @@ export const publishCommand = new Crust("publish")
 			description: "Override the registry passed to bun publish",
 		},
 	} as const)
-	.run(async ({ flags }) => {
+	.handle(async ({ flags }) => {
 		const stageDir = resolve(process.cwd(), flags["stage-dir"]);
 		const manifest = readPublishManifest(stageDir);
 

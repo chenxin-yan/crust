@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust } from "@crustjs/core/internal";
+import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
 
 import { didYouMeanPlugin } from "./did-you-mean.ts";
 
@@ -33,9 +33,9 @@ afterEach(() => {
 describe("didYouMeanPlugin", () => {
 	it("suggests the closest command on a typo (smoke test)", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("build", (cmd) => cmd.run(() => {}))
-			.command("test", (cmd) => cmd.run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("build", (cmd) => cmd.handle(() => {}))
+			.command("test", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["buld"] });
 
@@ -51,9 +51,9 @@ describe("didYouMeanPlugin", () => {
 
 	it("suggests the canonical name when the input matches an alias", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}))
-			.command("version", (cmd) => cmd.run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}))
+			.command("version", (cmd) => cmd.handle(() => {}));
 
 		// "issuess" is closest to the alias "issues" (distance 1) than to
 		// "issue" (distance 2). The plugin must report the canonical name
@@ -69,8 +69,8 @@ describe("didYouMeanPlugin", () => {
 
 	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}));
 
 		await app.execute({ argv: ["isue"] });
 
@@ -83,9 +83,9 @@ describe("didYouMeanPlugin", () => {
 		// "issue" via its 1-char alias "i". A short alias must not win simply
 		// because it is a prefix of the input.
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {}))
-			.command("install", (cmd) => cmd.run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}))
+			.command("install", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["insall"] });
 
@@ -96,9 +96,9 @@ describe("didYouMeanPlugin", () => {
 
 	it("lists only canonical names under 'Available commands'", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).run(() => {}))
-			.command("version", (cmd) => cmd.run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}))
+			.command("version", (cmd) => cmd.handle(() => {}));
 
 		await app.execute({ argv: ["completely-unknown"] });
 
@@ -109,8 +109,8 @@ describe("didYouMeanPlugin", () => {
 
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin({ mode: "help" }))
-			.command("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin({ mode: "help" })))
+			.command("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).handle(() => {}));
 
 		// Both the canonical "issue" and the alias "issues" are within
 		// Levenshtein distance 3 of "issuee". The first suggestion line
@@ -128,9 +128,9 @@ describe("didYouMeanPlugin", () => {
 		// real, invocable command but should not surface in user-facing
 		// error output. A close typo of it must not produce a suggestion.
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("build", (cmd) => cmd.run(() => {}))
-			.command("__complete", (cmd) => cmd.meta({ hidden: true }).run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("build", (cmd) => cmd.handle(() => {}))
+			.command("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {}));
 
 		// Typo distance(__complet -> __complete) = 1, well within the
 		// threshold. Distance(__complet -> build) is > 3, so without the
@@ -147,10 +147,10 @@ describe("didYouMeanPlugin", () => {
 		// canonical name. If a hidden command has an alias that's close to
 		// the typo, it still must not leak.
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("build", (cmd) => cmd.run(() => {}))
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("build", (cmd) => cmd.handle(() => {}))
 			.command("__complete", (cmd) =>
-				cmd.meta({ hidden: true, aliases: ["__comp"] }).run(() => {}),
+				cmd.meta({ hidden: true, aliases: ["__comp"] }).handle(() => {}),
 			);
 
 		await app.execute({ argv: ["__cmp"] });
@@ -163,10 +163,10 @@ describe("didYouMeanPlugin", () => {
 
 	it("omits hidden commands from the 'Available commands' fallback list", async () => {
 		const app = new Crust("app")
-			.use(didYouMeanPlugin())
-			.command("build", (cmd) => cmd.run(() => {}))
-			.command("test", (cmd) => cmd.run(() => {}))
-			.command("__complete", (cmd) => cmd.meta({ hidden: true }).run(() => {}));
+			.extend(extensionFromPlugin(didYouMeanPlugin()))
+			.command("build", (cmd) => cmd.handle(() => {}))
+			.command("test", (cmd) => cmd.handle(() => {}))
+			.command("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {}));
 
 		// No close match — we want the "Available commands" line.
 		await app.execute({ argv: ["zzzzz"] });

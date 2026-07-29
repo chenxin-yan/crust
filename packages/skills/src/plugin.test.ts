@@ -4,7 +4,12 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Crust, VALIDATION_MODE_ENV, type CrustPlugin } from "@crustjs/core/internal";
+import {
+	Crust,
+	VALIDATION_MODE_ENV,
+	type CrustPlugin,
+	extensionFromPlugin,
+} from "@crustjs/core/internal";
 
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";
@@ -69,12 +74,14 @@ describe("skillPlugin auto-update", () => {
 	it("does not install skills that are not yet present", async () => {
 		const app = new Crust("no-auto-install")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -87,16 +94,18 @@ describe("skillPlugin auto-update", () => {
 	it("renders plugin-provided top-level instructions into SKILL.md", async () => {
 		const app = new Crust("instruction-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					instructions: [
-						"Prefer readonly commands before mutating state.",
-						"Ask for confirmation before destructive actions.",
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						instructions: [
+							"Prefer readonly commands before mutating state.",
+							"Ask for confirmation before destructive actions.",
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -125,18 +134,20 @@ describe("skillPlugin auto-update", () => {
 	it("renders plugin-provided markdown instructions into SKILL.md", async () => {
 		const app = new Crust("markdown-instruction-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					instructions: `Read the command docs before answering.
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						instructions: `Read the command docs before answering.
 
 ## Response Policy
 
 - Prefer exact documented flags.
 - Quote defaults only when they appear in the command file.`,
-				}),
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -166,12 +177,14 @@ describe("skillPlugin auto-update", () => {
 	it("auto-updates already-installed skills when version changes", async () => {
 		const app = new Crust("update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		// Pre-install v1.0.0
@@ -197,12 +210,14 @@ describe("skillPlugin auto-update", () => {
 	it("auto-migrates a legacy install even when the version matches", async () => {
 		const app = new Crust("legacy-migration-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-legacy-migration-test");
@@ -229,12 +244,14 @@ describe("skillPlugin auto-update", () => {
 	it("prints auto-update message with Universal label", async () => {
 		const app = new Crust("update-message-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -271,13 +288,15 @@ describe("skillPlugin auto-update", () => {
 	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(shortCircuitPlugin())
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(extensionFromPlugin(shortCircuitPlugin()))
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		// Pre-install v1.0.0
@@ -303,12 +322,14 @@ describe("skillPlugin auto-update", () => {
 
 		const app = new Crust("validation-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		// Pre-install v1.0.0
@@ -340,13 +361,15 @@ describe("skillPlugin auto-update", () => {
 	it("does not auto-update when autoUpdate is false", async () => {
 		const app = new Crust("no-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		// Pre-install v1.0.0
@@ -374,12 +397,14 @@ describe("skillPlugin auto-update", () => {
 	it("prints no changes when universal skills are already installed", async () => {
 		const app = new Crust("no-change-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -423,13 +448,15 @@ describe("skillPlugin auto-update", () => {
 	it("runs manual skill update command", async () => {
 		const app = new Crust("manual-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -456,12 +483,14 @@ describe("skillPlugin auto-update", () => {
 	it("reports global scope when updating from the home directory", async () => {
 		const app = new Crust("manual-home-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		const logs: string[] = [];
@@ -511,12 +540,14 @@ describe("skillPlugin auto-update", () => {
 	it("reports no updates needed with global scope from the home directory", async () => {
 		const app = new Crust("manual-home-noop-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		const logs: string[] = [];
@@ -561,17 +592,19 @@ describe("skillPlugin auto-update", () => {
 	it("renders top-level instructions when running manual skill update", async () => {
 		const app = new Crust("manual-update-instructions-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					instructions: [
-						"Prefer readonly commands before mutating state.",
-						"Ask for confirmation before destructive actions.",
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						instructions: [
+							"Prefer readonly commands before mutating state.",
+							"Ask for confirmation before destructive actions.",
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -606,12 +639,14 @@ describe("skillPlugin auto-update", () => {
 	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {
 		const app = new Crust("fallback-scope-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -690,13 +725,15 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an empty array", async () => {
 		const app = new Crust("empty-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [],
+					}),
+				),
 			);
 
 		// Empty `customSkills` must be a true no-op: setup completes, no
@@ -720,20 +757,22 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts a URL sourceDir", async () => {
 		const app = new Crust("url-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: pathToFileURL(`${FIXTURE_DIR}/`),
-							version: "1.0.0",
-						},
-					],
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: pathToFileURL(`${FIXTURE_DIR}/`),
+								version: "1.0.0",
+							},
+						],
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
@@ -742,20 +781,22 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an absolute string sourceDir", async () => {
 		const app = new Crust("abs-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		await expect(app.execute({ argv: [] })).resolves.toBeUndefined();
@@ -765,20 +806,22 @@ describe("skillPlugin customSkills validation", () => {
 		// Setup must not throw — resolution-time errors defer to installSkillBundle.
 		const app = new Crust("rel-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: "some/relative/path",
-							version: "1.0.0",
-						},
-					],
-					autoUpdate: false,
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: "some/relative/path",
+								version: "1.0.0",
+							},
+						],
+						autoUpdate: false,
+					}),
+				),
 			);
 
 		// No bundle is installed, so autoUpdate sweep finds nothing and exits.
@@ -788,19 +831,21 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects a name that collides with the main skill", async () => {
 		const app = new Crust("collide-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "collide-test",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "collide-test",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -812,24 +857,26 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects duplicate names within the array", async () => {
 		const app = new Crust("dup-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -841,19 +888,21 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects an invalid skill name", async () => {
 		const app = new Crust("invalid-name-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "Invalid Name!",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "Invalid Name!",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -868,19 +917,21 @@ describe("skillPlugin customSkills validation", () => {
 		// fall through to the plugin-level fallback.
 		const app = new Crust("empty-version-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "",
+							},
+						],
+					}),
+				),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -892,20 +943,22 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects a non-string non-URL sourceDir", async () => {
 		const app = new Crust("bad-src-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
-							sourceDir: 42 as any,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
+								sourceDir: 42 as any,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
@@ -956,24 +1009,26 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 		const app = new Crust("name-mismatch-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							// Config name claims pricing-toolkit, but FIXTURE_DIR's
-							// SKILL.md frontmatter declares funnel-builder. Without
-							// expectedName enforcement, the funnel-builder install
-							// would silently install at v2.0.0 under the wrong
-							// directory.
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								// Config name claims pricing-toolkit, but FIXTURE_DIR's
+								// SKILL.md frontmatter declares funnel-builder. Without
+								// expectedName enforcement, the funnel-builder install
+								// would silently install at v2.0.0 under the wrong
+								// directory.
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const origExitCode = process.exitCode;
@@ -1032,19 +1087,21 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-update-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1073,19 +1130,21 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1134,25 +1193,27 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-resilience-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							// Bogus path — install will throw at resolve time.
-							sourceDir: "/nonexistent/path/to/funnel-builder",
-							version: "2.0.0",
-						},
-						{
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR_SECOND,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								// Bogus path — install will throw at resolve time.
+								sourceDir: "/nonexistent/path/to/funnel-builder",
+								version: "2.0.0",
+							},
+							{
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR_SECOND,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		try {
@@ -1185,20 +1246,22 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("no-auto-update-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1226,19 +1289,21 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("subcmd-skip-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: "/nonexistent/path/to/funnel-builder",
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: "/nonexistent/path/to/funnel-builder",
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1281,12 +1346,14 @@ describe("skillPlugin customSkills auto-update", () => {
 		// asserts that no bundle directory is ever created.
 		const app = new Crust("identical-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -1330,20 +1397,22 @@ describe("skillPlugin customSkills auto-update", () => {
 		// it should inherit and trigger a reinstall to 2.0.0.
 		const app = new Crust("inherit-version-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							// version omitted on purpose — must inherit
-							// `version: "2.0.0"` from the plugin.
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								// version omitted on purpose — must inherit
+								// `version: "2.0.0"` from the plugin.
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1369,19 +1438,21 @@ describe("skillPlugin customSkills auto-update", () => {
 		// bundle whose cadence is independent of the consuming CLI.
 		const app = new Crust("override-version-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "0.3.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "0.3.0",
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1409,13 +1480,15 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("inherit-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -1447,24 +1520,26 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all installs main + every bundle without prompting", async () => {
 		const app = new Crust("all-flag-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-						{
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR_SECOND,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+							{
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR_SECOND,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1495,19 +1570,21 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("prints sequential per-skill output (heading mentions bundle name)", async () => {
 		const app = new Crust("sequential-output-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1542,20 +1619,22 @@ describe("skillPlugin customSkills interactive command", () => {
 		// Bundle should land in the global scope, not the project scope.
 		const app = new Crust("all-scope-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1588,26 +1667,28 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all isolates per-bundle failures and exits non-zero", async () => {
 		const app = new Crust("all-isolation-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							// Bogus path — install rejects at resolve time.
-							sourceDir: "/nonexistent/path/to/funnel-builder",
-							version: "1.0.0",
-						},
-						{
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR_SECOND,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								// Bogus path — install rejects at resolve time.
+								sourceDir: "/nonexistent/path/to/funnel-builder",
+								version: "1.0.0",
+							},
+							{
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR_SECOND,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -1670,25 +1751,27 @@ describe("skillPlugin customSkills `skill update`", () => {
 	it("updates main + every bundle in sequence", async () => {
 		const app = new Crust("update-loop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "2.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "2.0.0",
-						},
-						{
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR_SECOND,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "2.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "2.0.0",
+							},
+							{
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR_SECOND,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		// Pre-install all three at v1.0.0.
@@ -1741,20 +1824,22 @@ describe("skillPlugin customSkills `skill update`", () => {
 	it("reports per-skill 'No updates needed' when nothing is outdated", async () => {
 		const app = new Crust("update-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "1.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: FIXTURE_DIR,
+								version: "1.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		await withCwd(tmpDir, () =>
@@ -1817,25 +1902,27 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		const app = new Crust("update-isolation-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					autoUpdate: false,
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: "/nonexistent/path/to/funnel-builder",
-							version: "2.0.0",
-						},
-						{
-							name: "pricing-toolkit",
-							sourceDir: FIXTURE_DIR_SECOND,
-							version: "2.0.0",
-						},
-					],
-				}),
+			.handle(() => {})
+			.extend(
+				extensionFromPlugin(
+					skillPlugin({
+						version: "1.0.0",
+						autoUpdate: false,
+						defaultScope: "project",
+						customSkills: [
+							{
+								name: "funnel-builder",
+								sourceDir: "/nonexistent/path/to/funnel-builder",
+								version: "2.0.0",
+							},
+							{
+								name: "pricing-toolkit",
+								sourceDir: FIXTURE_DIR_SECOND,
+								version: "2.0.0",
+							},
+						],
+					}),
+				),
 			);
 
 		const warnings: string[] = [];

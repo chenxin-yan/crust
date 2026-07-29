@@ -11,6 +11,6 @@ export const greetCmd = app
 			default: "world",
 		},
 	])
-	.run(({ args, flags }) => {
+	.handle(({ args, flags }) => {
 		console.log(`${flags.greet}, ${args.name}!`);
 	});

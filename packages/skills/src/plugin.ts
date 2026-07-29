@@ -519,19 +519,19 @@ async function autoUpdateCustomSkillsLoop(
  * `skillStatus`, `generateSkill`).
  *
  * @param options - Plugin configuration with version and defaults
- * @returns A `CrustPlugin` to register in a command's `plugins` array
+ * @returns The internal plugin behind the `skill()` Extension
  *
  * @example
  * ```ts
  * import { Crust } from "@crustjs/core";
- * import { skillPlugin } from "@crustjs/skills";
+ * import { skill } from "@crustjs/skills";
  *
  * const app = new Crust("my-cli").meta({ description: "My CLI" })
- *   .use(skillPlugin({
+ *   .extend(skill({
  *     version: "1.0.0",
  *     command: "skill", // registers "my-cli skill" subcommand
  *   }))
- *   .run(() => { /* ... *�/ });
+ *   .handle(() => { /* ... *�/ });
  *
  * await app.execute();
  * ```
@@ -808,7 +808,7 @@ function buildSkillCommand(
 				description: "Install for all detected agents non-interactively (universal + detected)",
 			},
 		})
-		.run(async (ctx) => {
+		.handle(async (ctx) => {
 			const meta = deriveSkillMeta(rootCmd, options);
 			const installAll = ctx.flags.all === true;
 			const isInteractive = !!process.stdin.isTTY;
@@ -1063,7 +1063,7 @@ function buildSkillUpdateCommand(
 				description: "Update scope (project or global)",
 			},
 		})
-		.run(async (ctx) => {
+		.handle(async (ctx) => {
 			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
 			const effectiveScope = resolveEffectiveScope(scope);
 			// Use all known agents and let skillStatus determine which are installed.

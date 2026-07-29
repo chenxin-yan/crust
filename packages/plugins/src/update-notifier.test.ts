@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { Crust } from "@crustjs/core/internal";
+import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
 
 import {
 	fetchLatestVersion,
@@ -1134,13 +1134,15 @@ describe("updateNotifierPlugin middleware", () => {
 			let commandExecuted = false;
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
-				.use(
-					updateNotifierPlugin({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
+				.extend(
+					extensionFromPlugin(
+						updateNotifierPlugin({
+							currentVersion: "1.0.0",
+							packageName: pkgName,
+						}),
+					),
 				)
-				.run(() => {
+				.handle(() => {
 					commandExecuted = true;
 				});
 
@@ -1172,14 +1174,16 @@ describe("updateNotifierPlugin middleware", () => {
 
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
-				.use(otherPlugin)
-				.use(
-					updateNotifierPlugin({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
+				.extend(extensionFromPlugin(otherPlugin))
+				.extend(
+					extensionFromPlugin(
+						updateNotifierPlugin({
+							currentVersion: "1.0.0",
+							packageName: pkgName,
+						}),
+					),
 				)
-				.run(() => {
+				.handle(() => {
 					commandExecuted = true;
 				});
 
@@ -1196,13 +1200,15 @@ describe("updateNotifierPlugin middleware", () => {
 			let commandExecuted = false;
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })
-				.use(
-					updateNotifierPlugin({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
+				.extend(
+					extensionFromPlugin(
+						updateNotifierPlugin({
+							currentVersion: "1.0.0",
+							packageName: pkgName,
+						}),
+					),
 				)
-				.run(() => {
+				.handle(() => {
 					commandExecuted = true;
 				});
 

@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core/internal";
+import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
 
 import { completionPlugin } from "./index.ts";
 
@@ -50,14 +50,14 @@ function getStdout(): string {
 function buildCli() {
 	return new Crust("mycli")
 		.meta({ description: "Test CLI" })
-		.use(completionPlugin({ version: "1.2.3" }))
+		.extend(extensionFromPlugin(completionPlugin({ version: "1.2.3" })))
 		.command("build", (cmd) =>
 			cmd
 				.meta({ description: "Build artifact" })
 				.flags({
 					target: { type: "string", choices: ["browser", "bun", "node"] },
 				})
-				.run(() => {}),
+				.handle(() => {}),
 		)
 		.command("deploy", (cmd) =>
 			cmd
@@ -71,11 +71,11 @@ function buildCli() {
 								choices: ["dev", "staging", "prod"],
 							},
 						})
-						.run(() => {}),
+						.handle(() => {}),
 				)
-				.run(() => {}),
+				.handle(() => {}),
 		)
-		.run(() => {});
+		.handle(() => {});
 }
 
 describe("completionPlugin", () => {
@@ -89,8 +89,8 @@ describe("completionPlugin", () => {
 
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
-			.use(completionPlugin({ command: "shell-completion" }))
-			.run(() => {});
+			.extend(extensionFromPlugin(completionPlugin({ command: "shell-completion" })))
+			.handle(() => {});
 		const { root } = await app.prepareCommandTree();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
 	});
@@ -196,13 +196,15 @@ describe("completionPlugin", () => {
 
 		it("respects the `shells` option to limit which files are written", async () => {
 			const app = new Crust("tinycli")
-				.use(
-					completionPlugin({
-						version: "0.1.0",
-						shells: ["bash", "zsh"],
-					}),
+				.extend(
+					extensionFromPlugin(
+						completionPlugin({
+							version: "0.1.0",
+							shells: ["bash", "zsh"],
+						}),
+					),
 				)
-				.run(() => {});
+				.handle(() => {});
 			await app.execute({
 				argv: ["completion", "bash", "--output-dir", tmpDir],
 			});

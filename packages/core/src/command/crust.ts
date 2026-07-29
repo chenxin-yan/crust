@@ -36,8 +36,8 @@ import { type CommandSnapshot, snapshotCommand } from "./snapshot.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The runtime context object passed to `preRun()`, `run()`, and `postRun()`
- * lifecycle hooks on the `Crust` builder.
+ * The runtime context object passed to the Command Handler defined with
+ * `.handle()`.
  *
  * Generic parameters:
  * - `A` — positional argument definitions tuple
@@ -322,9 +322,7 @@ function deepCloneCommandNode(node: CommandNode): CommandNode {
 		subCommands,
 		contexts: [...node.contexts],
 		plugins: [...node.plugins],
-		preRun: node.preRun,
 		run: node.run,
-		postRun: node.postRun,
 	};
 }
 
@@ -365,7 +363,7 @@ function freezeTree(node: CommandNode): void {
  *     verbose: { type: "boolean", short: "v", inherit: true },
  *   })
  *   .args([{ name: "file", type: "string", required: true }])
- *   .run(({ args, flags }) => {
+ *   .handle(({ args, flags }) => {
  *     console.log(args.file, flags.verbose);
  *   });
  * ```
@@ -391,6 +389,9 @@ export class Crust<
 
 	/** @internal — The inherited flags record (runtime counterpart of Inherited generic) */
 	readonly _inheritedFlags: FlagsDef;
+
+	/** @internal — True for builders created via `.sub()` / `.command(name, cb)`; gates root-only APIs */
+	readonly _isChild: boolean = false;
 
 	/**
 	 * Create a new root or standalone command builder.
@@ -420,6 +421,7 @@ export class Crust<
 		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
 		// Override constructor defaults with parent-provided state.
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
+		(instance as { _isChild: boolean })._isChild = true;
 		(instance._node as { contexts: ContextInstance[] }).contexts = [...contexts];
 		return instance;
 	}
@@ -443,6 +445,7 @@ export class Crust<
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
 		(cloned as { _inheritedFlags: FlagsDef })._inheritedFlags = this._inheritedFlags;
+		(cloned as { _isChild: boolean })._isChild = this._isChild;
 		return cloned;
 	}
 
@@ -461,7 +464,7 @@ export class Crust<
 	 * @example
 	 * ```ts
 	 * .command("issue", (cmd) =>
-	 *   cmd.meta({ aliases: ["issues", "i"] }).run(() => {})
+	 *   cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})
 	 * )
 	 * ```
 	 */
@@ -538,7 +541,8 @@ export class Crust<
 	}
 
 	/**
-	 * Set the main command handler.
+	 * Define the Command Handler — the function that implements this
+	 * command's behavior after its inputs and Contexts are ready.
 	 *
 	 * The handler receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed as `EffectiveFlags<Inherited, Local>` (inherited
@@ -547,10 +551,10 @@ export class Crust<
 	 * Returns a new builder with the handler stored. The original builder is
 	 * not mutated.
 	 *
-	 * @param handler - The main command handler function
+	 * @param handler - The Command Handler function
 	 * @returns A new `Crust` instance with the handler registered
 	 */
-	run(
+	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
@@ -559,70 +563,28 @@ export class Crust<
 	}
 
 	/**
-	 * Set the pre-run lifecycle hook.
+	 * Register one or more CLI Extensions on the application root.
 	 *
-	 * Called before `run()` — useful for initialization and setup.
-	 * Receives the same {@link CrustCommandContext} as `run()`.
+	 * Extensions are application-wide: they own the flags and commands they
+	 * contribute. Registering an Extension on a child builder is a definition
+	 * error.
 	 *
-	 * @param handler - The pre-run handler function
-	 * @returns A new `Crust` instance with the preRun handler registered
-	 */
-	preRun(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff, Ctx> {
-		return this._clone({
-			preRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
-	}
-
-	/**
-	 * Set the post-run lifecycle hook.
-	 *
-	 * Called after `run()` (even if it throws) — useful for teardown and cleanup.
-	 * Receives the same {@link CrustCommandContext} as `run()`.
-	 *
-	 * @param handler - The post-run handler function
-	 * @returns A new `Crust` instance with the postRun handler registered
-	 */
-	postRun(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff, Ctx> {
-		return this._clone({
-			postRun: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
-	}
-
-	/**
-	 * Register a plugin on this command.
-	 *
-	 * Plugins are collected during `.execute()` and their `setup()` hooks
-	 * receive `SetupContext` and `SetupActions`. Middleware hooks run in
-	 * registration order.
-	 *
-	 * Returns a new builder with the plugin appended. The original builder
-	 * is not mutated.
-	 *
-	 * @param plugin - The plugin to register
-	 * @returns A new `Crust` instance with the plugin registered
-	 */
-	use(plugin: CrustPlugin): Crust<Inherited, Local, A, Eff, Ctx> {
-		return this._clone({
-			plugins: [...this._node.plugins, plugin],
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
-	}
-
-	/**
-	 * Register one or more CLI extensions.
-	 *
-	 * Extensions are the public capability layer (help, version, completion,
-	 * did-you-mean, etc.). They lower into Crust's internal lifecycle without
-	 * exposing the plugin contract as part of the main authoring API.
+	 * @throws {CrustError} `DEFINITION` when called on a child builder
 	 */
 	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff, Ctx> {
+		if (this._isChild) {
+			throw new CrustError(
+				"DEFINITION",
+				"Extensions are application-wide: call .extend() on the root builder, not on a subcommand",
+				{ subject: "command", name: this._node.meta.name, reason: "extend-on-child" },
+			);
+		}
 		return extensions.reduce<Crust<Inherited, Local, A, Eff, Ctx>>((current, extension) => {
 			let extended = current;
 			for (const plugin of getExtensionPlugins(extension)) {
-				extended = extended.use(plugin);
+				extended = extended._clone({
+					plugins: [...extended._node.plugins, plugin],
+				}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
 			}
 			return extended;
 		}, this);
@@ -651,7 +613,7 @@ export class Crust<
 	 * // commands/deploy.ts
 	 * export const deployCmd = app.sub("deploy")
 	 *   .flags({ env: { type: "string", required: true } })
-	 *   .run(({ flags }) => {
+	 *   .handle(({ flags }) => {
 	 *     flags.verbose; // boolean | undefined  — typed!
 	 *     flags.env;     // string               — typed!
 	 *   });
@@ -792,6 +754,16 @@ export class Crust<
 			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
 
+		// Extensions are application-wide and root-only. A standalone builder
+		// that called .extend() cannot be attached as a subcommand.
+		if (builder._node.plugins.length > 0) {
+			throw new CrustError(
+				"DEFINITION",
+				`Subcommand "${name}" carries Extensions: call .extend() on the root builder instead`,
+				{ subject: "command", name, reason: "extend-on-child" },
+			);
+		}
+
 		if (this._node.subCommands[name]) {
 			throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
 		}
@@ -815,6 +787,37 @@ export class Crust<
 				[name]: childNode,
 			},
 		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+	}
+
+	/**
+	 * Invoke this application programmatically: resolve, parse, run
+	 * middleware and the Command Handler for `argv`.
+	 *
+	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
+	 * parse, Context, or handler failure without rendering it and without
+	 * changing process status. It resolves with no value after successful
+	 * cleanup. Prompt cancellation surfaces as a standard `AbortError`.
+	 *
+	 * @param argv - Arguments to parse (no `process.argv` default — pass them explicitly)
+	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
+	 *             exposed to Command Handlers and Extensions
+	 */
+	async run(
+		argv: readonly string[],
+		io?: {
+			stdout?: (text: string) => void;
+			stderr?: (text: string) => void;
+		},
+	): Promise<void> {
+		const resolvedIO: InvocationIO = { ...defaultIO(), ...io };
+
+		const prepared = await this._prepare(argv);
+
+		for (const warning of prepared.warnings) {
+			resolvedIO.stderr(`Warning: ${warning}`);
+		}
+
+		await this._dispatch(argv, prepared, resolvedIO);
 	}
 
 	/**
@@ -1020,39 +1023,7 @@ export class Crust<
 				stderr: io.stderr,
 			};
 
-			let runError: unknown;
-			try {
-				// preRun
-				if (resolvedNode.preRun) {
-					await resolvedNode.preRun(context);
-				}
-
-				// run
-				await resolvedNode.run(context);
-			} catch (error) {
-				runError = error;
-			}
-
-			// postRun always runs (even if run/preRun threw)
-			if (resolvedNode.postRun) {
-				try {
-					await resolvedNode.postRun(context);
-				} catch (postRunError) {
-					// If run already threw, preserve the original error and log postRun error
-					if (!runError) {
-						runError = postRunError;
-					} else {
-						io.stderr(
-							`Error in postRun: ${postRunError instanceof Error ? postRunError.message : String(postRunError)}`,
-						);
-					}
-				}
-			}
-
-			// Re-throw the original error if any
-			if (runError) {
-				throw runError;
-			}
+			await resolvedNode.run(context);
 		});
 	}
 }

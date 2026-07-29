@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core/internal";
+import { Crust, extensionFromPlugin } from "@crustjs/core/internal";
 
 import { completionPlugin } from "./index.ts";
 import type { CompletionSpec } from "./spec.ts";
@@ -27,13 +27,13 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.command("two words" as string, (c) => c.run(() => {}))
-			.run(() => {});
+			.command("two words" as string, (c) => c.handle(() => {}))
+			.handle(() => {});
 		expect(() => walkCommandNode(cli._node)).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } } as never).run(() => {});
+		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } } as never).handle(() => {});
 		expect(() => walkCommandNode(cli._node)).toThrow(/invalid flag name/);
 	});
 
@@ -45,7 +45,7 @@ describe("walker · validation", () => {
 					choices: ["a", "two words", "c"],
 				},
 			})
-			.run(() => {});
+			.handle(() => {});
 		expect(() => walkCommandNode(cli._node)).toThrow(/unsupported choice value/);
 	});
 
@@ -54,14 +54,14 @@ describe("walker · validation", () => {
 			.flags({
 				target: { type: "string", choices: ["a", "it's", "c"] },
 			})
-			.run(() => {});
+			.handle(() => {});
 		expect(() => walkCommandNode(cli._node)).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", () => {
 		const cli = new Crust("safe")
 			.meta({ description: "first line\nsecond line\rstill same line" })
-			.run(() => {});
+			.handle(() => {});
 		const spec = walkCommandNode(cli._node);
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.root.description).toBe("first line second line still same line");
@@ -289,7 +289,9 @@ describe("completionPlugin · --output-dir traversal", () => {
 			stderrChunks.push(args.map((a) => String(a)).join(" "));
 		};
 		try {
-			const cli = new Crust("real").use(completionPlugin({ binName: "../pwn" })).run(() => {});
+			const cli = new Crust("real")
+				.extend(extensionFromPlugin(completionPlugin({ binName: "../pwn" })))
+				.handle(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
 			console.error = origError;
@@ -305,7 +307,9 @@ describe("completionPlugin · --output-dir traversal", () => {
 		// and nothing escapes.
 		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
 		try {
-			const cli = new Crust("good").use(completionPlugin({ version: "1" })).run(() => {});
+			const cli = new Crust("good")
+				.extend(extensionFromPlugin(completionPlugin({ version: "1" })))
+				.handle(() => {});
 			await cli.execute({
 				argv: ["completion", "bash", "--output-dir", tmp],
 			});

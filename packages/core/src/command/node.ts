@@ -12,7 +12,7 @@ import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
  * Built by the `Crust` builder class; not part of the public API.
  * Each node carries its own local flags, the pre-computed effective
  * (inherited + local merged) flags, positional args, subcommands,
- * plugins, and lifecycle handlers.
+ * plugins, and the Command Handler.
  */
 export interface CommandNode {
 	/** Command metadata (name, description, usage) */
@@ -27,14 +27,10 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Context providers available to this command */
 	contexts: ContextInstance[];
-	/** Plugins registered via `.use()` */
+	/** Plugins registered via `.extend()` (Extensions lower to plugins) */
 	plugins: CrustPlugin[];
-	/** Called before `run()` — useful for initialization */
-	preRun?: (ctx: unknown) => void | Promise<void>;
-	/** The main command handler */
+	/** The Command Handler */
 	run?: (ctx: unknown) => void | Promise<void>;
-	/** Called after `run()` (even if it throws) — useful for teardown */
-	postRun?: (ctx: unknown) => void | Promise<void>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -57,9 +53,7 @@ export function createCommandNode(name: string): CommandNode {
 		subCommands: {},
 		contexts: [],
 		plugins: [],
-		preRun: undefined,
 		run: undefined,
-		postRun: undefined,
 	};
 }
 

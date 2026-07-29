@@ -83,7 +83,7 @@ const app = new Crust("create-crust")
 			description: "Project directory to scaffold into",
 		},
 	])
-	.run(async ({ args, flags }) => {
+	.handle(async ({ args, flags }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 

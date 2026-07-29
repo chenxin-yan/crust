@@ -667,7 +667,7 @@ export const buildCommand = new Crust("build")
 			default: false,
 		},
 	} as const)
-	.run(async ({ flags }) => {
+	.handle(async ({ flags }) => {
 		const cwd = process.cwd();
 
 		// Resolve entry file path relative to cwd
