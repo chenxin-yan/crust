@@ -1629,7 +1629,7 @@ describe("Crust .execute()", () => {
 
 	it("catches CrustError and sets exitCode", async () => {
 		const app = new Crust("test").run(() => {
-			throw new CrustError("EXECUTION", "custom crust error");
+			throw new CrustError("PARSE", "custom crust error");
 		});
 
 		await app.execute({ argv: [] });
@@ -1640,9 +1640,7 @@ describe("Crust .execute()", () => {
 
 	it("treats prompt cancellation as a silent user abort", async () => {
 		const app = new Crust("test").run(() => {
-			const error = new Error("Prompt was cancelled.");
-			error.name = "CancelledError";
-			throw error;
+			throw new DOMException("Prompt was cancelled.", "AbortError");
 		});
 
 		await app.execute({ argv: [] });
@@ -1903,9 +1901,7 @@ describe("Crust .execute()", () => {
 		const plugin: CrustPlugin = {
 			name: "cancel-plugin",
 			setup: () => {
-				const error = new Error("Prompt was cancelled.");
-				error.name = "CancelledError";
-				throw error;
+				throw new DOMException("Prompt was cancelled.", "AbortError");
 			},
 		};
 

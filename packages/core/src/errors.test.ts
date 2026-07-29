@@ -3,8 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { createCommandNode } from "./command/node.ts";
 import { CrustError } from "./errors.ts";
 
-describe("CrustError tagged shape", () => {
-	it("provides a stable tag and static guard", () => {
+describe("CrustError shape", () => {
+	it("provides a stable code and static guard", () => {
 		const error = CrustError.parse("Unknown flag", {
 			flag: "--wat",
 			reason: "unknown-flag",
@@ -12,21 +12,36 @@ describe("CrustError tagged shape", () => {
 
 		expect(error).toBeInstanceOf(Error);
 		expect(CrustError.is(error)).toBe(true);
-		expect(error._tag).toBe("CrustPARSEError");
 		expect(error.code).toBe("PARSE");
 		expect(error.details?.flag).toBe("--wat");
 	});
 
-	it("serializes tagged error metadata without serializing causes", () => {
+	it("exposes exactly the four stable codes", () => {
+		expect(CrustError.definition("bad").code).toBe("DEFINITION");
+		expect(CrustError.parse("bad").code).toBe("PARSE");
+		expect(CrustError.validation("bad").code).toBe("VALIDATION");
+		expect(
+			CrustError.commandNotFound("bad", {
+				input: "x",
+				available: [],
+				commandPath: [],
+				parentCommand: createCommandNode("cli"),
+			}).code,
+		).toBe("COMMAND_NOT_FOUND");
+	});
+
+	it("serializes error metadata without a _tag and without serializing causes", () => {
 		const cause = new Error("inner");
-		const error = CrustError.execution("Failed", { phase: "run" }).withCause(cause);
+		const error = CrustError.validation("Failed", {
+			issues: [{ message: "bad", path: "flags.x" }],
+		}).withCause(cause);
 
 		expect(error.toJSON()).toEqual({
-			_tag: "CrustEXECUTIONError",
-			code: "EXECUTION",
+			code: "VALIDATION",
 			message: "Failed",
-			details: { phase: "run" },
+			details: { issues: [{ message: "bad", path: "flags.x" }] },
 		});
+		expect("_tag" in error).toBe(false);
 	});
 
 	it("keeps command not found details strongly structured", () => {

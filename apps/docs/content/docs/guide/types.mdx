@@ -154,13 +154,13 @@ new Crust("serve")
 
 ### Sync only
 
-`parse` must be synchronous. Async parsers would return a `Promise` where a value was expected; Crust rejects them at command setup with `CrustError("CONFIG", …)`:
+`parse` must be synchronous. Async parsers would return a `Promise` where a value was expected; Crust rejects them at command setup with `CrustError("DEFINITION", …)`:
 
 ```ts
 .flags({
   endpoint: { type: "string", parse: async (s) => fetch(s) },
 })
-// → CrustError("CONFIG", "Async parse not supported for flag --endpoint. …")
+// → CrustError("DEFINITION", "Async parse not supported for flag --endpoint. …")
 ```
 
 Do async work inside your `run` handler instead.

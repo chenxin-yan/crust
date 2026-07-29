@@ -243,7 +243,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 *
 	 * Constraints:
 	 * - Synchronous only. `async` parsers are rejected at command setup
-	 *   with `CrustError("CONFIG", …)`.
+	 *   with `CrustError("DEFINITION", …)`.
 	 * - Only allowed on `type: "string"` (single + multi) and string args.
 	 *   `parse?: never` on every non-string variant prevents misuse at
 	 *   compile time.

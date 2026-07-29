@@ -243,7 +243,7 @@ function resolveDefault(
  * Walk every flag/arg def with a `parse` field and reject async parsers
  * up-front. Async parse would return a Promise that the parser would treat
  * as the resolved value — almost certainly a bug. Throws
- * `CrustError("CONFIG", …)` for each offender. Called at the top of
+ * `CrustError("DEFINITION", …)` for each offender. Called at the top of
  * {@link parseArgs} so misconfigured commands fail fast.
  */
 function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | undefined): void {
@@ -252,8 +252,9 @@ function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | u
 			const parse = (def as { parse?: (raw: string) => unknown }).parse;
 			if (parse && parse.constructor.name === "AsyncFunction") {
 				throw new CrustError(
-					"CONFIG",
+					"DEFINITION",
 					`Async parse not supported for flag --${name}. Use a sync parser; do async work in run().`,
+					{ subject: "flag", name, reason: "async-parse" },
 				);
 			}
 		}
@@ -263,8 +264,9 @@ function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | u
 			const parse = (def as { parse?: (raw: string) => unknown }).parse;
 			if (parse && parse.constructor.name === "AsyncFunction") {
 				throw new CrustError(
-					"CONFIG",
+					"DEFINITION",
 					`Async parse not supported for argument <${(def as ArgDef).name}>. Use a sync parser; do async work in run().`,
+					{ subject: "arg", name: (def as ArgDef).name, reason: "async-parse" },
 				);
 			}
 		}

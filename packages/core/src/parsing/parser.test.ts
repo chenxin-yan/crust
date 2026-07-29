@@ -1405,7 +1405,7 @@ describe("parseArgs — parse escape hatch", () => {
 		expect(result.flags.port).toBe(8080);
 	});
 
-	it("rejects async parse at setup with CrustError(CONFIG)", () => {
+	it("rejects async parse at setup with CrustError(DEFINITION)", () => {
 		const cmd = makeNode({
 			meta: "test",
 			flags: {
@@ -1418,7 +1418,7 @@ describe("parseArgs — parse escape hatch", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			const e = err as CrustError;
-			expect(e.code).toBe("CONFIG");
+			expect(e.code).toBe("DEFINITION");
 			expect(e.message).toMatch(/Async parse not supported/);
 			expect(e.message).toContain("--endpoint");
 		}

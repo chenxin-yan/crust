@@ -229,7 +229,7 @@ flags: {
 // flags.port: number (3000 when argv is absent)
 ```
 
-Async `parse` functions are rejected at command setup with `CrustError("CONFIG", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Types — the parse escape hatch](/docs/guide/types#the-parse-escape-hatch) for the full contract.
+Async `parse` functions are rejected at command setup with `CrustError("DEFINITION", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Types — the parse escape hatch](/docs/guide/types#the-parse-escape-hatch) for the full contract.
 
 ### `FlagsDef`
 

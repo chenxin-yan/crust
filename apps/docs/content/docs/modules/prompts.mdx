@@ -324,7 +324,7 @@ Theme resolution order, from lowest to highest priority:
 All prompts require an interactive TTY. When stdin is not a TTY, prompts throw `NonInteractiveError`, unless `initial` is provided, in which case the value is returned immediately without rendering.
 
 ```ts
-import { input, NonInteractiveError, CancelledError } from "@crustjs/prompts";
+import { input, NonInteractiveError } from "@crustjs/prompts";
 
 try {
   const name = await input({
@@ -335,7 +335,7 @@ try {
   if (err instanceof NonInteractiveError) {
     // Not a TTY and no initial value
   }
-  if (err instanceof CancelledError) {
+  if (err instanceof DOMException && err.name === "AbortError") {
     // User pressed Ctrl+C
   }
 }
@@ -419,7 +419,8 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 | `submit`              | Create a submit result to resolve a prompt        |
 | `assertTTY`           | Throw `NonInteractiveError` if stdin is not a TTY |
 | `NonInteractiveError` | Error thrown when a TTY is required but absent    |
-| `CancelledError`      | Error thrown when the user presses Ctrl+C         |
+
+Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` — check `err.name === "AbortError"`.
 
 ### Utilities
 

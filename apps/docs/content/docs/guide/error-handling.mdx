@@ -26,7 +26,7 @@ try {
 
 ## Error Codes
 
-Crust defines five error codes — `DEFINITION`, `VALIDATION`, `PARSE`, `EXECUTION`, and `COMMAND_NOT_FOUND`. See the [CrustError reference](/docs/api/errors#error-codes) for when each is thrown.
+Crust defines four error codes — `DEFINITION`, `VALIDATION`, `PARSE`, and `COMMAND_NOT_FOUND`. See the [CrustError reference](/docs/api/errors#error-codes) for when each is thrown.
 
 ## Type Narrowing with `.is()`
 
@@ -69,7 +69,7 @@ Chain an original error for debugging:
 try {
   await someOperation();
 } catch (originalError) {
-  throw new CrustError("EXECUTION", "Operation failed").withCause(originalError);
+  throw new CrustError("VALIDATION", "Operation failed").withCause(originalError);
 }
 ```
 
@@ -77,24 +77,12 @@ Access the original via `error.cause`.
 
 ## How `.execute()` Handles Errors
 
-`.execute()` catches all errors, prints them to stderr as `Error: <message>`, and sets `process.exitCode = 1`. It never throws. This handles:
+`.execute()` catches all errors, prints them to stderr as `Error: <message>`, and sets `process.exitCode = 1` (or `130` for an `AbortError` cancellation). It never throws. This handles:
 
 - Validation errors (missing args/flags)
 - Parse errors (unknown flags, bad types)
 - Command not found errors
-- Runtime errors (exceptions in command handlers)
-- Non-CrustError exceptions are wrapped in `CrustError("EXECUTION", ...)` with the original error set as the cause
-
-## Error Wrapping
-
-When a non-`CrustError` is thrown inside a command handler, `.execute()` automatically wraps it:
-
-```ts
-// Original: throw new Error("oops")
-// Becomes: CrustError("EXECUTION", "oops") with cause set to original error
-```
-
-This ensures consistent error formatting for all errors.
+- Runtime errors (exceptions in command handlers) — surfaced unwrapped, never converted to a `CrustError`
 
 ## Throwing Errors in Commands
 
@@ -121,7 +109,7 @@ For application-level errors, throw plain `Error`:
 })
 ```
 
-Both are handled correctly — plain errors get wrapped in `CrustError("EXECUTION", ...)` automatically.
+Both are handled correctly — plain errors are surfaced as-is with a nonzero exit code.
 
 ## Validation Layers
 

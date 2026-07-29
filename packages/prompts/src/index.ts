@@ -26,14 +26,7 @@ export type {
 	PromptConfig,
 	SubmitResult,
 } from "./core/renderer.ts";
-export {
-	assertTTY,
-	CancelledError,
-	isTTY,
-	NonInteractiveError,
-	runPrompt,
-	submit,
-} from "./core/renderer.ts";
+export { assertTTY, isTTY, NonInteractiveError, runPrompt, submit } from "./core/renderer.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompts

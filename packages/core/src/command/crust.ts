@@ -151,12 +151,12 @@ function createPluginState(): PluginState {
 	};
 }
 
-function isPromptCancelledError(error: unknown): boolean {
+function isAbortError(error: unknown): boolean {
 	if (!(error instanceof Error)) {
 		return false;
 	}
 
-	return error.name === "CancelledError";
+	return error.name === "AbortError";
 }
 
 function applyInheritedFlagsToSubtree(node: CommandNode, inheritedFlags: FlagsDef): void {
@@ -820,12 +820,6 @@ export class Crust<
 		try {
 			await runSetupHooks(allPlugins, setupContext, actions);
 		} catch (error) {
-			if (isPromptCancelledError(error)) {
-				throw error;
-			}
-			if (error instanceof CrustError) {
-				throw error;
-			}
 			if (error instanceof Error) {
 				throw error;
 			}
@@ -869,13 +863,8 @@ export class Crust<
 		try {
 			await runSetupHooks(allPlugins, setupContext, actions);
 		} catch (error) {
-			if (isPromptCancelledError(error)) {
+			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
-				return;
-			}
-			if (error instanceof CrustError) {
-				console.error(`Error: ${error.message}`);
-				process.exitCode = 1;
 				return;
 			}
 			const message = error instanceof Error ? error.message : String(error);
@@ -1002,23 +991,13 @@ export class Crust<
 				}
 			});
 		} catch (error) {
-			// Step 9: Error handling — wrap and surface
-			if (isPromptCancelledError(error)) {
+			// Step 9: Error handling — surface the original error unwrapped
+			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
-			if (error instanceof CrustError) {
-				console.error(`Error: ${error.message}`);
-				process.exitCode = 1;
-				return;
-			}
-			if (error instanceof Error) {
-				const wrapped = new CrustError("EXECUTION", error.message).withCause(error);
-				console.error(`Error: ${wrapped.message}`);
-				process.exitCode = 1;
-				return;
-			}
-			console.error(`Error: ${String(error)}`);
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(`Error: ${message}`);
 			process.exitCode = 1;
 		}
 	}

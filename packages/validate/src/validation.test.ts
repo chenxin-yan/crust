@@ -236,7 +236,7 @@ describe("throwValidationError", () => {
 			const crustErr = err as CrustError;
 			expect(crustErr.is("VALIDATION")).toBe(true);
 			expect(crustErr.is("PARSE")).toBe(false);
-			expect(crustErr.is("EXECUTION")).toBe(false);
+			expect(crustErr.is("DEFINITION")).toBe(false);
 		}
 	});
 });

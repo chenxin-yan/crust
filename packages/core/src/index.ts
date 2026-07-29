@@ -16,13 +16,10 @@ export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
-	ConfigErrorDetails,
 	CrustErrorCode,
 	CrustErrorDetails,
 	CrustErrorDetailsMap,
-	CrustErrorTag,
 	DefinitionErrorDetails,
-	ExecutionErrorDetails,
 	ParseErrorDetails,
 	ValidationErrorDetails,
 } from "./errors.ts";

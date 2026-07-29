@@ -28,34 +28,20 @@ export interface DefinitionErrorDetails {
 	readonly reason?: string;
 }
 
-export interface ExecutionErrorDetails {
-	readonly phase?: "setup" | "middleware" | "preRun" | "run" | "postRun";
-}
-
-export interface ConfigErrorDetails {
-	readonly subject?: "arg" | "flag";
-	readonly name?: string;
-	readonly reason?: string;
-}
-
 export interface CrustErrorDetailsMap {
 	DEFINITION: DefinitionErrorDetails | undefined;
 	VALIDATION: ValidationErrorDetails | undefined;
 	PARSE: ParseErrorDetails | undefined;
-	EXECUTION: ExecutionErrorDetails | undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
-	CONFIG: ConfigErrorDetails | undefined;
 }
 
 /**
  * All possible error codes emitted by Crust.
  *
- * - `DEFINITION` — Invalid command configuration (empty name, alias collision, bad variadic position)
+ * - `DEFINITION` — Invalid command configuration (empty name, alias collision, bad variadic position, unsupported definition such as async `parse`)
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
- * - `EXECUTION` — Runtime command/middleware failures
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
- * - `CONFIG` — Unsupported command/flag definition surfaced at setup time (e.g. async `parse`)
  *
  * @example
  * ```ts
@@ -78,7 +64,6 @@ export interface CrustErrorDetailsMap {
  */
 export type CrustErrorCode = keyof CrustErrorDetailsMap;
 export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C];
-export type CrustErrorTag<C extends CrustErrorCode = CrustErrorCode> = `Crust${C}Error`;
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustError — Custom error class
@@ -104,8 +89,6 @@ export type CrustErrorTag<C extends CrustErrorCode = CrustErrorCode> = `Crust${C
  * ```
  */
 export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
-	/** Stable discriminant for adapters and structured matching */
-	readonly _tag: CrustErrorTag<C>;
 	/** Machine-readable error code for programmatic handling */
 	readonly code: C;
 	/** Structured payload for programmatic handling */
@@ -122,7 +105,6 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 	) {
 		super(message);
 		this.name = "CrustError";
-		this._tag = `Crust${code}Error` as CrustErrorTag<C>;
 		this.code = code;
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
@@ -150,14 +132,6 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		return new CrustError("COMMAND_NOT_FOUND", message, details);
 	}
 
-	static config(message: string, details?: ConfigErrorDetails): CrustError<"CONFIG"> {
-		return new CrustError("CONFIG", message, details);
-	}
-
-	static execution(message: string, details?: ExecutionErrorDetails): CrustError<"EXECUTION"> {
-		return new CrustError("EXECUTION", message, details);
-	}
-
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {
 		return (this.code as CrustErrorCode) === code;
 	}
@@ -168,13 +142,11 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 	}
 
 	toJSON(): {
-		_tag: CrustErrorTag<C>;
 		code: C;
 		message: string;
 		details: CrustErrorDetails<C>;
 	} {
 		return {
-			_tag: this._tag,
 			code: this.code,
 			message: this.message,
 			details: this.details,
