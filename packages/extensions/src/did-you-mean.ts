@@ -2,7 +2,7 @@ import { type CommandSnapshot, CrustError, type Extension, extension } from "@cr
 
 import { renderHelp } from "./help.ts";
 
-export interface DidYouMeanPluginOptions {
+export interface DidYouMeanOptions {
 	mode?: "error" | "help";
 }
 
@@ -84,7 +84,7 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export function didYouMeanExtension(options: DidYouMeanPluginOptions = {}): Extension {
+export function didYouMeanExtension(options: DidYouMeanOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
 	return extension("did-you-mean", {

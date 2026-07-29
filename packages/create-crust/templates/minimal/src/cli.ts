@@ -1,5 +1,5 @@
 import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/plugins";
+import { help, version } from "@crustjs/extensions";
 
 import pkg from "../package.json";
 
@@ -22,8 +22,8 @@ const app = new Crust("{{name}}")
 			short: "g",
 		},
 	})
-	.handle(({ args, flags }) => {
-		console.log(`${flags.greet}, ${args.name}!`);
+	.handle(({ args, flags, stdout }) => {
+		stdout(`${flags.greet}, ${args.name}!`);
 	});
 
 await app.execute();

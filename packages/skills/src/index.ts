@@ -5,7 +5,7 @@
 import type { Extension } from "@crustjs/core";
 
 import { skillExtension } from "./plugin.ts";
-import type { SkillPluginOptions } from "./types.ts";
+import type { SkillOptions } from "./types.ts";
 
 // Agent detection
 export {
@@ -33,7 +33,7 @@ export {
 } from "./generate.ts";
 
 // Extension
-export function skill(options: SkillPluginOptions): Extension {
+export function skill(options: SkillOptions): Extension {
 	return skillExtension(options);
 }
 
@@ -52,7 +52,7 @@ export type {
 	SkillInstallMode,
 	SkillKind,
 	SkillMeta,
-	SkillPluginOptions,
+	SkillOptions,
 	StatusOptions,
 	StatusResult,
 	UninstallOptions,

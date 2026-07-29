@@ -20,7 +20,7 @@
  *   `zsh -n` / `fish -n` parsers) where embedded SGR codes are noise at
  *   best and a syntax hazard at worst.
  *
- * The shape is **internal to `@crustjs/plugins`**: it is not exported from
+ * The shape is **internal to `@crustjs/extensions`**: it is not exported from
  * the package entrypoint and may change across patch releases.
  */
 

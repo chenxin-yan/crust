@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
-import { didYouMean, help, updateNotifier, version } from "@crustjs/plugins";
+import { didYouMean, help, updateNotifier, version } from "@crustjs/extensions";
 
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";

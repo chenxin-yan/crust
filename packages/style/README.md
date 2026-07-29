@@ -352,7 +352,7 @@ getGlobalColorMode(); // ColorMode | undefined
 
 Instances returned by `createStyle()` are not affected — they capture their mode at creation time. The override only applies to the default `style` facade and the named re-exports.
 
-For a scoped override that only lasts for a single CLI run, use [`noColor()`](https://crustjs.com/docs/modules/plugins/no-color) from `@crustjs/plugins`, which saves and restores the previous mode around the command invocation.
+For a scoped override that only lasts for a single CLI run, use [`noColor()`](https://crustjs.com/docs/modules/plugins/no-color) from `@crustjs/extensions`, which saves and restores the previous mode around the command invocation.
 
 ### Deterministic Testing
 

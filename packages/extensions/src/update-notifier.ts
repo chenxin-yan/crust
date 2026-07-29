@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/plugins — Update notifier plugin
+// @crustjs/extensions — Update notifier plugin
 // ────────────────────────────────────────────────────────────────────────────
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
@@ -51,22 +51,22 @@ export interface UpdateNotifierCacheConfig {
  *
  * @example
  * ```ts
- * import { updateNotifierPlugin } from "@crustjs/plugins";
+ * import { updateNotifier } from "@crustjs/extensions";
  *
- * updateNotifierPlugin({
+ * updateNotifier({
  *   packageName: "my-cli",
  *   currentVersion: "1.2.3",
  * });
  * ```
  */
-export interface UpdateNotifierPluginOptions {
+export interface UpdateNotifierOptions {
 	/**
 	 * The current version of the CLI package.
 	 *
 	 * Typically sourced from `package.json`:
 	 * ```ts
 	 * import pkg from "../package.json";
-	 * updateNotifierPlugin({ packageName: pkg.name, currentVersion: pkg.version });
+	 * updateNotifier({ packageName: pkg.name, currentVersion: pkg.version });
 	 * ```
 	 */
 	currentVersion: string;
@@ -492,7 +492,7 @@ function resolveUpdateCommand(
  * @example
  * ```ts
  * import { Crust } from "@crustjs/core";
- * import { updateNotifier } from "@crustjs/plugins";
+ * import { updateNotifier } from "@crustjs/extensions";
  * import pkg from "../package.json";
  *
  * const app = new Crust("my-cli").meta({ description: "My awesome CLI" })
@@ -504,7 +504,7 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export function updateNotifierExtension(options: UpdateNotifierPluginOptions): Extension {
+export function updateNotifierExtension(options: UpdateNotifierOptions): Extension {
 	const {
 		currentVersion,
 		packageName,

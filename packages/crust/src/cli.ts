@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { Crust } from "@crustjs/core";
-import { didYouMean, help, updateNotifier, version } from "@crustjs/plugins";
+import { didYouMean, help, updateNotifier, version } from "@crustjs/extensions";
 
 import pkg from "../package.json";
 import { buildCommand } from "./commands/build.ts";

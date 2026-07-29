@@ -14,8 +14,8 @@ export type CompletionShell = "bash" | "zsh" | "fish";
 
 const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as const;
 
-/** Options for {@link completionPlugin}. */
-export interface CompletionPluginOptions {
+/** Options for the completion Extension. */
+export interface CompletionOptions {
 	/**
 	 * Subcommand name. Defaults to `"completion"`. Override only if the
 	 * default conflicts with an existing user-defined command.
@@ -97,7 +97,7 @@ function renderForShell(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-export function completionExtension(options: CompletionPluginOptions = {}): Extension {
+export function completionExtension(options: CompletionOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";

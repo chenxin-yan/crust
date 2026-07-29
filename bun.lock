@@ -96,10 +96,25 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
+        "@crustjs/extensions": "workspace:*",
         "@crustjs/man": "workspace:*",
-        "@crustjs/plugins": "workspace:*",
         "@crustjs/style": "workspace:*",
         "bunup": "catalog:",
+      },
+    },
+    "packages/extensions": {
+      "name": "@crustjs/extensions",
+      "version": "0.1.2",
+      "dependencies": {
+        "@crustjs/style": "workspace:^",
+      },
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:~",
       },
     },
     "packages/man": {
@@ -108,22 +123,7 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
-        "@crustjs/plugins": "workspace:*",
-        "bunup": "catalog:",
-      },
-      "peerDependencies": {
-        "@crustjs/core": "workspace:~",
-      },
-    },
-    "packages/plugins": {
-      "name": "@crustjs/plugins",
-      "version": "0.1.2",
-      "dependencies": {
-        "@crustjs/style": "workspace:^",
-      },
-      "devDependencies": {
-        "@crustjs/config": "workspace:*",
-        "@crustjs/core": "workspace:*",
+        "@crustjs/extensions": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
@@ -320,9 +320,9 @@
 
     "@crustjs/docs": ["@crustjs/docs@workspace:apps/docs"],
 
-    "@crustjs/man": ["@crustjs/man@workspace:packages/man"],
+    "@crustjs/extensions": ["@crustjs/extensions@workspace:packages/extensions"],
 
-    "@crustjs/plugins": ["@crustjs/plugins@workspace:packages/plugins"],
+    "@crustjs/man": ["@crustjs/man@workspace:packages/man"],
 
     "@crustjs/progress": ["@crustjs/progress@workspace:packages/progress"],
 

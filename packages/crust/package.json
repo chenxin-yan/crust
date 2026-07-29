@@ -45,7 +45,7 @@
 	"devDependencies": {
 		"@crustjs/man": "workspace:*",
 		"@crustjs/core": "workspace:*",
-		"@crustjs/plugins": "workspace:*",
+		"@crustjs/extensions": "workspace:*",
 		"@crustjs/style": "workspace:*",
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"

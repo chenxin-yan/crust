@@ -24,7 +24,7 @@ import type {
 	Scope,
 	SkillInstallMode,
 	SkillMeta,
-	SkillPluginOptions,
+	SkillOptions,
 } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -54,7 +54,7 @@ function parseScopeFlag(rawScope: string | undefined): Scope | undefined {
 
 async function resolveScopeForCommand(
 	rawScope: string | undefined,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 ): Promise<Scope> {
 	const explicit = parseScopeFlag(rawScope);
 	if (explicit !== undefined) return explicit;
@@ -128,7 +128,7 @@ function formatInstallOutput(
  *
  * The returned `name` is the canonical raw CLI name (e.g. `"my-cli"`).
  */
-function deriveSkillMeta(command: CommandSnapshot, options: SkillPluginOptions): SkillMeta {
+function deriveSkillMeta(command: CommandSnapshot, options: SkillOptions): SkillMeta {
 	return {
 		name: command.meta.name,
 		description: command.meta.description ?? "",
@@ -250,7 +250,7 @@ function validateCustomSkillsConfig(
 }
 
 /** Resolves the effective scope for a custom-skill auto-update sweep. */
-function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillPluginOptions): Scope[] {
+function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillOptions): Scope[] {
 	// When the entry declares an explicit scope, only that scope is checked.
 	// Otherwise, fall through to plugin defaultScope, else mirror main-skill
 	// behavior (check both project + global, deduped via resolveEffectiveScope).
@@ -274,7 +274,7 @@ function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillPlugin
  */
 async function autoUpdateCustomSkill(
 	entry: CustomSkillConfig,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 ): Promise<void> {
 	const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
 	if (agents.length === 0) {
@@ -375,7 +375,7 @@ function needsSkillReconciliation(
  */
 async function autoUpdateSkills(
 	rootCmd: CommandSnapshot,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
 ): Promise<void> {
 	// Use all known agents and let skillStatus (filesystem-only) determine
@@ -461,7 +461,7 @@ async function autoUpdateSkills(
  */
 async function autoUpdateCustomSkillsLoop(
 	customSkills: readonly CustomSkillConfig[],
-	options: SkillPluginOptions,
+	options: SkillOptions,
 ): Promise<void> {
 	for (const entry of customSkills) {
 		try {
@@ -531,7 +531,7 @@ async function autoUpdateCustomSkillsLoop(
  * await app.execute();
  * ```
  */
-export function skillExtension(options: SkillPluginOptions): Extension {
+export function skillExtension(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 
 	return extension("skills", {
@@ -573,7 +573,7 @@ export function skillExtension(options: SkillPluginOptions): Extension {
 /** Reconciles one custom-skill bundle through the interactive skill flow. */
 async function reconcileBundleInteractively(opts: {
 	entry: CustomSkillConfig;
-	options: SkillPluginOptions;
+	options: SkillOptions;
 	scope: Scope;
 	installAll: boolean;
 	isInteractive: boolean;
@@ -814,7 +814,7 @@ function buildSkillCommandGrammar(commandName: string) {
 
 async function runSkillInstallFlow(
 	rootCmd: CommandSnapshot,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
 	flags: Readonly<Record<string, unknown>>,
 ): Promise<void> {
@@ -1058,7 +1058,7 @@ async function runSkillInstallFlow(
 
 async function runSkillUpdateFlow(
 	rootCmd: CommandSnapshot,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
 	flags: Readonly<Record<string, unknown>>,
 ): Promise<void> {

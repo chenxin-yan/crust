@@ -57,8 +57,6 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--template",
-			"minimal",
 			"--distribution",
 			"binary",
 			"--no-install",
@@ -80,14 +78,14 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
 
-	it("fails with a clear error for an invalid template", async () => {
+	it("rejects the removed --template flag (single minimal template)", async () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-template");
 		const projectDir = join(tempRoot, "bad-template");
 
 		const result = await runCreateCrust([
 			projectDir,
 			"--template",
-			"invalid",
+			"modular",
 			"--distribution",
 			"binary",
 			"--no-install",
@@ -95,9 +93,7 @@ describe("create-crust CLI", () => {
 		]);
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain(
-			'Error: Invalid template "invalid". Expected "minimal" or "modular".',
-		);
+		expect(result.stderr).toContain('Unknown flag "--template"');
 		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
 
@@ -107,8 +103,6 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--template",
-			"minimal",
 			"--distribution",
 			"invalid",
 			"--no-install",
@@ -130,8 +124,6 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--template",
-			"minimal",
 			"--distribution",
 			"binary",
 			"--no-install",
@@ -161,8 +153,6 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--template",
-			"minimal",
 			"--distribution",
 			"binary",
 			"--no-install",

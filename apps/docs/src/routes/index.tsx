@@ -106,7 +106,7 @@ const MODULES: Array<{
     doc: "modules/core",
   },
   {
-    pkg: "@crustjs/plugins",
+    pkg: "@crustjs/extensions",
     desc: "Official Crust plugins",
     doc: "modules/plugins",
   },
@@ -212,7 +212,7 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 const CODE_EXAMPLE = `import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/plugins";
+import { help } from "@crustjs/extensions";
 
 const app = new Crust("greet")
   .extend(help())

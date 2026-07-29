@@ -27,8 +27,8 @@ const localDependencyPackages = [
 		requiredBuildOutput: "dist/index.js",
 	},
 	{
-		name: "@crustjs/plugins",
-		dir: "plugins",
+		name: "@crustjs/extensions",
+		dir: "extensions",
 		requiredBuildOutput: "dist/index.js",
 	},
 ] as const;
@@ -206,8 +206,6 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 			process.execPath,
 			builtCliPath,
 			sampleDir,
-			"--template",
-			"minimal",
 			"--distribution",
 			"binary",
 			"--no-install",

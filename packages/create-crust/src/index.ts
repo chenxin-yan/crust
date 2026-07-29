@@ -8,11 +8,7 @@ import { isInGitRepo, runSteps } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
-import {
-	type DistributionMode,
-	scaffoldCrustProject,
-	type TemplateStyle,
-} from "./create-project.ts";
+import { type DistributionMode, scaffoldCrustProject } from "./create-project.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -26,16 +22,6 @@ function validateProjectName(name: string): void {
 	if (INVALID_NAME_CHARS.test(name)) {
 		throw new Error(`Project name contains invalid characters: ${name}`);
 	}
-}
-
-function parseTemplateStyle(value: string | undefined): TemplateStyle | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	if (value === "minimal" || value === "modular") {
-		return value;
-	}
-	throw new Error(`Invalid template "${value}". Expected "minimal" or "modular".`);
 }
 
 function parseDistributionMode(value: string | undefined): DistributionMode | undefined {
@@ -55,10 +41,6 @@ function parseDistributionMode(value: string | undefined): DistributionMode | un
 const app = new Crust("create-crust")
 	.meta({ description: "Scaffold a new Crust CLI project" })
 	.flags({
-		template: {
-			type: "string",
-			description: 'Template style ("minimal" or "modular")',
-		},
 		distribution: {
 			type: "string",
 			description: 'Distribution mode ("binary" or "runtime")',
@@ -98,7 +80,6 @@ const app = new Crust("create-crust")
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
-		const templateInitial = parseTemplateStyle(flags.template);
 		const distributionInitial = parseDistributionMode(flags.distribution);
 
 		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
@@ -117,23 +98,6 @@ const app = new Crust("create-crust")
 			}
 		}
 
-		const template = await select<TemplateStyle>({
-			message: "Template style",
-			choices: [
-				{
-					label: "Minimal",
-					value: "minimal",
-					hint: "single-file starter",
-				},
-				{
-					label: "Modular",
-					value: "modular",
-					hint: "file split with .sub()",
-				},
-			],
-			default: "minimal",
-			...(templateInitial !== undefined ? { initial: templateInitial } : {}),
-		});
 		const distributionMode = await select<DistributionMode>({
 			message: "Distribution mode",
 			choices: [
@@ -181,7 +145,6 @@ const app = new Crust("create-crust")
 				scaffoldCrustProject({
 					resolvedDir,
 					name,
-					template,
 					distributionMode,
 				}),
 		});

@@ -1,11 +1,11 @@
-# @crustjs/plugins
+# @crustjs/extensions
 
 Official plugins for the [Crust](https://crustjs.com) CLI framework.
 
 ## Install
 
 ```sh
-bun add @crustjs/plugins
+bun add @crustjs/extensions
 ```
 
 ## Extensions
@@ -23,12 +23,12 @@ bun add @crustjs/plugins
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { didYouMean, help, version } from "@crustjs/plugins";
+import { didYouMean, help, version } from "@crustjs/extensions";
 
 const main = new Crust("my-cli")
 	.meta({ description: "My CLI tool" })
 	.extend(version("1.0.0"), didYouMean(), help())
-	.run(() => {
+	.handle(() => {
 		console.log("Hello!");
 	});
 
@@ -51,9 +51,9 @@ Register `noColor()` before extensions that may render output, such as `help()`.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { help, noColor, version } from "@crustjs/plugins";
+import { help, noColor, version } from "@crustjs/extensions";
 
-const app = new Crust("my-cli").extend(noColor(), version("1.0.0"), help()).run(() => {
+const app = new Crust("my-cli").extend(noColor(), version("1.0.0"), help()).handle(() => {
 	console.log("Hello!");
 });
 ```
@@ -64,13 +64,13 @@ The `updateNotifier` extension checks the npm registry for newer versions of you
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { updateNotifier } from "@crustjs/plugins";
+import { updateNotifier } from "@crustjs/extensions";
 import pkg from "../package.json";
 
 const main = new Crust("my-cli")
 	.meta({ description: "My CLI tool" })
 	.extend(updateNotifier({ packageName: pkg.name, currentVersion: pkg.version }))
-	.run(() => {
+	.handle(() => {
 		console.log("Hello!");
 	});
 
@@ -108,7 +108,7 @@ If you want cross-run cache behavior without forcing `@crustjs/store` as a depen
 
 ```ts
 import { stateDir, createStore } from "@crustjs/store";
-import { updateNotifier } from "@crustjs/plugins";
+import { updateNotifier } from "@crustjs/extensions";
 
 const store = createStore({
 	dirPath: stateDir("my-cli"), // Replace with your package name
@@ -156,7 +156,7 @@ The `completion()` extension adds a `completion <shell>` subcommand that emits a
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { completion } from "@crustjs/plugins";
+import { completion } from "@crustjs/extensions";
 import pkg from "../package.json";
 
 const app = new Crust("my-cli")
@@ -165,9 +165,9 @@ const app = new Crust("my-cli")
 		cmd
 			.meta({ description: "Build artifact" })
 			.flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
-			.run(() => {}),
+			.handle(() => {}),
 	)
-	.run(() => {});
+	.handle(() => {});
 
 await app.execute();
 ```

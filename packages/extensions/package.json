@@ -1,14 +1,14 @@
 {
-	"name": "@crustjs/plugins",
+	"name": "@crustjs/extensions",
 	"version": "0.1.2",
-	"description": "Official plugins for the Crust CLI framework",
+	"description": "Official Extensions for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/plugins"
+		"directory": "packages/extensions"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
@@ -16,11 +16,11 @@
 	},
 	"keywords": [
 		"cli",
-		"plugin",
+		"extension",
 		"help",
 		"version",
+		"completion",
 		"did-you-mean",
-		"man",
 		"bun",
 		"typescript"
 	],

@@ -638,7 +638,7 @@ export interface CustomSkillConfig extends Pick<
 	name: string;
 	/**
 	 * Version override. When omitted, the bundle inherits the plugin's
-	 * top-level {@link SkillPluginOptions.version}. Drives auto-update
+	 * top-level {@link SkillOptions.version}. Drives auto-update
 	 * detection: a bundle is reinstalled when its recorded `crust.json`
 	 * version differs from the effective (entry-or-plugin) version.
 	 *
@@ -655,14 +655,14 @@ export interface CustomSkillConfig extends Pick<
 	version?: InstallSkillBundleOptions["version"];
 	/**
 	 * Installation scope override. When omitted, the bundle inherits
-	 * {@link SkillPluginOptions.defaultScope} resolution: explicit `--scope`
+	 * {@link SkillOptions.defaultScope} resolution: explicit `--scope`
 	 * flag wins, else `defaultScope`, else the interactive scope prompt
 	 * (or `"global"` in non-interactive mode).
 	 */
 	scope?: InstallSkillBundleOptions["scope"];
 	/**
 	 * Installation strategy override. When omitted, inherits
-	 * {@link SkillPluginOptions.installMode} (default `"auto"`).
+	 * {@link SkillOptions.installMode} (default `"auto"`).
 	 */
 	installMode?: InstallSkillBundleOptions["installMode"];
 }
@@ -697,7 +697,7 @@ export interface CustomSkillConfig extends Pick<
  * - When `process.cwd()` is the home directory, `"project"` is normalized to
  *   `"global"` for path resolution and update/status messaging.
  */
-export interface SkillPluginOptions {
+export interface SkillOptions {
 	/** Skill version string — compared against the installed crust.json */
 	version: string;
 	/**
@@ -758,7 +758,7 @@ export interface SkillPluginOptions {
 	 *
 	 * Each entry's effective `version` drives auto-update detection (compared
 	 * against the recorded `crust.json` version). When the entry omits
-	 * `version`, the plugin's top-level {@link SkillPluginOptions.version} is
+	 * `version`, the plugin's top-level {@link SkillOptions.version} is
 	 * used — the typical case when the bundle ships in the same package as
 	 * the consuming CLI.
 	 *

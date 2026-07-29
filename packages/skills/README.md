@@ -38,7 +38,7 @@ Prefer readonly commands before mutating project state.
 			// installMode: "auto" | "symlink" | "copy" (default: "auto")
 		}),
 	)
-	.run(() => {
+	.handle(() => {
 		console.log("hello");
 	});
 
@@ -90,7 +90,7 @@ const app = new Crust("my-cli")
 			],
 		}),
 	)
-	.run(() => {});
+	.handle(() => {});
 
 await app.execute();
 ```
@@ -161,7 +161,7 @@ opt out, or an explicit array to scope the install.
 import { Crust } from "@crustjs/core";
 import { generateSkill } from "@crustjs/skills";
 
-export const app = new Crust("my-cli").meta({ description: "My CLI" }).run(async (ctx) => {
+export const app = new Crust("my-cli").meta({ description: "My CLI" }).handle(async (ctx) => {
 	// Defaults to universal + agents detected on PATH. Idempotent: targets
 	// that already match the current version are returned as `up-to-date`.
 	const result = await generateSkill({
@@ -193,7 +193,7 @@ their own agent list.
 
 If auto-update does not appear to work:
 
-- Ensure `skillPlugin(...)` is registered on the `Crust` builder via `.use()`.
+- Ensure `skill(...)` is registered on the `Crust` builder via `.extend()`.
 - Ensure at least one supported agent is detected. Auto-update checks both project and global install paths, with home-directory `project` scope treated as `global`.
 - Check for existing conflicting skill directories without `crust.json`.
 
@@ -207,7 +207,7 @@ import { Crust } from "@crustjs/core";
 // Export the command — used by skill generation.
 export const rootCommand = new Crust("my-cli")
 	.meta({ description: "My CLI tool" })
-	.run(({ args }) => {
+	.handle(({ args }) => {
 		console.log("Hello from my-cli!");
 	});
 
@@ -230,7 +230,7 @@ command docs under `commands/`.
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { annotate, skillPlugin } from "@crustjs/skills";
+import { annotate, skill } from "@crustjs/skills";
 
 const deploy = annotate(
 	new Crust("deploy")
@@ -238,7 +238,7 @@ const deploy = annotate(
 		.flags({
 			"dry-run": { type: "boolean", description: "Preview changes only" },
 		})
-		.run(() => {
+		.handle(() => {
 			// ...
 		}),
 	[
@@ -249,8 +249,8 @@ const deploy = annotate(
 
 const app = new Crust("my-cli")
 	.meta({ description: "My CLI" })
-	.use(
-		skillPlugin({
+	.extend(
+		skill({
 			version: "1.0.0",
 			instructions: `
 Read command docs before suggesting exact flags.

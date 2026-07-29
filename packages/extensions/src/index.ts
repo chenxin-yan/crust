@@ -1,29 +1,29 @@
 import type { Extension } from "@crustjs/core";
 
-import { type CompletionPluginOptions, completionExtension } from "./completion/index.ts";
-import { type DidYouMeanPluginOptions, didYouMeanExtension } from "./did-you-mean.ts";
+import { type CompletionOptions, completionExtension } from "./completion/index.ts";
+import { type DidYouMeanOptions, didYouMeanExtension } from "./did-you-mean.ts";
 import { helpExtension } from "./help.ts";
 import { noColorExtension } from "./no-color.ts";
-import { type UpdateNotifierPluginOptions, updateNotifierExtension } from "./update-notifier.ts";
+import { type UpdateNotifierOptions, updateNotifierExtension } from "./update-notifier.ts";
 import { type VersionValue, versionExtension } from "./version.ts";
 
-export type { CompletionPluginOptions, CompletionShell } from "./completion/index.ts";
-export type { DidYouMeanPluginOptions } from "./did-you-mean.ts";
+export type { CompletionOptions, CompletionShell } from "./completion/index.ts";
+export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { renderHelp } from "./help.ts";
 export type {
 	UpdateNotifierCacheAdapter,
 	UpdateNotifierCacheConfig,
 	UpdateNotifierInstallScope,
 	UpdateNotifierPackageManager,
-	UpdateNotifierPluginOptions,
+	UpdateNotifierOptions,
 } from "./update-notifier.ts";
 export type { VersionValue } from "./version.ts";
 
-export function completion(options?: CompletionPluginOptions): Extension {
+export function completion(options?: CompletionOptions): Extension {
 	return completionExtension(options);
 }
 
-export function didYouMean(options?: DidYouMeanPluginOptions): Extension {
+export function didYouMean(options?: DidYouMeanOptions): Extension {
 	return didYouMeanExtension(options);
 }
 
@@ -35,7 +35,7 @@ export function noColor(): Extension {
 	return noColorExtension();
 }
 
-export function updateNotifier(options: UpdateNotifierPluginOptions): Extension {
+export function updateNotifier(options: UpdateNotifierOptions): Extension {
 	return updateNotifierExtension(options);
 }
 

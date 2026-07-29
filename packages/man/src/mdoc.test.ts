@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
-import { help } from "@crustjs/plugins";
+import { help } from "@crustjs/extensions";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 

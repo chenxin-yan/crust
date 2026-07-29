@@ -19,7 +19,7 @@ const app = new Crust("greet")
 	.meta({ description: "Say hello" })
 	.args([{ name: "name", type: "string", default: "world" }])
 	.flags({ loud: { type: "boolean", description: "Shout it", short: "l" } })
-	.run(({ args, flags }) => {
+	.handle(({ args, flags }) => {
 		const message = `Hello, ${args.name}!`;
 		console.log(flags.loud ? message.toUpperCase() : message);
 	});
@@ -36,7 +36,7 @@ import { context, Crust } from "@crustjs/core";
 
 const config = context("config", () => ({ env: "prod" }));
 
-const app = new Crust("deploy").context(config).run(({ ctx }) => {
+const app = new Crust("deploy").context(config).handle(({ ctx }) => {
 	ctx.config.env; // string
 });
 ```

@@ -3,15 +3,13 @@ import { runSteps, scaffold } from "@crustjs/create";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
-import pluginsPackage from "../../plugins/package.json";
+import extensionsPackage from "../../extensions/package.json";
 
-export type TemplateStyle = "minimal" | "modular";
 export type DistributionMode = "binary" | "runtime";
 
 export interface CreateCrustProjectOptions {
 	readonly resolvedDir: string;
 	readonly name: string;
-	readonly template: TemplateStyle;
 	readonly distributionMode: DistributionMode;
 	readonly installDeps: boolean;
 	readonly initGit: boolean;
@@ -23,7 +21,7 @@ interface CreateCrustProjectDependencies {
 
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: corePackage.version,
-	crustPluginsVersion: pluginsPackage.version,
+	crustExtensionsVersion: extensionsPackage.version,
 	crustCliVersion: crustPackage.version,
 } satisfies Record<string, string>;
 
@@ -35,9 +33,8 @@ const CRUST_TEMPLATE_VERSION_CONTEXT = {
 export async function scaffoldCrustProject(
 	options: Omit<CreateCrustProjectOptions, "installDeps" | "initGit">,
 ): Promise<void> {
-	const { resolvedDir, name, template, distributionMode } = options;
+	const { resolvedDir, name, distributionMode } = options;
 
-	const styleTemplatePath = template === "minimal" ? "templates/minimal" : "templates/modular";
 	const distributionTemplatePath =
 		distributionMode === "binary"
 			? "templates/distribution/binary"
@@ -51,7 +48,7 @@ export async function scaffoldCrustProject(
 	});
 
 	await scaffold({
-		template: styleTemplatePath,
+		template: "templates/minimal",
 		dest: resolvedDir,
 		context,
 		conflict: "overwrite",
