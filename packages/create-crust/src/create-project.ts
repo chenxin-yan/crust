@@ -13,6 +13,7 @@ export interface CreateCrustProjectOptions {
 	readonly distributionMode: DistributionMode;
 	readonly installDeps: boolean;
 	readonly initGit: boolean;
+	readonly overwrite?: boolean;
 }
 
 interface CreateCrustProjectDependencies {
@@ -45,6 +46,7 @@ export async function scaffoldCrustProject(
 		template: "templates/base",
 		dest: resolvedDir,
 		context,
+		...(options.overwrite === true ? { conflict: "overwrite" } : {}),
 	});
 
 	await scaffold({

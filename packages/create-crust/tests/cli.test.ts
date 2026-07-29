@@ -16,13 +16,13 @@ function makeTempRoot(label: string): string {
 
 async function runCreateCrust(
 	args: string[],
-	env?: Record<string, string>,
+	options?: { env?: Record<string, string>; cwd?: string },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	const proc = Bun.spawn([process.execPath, builtCliPath, ...args], {
-		cwd: packageRoot,
+		cwd: options?.cwd ?? packageRoot,
 		env: {
 			...process.env,
-			...env,
+			...options?.env,
 			BUN_BE_BUN: "1",
 		},
 		stdout: "pipe",
@@ -135,6 +135,51 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).toContain("Aborted.");
 		expect(readFileSync(join(projectDir, "sentinel.txt"), "utf-8")).toBe("keep me");
 		expect(existsSync(join(projectDir, "package.json"))).toBe(false);
+	}, 30_000);
+
+	it("aborts scaffolding into a non-empty current directory without --overwrite", async () => {
+		const tempRoot = makeTempRoot("create-crust-dot-non-empty");
+		writeFileSync(join(tempRoot, "sentinel.txt"), "keep me", "utf-8");
+
+		const result = await runCreateCrust(
+			[".", "--distribution", "binary", "--no-install", "--no-git", "--no-overwrite"],
+			{ cwd: tempRoot },
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Aborted.");
+		expect(readFileSync(join(tempRoot, "sentinel.txt"), "utf-8")).toBe("keep me");
+		expect(existsSync(join(tempRoot, "package.json"))).toBe(false);
+	}, 30_000);
+
+	it("scaffolds into a non-empty current directory when --overwrite is passed", async () => {
+		const tempRoot = makeTempRoot("create-crust-dot-overwrite");
+		writeFileSync(join(tempRoot, "package.json"), '{"name":"old"}', "utf-8");
+
+		const result = await runCreateCrust(
+			[".", "--distribution", "binary", "--no-install", "--no-git", "--overwrite"],
+			{ cwd: tempRoot },
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("Error:");
+		expect(existsSync(join(tempRoot, "src", "cli.ts"))).toBe(true);
+		const pkg = JSON.parse(readFileSync(join(tempRoot, "package.json"), "utf-8"));
+		expect(pkg.name).not.toBe("old");
+	}, 30_000);
+
+	it("scaffolds into an empty current directory without prompting", async () => {
+		const tempRoot = makeTempRoot("create-crust-dot-empty");
+
+		const result = await runCreateCrust(
+			[".", "--distribution", "binary", "--no-install", "--no-git"],
+			{ cwd: tempRoot },
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).not.toContain("Error:");
+		expect(result.stdout).not.toContain("Overwrite");
+		expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
 	}, 30_000);
 
 	it("skips git initialization inside an existing repository even when --git is passed", async () => {

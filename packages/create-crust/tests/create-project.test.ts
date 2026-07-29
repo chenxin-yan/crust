@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { createCrustProject } from "../src/create-project.ts";
@@ -68,5 +68,22 @@ describe("createCrustProject", () => {
 
 		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
 		expect(pkg.name).toBe("skip-install-cli");
+	});
+
+	it("overwrites a non-empty destination when requested", async () => {
+		mkdirSync(TEST_DIR, { recursive: true });
+		writeFileSync(resolve(TEST_DIR, "package.json"), '{"name":"old"}');
+
+		await createCrustProject({
+			resolvedDir: TEST_DIR,
+			name: "replacement-cli",
+			distributionMode: "binary",
+			installDeps: false,
+			initGit: false,
+			overwrite: true,
+		});
+
+		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
+		expect(pkg.name).toBe("replacement-cli");
 	});
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
@@ -82,13 +82,21 @@ const app = new Crust("create-crust")
 		const dirName = basename(resolvedDir);
 		const distributionInitial = parseDistributionMode(flags.distribution);
 
-		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
-		if (targetDir !== "." && existsSync(resolvedDir)) {
+		// Ask before writing into an existing destination. The cwd (".") always
+		// exists, so it only needs confirmation when non-empty; a named directory
+		// prompts whenever it already exists.
+		const needsOverwriteConfirm =
+			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
+		let overwrite = false;
+		if (needsOverwriteConfirm) {
 			if (flags.overwrite === true) {
 				console.log(`Directory "${dirName}" already exists; overwriting (--overwrite).`);
 			}
-			const overwrite = await confirm({
-				message: `Directory "${dirName}" already exists. Overwrite?`,
+			overwrite = await confirm({
+				message:
+					targetDir === "."
+						? "Current directory is not empty. Overwrite conflicting files?"
+						: `Directory "${dirName}" already exists. Overwrite?`,
 				default: false,
 				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
 			});
@@ -146,6 +154,7 @@ const app = new Crust("create-crust")
 					resolvedDir,
 					name,
 					distributionMode,
+					overwrite,
 				}),
 		});
 
