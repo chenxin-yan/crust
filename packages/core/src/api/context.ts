@@ -42,15 +42,25 @@ export function context<Name extends string, Value, Options = void>(
 	});
 }
 
-function isDisposableValue(value: unknown): value is Disposable | AsyncDisposable {
+function registerDisposable(value: unknown, disposal: AsyncDisposableStack): void {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
-		return false;
+		return;
 	}
-	const candidate = value as { [Symbol.dispose]?: unknown; [Symbol.asyncDispose]?: unknown };
-	return (
-		typeof candidate[Symbol.dispose] === "function" ||
-		typeof candidate[Symbol.asyncDispose] === "function"
-	);
+	const candidate = value as {
+		[Symbol.dispose]?: () => void;
+		[Symbol.asyncDispose]?: () => PromiseLike<void>;
+	};
+	if (typeof candidate[Symbol.asyncDispose] === "function") {
+		disposal.use(candidate as AsyncDisposable);
+	} else {
+		const dispose = candidate[Symbol.dispose];
+		if (typeof dispose === "function") {
+			// Bun 1.3.10 rejects sync-only values passed to AsyncDisposableStack.use().
+			disposal.defer(() => {
+				dispose.call(candidate);
+			});
+		}
+	}
 }
 
 /**
@@ -65,9 +75,7 @@ export async function buildContexts(
 	for (const item of contexts) {
 		const value = await item.setup();
 		values[item.name] = value;
-		if (isDisposableValue(value)) {
-			disposal.use(value);
-		}
+		registerDisposable(value, disposal);
 	}
 	return values;
 }
