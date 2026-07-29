@@ -1,8 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import { blue, red } from "../colors.ts";
-import { bold } from "../modifiers.ts";
+import { getGlobalColorMode, setGlobalColorMode } from "../createStyle.ts";
+import { blue, bold, red } from "../runtimeExports.ts";
 import { visibleWidth } from "./width.ts";
+
+const originalColorMode = getGlobalColorMode();
+beforeAll(() => setGlobalColorMode("always"));
+afterAll(() => setGlobalColorMode(originalColorMode));
 
 // ────────────────────────────────────────────────────────────────────────────
 // visibleWidth — plain ASCII
@@ -98,6 +102,10 @@ describe("visibleWidth — full-width characters", () => {
 	it("counts fullwidth forms as full-width", () => {
 		// \uFF21 = Ａ (fullwidth A)
 		expect(visibleWidth("\uFF21")).toBe(2);
+	});
+
+	it("counts emoji as two columns", () => {
+		expect(visibleWidth("🙂")).toBe(2);
 	});
 
 	it("counts CJK with ANSI styles correctly", () => {

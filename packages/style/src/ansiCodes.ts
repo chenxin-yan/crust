@@ -23,9 +23,6 @@ function pair(open: number, close: number): AnsiPair {
 // Modifiers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Reset all attributes. */
-export const reset: AnsiPair = pair(0, 0);
-
 /** Bold / increased intensity. */
 export const bold: AnsiPair = pair(1, 22);
 

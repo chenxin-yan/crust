@@ -165,8 +165,6 @@ Scalar and callable contracts remain concise in prose: `ColorMode` is `"auto" | 
 
 <auto-type-table path="../../../../../packages/style/src/types.ts" name="CapabilityOverrides" />
 
-<auto-type-table path="../../../../../packages/style/src/types.ts" name="TrueColorOverrides" />
-
 #### Hyperlink and wrapping options
 
 <auto-type-table path="../../../../../packages/style/src/hyperlinks.ts" name="HyperlinkOptions" />
@@ -302,9 +300,7 @@ console.log(style.bold`Build ${style.cyan`./dist`} in ${ms}ms`); // nested
 #### 3. AnsiPair composition
 
 Every chainable doubles as an `AnsiPair` (`open` / `close` properties), so
-it can be passed to `composeStyles` and `applyStyle` directly. The
-pre-built `*Code` exports are still available for callers that prefer
-pure data:
+it can be passed to `composeStyles` and `applyStyle` directly:
 
 ```ts
 import { applyStyle, composeStyles, bold, red, bgYellow, fgCode } from "@crustjs/style";
@@ -374,12 +370,12 @@ console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 Pair factories work with `applyStyle` and `composeStyles`:
 
 ```ts
-import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, bold } from "@crustjs/style";
 
 const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
 
-const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
+const boldCoral = composeStyles(bold, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
@@ -429,14 +425,14 @@ Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensive
 ### Hyperlinks (OSC 8)
 
 ```ts
-import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
+import { createStyle, linkCode, composeStyles, applyStyle, underline } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
 
 console.log(s.link("Crust docs", "https://crustjs.com"));
 console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
 
-const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underline);
 console.log(applyStyle("Visit Crust", underlinedLink));
 ```
 

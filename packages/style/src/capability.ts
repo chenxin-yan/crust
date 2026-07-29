@@ -2,7 +2,7 @@
 // Capability — Terminal color support detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CapabilityOverrides, ColorDepth, ColorMode, TrueColorOverrides } from "./types.ts";
+import type { CapabilityOverrides, ColorDepth, ColorMode } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -17,11 +17,11 @@ function readNoColor(overrides: CapabilityOverrides | undefined): string | undef
 	return overrides !== undefined ? overrides.noColor : process.env.NO_COLOR;
 }
 
-function readColorTerm(overrides: TrueColorOverrides | undefined): string | undefined {
+function readColorTerm(overrides: CapabilityOverrides | undefined): string | undefined {
 	return overrides !== undefined ? overrides.colorTerm : process.env.COLORTERM;
 }
 
-function readTerm(overrides: TrueColorOverrides | undefined): string | undefined {
+function readTerm(overrides: CapabilityOverrides | undefined): string | undefined {
 	return overrides !== undefined ? overrides.term : process.env.TERM;
 }
 
@@ -86,10 +86,7 @@ function detectsTruecolor(colorTerm: string | undefined, term: string | undefine
  * }); // "256"
  * ```
  */
-export function resolveColorDepth(
-	mode: ColorMode,
-	overrides?: CapabilityOverrides & TrueColorOverrides,
-): ColorDepth {
+export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrides): ColorDepth {
 	if (mode === "never") {
 		return "none";
 	}
@@ -164,17 +161,5 @@ export function resolveModifierCapability(
  * @internal Exported for use by {@link createStyle}; not part of the stable
  * public surface of `@crustjs/style`.
  */
-export function resolveHyperlinkCapability(
-	mode: ColorMode,
-	overrides?: CapabilityOverrides,
-): boolean {
-	if (mode === "always") {
-		return true;
-	}
-
-	if (mode === "never") {
-		return false;
-	}
-
-	return readTTY(overrides);
-}
+export const resolveHyperlinkCapability: typeof resolveModifierCapability =
+	resolveModifierCapability;

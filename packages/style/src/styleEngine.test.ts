@@ -1,9 +1,31 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import * as codes from "./ansiCodes.ts";
-import { bgRed, black, blue, cyan, gray, green, magenta, red, white, yellow } from "./colors.ts";
-import { bold, dim, hidden, inverse, italic, strikethrough, underline } from "./modifiers.ts";
+import { getGlobalColorMode, setGlobalColorMode } from "./createStyle.ts";
+import {
+	bgRed,
+	black,
+	blue,
+	bold,
+	cyan,
+	dim,
+	gray,
+	green,
+	hidden,
+	inverse,
+	italic,
+	magenta,
+	red,
+	strikethrough,
+	underline,
+	white,
+	yellow,
+} from "./runtimeExports.ts";
 import { applyStyle, composeStyles } from "./styleEngine.ts";
+
+const originalColorMode = getGlobalColorMode();
+beforeAll(() => setGlobalColorMode("always"));
+afterAll(() => setGlobalColorMode(originalColorMode));
 
 // ────────────────────────────────────────────────────────────────────────────
 // applyStyle — basic application

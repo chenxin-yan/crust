@@ -13,31 +13,6 @@ const ANSI_SEQUENCE =
 	/[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/;
 
 /**
- * Test whether a code point is a full-width character (occupies 2 columns).
- */
-function isFullWidth(codePoint: number): boolean {
-	return (
-		(codePoint >= 0x4e00 && codePoint <= 0x9fff) ||
-		(codePoint >= 0x3400 && codePoint <= 0x4dbf) ||
-		(codePoint >= 0x20000 && codePoint <= 0x2a6df) ||
-		(codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-		(codePoint >= 0xff01 && codePoint <= 0xff60) ||
-		(codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-		(codePoint >= 0x2e80 && codePoint <= 0x2eff) ||
-		(codePoint >= 0x2f00 && codePoint <= 0x2fdf) ||
-		(codePoint >= 0x3000 && codePoint <= 0x303f) ||
-		(codePoint >= 0x3040 && codePoint <= 0x309f) ||
-		(codePoint >= 0x30a0 && codePoint <= 0x30ff) ||
-		(codePoint >= 0x3100 && codePoint <= 0x312f) ||
-		(codePoint >= 0x3130 && codePoint <= 0x318f) ||
-		(codePoint >= 0x3200 && codePoint <= 0x32ff) ||
-		(codePoint >= 0x3300 && codePoint <= 0x33ff) ||
-		(codePoint >= 0xac00 && codePoint <= 0xd7af) ||
-		(codePoint >= 0xfe30 && codePoint <= 0xfe4f)
-	);
-}
-
-/**
  * Check whether a character is an SGR reset sequence (\x1b[0m).
  */
 function isReset(seq: string): boolean {
@@ -176,12 +151,12 @@ function wrapLine(
 			continue;
 		}
 
-		const char = line[i];
-		if (char === undefined) {
+		const codePoint = line.codePointAt(i);
+		if (codePoint === undefined) {
 			break;
 		}
-		const codePoint = char.codePointAt(0) ?? 0;
-		const charWidth = isFullWidth(codePoint) ? 2 : 1;
+		const char = String.fromCodePoint(codePoint);
+		const charWidth = Bun.stringWidth(char);
 
 		// Check if adding this character would exceed the width
 		if (currentWidth + charWidth > width) {
@@ -248,15 +223,7 @@ function wrapLine(
 
 	// Push the remaining content
 	if (currentLine.length > 0) {
-		// Only close if we have active styles and there's visible content
-		const hasVisibleContent = currentLine.replace(
-			// oxlint-disable-next-line no-control-regex -- ANSI escape detection requires matching control characters
-			/[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g,
-			"",
-		);
-		if (hasVisibleContent.length > 0 || currentLine.length > 0) {
-			lines.push(currentLine);
-		}
+		lines.push(currentLine);
 	} else {
 		lines.push("");
 	}

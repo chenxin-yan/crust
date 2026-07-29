@@ -181,15 +181,6 @@ export interface CapabilityOverrides {
 	readonly isTTY?: boolean;
 	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
-}
-
-/**
- * Truecolor capability overrides for deterministic testing.
- *
- * These override environment variable checks used by
- * {@link resolveColorDepth} to detect 24-bit color support.
- */
-export interface TrueColorOverrides {
 	/** Override `process.env.COLORTERM`. */
 	readonly colorTerm?: string | undefined;
 	/** Override `process.env.TERM`. */
@@ -211,7 +202,7 @@ export interface StyleOptions {
 	 */
 	readonly mode?: ColorMode;
 	/** Capability overrides for deterministic testing. */
-	readonly overrides?: CapabilityOverrides & TrueColorOverrides;
+	readonly overrides?: CapabilityOverrides;
 }
 
 /**

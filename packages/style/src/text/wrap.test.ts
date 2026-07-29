@@ -1,8 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import { red } from "../colors.ts";
-import { bold } from "../modifiers.ts";
+import { getGlobalColorMode, setGlobalColorMode } from "../createStyle.ts";
+import { bold, red } from "../runtimeExports.ts";
 import { wrapText } from "./wrap.ts";
+
+const originalColorMode = getGlobalColorMode();
+beforeAll(() => setGlobalColorMode("always"));
+afterAll(() => setGlobalColorMode(originalColorMode));
 
 // ────────────────────────────────────────────────────────────────────────────
 // wrapText — plain text, word-break mode (default)
@@ -146,6 +150,10 @@ describe("wrapText — full-width characters", () => {
 		// Width 3: 你 (2) fits, 好 (2) would exceed, so force break
 		const result = wrapText("\u4f60\u597d", 3);
 		expect(result).toBe("\u4f60\n\u597d");
+	});
+
+	it("wraps emoji by visible width without splitting surrogate pairs", () => {
+		expect(wrapText("🙂🙂", 2)).toBe("🙂\n🙂");
 	});
 });
 

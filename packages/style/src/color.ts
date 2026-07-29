@@ -117,10 +117,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 		const [r, g, b] = parseRgb(input);
 		return `\x1b[${rgbToAnsi16Param(r, g, b) + 10}m`;
 	}
-	const fg = fgOpen(input, depth);
-	return fg.startsWith(FG_INTRODUCER)
-		? BG_INTRODUCER + fg.slice(FG_INTRODUCER.length)
-		: fg.replace(FG_INTRODUCER, BG_INTRODUCER);
+	return fgOpen(input, depth).replace(FG_INTRODUCER, BG_INTRODUCER);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
