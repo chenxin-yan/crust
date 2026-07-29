@@ -339,10 +339,6 @@ export function isUniversalAgent(agent: AgentTarget): boolean {
 }
 
 export interface DetectInstalledAgentsOptions {
-	/** Kept for backwards compatibility with previous API. */
-	scope?: Scope;
-	/** Kept for backwards compatibility with previous API. */
-	home?: string;
 	/** Working directory for PATH lookups. */
 	cwd?: string;
 	/** Test-only hook to override command detection. */
@@ -356,14 +352,11 @@ export interface DetectInstalledAgentsOptions {
  * present them as a single optional "Universal" install target.
  */
 export async function detectInstalledAgents(
-	options?: string | DetectInstalledAgentsOptions,
+	options: DetectInstalledAgentsOptions = {},
 ): Promise<AgentTarget[]> {
-	const resolvedOptions: DetectInstalledAgentsOptions =
-		typeof options === "string" ? { home: options } : (options ?? {});
-	const cwd = resolvedOptions.cwd ?? process.cwd();
+	const cwd = options.cwd ?? process.cwd();
 	const commandChecker =
-		resolvedOptions.commandChecker ??
-		((command: string) => Promise.resolve(isCommandOnPath(command)));
+		options.commandChecker ?? ((command: string) => Promise.resolve(isCommandOnPath(command)));
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {

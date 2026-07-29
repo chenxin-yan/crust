@@ -3,8 +3,6 @@ title: Error Handling
 description: Handle Crust failures, application errors, and cancellation.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 ## CrustError
 
 Crust uses exactly four framework error codes:
@@ -87,8 +85,3 @@ try {
 ```
 
 `execute()` treats this as silent cancellation and sets `process.exitCode` to `130`. `run()` throws the same exception.
-
-<Callout type="info">
-  Do not inspect removed `_tag` values. Use `error.code`, `error.is(code)`, or your application's
-  own error classes.
-</Callout>

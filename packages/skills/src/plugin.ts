@@ -350,24 +350,15 @@ async function autoUpdateCustomSkill(
 }
 
 function needsSkillReconciliation(
-	agent: AgentTarget,
-	scope: Scope,
 	meta: SkillMeta,
-	entry: { installed: boolean; version?: string; outputDir: string },
+	entry: { installed: boolean; version?: string },
 ): boolean {
-	// TODO(v0.1.0): Remove legacy outputDir reconciliation once `use-<cli>` ->
-	// `<cli>` migration support is dropped in @crustjs/skills.
-	if (!entry.installed) {
-		return false;
-	}
-
-	const expectedOutputDir = resolveAgentPath(agent, scope, meta.name);
-	return entry.version !== meta.version || entry.outputDir !== expectedOutputDir;
+	return entry.installed && entry.version !== meta.version;
 }
 
 /**
  * Performs automatic updates for already-installed skills when the version
- * has changed or a legacy install path needs migration.
+ * has changed.
  *
  * Runs during plugin setup so behavior is independent of middleware ordering.
  * Only updates skills that are already installed — first-time installation
@@ -402,9 +393,7 @@ async function autoUpdateSkills(
 			scope,
 		});
 
-		const needsUpdate = status.agents.filter((entry) =>
-			needsSkillReconciliation(entry.agent, scope, meta, entry),
-		);
+		const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
 
 		if (needsUpdate.length === 0) {
 			continue;
@@ -933,7 +922,7 @@ async function runSkillInstallFlow(
 	const toInstall = selectedAgents.filter((agent) => !installedAgentSet.has(agent));
 	const toUpdate = selectedAgents.filter((agent) => {
 		const entry = statusMap.get(agent);
-		return entry !== undefined && needsSkillReconciliation(agent, scope, meta, entry);
+		return entry !== undefined && needsSkillReconciliation(meta, entry);
 	});
 	const toUninstall = [...installedAgentSet].filter((agent) => !selectedAgents.includes(agent));
 
@@ -1074,9 +1063,7 @@ async function runSkillUpdateFlow(
 		agents,
 		scope,
 	});
-	const needsUpdate = status.agents.filter((entry) =>
-		needsSkillReconciliation(entry.agent, scope, meta, entry),
-	);
+	const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
 
 	if (needsUpdate.length === 0) {
 		console.log(dim(`No updates needed (${effectiveScope}).`));

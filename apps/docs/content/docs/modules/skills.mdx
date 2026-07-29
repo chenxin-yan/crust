@@ -168,8 +168,8 @@ cases:
    [`kind`](#kind-field-on-crustjson) than the install attempt (e.g. an
    existing `generated` skill collides with an incoming `bundle`).
 3. **Malformed manifest** — `crust.json` is present but cannot be
-   interpreted (invalid JSON, top-level non-object, missing `version`, or an
-   unrecognized `kind` value such as a hand-edit typo).
+   interpreted (invalid JSON, top-level non-object, missing `version`, missing
+   `kind`, or an unrecognized `kind` value such as a hand-edit typo).
 
 All three throw `SkillConflictError`. Pass `force: true` to overwrite, or
 uninstall the existing skill first.
@@ -192,9 +192,10 @@ optional discriminators that describe which flavor fired:
 - `details.kindMismatch?: { existing, attempted }` — set on kind mismatch.
 - `details.manifestMalformed?: { reason, rawKind? }` — set on malformed
   `crust.json`. `reason` is one of `"parse-error"`, `"not-an-object"`,
-  `"missing-version"`, or `"unknown-kind"`. `rawKind` is populated only when
-  `reason === "unknown-kind"` (the offending value found in the file).
-- Neither field set — the original "directory exists with no `crust.json`" case.
+  `"missing-version"`, `"missing-kind"`, or `"unknown-kind"`. `rawKind` is
+  populated only when `reason === "unknown-kind"` (the offending value found
+  in the file).
+- Neither field set — the target directory exists without `crust.json`.
 
 ```ts
 import { generateSkill, SkillConflictError } from "@crustjs/skills";
@@ -266,7 +267,7 @@ const deploy = annotate(
 
 ## Name Validation
 
-Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. `generateSkill()` validates the resolved name (with `use-` prefix) and throws a descriptive error if invalid.
+Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. `generateSkill()` validates the supplied name and throws a descriptive error if invalid.
 
 Use `isValidSkillName()` to check names before calling `generateSkill()`:
 
@@ -509,9 +510,9 @@ at the same name throws a `SkillConflictError` whose `details.kindMismatch`
 carries `{ existing, attempted }`. Uninstall the existing skill first or
 pass `force: true` to overwrite.
 
-Legacy `crust.json` files written before this field existed are read as
-`kind: "generated"` so existing generated installs continue to update
-cleanly without a migration step.
+A `crust.json` manifest must include `kind` with one of those two values.
+A missing or unrecognized `kind` makes the manifest malformed; installation
+throws `SkillConflictError` unless `force: true` is set.
 
 ## Type Reference
 

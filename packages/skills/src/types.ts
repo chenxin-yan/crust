@@ -155,9 +155,6 @@ export type SkillInstallMode = "auto" | "symlink" | "copy";
  * - `"generated"` — produced by {@link generateSkill} from a Crust command tree.
  * - `"bundle"` — installed by {@link installSkillBundle} from a hand-authored
  *   directory containing a `SKILL.md` and supporting files.
- *
- * Legacy `crust.json` files (written before this field existed) are read as
- * `"generated"` for backward compatibility.
  */
 export type SkillKind = "generated" | "bundle";
 

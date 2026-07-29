@@ -7,7 +7,7 @@
 "@crustjs/skills": minor
 ---
 
-Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009` and the migration guide):
+Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009`):
 
 - Extensions replace plugins: `@crustjs/extensions` package, `extension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
 - Contexts are command dependencies: `context()` always returns a factory, attached with `.provide()`, disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse order.
@@ -17,4 +17,4 @@ Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009` an
 - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
 - `create-crust` ships a single minimal template.
 
-This is a hard cut from the 0.1 API with no compatibility shims. Follow the migration guide for every removed name and its replacement.
+This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed above.

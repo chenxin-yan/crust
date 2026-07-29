@@ -137,12 +137,6 @@ describe("fg", () => {
 		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
-
-	it("byte-identical foreground escape to legacy `(0, 128, 255)`", () => {
-		// The pre-redesign API produced "\x1b[38;2;0;128;255mhello\x1b[39m" for
-		// rgb("hello", 0, 128, 255). The new fg helper must match exactly.
-		expect(fg("hello", [0, 128, 255])).toBe("\x1b[38;2;0;128;255mhello\x1b[39m");
-	});
 });
 
 describe("bg", () => {
@@ -166,10 +160,6 @@ describe("bg", () => {
 		expect(() => bg("hi", "definitely-not-a-color")).toThrow(TypeError);
 		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("", "definitely-not-a-color")).toThrow(TypeError);
-	});
-
-	it("byte-identical background escape to legacy `bgRgb`", () => {
-		expect(bg("hello", [0, 128, 255])).toBe("\x1b[48;2;0;128;255mhello\x1b[49m");
 	});
 });
 

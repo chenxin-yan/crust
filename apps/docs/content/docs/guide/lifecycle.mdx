@@ -48,9 +48,9 @@ With `execute()`, Crust first establishes a nonzero status, then invokes Extensi
 
 A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets status `130` and renders nothing. `run()` still throws it.
 
-## Replacing setup and cleanup hooks
+## Setup and cleanup
 
-The 0.1 `.preRun()` and `.postRun()` APIs are removed:
+Choose the mechanism that matches the setup's scope:
 
 - use a Context for command-specific setup and native disposal
 - use Extension `intercept` for app-wide behavior around invocation

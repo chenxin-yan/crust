@@ -194,38 +194,6 @@ describe("skill extension auto-update", () => {
 		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
 	});
 
-	it("auto-migrates a legacy install even when the version matches", async () => {
-		const app = new Crust("legacy-migration-test")
-			.meta({ description: "test" })
-			.handle(() => {})
-			.extend(
-				skillExtension({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
-			);
-
-		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-legacy-migration-test");
-		const legacySkillDir = join(tmpDir, ".agents", "skills", "use-legacy-migration-test");
-		await mkdir(legacyCanonicalDir, { recursive: true });
-		await mkdir(legacySkillDir, { recursive: true });
-		await writeFile(
-			join(legacyCanonicalDir, "crust.json"),
-			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
-		);
-		await writeFile(
-			join(legacySkillDir, "crust.json"),
-			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
-		);
-
-		await withCwd(tmpDir, () => app.execute({ argv: [] }));
-
-		const currentSkillDir = join(tmpDir, ".agents", "skills", "legacy-migration-test");
-		expect(await readInstalledVersion(currentSkillDir)).toBe("1.0.0");
-		expect(await exists(legacySkillDir)).toBe(false);
-		expect(await exists(legacyCanonicalDir)).toBe(false);
-	});
-
 	it("prints auto-update message with Universal label", async () => {
 		const app = new Crust("update-message-test")
 			.meta({ description: "test" })

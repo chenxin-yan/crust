@@ -372,38 +372,4 @@ export interface StyleInstance extends StyleMethodMap {
 		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
 		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
 	};
-
-	// ── Deprecated dynamic-color helpers ───────────────────────────────
-
-	/**
-	 * Apply a truecolor foreground RGB color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.fg | `fg(text, [r, g, b])`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly rgb: (text: string, r: number, g: number, b: number) => string;
-
-	/**
-	 * Apply a truecolor background RGB color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.bg | `bg(text, [r, g, b])`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
-
-	/**
-	 * Apply a truecolor foreground hex color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.fg | `fg(text, "#rrggbb")`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly hex: (text: string, hexColor: string) => string;
-
-	/**
-	 * Apply a truecolor background hex color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.bg | `bg(text, "#rrggbb")`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly bgHex: (text: string, hexColor: string) => string;
 }

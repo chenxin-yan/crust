@@ -39,7 +39,7 @@ describe("readInstalledVersion", () => {
 	it("reads version from crust.json", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.2.3" }),
+			JSON.stringify({ name: "test", version: "1.2.3", kind: "generated" }),
 		);
 
 		const version = await readInstalledVersion(tmpDir);
@@ -98,14 +98,13 @@ describe("readInstalledManifest", () => {
 		expect(manifest).toEqual({ version: "1.2.3", kind: "bundle" });
 	});
 
-	it("defaults missing kind to 'generated' (legacy crust.json)", async () => {
+	it("returns null when kind is missing", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.2.3" }),
 		);
 
-		const manifest = await readInstalledManifest(tmpDir);
-		expect(manifest).toEqual({ version: "1.2.3", kind: "generated" });
+		expect(await readInstalledManifest(tmpDir)).toBeNull();
 	});
 
 	it("returns null when kind is present but unrecognized (typo guard)", async () => {
@@ -208,16 +207,13 @@ describe("inspectInstalledManifest", () => {
 		});
 	});
 
-	it("returns status: 'ok' with normalized kind for legacy crust.json", async () => {
+	it("returns status: 'malformed' when kind is missing", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
 			JSON.stringify({ name: "test", version: "1.2.3" }),
 		);
 		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({
-			status: "ok",
-			manifest: { version: "1.2.3", kind: "generated" },
-		});
+		expect(result).toEqual({ status: "malformed", reason: "missing-kind" });
 	});
 
 	it("returns status: 'ok' for a well-formed bundle manifest", async () => {
@@ -243,7 +239,7 @@ describe("checkVersion", () => {
 	it("returns 'up-to-date' with version when versions match exactly", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0" }),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "generated" }),
 		);
 
 		const result = await checkVersion(tmpDir, "1.0.0");
@@ -254,7 +250,7 @@ describe("checkVersion", () => {
 	it("returns 'updated' with previous version when versions differ", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0" }),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "generated" }),
 		);
 
 		const result = await checkVersion(tmpDir, "2.0.0");
@@ -273,7 +269,7 @@ describe("checkVersion", () => {
 	it("uses exact string comparison", async () => {
 		await writeFile(
 			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0" }),
+			JSON.stringify({ name: "test", version: "1.0.0", kind: "generated" }),
 		);
 
 		// "1.0.0" !== "v1.0.0"

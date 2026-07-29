@@ -8,12 +8,6 @@ import { Callout } from "fumadocs-ui/components/callout";
 `@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
 
 <Callout>
-  Spinner support has moved to [`@crustjs/progress`](/docs/modules/progress). `@crustjs/prompts`
-  still re-exports `spinner` temporarily for compatibility, but that re-export is deprecated and
-  will be removed in `v0.1.0`.
-</Callout>
-
-<Callout>
   Both `input()` and `password()` accept either a `(value: string) => void | Promise<void>` validator (throw an `Error` to reject) **or** any [Standard Schema v1](https://standardschema.dev/) object directly (Zod, Valibot, Effect Schema, ArkType, …). When a schema is supplied, the prompt resolves to the schema's *transformed output* type — see [Validation](#validation) below.
 </Callout>
 

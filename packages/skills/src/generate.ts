@@ -38,7 +38,6 @@ import {
 	type InstalledSkillManifest,
 	inspectInstalledManifest,
 	readInstalledManifest,
-	readInstalledVersion,
 } from "./version.ts";
 
 const DEFAULT_INSTALL_MODE: SkillInstallMode = "auto";
@@ -127,12 +126,6 @@ export function resolveSkillName(name: string): string {
 	return name;
 }
 
-// TODO:(v0.1.0) Remove legacy `use-*` skill name compatibility after the
-// migration window for `use-<cli>` -> `<cli>` installs ends.
-function resolveLegacySkillName(name: string): string {
-	return name.startsWith("use-") ? name : `use-${name}`;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Public API — generateSkill
 // ────────────────────────────────────────────────────────────────────────────
@@ -182,7 +175,6 @@ export async function generateSkill(options: GenerateOptions): Promise<GenerateR
 
 	// Resolve the canonical current name — do not mutate the caller's meta object
 	const resolvedName = resolveSkillName(meta.name);
-	const legacyResolvedName = resolveLegacySkillName(meta.name);
 
 	// Validate resolved name against Agent Skills spec
 	if (!isValidSkillName(resolvedName)) {
@@ -215,7 +207,6 @@ export async function generateSkill(options: GenerateOptions): Promise<GenerateR
 		force,
 		installMode,
 		kind: "generated",
-		legacyResolvedName,
 	});
 }
 
@@ -243,13 +234,6 @@ interface InstallRenderedSkillOptions {
 	readonly installMode: SkillInstallMode;
 	/** Origin of the bundle being installed */
 	readonly kind: SkillKind;
-	/**
-	 * Legacy resolved name to sweep alongside `meta.name`.
-	 *
-	 * Pass `meta.name` (i.e. "same as current") to disable the legacy sweep —
-	 * bundle installs do not carry the `use-*` migration history.
-	 */
-	readonly legacyResolvedName: string;
 }
 
 /**
@@ -259,19 +243,17 @@ interface InstallRenderedSkillOptions {
  * Performs:
  * - Append `crust.json` (with the supplied `kind`) to the file list and sort
  * - Group agent targets by output directory
- * - Inspect existing install state (current + legacy paths)
+ * - Inspect existing install state
  * - Conflict detection (no `crust.json` OR kind mismatch; `force: true` bypasses)
  * - Write canonical bundle once when content changed
  * - Fan out to per-agent paths via the configured install mode
  * - Compute per-agent {@link InstallStatus}
- * - Sweep the legacy canonical when nothing else uses it
  *
  * The function does **not** validate the meta name — callers must do that
  * before invoking the core.
  */
 async function installRenderedSkill(options: InstallRenderedSkillOptions): Promise<GenerateResult> {
-	const { files, meta, agents, scope, clean, force, installMode, kind, legacyResolvedName } =
-		options;
+	const { files, meta, agents, scope, clean, force, installMode, kind } = options;
 
 	const primaryAgent = agents[0];
 	if (!primaryAgent) {
@@ -297,23 +279,14 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	}
 
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, meta.name);
-	const legacyCanonicalOutputDir = resolveCanonicalSkillPath(scope, legacyResolvedName);
-	const installStates = new Map<string, InstallLocationState>();
+	const installStates = new Map<string, ManagedPathState>();
 	for (const [outputDir, groupedAgents] of groups) {
 		const groupedPrimaryAgent = groupedAgents[0];
 		if (!groupedPrimaryAgent) {
 			continue;
 		}
 
-		installStates.set(
-			outputDir,
-			await inspectInstallLocation({
-				outputDir,
-				legacyOutputDir: resolveAgentPath(groupedPrimaryAgent, scope, legacyResolvedName),
-				canonicalOutputDir,
-				legacyCanonicalOutputDir,
-			}),
-		);
+		installStates.set(outputDir, await inspectManagedPath(outputDir, canonicalOutputDir));
 	}
 	const canonicalInspection = await inspectInstalledManifest(canonicalOutputDir);
 	const canonicalManifest =
@@ -366,7 +339,7 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 			continue;
 		}
 
-		if (state.current.inspection.exists && !state.current.isCrustManaged && !force) {
+		if (state.inspection.exists && !state.isCrustManaged && !force) {
 			// Re-inspect crust.json on the failure path so the error can
 			// distinguish "absent" from "present but malformed" (e.g. an
 			// unrecognized kind) instead of always reporting "no crust.json
@@ -387,12 +360,12 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 		// previous install's canonical was deleted manually but the agent copy
 		// remained. Reject those without `force` so the public collision
 		// contract holds end-to-end (not just at the canonical store).
-		if (state.current.manifest !== null && state.current.manifest.kind !== kind && !force) {
+		if (state.manifest !== null && state.manifest.kind !== kind && !force) {
 			throw new SkillConflictError({
 				agent: groupedPrimaryAgent,
 				outputDir,
 				kindMismatch: {
-					existing: state.current.manifest.kind,
+					existing: state.manifest.kind,
 					attempted: kind,
 				},
 			});
@@ -404,8 +377,8 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 			allFiles,
 			clean,
 			installMode,
-			inspection: state.current.inspection,
-			installedVersion: state.preferredVersion,
+			inspection: state.inspection,
+			installedVersion: state.version,
 			currentVersion: meta.version,
 			force,
 			// Per-output-path kind. Compared with the target `kind` so a
@@ -414,16 +387,15 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 			// leave a stale per-agent `crust.json`, trapping the next non-force
 			// call in `SkillConflictError`). Symlink mode is unaffected because
 			// `canonicalChanged` already triggered a canonical rewrite above.
-			installedKind: state.current.manifest?.kind ?? null,
+			installedKind: state.manifest?.kind ?? null,
 			currentKind: kind,
 		});
-		const legacyRemoved = await removeLegacyManagedPath(state);
 
 		const status = computeInstallStatus({
-			installedVersion: state.preferredVersion,
+			installedVersion: state.version,
 			currentVersion: meta.version,
 			canonicalChanged,
-			pathChanged: pathChanged || legacyRemoved || state.preferredOutputDir !== outputDir,
+			pathChanged,
 		});
 
 		for (const agent of groupedAgents) {
@@ -432,19 +404,8 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 				outputDir,
 				files: status === "up-to-date" ? [] : allFilePaths,
 				status,
-				previousVersion: status === "updated" ? (state.preferredVersion ?? undefined) : undefined,
+				previousVersion: status === "updated" ? (state.version ?? undefined) : undefined,
 			});
-		}
-	}
-
-	if (legacyResolvedName !== meta.name) {
-		const legacyCanonicalVersion = await readInstalledVersion(legacyCanonicalOutputDir);
-		if (
-			legacyCanonicalOutputDir !== canonicalOutputDir &&
-			legacyCanonicalVersion !== null &&
-			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
-		) {
-			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
 		}
 	}
 
@@ -468,9 +429,7 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
 	const { name, scope = "global" } = options;
 	const agents = resolveAllAgentTargets(options.agents);
 	const resolvedName = resolveSkillName(name);
-	const legacyResolvedName = resolveLegacySkillName(name);
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
-	const legacyCanonicalOutputDir = resolveCanonicalSkillPath(scope, legacyResolvedName);
 	const results: UninstallResult["agents"] = [];
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
@@ -488,50 +447,21 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
 		if (!groupedPrimaryAgent) {
 			continue;
 		}
-		const legacyOutputDir = resolveAgentPath(groupedPrimaryAgent, scope, legacyResolvedName);
-		const state = await inspectInstallLocation({
-			outputDir,
-			legacyOutputDir,
-			canonicalOutputDir,
-			legacyCanonicalOutputDir,
-		});
-
-		const currentRemoved = await removeManagedPath(state.current);
-		const legacyRemoved =
-			state.legacy.outputDir !== state.current.outputDir
-				? await removeManagedPath(state.legacy)
-				: false;
-		const removed = currentRemoved || legacyRemoved;
-		const removedOutputDir = currentRemoved
-			? outputDir
-			: legacyRemoved
-				? legacyOutputDir
-				: outputDir;
+		const state = await inspectManagedPath(outputDir, canonicalOutputDir);
+		const removed = await removeManagedPath(state);
 
 		for (const agent of groupedAgents) {
 			results.push({
 				agent,
-				outputDir: removedOutputDir,
+				outputDir,
 				status: removed ? "removed" : "not-found",
 			});
 		}
 	}
 
-	{
-		const canonicalVersion = await readInstalledVersion(canonicalOutputDir);
-		if (canonicalVersion !== null && !(await hasAnyInstalledAgentPath(resolvedName, scope))) {
-			await rm(canonicalOutputDir, { recursive: true, force: true });
-		}
-	}
-	{
-		const legacyCanonicalVersion = await readInstalledVersion(legacyCanonicalOutputDir);
-		if (
-			legacyCanonicalOutputDir !== canonicalOutputDir &&
-			legacyCanonicalVersion !== null &&
-			!(await hasAnyInstalledAgentPath(legacyResolvedName, scope))
-		) {
-			await rm(legacyCanonicalOutputDir, { recursive: true, force: true });
-		}
+	const canonicalManifest = await readInstalledManifest(canonicalOutputDir);
+	if (canonicalManifest !== null && !(await hasAnyInstalledAgentPath(resolvedName, scope))) {
+		await rm(canonicalOutputDir, { recursive: true, force: true });
 	}
 
 	return { agents: results };
@@ -551,7 +481,6 @@ export async function skillStatus(options: StatusOptions): Promise<StatusResult>
 	const { name, scope = "global" } = options;
 	const agents = resolveAllAgentTargets(options.agents);
 	const resolvedName = resolveSkillName(name);
-	const legacyResolvedName = resolveLegacySkillName(name);
 	const results: StatusResult["agents"] = [];
 	const groups = new Map<string, AgentResult["agent"][]>();
 	for (const agent of agents) {
@@ -569,21 +498,13 @@ export async function skillStatus(options: StatusOptions): Promise<StatusResult>
 		if (!groupedPrimaryAgent) {
 			continue;
 		}
-		const legacyOutputDir = resolveAgentPath(groupedPrimaryAgent, scope, legacyResolvedName);
 		const canonicalOutputDir = resolveCanonicalSkillPath(scope, resolvedName);
-		const legacyCanonicalOutputDir = resolveCanonicalSkillPath(scope, legacyResolvedName);
-		const state = await inspectInstallLocation({
-			outputDir,
-			legacyOutputDir,
-			canonicalOutputDir,
-			legacyCanonicalOutputDir,
-		});
-		const statusOutputDir = state.preferredOutputDir ?? outputDir;
-		const version = state.preferredVersion;
+		const state = await inspectManagedPath(outputDir, canonicalOutputDir);
+		const version = state.version;
 		for (const agent of groupedAgents) {
 			results.push({
 				agent,
-				outputDir: statusOutputDir,
+				outputDir,
 				installed: version !== null,
 				version: version ?? undefined,
 			});
@@ -606,13 +527,6 @@ interface ManagedPathState {
 	readonly manifest: InstalledSkillManifest | null;
 	readonly inspection: InstallPathInspection;
 	readonly isCrustManaged: boolean;
-}
-
-interface InstallLocationState {
-	readonly current: ManagedPathState;
-	readonly legacy: ManagedPathState;
-	readonly preferredVersion: string | null;
-	readonly preferredOutputDir: string | null;
 }
 
 interface EnsureAgentInstallPathOptions {
@@ -869,50 +783,6 @@ async function inspectManagedPath(
 	};
 }
 
-interface InspectInstallLocationOptions {
-	readonly outputDir: string;
-	readonly legacyOutputDir: string;
-	readonly canonicalOutputDir: string;
-	readonly legacyCanonicalOutputDir: string;
-}
-
-async function inspectInstallLocation(
-	options: InspectInstallLocationOptions,
-): Promise<InstallLocationState> {
-	const { outputDir, legacyOutputDir, canonicalOutputDir, legacyCanonicalOutputDir } = options;
-
-	const current = await inspectManagedPath(outputDir, canonicalOutputDir);
-	const legacy =
-		legacyOutputDir === outputDir
-			? current
-			: await inspectManagedPath(legacyOutputDir, legacyCanonicalOutputDir);
-
-	if (current.isCrustManaged) {
-		return {
-			current,
-			legacy,
-			preferredVersion: current.version,
-			preferredOutputDir: current.outputDir,
-		};
-	}
-
-	if (legacy.isCrustManaged) {
-		return {
-			current,
-			legacy,
-			preferredVersion: legacy.version,
-			preferredOutputDir: legacy.outputDir,
-		};
-	}
-
-	return {
-		current,
-		legacy,
-		preferredVersion: null,
-		preferredOutputDir: null,
-	};
-}
-
 async function removeManagedPath(state: ManagedPathState): Promise<boolean> {
 	if (!state.isCrustManaged || !state.inspection.exists) {
 		return false;
@@ -920,14 +790,6 @@ async function removeManagedPath(state: ManagedPathState): Promise<boolean> {
 
 	await rm(state.outputDir, { recursive: true, force: true });
 	return true;
-}
-
-async function removeLegacyManagedPath(state: InstallLocationState): Promise<boolean> {
-	if (state.legacy.outputDir === state.current.outputDir) {
-		return false;
-	}
-
-	return removeManagedPath(state.legacy);
 }
 
 async function safeRealpath(path: string): Promise<string | null> {
@@ -961,7 +823,7 @@ async function createDirectorySymlink(targetDir: string, symlinkPath: string): P
  * agents share a single directory — probing it once is sufficient.
  *
  * Works for both symlink and copy installs: symlink removal makes
- * `readInstalledVersion` return `null` (target unreachable), and copy removal
+ * `readInstalledManifest` return `null` (target unreachable), and copy removal
  * deletes the `crust.json` directly.
  */
 async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boolean> {
@@ -971,7 +833,7 @@ async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boo
 	}
 
 	for (const outputDir of uniquePaths) {
-		if ((await readInstalledVersion(outputDir)) !== null) {
+		if ((await readInstalledManifest(outputDir)) !== null) {
 			return true;
 		}
 	}

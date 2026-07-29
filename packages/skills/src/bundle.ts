@@ -389,8 +389,5 @@ export async function installSkillBundle(
 		force,
 		installMode,
 		kind: "bundle",
-		// Bundles do not carry the `use-*` legacy migration history, so the
-		// legacy sweep is disabled by passing the same name.
-		legacyResolvedName: resolvedName,
 	});
 }

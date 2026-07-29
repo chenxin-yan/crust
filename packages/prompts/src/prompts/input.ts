@@ -151,16 +151,7 @@ function createHandleKey<Output>(
 				// `Error` and render its message inline (same as the schema
 				// path's first-issue rendering).
 				try {
-					const fnResult = await (validate as ValidateFn<string>)(submitValue);
-					// Fail-fast migration guard: ValidateFn used to accept a
-					// `true | string` return shape. Now it returns `void` and
-					// throws on failure. If a caller still returns a value, surface
-					// it loudly instead of silently misinterpreting it.
-					if (fnResult !== undefined) {
-						throw new TypeError(
-							`validate() returned ${typeof fnResult === "string" ? `"${fnResult}"` : String(fnResult)}; ValidateFn must return void. Throw an Error to reject the input (see @crustjs/prompts ValidateFn docs).`,
-						);
-					}
+					await (validate as ValidateFn<string>)(submitValue);
 				} catch (err) {
 					return {
 						...state,

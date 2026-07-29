@@ -9,12 +9,6 @@ import {
 	resolveModifierCapability,
 } from "./capability.ts";
 import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
-import {
-	bgHex as bgHexDirect,
-	bgRgb as bgRgbDirect,
-	hex as hexDirect,
-	rgb as rgbDirect,
-} from "./dynamicColors.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
 import {
@@ -324,29 +318,6 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			return bgDirect(textOrInput as string, maybeInput, colorDepth);
 		}) as StyleInstance["bg"],
 
-		// ── Deprecated dynamic-color helpers ────────────────────────
-		//
-		// Gated on `trueColorEnabled` to preserve original (pre-deprecation)
-		// behavior: these emitted truecolor sequences when truecolor was
-		// available, otherwise plain text. Migrate to `fg` / `bg` for
-		// depth-aware output.
-
-		rgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) => rgbDirect(text, r, g, b)
-			: (text: string, _r: number, _g: number, _b: number) => text,
-
-		bgRgb: trueColorEnabled
-			? (text: string, r: number, g: number, b: number) => bgRgbDirect(text, r, g, b)
-			: (text: string, _r: number, _g: number, _b: number) => text,
-
-		hex: trueColorEnabled
-			? (text: string, hexColor: string) => hexDirect(text, hexColor)
-			: (text: string, _hexColor: string) => text,
-
-		bgHex: trueColorEnabled
-			? (text: string, hexColor: string) => bgHexDirect(text, hexColor)
-			: (text: string, _hexColor: string) => text,
-
 		...methods,
 	};
 
@@ -467,17 +438,7 @@ export function getRuntimeStyle(): StyleInstance {
 
 // Members whose implementation is a function and must be forwarded as a
 // bound method so callers can invoke them like `style.apply(...)`.
-const FORWARDED_METHODS = [
-	"apply",
-	"link",
-	"fg",
-	"bg",
-	// Deprecated — keep until v1.0.0.
-	"rgb",
-	"bgRgb",
-	"hex",
-	"bgHex",
-] as const;
+const FORWARDED_METHODS = ["apply", "link", "fg", "bg"] as const;
 
 // Members that read a value off the current runtime style on every access.
 const FORWARDED_GETTERS = ["enabled", "colorsEnabled", "trueColorEnabled", "colorDepth"] as const;

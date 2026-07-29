@@ -233,8 +233,6 @@ import type {
 	PasswordOptions,
 	PromptConfig,
 	SelectOptions,
-	SpinnerOptions,
-	SpinnerType,
 	ValidateFn,
 } from "../src/index.ts";
 
@@ -285,12 +283,7 @@ describe("type exports", () => {
 		const _multifilterOptsNoMsg: MultifilterOptions<string> = {
 			choices: ["a"],
 		};
-		const _spinnerOpts: SpinnerOptions<string> = {
-			message: "m",
-			task: async () => "done",
-		};
-		const _spinnerType: SpinnerType = "dots";
-		// ValidateFn<T> is throw-on-fail / void-on-success since 0.x.0.
+		// ValidateFn<T> is throw-on-fail / void-on-success.
 		const _validateFn: ValidateFn<string> = () => {};
 		const _partialTheme: PartialPromptTheme = {};
 		const _normalized: NormalizedChoice<string> = {

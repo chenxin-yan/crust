@@ -32,11 +32,6 @@ export { assertTTY, isTTY, NonInteractiveError, runPrompt, submit } from "./core
 // Prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-// TODO(v0.1.0): remove deprecated spinner re-exports in favor of @crustjs/progress
-/** @deprecated Import these types from `@crustjs/progress` instead. */
-export type { SpinnerController, SpinnerOptions, SpinnerType } from "@crustjs/progress";
-/** @deprecated Import `spinner` from `@crustjs/progress` instead. */
-export { spinner } from "@crustjs/progress";
 export type { ConfirmOptions } from "./prompts/confirm.ts";
 export { confirm } from "./prompts/confirm.ts";
 export type { FilterOptions } from "./prompts/filter.ts";

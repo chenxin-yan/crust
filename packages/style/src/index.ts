@@ -62,9 +62,6 @@ export { resolveColorDepth } from "./capability.ts";
 // Style primitives — Dynamic colors (depth-aware) powered by `Bun.color()`
 export { bgCode, fgCode } from "./color.ts";
 export { createStyle, getGlobalColorMode, setGlobalColorMode, style } from "./createStyle.ts";
-// Deprecated truecolor pair factories + hex parser — superseded by
-// `fgCode` / `bgCode`. Will be removed in v1.0.0.
-export { bgHexCode, bgRgbCode, hexCode, parseHex, rgbCode } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
 export type { NamedColor } from "./namedColors.ts";
@@ -83,12 +80,8 @@ export {
 	bgBrightYellow,
 	bgCyan,
 	bgGreen,
-	// Deprecated direct helpers — superseded by `fg` / `bg`. Will be removed
-	// in v1.0.0.
-	bgHex,
 	bgMagenta,
 	bgRed,
-	bgRgb,
 	bgWhite,
 	bgYellow,
 	// Foreground
@@ -108,14 +101,12 @@ export {
 	fg,
 	gray,
 	green,
-	hex,
 	hidden,
 	inverse,
 	italic,
 	link,
 	magenta,
 	red,
-	rgb,
 	strikethrough,
 	underline,
 	white,

@@ -136,11 +136,6 @@ describe("detectInstalledAgents", () => {
 		});
 		expect(result).not.toContain("opencode");
 	});
-
-	it("accepts legacy string parameter", async () => {
-		const result = await detectInstalledAgents("/tmp");
-		expect(Array.isArray(result)).toBe(true);
-	});
 });
 
 describe("PATH-based detection (default commandChecker)", () => {

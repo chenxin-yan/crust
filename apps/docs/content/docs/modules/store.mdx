@@ -416,7 +416,7 @@ value at use sites.
 
 `field()` throws `CrustStoreError("DEFINITION")` when handed a value that
 is not a Standard Schema v1 object. `type` is optional for schema-backed
-fields; pass it through `opts` only as legacy metadata for tooling.
+fields; include it in `opts` when tooling needs primitive-type metadata.
 
 ### Operation behavior
 
@@ -513,7 +513,7 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-`FieldDef` accepts both typed inline definitions and the schema-backed definitions returned by `field()`. The schema-backed branch carries the Standard Schema output type; it is not limited to the legacy `type` / `default` / `validate` shape.
+`FieldDef` accepts typed inline definitions and schema-backed definitions returned by `field()`. Inline fields declare their metadata and validation directly; the schema-backed branch carries the Standard Schema output type.
 
 #### `FieldDef`
 
