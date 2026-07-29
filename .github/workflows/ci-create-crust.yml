@@ -8,6 +8,7 @@ on:
       - "packages/create-crust/**"
       - "packages/create/**"
       - "packages/core/**"
+      - "packages/crust/**"
       - "packages/prompts/**"
       - "packages/style/**"
       - "package.json"
@@ -54,7 +55,7 @@ jobs:
             turbo-create-crust-${{ runner.os }}-
 
       - name: Build create-crust dependency subset
-        run: bun turbo run build --filter=./packages/utils --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/create --filter=./packages/create-crust
+        run: bun turbo run build --filter=./packages/utils --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/create --filter=./packages/crust --filter=./packages/create-crust
 
       - name: Print tool versions
         run: |
