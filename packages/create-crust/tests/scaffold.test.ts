@@ -9,6 +9,7 @@ import crustPackage from "../../crust/package.json";
 import extensionsPackage from "../../extensions/package.json";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
+const TEMPLATE_DIR = resolve(import.meta.dirname, "../templates");
 const TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: corePackage.version,
 	crustExtensionsVersion: extensionsPackage.version,
@@ -40,24 +41,21 @@ async function scaffoldProject(
 	const scaffoldContext = { ...context, ...TEMPLATE_VERSION_CONTEXT };
 
 	await scaffold({
-		template: "templates/base",
+		template: resolve(TEMPLATE_DIR, "base"),
 		dest,
 		context: scaffoldContext,
 		conflict,
 	});
 
 	await scaffold({
-		template: "templates/minimal",
+		template: resolve(TEMPLATE_DIR, "minimal"),
 		dest,
 		context: scaffoldContext,
 		conflict: "overwrite",
 	});
 
 	await scaffold({
-		template:
-			distribution === "binary"
-				? "templates/distribution/binary"
-				: "templates/distribution/runtime",
+		template: resolve(TEMPLATE_DIR, "distribution", distribution),
 		dest,
 		context: scaffoldContext,
 		conflict: "overwrite",

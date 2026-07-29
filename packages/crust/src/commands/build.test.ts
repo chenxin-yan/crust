@@ -10,7 +10,6 @@ import {
 	generateCmdResolver,
 	generateResolver,
 	getBinaryFilename,
-	resolveBaseName,
 	resolveBunBuildRunner,
 	resolveEnvFilePaths,
 	resolveOutfile,
@@ -18,9 +17,8 @@ import {
 	resolveTargetOutfile,
 	SUPPORTED_TARGETS,
 	TARGET_ALIASES,
-	TARGET_PLATFORM_MAP,
-	TARGET_UNAME_MAP,
 } from "../../src/commands/build.ts";
+import { resolveBaseName } from "../../src/utils/binary-name.ts";
 
 /**
  * Helper to extract the build command's internal node for definition checks.
@@ -555,27 +553,6 @@ describe("generateCmdResolver", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Unit tests for TARGET_UNAME_MAP
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("TARGET_UNAME_MAP", () => {
-	it("maps every supported target", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			expect(TARGET_UNAME_MAP[target]).toBeDefined();
-		}
-	});
-
-	it("uses uname -s / uname -m format", () => {
-		expect(TARGET_UNAME_MAP["bun-linux-x64-baseline"]).toBe("Linux-x86_64");
-		expect(TARGET_UNAME_MAP["bun-linux-arm64"]).toBe("Linux-aarch64");
-		expect(TARGET_UNAME_MAP["bun-darwin-x64"]).toBe("Darwin-x86_64");
-		expect(TARGET_UNAME_MAP["bun-darwin-arm64"]).toBe("Darwin-arm64");
-		expect(TARGET_UNAME_MAP["bun-windows-x64-baseline"]).toBe("Windows-x64");
-		expect(TARGET_UNAME_MAP["bun-windows-arm64"]).toBe("Windows-arm64");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -668,26 +645,5 @@ describe("SUPPORTED_TARGETS", () => {
 	it("includes x64 and arm64 architectures", () => {
 		expect(SUPPORTED_TARGETS.some((t) => t.includes("x64"))).toBe(true);
 		expect(SUPPORTED_TARGETS.some((t) => t.includes("arm64"))).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// TARGET_PLATFORM_MAP constant
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("TARGET_PLATFORM_MAP", () => {
-	it("maps every supported target", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			expect(TARGET_PLATFORM_MAP[target]).toBeDefined();
-		}
-	});
-
-	it("uses process.platform-process.arch format", () => {
-		expect(TARGET_PLATFORM_MAP["bun-linux-x64-baseline"]).toBe("linux-x64");
-		expect(TARGET_PLATFORM_MAP["bun-linux-arm64"]).toBe("linux-arm64");
-		expect(TARGET_PLATFORM_MAP["bun-darwin-x64"]).toBe("darwin-x64");
-		expect(TARGET_PLATFORM_MAP["bun-darwin-arm64"]).toBe("darwin-arm64");
-		expect(TARGET_PLATFORM_MAP["bun-windows-x64-baseline"]).toBe("win32-x64");
-		expect(TARGET_PLATFORM_MAP["bun-windows-arm64"]).toBe("win32-arm64");
 	});
 });

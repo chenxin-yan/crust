@@ -8,11 +8,6 @@ import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 import { resolveBaseName } from "../utils/binary-name.ts";
 import { generateManPageFromEntry } from "../utils/generate-man.ts";
 
-export { resolveBaseName } from "../utils/binary-name.ts";
-
-const PUBLIC_ENV_PREFIX = "PUBLIC_";
-const PUBLIC_ENV_PATTERN = `${PUBLIC_ENV_PREFIX}*` as const;
-
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
 // ────────────────────────────────────────────────────────────────────────────
@@ -37,8 +32,7 @@ export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
 /**
  * Consolidated metadata for every supported Bun compile target.
  *
- * Single source of truth — all other target maps (`TARGET_ALIASES`,
- * `TARGET_PLATFORM_MAP`, `TARGET_UNAME_MAP`) are derived from this.
+ * Single source of truth for target metadata.
  */
 export type TargetInfo = {
 	/** Human-friendly alias (e.g. "linux-x64", "darwin-arm64") */
@@ -114,14 +108,6 @@ export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
 ) as Record<string, BunTarget>;
 
 /**
- * Maps each Bun compile target to its `process.platform-process.arch` key
- * used by JS-based package resolvers and related tooling.
- */
-export const TARGET_PLATFORM_MAP: Record<BunTarget, string> = Object.fromEntries(
-	SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].platformKey]),
-) as Record<BunTarget, string>;
-
-/**
  * Resolve a user-provided target string to a valid Bun compile target.
  *
  * Accepts both full Bun target names and short aliases.
@@ -192,25 +178,12 @@ export function resolveTargetOutfile(
 	cwd: string,
 	outdir: string,
 ): string {
-	const isWindows = target.startsWith("bun-windows");
-	const ext = isWindows ? ".exe" : "";
-	return resolve(cwd, outdir, `${baseName}-${target}${ext}`);
+	return resolve(cwd, outdir, getBinaryFilename(baseName, target));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Shell resolver generator (Unix + Windows)
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Maps each Bun compile target to its `uname -s`/`uname -m` key
- * used by the shell resolver at runtime.
- *
- * Note: Linux ARM64 reports as `aarch64` via `uname -m`,
- * while macOS ARM64 reports as `arm64`.
- */
-export const TARGET_UNAME_MAP: Record<BunTarget, string> = Object.fromEntries(
-	SUPPORTED_TARGETS.map((t) => [t, TARGET_INFO[t].unameKey]),
-) as Record<BunTarget, string>;
 
 /**
  * Get the binary filename (basename only) for a given target.
@@ -241,7 +214,7 @@ export function generateResolver(baseName: string, targets: readonly BunTarget[]
 	const caseEntries: string[] = [];
 	for (const target of targets) {
 		if (target.startsWith("bun-windows")) continue;
-		const unameKey = TARGET_UNAME_MAP[target];
+		const unameKey = TARGET_INFO[target].unameKey;
 		const filename = getBinaryFilename(baseName, target);
 		caseEntries.push(`\t${unameKey}) bin="${filename}" ;;`);
 	}
@@ -470,7 +443,7 @@ export async function execBuild(
 		"build",
 		"--compile",
 		...toBunEnvFileArgs(envFiles),
-		`--env=${PUBLIC_ENV_PATTERN}`,
+		"--env=PUBLIC_*",
 		"--outfile",
 		outfilePath,
 		...(minify ? ["--minify"] : []),

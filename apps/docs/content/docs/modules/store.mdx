@@ -436,7 +436,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PARSE`      | Malformed JSON in persisted file                          | `{ path: string }`      |
 | `IO`         | Filesystem read, write, or delete failure                 | `{ path, operation }`   |
 | `VALIDATION` | One or more field validators rejected the state           | `{ operation, issues }` |
-| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`           |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{}`                    |
 
 ### Catching Errors
 

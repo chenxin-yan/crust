@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { detectPackageManager, getGitUser, isGitInstalled, isInGitRepo } from "./utils.ts";
+import { detectPackageManager, isGitInstalled, isInGitRepo } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // detectPackageManager()
@@ -146,23 +146,5 @@ describe("isGitInstalled", () => {
 	it("returns true when git is available", () => {
 		// Git is expected to be available in the test environment
 		expect(isGitInstalled()).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// getGitUser()
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("getGitUser", () => {
-	it("returns an object with name and email keys", () => {
-		const user = getGitUser();
-		expect(user).toHaveProperty("name");
-		expect(user).toHaveProperty("email");
-	});
-
-	it("returns strings or null for name and email", () => {
-		const user = getGitUser();
-		expect(typeof user.name === "string" || user.name === null).toBe(true);
-		expect(typeof user.email === "string" || user.email === null).toBe(true);
 	});
 });

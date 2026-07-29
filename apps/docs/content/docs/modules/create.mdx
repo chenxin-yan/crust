@@ -170,12 +170,6 @@ Check whether a directory is inside a Git work tree, including one rooted in a p
 
 Check whether `git` is available on the system PATH. Returns `boolean`.
 
-### `getGitUser()`
-
-Read the current git user's name and email from `git config`.
-
-Returns `{ name: string | null, email: string | null }`.
-
 ## Exports
 
 ### Functions
@@ -188,7 +182,6 @@ Returns `{ name: string | null, email: string | null }`.
 | `detectPackageManager` | Detect bun/npm/pnpm/yarn from lockfiles or user agent |
 | `isInGitRepo`          | Check whether a directory is inside a Git work tree   |
 | `isGitInstalled`       | Check if git is available                             |
-| `getGitUser`           | Read git user.name and user.email                     |
 
 ### Types
 
