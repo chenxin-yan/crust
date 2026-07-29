@@ -97,7 +97,7 @@ const FEATURES = [
 const MODULES: Array<{
   pkg: string;
   desc: string;
-  doc: string;
+  doc?: string;
   upcoming?: boolean;
 }> = [
   {

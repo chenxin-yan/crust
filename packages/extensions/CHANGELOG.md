@@ -1,5 +1,21 @@
 # @crustjs/plugins
 
+## 0.2.0
+
+### Minor Changes
+
+- d017fdf: Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009` and the migration guide):
+
+  - Extensions replace plugins: `@crustjs/extensions` package, `extension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
+  - Contexts are command dependencies: `context()` always returns a factory, attached with `.provide()`, disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse order.
+  - `.handle(handler)` defines the Command Handler; `.run(argv, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. `preRun`/`postRun` removed.
+  - `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` removed; handler and Context errors pass through unwrapped.
+  - Standard Schema supported directly on arg/flag definitions; `@crustjs/validate` removed.
+  - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
+  - `create-crust` ships a single minimal template.
+
+  This is a hard cut from the 0.1 API with no compatibility shims. Follow the migration guide for every removed name and its replacement.
+
 ## 0.1.2
 
 ### Patch Changes

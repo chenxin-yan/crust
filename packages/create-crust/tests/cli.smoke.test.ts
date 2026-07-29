@@ -31,6 +31,16 @@ const localDependencyPackages = [
 		dir: "extensions",
 		requiredBuildOutput: "dist/index.js",
 	},
+	{
+		// The 0.2.0 cohort is unpublished until release; link the workspace
+		// package so the scaffolded project's devDependency resolves. Linked
+		// (not packed) because the publish `files` list ships only compiled
+		// binaries — the dev entry point is dist/cli.js.
+		name: "@crustjs/crust",
+		dir: "crust",
+		requiredBuildOutput: "dist/cli.js",
+		linkDir: true,
+	},
 ] as const;
 
 interface CommandResult {
@@ -142,6 +152,11 @@ async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 			throw new Error(
 				`Built package output not found at ${requiredBuildOutput}. Run the package build before test:smoke.`,
 			);
+		}
+
+		if ("linkDir" in pkg && pkg.linkDir) {
+			specs[pkg.name] = `file:${packageDir.replaceAll("\\", "/")}`;
+			continue;
 		}
 
 		const before = new Set(readdirSync(localPackageDir));

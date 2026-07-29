@@ -1,5 +1,16 @@
 # @crustjs/store
 
+## 0.2.1
+
+### Patch Changes
+
+- c962196: Move `@crustjs/utils` to granular public subpaths: `@crustjs/utils/primitive`, `@crustjs/utils/source`, and `@crustjs/utils/schema`.
+
+  The utils package no longer exposes a root entry point, publishes side-effect-free metadata for downstream bundlers, disables minification for library output, and keeps the Standard Schema helpers as a public low-level subpath. Workspace consumers now import the narrower subpaths directly.
+
+- Updated dependencies [c962196]
+  - @crustjs/utils@0.0.4
+
 ## 0.2.0
 
 ### Minor Changes
