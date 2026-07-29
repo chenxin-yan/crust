@@ -1,5 +1,6 @@
 import { Crust } from "../command/crust.ts";
 import type { CommandNode } from "../command/node.ts";
+import { type CommandSnapshot, snapshotCommand } from "../command/snapshot.ts";
 import type { CrustPlugin, MiddlewareContext } from "../plugins.ts";
 import type { FlagDef } from "../types.ts";
 import type { Awaitable } from "./context.ts";
@@ -10,8 +11,8 @@ export interface ExtensionOutput {
 
 export interface ExtensionRunContext {
 	readonly argv: readonly string[];
-	readonly rootCommand: CommandNode;
-	readonly command: CommandNode;
+	readonly rootCommand: CommandSnapshot;
+	readonly command: CommandSnapshot;
 	readonly commandPath: readonly string[];
 	readonly args: Record<string, unknown>;
 	readonly flags: Record<string, unknown>;
@@ -30,10 +31,11 @@ export interface ExtensionFlagOptions {
 }
 
 function buildExtensionRunContext(context: MiddlewareContext): ExtensionRunContext {
+	const rootSnapshot = snapshotCommand(context.rootCommand);
 	return {
 		argv: context.argv,
-		rootCommand: context.rootCommand,
-		command: context.route?.command ?? context.rootCommand,
+		rootCommand: rootSnapshot,
+		command: context.route?.command ? snapshotCommand(context.route.command) : rootSnapshot,
 		commandPath: context.route?.commandPath ?? [context.rootCommand.meta.name],
 		args: (context.input?.args ?? {}) as Record<string, unknown>,
 		flags: (context.input?.flags ?? {}) as Record<string, unknown>,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, type CrustPlugin } from "@crustjs/core/internal";
+import { Crust, type CrustPlugin, snapshotCommand } from "@crustjs/core/internal";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 import { didYouMeanPlugin } from "./did-you-mean.ts";
@@ -95,7 +95,7 @@ describe("built-in plugins", () => {
 			] as const)
 			.command("build", (cmd) => cmd.meta({ description: "Build the project" }))._node;
 
-		const output = renderHelp(command);
+		const output = renderHelp(snapshotCommand(command));
 		const plain = stripAnsi(output);
 
 		expect(output).toContain("\x1b[");
@@ -117,7 +117,7 @@ describe("built-in plugins", () => {
 			},
 		})._node;
 
-		const output = stripAnsi(renderHelp(command));
+		const output = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(output).toContain("--verbose, --no-verbose");
 		expect(output).not.toContain("--no-loud");
 	});
@@ -131,7 +131,7 @@ describe("built-in plugins", () => {
 			},
 		})._node;
 
-		const output = stripAnsi(renderHelp(command));
+		const output = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(output).toContain("-h, --help");
 		expect(output).not.toContain("--no-help");
 	});
@@ -161,7 +161,7 @@ describe("built-in plugins", () => {
 				},
 			] as const)._node;
 
-		const lines = stripAnsi(renderHelp(command)).split("\n");
+		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
 
 		const verboseLine = lines.find((line) => line.includes("--verbose"));
 		const portLine = lines.find((line) => line.includes("--port"));
@@ -180,7 +180,7 @@ describe("built-in plugins", () => {
 			},
 		})._node;
 
-		const output = stripAnsi(renderHelp(command));
+		const output = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(output).toContain("[default: Infinity]");
 		expect(output).not.toContain("[default: null]");
 	});
@@ -470,7 +470,7 @@ describe("built-in plugins", () => {
 				.run(() => {}),
 		)._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("COMMANDS:");
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
@@ -481,7 +481,7 @@ describe("built-in plugins", () => {
 			cmd.meta({ description: "Build the project" }).run(() => {}),
 		)._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("COMMANDS:");
 		expect(plain).toContain("build");
 		// No parens means no aliases were rendered.
@@ -502,7 +502,7 @@ describe("built-in plugins", () => {
 				cmd.meta({ description: "Build the project" }).run(() => {}),
 			)._node;
 
-		const lines = stripAnsi(renderHelp(command)).split("\n");
+		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
 		const issueLine = lines.find((line) => line.includes("issue (issues, i)"));
 		const buildLine = lines.find((line) => line.match(/^\s+build\s+Build the project$/));
 
@@ -528,7 +528,7 @@ describe("built-in plugins", () => {
 					.run(() => {}),
 			)._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("COMMANDS:");
 		expect(plain).toContain("build");
 		expect(plain).not.toContain("__complete");
@@ -542,7 +542,7 @@ describe("built-in plugins", () => {
 			)
 			.run(() => {})._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).not.toContain("COMMANDS:");
 		expect(plain).not.toContain("__complete");
 	});
@@ -555,7 +555,7 @@ describe("built-in plugins", () => {
 			cmd.meta({ hidden: true, description: "Internal" }).run(() => {}),
 		)._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("USAGE:");
 		expect(plain).not.toMatch(/USAGE:\s+app\s+<command>/);
 		expect(plain).not.toContain("COMMANDS:");
@@ -579,7 +579,7 @@ describe("built-in plugins", () => {
 					.run(() => {}),
 			)._node;
 
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
 		expect(plain).not.toContain("__complete");
@@ -616,7 +616,7 @@ describe("built-in plugins", () => {
 				},
 			})
 			.run(() => {})._node;
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("--target");
 		expect(plain).toContain("Build target");
 		expect(plain).toContain("[choices: browser, bun, node]");
@@ -635,7 +635,7 @@ describe("built-in plugins", () => {
 				},
 			])
 			.run(() => {})._node;
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		// The ARGS section heading is the marker the rest of the
 		// assertions hang off; without it the test would silently miss
 		// rendering bugs that drop the section entirely.
@@ -655,7 +655,7 @@ describe("built-in plugins", () => {
 				},
 			})
 			.run(() => {})._node;
-		const plain = stripAnsi(renderHelp(command));
+		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		// Both suffixes appear on the same flag line, in this order, so the
 		// `[default: ...]` reads before `[choices: ...]`.
 		const targetLine = plain.split("\n").find((l) => l.includes("--target"));

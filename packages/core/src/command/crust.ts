@@ -29,6 +29,7 @@ import type {
 } from "../types.ts";
 import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
+import { type CommandSnapshot, snapshotCommand } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -55,8 +56,8 @@ export interface CrustCommandContext<
 	ctx: Readonly<Ctx>;
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
-	/** The resolved command node that is being executed */
-	command: CommandNode;
+	/** Readonly, serializable snapshot of the resolved command */
+	command: CommandSnapshot;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -953,7 +954,7 @@ export class Crust<
 					flags: parsed.flags,
 					ctx: await buildContexts(resolvedNode.contexts),
 					rawArgs: parsed.rawArgs,
-					command: resolvedNode,
+					command: snapshotCommand(resolvedNode),
 				};
 
 				let runError: unknown;

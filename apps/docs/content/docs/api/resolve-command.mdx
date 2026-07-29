@@ -39,7 +39,7 @@ interface CommandNotFoundErrorDetails {
   input: string; // The unknown subcommand name
   available: string[]; // Canonical sibling names (aliases live on parentCommand.subCommands)
   commandPath: string[]; // Path to the parent command
-  parentCommand: CommandNode; // The parent command node
+  parentCommand: CommandSnapshot; // Serializable snapshot of the parent command
 }
 ```
 

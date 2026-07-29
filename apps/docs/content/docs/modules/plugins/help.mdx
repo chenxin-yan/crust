@@ -147,7 +147,7 @@ my-cli create plugin --help # Help for nested subcommand
 
 ```ts
 function help(): Extension;
-function renderHelp(command: CommandNode, path?: string[]): string;
+function renderHelp(command: CommandSnapshot, path?: readonly string[]): string;
 ```
 
 The help output includes the full command path:

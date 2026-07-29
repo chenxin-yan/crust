@@ -1,5 +1,6 @@
 import { CrustError } from "../errors.ts";
 import type { CommandNode } from "./node.ts";
+import { snapshotCommand } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandRoute — Output of resolveCommand
@@ -128,7 +129,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 			input: candidate,
 			available: Object.keys(subCommands),
 			commandPath: [...path],
-			parentCommand: current,
+			parentCommand: snapshotCommand(current),
 		});
 	}
 

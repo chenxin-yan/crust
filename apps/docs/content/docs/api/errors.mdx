@@ -73,7 +73,7 @@ throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${name}".`, {
   input: name,
   available: ["build", "dev"],
   commandPath: ["my-cli"],
-  parentCommand: rootCmd,
+  parentCommand: parentSnapshot, // CommandSnapshot of the parent command
 });
 ```
 

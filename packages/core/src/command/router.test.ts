@@ -5,6 +5,7 @@ import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
+import type { CommandSnapshot } from "./snapshot.ts";
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.
@@ -633,8 +634,11 @@ describe("resolveCommand — CommandNode tree", () => {
 					available: ["build", "dev"],
 					commandPath: ["crust"],
 				});
-				// parentCommand should be the CommandNode
-				expect((crustError.details as { parentCommand: CommandNode }).parentCommand).toBe(root);
+				// parentCommand is a serializable snapshot of the parent node
+				const parentCommand = (crustError.details as { parentCommand: CommandSnapshot })
+					.parentCommand;
+				expect(parentCommand.meta.name).toBe(root.meta.name);
+				expect(Object.keys(parentCommand.subCommands)).toEqual(Object.keys(root.subCommands));
 			}
 		});
 	});

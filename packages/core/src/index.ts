@@ -10,6 +10,8 @@ export type {
 } from "./api/extension.ts";
 export { extension } from "./api/extension.ts";
 
+// Command snapshots
+export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
 // Command context
 export type { CrustCommandContext } from "./command/crust.ts";
 export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";

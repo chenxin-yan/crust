@@ -252,7 +252,7 @@ When a user types an unknown subcommand on a container command (no `.run()`), Cr
   input: "buld",                       // What the user typed
   available: ["build", "dev"],          // Valid subcommands + aliases
   commandPath: ["my-cli"],              // Path to the parent
-  parentCommand: main,                  // The parent command node
+  parentCommand: mainSnapshot,          // CommandSnapshot of the parent command
 }
 ```
 

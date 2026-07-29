@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { createCommandNode } from "./command/node.ts";
+import { snapshotCommand } from "./command/snapshot.ts";
 import { CrustError } from "./errors.ts";
 
 describe("CrustError shape", () => {
@@ -25,7 +26,7 @@ describe("CrustError shape", () => {
 				input: "x",
 				available: [],
 				commandPath: [],
-				parentCommand: createCommandNode("cli"),
+				parentCommand: snapshotCommand(createCommandNode("cli")),
 			}).code,
 		).toBe("COMMAND_NOT_FOUND");
 	});
@@ -45,7 +46,7 @@ describe("CrustError shape", () => {
 	});
 
 	it("keeps command not found details strongly structured", () => {
-		const parentCommand = createCommandNode("cli");
+		const parentCommand = snapshotCommand(createCommandNode("cli"));
 		const error = CrustError.commandNotFound('Unknown command "buld".', {
 			input: "buld",
 			available: ["build"],

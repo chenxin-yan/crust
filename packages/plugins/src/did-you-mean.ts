@@ -1,5 +1,5 @@
-import { CrustError } from "@crustjs/core";
-import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
+import { type CommandSnapshot, CrustError } from "@crustjs/core";
+import type { CrustPlugin } from "@crustjs/core/internal";
 
 import { renderHelp } from "./help.ts";
 
@@ -51,7 +51,10 @@ function levenshtein(a: string, b: string): number {
  * shortcut is intentionally omitted: with aliases in the candidate set,
  * any 1–2 char alias would falsely match every typo as distance 0.
  */
-function findSuggestions(input: string, subCommands: Record<string, CommandNode>): string[] {
+function findSuggestions(
+	input: string,
+	subCommands: Readonly<Record<string, CommandSnapshot>>,
+): string[] {
 	const best = new Map<string, number>();
 
 	const score = (text: string): number | null => {

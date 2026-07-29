@@ -1926,7 +1926,7 @@ describe("Crust .execute()", () => {
 		expect(result).toBe("done");
 	});
 
-	it("command context contains the resolved command node", async () => {
+	it("command context contains a serializable snapshot of the resolved command", async () => {
 		let receivedCommand: unknown;
 
 		const app = new Crust("test").flags({ verbose: { type: "boolean" } }).run((ctx) => {
@@ -1936,7 +1936,16 @@ describe("Crust .execute()", () => {
 		await app.execute({ argv: [] });
 
 		expect(receivedCommand).toBeDefined();
-		expect((receivedCommand as { meta: { name: string } }).meta.name).toBe("test");
+		const snapshot = receivedCommand as {
+			meta: { name: string };
+			hasHandler: boolean;
+			flags: Record<string, unknown>;
+		};
+		expect(snapshot.meta.name).toBe("test");
+		expect(snapshot.hasHandler).toBe(true);
+		expect(Object.keys(snapshot.flags)).toContain("verbose");
+		// Serializable across boundaries — no functions anywhere in the snapshot
+		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 });
 

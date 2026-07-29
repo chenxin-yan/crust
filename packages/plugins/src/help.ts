@@ -1,12 +1,18 @@
-import type { ArgDef, CommandMeta, FlagDef, FlagsDef } from "@crustjs/core";
-import type { CommandNode, CrustPlugin } from "@crustjs/core/internal";
+import type {
+	ArgSnapshot,
+	CommandMeta,
+	CommandSnapshot,
+	FlagDef,
+	FlagSnapshot,
+} from "@crustjs/core";
+import { type CommandNode, type CrustPlugin, snapshotCommand } from "@crustjs/core/internal";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
 const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
-function formatArgToken(arg: ArgDef): string {
+function formatArgToken(arg: ArgSnapshot): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;
 	const token = arg.required ? `<${base}>` : `[${base}]`;
 	return arg.required ? yellow(token) : dim(yellow(token));
@@ -74,7 +80,11 @@ function formatDescriptionWithChoices(
 	return `${base} ${suffix}`;
 }
 
-function formatUsage(meta: CommandMeta, command: CommandNode, path: string[]): string {
+function formatUsage(
+	meta: Readonly<CommandMeta>,
+	command: CommandSnapshot,
+	path: string[],
+): string {
 	if (meta.usage) return green(meta.usage);
 
 	const usageParts: string[] = [green(path.join(" "))];
@@ -82,24 +92,22 @@ function formatUsage(meta: CommandMeta, command: CommandNode, path: string[]): s
 	const hasVisibleSubCommands = Object.values(command.subCommands).some(
 		(sub) => sub.meta.hidden !== true,
 	);
-	if (hasVisibleSubCommands && !command.run) {
+	if (hasVisibleSubCommands && !command.hasHandler) {
 		usageParts.push(cyan("<command>"));
 	}
 
-	if (command.args) {
-		for (const arg of command.args) {
-			usageParts.push(formatArgToken(arg));
-		}
+	for (const arg of command.args) {
+		usageParts.push(formatArgToken(arg));
 	}
 
-	if (Object.keys(command.effectiveFlags).length > 0) {
+	if (Object.keys(command.flags).length > 0) {
 		usageParts.push(cyan("[options]"));
 	}
 
 	return usageParts.join(" ");
 }
 
-function formatFlagName(name: string, def: FlagDef): string {
+function formatFlagName(name: string, def: FlagSnapshot): string {
 	const labels: string[] = [];
 
 	if (def.short) {
@@ -115,33 +123,28 @@ function formatFlagName(name: string, def: FlagDef): string {
 	return cyan(labels.join(", "));
 }
 
-function formatFlagsSection(flagsDef: FlagsDef): string[] {
-	if (Object.keys(flagsDef).length === 0) return [];
+function formatFlagsSection(flags: Readonly<Record<string, FlagSnapshot>>): string[] {
+	if (Object.keys(flags).length === 0) return [];
 
 	const lines = [bold(cyan("OPTIONS:"))];
-	for (const [name, def] of Object.entries(flagsDef)) {
+	for (const [name, def] of Object.entries(flags)) {
 		const rendered = `${padEnd(formatFlagName(name, def), FLAG_COLUMN_WIDTH, " ")} `;
-		// `def.choices` only exists on string-typed flags; number/boolean
-		// variants narrow to `undefined`, which `formatChoicesSuffix`
-		// renders as the empty string.
-		const choices = def.type === "string" ? def.choices : undefined;
 		lines.push(
-			`  ${rendered}${formatDescriptionWithChoices(def.description, def.default, choices)}`.trimEnd(),
+			`  ${rendered}${formatDescriptionWithChoices(def.description, def.default, def.choices)}`.trimEnd(),
 		);
 	}
 
 	return lines;
 }
 
-function formatArgsSection(command: CommandNode): string[] {
-	if (!command.args || command.args.length === 0) return [];
+function formatArgsSection(command: CommandSnapshot): string[] {
+	if (command.args.length === 0) return [];
 
 	const lines = [bold(cyan("ARGS:"))];
-	for (const arg of command.args as readonly ArgDef[]) {
+	for (const arg of command.args) {
 		const rendered = `${padEnd(formatArgToken(arg), ARG_COLUMN_WIDTH, " ")} `;
-		const choices = arg.type === "string" ? arg.choices : undefined;
 		lines.push(
-			`  ${rendered}${formatDescriptionWithChoices(arg.description, arg.default, choices)}`.trimEnd(),
+			`  ${rendered}${formatDescriptionWithChoices(arg.description, arg.default, arg.choices)}`.trimEnd(),
 		);
 	}
 
@@ -168,7 +171,7 @@ function formatCommandLabel(name: string, aliases: readonly string[] | undefined
 	return `${styledName} (${aliases.join(", ")})`;
 }
 
-function formatCommandsSection(command: CommandNode): string[] {
+function formatCommandsSection(command: CommandSnapshot): string[] {
 	// Filter out subcommands marked `meta.hidden: true`. Hidden
 	// commands remain resolvable by direct invocation — routing in
 	// `packages/core/src/command/router.ts` does not consult `meta.hidden`. Filtering
@@ -192,8 +195,8 @@ function formatCommandsSection(command: CommandNode): string[] {
 	return lines;
 }
 
-export function renderHelp(command: CommandNode, path?: string[]): string {
-	const resolvedPath = path ?? [command.meta.name];
+export function renderHelp(command: CommandSnapshot, path?: readonly string[]): string {
+	const resolvedPath = [...(path ?? [command.meta.name])];
 	const lines: string[] = [];
 	lines.push(
 		command.meta.description
@@ -216,7 +219,7 @@ export function renderHelp(command: CommandNode, path?: string[]): string {
 		lines.push(...argsSection);
 	}
 
-	const optionsSection = formatFlagsSection(command.effectiveFlags);
+	const optionsSection = formatFlagsSection(command.flags);
 	if (optionsSection.length > 0) {
 		lines.push("");
 		lines.push(...optionsSection);
@@ -264,7 +267,7 @@ export function helpPlugin(): CrustPlugin {
 				return;
 			}
 
-			console.log(renderHelp(routedCommand, [...context.route.commandPath]));
+			console.log(renderHelp(snapshotCommand(routedCommand), context.route.commandPath));
 		},
 	};
 }

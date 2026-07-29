@@ -65,7 +65,7 @@ interface CrustCommandContext<A, F> {
   args: InferArgs<A>; // Parsed positional arguments
   flags: InferFlags<F>; // Parsed flags (inherited + local merged)
   rawArgs: string[]; // Arguments after `--`
-  command: CommandNode; // The resolved command node
+  command: CommandSnapshot; // Readonly, serializable snapshot of the resolved command
 }
 ```
 

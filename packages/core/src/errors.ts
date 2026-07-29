@@ -1,4 +1,4 @@
-import type { CommandNode } from "./command/node.ts";
+import type { CommandSnapshot } from "./command/snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustErrorCode — Discriminated error codes
@@ -8,7 +8,7 @@ export interface CommandNotFoundErrorDetails {
 	input: string;
 	available: string[];
 	commandPath: string[];
-	parentCommand: CommandNode;
+	parentCommand: CommandSnapshot;
 }
 
 export interface ValidationErrorDetails {
