@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useFumadocsLoader } from "fumadocs-core/source/client";
 import browserCollections from "fumadocs-mdx:collections/browser";
+import { TypeTable } from "fumadocs-ui/components/type-table";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
@@ -84,6 +85,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
           <MDX
             components={{
               ...defaultMdxComponents,
+              TypeTable,
             }}
           />
         </DocsBody>
