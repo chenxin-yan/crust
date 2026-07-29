@@ -1,9 +1,15 @@
 ---
-title: Crust
-description: Chainable builder for defining CLI commands with full type inference.
+title: "Crust"
+description: Immutable command builder, programmatic invocation, and terminal execution.
 ---
 
-The `Crust` class is a chainable, immutable builder for defining CLI commands. Each method returns a new instance — the original builder is never mutated.
+import { Callout } from "fumadocs-ui/components/callout";
+
+```ts
+import { Crust } from "@crustjs/core";
+```
+
+Every definition method returns a new builder. The original builder is unchanged.
 
 ## Constructor
 
@@ -11,345 +17,245 @@ The `Crust` class is a chainable, immutable builder for defining CLI commands. E
 new Crust(name: string)
 ```
 
-Creates a new root or standalone command builder.
-
-| Parameter | Type     | Description                          |
-| --------- | -------- | ------------------------------------ |
-| `name`    | `string` | The command name (must be non-empty) |
-
-**Throws:** `CrustError("DEFINITION")` if `name` is empty or whitespace-only.
-
-### Example
+Creates a root or standalone command. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
 
 ```ts
-import { Crust } from "@crustjs/core";
-
-const app = new Crust("my-cli").meta({ description: "My CLI tool" }).run(() => {
-  console.log("Hello!");
-});
-
-await app.execute();
+const app = new Crust("my-cli");
 ```
 
-## Methods
-
-### `.meta(meta)`
-
-Set description and usage metadata.
+## `.meta(meta)`
 
 ```ts
-meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A>
+meta(meta: Omit<CommandMeta, "name">): Crust
 ```
 
-The command name is already set by the builder source (`new Crust(name)`, `.sub(name)`, or the child builder passed into `.command(name, cb)`), so only `description` and `usage` can be provided here.
+Sets `description`, `usage`, `aliases`, or `hidden`. The constructor, `.sub()`, or inline `.command()` supplies the name.
 
 ```ts
-new Crust("deploy").meta({
-  description: "Deploy the application",
-  usage: "deploy [options] <environment>",
+const app = new Crust("issue").meta({
+  description: "Manage issues",
+  aliases: ["issues", "i"],
 });
 ```
 
-### `.flags(defs)`
+Aliases must be non-empty, contain no whitespace, not start with `-`, and not collide with sibling names or aliases.
 
-Define local flags for this command.
-
-```ts
-flags<const F extends FlagsDef>(
-  defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-): Crust<Inherited, F, A>
-```
-
-Validates at both compile time and runtime that flag names/short/aliases don't start with `no-` and aliases don't collide.
-
-```ts
-new Crust("serve").flags({
-  port: { type: "number", default: 3000, short: "p" },
-  verbose: { type: "boolean", short: "v", inherit: true },
-});
-```
-
-Set `inherit: true` on a flag to make it available to subcommands. See [Flag Inheritance](/docs/guide/flags#flag-inheritance).
-
-### `.args(defs)`
-
-Define positional arguments for this command.
+## `.args(defs)`
 
 ```ts
 args<const NewA extends ArgsDef>(
   defs: NewA & ValidateVariadicArgs<NewA>,
-): Crust<Inherited, Local, NewA>
+): Crust
 ```
 
-Validates at compile time that only the last argument has `variadic: true`.
+Defines an ordered tuple of positional arguments. Only the last argument may be variadic.
 
 ```ts
-new Crust("copy").args([
-  { name: "source", type: "string", required: true },
-  { name: "files", type: "string", variadic: true },
-]);
+const app = new Crust("copy").args([
+  { name: "source", type: "path", required: true },
+  { name: "destinations", type: "path", variadic: true },
+] as const);
 ```
 
-### `.run(handler)`
-
-Set the main command handler.
+A definition can instead carry a Standard Schema. Schema-backed arguments receive the raw string, `undefined` when absent, or `string[]` when variadic. The schema owns coercion, defaults, requiredness, choices, and validation; do not mix it with `type`, `default`, `required`, `choices`, or `parse`.
 
 ```ts
-run(
-  handler: (ctx: CrustCommandContext<A, EffectiveFlags<Inherited, Local>>) => void | Promise<void>,
-): Crust<Inherited, Local, A>
+const app = new Crust("serve").args([
+  { name: "port", schema: z.coerce.number().int().min(1) },
+] as const);
 ```
 
-The handler receives a `CrustCommandContext` with `args` typed from `.args()` and `flags` typed as the merge of inherited and local flags.
+## `.flags(defs)`
 
 ```ts
-new Crust("greet")
-  .args([{ name: "name", type: "string", default: "world" }])
-  .flags({ shout: { type: "boolean", short: "s" } })
-  .run(({ args, flags }) => {
-    const msg = `Hello, ${args.name}!`;
-    console.log(flags.shout ? msg.toUpperCase() : msg);
+flags<const F extends FlagsDef>(
+  defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
+): Crust
+```
+
+Defines named flags. Flag keys omit the `--` prefix.
+
+```ts
+const app = new Crust("serve").flags({
+  verbose: { type: "boolean", short: "v", inherit: true },
+  port: { type: "number", default: 3000 },
+  include: { type: "string", multiple: true },
+});
+```
+
+`inherit: true` exposes a flag to descendant commands. Boolean flags support generated `--no-name` negation unless `noNegate: true` is set. Names and aliases beginning with `no-` are reserved.
+
+Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
+
+```ts
+const app = new Crust("serve").flags({
+  port: { type: "string", schema: z.coerce.number().int().min(1) },
+});
+```
+
+## `.provide(context)`
+
+```ts
+provide<const C extends ContextInstance>(context: C): Crust
+```
+
+Attaches a Context produced by invoking a `context()` factory. Contexts are inherited by descendants, constructed in registration order only for the resolved command path, and available through `ctx` in the Command Handler.
+
+```ts
+import { context, Crust } from "@crustjs/core";
+
+const database = context("database", (options: { url: string }) => ({
+  url: options.url,
+  async [Symbol.asyncDispose]() {},
+}));
+
+const app = new Crust("my-cli")
+  .provide(database({ url: "postgres://localhost/app" }))
+  .handle(({ ctx }) => {
+    ctx.database.url;
   });
 ```
 
-### `.preRun(handler)`
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name on one command path throws `DEFINITION`.
 
-Set the pre-run lifecycle hook. Called before `.run()`.
+## `.extend(...extensions)`
 
 ```ts
-preRun(
-  handler: (ctx: CrustCommandContext<A, EffectiveFlags<Inherited, Local>>) => void | Promise<void>,
-): Crust<Inherited, Local, A>
+extend(...extensions: readonly Extension[]): Crust
 ```
 
-### `.postRun(handler)`
-
-Set the post-run lifecycle hook. Called after `.run()`, even if it throws.
+Registers application-wide Extensions on the root builder.
 
 ```ts
-postRun(
-  handler: (ctx: CrustCommandContext<A, EffectiveFlags<Inherited, Local>>) => void | Promise<void>,
-): Crust<Inherited, Local, A>
+import { help, version } from "@crustjs/extensions";
+
+const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 ```
 
-See [Lifecycle & Hooks](/docs/guide/lifecycle) for details on execution order and error handling.
+Calling `.extend()` on a child builder, or attaching a standalone builder that already carries Extensions as a subcommand, throws `DEFINITION`. Extension-owned command or flag name and alias collisions also throw `DEFINITION` when the application is prepared.
 
-### `.use(plugin)`
+See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
-Register a plugin on this command.
+## `.handle(handler)`
 
 ```ts
-use(plugin: CrustPlugin): Crust<Inherited, Local, A>
+handle(
+  handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+): Crust
 ```
 
-Plugins are collected from the entire command tree during `.execute()`. Setup hooks run sequentially, and middleware hooks form a chain.
+Defines the Command Handler. It runs after routing, parsing, validation, Extension interception, and Context construction.
 
 ```ts
-import { helpPlugin, versionPlugin } from "@crustjs/plugins";
-
-new Crust("my-cli").use(versionPlugin("1.0.0")).use(helpPlugin());
+const app = new Crust("greet")
+  .args([{ name: "name", type: "string", required: true }] as const)
+  .handle(({ args, flags, ctx, rawArgs, command, stdout, stderr }) => {
+    stdout(`Hello, ${args.name}!`);
+  });
 ```
 
-See [Plugins](/docs/guide/plugins) for more.
+The context contains typed `args`, typed effective `flags`, typed Context values in `ctx`, `rawArgs` after `--`, the resolved `CommandSnapshot`, and injectable `stdout(text)` and `stderr(text)` callbacks.
 
-### `.command(name, cb)`
-
-Register a subcommand via inline callback.
+## `.command(name, callback)`
 
 ```ts
-command<N extends string>(
-  name: N,
-  cb: (cmd: Crust<EffectiveFlags<Inherited, Local>, {}, []>) => Crust<any, any, any>,
-): Crust<Inherited, Local, A>
+command(
+  name: string,
+  callback: (command: Crust) => Crust,
+): Crust
 ```
 
-Use this for inline subcommands. The callback receives a fresh builder pre-typed with the parent's inheritable flags:
+Creates and registers a child command. The callback receives a builder typed with the parent's `inherit: true` flags and Contexts.
 
 ```ts
-new Crust("my-cli")
+const app = new Crust("my-cli")
   .flags({ verbose: { type: "boolean", inherit: true } })
-  .command("deploy", (cmd) =>
-    cmd.flags({ env: { type: "string", required: true } }).run(({ flags }) => {
-      flags.verbose; // boolean | undefined (inherited)
-      flags.env; // string (local)
+  .command("deploy", (command) =>
+    command.flags({ environment: { type: "string", required: true } }).handle(({ flags }) => {
+      flags.verbose;
+      flags.environment;
     }),
   );
 ```
 
-**Throws:** `CrustError("DEFINITION")` if name is empty or already registered.
-
-### `.command(builder)`
-
-Register a pre-built subcommand builder.
+## `.command(builder)`
 
 ```ts
-command(builder: Crust<any, any, any>): Crust<Inherited, Local, A>
+command(builder: Crust): Crust
 ```
 
-Use this when the subcommand is built elsewhere. It accepts any `Crust` builder:
+Registers a pre-built command using its existing name. A standalone `new Crust(name)` builder does not infer parent flags. Use `.sub(name)` when a split-file child needs typed inherited flags.
 
-- `app.sub("deploy")` when the subcommand should inherit the parent's `inherit: true` flags
-- `new Crust("deploy")` when the subcommand is fully standalone
-
-Use [`.sub()`](#subname) for split files and parent-aware flag inheritance.
-
-**Throws:** `CrustError("DEFINITION")` if the builder's name is empty or already registered.
+## `.sub(name)`
 
 ```ts
-const app = new Crust("my-cli").flags({
+sub<N extends string>(name: N): Crust
+```
+
+Creates an unattached child builder typed with the parent's effective flags and Contexts. Register it with `.command(builder)`.
+
+```ts title="app.ts"
+export const app = new Crust("my-cli").flags({
   verbose: { type: "boolean", inherit: true },
 });
-
-const standalone = new Crust("doctor").run(() => {
-  console.log("doctor");
-});
-
-const inherited = app.sub("deploy").run(({ flags }) => {
-  flags.verbose; // boolean | undefined
-});
-
-await app.command(standalone).command(inherited).execute();
 ```
 
-### `.sub(name)`
+```ts title="commands/deploy.ts"
+import { app } from "../app.ts";
 
-Create a subcommand builder pre-typed with this command's inheritable flags.
+export const deploy = app.sub("deploy").handle(({ flags }) => {
+  flags.verbose;
+});
+```
+
+```ts title="cli.ts"
+import { app } from "./app.ts";
+import { deploy } from "./commands/deploy.ts";
+
+await app.command(deploy).execute();
+```
+
+See [Split command files](/docs/guide/split-files) for the import-order rule.
+
+## `.run(argv, io?)`
 
 ```ts
-sub<N extends string>(name: N): Crust<EffectiveFlags<Inherited, Local>, {}, []>
+run(
+  argv: readonly string[],
+  io?: {
+    stdout?: (text: string) => void;
+    stderr?: (text: string) => void;
+  },
+): Promise<void>
 ```
 
-Use this when a subcommand lives in another file or should inherit parent flags. It is the factory method for the **file-splitting pattern**.
+Invokes an application programmatically. `argv` is required and does not include the executable name.
 
 ```ts
-// shared.ts — root command with shared flags
-export const app = new Crust("my-cli").flags({ verbose: { type: "boolean", inherit: true } });
-
-// commands/deploy.ts — subcommand in a separate file
-export const deployCmd = app
-  .sub("deploy")
-  .flags({ env: { type: "string", required: true } })
-  .run(({ flags }) => {
-    flags.verbose; // boolean | undefined — inherited and typed!
-    flags.env; // string
-  });
-
-// cli.ts — register and execute
-await app.command(deployCmd).execute();
+const stdout: string[] = [];
+await app.run(["Ada"], {
+  stdout: (text) => stdout.push(text),
+  stderr: (text) => stdout.push(text),
+});
 ```
 
-**Throws:** `CrustError("DEFINITION")` if name is empty or whitespace-only.
+`run()` resolves after successful cleanup. It does not render errors, run Extension `handleError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Handler, and cancellation failures are thrown unchanged.
 
-### `.execute(options?)`
-
-Entry point for CLI execution. Parses `process.argv`, resolves subcommands, runs plugins and middleware, and executes the matched command handler.
+## `.execute(options?)`
 
 ```ts
 execute(options?: { argv?: string[] }): Promise<void>
 ```
 
-| Option | Type       | Default                 | Description                                  |
-| ------ | ---------- | ----------------------- | -------------------------------------------- |
-| `argv` | `string[]` | `process.argv.slice(2)` | Override the argv array (useful for testing) |
-
-**Execution flow:**
-
-```
-1. Collect all plugins from the command tree
-2. Run plugin setup() hooks (in order)
-3. Freeze the entire command tree
-4. Resolve subcommand (resolveCommand)
-5. Parse args/flags (parseArgs)
-6. Run plugin middleware chain (in order)
-   └─ Terminal:
-      ├─ preRun()
-      ├─ run()
-      └─ postRun()  (always runs, even on error)
-```
-
-**Error handling:** `.execute()` catches all errors, prints them to stderr as `Error: <message>`, and sets `process.exitCode = 1`. It never throws.
+Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` is useful in tests.
 
 ```ts
 await app.execute();
-
-// With custom argv (for testing)
-await app.execute({ argv: ["deploy", "--env", "production"] });
 ```
 
-### `.prepareCommandTree(options?)`
+`execute()` renders a failure once through the Extension `handleError` chain ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation is silent and sets exit code `130`.
 
-Builds a **frozen, validated copy** of the command tree after plugin `setup()` hooks, without running middleware or command handlers. The original builder is **not** mutated.
-
-Use this for documentation generators such as [`@crustjs/man`](/docs/modules/man).
-
-```ts
-prepareCommandTree(options?: {
-  argv?: readonly string[];
-}): Promise<{ root: CommandNode; warnings: readonly string[] }>
-```
-
-| Option | Type                | Default | Description                                                      |
-| ------ | ------------------- | ------- | ---------------------------------------------------------------- |
-| `argv` | `readonly string[]` | `[]`    | Synthetic argv passed to plugin `setup()` (same as `.execute()`) |
-
-**Throws** on the same validation failures as build-time tree validation (e.g. invalid flag definitions). Unlike `.execute()`, errors are thrown instead of printing to stderr.
-
-## Compile-Time Checks
-
-The `.flags()` and `.args()` methods perform three compile-time validations with per-item error targeting:
-
-1. **`ValidateVariadicArgs<A>`** — Ensures only the last positional argument has `variadic: true`
-2. **`ValidateFlagAliases<F>`** — Ensures no flag alias collides with another flag name or alias
-3. **`ValidateNoPrefixedFlags<F>`** — Ensures flag names and aliases do not start with `"no-"` (reserved for boolean negation)
-
-On error, these types add branded properties (`FIX_VARIADIC_POSITION`, `FIX_ALIAS_COLLISION`, or `FIX_NO_PREFIX`) to the specific offending arg/flag so the TypeScript squiggle appears on the exact problematic item.
-
-## Utility Functions
-
-### `createCommandNode(name)`
-
-Create a fresh `CommandNode` with default values. Primarily used by downstream packages.
-
-```ts
-function createCommandNode(name: string): CommandNode;
-```
-
-### `computeEffectiveFlags(inherited, local)`
-
-Merge inherited flags (filtered for `inherit: true`) with local flags. Local flags override inherited flags with the same key.
-
-```ts
-function computeEffectiveFlags(inherited: FlagsDef, local: FlagsDef): FlagsDef;
-```
-
-## Constants
-
-### `VALIDATION_MODE_ENV`
-
-Env var name (`"CRUST_INTERNAL_VALIDATE_ONLY"`) used by `crust build` to trigger build-time validation mode. When set without the force-exit companion below, `.execute()` runs the validation pipeline, surfaces errors via stderr and `process.exitCode`, then returns to the caller.
-
-```ts
-const VALIDATION_MODE_ENV: string;
-```
-
-### `VALIDATION_FORCE_EXIT_ENV`
-
-Companion env (`"CRUST_INTERNAL_VALIDATE_FORCE_EXIT"`) that makes validation mode call `process.exit(process.exitCode ?? 0)` at the end of the validation branch. `crust build` sets it only in its validation subprocess, so entrypoint code after `await app.execute()` is skipped during the pre-compile check; in-process callers (tests, embedders) leave it unset and `.execute()` returns normally.
-
-```ts
-const VALIDATION_FORCE_EXIT_ENV: string;
-```
-
-For user-facing env behavior, see [Environment Variables](/docs/guide/environment) and [Building & Distribution](/docs/guide/build).
-
-## Generic Parameters
-
-The `Crust` class has three generic parameters:
-
-| Parameter   | Description                                                                     |
-| ----------- | ------------------------------------------------------------------------------- |
-| `Inherited` | Flags inherited from the parent command (populated by `.command()` or `.sub()`) |
-| `Local`     | Flags defined on this command via `.flags()`                                    |
-| `A`         | Positional argument definitions from `.args()`                                  |
-
-The effective flags available in handlers are `EffectiveFlags<Inherited, Local>` — inherited flags (filtered for `inherit: true`) merged with local flags, where local flags override inherited flags with the same key.
+<Callout type="warn">
+  Use `.handle(handler)` to define behavior. `.run(argv, io)` is only programmatic invocation;
+  `.execute()` is the terminal entry point.
+</Callout>

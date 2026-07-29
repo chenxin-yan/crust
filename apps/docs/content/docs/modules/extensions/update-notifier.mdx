@@ -1,0 +1,111 @@
+---
+title: Update Notifier
+description: Check npm for a newer stable version after a command succeeds.
+---
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { updateNotifier } from "@crustjs/extensions";
+import pkg from "../package.json";
+
+const app = new Crust("my-cli")
+  .extend(
+    updateNotifier({
+      packageName: pkg.name,
+      currentVersion: pkg.version,
+    }),
+  )
+  .handle(({ stdout }) => stdout("Done"));
+
+await app.execute();
+```
+
+## API
+
+```ts
+interface UpdateNotifierOptions {
+  currentVersion: string;
+  packageName: string;
+  timeoutMs?: number;
+  registryUrl?: string;
+  packageManager?: UpdateNotifierPackageManager | "auto";
+  installScope?: UpdateNotifierInstallScope | "auto";
+  updateCommand?:
+    | string
+    | ((
+        packageName: string,
+        packageManager: UpdateNotifierPackageManager,
+        installScope: UpdateNotifierInstallScope,
+      ) => string);
+  cache?: UpdateNotifierCacheConfig;
+}
+
+function updateNotifier(options: UpdateNotifierOptions): Extension;
+```
+
+| Option           | Default                        | Description                                          |
+| ---------------- | ------------------------------ | ---------------------------------------------------- |
+| `currentVersion` | Required                       | Installed version                                    |
+| `packageName`    | Required                       | npm package to query                                 |
+| `timeoutMs`      | `5_000`                        | Registry request timeout in milliseconds             |
+| `registryUrl`    | `"https://registry.npmjs.org"` | Registry base URL                                    |
+| `packageManager` | `"auto"`                       | Package manager used in the suggested update command |
+| `installScope`   | `"auto"`                       | Local or global installation scope                   |
+| `updateCommand`  | Inferred                       | Replacement update command or command factory        |
+| `cache`          | None                           | Cross-run check and notification persistence         |
+
+The `intercept` hook first awaits the Command Handler, then checks for an update. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. The notice is written to process stderr. Version comparison uses stable `major.minor.patch` values and ignores prerelease/build suffixes.
+
+Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed.
+
+## Cache adapter
+
+```ts
+interface UpdateNotifierCacheConfig {
+  adapter: UpdateNotifierCacheAdapter;
+  intervalMs?: number; // default 86_400_000 (24 hours)
+}
+
+interface UpdateNotifierCacheAdapter {
+  read(): Promise<UpdateNotifierState | null | undefined>;
+  write(state: UpdateNotifierState): Promise<void>;
+}
+
+interface UpdateNotifierState {
+  lastCheckedAt: number;
+  latestVersion?: string;
+  lastNotifiedVersion?: string;
+}
+```
+
+The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierInstallScope`, and `UpdateNotifierPackageManager` alongside `UpdateNotifierOptions`.
+
+```ts
+import { createStore, stateDir } from "@crustjs/store";
+import { updateNotifier, type UpdateNotifierCacheAdapter } from "@crustjs/extensions";
+
+const store = createStore({
+  dirPath: stateDir("my-cli"),
+  name: "update-notifier",
+  fields: {
+    lastCheckedAt: { type: "number", default: 0 },
+    latestVersion: { type: "string" },
+    lastNotifiedVersion: { type: "string" },
+  },
+});
+
+const adapter: UpdateNotifierCacheAdapter = {
+  read: () => store.read(),
+  write: (state) => store.write(state),
+};
+
+const notifier = updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+  packageManager: "bun",
+  installScope: "global",
+  cache: { adapter },
+});
+```

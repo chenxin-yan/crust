@@ -1,28 +1,28 @@
 ---
 title: "Overview"
-description: Crust's composable module ecosystem — use the unified bundle or pick individual modules.
+description: Crust packages for authoring, distributing, and supporting CLI applications.
 ---
 
-Crust ships as independent modules so you only install what you need. For most projects, install [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins) as runtime dependencies, plus [`@crustjs/crust`](/docs/modules/crust) as a dev dependency for CLI build tooling.
+Install [`@crustjs/core`](/docs/modules/core) and the capabilities your application needs. The framework spine packages share one lockstep version.
 
-## Available Modules
+## Framework spine
 
-| Module                                        | Description                                                        |
-| --------------------------------------------- | ------------------------------------------------------------------ |
-| [`@crustjs/core`](/docs/modules/core)         | Command definition, parsing, routing, contexts, extensions, errors |
-| [`@crustjs/plugins`](/docs/modules/plugins)   | Official extensions — help, version, did-you-mean                  |
-| [`@crustjs/crust`](/docs/modules/crust)       | CLI tooling — build and distribute standalone executables          |
-| [`@crustjs/man`](/docs/modules/man)           | Optional — generate `mdoc(7)` man pages from your command tree     |
-| [`@crustjs/progress`](/docs/modules/progress) | Non-interactive progress indicators for long-running tasks         |
-| [`@crustjs/style`](/docs/modules/style)       | Terminal styling, layout utilities, and markdown theme             |
-| [`@crustjs/create`](/docs/modules/create)     | Headless scaffolding engine for building create-xx tools           |
-| [`@crustjs/prompts`](/docs/modules/prompts)   | Interactive terminal prompts                                       |
-| [`@crustjs/store`](/docs/modules/store)       | Type-safe config persistence for CLI apps                          |
-| [`@crustjs/skills`](/docs/modules/skills)     | Agent skill generation from Crust command definitions              |
-| [`@crustjs/utils`](/docs/modules/utils)       | Shared low-level utilities (pre-stable)                            |
+| Module                                                       | Description                                                                           |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`@crustjs/core`](/docs/modules/core)                        | Command definitions, Contexts, Extensions, execution, and errors                      |
+| [`@crustjs/extensions`](/docs/modules/extensions)            | Official Extensions: help, version, completion, typo presentation, color, and updates |
+| [`@crustjs/crust`](/docs/modules/crust)                      | Build and distribution CLI                                                            |
+| [`create-crust`](https://www.npmjs.com/package/create-crust) | Generate the minimal Crust starter                                                    |
+| [`@crustjs/man`](/docs/modules/man)                          | Generate mdoc(7) manual pages from Command Snapshots                                  |
+| [`@crustjs/skills`](/docs/modules/skills)                    | Generate agent skills from Command Snapshots                                          |
 
-## Coming Soon
+## Standalone libraries
 
-| [`@crustjs/test`](/docs/modules/test) | Helpers for testing CLI applications |
-| [`@crustjs/render`](/docs/modules/render) | Render markdown, HTML, and more in the terminal |
-| [`@crustjs/log`](/docs/modules/log) | Structured logging for CLI apps |
+| Module                                        | Description                                     |
+| --------------------------------------------- | ----------------------------------------------- |
+| [`@crustjs/create`](/docs/modules/create)     | Headless scaffolding engine for create-\* tools |
+| [`@crustjs/progress`](/docs/modules/progress) | Non-interactive progress indicators             |
+| [`@crustjs/prompts`](/docs/modules/prompts)   | Interactive terminal prompts                    |
+| [`@crustjs/store`](/docs/modules/store)       | Typed configuration persistence                 |
+| [`@crustjs/style`](/docs/modules/style)       | Terminal styling and layout utilities           |
+| [`@crustjs/utils`](/docs/modules/utils)       | Low-level shared utilities                      |

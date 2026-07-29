@@ -1,130 +1,59 @@
 ---
-title: Lifecycle & Hooks
-description: Understand the command execution lifecycle and preRun, run, postRun hooks.
+title: Execution Model
+description: Understand preparation, invocation, cleanup, and terminal error presentation.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+## Two invocation modes
 
-Every command supports three lifecycle hooks: `.preRun()`, `.run()`, and `.postRun()`. These let you add initialization and cleanup logic around your main command handler.
-
-## Lifecycle Hooks
+Use `execute()` at a CLI entrypoint:
 
 ```ts
-import { Crust } from "@crustjs/core";
-
-const cmd = new Crust("deploy")
-  .preRun(({ args, flags }) => {
-    console.log("Validating configuration...");
-  })
-  .run(({ args, flags }) => {
-    console.log("Deploying...");
-  })
-  .postRun(({ args, flags }) => {
-    console.log("Cleaning up...");
-  });
+await app.execute();
 ```
 
-### Execution Order
+It reads `process.argv.slice(2)` by default, presents failures through Extension `handleError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and resolves.
 
-```
-preRun  ->  run  ->  postRun
-```
-
-1. **`.preRun()`** — Called before `run()`. Use for initialization, validation, or setup
-2. **`.run()`** — The main command handler
-3. **`.postRun()`** — Called after `run()`, **even if `run()` throws**. Use for cleanup or teardown
-
-<Callout>
-  `postRun` runs in a `finally` block, so it executes even when `run()` throws an error. The error
-  is still re-thrown after `postRun` completes.
-</Callout>
-
-### Async Support
-
-All hooks support async functions:
+Use `run()` for programmatic invocation:
 
 ```ts
-new Crust("migrate")
-  .preRun(async () => {
-    await checkDatabaseConnection();
-  })
-  .run(async () => {
-    await runMigrations();
-  })
-  .postRun(async () => {
-    await closeDatabaseConnection();
-  });
+await app.run(["deploy", "--dry-run"], {
+  stdout: (line) => output.push(line),
+  stderr: (line) => diagnostics.push(line),
+});
 ```
 
-### Hook Context
+It requires explicit argv, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`.
 
-Each hook receives the same command context object:
+## Successful invocation order
 
-```ts
-interface CrustCommandContext<A, F> {
-  args: InferArgs<A>; // Parsed positional arguments
-  flags: InferFlags<F>; // Parsed flags (inherited + local merged)
-  rawArgs: string[]; // Arguments after `--`
-  command: CommandSnapshot; // Readonly, serializable snapshot of the resolved command
-  stdout: (text: string) => void; // Write a line of standard output
-  stderr: (text: string) => void; // Write a line of diagnostic output
-}
-```
+1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions (duplicate Context names are rejected earlier, at definition time).
+2. **Route** — resolve the command path.
+3. **Parse syntax** — consume positional and flag tokens.
+4. **Intercept** — run Extension intercepts in `.extend()` order. An intercept can stop here by not calling `next()`.
+5. **Validate structure** — enforce required values, choices, and other core rules.
+6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
+7. **Construct Contexts** — create Context values for the resolved path in registration order.
+8. **Run the Command Handler**.
+9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
 
-All hooks see the same parsed input — there's no data transformation between hooks.
+Code after `await next()` in an intercept runs while the chain unwinds, after the Command Handler and Context disposal beneath it.
 
-## Full Execution Lifecycle
+## Error flow
 
-When you call `.execute()`, Crust runs through four phases:
+Definition, routing, and parse failures occur before intercepts. Validation, schema, Context, and Command Handler failures can unwind through intercepts that called `next()`.
 
-### 1. Initialization
+With `run()`, the original value is thrown to the caller. Handler and Context failures are never wrapped in `CrustError`.
 
-Crust materializes a fresh runtime tree from the source builder, applies extensions, and prepares typed context providers. The source builder is not mutated or frozen.
+With `execute()`, Crust first establishes a nonzero status, then invokes Extension `handleError` hooks in `.extend()` order. A hook can render and return or call `next()`; Core's default renderer terminates the chain.
 
-### 2. Routing & Parsing
+A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets status `130` and renders nothing. `run()` still throws it.
 
-`resolveCommand()` walks `argv` against the subcommand tree, then the custom parser parses and coerces args and flags for the matched command. Extensions such as `help()` can intercept before required-value errors are surfaced.
+## Replacing setup and cleanup hooks
 
-### 3. Extensions & Hooks
+The 0.1 `.preRun()` and `.postRun()` APIs are removed:
 
-Extensions can wrap execution, with command hooks at the center:
+- use a Context for command-specific setup and native disposal
+- use Extension `intercept` for app-wide behavior around invocation
+- keep ordinary local setup in the Command Handler when it is not reusable
 
-```
-extension A  →  extension B  →  preRun → run → postRun
-```
-
-- `preRun()` throws → `run()` is skipped, `postRun()` still runs
-- `postRun()` **always runs**, even on error. If both `run` and `postRun` throw, the original error is preserved
-
-### 4. Error Handling
-
-`.execute()` catches all errors — they never propagate to the caller. Errors are printed to stderr and `process.exitCode` is set to `1`.
-
-## Practical Example
-
-```ts
-const deploy = new Crust("deploy")
-  .meta({ description: "Deploy to production" })
-  .flags({
-    env: { type: "string", required: true, description: "Target environment" },
-    dryRun: { type: "boolean", description: "Simulate without deploying", short: "d" },
-  })
-  .preRun(async ({ flags }) => {
-    // Validate before running
-    if (flags.env === "production" && flags.dryRun) {
-      console.log("Dry run for production deployment");
-    }
-  })
-  .run(async ({ flags }) => {
-    if (flags.dryRun) {
-      console.log(`[DRY RUN] Would deploy to ${flags.env}`);
-      return;
-    }
-    console.log(`Deploying to ${flags.env}...`);
-    // deployment logic
-  })
-  .postRun(async ({ flags }) => {
-    // Always runs — send notification regardless of success/failure
-    console.log(`Deployment to ${flags.env} finished`);
-  });
-```
+This keeps dependency construction lazy and guarantees reverse-order cleanup.

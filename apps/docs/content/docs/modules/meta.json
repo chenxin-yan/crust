@@ -3,17 +3,14 @@
   "icon": "Blocks",
   "pages": [
     "core",
-    "plugins",
+    "extensions",
     "crust",
     "create",
     "progress",
     "prompts",
     "style",
-    "test",
-    "render",
     "store",
     "skills",
-    "log",
     "man",
     "utils"
   ]

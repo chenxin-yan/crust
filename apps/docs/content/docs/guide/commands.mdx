@@ -1,111 +1,76 @@
 ---
 title: Commands
-description: Define CLI commands with full type inference using the Crust builder.
+description: Define immutable, typed commands and Command Handlers.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Commands are the building blocks of every Crust CLI. You define them with the `Crust` builder, and Crust handles parsing, validation, routing, and execution.
-
-## Defining a Command
-
-Use `new Crust(name)` to create an app command:
+A command combines metadata, inputs, dependencies, and one Command Handler.
 
 ```ts
 import { Crust } from "@crustjs/core";
 
-const serve = new Crust("serve").meta({ description: "Start the development server" }).run(() => {
-  console.log("Server started!");
-});
-```
-
-The command name is set via the constructor. Use `.meta()` to set `description` and `usage` — the `description` is optional but recommended as it appears in help output.
-
-## Command Metadata
-
-Set metadata with `.meta()`:
-
-```ts
-new Crust("serve").meta({
-  description: "Start the dev server", // Shown in help text
-  usage: "serve [port] [options]", // Overrides auto-generated usage
-});
-```
-
-See the [Crust builder reference](/docs/api/crust#metameta) for the full list of metadata fields.
-
-## The `.run()` Handler
-
-The `.run()` method sets the command's main logic. It receives a `CrustCommandContext` with parsed `args`, `flags`, and `rawArgs`:
-
-```ts
-new Crust("greet")
+const app = new Crust("greet")
+  .meta({ description: "Print a greeting", aliases: ["hello"] })
   .args([{ name: "name", type: "string", required: true }])
   .flags({ loud: { type: "boolean", short: "l" } })
-  .run(({ args, flags, rawArgs }) => {
-    // args.name is typed as `string` (required)
-    // flags.loud is typed as `boolean | undefined`
-    // rawArgs contains everything after `--`
-    console.log(`Hello, ${args.name}!`);
+  .handle(({ args, flags, stdout }) => {
+    const text = `Hello, ${args.name}!`;
+    stdout(flags.loud ? text.toUpperCase() : text);
   });
+
+await app.execute();
 ```
 
-The handler can be `async`:
+## Immutable builders
+
+Every builder method returns a new `Crust` value. Keep the returned value:
 
 ```ts
-new Crust("fetch").run(async () => {
-  const data = await fetch("https://api.example.com/data");
-  console.log(await data.json());
+const base = new Crust("app");
+const described = base.meta({ description: "My app" });
+```
+
+This permits safe composition and preserves input inference through the chain.
+
+## Command Handler context
+
+`.handle()` receives:
+
+- `args` and `flags`: validated, transformed inputs
+- `ctx`: constructed [Contexts](/docs/guide/contexts)
+- `rawArgs`: tokens after `--`
+- `command`: the resolved readonly `CommandSnapshot`
+- `stdout(text)` and `stderr(text)`: injectable line writers
+
+```ts
+const command = new Crust("inspect").handle(({ command, stdout }) => {
+  stdout(command.meta.name);
 });
 ```
 
-## Running Commands
+Throw ordinary errors from Command Handlers. Crust does not wrap them.
 
-Call `.execute()` to run the CLI. It parses `process.argv`, resolves subcommands, loads extensions, and executes the matched handler:
+## Invocation
+
+Use `execute()` at the terminal boundary:
 
 ```ts
-import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/plugins";
+await app.execute();
+```
 
-const main = new Crust("my-cli").extend(help()).run(() => {
-  console.log("Running!");
+Use `run()` from tests or another program:
+
+```ts
+await app.run(["Ada"], {
+  stdout: (line) => output.push(line),
+  stderr: (line) => diagnostics.push(line),
 });
-
-await main.execute();
 ```
 
-`.execute()` catches all errors, prints them to stderr, and sets `process.exitCode = 1`. It never throws. For testing, pass a custom `argv`:
+`run()` throws the original error. `execute()` presents errors through the Extension `handleError` chain, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
 
-```ts
-await main.execute({ argv: ["--help"] });
-```
-
-## Type Inference
-
-Crust infers the types of your `args` and `flags` from their definitions. No manual type annotations needed:
-
-```ts
-const cmd = new Crust("example")
-  .args([
-    { name: "port", type: "number", default: 3000 },
-    { name: "host", type: "string", required: true },
-  ])
-  .flags({
-    verbose: { type: "boolean" },
-    output: { type: "string", default: "dist" },
-    count: { type: "number", required: true },
-  })
-  .run(({ args, flags }) => {
-    args.port; // number (has default -> guaranteed)
-    args.host; // string (required -> guaranteed)
-    flags.verbose; // boolean | undefined
-    flags.output; // string (has default -> guaranteed)
-    flags.count; // number (required -> guaranteed)
-  });
-```
-
-## Next Steps
-
-- [Arguments](/docs/guide/arguments) — positional argument definitions
-- [Flags](/docs/guide/flags) — named flag definitions and flag inheritance
-- [Subcommands](/docs/guide/subcommands) — nested command trees
+<Callout type="info">
+  A command without a Command Handler is valid when it owns subcommands. Invoking it directly
+  resolves without output; register the `help()` Extension to present the container's help instead.
+</Callout>

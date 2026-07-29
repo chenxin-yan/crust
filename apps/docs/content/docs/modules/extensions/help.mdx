@@ -1,0 +1,42 @@
+---
+title: Help
+description: Add inherited help output to every command.
+---
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { help } from "@crustjs/extensions";
+
+const app = new Crust("my-cli")
+  .meta({ description: "My CLI" })
+  .extend(help())
+  .handle(() => {});
+
+await app.execute();
+```
+
+```sh
+my-cli --help
+my-cli -h
+my-cli deploy --help
+```
+
+```ts
+function help(): Extension;
+```
+
+`help()` owns an inherited boolean `help` flag with short name `h`. Its `intercept` hook writes help through `ctx.stdout` and short-circuits the Command Handler when `--help` is present. A container command with no Command Handler also displays help.
+
+The renderer includes usage, visible subcommands, positional arguments, effective flags, aliases, defaults, and choices. Commands with `meta.hidden: true` stay routable but are omitted from listings.
+
+## `renderHelp`
+
+```ts
+import { renderHelp } from "@crustjs/extensions";
+
+function renderHelp(command: CommandSnapshot, path?: readonly string[]): string;
+```
+
+Renders help from a readonly Command Snapshot without executing an application. `path` defaults to `[command.meta.name]`.

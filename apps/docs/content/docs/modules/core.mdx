@@ -1,9 +1,9 @@
 ---
 title: "Core"
-description: Core framework library — command definition, parsing, routing, contexts, extensions, and errors.
+description: Supported command-authoring runtime for Crust applications and Extensions.
 ---
 
-The core package provides everything needed to define and run CLI commands. It keeps runtime dependencies minimal and does not depend on schema libraries or Effect.
+`@crustjs/core` defines commands, routes and validates argv, constructs Contexts, applies Extensions, and runs Command Handlers.
 
 ## Install
 
@@ -11,70 +11,91 @@ The core package provides everything needed to define and run CLI commands. It k
 bun add @crustjs/core
 ```
 
-## Exports
-
-### Builders
-
-| Export                     | Description                                                |
-| -------------------------- | ---------------------------------------------------------- |
-| [`Crust`](/docs/api/crust) | Chainable builder for CLI apps and commands with inference |
-
-### Functions
-
-| Function               | Description                                             |
-| ---------------------- | ------------------------------------------------------- |
-| `context(name, setup)` | Define typed command dependencies for `.context()`      |
-| `extension(name)`      | Author CLI capabilities for loading through `.extend()` |
-
-### Constants
-
-| Constant                    | Description                                                                                                       |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_MODE_ENV`       | Environment variable name for build-time validation mode                                                          |
-| `VALIDATION_FORCE_EXIT_ENV` | Companion env var that makes validation mode call `process.exit()` (set by `crust build`'s validation subprocess) |
-
-### Types
-
-| Type                             | Description                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `CrustCommandContext<A, F, Ctx>` | Runtime context passed to lifecycle hooks                                                  |
-| `ContextInstance`                | A typed context provider created by `context()`                                            |
-| `ContextFactory`                 | A parameterized context factory created by `context()`                                     |
-| `CommandMeta`                    | Command metadata (name, description, usage, aliases, hidden)                               |
-| `ArgDef`                         | Positional argument definition                                                             |
-| `ArgsDef`                        | Tuple of argument definitions                                                              |
-| `FlagDef`                        | Named flag definition                                                                      |
-| `FlagsDef`                       | Record of flag definitions                                                                 |
-| `InferArgs<A>`                   | Infer resolved arg types from definitions                                                  |
-| `InferFlags<F>`                  | Infer resolved flag types from definitions                                                 |
-| `EffectiveFlags<I, L>`           | Compute effective flags from inherited + local                                             |
-| `InheritableFlags<F>`            | Pick only inheritable flags                                                                |
-| `MergeFlags<P, L>`               | Merge parent + local flags                                                                 |
-| `ParseResult<A, F>`              | Output of `parseArgs`                                                                      |
-| `Extension`                      | CLI extension builder loaded via `.extend()`                                               |
-| `CrustError`                     | Typed error class                                                                          |
-| `CrustErrorCode`                 | Error code union                                                                           |
-| `ValueType`                      | Supported type literals (`"string" \| "number" \| "boolean" \| "url" \| "path" \| "json"`) |
-| `Resolve<T>`                     | Maps a `ValueType` literal to its runtime TypeScript type                                  |
-| `ResolveBaseType<F>`             | Resolves a flag/arg def to `ReturnType<parse>` when present, else `Resolve<F["type"]>`     |
-| `ValidateFlagAliases<F>`         | Compile-time alias collision check                                                         |
-| `ValidateNoPrefixedFlags<F>`     | Compile-time no- prefix check                                                              |
-| `ValidateVariadicArgs<A>`        | Compile-time variadic position check                                                       |
-
-## Contexts
-
-Use `context()` when multiple commands need shared dependencies without hand-annotating every handler:
+## Quick example
 
 ```ts
 import { context, Crust } from "@crustjs/core";
+import { help } from "@crustjs/extensions";
 
-const config = context("config", () => ({ env: "prod" }));
+const config = context("config", (options: { environment: string }) => options);
 
-const app = new Crust("deploy").context(config).run(({ ctx }) => {
-  ctx.config.env; // string
-});
+const app = new Crust("deploy")
+  .extend(help())
+  .provide(config({ environment: "production" }))
+  .flags({ verbose: { type: "boolean", short: "v" } })
+  .handle(({ flags, ctx, stdout }) => {
+    stdout(`${ctx.config.environment}: verbose=${flags.verbose ?? false}`);
+  });
+
+await app.execute();
 ```
 
-## When to Use
+## Runtime exports
 
-`@crustjs/core` is the primary runtime dependency for all Crust CLI applications. Install it alongside [`@crustjs/plugins`](/docs/modules/plugins) for official plugin support, and [`@crustjs/crust`](/docs/modules/crust) as a dev dependency for build tooling.
+| Export                           | Description                                                                                  |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)       | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
+| `context(name, setup)`           | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
+| `extension(name, config)`        | Define a frozen, application-wide Extension value                                            |
+| [`CrustError`](/docs/api/errors) | Framework error for definition, routing, parsing, and validation failures                    |
+
+## Definition types
+
+| Type          | Description                                                        |
+| ------------- | ------------------------------------------------------------------ |
+| `ArgDef`      | Core-value, raw, or Standard Schema positional argument definition |
+| `ArgsDef`     | Readonly ordered argument definitions                              |
+| `FlagDef`     | Core-value or Standard Schema flag definition                      |
+| `FlagsDef`    | Flag-name-to-definition record                                     |
+| `CommandMeta` | Name, description, usage, aliases, and visibility                  |
+| `ValueType`   | String, number, boolean, URL, path, or JSON value literal          |
+
+See [Types](/docs/api/types) for field-level definitions.
+
+## Command boundary types
+
+| Type                  | Description                                |
+| --------------------- | ------------------------------------------ |
+| `CrustCommandContext` | Typed context passed to a Command Handler  |
+| `CommandSnapshot`     | Readonly, serializable command description |
+| `ArgSnapshot`         | Serializable argument projection           |
+| `FlagSnapshot`        | Serializable flag projection               |
+
+## Context types
+
+| Type              | Description                                                 |
+| ----------------- | ----------------------------------------------------------- |
+| `ContextFactory`  | Factory returned by `context()`                             |
+| `ContextInstance` | Named lazy dependency attached with `.provide()`            |
+| `ContextMap`      | Record shape used for inferred Command Handler `ctx` values |
+
+## Extension types
+
+| Type                    | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `Extension`             | Named frozen Extension value                             |
+| `ExtensionConfig`       | Owned flags/commands and `intercept`/`handleError` hooks |
+| `ExtensionCommand`      | Structural configured-command contribution               |
+| `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope     |
+| `ExtensionContext`      | Readonly invocation view passed to Extension hooks       |
+| `ExtensionNext`         | `() => Promise<void>` chain continuation                 |
+| `ExtensionIntercept`    | Cross-cutting interception hook                          |
+| `ExtensionErrorHandler` | Terminal error-presentation hook                         |
+
+## Error types
+
+| Type                          | Description                                                              |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `CrustErrorCode`              | Four codes: `DEFINITION`, `PARSE`, `VALIDATION`, and `COMMAND_NOT_FOUND` |
+| `CrustErrorDetails<C>`        | Details selected by an error code                                        |
+| `CrustErrorDetailsMap`        | Mapping from each code to its details type                               |
+| `DefinitionErrorDetails`      | Definition subject, name, and reason                                     |
+| `ParseErrorDetails`           | Flag, argument, value, and reason                                        |
+| `ValidationErrorDetails`      | Aggregated `{ message, path }` issues                                    |
+| `CommandNotFoundErrorDetails` | Input, siblings, path, and parent Command Snapshot                       |
+
+## Tooling subpath
+
+`@crustjs/core/tooling` exposes `prepareCommandSnapshot`, `snapshotCommand`, `VALIDATION_MODE_ENV`, and `VALIDATION_FORCE_EXIT_ENV` for lockstep first-party man, skill, and build tooling. This subpath is explicitly unsupported and has no compatibility guarantee. Application code should use the root exports above.
+
+Use [`@crustjs/extensions`](/docs/modules/extensions) for the official Extensions and [`@crustjs/crust`](/docs/modules/crust) as a development dependency for build tooling.

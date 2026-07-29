@@ -1,275 +1,49 @@
 ---
 title: Subcommands
-description: Build nested command trees with automatic routing.
+description: Compose nested command trees inline or from pre-built command builders.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+## Inline commands
 
-Subcommands let you organize your CLI into a tree of nested commands, like `git commit` or `docker compose up`.
-
-## Pick a Pattern
-
-Use the pattern that matches how the subcommand is defined:
-
-| Pattern                             | Use when                                    | Notes                                          |
-| ----------------------------------- | ------------------------------------------- | ---------------------------------------------- |
-| `.command(name, cb)`                | The command tree is defined inline          | Golden path with the strongest inference       |
-| `app.sub(name)` + `.command(child)` | The subcommand lives in another source file | Parent-typed split module with inherited flags |
-
-## Inline Subcommands
-
-Use `.command(name, cb)` when the subcommand is defined in place:
+`.command(name, configure)` creates a child typed from its parent:
 
 ```ts
-import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/plugins";
-
-const main = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .extend(help())
-  .command("build", (cmd) =>
-    cmd
-      .meta({ description: "Build the project" })
-      .flags({ minify: { type: "boolean", default: true } })
-      .run(({ flags }) => {
-        console.log(`Building... (minify: ${flags.minify})`);
-      }),
-  )
-  .command("dev", (cmd) =>
-    cmd
-      .meta({ description: "Start dev server" })
-      .flags({ port: { type: "number", default: 3000, short: "p" } })
-      .run(({ flags }) => {
-        console.log(`Dev server on port ${flags.port}`);
+const app = new Crust("git")
+  .flags({ verbose: { type: "boolean", inherit: true } })
+  .command("clone", (command) =>
+    command
+      .args([{ name: "url", type: "url", required: true }])
+      .handle(({ args, flags, stdout }) => {
+        stdout(`${flags.verbose ? "Cloning" : "clone"} ${args.url}`);
       }),
   );
-
-await main.execute();
 ```
 
-```sh
-my-cli build              # Runs the build command
-my-cli dev --port 8080    # Runs the dev command
-my-cli --help             # Shows help with available subcommands
-```
+Nest `.command()` calls to any depth. Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command.
 
-## How Routing Works
+## Pre-built commands
 
-When Crust receives `argv`, it walks the subcommand tree **before** parsing flags or arguments. Each token is checked against subcommand names — if it matches, Crust recurses into that subcommand. If no match is found, the token is treated as a positional arg (when the command has `.run()`) or throws a `COMMAND_NOT_FOUND` error (when it doesn't).
-
-This means subcommand names are consumed before flag parsing, so `my-cli build --minify` first resolves `build`, then parses `--minify` against the build command's flags. See the [resolveCommand() reference](/docs/api/resolve-command#resolution-algorithm) for the detailed step-by-step algorithm.
-
-## Aliases
-
-A command can declare alternative names — short or long forms that resolve to the same command node — via the `aliases` field on `meta()`:
+Attach an existing builder with `.command(builder)`:
 
 ```ts
-import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/plugins";
-
-const main = new Crust("my-cli").extend(help()).command("issue", (cmd) =>
-  cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).command("list", (sub) =>
-    sub.meta({ description: "List open issues" }).run(() => {
-      console.log("open issues…");
-    }),
-  ),
-);
-
-await main.execute();
+const status = new Crust("status").handle(({ stdout }) => stdout("clean"));
+const app = new Crust("git").command(status);
 ```
 
-All three of the following invoke the same command:
-
-```sh
-my-cli issue list
-my-cli issues list   # via alias "issues"
-my-cli i list        # via alias "i"
-```
-
-The canonical name is what appears in `commandPath`, error messages, and `didYouMean()` suggestions — the alias the user typed is not preserved. Help renders the canonical name with aliases inline:
-
-```text
-COMMANDS:
-  issue (issues, i)   Manage issues
-```
-
-### Conflict policy
-
-Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. They must also be non-empty, contain no whitespace, and not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time:
+A standalone builder is isolated from parent flag types. For a separate-file child that inherits parent flags and Contexts, create it with `parent.sub(name)`:
 
 ```ts
-// ❌ Throws: alias "i" collides with sibling canonical name "i"
-new Crust("my-cli")
-  .command("i", (cmd) => cmd.run(() => {}))
-  .command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).run(() => {}));
-//                                                  ^^^
-// CrustError: Subcommand "issue" alias "i" collides with sibling
-// canonical name "i"
+const base = new Crust("git").flags({ verbose: { type: "boolean", inherit: true } });
+const clone = base.sub("clone").handle(({ flags }) => flags.verbose);
+const app = base.command(clone);
 ```
 
-The same check runs during `prepareCommandTree()` for plugin-installed subcommands, so plugins can't sneak conflicting aliases past the policy.
+See [Split Commands Across Files](/docs/guide/split-files) for the import-order rule and a complete layout.
 
-## Hidden Commands
+## Context inheritance
 
-Set `hidden: true` on a subcommand's `meta()` to omit it from the default `--help` listing:
+Contexts attached to a parent are available to descendants. `.sub()` carries their types into a separate-file child; attaching the child merges the parent path's Context instances at runtime.
 
-```ts
-const app = new Crust("my-cli")
-  .command("build", (cmd) => cmd.meta({ description: "Build the project" }).run(() => {}))
-  .command("__complete", (cmd) =>
-    cmd.meta({ hidden: true, description: "Internal completion entrypoint" }).run(() => {}),
-  );
-```
+## Unknown commands
 
-`hidden` affects help rendering only — the command remains directly invocable by name, alias resolution still works, and `didYouMean()` still suggests it. It is intended for internal/runtime commands like the `__complete` entrypoint used by shell-completion extensions. See the [`CommandMeta` reference](/docs/api/types#commandmeta) for details.
-
-## Nested Subcommands
-
-Subcommands can be nested arbitrarily deep:
-
-```ts
-const main = new Crust("my-cli").command("create", (create) =>
-  create
-    .meta({ description: "Create resources" })
-    .command("component", (cmd) =>
-      cmd
-        .meta({ description: "Create a component" })
-        .args([{ name: "name", type: "string", required: true }])
-        .run(({ args }) => {
-          console.log(`Creating component: ${args.name}`);
-        }),
-    )
-    .command("plugin", (cmd) =>
-      cmd
-        .meta({ description: "Create a plugin" })
-        .args([{ name: "name", type: "string", required: true }])
-        .run(({ args }) => {
-          console.log(`Creating plugin: ${args.name}`);
-        }),
-    ),
-);
-```
-
-```sh
-my-cli create component Button
-my-cli create plugin auth
-```
-
-## Container Commands
-
-A command with subcommands but no `.run()` handler is a **container command**. It exists purely to group subcommands:
-
-```ts
-const main = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .command("build", (cmd) =>
-    cmd.run(() => {
-      /* ... */
-    }),
-  )
-  .command("dev", (cmd) =>
-    cmd.run(() => {
-      /* ... */
-    }),
-  );
-// No .run() on main — this is a container
-```
-
-When a user runs a container command directly (e.g., `my-cli` with no subcommand), the help plugin automatically shows help with the available subcommands.
-
-## Commands with Both `.run()` and Subcommands
-
-A command can have both `.run()` and subcommands. In this case:
-
-- If the first argument matches a subcommand name, it routes to that subcommand
-- Otherwise, the arguments are treated as positionals for the parent command
-
-```ts
-const main = new Crust("my-cli")
-  .args([{ name: "file", type: "string" }])
-  .command("build", (cmd) =>
-    cmd.run(() => {
-      /* ... */
-    }),
-  )
-  .command("dev", (cmd) =>
-    cmd.run(() => {
-      /* ... */
-    }),
-  )
-  .run(({ args }) => {
-    // Runs when no subcommand matches
-    console.log(`Processing file: ${args.file}`);
-  });
-```
-
-```sh
-my-cli build        # Routes to build subcommand
-my-cli readme.md    # Runs parent command with file="readme.md"
-```
-
-## File-Splitting Pattern
-
-Use `.sub()` when the subcommand lives in another file and must retain the parent app's inherited flags. Keep the base app in a file that imports no command modules; import both the app and commands from the entrypoint.
-
-```ts title="shared.ts"
-import { Crust } from "@crustjs/core";
-
-export const app = new Crust("my-cli").flags({
-  verbose: { type: "boolean", short: "v", inherit: true },
-});
-```
-
-```ts title="commands/deploy.ts"
-import { app } from "../shared.ts";
-
-export const deployCmd = app
-  .sub("deploy")
-  .meta({ description: "Deploy to production" })
-  .flags({ env: { type: "string", required: true } })
-  .run(({ flags }) => {
-    flags.verbose; // boolean | undefined — inherited and typed!
-    flags.env; // string
-  });
-```
-
-```ts title="cli.ts"
-import { app } from "./shared.ts";
-import { deployCmd } from "./commands/deploy.ts";
-import { help } from "@crustjs/plugins";
-
-await app.extend(help()).command(deployCmd).execute();
-```
-
-`.sub()` creates a child builder pre-typed with the parent's inheritable flags. Prefer inline `.command(name, cb)` for most CLIs; use `.sub()` only when splitting command definition files without duplicating handler types.
-
-## Unknown Subcommands
-
-When a user types an unknown subcommand on a container command (no `.run()`), Crust throws a `COMMAND_NOT_FOUND` error with structured details:
-
-```ts
-{
-  input: "buld",                       // What the user typed
-  available: ["build", "dev"],          // Valid subcommands + aliases
-  commandPath: ["my-cli"],              // Path to the parent
-  parentCommand: mainSnapshot,          // CommandSnapshot of the parent command
-}
-```
-
-If any sibling defines aliases, `available` is a flat list of canonical names followed by each canonical's aliases (in sibling insertion order). For example, `issue` with `aliases: ["issues", "i"]` and `version` produces `available: ["issue", "issues", "i", "version"]`. `didYouMean()` uses this list to match against alias spellings but always reports the canonical name as its suggestion.
-
-The [Did You Mean Plugin](/docs/modules/plugins/did-you-mean) catches these errors and provides "Did you mean?" suggestions.
-
-## Command Path
-
-Crust tracks the full command path during routing. This is used by the help plugin to generate correct usage text:
-
-```sh
-$ my-cli create component --help
-my-cli create component - Create a component
-
-USAGE:
-  my-cli create component <name> [options]
-```
-
-The path `["my-cli", "create", "component"]` is available in the `CommandRoute` returned by `resolveCommand`.
+An unknown subcommand produces `CrustError` code `COMMAND_NOT_FOUND`. Its details include the input, available commands, the command path, and a readonly snapshot of the parent command. The official `didYouMean()` Extension uses this information to suggest nearby names.

@@ -3,7 +3,7 @@ title: "Skills"
 description: Agent skill generation for AI coding assistants.
 ---
 
-The `@crustjs/skills` package generates and installs agent skills from your CLI's command definitions. Skills provide structured documentation that AI coding assistants use to understand your CLI.
+The `@crustjs/skills` package generates and installs agent skills from your CLI's readonly Command Snapshot. Skills provide structured documentation that AI coding assistants use to understand your CLI. Snapshot preparation uses the explicitly unsupported `@crustjs/core/tooling` bridge internally; application code registers only the `skill()` Extension.
 
 ## Install
 
@@ -45,13 +45,18 @@ This gives you:
 ## Extension Options
 
 ```ts
-interface SkillPluginOptions {
-  version: string; // required — compared against installed crust.json
-  defaultScope?: "global" | "project"; // skip the interactive scope prompt
+interface SkillOptions {
+  version: string; // compared against installed crust.json
+  defaultScope?: "global" | "project";
+  installMode?: "auto" | "symlink" | "copy";
   autoUpdate?: boolean; // default: true
+  instructions?: string | string[];
+  license?: string;
+  allowedTools?: string;
+  compatibility?: string;
+  disableModelInvocation?: boolean;
+  customSkills?: CustomSkillConfig[];
   command?: string; // default: "skill"
-  instructions?: string | string[]; // extra top-level SKILL.md content
-  customSkills?: CustomSkillConfig[]; // hand-authored bundles, default: []
 }
 ```
 
@@ -108,8 +113,7 @@ my-cli skill
 ### Hand-authored bundles via `customSkills`
 
 The extension can manage hand-authored skill bundles alongside the auto-
-generated command-reference skill. Each entry follows the same extension
-lifecycle as the main skill — auto-update, interactive multiselect, and
+generated command-reference skill. Each entry follows the same Extension behavior as the main skill — auto-update, interactive multiselect, and
 `skill update` — and gets its own multiselect prompt after the main one,
 in array order. See the [`@crustjs/skills` README][skills-custom] for
 the full reference.
@@ -127,7 +131,7 @@ const app = new Crust("my-cli")
     skill({
       version: pkg.version,
       customSkills: [
-        // Inherits `version: pkg.version` from the plugin.
+        // Inherits `version: pkg.version` from the Extension.
         { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
         // Explicit override for an independently-versioned bundle.
         {
@@ -138,7 +142,7 @@ const app = new Crust("my-cli")
       ],
     }),
   )
-  .run(() => {});
+  .handle(() => {});
 ```
 
 The `CustomSkillConfig` shape:
@@ -147,13 +151,13 @@ The `CustomSkillConfig` shape:
 interface CustomSkillConfig {
   name: string; // unique; must match SKILL.md frontmatter
   sourceDir: string | URL; // file:// URL, absolute path, or bare relative
-  version?: string; // inherits plugin `version` when omitted
-  scope?: "global" | "project"; // overrides plugin defaultScope
+  version?: string; // inherits Extension `version` when omitted
+  scope?: "global" | "project"; // overrides Extension defaultScope
   installMode?: "auto" | "symlink" | "copy";
 }
 ```
 
-`version` is optional: omit it to inherit the plugin's top-level
+`version` is optional: omit it to inherit the Extension's top-level
 `version` (the typical case when the bundle ships in the same package as
 the CLI), or pass an explicit value when a bundle's release cadence is
 independent of the consuming CLI. The bundle's `SKILL.md` frontmatter
@@ -165,7 +169,7 @@ Resolution rules for `sourceDir` mirror
 [`installSkillBundle()`](#installing-hand-authored-bundles): URL with
 `file:` protocol, absolute path, or a bare relative string resolved from
 the nearest `package.json` walking up from `process.argv[1]`. Resolution
-errors surface at install time, not at plugin setup.
+errors surface at install time, not at Extension registration.
 
 Bundles share the canonical `.crust/skills` store with the main skill
 and inherit `defaultScope` / `installMode` resolution unless overridden
@@ -195,7 +199,7 @@ uninstall the existing skill first.
 
 | Context                         | Conflict behavior                                             |
 | ------------------------------- | ------------------------------------------------------------- |
-| **Auto-update middleware**      | Logs a warning and skips — the CLI continues running normally |
+| **Auto-update intercept**       | Logs a warning and skips — the CLI continues running normally |
 | **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
 | **`skill update` command**      | Logs a warning and skips the conflicting agent                |
 | **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite  |
@@ -274,7 +278,7 @@ import { Crust } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
 const deploy = annotate(
-  new Crust("deploy").meta({ description: "Deploy the application" }).run(() => {
+  new Crust("deploy").meta({ description: "Deploy the application" }).handle(() => {
     // ...
   }),
   [
@@ -367,7 +371,7 @@ await generateSkill({
 
 ## Installing Hand-Authored Bundles
 
-`generateSkill()` produces a skill bundle from a Crust command tree.
+`generateSkill()` produces a skill bundle from a Crust Command Snapshot.
 `installSkillBundle()` is the dual entrypoint for **hand-authored** bundles —
 use it when you have a directory containing `SKILL.md` and supporting files
 that should flow through the same canonical-store + agent fan-out plumbing.

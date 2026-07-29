@@ -7,11 +7,14 @@
     "flags",
     "types",
     "subcommands",
-    "plugins",
+    "extensions",
+    "contexts",
     "lifecycle",
+    "split-files",
     "environment",
     "error-handling",
     "build",
-    "development"
+    "development",
+    "migrate-to-0-2"
   ]
 }

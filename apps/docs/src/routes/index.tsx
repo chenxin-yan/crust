@@ -89,7 +89,7 @@ const FEATURES = [
   { id: "type-safe", title: "Type-Safe", desc: "Full inference. Zero casts." },
   { id: "zero-deps", title: "Zero Deps", desc: "No runtime dependencies." },
   { id: "composable", title: "Composable", desc: "Modular packages." },
-  { id: "plugins", title: "Plugins", desc: "Middleware-based hooks." },
+  { id: "extensions", title: "Extensions", desc: "Application-wide capabilities." },
   { id: "chainable", title: "Chainable", desc: "Fluent builder API." },
   { id: "bun-native", title: "Bun Native", desc: "Built for Bun runtime." },
 ];
@@ -102,13 +102,13 @@ const MODULES: Array<{
 }> = [
   {
     pkg: "@crustjs/core",
-    desc: "Parsing, routing, plugin system",
+    desc: "Commands, Contexts, Extensions, execution",
     doc: "modules/core",
   },
   {
     pkg: "@crustjs/extensions",
-    desc: "Official Crust plugins",
-    doc: "modules/plugins",
+    desc: "Official Crust Extensions",
+    doc: "modules/extensions",
   },
   {
     pkg: "@crustjs/crust",
@@ -153,19 +153,16 @@ const MODULES: Array<{
   {
     pkg: "@crustjs/test",
     desc: "CLI testing helpers",
-    doc: "modules/test",
     upcoming: true,
   },
   {
     pkg: "@crustjs/render",
     desc: "Terminal content rendering",
-    doc: "modules/render",
     upcoming: true,
   },
   {
     pkg: "@crustjs/log",
     desc: "Structured logging",
-    doc: "modules/log",
     upcoming: true,
   },
 ];
@@ -218,9 +215,9 @@ const app = new Crust("greet")
   .extend(help())
   .args([{ name: "name", type: "string" }])
   .flags({ shout: { type: "boolean", short: "s" } })
-  .run(({ args, flags }) => {
+  .handle(({ args, flags, stdout }) => {
     const msg = \`Hello, \${args.name}!\`;
-    console.log(flags.shout ? msg.toUpperCase() : msg);
+    stdout(flags.shout ? msg.toUpperCase() : msg);
   });
 
 await app.execute();`;

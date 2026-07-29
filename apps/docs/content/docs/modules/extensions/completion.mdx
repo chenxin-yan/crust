@@ -1,0 +1,83 @@
+---
+title: Completion
+description: Generate static shell completion scripts for bash, zsh, and fish.
+---
+
+The completion Extension contributes a `completion <shell>` root command. It reads the final root Command Snapshot at invocation time and emits a self-contained script; generated scripts do not call back into the CLI on each completion.
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { completion } from "@crustjs/extensions";
+import pkg from "../package.json";
+
+const app = new Crust("my-cli")
+  .extend(completion({ version: pkg.version }))
+  .command("build", (command) =>
+    command
+      .flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
+      .handle(() => {}),
+  );
+
+await app.execute();
+```
+
+```sh
+my-cli completion bash > ~/.local/share/bash-completion/completions/my-cli
+my-cli completion zsh > ~/.zsh/completions/_my-cli
+my-cli completion fish > ~/.config/fish/completions/my-cli.fish
+```
+
+## API
+
+```ts
+type CompletionShell = "bash" | "zsh" | "fish";
+
+interface CompletionOptions {
+  command?: string;
+  binName?: string;
+  shells?: readonly CompletionShell[];
+  version?: string;
+}
+
+function completion(options?: CompletionOptions): Extension;
+```
+
+| Option    | Default          | Description                        |
+| --------- | ---------------- | ---------------------------------- |
+| `command` | `"completion"`   | Contributed root command name      |
+| `binName` | Root `meta.name` | Binary name embedded in scripts    |
+| `shells`  | All three shells | Files emitted by `--output-dir`    |
+| `version` | `"0.0.0"`        | Text embedded in generated headers |
+
+The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through `ctx.stdout`. With `--output-dir <path>`, the Extension writes every configured shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
+
+```sh
+my-cli completion bash --output-dir completions/
+```
+
+## Value candidates
+
+- `choices` on string arguments and flags become static candidates.
+- `path` and unconstrained `string` values get file completion where the shell supports it.
+- `url` and `json` values do not get misleading file completion.
+- Boolean flags do not consume a value.
+- Commands with `meta.hidden: true` and their descendants are omitted.
+
+The Extension validates command, flag, argument, alias, choice, and binary identifiers before rendering. Unsafe identifiers throw instead of producing shell code with incorrect quoting.
+
+## Packaging
+
+Generate all files during packaging when a target binary cannot run on the build host:
+
+```json
+{
+  "scripts": {
+    "generate:completion": "bun run dist/my-cli.js completion bash --output-dir completions/"
+  },
+  "files": ["dist", "completions"]
+}
+```
+
+Completion scripts are snapshots. Regenerate them when the command definition changes.

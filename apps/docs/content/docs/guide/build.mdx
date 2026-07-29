@@ -177,9 +177,9 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
-The validation works by spawning the current executable in Bun mode with `CRUST_INTERNAL_VALIDATE_ONLY=1` and the companion `CRUST_INTERNAL_VALIDATE_FORCE_EXIT=1`. When [`.execute()`](/docs/api/crust#executeoptions) detects these env vars, it runs plugin setup and validates the full command tree (including subcommands and plugin-injected flags) without executing any command handlers, then exits the subprocess so any code after `await app.execute()` in your entrypoint is skipped.
+The validation subprocess asks `.execute()` to prepare and validate the full command graph, including subcommands and Extension-owned flags and commands, without executing any Command Handlers. It then exits before code after `await app.execute()` can run.
 
-If you pass `--env-file`, the validation subprocess receives the same explicit env-file inputs as the build step. That keeps plugin setup and command-tree validation aligned with the final compilation.
+If you pass `--env-file`, the validation subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
 ### What it catches
 
@@ -190,12 +190,7 @@ If you pass `--env-file`, the validation subprocess receives the same explicit e
 | `no-` prefixed alias           | `DEFINITION` | Alias `no-store` on a flag                   |
 | Long alias shadowing flag name | `DEFINITION` | Alias `out` when another flag is named `out` |
 
-In addition to hard errors, the validation emits **warnings** for plugin conflicts that are allowed at runtime but may indicate unintentional behavior:
-
-| Warning                                 | Example                                                                      |
-| --------------------------------------- | ---------------------------------------------------------------------------- |
-| Plugin flag overrides user-defined flag | Plugin calls `addFlag(cmd, "verbose", ...)` but `verbose` already exists     |
-| Plugin subcommand skipped               | Plugin calls `addSubCommand(cmd, "deploy", ...)` but `deploy` already exists |
+Extension-owned command names, aliases, flag names, short forms, and long aliases are checked against application definitions and other Extensions. Collisions are `DEFINITION` errors; Crust never warns and skips a contribution.
 
 ### Skipping validation
 

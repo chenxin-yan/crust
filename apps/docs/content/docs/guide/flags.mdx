@@ -1,219 +1,90 @@
 ---
 title: Flags
-description: Define named flags with types, aliases, defaults, multiple values, and inheritance.
+description: Define typed named inputs, aliases, repeated values, and inherited flags.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Flags are named options passed with `--` (long form) or `-` short form. They're defined via `.flags()`.
-
-```sh
-my-cli --port 3000 --verbose -o dist
-#      ^^^^^^^^^^^  ^^^^^^^^ ^^
-#      flag         flag    short
-```
-
-## Defining Flags
-
-Flags are defined with the `.flags()` method:
-
 ```ts
-const cmd = new Crust("serve")
+const command = new Crust("serve")
   .flags({
-    port: {
-      type: "number",
-      description: "Port to listen on",
-      default: 3000,
-      short: "p",
-    },
-    verbose: {
-      type: "boolean",
-      description: "Enable verbose logging",
-      short: "v",
-    },
+    port: { type: "number", default: 3000, short: "p" },
+    verbose: { type: "boolean", short: "v" },
   })
-  .run(({ flags }) => {
-    console.log(`Port: ${flags.port}`); // number (has default)
-    console.log(`Verbose: ${flags.verbose}`); // boolean | undefined
-  });
+  .handle(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
 ```
 
-## Flag Properties
+See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
-Each flag is a `FlagDef` object with properties like `type`, `description`, `default`, `required`, `short`, `aliases`, `multiple`, and `inherit`. See the [FlagDef reference](/docs/api/types#flagdef) for the full property table.
+## Aliases and negation
 
-## Types
+`short` defines one single-character form. `aliases` adds other short or long forms:
 
-Flags accept six built-in `type` literals: `string`, `number`, `boolean`, `url`, `path`, and `json`. See [Types](/docs/guide/types) for the full semantics, error modes, completion behaviour, and the `parse` escape hatch for custom transformations like dates, durations, or ports.
-
-### Boolean Negation
-
-Boolean flags support `--no-` prefix negation:
-
-```sh
-my-cli --no-minify  # flags.minify === false
+```ts
+.flags({ output: { type: "path", short: "o", aliases: ["out"] } })
 ```
 
-This works automatically for any boolean flag. When a boolean flag is repeated, the **last occurrence wins**:
+Boolean flags support canonical `--no-name` negation. They do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved; violations are `DEFINITION` errors.
 
-```sh
-my-cli --verbose --no-verbose   # flags.verbose === false
-my-cli --no-verbose --verbose   # flags.verbose === true
-```
-
-Use the canonical flag name for negation (`--no-verbose`), not aliases like `--no-v` or `--no-loud`.
-
-Boolean flags are toggles and do not accept explicit value assignment. Forms like `--verbose=true` or `--verbose=false` are parse errors.
-
-## Short & Aliases
-
-Provide a single-character short form with the `short` property, and additional aliases with the `aliases` property:
+## Required and defaulted values
 
 ```ts
 .flags({
-  output: { type: "string", short: "o" }, // -o dist
-  verbose: { type: "boolean", short: "v" }, // -v
-  target: { type: "string", short: "t", aliases: ["T"] }, // -t or -T
-})
-```
-
-`short` accepts a single character for the `-x` short form. `aliases` accepts an array of additional aliases (single-char or long).
-
-<Callout type="warn">
-  Alias collisions are caught at **compile time** and **runtime**. If an alias conflicts with
-  another flag name or another alias, you'll get an error.
-</Callout>
-
-<Callout type="warn">
-  The `no-` prefix is reserved for boolean negation. Do not define flag names, short forms, or
-  aliases that start with `no-`.
-</Callout>
-
-## Required Flags
-
-Mark a flag as `required` to error when it's missing:
-
-```ts
-.flags({ config: { type: "string", required: true } })
-```
-
-```sh
-$ my-cli
-# Error: Missing required flag "--config"
-```
-
-## Default Values
-
-Provide a `default` to use when the flag isn't passed:
-
-```ts
-.flags({
-  port: { type: "number", default: 3000 },
+  token: { type: "string", required: true },
   format: { type: "string", default: "json" },
-  minify: { type: "boolean", default: true },
 })
 ```
 
-When a default is set, the inferred type is guaranteed (no `| undefined`).
+Both values are non-optional in the Command Handler. Other flags include `undefined` in their inferred type.
 
-## Multiple Values
-
-Set `multiple: true` to collect repeated flag values into an array:
+## Repeated values
 
 ```ts
-.flags({
-  target: {
-    type: "string",
-    multiple: true,
-    description: "Target platform(s)",
-    short: "t",
-  },
-})
+.flags({ target: { type: "string", multiple: true, short: "t" } })
 ```
 
-```sh
-my-cli --target linux-x64 --target darwin-arm64
-# flags.target === ["linux-x64", "darwin-arm64"]
-```
-
-Boolean flags with `multiple: true` collect each occurrence (including `--no-` negations) into the array:
-
-```sh
-my-cli --verbose --no-verbose --verbose
-# flags.verbose === [true, false, true]
-```
-
-You can also provide a default array:
-
-```ts
-.flags({
-  include: {
-    type: "string",
-    multiple: true,
-    default: ["src/**"],
-  },
-})
-```
+`--target linux --target darwin` produces `string[]`. Repeated boolean flags also collect booleans when `multiple: true`.
 
 ## Choices
 
-Use `choices` on a string flag to declare a static enum of valid values:
-
 ```ts
-.flags({
-  target: {
-    type: "string",
-    description: "Target runtime",
-    choices: ["browser", "bun", "node"],
-  },
-  suites: {
-    type: "string",
-    multiple: true,
-    choices: ["unit", "integration"],
-  },
-})
+.flags({ target: { type: "string", choices: ["bun", "node"] } })
 ```
 
-`choices` is **validated at parse time** — passing a value outside the list throws `CrustError("PARSE", …)`. When combined with `parse`, the raw argv token is checked against `choices` first; `parse` only runs on values that pass the choices gate. Shell-completion plugins also consume `choices` to emit value candidates after `--flag=` or `--flag <TAB>`. `choices` is only available on string-typed flags; using it on number or boolean flags is a compile-time error. See the [API reference](/docs/api/types#flagdef) for details.
+Choices are supported on string flags and invalid values produce `PARSE` errors.
 
-## Flag Inheritance
+## Inherited flags
 
-Set `inherit: true` on a flag to make it available to subcommands:
+Set `inherit: true` to expose a parent flag to descendant Command Handlers:
 
 ```ts
-const app = new Crust("my-cli")
-  .flags({
-    verbose: { type: "boolean", short: "v", inherit: true },
-    debug: { type: "boolean" }, // not inherited
-  })
-  .command("deploy", (cmd) =>
-    cmd.flags({ env: { type: "string", required: true } }).run(({ flags }) => {
-      flags.verbose; // boolean | undefined (inherited from parent)
-      flags.env; // string (local)
-      // flags.debug — not available (not inherited)
+const app = new Crust("app")
+  .flags({ verbose: { type: "boolean", inherit: true } })
+  .command("deploy", (command) =>
+    command.flags({ env: { type: "string", required: true } }).handle(({ flags }) => {
+      flags.verbose; // boolean | undefined
+      flags.env; // string
     }),
   );
 ```
 
-Inherited flags are:
+The flag is parsed and shown in help at each descendant. Declare inherited flags before creating a child with `.sub()`; see [Split Commands Across Files](/docs/guide/split-files).
 
-- **Parsed** by the subcommand's parser alongside local flags
-- **Typed** correctly in the subcommand's handler via `EffectiveFlags<Inherited, Local>`
-- **Shown** in the subcommand's help output
+## Standard Schemas
 
-Local flags override inherited flags with the same key. Only flags with `inherit: true` are propagated — all other parent flags are excluded.
+For a schema-backed flag, `type` controls token grammar only: `"string"` consumes a token and `"boolean"` does not. The schema owns the resulting value.
 
-See the [`.sub()` factory](/docs/api/crust#subname) for how to use flag inheritance with the file-splitting pattern.
+```ts
+import { z } from "zod";
 
-## Unknown Flags
-
-Crust uses **strict mode** for flag parsing. Unknown flags immediately produce a `PARSE` error:
-
-```sh
-$ my-cli --unknown-flag
-# Error: Unknown flag "--unknown-flag"
+new Crust("serve")
+  .flags({ port: { type: "string", schema: z.coerce.number().int() } })
+  .handle(({ flags }) => {
+    flags.port; // number
+  });
 ```
 
-## Type Inference
-
-Crust infers flag types from your definitions — `required` and `default` guarantee the value, otherwise it's `T | undefined`. Flags with `multiple: true` resolve to arrays. See the [full inference rules](/docs/api/types#inferflagsf) for all cases.
+<Callout type="warn">
+  Do not combine `schema` with core value options such as `default`, `required`, `choices`, or
+  `parse`.
+</Callout>

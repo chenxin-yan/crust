@@ -1,0 +1,37 @@
+---
+title: Version
+description: Add a root-only version flag.
+---
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { version } from "@crustjs/extensions";
+import pkg from "../package.json";
+
+const app = new Crust("my-cli").extend(version(pkg.version)).handle(() => {});
+
+await app.execute();
+```
+
+```sh
+$ my-cli --version
+my-cli v1.2.3
+```
+
+## API
+
+```ts
+type VersionValue = string | (() => string);
+
+function version(value?: VersionValue): Extension;
+```
+
+The default value is `"0.0.0"`. Pass a function to resolve the version only when the flag is handled:
+
+```ts
+const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? "dev"));
+```
+
+`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Handler only for a root invocation with `--version` or `-v`; subcommands do not receive the flag.

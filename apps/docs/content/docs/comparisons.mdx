@@ -1,87 +1,35 @@
 ---
 title: Comparisons
-description: How Crust compares to other TypeScript and JavaScript CLI frameworks.
-icon: Scale
+description: Compare Crust's command-authoring model with other CLI frameworks.
 ---
 
-Crust is not the first CLI framework. It builds on ideas from many excellent projects. This page offers a comprehensive comparison to help you pick the right tool for your use case.
+Crust is designed for Bun and TypeScript. Its distinguishing API choices are immutable command builders, inferred Command Handler inputs, app-wide Extensions, lazy typed Contexts, and Standard Schema support.
 
-## Overview
+```ts
+import { Crust } from "@crustjs/core";
+import { help } from "@crustjs/extensions";
 
-|                        |      Crust      | Commander.js  |      yargs       |  oclif   | Clipanion |   citty    |      CAC      |    meow    |
-| ---------------------- | :-------------: | :-----------: | :--------------: | :------: | :-------: | :--------: | :-----------: | :--------: |
-| **TypeScript native**  |       ✅        |      ⚠️       |        ⚠️        |    ✅    |    ✅     |     ✅     |      ✅       |     ⚠️     |
-| **Bundle size (gzip)** |     ~3.6 kB     |   ~11.5 kB    |      ~32 kB      | ~100 kB+ | ~10.0 kB  |  ~2.9 kB   |    ~3.9 kB    |  ~43.7 kB  |
-| **Install size**       |      21 kB      |    209 kB     |      509 kB      |  411 kB  |  368 kB   |   24 kB    |     41 kB     |   411 kB   |
-| **Architecture**       | Builder + chain | Class + chain | Functional chain |  Class   |   Class   | Functional | Class + chain | Functional |
-| **Bun support**        |       ✅        |      ⚠️       |        ⚠️        |    ❌    |    ⚠️     |     ✅     |      ✅       |     ✅     |
-| **Zero dependencies**  |       ✅        |      ✅       |        ❌        |    ❌    |    ⚠️     |     ✅     |      ✅       |     ✅     |
-| **Plugin system**      |       ✅        |      ❌       |        ❌        |    ✅    |    ❌     |     ❌     |      ❌       |     ❌     |
-| **Subcommands**        |       ✅        |      ✅       |        ✅        |    ✅    |    ✅     |     ✅     |      ✅       |     ❌     |
-| **Auto help**          |   ✅ (plugin)   |      ✅       |        ✅        |    ✅    |    ✅     |     ✅     |      ✅       |     ✅     |
-| **Shell completion**   |   ✅ (plugin)   |      ❌       |        ✅        |    ✅    |    ❌     |     ❌     |      ❌       |     ❌     |
-| **Lifecycle hooks**    |       ✅        |      ✅       |        ❌        |    ✅    |    ❌     |     ❌     |      ❌       |     ❌     |
-| **Validation**         |   ✅ (module)   |      ✅       |        ✅        |    ✅    |    ✅     |     ⚠️     |      ❌       |     ⚠️     |
+const app = new Crust("deploy")
+  .extend(help())
+  .args([{ name: "target", type: "string", required: true }])
+  .flags({ dryRun: { type: "boolean", short: "d" } })
+  .handle(({ args, flags, stdout }) => {
+    stdout(`${flags.dryRun ? "Preview" : "Deploy"}: ${args.target}`);
+  });
 
-## vs. Commander.js
+await app.execute();
+```
 
-[Commander.js](https://github.com/tj/commander.js) is the most widely used CLI library in the Node.js ecosystem (~280M weekly downloads). It pioneered the fluent, chainable API pattern that many frameworks follow.
+| Concern                 | Crust approach                                               |
+| ----------------------- | ------------------------------------------------------------ |
+| Runtime                 | Bun-native, ESM                                              |
+| Command definitions     | Immutable fluent builders                                    |
+| Type inference          | Derived from argument, flag, schema, and Context definitions |
+| Reusable capabilities   | Root-only `.extend()` with plain Extension values            |
+| Command dependencies    | Lazy `.provide()` Contexts inherited by descendants          |
+| Validation              | Built-ins or any Standard Schema on the definition           |
+| Programmatic invocation | `.run(argv, io)` throws original errors                      |
+| Terminal invocation     | `.execute()` renders errors and sets exit status             |
+| Distribution            | Standalone Bun executables or runtime packages               |
 
-- **Language & types** — Written in JavaScript with bundled `.d.ts` type definitions. Option types require manual annotation via `.opts<T>()` — there is no automatic inference from definitions.
-- **Architecture** — Class-based with builder/chaining pattern. Extends Node.js `EventEmitter` for lifecycle events.
-- **Strengths** — Extremely mature (since 2011), zero dependencies, comprehensive feature set (conflicts, implications, env vars, custom parsing), huge community and ecosystem.
-- **Where Crust differs** — Crust infers argument and flag types automatically from definitions with no manual annotations. Crust uses an immutable, chainable builder API with full TypeScript inference, and provides a first-class plugin system with middleware. Crust also ships a complete ecosystem (styling, prompts, validation, scaffolding) so you don't need to assemble third-party packages.
-
-## vs. yargs
-
-[yargs](https://github.com/yargs/yargs) is a feature-rich argument parser used by npm, Mocha, and many other projects (~149M weekly downloads).
-
-- **Language & types** — Source has been migrated to TypeScript as of v18, though it originated as a JavaScript project. Types are now bundled. Type inference is available but returns a union with `Promise` due to async command support, requiring narrowing.
-- **Architecture** — Functional factory with fluent chaining. Includes middleware hooks and built-in shell completion generation.
-- **Strengths** — Battle-tested at massive scale, rich parsing features (arrays, counts, dot-nested objects, coercion), i18n support, Bash/Zsh completion built in.
-- **Where Crust differs** — Crust is TypeScript-first with full type inference and no manual annotations needed. Crust's plugin system provides structured extensibility compared to yargs' ad-hoc middleware. Crust has zero runtime dependencies vs yargs' six transitive dependencies (cliui, escalade, get-caller-file, string-width, y18n, yargs-parser), resulting in a 509 kB install size.
-
-## vs. oclif
-
-[oclif](https://github.com/oclif/oclif) by Salesforce powers the Salesforce CLI, Heroku CLI, and Twilio CLI.
-
-- **Language & types** — Written entirely in TypeScript with excellent type inference via static class properties.
-- **Architecture** — Class-based with abstract `Command` base class. Commands declare args and flags as static properties. Has a mature plugin system with file-based discovery, lifecycle hooks, and an official plugin ecosystem.
-- **Strengths** — Proven at enterprise scale, outstanding TypeScript support, scaffolding CLI (`oclif generate`), testing utilities, JSON output mode, auto-updater, installer generation.
-- **Where Crust differs** — Crust uses a lightweight, immutable builder API vs oclif's class-based inheritance model. Crust is Bun-native with zero dependencies, while oclif targets Node.js exclusively and `@oclif/core` pulls in 18 runtime dependencies (~411 kB install size). Crust is better suited for lightweight to mid-size CLIs, while oclif targets large enterprise tools.
-
-## vs. Clipanion
-
-[Clipanion](https://github.com/arcanis/clipanion) is the CLI engine behind Yarn Berry, built by the Yarn team. Note that Clipanion v4 has been on release candidate (`4.0.0-rc.4`) since September 2024 with no recent activity.
-
-- **Language & types** — Written in TypeScript with strong type inference through class property declarations and an optional `typanion` validation companion (peer dependency).
-- **Architecture** — Class-based with a unique state-machine parser that handles ambiguous syntax more gracefully than traditional parsers.
-- **Strengths** — Exceptional type safety, advanced parsing semantics (proxy commands, rest arguments), production-proven by Yarn.
-- **Where Crust differs** — Crust uses an immutable builder approach vs Clipanion's class-based commands. Crust provides a plugin system and lifecycle hooks that Clipanion lacks. Clipanion has no built-in shell completion or autocompletion suggestions. Clipanion also depends on `typanion` as a peer dependency for validation, while Crust's core is truly zero-dependency.
-
-## vs. citty
-
-[citty](https://github.com/unjs/citty) is a lightweight CLI framework from the UnJS ecosystem.
-
-- **Language & types** — Written in TypeScript with automatic type inference from argument and flag definitions. Closest in philosophy to Crust.
-- **Architecture** — Function-based and declarative. Commands are plain objects defined with `defineCommand()` (similar to Crust's previous API).
-- **Strengths** — Minimal, zero dependencies, excellent TypeScript inference, familiar to anyone using the UnJS/Nuxt ecosystem.
-- **Where Crust differs** — Crust adds a plugin system with middleware, lifecycle hooks (`preRun`/`postRun`), compile-time validation (flag alias collisions, variadic arg constraints), and official plugins for help, version, and autocompletion. Crust also offers more granular error handling with typed error codes.
-
-## vs. CAC
-
-[CAC](https://github.com/cacjs/cac) is a zero-dependency CLI builder written in TypeScript (~24.4M weekly downloads).
-
-- **Language & types** — Written entirely in TypeScript with bundled type definitions. Types are well-structured but don't auto-infer arg/flag types from definitions — you work with a generic parsed-options object.
-- **Architecture** — Class-based with fluent chaining (`cli.command(...).option(...).action(...)`). Extends `EventEmitter`.
-- **Strengths** — Zero dependencies, multi-runtime support (Node.js, Bun, Deno), dot-nested options, compact codebase (~3.9 kB gzip).
-- **Where Crust differs** — Crust provides full type inference from definitions, a plugin system, lifecycle hooks, and compile-time validation. CAC's `EventEmitter`-based extensibility is more ad-hoc compared to Crust's structured middleware pipeline. Crust also provides a complete ecosystem (prompts, styling, validation, scaffolding) that CAC leaves to third-party libraries.
-
-## vs. meow
-
-[meow](https://github.com/sindresorhus/meow) by Sindre Sorhus is a minimal CLI helper focused on flag parsing (~31.4M weekly downloads).
-
-- **Language & types** — Written in JavaScript with bundled `.d.ts` definitions generated via rollup. No type inference from flag definitions.
-- **Architecture** — Single function call that returns a parsed result object. No command routing — it handles flags and positional input only.
-- **Strengths** — Simple API, auto-reads `package.json` for version and description, built-in required-flag validation. As of v14, meow has zero runtime dependencies (previously depended on 9+ transitive packages — now bundled internally).
-- **Where Crust differs** — Crust supports subcommands, lifecycle hooks, plugins, and full type inference. meow is designed for single-command scripts, not multi-command CLIs. Despite its minimal API surface, meow's internally-bundled dependencies result in a ~43.7 kB gzip bundle — larger than most alternatives. It intentionally omits features like command routing, plugins, and extensibility that Crust provides.
+Choose based on your runtime, distribution needs, and preferred authoring model. Crust deliberately makes Bun and TypeScript part of its contract rather than abstracting over every JavaScript runtime.

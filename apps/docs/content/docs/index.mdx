@@ -1,100 +1,42 @@
 ---
-title: What is Crust?
-description: A TypeScript-first, Bun-native CLI framework with composable modules.
-icon: House
+title: Crust
+description: A TypeScript-first framework for command-line applications.
 ---
 
-import { Cards, Card } from "fumadocs-ui/components/card";
+Crust defines typed command-line applications with immutable builders and runs them on Bun.
 
-## Why Crust?
+## Define a command
 
-Most CLI tools in the JavaScript ecosystem are either **minimal arg parsers** that leave you wiring everything together, or **heavyweight frameworks** that bring more complexity than you need.
-
-Crust sits in the sweet spot: more structured than a bare parser, lighter than a full framework, and designed so you only pull in what you actually use.
-
-- **Chainable builder API** — Immutable, type-safe builder pattern with full TypeScript inference
-- **TypeScript-first** — Args and flags are fully inferred from your definitions. No manual type annotations, just autocomplete that works.
-- **Composable, not monolithic** — Every capability ships as its own module. Install only what you need — `@crustjs/core` for the framework, `@crustjs/plugins` for official extensions, `@crustjs/crust` for build tooling.
-- **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
-
-## Features
-
-- **Compile-time validation** catches flag alias collisions and variadic arg mistakes before your code runs
-- **Zero runtime dependencies** — Core modules have no external dependencies
-- **Subcommand routing** — Nested command trees with automatic resolution
-- **Contexts & extensions** — Typed command dependencies via `.use()` and CLI capabilities via `.extend()`
-- **Flag inheritance** — Share flags across subcommands with `inherit: true`
-
-## Quick Example
-
-```ts title="src/cli.ts"
+```ts
 import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/plugins";
+import { help, version } from "@crustjs/extensions";
 
-const main = new Crust("greet")
-  .meta({ description: "A friendly greeter CLI" })
-  .extend(version("1.0.0"), help())
-  .args([
-    {
-      name: "name",
-      type: "string",
-      description: "Who to greet",
-      default: "world",
-    },
-  ])
-  .flags({
-    shout: { type: "boolean", description: "SHOUT the greeting", short: "s" },
-  })
-  .run(({ args, flags }) => {
-    const message = `Hello, ${args.name}!`;
-    console.log(flags.shout ? message.toUpperCase() : message);
+const app = new Crust("hello")
+  .meta({ description: "Print a greeting" })
+  .extend(version("0.2.0"), help())
+  .args([{ name: "name", type: "string", default: "world" }])
+  .flags({ loud: { type: "boolean", short: "l" } })
+  .handle(({ args, flags, stdout }) => {
+    const greeting = `Hello, ${args.name}!`;
+    stdout(flags.loud ? greeting.toUpperCase() : greeting);
   });
 
-await main.execute();
+await app.execute();
 ```
 
-```text
-$ bun run src/cli.ts world --shout
-HELLO, WORLD!
+## Core concepts
 
-$ bun run src/cli.ts --help
-greet - A friendly greeter CLI
+- **Immutable builders** — `.meta()`, `.args()`, `.flags()`, `.command()`, and `.handle()` return new builders with inferred input types.
+- **Extensions** — app-wide capabilities attached once at the root with `.extend()`. Official Extensions provide help, version, completion, suggestions, color control, and update notices.
+- **Contexts** — named command dependencies created lazily for the resolved command path and attached with `.provide()`.
+- **Schema-first validation** — place any Standard Schema on an argument or flag definition; the Command Handler receives its output type.
+- **Two invocation modes** — `.execute()` owns terminal error presentation and exit status; `.run(argv, io)` is programmatic and throws the original error.
 
-USAGE:
-  greet [name] [options]
+## Start here
 
-ARGS:
-  [name]              Who to greet [default: "world"]
-
-OPTIONS:
-  -s, --shout, --no-shout        SHOUT the greeting
-  -h, --help, --no-help          Show help
-  -v, --version, --no-version    Show version number
-```
-
-<Cards>
-  <Card
-    title="Quick Start"
-    description="Build your first CLI in 2 minutes"
-    href="/docs/quick-start"
-  />
-  <Card
-    title="Guide"
-    description="Learn how to define commands, arguments, flags, and more"
-    href="/docs/guide"
-  />
-  <Card
-    title="Modules"
-    description="Explore the composable module ecosystem"
-    href="/docs/modules"
-  />
-  <Card title="API Reference" description="Full API signatures and types" href="/docs/api" />
-</Cards>
-
-## Roadmap
-
-Curious about what's coming next? Check out the [Roadmap](https://github.com/users/chenxin-yan/projects/10) to see what we're working on, what's planned, and where you can contribute.
-
-## Community
-
-Have questions or want to chat about Crust? Join our [Discord community](https://discord.gg/sQF8hdN6Ht) to connect with other developers, get help, and stay up to date.
+- [Installation](/docs/installation)
+- [Quick Start](/docs/quick-start)
+- [Commands](/docs/guide/commands)
+- [Extensions](/docs/guide/extensions)
+- [Contexts](/docs/guide/contexts)
+- [Migrate to 0.2](/docs/guide/migrate-to-0-2)

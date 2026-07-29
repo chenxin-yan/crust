@@ -1,29 +1,26 @@
 ---
 title: "Overview"
-description: Complete API reference for every class, function, type, and error in Crust.
+description: Supported public API reference for @crustjs/core.
 ---
 
-All exports listed here come from `@crustjs/core`.
+import { Callout } from "fumadocs-ui/components/callout";
 
-## Classes
+All exports on these pages come from `@crustjs/core`.
 
-| Class                      | Description                                                          |
-| -------------------------- | -------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust) | Chainable builder for defining CLI commands with full type inference |
+## Runtime API
 
-## Functions
+| Export                           | Description                                                  |
+| -------------------------------- | ------------------------------------------------------------ |
+| [`Crust`](/docs/api/crust)       | Immutable, chainable command builder and invocation boundary |
+| `context(name, setup)`           | Define a named command dependency factory                    |
+| `extension(name, config)`        | Define an application-wide Extension                         |
+| [`CrustError`](/docs/api/errors) | Structured framework error with one of four stable codes     |
 
-| Function                                                                          | Description                                                |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`parseArgs()`](/docs/api/parse-args)                                             | Parse argv against arg/flag definitions                    |
-| [`validateParsed()`](/docs/api/validate-parsed)                                   | Validate a parse result against required-value constraints |
-| [`resolveCommand()`](/docs/api/resolve-command)                                   | Resolve a subcommand from an argv array                    |
-| [`createCommandNode()`](/docs/api/crust#createcommandnodename)                    | Create a fresh CommandNode (for downstream packages)       |
-| [`computeEffectiveFlags()`](/docs/api/crust#computeeffectiveflagsinherited-local) | Merge inherited + local flags at runtime                   |
+## Types
 
-## Types & Errors
+See [Types](/docs/api/types) for command definitions, Command Snapshots, Command Handler contexts, Contexts, Extensions, and error detail types.
 
-| Page                       | Description                                                                                               |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [Types](/docs/api/types)   | All type definitions — ArgDef, FlagDef, CommandNode, CrustCommandContext, InferArgs, InferFlags, and more |
-| [Errors](/docs/api/errors) | CrustError class, error codes, and structured error details                                               |
+<Callout type="warn">
+  `@crustjs/core/tooling` is an unsupported bridge for first-party build, man-page, and skill
+  tooling. It is not part of the supported application-authoring API.
+</Callout>
