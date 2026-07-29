@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import * as os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -26,6 +26,16 @@ const FIXTURE_DIR_SECOND = join(
 	"fixtures",
 	"bundle-second",
 );
+const realHomedir = os.homedir;
+
+function mockHomedir(path: string): void {
+	// Bun caches homedir(), so changing HOME after startup does not redirect global paths.
+	mock.module("node:os", () => ({ ...os, homedir: () => path }));
+}
+
+function restoreHomedir(): void {
+	mock.module("node:os", () => ({ ...os, homedir: realHomedir }));
+}
 
 function shortCircuitExtension() {
 	return extension("short-circuit", {
@@ -56,7 +66,7 @@ describe("skill extension auto-update", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -439,9 +449,10 @@ describe("skill extension auto-update", () => {
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
+		mockHomedir(tmpDir);
 
 		try {
-			await withCwd(homedir(), () =>
+			await withCwd(tmpDir, () =>
 				generateSkill({
 					command: snapshotCommand(app._node),
 					meta: {
@@ -454,24 +465,15 @@ describe("skill extension auto-update", () => {
 				}),
 			);
 
-			const skillDir = join(homedir(), ".agents", "skills", "manual-home-update-test");
+			const skillDir = join(tmpDir, ".agents", "skills", "manual-home-update-test");
 			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
-			await withCwd(homedir(), () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
 			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 		} finally {
 			console.log = originalLog;
-			await rm(join(homedir(), ".agents", "skills", "manual-home-update-test"), {
-				recursive: true,
-				force: true,
-			});
-			await rm(join(homedir(), ".crust", "skills", "manual-home-update-test"), {
-				recursive: true,
-				force: true,
-			});
+			restoreHomedir();
 		}
 
 		expect(logs.some((line) => line.includes("(global)"))).toBe(true);
@@ -494,9 +496,10 @@ describe("skill extension auto-update", () => {
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
+		mockHomedir(tmpDir);
 
 		try {
-			await withCwd(homedir(), () =>
+			await withCwd(tmpDir, () =>
 				generateSkill({
 					command: snapshotCommand(app._node),
 					meta: {
@@ -509,19 +512,10 @@ describe("skill extension auto-update", () => {
 				}),
 			);
 
-			await withCwd(homedir(), () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 		} finally {
 			console.log = originalLog;
-			await rm(join(homedir(), ".agents", "skills", "manual-home-noop-test"), {
-				recursive: true,
-				force: true,
-			});
-			await rm(join(homedir(), ".crust", "skills", "manual-home-noop-test"), {
-				recursive: true,
-				force: true,
-			});
+			restoreHomedir();
 		}
 
 		expect(logs.some((line) => line.includes("No updates needed (global)."))).toBe(true);
@@ -890,7 +884,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-name-mismatch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -976,7 +970,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -1404,7 +1398,7 @@ describe("skillPlugin customSkills interactive command", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-cmd-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -1533,24 +1527,24 @@ describe("skillPlugin customSkills interactive command", () => {
 			value: false,
 			configurable: true,
 		});
-		// Redirect HOME so global-scope writes land inside tmpDir, then
-		// restore. Crust derives the global path from `homedir()`, so
-		// overriding HOME is the canonical hook.
-		const origHome = process.env.HOME;
-		process.env.HOME = tmpDir;
+		const projectDir = join(tmpDir, "project");
+		await mkdir(projectDir);
+		mockHomedir(tmpDir);
 		const origLog = console.log;
 		console.log = () => {};
 		try {
-			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "--all", "--scope", "global"] }));
+			await withCwd(projectDir, () =>
+				app.execute({ argv: ["skill", "--all", "--scope", "global"] }),
+			);
 		} finally {
 			if (originalIsTTY) {
 				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
 			}
 			console.log = origLog;
-			process.env.HOME = origHome;
+			restoreHomedir();
 		}
 
-		const projectBundle = join(tmpDir, ".agents", "skills", "funnel-builder");
+		const projectBundle = join(projectDir, ".agents", "skills", "funnel-builder");
 		// Project-scope path must NOT exist — the explicit --scope flag wins.
 		await expect(stat(projectBundle)).rejects.toThrow();
 	});
@@ -1627,7 +1621,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-update-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });

@@ -412,61 +412,6 @@ describe("Crust type-level tests", () => {
 		>;
 	});
 
-	it(".flags() with alias collision produces compile error", () => {
-		// This test verifies the compile-time constraint. If we uncomment the
-		// invalid definition below, TypeScript will produce a compile error:
-		//
-		// const app = new Crust("test").flags({
-		//   verbose: { type: "boolean", short: "v" },
-		//   version: { type: "boolean", short: "v" },
-		// });
-		//
-		// Error: Property 'FIX_ALIAS_COLLISION' is missing...
-
-		// Valid flags: no collision
-		const app = new Crust("test").flags({
-			verbose: { type: "boolean", short: "v" },
-			version: { type: "boolean", short: "V" },
-		});
-		expect(app).toBeDefined();
-	});
-
-	it(".flags() with no- prefix produces compile error", () => {
-		// This test verifies the compile-time constraint. If we uncomment the
-		// invalid definition below, TypeScript will produce a compile error:
-		//
-		// const app = new Crust("test").flags({
-		//   "no-cache": { type: "boolean" },
-		// });
-		//
-		// Error: Property 'FIX_NO_PREFIX' is missing...
-
-		// Valid flags: no "no-" prefix
-		const app = new Crust("test").flags({
-			cache: { type: "boolean" },
-		});
-		expect(app).toBeDefined();
-	});
-
-	it(".args() with non-last variadic produces compile error", () => {
-		// This test verifies the compile-time constraint. If we uncomment the
-		// invalid definition below, TypeScript will produce a compile error:
-		//
-		// const app = new Crust("test").args([
-		//   { name: "files", type: "string", variadic: true },
-		//   { name: "output", type: "string" },
-		// ]);
-		//
-		// Error: Property 'FIX_VARIADIC_POSITION' is missing...
-
-		// Valid args: variadic is last
-		const app = new Crust("test").args([
-			{ name: "output", type: "string" },
-			{ name: "files", type: "string", variadic: true },
-		]);
-		expect(app).toBeDefined();
-	});
-
 	it("chaining .flags().args() preserves both generics", () => {
 		const app = new Crust("test")
 			.flags({

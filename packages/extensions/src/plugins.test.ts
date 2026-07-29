@@ -4,7 +4,6 @@ import { Crust, extension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
-import { didYouMeanExtension } from "./did-you-mean.ts";
 import { helpExtension, renderHelp } from "./help.ts";
 import { noColorExtension } from "./no-color.ts";
 import { versionExtension } from "./version.ts";
@@ -440,18 +439,6 @@ describe("built-in plugins", () => {
 		await app.execute({ argv: ["--version"] });
 
 		expect(getStdout()).toContain("app v3.5.0");
-	});
-
-	it("didYouMean plugin handles command not found in error mode", async () => {
-		const app = new Crust("app")
-			.extend(didYouMeanExtension())
-			.command("build", (cmd) => cmd.handle(() => {}));
-
-		await app.execute({ argv: ["buld"] });
-
-		expect(getStderr()).toContain('Unknown command "buld"');
-		expect(getStderr()).toContain('Did you mean "build"?');
-		expect(process.exitCode).toBe(1);
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────────

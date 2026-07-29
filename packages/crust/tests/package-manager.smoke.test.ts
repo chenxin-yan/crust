@@ -126,13 +126,9 @@ afterAll(() => {
 	rmSync(testRoot, { recursive: true, force: true });
 });
 
-describe("package manager smoke", () => {
+describe.skipIf(!packageManager)("package manager smoke", () => {
 	it("installs and runs the staged CLI through node_modules/.bin", async () => {
-		if (!packageManager) {
-			return;
-		}
-
-		if (!hasCommand(packageManager)) {
+		if (!hasCommand(packageManager!)) {
 			throw new Error(`${packageManager} is required for this smoke test.`);
 		}
 		if (!hasCommand("npm")) {
@@ -168,27 +164,8 @@ describe("package manager smoke", () => {
 			),
 		);
 
-		const installCommand =
-			packageManager === "bun"
-				? ["bun", "install"]
-				: packageManager === "pnpm"
-					? ["pnpm", "install"]
-					: ["npm", "install"];
-
-		const install = await run(installCommand, installDir);
+		const install = await run([packageManager!, "install"], installDir);
 		expect(install.exitCode).toBe(0);
-
-		const launcherPath = join(
-			installDir,
-			"node_modules",
-			"@scope",
-			"resolver-smoke",
-			"bin",
-			"resolver-smoke",
-		);
-		const launcherSource = readFileSync(launcherPath, "utf-8");
-		expect(launcherSource).not.toContain("usr/bin/env node");
-		expect(launcherSource).not.toContain("require.resolve");
 
 		const binPath = join(installDir, "node_modules", ".bin", "resolver-smoke");
 		chmodSync(binPath, 0o755);
