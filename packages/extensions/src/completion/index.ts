@@ -153,16 +153,6 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 			const safeVersion = sanitizeFreeText(version);
 
 			const requestedShell = context.args.shell as CompletionShell;
-			if (!SUPPORTED_SHELLS.includes(requestedShell)) {
-				// Parser-side `choices` validation normally rejects this path;
-				// keep the guard for direct invocation in tests/tools.
-				context.stderr(
-					`Unsupported shell "${requestedShell}". Supported: ${SUPPORTED_SHELLS.join(", ")}`,
-				);
-				process.exitCode = 1;
-				return;
-			}
-
 			const spec = walkCommandNode(rootCommand);
 			const outputDir = context.flags["output-dir"] as string | undefined;
 

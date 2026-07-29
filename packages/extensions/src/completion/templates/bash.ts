@@ -1,4 +1,4 @@
-import { bashDoubleQuoteInner, bashSingleQuote, sanitizeForComment } from "../escape.ts";
+import { bashDoubleQuoteInner, bashSingleQuote } from "../escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
 
 /**
@@ -382,10 +382,8 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 
 	const lines: string[] = [];
 
-	const safeBin = sanitizeForComment(binName);
-	const safeVersion = sanitizeForComment(version);
 	lines.push(
-		`# completion script for ${safeBin} v${safeVersion} — regenerate with: ${safeBin} completion bash`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion bash`,
 	);
 	lines.push("");
 

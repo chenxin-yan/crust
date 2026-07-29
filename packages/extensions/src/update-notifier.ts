@@ -5,7 +5,7 @@
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import { type Extension, extension } from "@crustjs/core";
-import { bold, cyan, dim, green, visibleWidth, yellow } from "@crustjs/style";
+import { bold, cyan, dim, green, padEnd, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export type UpdateNotifierInstallScope = "local" | "global";
@@ -455,6 +455,8 @@ function resolveUpdateCommand(
 		  ) => string)
 		| undefined,
 ): string {
+	if (typeof override === "string") return override;
+
 	const detectedPackageManager =
 		packageManagerOption && packageManagerOption !== "auto"
 			? packageManagerOption
@@ -464,7 +466,6 @@ function resolveUpdateCommand(
 			? installScopeOption
 			: detectInstallScopeFromEnvironment();
 
-	if (typeof override === "string") return override;
 	if (typeof override === "function") {
 		return override(packageName, detectedPackageManager, detectedInstallScope);
 	}
@@ -606,16 +607,6 @@ const BOX_HORIZONTAL = "─";
 const BOX_VERTICAL = "│";
 
 /**
- * Pad a line to a fixed visible width, accounting for ANSI escape codes.
- *
- * @internal
- */
-function padLine(text: string, width: number): string {
-	const padding = width - visibleWidth(text);
-	return padding > 0 ? text + " ".repeat(padding) : text;
-}
-
-/**
  * Emits a styled, boxed update notice to stderr.
  *
  * Uses stderr so the notice does not interfere with piped stdout.
@@ -649,8 +640,8 @@ function emitUpdateNotice(
 		"",
 		`${yellow(BOX_TOP_LEFT)}${yellow(border)}${yellow(BOX_TOP_RIGHT)}`,
 		emptyLine,
-		`${yellow(BOX_VERTICAL)}${pad}${padLine(versionLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
-		`${yellow(BOX_VERTICAL)}${pad}${padLine(commandLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		`${yellow(BOX_VERTICAL)}${pad}${padEnd(versionLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		`${yellow(BOX_VERTICAL)}${pad}${padEnd(commandLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
 		emptyLine,
 		`${yellow(BOX_BOTTOM_LEFT)}${yellow(border)}${yellow(BOX_BOTTOM_RIGHT)}`,
 		"",

@@ -1,9 +1,4 @@
-import {
-	sanitizeForComment,
-	zshArgsDescription,
-	zshDescribeField,
-	zshSingleQuote,
-} from "../escape.ts";
+import { zshArgsDescription, zshDescribeField, zshSingleQuote } from "../escape.ts";
 import type { CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
 
 /**
@@ -300,16 +295,13 @@ export function renderZsh(spec: CompletionSpec, binName: string, version: string
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
-	const safeBin = sanitizeForComment(binName);
-	const safeVersion = sanitizeForComment(version);
-
 	// `#compdef` MUST be the first line for zsh's autoload mechanism.
 	// `binName` was validated upstream; only the safe identifier set
 	// reaches here, so a quoted compdef target is unnecessary (and `zsh`
 	// itself rejects unusual `#compdef` arguments).
 	lines.push(`#compdef ${binName}`);
 	lines.push(
-		`# completion script for ${safeBin} v${safeVersion} — regenerate with: ${safeBin} completion zsh`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion zsh`,
 	);
 	lines.push("");
 

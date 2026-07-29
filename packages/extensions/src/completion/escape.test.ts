@@ -6,7 +6,6 @@ import {
 	assertSafeIdentifier,
 	bashSingleQuote,
 	fishSingleQuote,
-	sanitizeForComment,
 	sanitizeFreeText,
 	zshArgsDescription,
 	zshDescribeField,
@@ -88,7 +87,7 @@ describe("assertSafeChoiceValue", () => {
 	});
 });
 
-describe("sanitizeFreeText / sanitizeForComment", () => {
+describe("sanitizeFreeText", () => {
 	it("strips controls but keeps ordinary printable text", () => {
 		expect(sanitizeFreeText("hello world")).toBe("hello world");
 		// Tabs are preserved (descriptions occasionally use them).
@@ -101,12 +100,6 @@ describe("sanitizeFreeText / sanitizeForComment", () => {
 		expect(sanitizeFreeText("a\0b")).toBe("a b");
 		expect(sanitizeFreeText("a\x1bb")).toBe("a b"); // ESC
 		expect(sanitizeFreeText("a\x7fb")).toBe("a b"); // DEL
-	});
-
-	it("sanitizeForComment is sanitizeFreeText for v1", () => {
-		// Documents the named alias for clarity at call sites; if the
-		// shapes ever diverge this assertion forces a deliberate update.
-		expect(sanitizeForComment("a\nb")).toBe(sanitizeFreeText("a\nb"));
 	});
 });
 

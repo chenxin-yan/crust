@@ -4,47 +4,13 @@ import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from ".
 import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "./spec.ts";
 
 /**
- * Strip ANSI escape sequences (CSI + private-use SGR codes) from a string.
- *
- * Help-text descriptions can carry colour codes from `@crustjs/style` (e.g.
- * `dim(...)`, `cyan(...)`). The completion templates inline descriptions
- * verbatim into shell scripts; embedded `\x1b[...m` would corrupt the
- * generated output (and would render as garbage in the completion menu of
- * any terminal that did not interpret them).
- *
- * The pattern matches `ESC` followed by `[` (CSI) or `]` (OSC) plus any
- * intermediate parameter/intermediate bytes terminated by a final byte in
- * the conventional ranges. This is intentionally permissive: we strip more
- * than strictly SGR because users who reach for ANSI in a description
- * almost always mean "decoration", not "data".
- */
-// Build the pattern via the `RegExp` constructor with a string assembled from
-// `String.fromCharCode` so the source has no embedded control characters —
-// Oxlint's `no-control-regex` rule flags both regex literals and
-// string literals that contain raw `\x1b`/`\x07`. Behaviour is identical to
-// the equivalent regex literal.
-const ESC = String.fromCharCode(0x1b);
-const BEL = String.fromCharCode(0x07);
-const ANSI_PATTERN = new RegExp(
-	// CSI: ESC [ <params/intermediates> <final>
-	// OSC: ESC ] ... (BEL | ESC \)
-	// Two-byte simple sequences: ESC <0x40-0x5F>
-	`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|[@-_])`,
-	"g",
-);
-
-function stripAnsi(value: string): string {
-	return value.replace(ANSI_PATTERN, "");
-}
-
-/**
  * Normalise an optional description: strip ANSI, then drop empty results.
  * Returning `undefined` (rather than `""`) makes templates' presence checks
  * easy and keeps generated scripts tidy.
  */
 function normaliseDescription(value: string | undefined): string | undefined {
 	if (value === undefined) return undefined;
-	const stripped = sanitizeFreeText(stripAnsi(value)).trim();
+	const stripped = sanitizeFreeText(Bun.stripANSI(value)).trim();
 	return stripped.length === 0 ? undefined : stripped;
 }
 

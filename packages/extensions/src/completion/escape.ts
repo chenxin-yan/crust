@@ -126,15 +126,6 @@ export function sanitizeFreeText(value: string): string {
 	return value.replace(/[\x00-\x08\x0A-\x1F\x7F]/g, " ");
 }
 
-/**
- * Sanitise a value for inclusion as the **header comment** in a generated
- * shell script. Strips controls including newlines so a single line stays
- * a single line.
- */
-export function sanitizeForComment(value: string): string {
-	return sanitizeFreeText(value);
-}
-
 // ── Bash ──────────────────────────────────────────────────────────────────
 
 /**
@@ -171,14 +162,8 @@ export function bashDoubleQuoteInner(value: string): string {
 
 // ── Zsh ───────────────────────────────────────────────────────────────────
 
-/**
- * Wrap `value` as a zsh single-quoted shell word.
- *
- * Identical idiom to bash: `'foo'\''bar'`.
- */
-export function zshSingleQuote(value: string): string {
-	return `'${value.replace(/'/g, "'\\''")}'`;
-}
+/** Wrap `value` as a zsh single-quoted shell word. */
+export const zshSingleQuote: typeof bashSingleQuote = bashSingleQuote;
 
 /**
  * Escape free-form text for use inside the `[...]` description bracket of
@@ -225,17 +210,4 @@ export function zshDescribeField(value: string): string {
  */
 export function fishSingleQuote(value: string): string {
 	return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
-}
-
-/**
- * Build a fish-tokenised candidate list for use as the body of `-a` (the
- * argument completion list). Per fish's `complete --arguments` behaviour,
- * the value is split on **un-quoted** spaces, so each candidate gets
- * single-quoted independently and joined with a literal space.
- *
- * Empty list → empty string; callers should skip the `-a` flag entirely
- * in that case.
- */
-export function fishArgList(values: readonly string[]): string {
-	return values.map(fishSingleQuote).join(" ");
 }

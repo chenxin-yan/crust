@@ -77,18 +77,15 @@ describe("renderFish", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// Replaces the order-insensitive `__fish_seen_subcommand_from`
 		// chain with a helper that walks `commandline -opc` left-to-right.
-		expect(script).toContain("function __mycli_path_is");
+		expect(script).toContain("function __mycli_path_at_arg");
 		expect(script).toContain("commandline -opc");
 	});
 
-	it("emits subcommand rules gated on __<ident>_path_is at the top level", () => {
+	it("emits subcommand rules gated on __<ident>_path_at_arg at the top level", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		// Top-level rules call the helper with the leaf-block list (the
-		// canonical+alias spellings of the root's children) as the only
-		// argument — no consumed-path prefix. The condition is itself
-		// fish-single-quoted, so embedded `'` from the helper args are
-		// emitted as `\'` (fish's single-quote escape sequence).
-		expect(script).toContain("-n '__mycli_path_is \\'build deploy dep\\''");
+		// Top-level rules use the variadic zero offset before the root's
+		// child spellings, matching the path at any non-child positional.
+		expect(script).toContain("-n '__mycli_path_at_arg \\'*0\\' \\'build deploy dep\\''");
 		// Build / deploy / deploy-alias rules each carry their own `-a`.
 		expect(script).toMatch(/-f -a 'build' -d 'Build artifact'/);
 		expect(script).toMatch(/-f -a 'deploy' -d 'Deploy'/);
@@ -106,20 +103,18 @@ describe("renderFish", () => {
 		expect(script).toMatch(/-x -l 'target' -a 'node'/);
 	});
 
-	it("nested subcommand rules call __<ident>_path_is with the consumed path", () => {
+	it("nested subcommand rules call __<ident>_path_at_arg with the consumed path", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		// `deploy prod --env` lives at depth 2; the helper receives the
-		// depth-1 spelling list (`deploy dep`), then the leaf block
-		// (empty here because `prod` has no children). Embedded `'`s in
-		// the helper-call string are escaped as `\'` by fish.
-		expect(script).toContain("-n '__mycli_path_is \\'deploy dep\\' \\'prod\\' \\'\\''");
+		expect(script).toContain(
+			"-n '__mycli_path_at_arg \\'deploy dep\\' \\'prod\\' \\'*0\\' \\'\\''",
+		);
 	});
 
 	it("negates deeper subcommand candidates via the helper's leaf-block list", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// At depth `[deploy]` the leaf-block list is `prod` (its only
 		// child); the helper rejects when `prod` has already appeared.
-		expect(script).toContain("-n '__mycli_path_is \\'deploy dep\\' \\'prod\\''");
+		expect(script).toContain("-n '__mycli_path_at_arg \\'deploy dep\\' \\'*0\\' \\'prod\\''");
 	});
 
 	it("emits boolean flags without -r/-x", () => {

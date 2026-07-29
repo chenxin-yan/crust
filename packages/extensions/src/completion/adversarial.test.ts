@@ -72,44 +72,6 @@ describe("walker · validation", () => {
 	});
 });
 
-// ── Comment/header injection ─────────────────────────────────────────────
-
-describe("renderBash / renderZsh / renderFish · header injection", () => {
-	const minimal: CompletionSpec = {
-		root: { name: "x", flags: [], args: [], subCommands: [] },
-	};
-
-	it.each([
-		["bash", renderBash],
-		["zsh", renderZsh],
-		["fish", renderFish],
-	] as const)(
-		"%s strips newlines from `version` so the header stays a single comment line",
-		(_shell, render) => {
-			// Without sanitisation, an embedded `\n` would terminate the
-			// `# ...` comment line and turn the rest into executable shell
-			// when the script is `eval`'d (the documented install path). The
-			// invariant we care about is: the embedded text remains *inside*
-			// the comment line, not that the textual payload disappears
-			// (the textual payload is inert because it's commented out).
-			const evil = "1.0\necho ATTACK #";
-			const out = render(minimal, "x", evil);
-			const headerLine = out.split("\n").find((l) => l.includes("v1.0"));
-			expect(headerLine).toBeDefined();
-			// The full payload is on the *same* line as `v1.0` (i.e. inside
-			// the comment), not on a follow-up line.
-			expect(headerLine).toContain("ATTACK");
-			// And no second comment-less line containing `echo ATTACK` exists
-			// (which would happen if the newline survived).
-			const nonCommentLines = out
-				.split("\n")
-				.filter((l) => l.length > 0 && !l.startsWith("#"))
-				.filter((l) => l.includes("ATTACK"));
-			expect(nonCommentLines).toEqual([]);
-		},
-	);
-});
-
 // ── --no- negation ───────────────────────────────────────────────────────
 
 describe("--no- negation", () => {
@@ -359,14 +321,16 @@ describe("renderFish · ordered subcommand predicate", () => {
 	it("emits a path-walking helper that only matches the in-order canonical path", () => {
 		const out = renderFish(spec, "mycli", "1");
 		// One helper, used by both the build subcmd and its child.
-		expect(out).toContain("function __mycli_path_is");
+		expect(out).toContain("function __mycli_path_at_arg");
 		// build's `deploy` child is gated on the depth-2 path
 		// `[build, deploy]`, NOT on `seen_subcommand_from deploy`. The
 		// relevant rule includes `'build'` then `'deploy'` then a leaf
 		// block (empty for the leaf).
-		expect(out).toMatch(/-n '__mycli_path_is \\'build\\' \\'deploy\\' \\'\\''.*-l 'fast'/);
+		expect(out).toMatch(
+			/-n '__mycli_path_at_arg \\'build\\' \\'deploy\\' \\'\*0\\' \\'\\''.*-l 'fast'/,
+		);
 		// Top-level deploy's `slow` flag is gated on the depth-1 path
 		// `[deploy]`. Its block is empty (no children).
-		expect(out).toMatch(/-n '__mycli_path_is \\'deploy\\' \\'\\''.*-l 'slow'/);
+		expect(out).toMatch(/-n '__mycli_path_at_arg \\'deploy\\' \\'\*0\\' \\'\\''.*-l 'slow'/);
 	});
 });

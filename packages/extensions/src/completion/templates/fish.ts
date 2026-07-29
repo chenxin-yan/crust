@@ -1,4 +1,4 @@
-import { fishSingleQuote, sanitizeForComment } from "../escape.ts";
+import { fishSingleQuote } from "../escape.ts";
 import type { CompletionCommand, CompletionSpec } from "../spec.ts";
 
 /**
@@ -11,7 +11,7 @@ import type { CompletionCommand, CompletionSpec } from "../spec.ts";
  * no shell state to manage.
  *
  * **Subcommand routing.** We emit a single helper per script —
- * `__<ident>_path_is` — that walks `commandline -opc` left-to-right,
+ * `__<ident>_path_at_arg` — that walks `commandline -opc` left-to-right,
  * skips flags and the `--` end-of-options terminator, and verifies that
  * each consumed positional matches the expected canonical-or-alias set
  * for its depth in order. This replaces the stock
@@ -93,42 +93,12 @@ function renderRule(binName: string, parts: RuleParts): string {
 }
 
 /**
- * Build the `-n` predicate expression that matches "we are currently at
- * the command path `path` and no deeper subcommand has been entered".
- *
- * Always uses the per-script helper `__<ident>_path_is`. The helper
- * receives one argument per depth (space-joined acceptable spellings at
- * that depth) plus a final "block" argument that lists the child
- * spellings of the leaf — the helper rejects when any of those have
- * already appeared past the path.
- */
-function pathPredicate(
-	ident: string,
-	path: readonly CompletionCommand[],
-	leaf: CompletionCommand,
-): string {
-	const args: string[] = [];
-	for (const node of path) {
-		args.push(fishSingleQuote(spellingsOf(node)));
-	}
-	args.push(fishSingleQuote(childSpellings(leaf)));
-	return `__${ident}_path_is ${args.join(" ")}`;
-}
-
-/**
- * Build the `-n` predicate for a positional-argument-choice rule.
+ * Build the `-n` path and positional-argument predicate.
  *
  * Calls `__<ident>_path_at_arg <spellings...> <pos_spec> <block>` where
  * `pos_spec` is either `<N>` (exact: completion fires when exactly N
- * positionals have been consumed past the path) or `*<N>` (variadic
- * fallback: fires when N-or-more positionals have been consumed, used
- * for variadic args with choices).
- *
- * Notes on layering: this helper is intentionally a parallel function
- * to `__<ident>_path_is` rather than a generalisation of it — the two
- * call sites (subcommand/flag rules vs positional-choice rules) want
- * distinct semantics and the call surfaces are clearer when each helper
- * does one thing.
+ * positionals have been consumed past the path) or `*<N>` (fires when
+ * N-or-more positionals have been consumed).
  */
 function posPredicate(
 	ident: string,
@@ -163,7 +133,7 @@ function emitRules(
 	current: CompletionCommand,
 	out: string[],
 ): void {
-	const condition = pathPredicate(ident, path, current);
+	const condition = posPredicate(ident, path, current, "*0");
 
 	// Subcommand rules: emit one rule per spelling so each can carry its
 	// own description in the menu. fishSingleQuote is applied via the
@@ -327,70 +297,12 @@ function emitRules(
 }
 
 /**
- * Emit the per-script `__<ident>_path_is` helper. See
- * {@link pathPredicate} for the calling convention.
- *
- * The helper walks `commandline -opc` (the line tokens up to the cursor),
- * skipping the program name, all `-*` tokens, and everything after `--`.
- * It then checks each consumed positional matches the expected
- * spelling-list at depth `i`, in order. Past the path, it returns 1 if
- * any of the leaf's children have been entered (so deeper paths win and
- * shallower predicates stop matching).
- */
-function emitHelper(ident: string): string[] {
-	const fn = `__${ident}_path_is`;
-	const lines: string[] = [];
-	lines.push(`function ${fn}`);
-	lines.push("\tset -l n (math (count $argv) - 1)");
-	lines.push('\tset -l block (string split " " -- $argv[-1])');
-	lines.push("\tset -l tokens (commandline -opc)");
-	lines.push("\tset -l total (count $tokens)");
-	// Skip the program name (token 1).
-	lines.push("\tset -l j 2");
-	lines.push("\tset -l consumed 0");
-	lines.push("\tset -l end_of_options 0");
-	lines.push("\twhile test $j -le $total");
-	lines.push("\t\tset -l t $tokens[$j]");
-	lines.push('\t\tif test "$t" = "--"');
-	lines.push("\t\t\tset end_of_options 1");
-	lines.push("\t\t\tset j (math $j + 1)");
-	lines.push("\t\t\tcontinue");
-	lines.push("\t\tend");
-	lines.push("\t\tif test $end_of_options -eq 0; and string match -q -- '-*' $t");
-	lines.push("\t\t\tset j (math $j + 1)");
-	lines.push("\t\t\tcontinue");
-	lines.push("\t\tend");
-	lines.push("\t\tif test $consumed -lt $n");
-	lines.push('\t\t\tset -l alts (string split " " -- $argv[(math $consumed + 1)])');
-	lines.push("\t\t\tif not contains -- $t $alts");
-	lines.push("\t\t\t\treturn 1");
-	lines.push("\t\t\tend");
-	lines.push("\t\t\tset consumed (math $consumed + 1)");
-	lines.push("\t\telse");
-	lines.push("\t\t\tif contains -- $t $block");
-	lines.push("\t\t\t\treturn 1");
-	lines.push("\t\t\tend");
-	lines.push("\t\tend");
-	lines.push("\t\tset j (math $j + 1)");
-	lines.push("\tend");
-	lines.push("\ttest $consumed -eq $n");
-	lines.push("end");
-	return lines;
-}
-
-/**
- * Emit the per-script `__<ident>_path_at_arg` helper. Like
- * {@link emitHelper} but takes an extra `pos_spec` argument before the
- * block list. `pos_spec` is `<N>` (fires when exactly N positionals have
+ * Emit the per-script `__<ident>_path_at_arg` helper. It takes a
+ * `pos_spec` argument before the block list. `pos_spec` is `<N>` (fires
+ * when exactly N positionals have
  * been consumed past the path — the cursor is filling slot N) or
  * `*<N>` (variadic; fires when N-or-more positionals have been
- * consumed, used for variadic-with-choices args).
- *
- * The walking loop is identical to `__<ident>_path_is`; only the final
- * test differs. Kept as a separate helper rather than a parameterised
- * superset of the existing one so call sites stay declarative — a
- * subcommand rule wants "we are at this path, nothing further typed",
- * not "we are at this path with offset=0".
+ * consumed, used for variadic-with-choices args and path matching).
  */
 function emitPosHelper(ident: string): string[] {
 	const fn = `__${ident}_path_at_arg`;
@@ -462,16 +374,12 @@ export function renderFish(spec: CompletionSpec, binName: string, version: strin
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
-	const safeBin = sanitizeForComment(binName);
-	const safeVersion = sanitizeForComment(version);
 	lines.push(
-		`# completion script for ${safeBin} v${safeVersion} — regenerate with: ${safeBin} completion fish`,
+		`# completion script for ${binName} v${version} — regenerate with: ${binName} completion fish`,
 	);
 	lines.push("");
 
-	// Emit the path-resolution helpers before any rules reference them.
-	lines.push(...emitHelper(ident));
-	lines.push("");
+	// Emit the path-resolution helper before any rules reference it.
 	lines.push(...emitPosHelper(ident));
 	lines.push("");
 

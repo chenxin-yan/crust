@@ -126,8 +126,8 @@ describe("completionExtension", () => {
 		// We replaced the order-insensitive `__fish_seen_subcommand_from`
 		// chain with a per-script helper that walks `commandline -opc`
 		// left-to-right.
-		expect(out).toContain("function __mycli_path_is");
-		expect(out).toContain("__mycli_path_is");
+		expect(out).toContain("function __mycli_path_at_arg");
+		expect(out).toContain("__mycli_path_at_arg");
 	});
 
 	it("rejects unsupported shell names with a clear stderr message", async () => {
