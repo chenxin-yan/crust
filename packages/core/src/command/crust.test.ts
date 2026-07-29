@@ -1926,6 +1926,18 @@ describe("Crust .execute()", () => {
 		expect(result).toBe("done");
 	});
 
+	it("handler context exposes stdout/stderr text callbacks", async () => {
+		const app = new Crust("test").run((ctx) => {
+			ctx.stdout("hello out");
+			ctx.stderr("hello err");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(stdoutChunks).toContain("hello out");
+		expect(stderrChunks).toContain("hello err");
+	});
+
 	it("command context contains a serializable snapshot of the resolved command", async () => {
 		let receivedCommand: unknown;
 

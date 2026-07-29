@@ -66,6 +66,8 @@ interface CrustCommandContext<A, F> {
   flags: InferFlags<F>; // Parsed flags (inherited + local merged)
   rawArgs: string[]; // Arguments after `--`
   command: CommandSnapshot; // Readonly, serializable snapshot of the resolved command
+  stdout: (text: string) => void; // Write a line of standard output
+  stderr: (text: string) => void; // Write a line of diagnostic output
 }
 ```
 

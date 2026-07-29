@@ -58,6 +58,32 @@ export interface CrustCommandContext<
 	rawArgs: string[];
 	/** Readonly, serializable snapshot of the resolved command */
 	command: CommandSnapshot;
+	/** Write a line of standard output (injectable text callback) */
+	stdout: (text: string) => void;
+	/** Write a line of diagnostic output (injectable text callback) */
+	stderr: (text: string) => void;
+}
+
+/** Injectable output callbacks threaded through one invocation. */
+interface InvocationIO {
+	stdout: (text: string) => void;
+	stderr: (text: string) => void;
+}
+
+/** Terminal defaults: line-oriented writes to the process streams. */
+function defaultIO(): InvocationIO {
+	return {
+		stdout: (text) => console.log(text),
+		stderr: (text) => console.error(text),
+	};
+}
+
+/** Output of `_prepare`: one cloned, set-up, frozen tree ready to dispatch. */
+interface PreparedInvocation {
+	rootNode: CommandNode;
+	allPlugins: CrustPlugin[];
+	state: PluginState;
+	warnings: string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -846,38 +872,24 @@ export class Crust<
 	 */
 	async execute(options?: { argv?: string[] }): Promise<void> {
 		const argv = options?.argv ?? process.argv.slice(2);
-		const rootNode = deepCloneCommandNode(this._node);
+		const io = defaultIO();
 
-		// ── Step 1: Collect all plugins from the tree ──────────────────────
-		const allPlugins = collectPlugins(rootNode);
-
-		// ── Step 2: Run plugin setup() hooks ───────────────────────────────
-		const warnings: string[] = [];
-		const state = createPluginState();
-		const setupContext: SetupContext = {
-			argv: [...argv] as readonly string[],
-			rootCommand: rootNode,
-			state,
-		};
-		const actions = createSetupActions(warnings);
-
+		let prepared: PreparedInvocation;
 		try {
-			await runSetupHooks(allPlugins, setupContext, actions);
+			prepared = await this._prepare(argv);
 		} catch (error) {
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
 			const message = error instanceof Error ? error.message : String(error);
-			console.error(`Error: ${message}`);
+			io.stderr(`Error: ${message}`);
 			process.exitCode = 1;
 			return;
 		}
+		const { rootNode, warnings } = prepared;
 
-		// ── Step 3: Freeze the command tree ────────────────────────────────
-		freezeTree(rootNode);
-
-		// ── Step 4: Build-time validation mode ─────────────────────────────
+		// ── Build-time validation mode ─────────────────────────────────────
 		if (process.env[VALIDATION_MODE_ENV] === "1") {
 			const result = (async () => {
 				try {
@@ -912,7 +924,57 @@ export class Crust<
 			console.warn(`Warning: ${warning}`);
 		}
 
-		// ── Steps 5–8: Resolve, parse, middleware, execute ─────────────────
+		try {
+			await this._dispatch(argv, prepared, io);
+		} catch (error) {
+			// Render the failure once and set the exit code — the original
+			// error surfaces unwrapped, never converted or re-thrown here.
+			if (isAbortError(error)) {
+				process.exitCode = EXIT_CODE_CANCELLED;
+				return;
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			io.stderr(`Error: ${message}`);
+			process.exitCode = 1;
+		}
+	}
+
+	/**
+	 * Clone the tree, run plugin setup hooks, and freeze the result.
+	 * Throws the original setup failure without rendering it.
+	 */
+	private async _prepare(argv: readonly string[]): Promise<PreparedInvocation> {
+		const rootNode = deepCloneCommandNode(this._node);
+		const allPlugins = collectPlugins(rootNode);
+
+		const warnings: string[] = [];
+		const state = createPluginState();
+		const setupContext: SetupContext = {
+			argv: [...argv] as readonly string[],
+			rootCommand: rootNode,
+			state,
+		};
+		const actions = createSetupActions(warnings);
+
+		await runSetupHooks(allPlugins, setupContext, actions);
+
+		freezeTree(rootNode);
+
+		return { rootNode, allPlugins, state, warnings };
+	}
+
+	/**
+	 * Resolve, parse, run middleware and the Command Handler for one
+	 * invocation. Throws the original failure (definition, parse, Context,
+	 * or handler error) without rendering it or touching `process.exitCode`.
+	 */
+	private async _dispatch(
+		argv: readonly string[],
+		prepared: PreparedInvocation,
+		io: InvocationIO,
+	): Promise<void> {
+		const { rootNode, allPlugins, state } = prepared;
+
 		const middlewareContext: MiddlewareContext = {
 			argv: [...argv] as readonly string[],
 			rootCommand: rootNode,
@@ -921,85 +983,76 @@ export class Crust<
 			input: null,
 		};
 
+		let resolvedNode: CommandNode;
+		let parsed: ReturnType<typeof parseArgs>;
+
 		try {
-			let resolvedNode: CommandNode;
-			let parsed: ReturnType<typeof parseArgs>;
+			// Resolve subcommand
+			const resolved = resolveCommand(rootNode, [...argv]);
+			middlewareContext.route = resolved;
 
-			try {
-				// Step 5: Resolve subcommand
-				const resolved = resolveCommand(rootNode, [...argv]);
-				middlewareContext.route = resolved;
-
-				// Step 6: Parse remaining argv
-				// Safe cast: rootNode is always CommandNode, so all resolved descendants are too
-				resolvedNode = resolved.command as CommandNode;
-				parsed = parseArgs(resolvedNode, resolved.argv);
-				middlewareContext.input = parsed;
-			} catch (error) {
-				// Route/parse errors pass through middleware before surfacing
-				await runMiddlewareChain(allPlugins, middlewareContext, async () => {
-					throw error;
-				});
-				return;
-			}
-
-			// Step 7: Run middleware chain → Step 8: lifecycle hooks
-			await runMiddlewareChain(allPlugins, middlewareContext, async () => {
-				validateParsed(resolvedNode, parsed);
-
-				if (!resolvedNode.run) return;
-
-				const context: CrustCommandContext = {
-					args: parsed.args,
-					flags: parsed.flags,
-					ctx: await buildContexts(resolvedNode.contexts),
-					rawArgs: parsed.rawArgs,
-					command: snapshotCommand(resolvedNode),
-				};
-
-				let runError: unknown;
-				try {
-					// preRun
-					if (resolvedNode.preRun) {
-						await resolvedNode.preRun(context);
-					}
-
-					// run
-					await resolvedNode.run(context);
-				} catch (error) {
-					runError = error;
-				}
-
-				// postRun always runs (even if run/preRun threw)
-				if (resolvedNode.postRun) {
-					try {
-						await resolvedNode.postRun(context);
-					} catch (postRunError) {
-						// If run already threw, preserve the original error and log postRun error
-						if (!runError) {
-							runError = postRunError;
-						} else {
-							console.error(
-								`Error in postRun: ${postRunError instanceof Error ? postRunError.message : String(postRunError)}`,
-							);
-						}
-					}
-				}
-
-				// Re-throw the original error if any
-				if (runError) {
-					throw runError;
-				}
-			});
+			// Parse remaining argv
+			// Safe cast: rootNode is always CommandNode, so all resolved descendants are too
+			resolvedNode = resolved.command as CommandNode;
+			parsed = parseArgs(resolvedNode, resolved.argv);
+			middlewareContext.input = parsed;
 		} catch (error) {
-			// Step 9: Error handling — surface the original error unwrapped
-			if (isAbortError(error)) {
-				process.exitCode = EXIT_CODE_CANCELLED;
-				return;
-			}
-			const message = error instanceof Error ? error.message : String(error);
-			console.error(`Error: ${message}`);
-			process.exitCode = 1;
+			// Route/parse errors pass through middleware before surfacing
+			await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+				throw error;
+			});
+			return;
 		}
+
+		// Middleware chain → lifecycle hooks
+		await runMiddlewareChain(allPlugins, middlewareContext, async () => {
+			validateParsed(resolvedNode, parsed);
+
+			if (!resolvedNode.run) return;
+
+			const context: CrustCommandContext = {
+				args: parsed.args,
+				flags: parsed.flags,
+				ctx: await buildContexts(resolvedNode.contexts),
+				rawArgs: parsed.rawArgs,
+				command: snapshotCommand(resolvedNode),
+				stdout: io.stdout,
+				stderr: io.stderr,
+			};
+
+			let runError: unknown;
+			try {
+				// preRun
+				if (resolvedNode.preRun) {
+					await resolvedNode.preRun(context);
+				}
+
+				// run
+				await resolvedNode.run(context);
+			} catch (error) {
+				runError = error;
+			}
+
+			// postRun always runs (even if run/preRun threw)
+			if (resolvedNode.postRun) {
+				try {
+					await resolvedNode.postRun(context);
+				} catch (postRunError) {
+					// If run already threw, preserve the original error and log postRun error
+					if (!runError) {
+						runError = postRunError;
+					} else {
+						io.stderr(
+							`Error in postRun: ${postRunError instanceof Error ? postRunError.message : String(postRunError)}`,
+						);
+					}
+				}
+			}
+
+			// Re-throw the original error if any
+			if (runError) {
+				throw runError;
+			}
+		});
 	}
 }
