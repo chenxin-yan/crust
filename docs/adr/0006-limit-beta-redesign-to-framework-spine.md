@@ -1,0 +1,3 @@
+# Limit the beta redesign to the framework spine
+
+The beta intentionally redesigns Core, Extensions, generated create-crust applications, and their documentation. Build, man-page, and skills integrations receive compatibility changes through an explicitly unsupported `@crustjs/core/tooling` subpath limited to serializable snapshot preparation and the build-validation protocol; public `CommandNode` and `prepareCommandTree()` access are removed. Prompts, store, style, progress, create internals, and other supporting packages are verified but not redesigned; this keeps the release focused without allowing first-party integrations or golden paths to drift.

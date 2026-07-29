@@ -2,7 +2,16 @@
 	"$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
 	"changelog": "@changesets/cli/changelog",
 	"commit": false,
-	"fixed": [],
+	"fixed": [
+		[
+			"@crustjs/core",
+			"@crustjs/extensions",
+			"@crustjs/crust",
+			"create-crust",
+			"@crustjs/man",
+			"@crustjs/skills"
+		]
+	],
 	"linked": [],
 	"access": "public",
 	"baseBranch": "main",

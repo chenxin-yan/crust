@@ -1,0 +1,3 @@
+# Release the framework spine as regular 0.2.0 packages
+
+Core, Extensions, crust tooling, create-crust, man, and skills will publish coordinated regular `0.2.0` releases rather than npm prereleases; `0.2.0` (not `0.1.0`) because `@crustjs/man` and `@crustjs/skills` are already published at `0.1.2` and a lockstep group cannot version backwards. The project remains product-level beta, but ordinary version resolution and scaffolding should install the new API without requiring a prerelease tag. Pre-0.1 APIs receive a hard cut with a before/after migration guide and npm deprecation pointers rather than aliases, re-export packages, or compatibility shims.
