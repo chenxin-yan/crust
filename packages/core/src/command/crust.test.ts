@@ -6,6 +6,7 @@ import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../
 import {
 	Crust,
 	type CrustCommandContext,
+	prepareCommandSnapshot,
 	VALIDATION_FORCE_EXIT_ENV,
 	VALIDATION_MODE_ENV,
 } from "./crust.ts";
@@ -2516,8 +2517,8 @@ describe("Crust .command(builder)", () => {
 	});
 });
 
-describe("Crust.prepareCommandTree", () => {
-	it("returns a frozen tree and does not mutate the builder", async () => {
+describe("prepareCommandSnapshot (tooling)", () => {
+	it("returns a frozen snapshot with Extension flags applied, without mutating the builder", async () => {
 		const docs = extension("doc-test", {
 			flags: {
 				extra: { type: "boolean", description: "Injected for docs" },
@@ -2528,23 +2529,23 @@ describe("Crust.prepareCommandTree", () => {
 
 		expect(app._node.localFlags.extra).toBeUndefined();
 
-		const { root, warnings } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 
 		expect(app._node.localFlags.extra).toBeUndefined();
-		expect(root.effectiveFlags.extra).toMatchObject({
+		expect(root.flags.extra).toMatchObject({
 			type: "boolean",
 			description: "Injected for docs",
 		});
 		expect(Object.isFrozen(root)).toBe(true);
-		expect(warnings).toEqual([]);
+		expect(() => structuredClone(root)).not.toThrow();
 	});
 
 	it("can be called multiple times", async () => {
 		const app = new Crust("cli").handle(() => {});
-		const a = await app.prepareCommandTree();
-		const b = await app.prepareCommandTree();
-		expect(a.root.meta.name).toBe("cli");
-		expect(b.root.meta.name).toBe("cli");
+		const a = await prepareCommandSnapshot(app);
+		const b = await prepareCommandSnapshot(app);
+		expect(a.meta.name).toBe("cli");
+		expect(b.meta.name).toBe("cli");
 	});
 });
 

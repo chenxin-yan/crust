@@ -1,31 +1,31 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
-import { parseArgs, resolveCommand, type CommandNode } from "@crustjs/core/tooling";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 
 describe("crust integration", () => {
-	it("Crust builder + parseArgs work through re-export", () => {
+	it("parses args and flags through the public run() pipeline", async () => {
+		let captured: { file?: unknown; output?: unknown } = {};
 		const app = new Crust("parse-test")
 			.args([{ name: "file", type: "string", required: true }] as const)
 			.flags({
 				output: { type: "string", default: "dist", short: "o" },
-			} as const);
+			} as const)
+			.handle(({ args, flags }) => {
+				captured = { file: args.file, output: flags.output };
+			});
 
-		// Access the internal node to test parseArgs directly
-		const node = (app as unknown as { _node: CommandNode })._node;
-		const result = parseArgs(node, ["src/index.ts", "-o", "build"]);
-		expect((result.args as Record<string, unknown>).file).toBe("src/index.ts");
-		expect((result.flags as Record<string, unknown>).output).toBe("build");
+		await app.run(["src/index.ts", "-o", "build"]);
+		expect(captured.file).toBe("src/index.ts");
+		expect(captured.output).toBe("build");
 	});
 
-	it("resolveCommand works with Crust builder", () => {
+	it("prepareCommandSnapshot exposes the routed tree through the tooling bridge", async () => {
 		const app = new Crust("root").command("sub", (cmd) => cmd.handle(() => {}));
 
-		const node = (app as unknown as { _node: CommandNode })._node;
-		const result = resolveCommand(node, ["sub", "--flag"]);
-		expect(result.command.meta.name).toBe("sub");
-		expect(result.argv).toEqual(["--flag"]);
-		expect(result.commandPath).toEqual(["root", "sub"]);
+		const root = await prepareCommandSnapshot(app);
+		expect(root.meta.name).toBe("root");
+		expect(root.subCommands.sub?.hasHandler).toBe(true);
 	});
 
 	it("Crust.execute() runs command through builder", async () => {

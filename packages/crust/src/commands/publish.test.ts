@@ -3,7 +3,6 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { parseArgs, type CommandNode } from "@crustjs/core/tooling";
 
 import {
 	buildPublishCommand,
@@ -15,12 +14,16 @@ import {
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
-function makePublishNode() {
-	const app = new Crust("test").command(publishCommand);
-	const node = (app as unknown as { _node: CommandNode })._node;
-	const publishNode = node.subCommands.publish;
-	if (!publishNode) throw new Error("publish subcommand not found");
-	return publishNode;
+/** Parse argv against the publish command's grammar through the public pipeline. */
+async function parsePublishArgs(argv: string[]) {
+	let captured: { flags: Record<string, unknown> } | undefined;
+	await publishCommand
+		.handle((ctx) => {
+			captured = { flags: ctx.flags as Record<string, unknown> };
+		})
+		.run(argv);
+	if (!captured) throw new Error("publish handler did not run");
+	return captured;
 }
 
 function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
@@ -63,9 +66,8 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 }
 
 describe("publishCommand definition", () => {
-	it("has correct defaults", () => {
-		const node = makePublishNode();
-		const result = parseArgs(node, []);
+	it("has correct defaults", async () => {
+		const result = await parsePublishArgs([]);
 
 		expect(result.flags["stage-dir"]).toBe("dist/npm");
 		expect(result.flags.access).toBe("public");

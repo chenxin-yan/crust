@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { Crust, extension } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/internal";
+import { snapshotCommand } from "@crustjs/core/tooling";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 import { didYouMeanExtension } from "./did-you-mean.ts";

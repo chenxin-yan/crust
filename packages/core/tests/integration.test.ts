@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import type {
-	ArgDef,
-	ArgsDef,
-	CommandMeta,
-	FlagDef,
-	FlagsDef,
-	InferArgs,
-	ParseResult,
-} from "../src/index";
+import { resolveCommand, type CommandRoute } from "../src/command/router";
+import type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../src/index";
 import { Crust, extension } from "../src/index";
-import { parseArgs, resolveCommand, type CommandRoute } from "../src/tooling";
+import { parseArgs } from "../src/parsing/parser";
+import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
 
 // ────────────────────────────────────────────────────────────────────────────

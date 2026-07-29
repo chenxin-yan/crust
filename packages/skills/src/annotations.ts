@@ -1,5 +1,10 @@
 import type { CommandSnapshot, Crust } from "@crustjs/core";
-import type { CommandNode } from "@crustjs/core/tooling";
+
+/**
+ * Minimal structural stand-in for the internal command node: annotations
+ * attach to any object on the command tree without importing internal types.
+ */
+type CommandNode = object;
 
 import { normalizeInstructionList } from "./instructions.ts";
 
@@ -22,7 +27,7 @@ type AnnotatedCommandNode = CommandNode & {
 
 function resolveCommandNode(target: SkillCommandTarget): CommandNode {
 	// Structural check instead of `instanceof`: Crust class identity differs
-	// across separately-bundled entry points (index vs internal).
+	// across separately-bundled entry points (index vs tooling).
 	return "_node" in target ? target._node : target;
 }
 

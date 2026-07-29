@@ -46,7 +46,7 @@ export interface CrustErrorDetailsMap {
  * @example
  * ```ts
  * try {
- *   parseArgs(cmd, argv);
+ *   await app.run(argv);
  * } catch (err) {
  *   if (err instanceof CrustError) {
  *     switch (err.code) {
@@ -77,10 +77,10 @@ export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C
  *
  * @example
  * ```ts
- * import { CrustError, parseArgs } from "@crustjs/core";
+ * import { CrustError } from "@crustjs/core";
  *
  * try {
- *   const result = parseArgs(cmd, process.argv.slice(2));
+ *   await app.run(process.argv.slice(2));
  * } catch (err) {
  *   if (err instanceof CrustError) {
  *     console.error(`[${err.code}] ${err.message}`);

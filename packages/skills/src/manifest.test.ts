@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/internal";
-import type { CommandNode } from "@crustjs/core/tooling";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";

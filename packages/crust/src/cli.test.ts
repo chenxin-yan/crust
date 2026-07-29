@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 import { didYouMean, help, updateNotifier, version } from "@crustjs/plugins";
 
 import { buildCommand } from "./commands/build.ts";
@@ -102,20 +103,20 @@ describe("crust CLI entry point", () => {
 	describe("root command", () => {
 		it("should have correct meta", async () => {
 			const app = makeCrustApp();
-			const { root } = await app.prepareCommandTree();
+			const root = await prepareCommandSnapshot(app);
 			expect(root.meta.name).toBe("@crustjs/crust");
 			expect(root.meta.description).toBe("CLI tooling for the Crust framework");
 		});
 
 		it("should use extensions for root behavior", async () => {
 			const app = makeCrustApp();
-			const { root } = await app.prepareCommandTree();
-			expect(root.run).toBeUndefined();
+			const root = await prepareCommandSnapshot(app);
+			expect(root.hasHandler).toBe(false);
 		});
 
 		it("should have build and publish as subcommands", async () => {
 			const app = makeCrustApp();
-			const { root } = await app.prepareCommandTree();
+			const root = await prepareCommandSnapshot(app);
 			expect(root.subCommands).toBeDefined();
 			expect(root.subCommands.build).toBeDefined();
 			expect(root.subCommands.publish).toBeDefined();
@@ -205,7 +206,7 @@ describe("crust CLI entry point", () => {
 	describe("self-hosting verification", () => {
 		it("should use the cli builder from @crustjs/core (dogfooding)", async () => {
 			const app = makeCrustApp();
-			const { root } = await app.prepareCommandTree();
+			const root = await prepareCommandSnapshot(app);
 			expect(root.meta).toBeDefined();
 			expect(root.subCommands).toBeDefined();
 		});

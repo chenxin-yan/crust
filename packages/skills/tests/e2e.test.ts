@@ -16,8 +16,9 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust, snapshotCommand } from "@crustjs/core/internal";
-import type { CommandNode } from "@crustjs/core/tooling";
+import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { annotate } from "../src/annotations.ts";
 import { generateSkill } from "../src/generate.ts";

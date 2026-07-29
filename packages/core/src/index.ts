@@ -17,7 +17,7 @@ export { extension } from "./api/extension.ts";
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
 // Command context
 export type { CrustCommandContext } from "./command/crust.ts";
-export { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";
+export { Crust } from "./command/crust.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
@@ -30,23 +30,4 @@ export type {
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 // Core types
-export type {
-	ArgDef,
-	ArgsDef,
-	CommandMeta,
-	EffectiveFlags,
-	FlagDef,
-	FlagsDef,
-	InferArgs,
-	InferFlags,
-	InheritableFlags,
-	MergeFlags,
-	ParseResult,
-	Resolve,
-	ResolveBaseType,
-	ValidateCrossCollisions,
-	ValidateFlagAliases,
-	ValidateNoPrefixedFlags,
-	ValidateVariadicArgs,
-	ValueType,
-} from "./types.ts";
+export type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef, ValueType } from "./types.ts";

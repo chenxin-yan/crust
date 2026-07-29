@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 import { help } from "@crustjs/plugins";
 
 import { renderManPageMdoc } from "./mdoc.ts";
@@ -13,7 +14,7 @@ describe("renderManPageMdoc", () => {
 			.flags({ verbose: { type: "boolean", short: "v", description: "Verbose" } })
 			.command("ping", (cmd) => cmd.meta({ description: "Ping" }).handle(() => {}));
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh NAME");
@@ -32,7 +33,7 @@ describe("renderManPageMdoc", () => {
 			.meta({ description: ".config is read automatically." })
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
 
 		expect(mdoc).toMatch(/\.Nd .*\\&\.config is read automatically\./);
@@ -41,7 +42,7 @@ describe("renderManPageMdoc", () => {
 
 	it("uses explicit date for .Dd", async () => {
 		const app = new Crust("x").handle(() => {});
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({
 			root,
 			name: "x",
@@ -55,7 +56,7 @@ describe("renderManPageMdoc", () => {
 		process.env.SOURCE_DATE_EPOCH = "86400";
 		try {
 			const app = new Crust("x").handle(() => {});
-			const { root } = await app.prepareCommandTree();
+			const root = await prepareCommandSnapshot(app);
 			const mdoc = renderManPageMdoc({ root, name: "x" });
 			expect(mdoc.startsWith(".Dd January 2, 1970\n")).toBe(true);
 		} finally {
@@ -77,7 +78,7 @@ describe("renderManPageMdoc", () => {
 			)
 			.command(new Crust("version").meta({ description: "Show version" }).handle(() => {}));
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh SUBCOMMANDS");
@@ -106,7 +107,7 @@ describe("renderManPageMdoc", () => {
 					.handle(() => {}),
 			);
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".It Nm build");
@@ -120,7 +121,7 @@ describe("renderManPageMdoc", () => {
 			)
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).not.toContain(".Sh SUBCOMMANDS");
@@ -139,7 +140,7 @@ describe("renderManPageMdoc", () => {
 			})
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".It Sy --target");
@@ -160,7 +161,7 @@ describe("renderManPageMdoc", () => {
 			])
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh ARGUMENTS");
@@ -181,7 +182,7 @@ describe("renderManPageMdoc", () => {
 			})
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		// Both the canonical `--output` and the alias `--out` appear in the
@@ -200,7 +201,7 @@ describe("renderManPageMdoc", () => {
 			})
 			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		// Canonical + alias + both negations, in declaration order.

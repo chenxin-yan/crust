@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/internal";
+import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completionExtension } from "./index.ts";
 import type { CompletionSpec } from "./spec.ts";

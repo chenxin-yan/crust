@@ -1,5 +1,5 @@
-import type { ArgDef, CommandMeta, FlagDef, FlagsDef } from "@crustjs/core";
-import type { CommandNode } from "@crustjs/core/tooling";
+import type { ArgSnapshot, CommandMeta, FlagSnapshot } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 
 const MONTH_NAMES = [
 	"January",
@@ -45,27 +45,27 @@ function formatDescription(description: string | undefined, defaultValue: unknow
 	return `${description} ${suffix}`;
 }
 
-function formatArgToken(arg: ArgDef): string {
+function formatArgToken(arg: ArgSnapshot): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;
 	return arg.required ? `<${base}>` : `[${base}]`;
 }
 
-function formatUsagePlain(meta: CommandMeta, command: CommandNode, path: string[]): string {
+function formatUsagePlain(meta: CommandMeta, command: CommandSnapshot, path: string[]): string {
 	if (meta.usage) return meta.usage;
 
 	const parts: string[] = [path.join(" ")];
 
-	if (Object.keys(command.subCommands).length > 0 && !command.run) {
+	if (Object.keys(command.subCommands).length > 0 && !command.hasHandler) {
 		parts.push("<command>");
 	}
 
-	if (command.args) {
+	if (command.args.length > 0) {
 		for (const arg of command.args) {
 			parts.push(formatArgToken(arg));
 		}
 	}
 
-	if (Object.keys(command.effectiveFlags).length > 0) {
+	if (Object.keys(command.flags).length > 0) {
 		parts.push("[options]");
 	}
 
@@ -86,7 +86,7 @@ function formatUsagePlain(meta: CommandMeta, command: CommandNode, path: string[
  * the canonical name and have no way to discover that `--out` is
  * equivalent.
  */
-function formatFlagLabels(name: string, def: FlagDef): string {
+function formatFlagLabels(name: string, def: FlagSnapshot): string {
 	const longNames: string[] = [name];
 	if (def.aliases) {
 		for (const alias of def.aliases) longNames.push(alias);
@@ -152,7 +152,7 @@ function ndArgument(text: string): string {
 	return line;
 }
 
-function longestFlagWidth(flags: FlagsDef): string {
+function longestFlagWidth(flags: Readonly<Record<string, FlagSnapshot>>): string {
 	let max = 8;
 	for (const [name, def] of Object.entries(flags)) {
 		max = Math.max(max, formatFlagLabels(name, def).length);
@@ -174,7 +174,7 @@ function formatSubcommandLabel(name: string, aliases: readonly string[] | undefi
 	return `${name} (${aliases.join(", ")})`;
 }
 
-function longestSubcommandWidth(command: CommandNode): string {
+function longestSubcommandWidth(command: CommandSnapshot): string {
 	let max = 8;
 	for (const [name, sub] of Object.entries(command.subCommands)) {
 		// Hidden subcommands are not rendered (see SUBCOMMANDS loop) and
@@ -207,8 +207,8 @@ function resolveDdLine(explicit?: string): string {
 }
 
 export interface RenderManPageMdocOptions {
-	/** Frozen root command node (e.g. from `prepareCommandTree()`). */
-	root: CommandNode;
+	/** Frozen root Command Snapshot (e.g. from `prepareCommandSnapshot()`). */
+	root: CommandSnapshot;
 	/** Name shown in `man <name>` / `.Nm` (often matches the binary). */
 	name: string;
 	/** Manual section; user commands use `1`. */
@@ -276,10 +276,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 
-	const flagEntries = Object.entries(root.effectiveFlags).sort(([a], [b]) => a.localeCompare(b));
+	const flagEntries = Object.entries(root.flags).sort(([a], [b]) => a.localeCompare(b));
 	if (flagEntries.length > 0) {
 		lines.push(".Sh OPTIONS");
-		lines.push(`.Bl -tag -width ${longestFlagWidth(root.effectiveFlags)}`);
+		lines.push(`.Bl -tag -width ${longestFlagWidth(root.flags)}`);
 		for (const [flagName, def] of flagEntries) {
 			const labels = formatFlagLabels(flagName, def);
 			lines.push(`.It Sy ${labels}`);
@@ -295,7 +295,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 
-	if (root.args && root.args.length > 0) {
+	if (root.args.length > 0) {
 		lines.push(".Sh ARGUMENTS");
 		lines.push(".Bl -tag -width 12n");
 		for (const arg of root.args) {

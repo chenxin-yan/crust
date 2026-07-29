@@ -832,24 +832,6 @@ export class Crust<
 	}
 
 	/**
-	 * Build a frozen, validated copy of the command tree with all Extension
-	 * contributions applied. Does not call Command Handlers.
-	 *
-	 * Unsupported tooling surface (used by man-page/skill generators); moves
-	 * fully behind `@crustjs/core/tooling`.
-	 */
-	async prepareCommandTree(_options?: {
-		argv?: readonly string[];
-	}): Promise<{ root: CommandNode; warnings: readonly string[] }> {
-		const prepared = await this._prepare();
-
-		const { validateCommandTree } = await import("../parsing/validation.ts");
-		validateCommandTree(prepared.rootNode);
-
-		return { root: prepared.rootNode, warnings: [] };
-	}
-
-	/**
 	 * Invoke this application programmatically: resolve, parse, run the
 	 * Extension intercept chain and the Command Handler for `argv`.
 	 *
@@ -954,28 +936,7 @@ export class Crust<
 	 * throw DEFINITION errors; failures propagate unrendered.
 	 */
 	private async _prepare(): Promise<PreparedInvocation> {
-		const rootNode = deepCloneCommandNode(this._node);
-		const extensions = this._node.extensions;
-
-		// Commands first, then flags, so recursive Extension flags also reach
-		// Extension-contributed commands (e.g. --help on "completion").
-		for (const ext of extensions) {
-			applyExtensionCommands(rootNode, ext);
-		}
-		for (const ext of extensions) {
-			applyExtensionFlags(rootNode, ext);
-		}
-
-		const ownedCommands = new Set<string>();
-		for (const ext of extensions) {
-			for (const builder of ext.commands ?? []) {
-				ownedCommands.add(builder._node.meta.name);
-			}
-		}
-
-		freezeTree(rootNode);
-
-		return { rootNode, extensions, ownedCommands };
+		return prepareInvocation(this._node);
 	}
 
 	/**
@@ -1137,4 +1098,49 @@ async function renderFailure(
 		// rendering of the original failure so it is never lost.
 		renderDefault();
 	}
+}
+
+/** Shared prepare step: clone, apply Extensions, freeze. */
+async function prepareInvocation(node: CommandNode): Promise<PreparedInvocation> {
+	const rootNode = deepCloneCommandNode(node);
+	const extensions = node.extensions;
+
+	// Commands first, then flags, so recursive Extension flags also reach
+	// Extension-contributed commands (e.g. --help on "completion").
+	for (const ext of extensions) {
+		applyExtensionCommands(rootNode, ext);
+	}
+	for (const ext of extensions) {
+		applyExtensionFlags(rootNode, ext);
+	}
+
+	const ownedCommands = new Set<string>();
+	for (const ext of extensions) {
+		for (const builder of ext.commands ?? []) {
+			ownedCommands.add(builder._node.meta.name);
+		}
+	}
+
+	freezeTree(rootNode);
+
+	return { rootNode, extensions, ownedCommands };
+}
+
+/**
+ * Prepare a frozen, validated Command Snapshot of an application with all
+ * Extension contributions applied. Does not call Command Handlers.
+ *
+ * Explicitly unsupported tooling bridge (ADR-0006), exposed only via
+ * `@crustjs/core/tooling` for man-page/skill generators and build tooling.
+ * The parameter is structural so any `Crust` builder satisfies it.
+ */
+export async function prepareCommandSnapshot(app: {
+	readonly _node: CommandNode;
+}): Promise<CommandSnapshot> {
+	const prepared = await prepareInvocation(app._node);
+
+	const { validateCommandTree } = await import("../parsing/validation.ts");
+	validateCommandTree(prepared.rootNode);
+
+	return snapshotCommand(prepared.rootNode);
 }

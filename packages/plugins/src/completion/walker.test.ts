@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/internal";
-import type { CommandNode } from "@crustjs/core/tooling";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { walkCommandNode } from "./walker.ts";
 

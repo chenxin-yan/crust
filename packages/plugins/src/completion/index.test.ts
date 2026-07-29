@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 
 import { completionExtension } from "./index.ts";
 
@@ -81,7 +82,7 @@ function buildCli() {
 describe("completionExtension", () => {
 	it("registers a `completion` subcommand on the root command (after setup)", async () => {
 		const app = buildCli();
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		expect(Object.keys(root.subCommands)).toContain("completion");
 		const completionNode = root.subCommands.completion;
 		expect(completionNode?.meta.description).toBe("Generate shell tab-completion scripts");
@@ -91,7 +92,7 @@ describe("completionExtension", () => {
 		const app = new Crust("mycli")
 			.extend(completionExtension({ command: "shell-completion" }))
 			.handle(() => {});
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
 	});
 

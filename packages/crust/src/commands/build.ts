@@ -1,7 +1,8 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { Crust, VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
+import { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
 import { bold, cyan, dim, green, yellow } from "@crustjs/style";
 
 import { resolveBaseName } from "../utils/binary-name.ts";

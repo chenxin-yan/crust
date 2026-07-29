@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Crust, extension } from "@crustjs/core";
-import { VALIDATION_MODE_ENV, snapshotCommand } from "@crustjs/core/internal";
+import { snapshotCommand, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
 
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";

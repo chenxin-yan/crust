@@ -3,7 +3,8 @@ import { lstat, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "n
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Crust, snapshotCommand } from "@crustjs/core/internal";
+import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { installSkillBundle, loadBundleFiles } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
