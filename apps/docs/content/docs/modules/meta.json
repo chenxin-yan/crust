@@ -6,7 +6,6 @@
     "plugins",
     "crust",
     "create",
-    "validate",
     "progress",
     "prompts",
     "style",

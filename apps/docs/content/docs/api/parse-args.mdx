@@ -59,10 +59,10 @@ interface ParseResult<A, F> {
 | `"boolean"`     | Toggle flags. `--flag` -> `true`, `--no-flag` -> `false`. Value assignment forms like `--flag=true` are rejected                                                                            |
 | omitted         | Positional args only: kept as the raw string token (or raw string array for variadic args). Flags must declare `type` because parser grammar determines whether `--flag value` is consumed. |
 
-Raw mode is automatic when a positional arg is defined without a `type`. The
-`arg()` helper in [`@crustjs/validate`](/docs/modules/validate) uses this mode
-by default; its schema decides requiredness, defaults, and transformations by
-validating the raw value (including `undefined` when the arg is missing).
+Raw mode is automatic when a positional arg is defined without a `type`. It
+exists for schema-backed validation: the schema decides requiredness, defaults,
+and transformations by validating the raw value (including `undefined` when
+the arg is missing).
 
 ### Alias Resolution
 

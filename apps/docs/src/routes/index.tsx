@@ -121,11 +121,6 @@ const MODULES: Array<{
     doc: "modules/create",
   },
   {
-    pkg: "@crustjs/validate",
-    desc: "Schema-first validation adapters",
-    doc: "modules/validate",
-  },
-  {
     pkg: "@crustjs/progress",
     desc: "Progress indicators",
     doc: "modules/progress",

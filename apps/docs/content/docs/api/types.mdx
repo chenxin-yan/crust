@@ -93,8 +93,8 @@ type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
 ```
 
 `type` is optional. Omitting it activates the raw parser mode (see
-[`parseArgs`](/docs/api/parse-args)) and is the default produced by
-[`arg()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
+[`parseArgs`](/docs/api/parse-args)), which keeps the raw string token for
+schema-backed validation.
 
 Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
 
@@ -153,8 +153,7 @@ type FlagDef =
 
 Flags always declare `type` because it defines CLI grammar/token ownership:
 boolean flags do not consume a value, while string and number flags consume
-`--flag value` / `--flag=value`. Schema-backed flags produced by
-[`flag()`](/docs/modules/validate#quick-start--zod) still include this parser
+`--flag value` / `--flag=value`. Schema-backed flags still include this parser
 metadata; the schema validates and transforms the parsed value afterward.
 
 Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
@@ -299,7 +298,7 @@ type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, ne
 
 Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
 
-Type-less (raw) positional args — produced by [`arg()`](/docs/modules/validate#quick-start--zod) from `@crustjs/validate` — resolve to `unknown` (or `unknown[]` when variadic). The downstream schema validator narrows them to the concrete output type.
+Type-less (raw) positional args resolve to `unknown` (or `unknown[]` when variadic). The downstream schema validator narrows them to the concrete output type.
 
 ### `InferFlags<F>`
 

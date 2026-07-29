@@ -63,8 +63,6 @@ const email = await input({ message: "Email?", validate: Email });
 //    ^? string
 ```
 
-For command-level argument and flag validation against the same schemas, see [`@crustjs/validate`](https://crustjs.com/docs/modules/validate).
-
 ## More
 
 - Full docs: [crustjs.com/docs/modules/prompts](https://crustjs.com/docs/modules/prompts)

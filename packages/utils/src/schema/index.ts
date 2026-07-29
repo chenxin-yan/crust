@@ -151,7 +151,7 @@ export function normalizeStandardPath(
  * Normalize Standard Schema issues into canonical `ValidationIssue` objects.
  *
  * Applies an optional prefix (e.g. `["flags", "verbose"]`) to each issue
- * path, then formats to the dot-path string used by `@crustjs/validate`.
+ * path, then formats each path to its canonical dot-path string.
  *
  * @param issues — Raw Standard Schema issues from a failed validation
  * @param prefix — Optional path segments prepended to each issue path
