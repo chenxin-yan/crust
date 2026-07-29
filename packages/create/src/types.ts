@@ -72,13 +72,14 @@ export interface ScaffoldResult {
  * ```
  */
 export type PostScaffoldStep =
+	/** Detect the package manager and install dependencies. */
 	| { readonly type: "install" }
+	/** Initialize Git and optionally create a commit containing all files. */
 	| { readonly type: "git-init"; readonly commit?: string }
+	/** Open the project in `$EDITOR` or VS Code; does not fail when no editor is found. */
 	| { readonly type: "open-editor" }
 	/**
-	 * Bun Shell command string.
-	 *
-	 * Cross-platform shell syntax like redirection and `exit` is supported
-	 * without depending on a system `sh` executable.
+	 * Run a Bun Shell command string. Cross-platform shell syntax like
+	 * redirection and `exit` is supported without a system `sh` executable.
 	 */
 	| { readonly type: "command"; readonly cmd: string; readonly cwd?: string };

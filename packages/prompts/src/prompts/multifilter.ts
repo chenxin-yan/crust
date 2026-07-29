@@ -42,7 +42,11 @@ export interface MultifilterOptions<T> {
 	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: readonly T[];
-	/** Whether at least one item must be selected (defaults to false) */
+	/**
+	 * Whether at least one item must be selected.
+	 *
+	 * @default false
+	 */
 	readonly required?: boolean;
 	/** Minimum number of selections required */
 	readonly min?: number;
@@ -50,7 +54,11 @@ export interface MultifilterOptions<T> {
 	readonly max?: number;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
-	/** Maximum number of visible filtered results before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible filtered results before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;

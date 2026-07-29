@@ -1,8 +1,6 @@
 # @crustjs/prompts
 
-Interactive terminal prompts for the [Crust](https://crustjs.com) CLI framework.
-
-`@crustjs/prompts` ships seven prompts (`input`, `password`, `confirm`, `select`, `multiselect`, `filter`, `multifilter`), a customizable theme, fuzzy matching, and a small renderer for building custom prompts. All prompt UI renders to **stderr** so it never pollutes piped stdout.
+Interactive terminal prompts for the Crust CLI ecosystem
 
 ## Install
 
@@ -10,60 +8,6 @@ Interactive terminal prompts for the [Crust](https://crustjs.com) CLI framework.
 bun add @crustjs/prompts
 ```
 
-## Quick start
+## Documentation
 
-```ts
-import { input, password, confirm, select } from "@crustjs/prompts";
-
-const name = await input({ message: "Project name?" });
-const useTS = await confirm({ message: "Use TypeScript?" });
-const fw = await select({
-	message: "Framework",
-	choices: ["react", "vue", "svelte"],
-});
-const secret = await password({
-	message: "Enter password:",
-	validate: (v) => {
-		if (v.length < 8) throw new Error("Must be at least 8 characters");
-	},
-});
-```
-
-Pass `initial` to skip interactivity (useful for prefilling from CLI flags or in CI). For prompts that support a `default` (`input`, `confirm`, `multiselect`, `filter`), the default is also returned automatically when stdin is not a TTY; otherwise a `NonInteractiveError` is thrown.
-
-## Validation
-
-The `validate` slot on `input()` and `password()` is **polymorphic**:
-
-- a `(value: string) => void | Promise<void>` validator that **throws an `Error` to reject** the input (the error's `message` renders inline), or
-- any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
-
-This matches the throw-on-fail contract used by `@crustjs/store`'s `FieldDef.validate` and `parseValue()` — one rule across the workspace.
-
-When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success — no second-pass parse step. `initial` and non-TTY `default` are parsed through the schema as well, so the `Promise<Output>` contract holds for every code path; a value the schema rejects throws.
-
-```ts
-import { input } from "@crustjs/prompts";
-import { z } from "zod";
-
-const port = await input({
-	message: "Port?",
-	validate: z.coerce.number().int().min(1).max(65535),
-});
-//    ^? number
-```
-
-```ts
-import { input } from "@crustjs/prompts";
-import { Schema } from "effect";
-
-const Email = Schema.standardSchemaV1(Schema.String.pipe(Schema.pattern(/.+@.+/)));
-
-const email = await input({ message: "Email?", validate: Email });
-//    ^? string
-```
-
-## More
-
-- Full docs: [crustjs.com/docs/modules/prompts](https://crustjs.com/docs/modules/prompts)
-- Source: [`packages/prompts/`](https://github.com/chenxin-yan/crust/tree/main/packages/prompts)
+Full docs: [crustjs.com/docs/modules/prompts](https://crustjs.com/docs/modules/prompts)

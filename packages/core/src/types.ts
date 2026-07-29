@@ -154,21 +154,6 @@ interface JsonArgDef extends ArgDefBase {
 	parse?: never;
 }
 
-/**
- * Defines a single positional argument for a CLI command.
- *
- * Discriminated by `type` for type-safe `default` values. Boolean toggle
- * fields (`required`, `variadic`) only accept `true`.
- *
- * @example
- * ```ts
- * const args = [
- *   { name: "port", type: "number", description: "Port number", default: 3000 },
- *   { name: "name", type: "string", required: true },
- *   { name: "files", type: "string", variadic: true },
- * ] as const satisfies ArgsDef;
- * ```
- */
 interface RawArgDef extends ArgDefBase {
 	/** Optional parser hint. Omit for raw schema-backed validation. */
 	type?: never;
@@ -204,6 +189,21 @@ interface SchemaArgDef {
 	parse?: never;
 }
 
+/**
+ * Defines a single positional argument for a CLI command.
+ *
+ * Discriminated by `type` for type-safe `default` values. Boolean toggle
+ * fields (`required`, `variadic`) only accept `true`.
+ *
+ * @example
+ * ```ts
+ * const args = [
+ *   { name: "port", type: "number", description: "Port number", default: 3000 },
+ *   { name: "name", type: "string", required: true },
+ *   { name: "files", type: "string", variadic: true },
+ * ] as const satisfies ArgsDef;
+ * ```
+ */
 export type ArgDef =
 	| StringArgDef
 	| NumberArgDef
@@ -416,21 +416,6 @@ interface JsonMultiFlagDef extends MultiFlagBase {
 	parse?: never;
 }
 
-/**
- * Defines a single named flag for a CLI command.
- *
- * Discriminated by `type` and `multiple` for type-safe `default` values.
- * Boolean toggle fields (`required`, `multiple`) only accept `true`.
- *
- * @example
- * ```ts
- * const flags = {
- *   verbose: { type: "boolean", description: "Enable verbose logging", short: "v" },
- *   port: { type: "number", description: "Port number", default: 3000 },
- *   files: { type: "string", multiple: true, default: ["index.ts"] },
- * } satisfies FlagsDef;
- * ```
- */
 /** Shared fields for schema-backed flags (exclusive mode) */
 interface SchemaFlagBase {
 	/** Human-readable description for help text */
@@ -474,6 +459,21 @@ interface SchemaBooleanFlagDef extends SchemaFlagBase {
 	noNegate?: true;
 }
 
+/**
+ * Defines a single named flag for a CLI command.
+ *
+ * Discriminated by `type` and `multiple` for type-safe `default` values.
+ * Boolean toggle fields (`required`, `multiple`) only accept `true`.
+ *
+ * @example
+ * ```ts
+ * const flags = {
+ *   verbose: { type: "boolean", description: "Enable verbose logging", short: "v" },
+ *   port: { type: "number", description: "Port number", default: 3000 },
+ *   files: { type: "string", multiple: true, default: ["index.ts"] },
+ * } satisfies FlagsDef;
+ * ```
+ */
 export type FlagDef =
 	| StringFlagDef
 	| NumberFlagDef

@@ -26,17 +26,13 @@ Available commands: deploy
 ## Options
 
 ```ts
-interface DidYouMeanOptions {
-  mode?: "error" | "help";
-}
-
 function didYouMean(options?: DidYouMeanOptions): Extension;
 ```
 
-| Mode                | Output                                                                 |
-| ------------------- | ---------------------------------------------------------------------- |
-| `"error"` (default) | Writes the message and visible available commands through `ctx.stderr` |
-| `"help"`            | Writes the message and parent command help through `ctx.stdout`        |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/did-you-mean.ts"
+  name="DidYouMeanOptions"
+/>
 
 Suggestions compare the unknown token with visible sibling command names and aliases. Alias matches are reported as canonical command names. Hidden commands are omitted.
 

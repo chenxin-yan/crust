@@ -68,7 +68,11 @@ async function parseShortCircuit<Output>(
 export interface PasswordOptions<Output = string> {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
-	/** Character used to mask the input (default: `"*"`) */
+	/**
+	 * Character used to mask the input.
+	 *
+	 * @default "*"
+	 */
 	readonly mask?: string;
 	/**
 	 * Validation: either a `ValidateFn` (throw an `Error` to reject) or a

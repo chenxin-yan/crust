@@ -4,17 +4,25 @@ import type { CommandSnapshot } from "./command/snapshot.ts";
 // CrustErrorCode — Discriminated error codes
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Details for a subcommand token that could not be resolved. */
 export interface CommandNotFoundErrorDetails {
+	/** Unrecognized subcommand token. */
 	input: string;
+	/** Canonical names of available child commands. */
 	available: string[];
+	/** Canonical path to the command whose child could not be resolved. */
 	commandPath: string[];
+	/** Readonly, serializable snapshot of the parent command. */
 	parentCommand: CommandSnapshot;
 }
 
+/** Aggregated Standard Schema and required-value validation failures. */
 export interface ValidationErrorDetails {
+	/** Issues normalized under `args.<name>` or `flags.<name>`. */
 	issues: readonly { readonly message: string; readonly path: string }[];
 }
 
+/** Details for argv syntax or built-in value parsing failures. */
 export interface ParseErrorDetails {
 	readonly flag?: string;
 	readonly argument?: string;
@@ -22,6 +30,7 @@ export interface ParseErrorDetails {
 	readonly reason?: string;
 }
 
+/** Details for invalid application definitions. */
 export interface DefinitionErrorDetails {
 	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
 	readonly name?: string;

@@ -44,21 +44,7 @@ This gives you:
 
 ## Extension Options
 
-```ts
-interface SkillOptions {
-  version: string; // compared against installed crust.json
-  defaultScope?: "global" | "project";
-  installMode?: "auto" | "symlink" | "copy";
-  autoUpdate?: boolean; // default: true
-  instructions?: string | string[];
-  license?: string;
-  allowedTools?: string;
-  compatibility?: string;
-  disableModelInvocation?: boolean;
-  customSkills?: CustomSkillConfig[];
-  command?: string; // default: "skill"
-}
-```
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
 Scope resolution for the interactive command and `skill update`:
 
@@ -87,7 +73,7 @@ Path model:
 | Universal  | `~/.agents/skills/<name>/`        | `.agents/skills/<name>/` |
 | Additional | Agent-specific convention per CLI | Agent-specific path      |
 
-If `process.cwd()` is the home directory, project paths collapse to the same global paths shown above.
+If `process.cwd()` is the home directory, project paths collapse to the same global paths shown above. For example, universal agents use `.agents/skills/<name>` while Claude Code uses `.claude/skills/<name>`; their default global paths use the corresponding directory under the user's home (Claude also honors `CLAUDE_CONFIG_DIR`). The canonical `.crust/skills/<name>` store is separate from these agent-facing paths.
 
 ## Interactive Command
 
@@ -108,17 +94,18 @@ The user toggles options on or off and the system reconciles the desired state:
 
 ```sh
 my-cli skill
+my-cli skill --all
+my-cli skill update
 ```
+
+`--scope project|global` applies to both commands. `--all` applies to `skill` and installs for all universal plus detected agents without prompting.
 
 ### Hand-authored bundles via `customSkills`
 
 The extension can manage hand-authored skill bundles alongside the auto-
 generated command-reference skill. Each entry follows the same Extension behavior as the main skill — auto-update, interactive multiselect, and
 `skill update` — and gets its own multiselect prompt after the main one,
-in array order. See the [`@crustjs/skills` README][skills-custom] for
-the full reference.
-
-[skills-custom]: https://github.com/chenxin-yan/crust/tree/main/packages/skills#hand-authored-bundles-via-customskills
+in array order. The full bundle reference follows below.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -145,17 +132,9 @@ const app = new Crust("my-cli")
   .handle(() => {});
 ```
 
-The `CustomSkillConfig` shape:
+The `CustomSkillConfig` shape is generated from the exported type:
 
-```ts
-interface CustomSkillConfig {
-  name: string; // unique; must match SKILL.md frontmatter
-  sourceDir: string | URL; // file:// URL, absolute path, or bare relative
-  version?: string; // inherits Extension `version` when omitted
-  scope?: "global" | "project"; // overrides Extension defaultScope
-  installMode?: "auto" | "symlink" | "copy";
-}
-```
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="CustomSkillConfig" />
 
 `version` is optional: omit it to inherit the Extension's top-level
 `version` (the typical case when the bundle ships in the same package as
@@ -256,12 +235,9 @@ const meta: SkillMeta = {
 };
 ```
 
-| Field                    | Frontmatter Key            | Description                                                                  |
-| ------------------------ | -------------------------- | ---------------------------------------------------------------------------- |
-| `allowedTools`           | `allowed-tools`            | Space-delimited list of pre-approved tools (e.g. `Bash(my-cli *) Read Grep`) |
-| `license`                | `license`                  | License name or file reference                                               |
-| `compatibility`          | `compatibility`            | Environment requirements or compatibility notes                              |
-| `disableModelInvocation` | `disable-model-invocation` | When `true`, prevents agents from auto-loading the skill                     |
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillMeta" />
+
+The camelCase properties `allowedTools` and `disableModelInvocation` are emitted as the frontmatter keys `allowed-tools` and `disable-model-invocation`.
 
 ## Command-Level Prompt Guidance
 
@@ -303,7 +279,11 @@ isValidSkillName("My_CLI"); // false
 
 ## Low-Level Primitives
 
-For custom workflows, the package also exports lower-level functions:
+For custom workflows, the package also exports lower-level functions.
+
+### `generateSkill()` options
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="GenerateOptions" />
 
 ### Default targets — omit `agents` for the common case
 
@@ -369,6 +349,57 @@ await generateSkill({
 });
 ```
 
+### Agent and canonical-path helpers
+
+`isUniversalAgent(agent)` returns whether an `AgentTarget` belongs to the universal group. `resolveCanonicalSkillPath(scope, name)` returns the single source-of-truth bundle location (`.crust/skills/<name>` for project scope or `~/.crust/skills/<name>` for global scope). Project scope resolves to global when the current directory is the home directory.
+
+```ts
+import { isUniversalAgent, resolveCanonicalSkillPath } from "@crustjs/skills";
+
+isUniversalAgent("opencode"); // true
+resolveCanonicalSkillPath("project", "my-cli");
+// → "<cwd>/.crust/skills/my-cli"
+```
+
+### Uninstall cleanup
+
+After removing agent install paths, `uninstallSkill()` removes the canonical store entry when no remaining agent path references it.
+
+## Generated Output
+
+Generated skills are written once to the canonical store and installed into agent paths by symlink or copy:
+
+```text
+.crust/skills/my-cli/
+  SKILL.md
+  commands/
+    my-cli.md
+    serve.md
+    db/
+      migrate.md
+  crust.json
+```
+
+- `SKILL.md` is the agent entrypoint and links to the generated command reference.
+- `commands/*.md` mirrors the CLI hierarchy with usage, arguments, flags, defaults, aliases, and subcommand links.
+- `crust.json` records Crust ownership, name, description, version, and skill kind.
+
+The renderer escapes YAML-special characters in frontmatter and literal `|` characters in generated Markdown tables; callers pass raw values without manual escaping.
+
+### Import-safe command definitions
+
+Guard execution with `import.meta.main` when a command module may also be imported for snapshot generation:
+
+```ts
+import { Crust } from "@crustjs/core";
+
+export const rootCommand = new Crust("my-cli")
+  .meta({ description: "My CLI tool" })
+  .handle(() => console.log("Hello from my-cli!"));
+
+if (import.meta.main) await rootCommand.execute();
+```
+
 ## Installing Hand-Authored Bundles
 
 `generateSkill()` produces a skill bundle from a Crust Command Snapshot.
@@ -418,15 +449,10 @@ contents change. Wiring it to the consuming package's `package.json`
 
 ### Options
 
-| Option        | Type                            | Default    | Description                                                                                                                        |
-| ------------- | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `sourceDir`   | `string \| URL`                 | — required | Bundle directory. Absolute path, `file:` URL, or relative path resolved from the nearest `package.json`.                           |
-| `agents`      | `AgentTarget[]`                 | — required | Agents to install for. `[]` validates the bundle without installing (no auto-detection — unlike `generateSkill()`).                |
-| `version`     | `string`                        | — required | Recorded in `crust.json` and compared on subsequent installs. Typically wired to the consuming package's `package.json` `version`. |
-| `scope`       | `"global" \| "project"`         | `"global"` | Install scope. When `process.cwd()` is the home directory, `"project"` normalizes to `"global"`.                                   |
-| `installMode` | `"auto" \| "symlink" \| "copy"` | `"auto"`   | Same semantics as `generateSkill()`. `"auto"` symlinks from the canonical store, falling back to copy.                             |
-| `clean`       | `boolean`                       | `true`     | Remove the existing skill directory before writing.                                                                                |
-| `force`       | `boolean`                       | `false`    | Rewrite even when the recorded version is unchanged, and overwrite a conflicting directory instead of throwing.                    |
+<auto-type-table
+  path="../../../../../packages/skills/src/types.ts"
+  name="InstallSkillBundleOptions"
+/>
 
 Crust copies bundle files as raw bytes, so supporting assets such as images,
 fonts, or scripts round-trip unchanged. `SKILL.md` is also parsed as UTF-8 to
@@ -486,3 +512,17 @@ pass `force: true` to overwrite.
 Legacy `crust.json` files written before this field existed are read as
 `kind: "generated"` so existing generated installs continue to update
 cleanly without a migration step.
+
+## Type Reference
+
+### Results
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="AgentResult" />
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="GenerateResult" />
+
+### Status and uninstall options
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="StatusOptions" />
+
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="UninstallOptions" />

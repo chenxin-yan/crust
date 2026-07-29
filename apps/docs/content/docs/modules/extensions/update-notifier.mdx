@@ -25,36 +25,13 @@ await app.execute();
 ## API
 
 ```ts
-interface UpdateNotifierOptions {
-  currentVersion: string;
-  packageName: string;
-  timeoutMs?: number;
-  registryUrl?: string;
-  packageManager?: UpdateNotifierPackageManager | "auto";
-  installScope?: UpdateNotifierInstallScope | "auto";
-  updateCommand?:
-    | string
-    | ((
-        packageName: string,
-        packageManager: UpdateNotifierPackageManager,
-        installScope: UpdateNotifierInstallScope,
-      ) => string);
-  cache?: UpdateNotifierCacheConfig;
-}
-
 function updateNotifier(options: UpdateNotifierOptions): Extension;
 ```
 
-| Option           | Default                        | Description                                          |
-| ---------------- | ------------------------------ | ---------------------------------------------------- |
-| `currentVersion` | Required                       | Installed version                                    |
-| `packageName`    | Required                       | npm package to query                                 |
-| `timeoutMs`      | `5_000`                        | Registry request timeout in milliseconds             |
-| `registryUrl`    | `"https://registry.npmjs.org"` | Registry base URL                                    |
-| `packageManager` | `"auto"`                       | Package manager used in the suggested update command |
-| `installScope`   | `"auto"`                       | Local or global installation scope                   |
-| `updateCommand`  | Inferred                       | Replacement update command or command factory        |
-| `cache`          | None                           | Cross-run check and notification persistence         |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierOptions"
+/>
 
 The `intercept` hook first awaits the Command Handler, then checks for an update. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. The notice is written to process stderr. Version comparison uses stable `major.minor.patch` values and ignores prerelease/build suffixes.
 
@@ -62,23 +39,22 @@ Without `cache`, the check occurs once per process execution. With `cache`, a fr
 
 ## Cache adapter
 
-```ts
-interface UpdateNotifierCacheConfig {
-  adapter: UpdateNotifierCacheAdapter;
-  intervalMs?: number; // default 86_400_000 (24 hours)
-}
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierCacheConfig"
+/>
 
-interface UpdateNotifierCacheAdapter {
-  read(): Promise<UpdateNotifierState | null | undefined>;
-  write(state: UpdateNotifierState): Promise<void>;
-}
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierCacheAdapter"
+/>
 
-interface UpdateNotifierState {
-  lastCheckedAt: number;
-  latestVersion?: string;
-  lastNotifiedVersion?: string;
-}
-```
+The adapter reads and writes this structural state shape; `UpdateNotifierState` itself is not exported from the package root:
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierState"
+/>
 
 The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierInstallScope`, and `UpdateNotifierPackageManager` alongside `UpdateNotifierOptions`.
 

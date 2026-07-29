@@ -57,7 +57,11 @@ export interface SelectOptions<T> {
 	readonly default?: T;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: T;
-	/** Maximum number of visible choices before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible choices before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;

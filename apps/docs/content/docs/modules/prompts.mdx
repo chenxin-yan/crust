@@ -72,14 +72,7 @@ const name = await input({
 });
 ```
 
-| Option        | Type                                       | Default | Description                                                                              |
-| ------------- | ------------------------------------------ | ------- | ---------------------------------------------------------------------------------------- |
-| `message`     | `string`                                   | —       | Prompt message displayed to the user                                                     |
-| `placeholder` | `string`                                   | —       | Placeholder text shown when input is empty                                               |
-| `default`     | `string`                                   | —       | Value used when the user submits empty input                                             |
-| `initial`     | `string`                                   | —       | Skip prompt and return this value immediately                                            |
-| `validate`    | `ValidateFn<string>` \| Standard Schema v1 | —       | Function (throw to reject) **or** Standard Schema (resolves to its transformed `Output`) |
-| `theme`       | `PartialPromptTheme`                       | —       | Per-prompt theme overrides                                                               |
+<auto-type-table path="../../../../../packages/prompts/src/prompts/input.ts" name="InputOptions" />
 
 See [Validation](#validation) for the schema shape and typed return values.
 
@@ -96,13 +89,10 @@ const secret = await password({
 });
 ```
 
-| Option     | Type                                       | Default | Description                                                                              |
-| ---------- | ------------------------------------------ | ------- | ---------------------------------------------------------------------------------------- |
-| `message`  | `string`                                   | —       | Prompt message                                                                           |
-| `mask`     | `string`                                   | `"*"`   | Character used to mask the input                                                         |
-| `initial`  | `string`                                   | —       | Skip prompt and return this value immediately                                            |
-| `validate` | `ValidateFn<string>` \| Standard Schema v1 | —       | Function (throw to reject) **or** Standard Schema (resolves to its transformed `Output`) |
-| `theme`    | `PartialPromptTheme`                       | —       | Per-prompt theme overrides                                                               |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/password.ts"
+  name="PasswordOptions"
+/>
 
 ## Validation
 
@@ -149,14 +139,10 @@ const proceed = await confirm({
 });
 ```
 
-| Option     | Type                 | Default | Description                                       |
-| ---------- | -------------------- | ------- | ------------------------------------------------- |
-| `message`  | `string`             | —       | Prompt message                                    |
-| `default`  | `boolean`            | `true`  | Value used when Enter is pressed without toggling |
-| `initial`  | `boolean`            | —       | Skip prompt and return this value immediately     |
-| `active`   | `string`             | `"Yes"` | Label for the affirmative option                  |
-| `inactive` | `string`             | `"No"`  | Label for the negative option                     |
-| `theme`    | `PartialPromptTheme` | —       | Per-prompt theme overrides                        |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/confirm.ts"
+  name="ConfirmOptions"
+/>
 
 ### `select(options)`
 
@@ -173,14 +159,10 @@ const port = await select({
 });
 ```
 
-| Option       | Type                 | Default | Description                                   |
-| ------------ | -------------------- | ------- | --------------------------------------------- |
-| `message`    | `string`             | —       | Prompt message                                |
-| `choices`    | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects  |
-| `default`    | `T`                  | —       | Sets initial cursor to the matching choice    |
-| `initial`    | `T`                  | —       | Skip prompt and return this value immediately |
-| `maxVisible` | `number`             | `10`    | Maximum visible choices before scrolling      |
-| `theme`      | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/select.ts"
+  name="SelectOptions"
+/>
 
 ### `multiselect(options)`
 
@@ -202,17 +184,10 @@ const features = await multiselect({
 });
 ```
 
-| Option       | Type                 | Default | Description                                   |
-| ------------ | -------------------- | ------- | --------------------------------------------- |
-| `message`    | `string`             | —       | Prompt message                                |
-| `choices`    | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects  |
-| `default`    | `T[]`                | —       | Pre-selects matching choices                  |
-| `initial`    | `T[]`                | —       | Skip prompt and return this value immediately |
-| `required`   | `boolean`            | `false` | Require at least one selection                |
-| `min`        | `number`             | —       | Minimum selections required                   |
-| `max`        | `number`             | —       | Maximum selections allowed                    |
-| `maxVisible` | `number`             | `10`    | Maximum visible choices before scrolling      |
-| `theme`      | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/multiselect.ts"
+  name="MultiselectOptions"
+/>
 
 ### `filter(options)`
 
@@ -228,15 +203,10 @@ const lang = await filter({
 });
 ```
 
-| Option        | Type                 | Default | Description                                   |
-| ------------- | -------------------- | ------- | --------------------------------------------- |
-| `message`     | `string`             | —       | Prompt message                                |
-| `choices`     | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects  |
-| `initial`     | `T`                  | —       | Skip prompt and return this value immediately |
-| `default`     | `T`                  | —       | Sets initial highlight; used when not a TTY   |
-| `placeholder` | `string`             | —       | Placeholder text for the query input          |
-| `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling      |
-| `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                    |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/filter.ts"
+  name="FilterOptions"
+/>
 
 ### `multifilter(options)`
 
@@ -262,18 +232,10 @@ const features = await multifilter({
 });
 ```
 
-| Option        | Type                 | Default | Description                                     |
-| ------------- | -------------------- | ------- | ----------------------------------------------- |
-| `message`     | `string`             | —       | Prompt message                                  |
-| `choices`     | `Choice<T>[]`        | —       | Strings or `{ label, value, hint? }` objects    |
-| `default`     | `T[]`                | —       | Pre-selects matching choices                    |
-| `initial`     | `T[]`                | —       | Skip prompt and return these values immediately |
-| `required`    | `boolean`            | `false` | Require at least one selection                  |
-| `min`         | `number`             | —       | Minimum selections required                     |
-| `max`         | `number`             | —       | Maximum selections allowed                      |
-| `placeholder` | `string`             | —       | Placeholder text for the query input            |
-| `maxVisible`  | `number`             | `10`    | Maximum visible results before scrolling        |
-| `theme`       | `PartialPromptTheme` | —       | Per-prompt theme overrides                      |
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/multifilter.ts"
+  name="MultifilterOptions"
+/>
 
 ## Themes
 
@@ -319,7 +281,7 @@ Theme resolution order, from lowest to highest priority:
 
 ## Non-Interactive Environments
 
-All prompts require an interactive TTY. When stdin is not a TTY, prompts throw `NonInteractiveError`, unless `initial` is provided, in which case the value is returned immediately without rendering.
+All prompts require an interactive TTY unless a short-circuit value is available. Every prompt returns `initial` immediately without rendering. In addition, `input`, `confirm`, `select`, `multiselect`, `filter`, and `multifilter` return an explicitly provided `default` when stdin is not a TTY. Otherwise, the prompt throws `NonInteractiveError`.
 
 ```ts
 import { input, NonInteractiveError } from "@crustjs/prompts";

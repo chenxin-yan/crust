@@ -3,6 +3,14 @@ import { type CommandSnapshot, CrustError, type Extension, extension } from "@cr
 import { renderHelp } from "./help.ts";
 
 export interface DidYouMeanOptions {
+	/**
+	 * Presentation mode for command-not-found errors.
+	 *
+	 * `"error"` writes the message and visible commands to stderr. `"help"`
+	 * writes the message and parent command help to stdout.
+	 *
+	 * @default "error"
+	 */
 	mode?: "error" | "help";
 }
 

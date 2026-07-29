@@ -24,4 +24,6 @@ my-cli --no-color
 my-cli deploy --no-color
 ```
 
+The flag has no default. When it is omitted, the Extension leaves the current color mode unchanged. The Extension does not read `NO_COLOR`; environment-based color detection remains the responsibility of `@crustjs/style`.
+
 Its `intercept` hook temporarily sets the global `@crustjs/style` color mode to `"always"` or `"never"`, delegates to the next hook and Command Handler, then restores the previous mode in `finally`.

@@ -34,24 +34,15 @@ my-cli completion fish > ~/.config/fish/completions/my-cli.fish
 ```ts
 type CompletionShell = "bash" | "zsh" | "fish";
 
-interface CompletionOptions {
-  command?: string;
-  binName?: string;
-  shells?: readonly CompletionShell[];
-  version?: string;
-}
-
 function completion(options?: CompletionOptions): Extension;
 ```
 
-| Option    | Default          | Description                        |
-| --------- | ---------------- | ---------------------------------- |
-| `command` | `"completion"`   | Contributed root command name      |
-| `binName` | Root `meta.name` | Binary name embedded in scripts    |
-| `shells`  | All three shells | Files emitted by `--output-dir`    |
-| `version` | `"0.0.0"`        | Text embedded in generated headers |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/completion/index.ts"
+  name="CompletionOptions"
+/>
 
-The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through `ctx.stdout`. With `--output-dir <path>`, the Extension writes every configured shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
+The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written directly with `process.stdout.write()` so redirection captures it byte-for-byte without a context-added trailing newline. With `--output-dir <path>`, the Extension writes every configured shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
 
 ```sh
 my-cli completion bash --output-dir completions/

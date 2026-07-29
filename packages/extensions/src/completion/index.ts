@@ -17,27 +17,32 @@ const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as 
 /** Options for the completion Extension. */
 export interface CompletionOptions {
 	/**
-	 * Subcommand name. Defaults to `"completion"`. Override only if the
-	 * default conflicts with an existing user-defined command.
+	 * Subcommand name. Override only if the default conflicts with an existing user-defined command.
+	 *
+	 * @default "completion"
 	 */
 	command?: string;
 	/**
 	 * Binary name embedded in generated scripts (the `complete -F` target,
-	 * the `#compdef` line, the `complete -c <bin>` rules). Defaults to the
-	 * root command's `meta.name`.
+	 * the `#compdef` line, the `complete -c <bin>` rules).
+	 *
+	 * @default The root command's `meta.name`
 	 */
 	binName?: string;
 	/**
 	 * Shells to emit when running `<bin> completion <shell> --output-dir`.
-	 * Defaults to all three. The positional `<shell>` argument is always
-	 * the union of these values regardless of any narrower setting (we
-	 * intentionally keep the user-facing CLI predictable).
+	 * The positional `<shell>` argument is always the union of these values
+	 * regardless of any narrower setting.
+	 *
+	 * @default All supported shells (`bash`, `zsh`, and `fish`)
 	 */
 	shells?: readonly CompletionShell[];
 	/**
 	 * Free-form version string embedded in generated script headers. The
-	 * walker does not parse it — it flows through as text. Defaults to
-	 * `"0.0.0"`. Pass your `package.json` version when wiring the plugin.
+	 * walker does not parse it. Pass your `package.json` version when wiring
+	 * the plugin.
+	 *
+	 * @default "0.0.0"
 	 */
 	version?: string;
 }

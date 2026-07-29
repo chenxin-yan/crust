@@ -95,16 +95,18 @@ export interface UpdateNotifierOptions {
 
 	/**
 	 * Package manager used to generate the suggested upgrade command.
+	 * Set to `"auto"` to infer from the runtime environment.
 	 *
-	 * Set to "auto" (default) to infer from the runtime environment.
+	 * @default "auto"
 	 */
 	packageManager?: UpdateNotifierPackageManager | "auto";
 
 	/**
 	 * Install scope used to generate the suggested upgrade command.
+	 * Set to `"auto"` to infer whether the CLI is running from a global
+	 * install or a project-local dependency.
 	 *
-	 * Set to "auto" (default) to infer whether the CLI is running from a
-	 * global install or a project-local dependency.
+	 * @default "auto"
 	 */
 	installScope?: UpdateNotifierInstallScope | "auto";
 

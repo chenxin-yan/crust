@@ -205,7 +205,10 @@ export interface TrueColorOverrides {
  * ```
  */
 export interface StyleOptions {
-	/** Color emission mode. Defaults to `"auto"`. */
+	/**
+	 * Color emission mode.
+	 * @default "auto"
+	 */
 	readonly mode?: ColorMode;
 	/** Capability overrides for deterministic testing. */
 	readonly overrides?: CapabilityOverrides & TrueColorOverrides;

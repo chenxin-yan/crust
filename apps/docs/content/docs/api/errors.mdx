@@ -17,6 +17,14 @@ class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
   readonly details: CrustErrorDetails<C>;
   cause?: unknown;
 
+  constructor(
+    code: C,
+    message: string,
+    ...details: undefined extends CrustErrorDetails<C>
+      ? [] | [CrustErrorDetails<C>]
+      : [CrustErrorDetails<C>]
+  );
+
   is<T extends CrustErrorCode>(code: T): this is CrustError<T>;
   withCause(cause: unknown): this;
   toJSON(): { code: C; message: string; details: CrustErrorDetails<C> };
@@ -32,7 +40,7 @@ class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
 }
 ```
 
-Use `code` or `.is(code)` instead of matching messages.
+Use `code` or `.is(code)` instead of matching messages. The constructor's details argument is optional for codes whose entry in `CrustErrorDetailsMap` includes `undefined`; `COMMAND_NOT_FOUND` requires its details payload.
 
 ```ts
 try {
@@ -61,50 +69,30 @@ type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND
 
 ## Details
 
+### `CrustErrorDetailsMap`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="CrustErrorDetailsMap" />
+
 ### `DefinitionErrorDetails`
 
-```ts
-interface DefinitionErrorDetails {
-  readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
-  readonly name?: string;
-  readonly reason?: string;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
 
 ### `ParseErrorDetails`
 
-```ts
-interface ParseErrorDetails {
-  readonly flag?: string;
-  readonly argument?: string;
-  readonly value?: string;
-  readonly reason?: string;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
 
 ### `ValidationErrorDetails`
 
-```ts
-interface ValidationErrorDetails {
-  issues: readonly {
-    readonly message: string;
-    readonly path: string;
-  }[];
-}
-```
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="ValidationErrorDetails" />
 
 Standard Schema failures are aggregated into one `VALIDATION` error. Paths are normalized under `args.<name>` or `flags.<name>`.
 
 ### `CommandNotFoundErrorDetails`
 
-```ts
-interface CommandNotFoundErrorDetails {
-  input: string;
-  available: string[];
-  commandPath: string[];
-  parentCommand: CommandSnapshot;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/errors.ts"
+  name="CommandNotFoundErrorDetails"
+/>
 
 `parentCommand` is a readonly, serializable snapshot of the command whose child could not be resolved.
 

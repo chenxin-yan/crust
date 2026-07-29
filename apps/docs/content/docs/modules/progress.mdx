@@ -47,12 +47,7 @@ await spinner({
 });
 ```
 
-| Option    | Type                                            | Default  | Description                                      |
-| --------- | ----------------------------------------------- | -------- | ------------------------------------------------ |
-| `message` | `string`                                        | —        | Message displayed alongside the spinner          |
-| `task`    | `(controller: SpinnerController) => Promise<T>` | —        | Async task to run and wrap with spinner output   |
-| `spinner` | `SpinnerType`                                   | `"dots"` | Animation style or custom `{ frames, interval }` |
-| `theme`   | `PartialProgressTheme`                          | —        | Per-call theme overrides                         |
+<auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
 
 ### `SpinnerController`
 
@@ -91,6 +86,8 @@ const custom = { frames: ["⊶", "⊷"], interval: 150 };
 - `message`
 - `success`
 - `error`
+
+<auto-type-table path="../../../../../packages/progress/src/types.ts" name="ProgressTheme" />
 
 The default theme preserves the previous spinner colors:
 

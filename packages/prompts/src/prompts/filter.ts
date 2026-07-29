@@ -40,7 +40,11 @@ export interface FilterOptions<T> {
 	readonly default?: T;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
-	/** Maximum number of visible filtered results before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible filtered results before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;

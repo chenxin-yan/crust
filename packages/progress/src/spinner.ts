@@ -55,7 +55,11 @@ export interface SpinnerOptions<T> {
 	readonly message: string;
 	/** The async task to run while the spinner is displayed. */
 	readonly task: (controller: SpinnerController) => Promise<T>;
-	/** Spinner animation style (defaults to `"dots"`). */
+	/**
+	 * Spinner animation style.
+	 *
+	 * @default "dots"
+	 */
 	readonly spinner?: SpinnerType;
 	/** Per-spinner theme overrides. */
 	readonly theme?: PartialProgressTheme;

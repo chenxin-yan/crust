@@ -413,13 +413,7 @@ import type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef, ValueType } from 
 
 ### Validation protocol constants moved
 
-Before:
-
-```ts
-import { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core";
-```
-
-After, these unsupported build-protocol constants live under tooling:
+These unsupported build-protocol constants now live under tooling:
 
 ```ts
 import { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";

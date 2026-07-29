@@ -211,7 +211,11 @@ export interface RenderManPageMdocOptions {
 	root: CommandSnapshot;
 	/** Name shown in `man <name>` / `.Nm` (often matches the binary). */
 	name: string;
-	/** Manual section; user commands use `1`. */
+	/**
+	 * Manual section; user commands use `1`.
+	 *
+	 * @default 1
+	 */
 	section?: number;
 	/**
 	 * Override the `.Dd` date (e.g. `"April 1, 2026"`). If omitted, uses

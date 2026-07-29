@@ -30,16 +30,7 @@ type ArgsDef = readonly ArgDef[];
 
 Core-value argument definitions share these fields:
 
-| Field         | Type                       | Description                                                       |
-| ------------- | -------------------------- | ----------------------------------------------------------------- |
-| `name`        | `string`                   | Key in the Command Handler's `args` object                        |
-| `type`        | `ValueType`                | Required for a typed core value; omit only for raw or schema mode |
-| `description` | `string`                   | Help text                                                         |
-| `required`    | `true`                     | Reject an absent value                                            |
-| `variadic`    | `true`                     | Collect remaining tokens; allowed only on the final argument      |
-| `default`     | Value matching `type`      | Value used when absent                                            |
-| `choices`     | `readonly string[]`        | Allowed values for string arguments                               |
-| `parse`       | `(raw: string) => unknown` | Synchronous transform for string arguments                        |
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="ArgDef" />
 
 A variadic value is always an array. `parse` runs once per element for a variadic string argument.
 
@@ -68,19 +59,7 @@ type FlagsDef = Record<string, FlagDef>;
 
 Core-value flag definitions support:
 
-| Field         | Type                       | Description                                     |
-| ------------- | -------------------------- | ----------------------------------------------- |
-| `type`        | `ValueType`                | Token grammar and value conversion              |
-| `description` | `string`                   | Help text                                       |
-| `short`       | `string`                   | Short alias such as `"v"` for `-v`              |
-| `aliases`     | `string[]`                 | Additional long aliases                         |
-| `required`    | `true`                     | Reject an absent value                          |
-| `inherit`     | `true`                     | Make the flag available to descendants          |
-| `multiple`    | `true`                     | Collect repeated occurrences into an array      |
-| `default`     | Value matching `type`      | Value used when absent                          |
-| `choices`     | `readonly string[]`        | Allowed values for string flags                 |
-| `parse`       | `(raw: string) => unknown` | Synchronous transform for string flags          |
-| `noNegate`    | `true`                     | Disable generated `--no-name` for boolean flags |
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="FlagDef" />
 
 ```ts
 const flags = {
@@ -103,15 +82,7 @@ The schema receives the raw `string | undefined` or `boolean | undefined`; with 
 
 ### `CommandMeta`
 
-```ts
-interface CommandMeta {
-  name: string;
-  description?: string;
-  usage?: string;
-  aliases?: readonly string[];
-  hidden?: boolean;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
 `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
@@ -121,48 +92,20 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
 
 ### `CommandSnapshot`
 
-```ts
-interface CommandSnapshot {
-  readonly meta: Readonly<CommandMeta>;
-  readonly hasHandler: boolean;
-  readonly args: readonly ArgSnapshot[];
-  readonly flags: Readonly<Record<string, FlagSnapshot>>;
-  readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/command/snapshot.ts"
+  name="CommandSnapshot"
+/>
 
 `flags` contains effective inherited and local flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
-```ts
-interface ArgSnapshot {
-  readonly name: string;
-  readonly type?: ValueType;
-  readonly description?: string;
-  readonly required?: boolean;
-  readonly variadic?: boolean;
-  readonly choices?: readonly string[];
-  readonly default?: unknown;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="ArgSnapshot" />
 
 ### `FlagSnapshot`
 
-```ts
-interface FlagSnapshot {
-  readonly type: ValueType;
-  readonly description?: string;
-  readonly short?: string;
-  readonly aliases?: readonly string[];
-  readonly required?: boolean;
-  readonly inherit?: boolean;
-  readonly multiple?: boolean;
-  readonly noNegate?: boolean;
-  readonly choices?: readonly string[];
-  readonly default?: unknown;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
 Snapshots omit schemas and parse functions. `URL` defaults become strings, and array defaults are copied and frozen.
 
@@ -170,17 +113,10 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 
 ### `CrustCommandContext<A, F, Ctx>`
 
-```ts
-interface CrustCommandContext<A, F, Ctx> {
-  args: InferArgs<A>;
-  flags: InferFlags<F>;
-  ctx: Readonly<Ctx>;
-  rawArgs: string[];
-  command: CommandSnapshot;
-  stdout: (text: string) => void;
-  stderr: (text: string) => void;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/command/crust.ts"
+  name="CrustCommandContext"
+/>
 
 `InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
 
@@ -198,13 +134,10 @@ interface ContextFactory<Name extends string, Options, Value> {
 
 ### `ContextInstance`
 
-```ts
-interface ContextInstance<Name extends string = string, Value = unknown> {
-  readonly kind: "context";
-  readonly name: Name;
-  setup(): Value | Promise<Value>;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/api/context.ts"
+  name="ContextInstance"
+/>
 
 Attach an instance with `.provide()`. Core constructs it lazily on the resolved path.
 
@@ -220,22 +153,14 @@ The map shape used for inferred `ctx` values.
 
 ### `ExtensionConfig`
 
-```ts
-interface ExtensionConfig {
-  readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
-  readonly commands?: readonly ExtensionCommand[];
-  readonly intercept?: ExtensionIntercept;
-  readonly handleError?: ExtensionErrorHandler;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionConfig"
+/>
 
 ### `Extension`
 
-```ts
-interface Extension extends ExtensionConfig {
-  readonly name: string;
-}
-```
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
 `extension(name, config)` returns a frozen structural value.
 
@@ -253,19 +178,10 @@ A structural type satisfied by a configured `Crust` builder. Extension commands 
 
 ### `ExtensionContext`
 
-```ts
-interface ExtensionContext {
-  readonly argv: readonly string[];
-  readonly rootCommand: CommandSnapshot;
-  readonly command: CommandSnapshot;
-  readonly commandPath: readonly string[];
-  readonly args: Readonly<Record<string, unknown>>;
-  readonly flags: Readonly<Record<string, unknown>>;
-  readonly rawArgs: readonly string[];
-  readonly stdout: (text: string) => void;
-  readonly stderr: (text: string) => void;
-}
-```
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionContext"
+/>
 
 `args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Handler types.
 

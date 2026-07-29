@@ -1,8 +1,16 @@
 # @crustjs/man
 
-Generate **mdoc(7)** manual pages (section 1) from a Crust CLI definition.
+Generate mdoc(7) manual pages from Crust CLI definitions
 
-See the [Man module docs](https://crustjs.com/docs/modules/man) for install steps, `writeManPage`, `crust build --man`, and packaging notes.
+## Install
+
+```sh
+bun add @crustjs/man
+```
+
+## Documentation
+
+Full docs: [crustjs.com/docs/modules/man](https://crustjs.com/docs/modules/man)
 
 ## Roadmap (v2+)
 

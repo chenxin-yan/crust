@@ -12,7 +12,11 @@ export interface WriteManPageOptions {
 	name: string;
 	/** Output path (e.g. `man/mycli.1`). Parent directories are created. */
 	outfile: string;
-	/** Manual section; defaults to `1`. */
+	/**
+	 * Manual section.
+	 *
+	 * @default 1
+	 */
 	section?: number;
 	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
 	date?: string;

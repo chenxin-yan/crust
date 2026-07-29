@@ -16,16 +16,13 @@ Peer dependency: `@crustjs/core`.
 ## `writeManPage(options)`
 
 ```ts
-interface WriteManPageOptions {
-  app: Parameters<typeof prepareCommandSnapshot>[0];
-  name: string;
-  outfile: string;
-  section?: number;
-  date?: string;
-}
-
 function writeManPage(options: WriteManPageOptions): Promise<void>;
 ```
+
+<auto-type-table
+  path="../../../../../packages/man/src/write-man-page.ts"
+  name="WriteManPageOptions"
+/>
 
 `writeManPage` prepares and validates the application's final Command Snapshot, renders mdoc, creates parent directories, and writes the page.
 
@@ -46,15 +43,13 @@ await writeManPage({
 ## `renderManPageMdoc(options)`
 
 ```ts
-interface RenderManPageMdocOptions {
-  root: CommandSnapshot;
-  name: string;
-  section?: number;
-  date?: string;
-}
-
 function renderManPageMdoc(options: RenderManPageMdocOptions): string;
 ```
+
+<auto-type-table
+  path="../../../../../packages/man/src/mdoc.ts"
+  name="RenderManPageMdocOptions"
+/>
 
 Use this lower-level function when you already have a frozen Command Snapshot. It does not accept a live command definition.
 

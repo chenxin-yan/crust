@@ -44,7 +44,8 @@ crust build --env-file .env.production
 | `--env-file`  | —     | `"string"` (repeatable) | —             | Explicit env file(s) used for build-time constants         |
 | `--validate`  | —     | `"boolean"`             | `true`        | Pre-compile validation of command definitions              |
 | `--package`   | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
-| `--stage-dir` | —     | `"string"`              | `dist/npm`    | Directory to stage npm packages when using `--package`     |
+| `--stage-dir` | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`      |
+| `--man`       | —     | `"boolean"`             | `false`       | Write an mdoc(7) page; entry must export `app` or default  |
 
 ## Supported Targets
 
@@ -279,6 +280,15 @@ crust publish --stage-dir ./npm-packages
 ```
 
 The publish command reads the `manifest.json` and publishes packages in dependency order (platform packages first, then root package).
+
+| Flag          | Type        | Default    | Description                                              |
+| ------------- | ----------- | ---------- | -------------------------------------------------------- |
+| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`          |
+| `--tag`       | `"string"`  | —          | Override the npm dist-tag passed to `bun publish`        |
+| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`                 |
+| `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing      |
+| `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publishing |
+| `--registry`  | `"string"`  | —          | Override the registry passed to `bun publish`            |
 
 ### Distribution Package Names
 

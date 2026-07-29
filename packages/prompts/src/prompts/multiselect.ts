@@ -61,13 +61,21 @@ export interface MultiselectOptions<T> {
 	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: readonly T[];
-	/** Whether at least one item must be selected (defaults to false) */
+	/**
+	 * Whether at least one item must be selected.
+	 *
+	 * @default false
+	 */
 	readonly required?: boolean;
 	/** Minimum number of selections required */
 	readonly min?: number;
 	/** Maximum number of selections allowed */
 	readonly max?: number;
-	/** Maximum number of visible choices before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible choices before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
