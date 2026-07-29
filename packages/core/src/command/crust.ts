@@ -14,7 +14,7 @@ import type {
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { validateIncomingAliases } from "../parsing/validation.ts";
+import { validateCommandTree, validateIncomingAliases } from "../parsing/validation.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -72,14 +72,12 @@ interface InvocationIO {
 }
 
 /** Terminal defaults: line-oriented writes to the process streams. */
-function defaultIO(): InvocationIO {
-	return {
-		stdout: (text) => console.log(text),
-		stderr: (text) => console.error(text),
-	};
-}
+const DEFAULT_IO: InvocationIO = {
+	stdout: (text) => console.log(text),
+	stderr: (text) => console.error(text),
+};
 
-/** Output of `_prepare`: one cloned, extension-applied, frozen tree. */
+/** One cloned, extension-applied, frozen command tree. */
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly Extension[];
@@ -109,38 +107,6 @@ function validateSchemaExclusivity(
 				`${subject} "${name}" mixes core option "${key}" with a schema — the schema exclusively owns coercion, defaults, requiredness, choices, and validation`,
 				{ subject, name, reason: "schema-exclusive" },
 			);
-		}
-	}
-}
-
-/**
- * Runtime guard: reject flag names starting with "no-".
- * Mirrors the compile-time `ValidateNoPrefixedFlags` type.
- */
-function validateNoPrefixFlags(flags: FlagsDef): void {
-	for (const [name, def] of Object.entries(flags)) {
-		if (name.startsWith("no-")) {
-			const base = name.slice(3);
-			throw new CrustError(
-				"DEFINITION",
-				`Flag "--${name}" must not use "no-" prefix; define "${base}" and negate with "--no-${base}"`,
-			);
-		}
-		if (def.short?.startsWith("no-")) {
-			throw new CrustError(
-				"DEFINITION",
-				`Short alias "-${def.short}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
-			);
-		}
-		if (def.aliases) {
-			for (const alias of def.aliases) {
-				if (alias.startsWith("no-")) {
-					throw new CrustError(
-						"DEFINITION",
-						`Alias "--${alias}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
-					);
-				}
-			}
 		}
 	}
 }
@@ -178,9 +144,6 @@ export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
  */
 export const VALIDATION_FORCE_EXIT_ENV = "CRUST_INTERNAL_VALIDATE_FORCE_EXIT";
 const EXIT_CODE_CANCELLED = 130;
-
-/** Key for storing validation result on globalThis (for in-process tests) */
-const VALIDATION_RESULT_GLOBAL_KEY = "__CRUST_VALIDATE_RESULT__";
 
 function isAbortError(error: unknown): boolean {
 	if (!(error instanceof Error)) {
@@ -511,7 +474,6 @@ export class Crust<
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
 	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
 		// Runtime validation
-		validateNoPrefixFlags(defs);
 		for (const [name, def] of Object.entries(defs)) {
 			validateSchemaExclusivity("flag", name, def as unknown as Record<string, unknown>);
 		}
@@ -853,8 +815,8 @@ export class Crust<
 			stderr?: (text: string) => void;
 		},
 	): Promise<void> {
-		const resolvedIO: InvocationIO = { ...defaultIO(), ...io };
-		const prepared = await this._prepare();
+		const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
+		const prepared = prepareInvocation(this._node);
 		await this._dispatch(argv, prepared, resolvedIO);
 	}
 
@@ -871,11 +833,11 @@ export class Crust<
 	 */
 	async execute(options?: { argv?: string[] }): Promise<void> {
 		const argv = options?.argv ?? process.argv.slice(2);
-		const io = defaultIO();
+		const io = DEFAULT_IO;
 
 		let prepared: PreparedInvocation;
 		try {
-			prepared = await this._prepare();
+			prepared = prepareInvocation(this._node);
 		} catch (error) {
 			// Extension-application failures render directly: the handleError
 			// chain belongs to Extensions that just failed to apply.
@@ -891,22 +853,13 @@ export class Crust<
 
 		// ── Build-time validation mode ─────────────────────────────────────
 		if (process.env[VALIDATION_MODE_ENV] === "1") {
-			const result = (async () => {
-				try {
-					const { validateCommandTree } = await import("../parsing/validation.ts");
-					validateCommandTree(prepared.rootNode);
-					return { ok: true } as const;
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					console.error(message);
-					process.exitCode = 1;
-					return { ok: false, error } as const;
-				}
-			})();
-
-			// Store for in-process consumers (tests)
-			(globalThis as Record<string, unknown>)[VALIDATION_RESULT_GLOBAL_KEY] = result;
-			await result;
+			try {
+				validateCommandTree(prepared.rootNode);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error(message);
+				process.exitCode = 1;
+			}
 
 			// Build validation subprocesses opt in to force-exit so user code
 			// after `await app.execute()` is skipped (see VALIDATION_FORCE_EXIT_ENV).
@@ -928,15 +881,6 @@ export class Crust<
 			process.exitCode = 1;
 			await renderFailure(error, argv, prepared, io);
 		}
-	}
-
-	/**
-	 * Clone the tree, apply Extension-owned commands and flags, and freeze
-	 * the result. Collisions with application or other Extension definitions
-	 * throw DEFINITION errors; failures propagate unrendered.
-	 */
-	private async _prepare(): Promise<PreparedInvocation> {
-		return prepareInvocation(this._node);
 	}
 
 	/**
@@ -1101,7 +1045,7 @@ async function renderFailure(
 }
 
 /** Shared prepare step: clone, apply Extensions, freeze. */
-async function prepareInvocation(node: CommandNode): Promise<PreparedInvocation> {
+function prepareInvocation(node: CommandNode): PreparedInvocation {
 	const rootNode = deepCloneCommandNode(node);
 	const extensions = node.extensions;
 
@@ -1137,9 +1081,7 @@ async function prepareInvocation(node: CommandNode): Promise<PreparedInvocation>
 export async function prepareCommandSnapshot(app: {
 	readonly _node: CommandNode;
 }): Promise<CommandSnapshot> {
-	const prepared = await prepareInvocation(app._node);
-
-	const { validateCommandTree } = await import("../parsing/validation.ts");
+	const prepared = prepareInvocation(app._node);
 	validateCommandTree(prepared.rootNode);
 
 	return snapshotCommand(prepared.rootNode);

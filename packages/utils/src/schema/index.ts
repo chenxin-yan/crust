@@ -21,9 +21,6 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
  */
 export type StandardSchema<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output>;
 
-/** Infer the input type accepted by a Standard Schema. */
-export type InferInput<S extends StandardSchema> = StandardSchemaV1.InferInput<S>;
-
 /** Infer the output type produced by a Standard Schema on success. */
 export type InferOutput<S extends StandardSchema> = StandardSchemaV1.InferOutput<S>;
 
@@ -49,17 +46,6 @@ export function isStandardSchema(value: unknown): value is StandardSchema {
 	if (typeof props !== "object" || props === null) return false;
 	const p = props as Record<string, unknown>;
 	return p.version === 1 && typeof p.validate === "function";
-}
-
-/**
- * Throw `TypeError` if `value` is not a Standard Schema v1 object.
- */
-export function assertStandardSchema(value: unknown, label: string): void {
-	if (!isStandardSchema(value)) {
-		throw new TypeError(
-			`${label}: argument must be a Standard Schema v1 object (got ${typeof value})`,
-		);
-	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -103,7 +89,7 @@ export interface ValidationIssue {
  * // => ""
  * ```
  */
-export function formatPath(path: readonly PropertyKey[]): string {
+function formatPath(path: readonly PropertyKey[]): string {
 	let result = "";
 	for (const segment of path) {
 		if (typeof segment === "number") {
@@ -132,7 +118,7 @@ export function formatPath(path: readonly PropertyKey[]): string {
  * plain `PropertyKey`. Returns an empty array for a root-level issue
  * (`undefined`).
  */
-export function normalizeStandardPath(
+function normalizeStandardPath(
 	path: ReadonlyArray<PropertyKey | StandardSchemaV1.PathSegment> | undefined,
 ): PropertyKey[] {
 	if (!path) return [];

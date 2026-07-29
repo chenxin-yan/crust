@@ -23,11 +23,7 @@ import { parseArgs, validateParsed } from "./parser.ts";
  * on violation. The `subjectLabel` is shown in the error so the user can
  * locate the offending subcommand in their tree.
  */
-export function validateAliasString(
-	alias: unknown,
-	canonicalName: string,
-	subjectLabel: string,
-): void {
+function validateAliasString(alias: unknown, canonicalName: string, subjectLabel: string): void {
 	if (typeof alias !== "string" || alias.length === 0) {
 		throw new CrustError(
 			"DEFINITION",

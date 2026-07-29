@@ -29,10 +29,6 @@ class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
   withCause(cause: unknown): this;
   toJSON(): { code: C; message: string; details: CrustErrorDetails<C> };
 
-  static is(value: unknown): value is CrustError;
-  static definition(message: string, details?: DefinitionErrorDetails): CrustError<"DEFINITION">;
-  static parse(message: string, details?: ParseErrorDetails): CrustError<"PARSE">;
-  static validation(message: string, details?: ValidationErrorDetails): CrustError<"VALIDATION">;
   static commandNotFound(
     message: string,
     details: CommandNotFoundErrorDetails,

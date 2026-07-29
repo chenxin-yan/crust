@@ -21,11 +21,11 @@ bun add @crustjs/utils
 
 ## Exports
 
-| Subpath                    | Exports                                                                                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@crustjs/utils/source`    | `resolveSourceDir`                                                                                                                                                             |
-| `@crustjs/utils/primitive` | `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString`                                                                                                  |
-| `@crustjs/utils/schema`    | `StandardSchema`, `InferInput`, `InferOutput`, `isStandardSchema`, `assertStandardSchema`, `ValidationIssue`, `formatPath`, `normalizeStandardPath`, `normalizeStandardIssues` |
+| Subpath                    | Exports                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `@crustjs/utils/source`    | `resolveSourceDir`                                                                                |
+| `@crustjs/utils/primitive` | `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString`                     |
+| `@crustjs/utils/schema`    | `StandardSchema`, `InferOutput`, `isStandardSchema`, `ValidationIssue`, `normalizeStandardIssues` |
 
 ## `resolveSourceDir`
 
@@ -140,13 +140,10 @@ directly.
 
 ### Schema exports
 
-| Export                                     | Purpose                                                           |
-| ------------------------------------------ | ----------------------------------------------------------------- |
-| `StandardSchema<Input, Output>`            | Provider-neutral Standard Schema v1 alias                         |
-| `InferInput<S>` / `InferOutput<S>`         | Infer a schema's accepted and produced value types                |
-| `isStandardSchema(value)`                  | Check the `~standard` v1 boundary and narrow the value            |
-| `assertStandardSchema(value, label)`       | Throw `TypeError` when a value is not a Standard Schema v1 object |
-| `ValidationIssue`                          | Normalized `{ message, path }` issue shape                        |
-| `formatPath(path)`                         | Format property keys as a dot/bracket path                        |
-| `normalizeStandardPath(path)`              | Flatten Standard Schema path segments to property keys            |
-| `normalizeStandardIssues(issues, prefix?)` | Normalize provider issues and prepend an optional path prefix     |
+| Export                                     | Purpose                                                       |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `StandardSchema<Input, Output>`            | Provider-neutral Standard Schema v1 alias                     |
+| `InferOutput<S>`                           | Infer a schema's produced value type                          |
+| `isStandardSchema(value)`                  | Check the `~standard` v1 boundary and narrow the value        |
+| `ValidationIssue`                          | Normalized `{ message, path }` issue shape                    |
+| `normalizeStandardIssues(issues, prefix?)` | Normalize provider issues and prepend an optional path prefix |

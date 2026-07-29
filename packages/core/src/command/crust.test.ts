@@ -182,45 +182,27 @@ describe("Crust .flags()", () => {
 		expect(withFlags._node.meta.description).toBe("desc");
 	});
 
-	it("throws CrustError DEFINITION on flag name starting with no-", () => {
-		const app = new Crust("test");
-		try {
-			app.flags({ "no-cache": { type: "boolean" } } as FlagsDef &
-				ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("no-");
-		}
+	it("throws CrustError DEFINITION at parse time on flag name starting with no-", async () => {
+		const app = new Crust("test").flags({ "no-cache": { type: "boolean" } } as FlagsDef &
+			ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("throws CrustError DEFINITION on aliases starting with no-", () => {
-		const app = new Crust("test");
-		try {
-			app.flags({
-				cache: { type: "boolean", aliases: ["no-store"] },
-			} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("no-");
-		}
+	it("throws CrustError DEFINITION at parse time on aliases starting with no-", async () => {
+		const app = new Crust("test").flags({
+			cache: { type: "boolean", aliases: ["no-store"] },
+		} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("throws CrustError DEFINITION on aliases array containing no- entry", () => {
-		const app = new Crust("test");
-		try {
-			app.flags({
-				cache: { type: "boolean", short: "c", aliases: ["no-store"] },
-			} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("no-");
-		}
+	it("throws CrustError DEFINITION at parse time on short aliases starting with no-", async () => {
+		const app = new Crust("test").flags({
+			cache: { type: "boolean", short: "no-c" },
+		} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+
+		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
 	it("accepts flags with inherit: true", () => {

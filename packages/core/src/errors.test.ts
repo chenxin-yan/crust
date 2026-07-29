@@ -5,35 +5,20 @@ import { snapshotCommand } from "./command/snapshot.ts";
 import { CrustError } from "./errors.ts";
 
 describe("CrustError shape", () => {
-	it("provides a stable code and static guard", () => {
-		const error = CrustError.parse("Unknown flag", {
+	it("provides a stable code and details", () => {
+		const error = new CrustError("PARSE", "Unknown flag", {
 			flag: "--wat",
 			reason: "unknown-flag",
 		});
 
 		expect(error).toBeInstanceOf(Error);
-		expect(CrustError.is(error)).toBe(true);
 		expect(error.code).toBe("PARSE");
 		expect(error.details?.flag).toBe("--wat");
 	});
 
-	it("exposes exactly the four stable codes", () => {
-		expect(CrustError.definition("bad").code).toBe("DEFINITION");
-		expect(CrustError.parse("bad").code).toBe("PARSE");
-		expect(CrustError.validation("bad").code).toBe("VALIDATION");
-		expect(
-			CrustError.commandNotFound("bad", {
-				input: "x",
-				available: [],
-				commandPath: [],
-				parentCommand: snapshotCommand(createCommandNode("cli")),
-			}).code,
-		).toBe("COMMAND_NOT_FOUND");
-	});
-
 	it("serializes error metadata without a _tag and without serializing causes", () => {
 		const cause = new Error("inner");
-		const error = CrustError.validation("Failed", {
+		const error = new CrustError("VALIDATION", "Failed", {
 			issues: [{ message: "bad", path: "flags.x" }],
 		}).withCause(cause);
 

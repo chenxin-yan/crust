@@ -118,22 +118,6 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
 
-	static is(value: unknown): value is CrustError {
-		return value instanceof CrustError;
-	}
-
-	static definition(message: string, details?: DefinitionErrorDetails): CrustError<"DEFINITION"> {
-		return new CrustError("DEFINITION", message, details);
-	}
-
-	static parse(message: string, details?: ParseErrorDetails): CrustError<"PARSE"> {
-		return new CrustError("PARSE", message, details);
-	}
-
-	static validation(message: string, details?: ValidationErrorDetails): CrustError<"VALIDATION"> {
-		return new CrustError("VALIDATION", message, details);
-	}
-
 	static commandNotFound(
 		message: string,
 		details: CommandNotFoundErrorDetails,
