@@ -1,11 +1,5 @@
 # @crustjs/prompts
 
-## 0.2.0
-
-### Minor Changes
-
-- 42021b2: Prompt cancellation (Ctrl+C) now rejects with a standard `DOMException` named `"AbortError"` instead of the removed `CancelledError` class. Check `err.name === "AbortError"` to detect cancellation.
-
 ## 0.1.0
 
 ### Minor Changes
@@ -15,7 +9,6 @@
   The `validate` option on `input()` and `password()` is now polymorphic. In addition to the existing function shape — `(value: string) => true | string | Promise<true | string>` — you can pass any [Standard Schema v1](https://standardschema.dev/) object directly (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
 
   When a schema is supplied, the prompt:
-
   1. Parses the raw input on submit by `await`ing `schema['~standard'].validate(submitValue)` (so async schemas like Zod's `refine(async ...)` are supported).
   2. Renders the **first** issue's `message` inline on rejection, falling back to `"Validation failed"` when the issue message is empty.
   3. Resolves to the schema's **transformed output** type on success — no second-pass parse step.
@@ -26,8 +19,8 @@
   import { z } from "zod";
 
   const port = await input({
-    message: "Port?",
-    validate: z.coerce.number().int().min(1),
+  	message: "Port?",
+  	validate: z.coerce.number().int().min(1),
   });
   //    ^? number
   ```
@@ -60,16 +53,16 @@
   ```ts
   // Before
   input({
-    message: "Email?",
-    validate: (v) => v.includes("@") || "Must contain @",
+  	message: "Email?",
+  	validate: (v) => v.includes("@") || "Must contain @",
   });
 
   // After
   input({
-    message: "Email?",
-    validate: (v) => {
-      if (!v.includes("@")) throw new Error("Must contain @");
-    },
+  	message: "Email?",
+  	validate: (v) => {
+  		if (!v.includes("@")) throw new Error("Must contain @");
+  	},
   });
   ```
 
