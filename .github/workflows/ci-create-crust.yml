@@ -32,7 +32,9 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          - windows-latest
+          # windows-latest disabled: Bun panics when Bunup bundles workspace
+          # deps through node_modules on Windows. Re-enable once fixed:
+          # https://github.com/oven-sh/bun/issues/26798
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
