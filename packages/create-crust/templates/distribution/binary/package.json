@@ -24,6 +24,6 @@
 		"@crustjs/crust": "^{{crustCliVersion}}",
 		"@crustjs/extensions": "^{{crustExtensionsVersion}}",
 		"@types/bun": "latest",
-		"typescript": "^6"
+		"typescript": "^7.0.2"
 	}
 }

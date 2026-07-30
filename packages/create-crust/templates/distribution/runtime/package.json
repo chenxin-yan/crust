@@ -23,6 +23,6 @@
 	"devDependencies": {
 		"@crustjs/crust": "^{{crustCliVersion}}",
 		"@types/bun": "latest",
-		"typescript": "^6"
+		"typescript": "^7.0.2"
 	}
 }
