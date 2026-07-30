@@ -381,7 +381,7 @@ if (edit) {
 
 `handleTextEdit` handles backspace, delete, left, right, home, end, and printable character insertion. It returns `null` for non-text-editing keys so you can handle them separately.
 
-Only one prompt can be active at a time. Running a second prompt while one is already active rejects with an error.
+Only one prompt can be active per input stream. Prompts on distinct input streams can run concurrently; a second prompt sharing an input stream rejects with an error.
 
 ## Exports
 
@@ -465,6 +465,6 @@ Key design decisions:
 
 - **stderr rendering**: All prompt UI writes to stderr, keeping stdout clean for piped output.
 - **`initial` escape hatch**: Every prompt accepts `initial` to skip interactivity in CI and scripted usage.
-- **Single active prompt**: Only one prompt can run at a time; concurrent calls are rejected with a clear error.
+- **Single active prompt per input stream**: Prompts on distinct input streams can run concurrently; concurrent calls sharing an input stream are rejected with a clear error.
 - **Composable themes**: Three-layer resolution with `StyleFn` slots from `@crustjs/style`.
 - **Shared text editing**: Common cursor-editing logic lives in `handleTextEdit` for consistency and reuse in custom prompts.

@@ -226,6 +226,36 @@ describe("runPrompt", () => {
 		expect(output).toContain("prompt");
 	});
 
+	it("disables raw mode on a fake input without isRaw", async () => {
+		const input = new PassThrough() as PassThrough & {
+			isTTY: boolean;
+			setRawMode: (mode: boolean) => PassThrough;
+		};
+		input.isTTY = true;
+		const rawModes: boolean[] = [];
+		input.setRawMode = (mode) => {
+			rawModes.push(mode);
+			return input;
+		};
+		const output = new Writable({
+			write(_chunk, _encoding, callback) {
+				callback();
+			},
+		});
+		const config: PromptConfig<undefined, string> = {
+			render: () => "prompt",
+			handleKey: () => submit("done"),
+			initialState: undefined,
+			theme: defaultTheme,
+		};
+
+		const answer = runPrompt(config, { input, output });
+		input.write("x");
+
+		await answer;
+		expect(rawModes).toEqual([true, false]);
+	});
+
 	it("uses streams from withPromptIO", async () => {
 		const harness = createPromptIO();
 		const config: PromptConfig<{ value: string }, string> = {

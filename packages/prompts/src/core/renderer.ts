@@ -261,6 +261,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 		let state = initialState;
 		let prevLineCount = 0;
 		let isCleanedUp = false;
+		let rawModeEnabled = false;
 
 		// ── Cleanup helper ──────────────────────────────────────────────
 		function cleanup(): void {
@@ -270,7 +271,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 			stdin.removeListener("keypress", onKeypress);
 
-			if (stdin.isTTY && stdin.isRaw) {
+			if (rawModeEnabled) {
 				stdin.setRawMode?.(false);
 			}
 
@@ -395,7 +396,10 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 		// ── Initialize ──────────────────────────────────────────────────
 		try {
 			readline.emitKeypressEvents(stdin);
-			stdin.setRawMode?.(true);
+			if (stdin.setRawMode) {
+				stdin.setRawMode(true);
+				rawModeEnabled = true;
+			}
 			stdin.resume();
 			output.write(HIDE_CURSOR);
 

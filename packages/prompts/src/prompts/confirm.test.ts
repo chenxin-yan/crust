@@ -358,7 +358,7 @@ describe("confirm — non-TTY", () => {
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(confirm({ message: "Continue?" })).rejects.toThrow("interactive terminal");
+		await expect(nonTTY({ message: "Continue?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
@@ -389,7 +389,7 @@ describe("confirm — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no explicit default in non-TTY", async () => {
-		await expect(confirm({ message: "Continue?" })).rejects.toThrow("interactive terminal");
+		await expect(nonTTY({ message: "Continue?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
