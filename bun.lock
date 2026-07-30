@@ -99,7 +99,6 @@
         "@crustjs/extensions": "workspace:*",
         "@crustjs/man": "workspace:*",
         "@crustjs/style": "workspace:*",
-        "bunup": "catalog:",
       },
     },
     "packages/extensions": {

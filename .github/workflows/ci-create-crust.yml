@@ -61,9 +61,8 @@ jobs:
       - name: Build create-crust dependency subset
         run: bun turbo run build --filter=./packages/utils --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/config --filter=./packages/man --filter=./packages/create --filter=./packages/create-crust
 
-      # Bunup's resolver plugin crashes Bun 1.3.10 on Windows workspace paths.
       - name: Build Crust JavaScript CLI
-        run: bun build packages/crust/src/cli.ts --target=bun --outfile=packages/crust/dist/cli.js --minify --packages=external
+        run: bun run --cwd packages/crust build:cli
 
       - name: Print tool versions
         run: |
