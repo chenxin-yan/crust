@@ -4,8 +4,8 @@
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
@@ -296,12 +296,14 @@ function renderSubmitted<T>(
  * In non-interactive environments (no TTY), the `default` values are returned
  * automatically if provided.
  */
-export async function multifilter<T>(options: MultifilterOptions<T>): Promise<T[]> {
+export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
 	if (options.initial !== undefined) {
 		return [...options.initial];
 	}
 
-	if (!isTTY() && options.default !== undefined) {
+	const promptIO = resolvePromptIO(io);
+
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		return [...options.default];
 	}
 
@@ -341,13 +343,16 @@ export async function multifilter<T>(options: MultifilterOptions<T>): Promise<T[
 		error: null,
 	};
 
-	return runPrompt<MultifilterState<T>, T[]>({
-		initialState,
-		theme,
-		render: (state, resolvedTheme) =>
-			renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
-		handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-		renderSubmitted: (state, value, resolvedTheme) =>
-			renderSubmitted(state, value, resolvedTheme, options.message, choices, state.selected),
-	});
+	return runPrompt<MultifilterState<T>, T[]>(
+		{
+			initialState,
+			theme,
+			render: (state, resolvedTheme) =>
+				renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
+			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
+			renderSubmitted: (state, value, resolvedTheme) =>
+				renderSubmitted(state, value, resolvedTheme, options.message, choices, state.selected),
+		},
+		promptIO,
+	);
 }

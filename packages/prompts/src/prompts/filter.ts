@@ -4,8 +4,8 @@
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
@@ -273,14 +273,16 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-export async function filter<T>(options: FilterOptions<T>): Promise<T> {
+export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	// Non-interactive fallback: return default value when stdin is not a TTY
-	if (!isTTY() && options.default !== undefined) {
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		return options.default;
 	}
 
@@ -317,20 +319,23 @@ export async function filter<T>(options: FilterOptions<T>): Promise<T> {
 		scrollOffset: initialScrollOffset,
 	};
 
-	return runPrompt<FilterState<T>, T>({
-		initialState,
-		theme,
-		render: (state, resolvedTheme) =>
-			renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
-		handleKey: createHandleKey<T>(maxVisible),
-		renderSubmitted: (state, value, resolvedTheme) =>
-			renderSubmitted(
-				state,
-				value,
-				resolvedTheme,
-				options.message,
-				state.results,
-				state.listCursor,
-			),
-	});
+	return runPrompt<FilterState<T>, T>(
+		{
+			initialState,
+			theme,
+			render: (state, resolvedTheme) =>
+				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
+			handleKey: createHandleKey<T>(maxVisible),
+			renderSubmitted: (state, value, resolvedTheme) =>
+				renderSubmitted(
+					state,
+					value,
+					resolvedTheme,
+					options.message,
+					state.results,
+					state.listCursor,
+				),
+		},
+		promptIO,
+	);
 }

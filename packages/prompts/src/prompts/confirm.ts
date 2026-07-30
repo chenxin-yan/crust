@@ -2,8 +2,8 @@
 // Confirm — Yes/no boolean confirmation prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
@@ -182,15 +182,17 @@ function renderSubmitted(
  * });
  * ```
  */
-export async function confirm(options: ConfirmOptions): Promise<boolean> {
+export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<boolean> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	// Non-interactive fallback: return default value when stdin is not a TTY
 	// Only triggers when user explicitly passed `default` (not the internal default of `true`)
-	if (!isTTY() && options.default !== undefined) {
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		return options.default;
 	}
 
@@ -203,12 +205,15 @@ export async function confirm(options: ConfirmOptions): Promise<boolean> {
 		value: defaultValue,
 	};
 
-	return runPrompt<ConfirmState, boolean>({
-		initialState,
-		theme,
-		render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
-		handleKey,
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message, activeLabel, inactiveLabel),
-	});
+	return runPrompt<ConfirmState, boolean>(
+		{
+			initialState,
+			theme,
+			render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
+			handleKey,
+			renderSubmitted: (state, value, t) =>
+				renderSubmitted(state, value, t, options.message, activeLabel, inactiveLabel),
+		},
+		promptIO,
+	);
 }

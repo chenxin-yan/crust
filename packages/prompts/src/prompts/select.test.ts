@@ -1,89 +1,44 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { select } from "./select.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { select, type SelectOptions } from "./select.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
+function start<T>(options: SelectOptions<T>): Promise<T> {
+	const prompt = renderPrompt<SelectOptions<T>, T>(select, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
-}
-
-/**
- * Emit a keypress event on stdin.
- */
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
 }
 
-/**
- * Wait briefly for async event processing.
- */
+function screen(): string {
+	return activePrompt.screen();
+}
+
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
@@ -110,11 +65,8 @@ describe("select — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — default value", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("sets initial cursor to matching default value", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 			default: "green",
@@ -129,7 +81,7 @@ describe("select — default value", () => {
 	});
 
 	it("defaults cursor to first item when no default is provided", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 		});
@@ -142,7 +94,7 @@ describe("select — default value", () => {
 	});
 
 	it("defaults cursor to first item when default value is not found", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 			default: "yellow",
@@ -161,11 +113,8 @@ describe("select — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — navigation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("down arrow moves cursor down", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
@@ -180,7 +129,7 @@ describe("select — navigation", () => {
 	});
 
 	it("up arrow moves cursor up", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "b",
@@ -196,7 +145,7 @@ describe("select — navigation", () => {
 	});
 
 	it("j moves cursor down (vim)", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
@@ -211,7 +160,7 @@ describe("select — navigation", () => {
 	});
 
 	it("k moves cursor up (vim)", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "c",
@@ -227,7 +176,7 @@ describe("select — navigation", () => {
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
@@ -243,7 +192,7 @@ describe("select — navigation", () => {
 	});
 
 	it("wraps to first item when moving down from last", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "c",
@@ -260,7 +209,7 @@ describe("select — navigation", () => {
 	});
 
 	it("Enter selects the highlighted item", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
@@ -282,11 +231,8 @@ describe("select — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — choice types", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("handles string choices correctly", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 		});
@@ -299,7 +245,7 @@ describe("select — choice types", () => {
 	});
 
 	it("handles object choices with label and value", async () => {
-		const promise = select<number>({
+		const promise = start({
 			message: "Pick a port",
 			choices: [
 				{ label: "HTTP", value: 80 },
@@ -317,7 +263,7 @@ describe("select — choice types", () => {
 	});
 
 	it("handles object choices with hints", async () => {
-		const promise = select<number>({
+		const promise = start({
 			message: "Pick a port",
 			choices: [
 				{ label: "HTTP", value: 80 },
@@ -327,7 +273,7 @@ describe("select — choice types", () => {
 
 		await tick();
 		// Verify hint text is rendered
-		expect(stderrOutput).toContain("recommended");
+		expect(screen()).toContain("recommended");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -339,52 +285,49 @@ describe("select — choice types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — rendering", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders message on initial display", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Choose your favorite",
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Choose your favorite");
+		expect(screen()).toContain("Choose your favorite");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders all visible choices", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("alpha");
-		expect(stderrOutput).toContain("beta");
-		expect(stderrOutput).toContain("gamma");
+		expect(screen()).toContain("alpha");
+		expect(screen()).toContain("beta");
+		expect(screen()).toContain("gamma");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders cursor indicator on active item", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["alpha", "beta"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("›");
+		expect(screen()).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick a fruit",
 			choices: ["apple", "banana", "cherry"],
 		});
@@ -396,11 +339,11 @@ describe("select — rendering", () => {
 
 		await promise;
 		// After submit, the selected label should appear in the output
-		expect(stderrOutput).toContain("banana");
+		expect(screen()).toContain("banana");
 	});
 
 	it("renders labels for object choices", async () => {
-		const promise = select<number>({
+		const promise = start({
 			message: "Pick",
 			choices: [
 				{ label: "Option A", value: 1 },
@@ -409,8 +352,8 @@ describe("select — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Option A");
-		expect(stderrOutput).toContain("Option B");
+		expect(screen()).toContain("Option A");
+		expect(screen()).toContain("Option B");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -422,12 +365,9 @@ describe("select — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — viewport scrolling", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("limits visible choices to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices,
 			maxVisible: 5,
@@ -435,9 +375,9 @@ describe("select — viewport scrolling", () => {
 
 		await tick();
 		// Only first 5 items should be visible
-		expect(stderrOutput).toContain("item-0");
-		expect(stderrOutput).toContain("item-4");
-		expect(stderrOutput).not.toContain("item-5");
+		expect(screen()).toContain("item-0");
+		expect(screen()).toContain("item-4");
+		expect(screen()).not.toContain("item-5");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -445,14 +385,14 @@ describe("select — viewport scrolling", () => {
 
 	it("shows scroll-down indicator when more items below", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("...");
+		expect(screen()).toContain("...");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -460,7 +400,7 @@ describe("select — viewport scrolling", () => {
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices,
 			maxVisible: 3,
@@ -476,7 +416,7 @@ describe("select — viewport scrolling", () => {
 		await tick();
 
 		// item-3 should now be visible
-		expect(stderrOutput).toContain("item-3");
+		expect(screen()).toContain("item-3");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -484,7 +424,7 @@ describe("select — viewport scrolling", () => {
 	});
 
 	it("does not show scroll indicators when all items fit", async () => {
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			maxVisible: 10,
@@ -493,7 +433,7 @@ describe("select — viewport scrolling", () => {
 		await tick();
 		// With only 3 items and maxVisible=10, no scroll indicators
 		// Count "..." occurrences — should not appear as a scroll indicator line
-		const lines = stderrOutput.split("\n");
+		const lines = screen().split("\n");
 		const scrollLines = lines.filter((l) => l.trim() === "...");
 		expect(scrollLines.length).toBe(0);
 
@@ -503,7 +443,7 @@ describe("select — viewport scrolling", () => {
 
 	it("wrapping from last item scrolls viewport back to top", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = select({
+		const promise = start({
 			message: "Pick",
 			choices,
 			maxVisible: 3,
@@ -516,7 +456,7 @@ describe("select — viewport scrolling", () => {
 		await tick();
 
 		// Should now show the first items
-		expect(stderrOutput).toContain("item-0");
+		expect(screen()).toContain("item-0");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -529,18 +469,15 @@ describe("select — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — no message", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders default message when message is omitted", async () => {
-		const promise = select({
+		const promise = start({
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Pick an option");
-		expect(stderrOutput).not.toContain("undefined");
-		expect(stderrOutput).toContain("a");
+		expect(screen()).toContain("Pick an option");
+		expect(screen()).not.toContain("undefined");
+		expect(screen()).toContain("a");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -548,7 +485,7 @@ describe("select — no message", () => {
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = select({
+		const promise = start({
 			choices: ["a", "b", "c"],
 		});
 
@@ -556,8 +493,8 @@ describe("select — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Pick an option");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Pick an option");
+		expect(screen()).not.toContain("undefined");
 	});
 });
 
@@ -566,18 +503,13 @@ describe("select — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY<T>(options: SelectOptions<T>): Promise<T> {
+		return select(options, nonTTYIO());
+	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			select({
+			nonTTY({
 				message: "Pick",
 				choices: ["a", "b", "c"],
 			}),
@@ -585,13 +517,7 @@ describe("select — non-TTY", () => {
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await select({
+		const result = await nonTTY({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			initial: "b",
@@ -601,13 +527,7 @@ describe("select — non-TTY", () => {
 	});
 
 	it("returns default value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await select({
+		const result = await nonTTY({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "b",
@@ -617,14 +537,8 @@ describe("select — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			select({
+			nonTTY({
 				message: "Pick",
 				choices: ["a", "b", "c"],
 			}),
@@ -632,13 +546,7 @@ describe("select — non-TTY", () => {
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await select({
+		const result = await nonTTY({
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			initial: "a",

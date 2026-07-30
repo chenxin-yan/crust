@@ -2,8 +2,8 @@
 // Multiselect — Checkbox-style multi selection from a list for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
@@ -314,14 +314,16 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-export async function multiselect<T>(options: MultiselectOptions<T>): Promise<T[]> {
+export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return [...options.initial];
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	// Non-interactive fallback: return default values when stdin is not a TTY
-	if (!isTTY() && options.default !== undefined) {
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		return [...options.default];
 	}
 
@@ -348,12 +350,15 @@ export async function multiselect<T>(options: MultiselectOptions<T>): Promise<T[
 		error: null,
 	};
 
-	return runPrompt<MultiselectState<T>, T[]>({
-		initialState,
-		theme,
-		render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
-		handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message, choices, state.selected),
-	});
+	return runPrompt<MultiselectState<T>, T[]>(
+		{
+			initialState,
+			theme,
+			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
+			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
+			renderSubmitted: (state, value, t) =>
+				renderSubmitted(state, value, t, options.message, choices, state.selected),
+		},
+		promptIO,
+	);
 }

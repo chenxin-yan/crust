@@ -1,89 +1,44 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { multiselect } from "./multiselect.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { multiselect, type MultiselectOptions } from "./multiselect.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
+function start<T>(options: MultiselectOptions<T>): Promise<T[]> {
+	const prompt = renderPrompt<MultiselectOptions<T>, T[]>(multiselect, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
-}
-
-/**
- * Emit a keypress event on stdin.
- */
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
 }
 
-/**
- * Wait briefly for async event processing.
- */
+function screen(): string {
+	return activePrompt.screen();
+}
+
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric values
 // ────────────────────────────────────────────────────────────────────────────
@@ -110,11 +65,8 @@ describe("multiselect — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — default value", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("pre-selects items matching default values", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "mushrooms"],
@@ -129,7 +81,7 @@ describe("multiselect — default value", () => {
 	});
 
 	it("returns empty array when no defaults and nothing selected", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 		});
@@ -142,7 +94,7 @@ describe("multiselect — default value", () => {
 	});
 
 	it("ignores default values that don't match any choice", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "nonexistent"],
@@ -161,11 +113,8 @@ describe("multiselect — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — Space toggle", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("Space toggles selection on current item", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -181,7 +130,7 @@ describe("multiselect — Space toggle", () => {
 	});
 
 	it("Space toggles off a selected item", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
@@ -198,7 +147,7 @@ describe("multiselect — Space toggle", () => {
 	});
 
 	it("can select multiple items", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -224,11 +173,8 @@ describe("multiselect — Space toggle", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — navigation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("down arrow moves cursor down", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -245,7 +191,7 @@ describe("multiselect — navigation", () => {
 	});
 
 	it("up arrow moves cursor up", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -265,7 +211,7 @@ describe("multiselect — navigation", () => {
 	});
 
 	it("j moves cursor down (vim)", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -282,7 +228,7 @@ describe("multiselect — navigation", () => {
 	});
 
 	it("k moves cursor up (vim)", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -301,7 +247,7 @@ describe("multiselect — navigation", () => {
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -318,7 +264,7 @@ describe("multiselect — navigation", () => {
 	});
 
 	it("wraps to first item when moving down from last", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -346,11 +292,8 @@ describe("multiselect — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — toggle all / invert", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("'a' selects all items when none are selected", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
@@ -365,7 +308,7 @@ describe("multiselect — toggle all / invert", () => {
 	});
 
 	it("'a' deselects all items when all are selected", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a", "b", "c"],
@@ -381,7 +324,7 @@ describe("multiselect — toggle all / invert", () => {
 	});
 
 	it("'a' selects all when some are selected (not all)", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
@@ -397,7 +340,7 @@ describe("multiselect — toggle all / invert", () => {
 	});
 
 	it("'i' inverts selection", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
@@ -413,7 +356,7 @@ describe("multiselect — toggle all / invert", () => {
 	});
 
 	it("'i' inverts from all selected to none", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a", "b", "c"],
@@ -434,11 +377,8 @@ describe("multiselect — toggle all / invert", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — validation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("required blocks empty submit", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			required: true,
@@ -450,7 +390,7 @@ describe("multiselect — validation", () => {
 		await tick();
 
 		// Error should be shown
-		expect(stderrOutput).toContain("At least one item must be selected");
+		expect(screen()).toContain("At least one item must be selected");
 
 		// Select something and submit
 		pressKey(" ", { name: "space" });
@@ -462,7 +402,7 @@ describe("multiselect — validation", () => {
 	});
 
 	it("min validation blocks submit when too few selected", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			min: 2,
@@ -476,7 +416,7 @@ describe("multiselect — validation", () => {
 		await tick();
 
 		// Error should be shown
-		expect(stderrOutput).toContain("Select at least 2 items");
+		expect(screen()).toContain("Select at least 2 items");
 
 		// Select another item and submit
 		pressKey("", { name: "down" });
@@ -490,7 +430,7 @@ describe("multiselect — validation", () => {
 	});
 
 	it("max validation blocks submit when too many selected", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			max: 1,
@@ -502,7 +442,7 @@ describe("multiselect — validation", () => {
 		await tick();
 
 		// Error should be shown
-		expect(stderrOutput).toContain("Select at most 1 item");
+		expect(screen()).toContain("Select at most 1 item");
 
 		// Deselect one and submit
 		pressKey(" ", { name: "space" });
@@ -514,7 +454,7 @@ describe("multiselect — validation", () => {
 	});
 
 	it("error clears when user navigates", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			required: true,
@@ -524,15 +464,15 @@ describe("multiselect — validation", () => {
 		// Submit with nothing — triggers error
 		pressKey("", { name: "return" });
 		await tick();
-		expect(stderrOutput).toContain("At least one item must be selected");
+		expect(screen()).toContain("At least one item must be selected");
 
 		// Navigate — error should clear
-		stderrOutput = "";
+
 		pressKey("", { name: "down" });
 		await tick();
 
 		// The error should no longer appear in new output
-		expect(stderrOutput).not.toContain("At least one item must be selected");
+		expect(screen()).not.toContain("At least one item must be selected");
 
 		// Select and submit
 		pressKey(" ", { name: "space" });
@@ -549,81 +489,78 @@ describe("multiselect — validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — rendering", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders message on initial display", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Select toppings");
+		expect(screen()).toContain("Select toppings");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders all choices with checkboxes", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("alpha");
-		expect(stderrOutput).toContain("beta");
-		expect(stderrOutput).toContain("gamma");
-		expect(stderrOutput).toContain("○");
+		expect(screen()).toContain("alpha");
+		expect(screen()).toContain("beta");
+		expect(screen()).toContain("gamma");
+		expect(screen()).toContain("○");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders checked boxes for selected items", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["alpha", "beta", "gamma"],
 			default: ["alpha"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("●");
+		expect(screen()).toContain("●");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders cursor indicator on active item", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["alpha", "beta"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("›");
+		expect(screen()).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders hint line with keybindings", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices: ["alpha", "beta"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Space to toggle");
-		expect(stderrOutput).toContain("Enter to confirm");
+		expect(screen()).toContain("Space to toggle");
+		expect(screen()).toContain("Enter to confirm");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders submitted answer with comma-separated labels", async () => {
-		const promise = multiselect({
+		const promise = start({
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "mushrooms"],
@@ -634,11 +571,11 @@ describe("multiselect — rendering", () => {
 
 		await promise;
 		// After submit, should show comma-separated labels
-		expect(stderrOutput).toContain("cheese, mushrooms");
+		expect(screen()).toContain("cheese, mushrooms");
 	});
 
 	it("renders hints for object choices", async () => {
-		const promise = multiselect<string>({
+		const promise = start({
 			message: "Select features",
 			choices: [
 				{ label: "TypeScript", value: "ts", hint: "recommended" },
@@ -647,7 +584,7 @@ describe("multiselect — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("recommended");
+		expect(screen()).toContain("recommended");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -659,21 +596,18 @@ describe("multiselect — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — viewport scrolling", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("limits visible choices to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("item-0");
-		expect(stderrOutput).toContain("item-4");
-		expect(stderrOutput).not.toContain("item-5");
+		expect(screen()).toContain("item-0");
+		expect(screen()).toContain("item-4");
+		expect(screen()).not.toContain("item-5");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -681,14 +615,14 @@ describe("multiselect — viewport scrolling", () => {
 
 	it("shows scroll-down indicator when more items below", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("...");
+		expect(screen()).toContain("...");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -696,7 +630,7 @@ describe("multiselect — viewport scrolling", () => {
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = multiselect({
+		const promise = start({
 			message: "Select",
 			choices,
 			maxVisible: 3,
@@ -712,7 +646,7 @@ describe("multiselect — viewport scrolling", () => {
 		await tick();
 
 		// item-3 should now be visible
-		expect(stderrOutput).toContain("item-3");
+		expect(screen()).toContain("item-3");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -724,18 +658,15 @@ describe("multiselect — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — no message", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders default message when message is omitted", async () => {
-		const promise = multiselect({
+		const promise = start({
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Pick one or more");
-		expect(stderrOutput).not.toContain("undefined");
-		expect(stderrOutput).toContain("a");
+		expect(screen()).toContain("Pick one or more");
+		expect(screen()).not.toContain("undefined");
+		expect(screen()).toContain("a");
 
 		// Select first item and submit
 		pressKey("", { name: "space" });
@@ -747,7 +678,7 @@ describe("multiselect — no message", () => {
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = multiselect({
+		const promise = start({
 			choices: ["a", "b", "c"],
 		});
 
@@ -757,8 +688,8 @@ describe("multiselect — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Pick one or more");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Pick one or more");
+		expect(screen()).not.toContain("undefined");
 	});
 });
 
@@ -767,18 +698,13 @@ describe("multiselect — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY<T>(options: MultiselectOptions<T>): Promise<T[]> {
+		return multiselect(options, nonTTYIO());
+	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			multiselect({
+			nonTTY({
 				message: "Select",
 				choices: ["a", "b", "c"],
 			}),
@@ -786,13 +712,7 @@ describe("multiselect — non-TTY", () => {
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await multiselect({
+		const result = await nonTTY({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			initial: ["b"],
@@ -802,13 +722,7 @@ describe("multiselect — non-TTY", () => {
 	});
 
 	it("returns default values in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await multiselect({
+		const result = await nonTTY({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a", "c"],
@@ -818,14 +732,8 @@ describe("multiselect — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			multiselect({
+			nonTTY({
 				message: "Select",
 				choices: ["a", "b", "c"],
 			}),
@@ -833,13 +741,7 @@ describe("multiselect — non-TTY", () => {
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await multiselect({
+		const result = await nonTTY({
 			message: "Select",
 			choices: ["a", "b", "c"],
 			initial: ["a"],

@@ -1,110 +1,56 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
-import { password } from "./password.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { password, type PasswordOptions } from "./password.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
+function start<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
+	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(password, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
-}
-
-/**
- * Emit a keypress event on stdin.
- */
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
 }
 
-/**
- * Wait briefly for async event processing.
- */
+function screen(): string {
+	return activePrompt.screen();
+}
+
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Poll `stderrOutput` until it contains `needle`, or throw after `timeout`
- * ms. Use this instead of a fixed `tick(N)` whenever the assertion depends
- * on async work that may take a variable amount of time on slower runners
- * (notably async schema validation, which has its own internal delays).
- */
-async function waitForStderr(needle: string, timeout = 500): Promise<void> {
-	const start = Date.now();
-	while (!stderrOutput.includes(needle)) {
-		if (Date.now() - start > timeout) {
-			throw new Error(
-				`stderr never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
-					`Got: ${JSON.stringify(stderrOutput)}`,
-			);
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
+
+async function waitForScreen(needle: string, timeout = 500): Promise<void> {
+	const started = Date.now();
+	while (!screen().includes(needle)) {
+		if (Date.now() - started > timeout) {
+			throw new Error(`screen never contained ${JSON.stringify(needle)} within ${timeout}ms.`);
 		}
 		await tick(5);
 	}
 }
-
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — empty-string edge case
 // ────────────────────────────────────────────────────────────────────────────
@@ -128,21 +74,18 @@ describe("password — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — masked rendering", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders message on initial display", async () => {
-		const promise = password({ message: "Enter password:" });
+		const promise = start({ message: "Enter password:" });
 
 		await tick();
-		expect(stderrOutput).toContain("Enter password:");
+		expect(screen()).toContain("Enter password:");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders mask characters instead of actual value", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("a");
@@ -153,7 +96,7 @@ describe("password — masked rendering", () => {
 		await tick();
 
 		// Should see mask characters (***) but NOT the actual value "abc"
-		expect(stderrOutput).toContain("*");
+		expect(screen()).toContain("*");
 		// The actual characters should not appear in output
 		// (except potentially in keypress event data, not in rendered output)
 
@@ -164,7 +107,7 @@ describe("password — masked rendering", () => {
 	});
 
 	it("supports custom mask character", async () => {
-		const promise = password({ message: "Password?", mask: "●" });
+		const promise = start({ message: "Password?", mask: "●" });
 
 		await tick();
 		pressKey("x");
@@ -173,7 +116,7 @@ describe("password — masked rendering", () => {
 		await tick();
 
 		// Custom mask character should appear in output
-		expect(stderrOutput).toContain("●");
+		expect(screen()).toContain("●");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -181,7 +124,7 @@ describe("password — masked rendering", () => {
 	});
 
 	it("shows fixed-length mask on submission regardless of actual length", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		// Type a 10-character password
@@ -195,15 +138,15 @@ describe("password — masked rendering", () => {
 
 		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
 		// The submitted line uses the success theme, so look for **** in output
-		expect(stderrOutput).toContain("****");
+		expect(screen()).toContain("****");
 	});
 
 	it("shows cursor indicator when input is empty", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		// U+2502 (│) is the cursor character
-		expect(stderrOutput).toContain("\u2502");
+		expect(screen()).toContain("\u2502");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -215,11 +158,8 @@ describe("password — masked rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — keypress editing", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("submits typed value on Enter", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("s");
@@ -235,7 +175,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("backspace deletes character before cursor", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -253,7 +193,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("backspace at position 0 does nothing", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("", { name: "backspace" });
@@ -267,7 +207,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("delete removes character at cursor", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -291,7 +231,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("left/right arrow keys move cursor", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -310,7 +250,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("home key jumps to start", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -328,7 +268,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("end key jumps to end", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -348,7 +288,7 @@ describe("password — keypress editing", () => {
 	});
 
 	it("ignores ctrl+key combinations", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		pressKey("A");
@@ -367,11 +307,8 @@ describe("password — keypress editing", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — validation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("shows error message when validation fails", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Password?",
 			validate: (v) => {
 				if (v.length < 4) throw new Error("Password must be at least 4 characters");
@@ -387,7 +324,7 @@ describe("password — validation", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("Password must be at least 4 characters");
+		expect(screen()).toContain("Password must be at least 4 characters");
 
 		// Type more and resubmit
 		pressKey("c");
@@ -401,7 +338,7 @@ describe("password — validation", () => {
 	});
 
 	it("supports async validation", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Token?",
 			validate: async (v) => {
 				await new Promise((r) => setTimeout(r, 5));
@@ -421,7 +358,7 @@ describe("password — validation", () => {
 	});
 
 	it("clears error on new character input", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Password?",
 			validate: (v) => {
 				if (v.length < 2) throw new Error("Too short");
@@ -435,7 +372,7 @@ describe("password — validation", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("Too short");
+		expect(screen()).toContain("Too short");
 
 		// Type another character — error should be cleared from state
 		pressKey("b");
@@ -452,15 +389,12 @@ describe("password — validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — no message", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders default message when message is omitted", async () => {
-		const promise = password({});
+		const promise = start({});
 
 		await tick();
-		expect(stderrOutput).toContain("Enter a password");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Enter a password");
+		expect(screen()).not.toContain("undefined");
 
 		pressKey("s");
 		await tick();
@@ -475,7 +409,7 @@ describe("password — no message", () => {
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = password({});
+		const promise = start({});
 
 		await tick();
 		pressKey("x");
@@ -483,8 +417,8 @@ describe("password — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Enter a password");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Enter a password");
+		expect(screen()).not.toContain("undefined");
 	});
 });
 
@@ -493,27 +427,16 @@ describe("password — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
+		return password(options, nonTTYIO());
+	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		await expect(password({ message: "Password?" })).rejects.toThrow("interactive terminal");
+		await expect(nonTTY({ message: "Password?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await password({
+		const result = await nonTTY({
 			message: "Password?",
 			initial: "secret123",
 		});
@@ -527,11 +450,8 @@ describe("password — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — schema validation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("resolves to string when a string schema accepts the input", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Password?",
 			validate: z.string().min(3),
 		});
@@ -551,7 +471,7 @@ describe("password — schema validation", () => {
 	});
 
 	it("renders the first issue's message and waits for retry on failure", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Password?",
 			validate: z.string().min(3, "Too short"),
 		});
@@ -562,7 +482,7 @@ describe("password — schema validation", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("Too short");
+		expect(screen()).toContain("Too short");
 
 		pressKey("b");
 		await tick();
@@ -575,7 +495,7 @@ describe("password — schema validation", () => {
 	});
 
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
-		const promise = password({
+		const promise = start({
 			message: "PIN?",
 			validate: z.coerce.number().int().min(1000),
 		});
@@ -605,7 +525,7 @@ describe("password — schema validation", () => {
 			{ message: "wrong passphrase" },
 		);
 
-		const promise = password({
+		const promise = start({
 			message: "Passphrase?",
 			validate: asyncSchema,
 		});
@@ -616,9 +536,9 @@ describe("password — schema validation", () => {
 			await tick();
 		}
 		pressKey("", { name: "return" });
-		await waitForStderr("wrong passphrase");
+		await waitForScreen("wrong passphrase");
 
-		expect(stderrOutput).toContain("wrong passphrase");
+		expect(screen()).toContain("wrong passphrase");
 
 		// Clear and type the correct value.
 		for (let i = 0; i < 5; i++) {
@@ -647,7 +567,7 @@ describe("password — schema validation", () => {
 			},
 		};
 
-		const promise = password({
+		const promise = start({
 			message: "Word?",
 			validate: emptyMessageSchema,
 		});
@@ -658,7 +578,7 @@ describe("password — schema validation", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("Validation failed");
+		expect(screen()).toContain("Validation failed");
 
 		pressKey("", { name: "backspace" });
 		await tick();
@@ -737,15 +657,12 @@ describe("password — schema short-circuit", () => {
 // rejection and submission paths so a regression is loud.
 
 describe("password — secrecy", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	// A unique, unlikely-to-appear-in-prompt-chrome marker so any leak fails
 	// the assertion deterministically.
 	const SECRET = "hunter2-XYZ";
 
 	it("never renders the raw value while typing or after submission", async () => {
-		const promise = password({ message: "Password?" });
+		const promise = start({ message: "Password?" });
 
 		await tick();
 		for (const ch of SECRET) {
@@ -755,11 +672,11 @@ describe("password — secrecy", () => {
 		pressKey("", { name: "return" });
 		await promise;
 
-		expect(stderrOutput).not.toContain(SECRET);
+		expect(screen()).not.toContain(SECRET);
 	});
 
 	it("never renders the raw value when schema validation rejects", async () => {
-		const promise = password({
+		const promise = start({
 			message: "Password?",
 			validate: z.string().min(64, "too short"),
 		});
@@ -772,8 +689,8 @@ describe("password — secrecy", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("too short");
-		expect(stderrOutput).not.toContain(SECRET);
+		expect(screen()).toContain("too short");
+		expect(screen()).not.toContain(SECRET);
 
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
