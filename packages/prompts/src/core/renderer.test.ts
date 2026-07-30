@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { PassThrough, Writable } from "node:stream";
 
+import { createPromptIO } from "../testing.ts";
 import {
 	assertTTY,
 	isTTY,
@@ -7,6 +9,7 @@ import {
 	type PromptConfig,
 	runPrompt,
 	submit,
+	withPromptIO,
 } from "./renderer.ts";
 import { defaultTheme } from "./theme.ts";
 
@@ -185,6 +188,92 @@ describe("runPrompt", () => {
 		process.stderr.write = originalStderrWrite;
 		// Remove any lingering keypress listeners added during tests
 		process.stdin.removeAllListeners("keypress");
+	});
+
+	it("uses supplied TTY streams instead of process globals", async () => {
+		const input = new PassThrough() as PassThrough & {
+			isTTY: boolean;
+			isRaw: boolean;
+			setRawMode: (mode: boolean) => PassThrough;
+		};
+		input.isTTY = true;
+		input.isRaw = false;
+		input.setRawMode = (mode) => {
+			input.isRaw = mode;
+			return input;
+		};
+
+		let output = "";
+		const stream = new Writable({
+			write(chunk, _encoding, callback) {
+				output += chunk.toString();
+				callback();
+			},
+		}) as Writable & { columns: number };
+		stream.columns = 80;
+
+		const config: PromptConfig<{ value: string }, string> = {
+			render: (state) => state.value,
+			handleKey: () => submit("done"),
+			initialState: { value: "prompt" },
+			theme: defaultTheme,
+		};
+
+		const answer = runPrompt(config, { input, output: stream });
+		input.write("x");
+
+		expect(await answer).toBe("done");
+		expect(output).toContain("prompt");
+	});
+
+	it("uses streams from withPromptIO", async () => {
+		const harness = createPromptIO();
+		const config: PromptConfig<{ value: string }, string> = {
+			render: (state) => state.value,
+			handleKey: () => submit("done"),
+			initialState: { value: "prompt" },
+			theme: defaultTheme,
+		};
+
+		const answer = withPromptIO(harness.io, () => runPrompt(config));
+		harness.type("x");
+
+		expect(await answer).toBe("done");
+		expect(harness.screen()).toContain("prompt");
+	});
+
+	it("permits concurrent prompts on distinct input streams", async () => {
+		const first = createPromptIO();
+		const second = createPromptIO();
+		const config: PromptConfig<undefined, string> = {
+			render: () => "prompt",
+			handleKey: () => submit("done"),
+			initialState: undefined,
+			theme: defaultTheme,
+		};
+
+		const firstAnswer = runPrompt(config, first.io);
+		const secondAnswer = runPrompt(config, second.io);
+		first.type("x");
+		second.type("x");
+
+		expect(await firstAnswer).toBe("done");
+		expect(await secondAnswer).toBe("done");
+	});
+
+	it("rejects concurrent prompts on the same input stream", async () => {
+		const harness = createPromptIO();
+		const config: PromptConfig<undefined, string> = {
+			render: () => "prompt",
+			handleKey: () => submit("done"),
+			initialState: undefined,
+			theme: defaultTheme,
+		};
+
+		const answer = runPrompt(config, harness.io);
+		await expect(runPrompt(config, harness.io)).rejects.toThrow("same input stream");
+		harness.type("x");
+		await answer;
 	});
 
 	it("rejects with NonInteractiveError when stdin is not a TTY", async () => {

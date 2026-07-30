@@ -24,9 +24,19 @@ export type {
 	HandleKeyResult,
 	KeypressEvent,
 	PromptConfig,
+	PromptIO,
+	PromptInput,
+	PromptOutput,
 	SubmitResult,
 } from "./core/renderer.ts";
-export { assertTTY, isTTY, NonInteractiveError, runPrompt, submit } from "./core/renderer.ts";
+export {
+	assertTTY,
+	isTTY,
+	NonInteractiveError,
+	runPrompt,
+	submit,
+	withPromptIO,
+} from "./core/renderer.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Prompts

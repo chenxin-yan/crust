@@ -4,8 +4,8 @@
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
@@ -262,14 +262,22 @@ export function input<Output>(
 	options: InputOptions<Output> & {
 		readonly validate: StandardSchemaV1<unknown, Output>;
 	},
+	io?: PromptIO,
 ): Promise<Output>;
 export function input(
 	options?: Omit<InputOptions, "validate"> & {
 		readonly validate?: ValidateFn<string>;
 	},
+	io?: PromptIO,
 ): Promise<string>;
-export function input<Output>(options: InputOptions<Output>): Promise<Output | string>;
-export async function input<Output>(options: InputOptions<Output> = {}): Promise<Output | string> {
+export function input<Output>(
+	options: InputOptions<Output>,
+	io?: PromptIO,
+): Promise<Output | string>;
+export async function input<Output>(
+	options: InputOptions<Output> = {},
+	io?: PromptIO,
+): Promise<Output | string> {
 	// Short-circuit: return initial value immediately without rendering.
 	// When `validate` is a Standard Schema we MUST parse the short-circuit
 	// value through it so the `Promise<Output>` overload stays sound — a raw
@@ -282,9 +290,11 @@ export async function input<Output>(options: InputOptions<Output> = {}): Promise
 		return options.initial;
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	// Non-interactive fallback: return default value when stdin is not a TTY.
 	// Same schema-soundness rule as above.
-	if (!isTTY() && options.default !== undefined) {
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		if (isStandardSchema(options.validate)) {
 			return parseShortCircuit(options.validate, options.default, "default");
 		}
@@ -299,12 +309,15 @@ export async function input<Output>(options: InputOptions<Output> = {}): Promise
 		error: null,
 	};
 
-	return runPrompt<InputState, Output | string>({
-		initialState,
-		theme,
-		render: (state, t) =>
-			renderInput(state, t, options.message, options.placeholder, options.default),
-		handleKey: createHandleKey<Output>(options.validate, options.default),
-		renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
-	});
+	return runPrompt<InputState, Output | string>(
+		{
+			initialState,
+			theme,
+			render: (state, t) =>
+				renderInput(state, t, options.message, options.placeholder, options.default),
+			handleKey: createHandleKey<Output>(options.validate, options.default),
+			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
+		},
+		promptIO,
+	);
 }
