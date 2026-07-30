@@ -334,6 +334,8 @@ describe("updateNotifierExtension middleware", () => {
 	const originalNpmConfigPrefix = process.env.npm_config_prefix;
 	const originalPnpmHome = process.env.PNPM_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
+	let originalConsoleError: typeof console.error;
+	let processStderrChunks: string[];
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
 
@@ -344,13 +346,17 @@ describe("updateNotifierExtension middleware", () => {
 		testCounter++;
 		cachedState = undefined;
 
-		// Capture stderr (process.stderr.write) for update notice assertions
 		stderrChunks = [];
+		processStderrChunks = [];
 		originalStderrWrite = process.stderr.write;
+		originalConsoleError = console.error;
 		process.stderr.write = ((chunk: string | Uint8Array) => {
-			stderrChunks.push(String(chunk));
+			processStderrChunks.push(String(chunk));
 			return true;
 		}) as typeof process.stderr.write;
+		console.error = (...args: unknown[]) => {
+			stderrChunks.push(args.map(String).join(" "));
+		};
 	});
 
 	function restoreEnv(key: string, original: string | undefined) {
@@ -361,6 +367,7 @@ describe("updateNotifierExtension middleware", () => {
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		process.stderr.write = originalStderrWrite;
+		console.error = originalConsoleError;
 		process.argv = [...originalProcessArgv];
 		restoreEnv("npm_config_user_agent", originalUserAgent);
 		restoreEnv("npm_execpath", originalNpmExecpath);
@@ -455,7 +462,7 @@ describe("updateNotifierExtension middleware", () => {
 			flags: {},
 			rawArgs: [] as readonly string[],
 			stdout: () => {},
-			stderr: () => {},
+			stderr: (text: string) => stderrChunks.push(text),
 		};
 
 		const next = async () => {
@@ -1067,22 +1074,12 @@ describe("updateNotifierExtension middleware", () => {
 				flags: {},
 				rawArgs: [] as readonly string[],
 				stdout: () => {},
-				stderr: () => {},
+				stderr: () => executionOrder.push("notice"),
 			};
-
-			// Override process.stderr.write to track ordering
-			const prevStderrWrite = process.stderr.write;
-			process.stderr.write = ((chunk: string | Uint8Array) => {
-				executionOrder.push("notice");
-				stderrChunks.push(String(chunk));
-				return true;
-			}) as typeof process.stderr.write;
 
 			await plugin.intercept?.(context, async () => {
 				executionOrder.push("command");
 			});
-
-			process.stderr.write = prevStderrWrite;
 
 			// Command must run before notice
 			expect(executionOrder).toContain("command");
@@ -1107,7 +1104,7 @@ describe("updateNotifierExtension middleware", () => {
 		});
 	});
 
-	// ── Integration with Crust.execute() ────────────────────────────────
+	// ── Integration with Crust ──────────────────────────────────────────
 
 	describe("Crust.execute() integration", () => {
 		it("works as a plugin passed to Crust.execute()", async () => {
@@ -1187,6 +1184,28 @@ describe("updateNotifierExtension middleware", () => {
 
 			expect(commandExecuted).toBe(true);
 			expect(getOutput()).toBe("");
+		});
+	});
+
+	describe("Crust.run() integration", () => {
+		it("writes update notices through injected stderr", async () => {
+			const pkgName = uniquePackageName("injected-stderr");
+			mockRegistryResponse("5.0.0");
+			const stderr: string[] = [];
+			const app = new Crust(pkgName)
+				.extend(
+					updateNotifierExtension({
+						currentVersion: "1.0.0",
+						packageName: pkgName,
+					}),
+				)
+				.handle(() => {});
+
+			await app.run([], { stderr: (text) => stderr.push(text) });
+
+			expect(stderr.join("\n")).toContain("Update available");
+			expect(stderr.join("\n")).toContain("5.0.0");
+			expect(processStderrChunks.join("")).toBe("");
 		});
 	});
 });

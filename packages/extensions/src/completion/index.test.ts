@@ -9,30 +9,33 @@ import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 import { completionExtension } from "./index.ts";
 
 let stdoutBuf: Buffer[];
+let processStdoutBuf: Buffer[];
 let stderrChunks: string[];
 let originalWrite: typeof process.stdout.write;
+let originalLog: typeof console.log;
 let originalError: typeof console.error;
 let originalExitCode: typeof process.exitCode;
 
 beforeEach(() => {
 	stdoutBuf = [];
+	processStdoutBuf = [];
 	stderrChunks = [];
 	originalWrite = process.stdout.write.bind(process.stdout);
+	originalLog = console.log;
 	originalError = console.error;
 	originalExitCode = process.exitCode;
 
-	// Capture process.stdout.write directly because the plugin uses
-	// `process.stdout.write(script)` rather than `console.log` (it writes a
-	// trailing-newline-bearing script and we want it byte-exact).
 	process.stdout.write = ((chunk: unknown) => {
 		if (typeof chunk === "string") {
-			stdoutBuf.push(Buffer.from(chunk, "utf8"));
+			processStdoutBuf.push(Buffer.from(chunk, "utf8"));
 		} else if (chunk instanceof Uint8Array) {
-			stdoutBuf.push(Buffer.from(chunk));
+			processStdoutBuf.push(Buffer.from(chunk));
 		}
 		return true;
 	}) as typeof process.stdout.write;
-
+	console.log = (...args: unknown[]) => {
+		stdoutBuf.push(Buffer.from(`${args.map(String).join(" ")}\n`, "utf8"));
+	};
 	console.error = (...args: unknown[]) => {
 		stderrChunks.push(args.map((a) => String(a)).join(" "));
 	};
@@ -40,12 +43,17 @@ beforeEach(() => {
 
 afterEach(() => {
 	process.stdout.write = originalWrite;
+	console.log = originalLog;
 	console.error = originalError;
 	process.exitCode = (originalExitCode as number) ?? 0;
 });
 
 function getStdout(): string {
 	return Buffer.concat(stdoutBuf).toString("utf8");
+}
+
+function getProcessStdout(): string {
+	return Buffer.concat(processStdoutBuf).toString("utf8");
 }
 
 function buildCli() {
@@ -106,6 +114,16 @@ describe("completionExtension", () => {
 		// bare in the `compgen -W` wordlist.
 		expect(out).toContain("browser bun node"); // build --target
 		expect(out).toContain("dev staging prod"); // deploy prod --env
+	});
+
+	it("writes completion scripts through injected stdout", async () => {
+		const app = buildCli();
+		const output: string[] = [];
+
+		await app.run(["completion", "bash"], { stdout: (text) => output.push(text) });
+
+		expect(output.join("\n")).toStartWith("# completion script for mycli v1.2.3");
+		expect(getProcessStdout()).toBe("");
 	});
 
 	it("`mycli completion zsh` prints a zsh script with #compdef header", async () => {

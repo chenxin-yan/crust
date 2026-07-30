@@ -869,8 +869,11 @@ export class Crust<
 			return;
 		}
 
+		let extensionContext: ExtensionContext | undefined;
 		try {
-			await this._dispatch(argv, prepared, io);
+			await this._dispatch(argv, prepared, io, (context) => {
+				extensionContext = context;
+			});
 		} catch (error) {
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
@@ -879,7 +882,7 @@ export class Crust<
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension handleError hooks do (ADR-0001).
 			process.exitCode = 1;
-			await renderFailure(error, argv, prepared, io);
+			await renderFailure(error, argv, prepared, io, extensionContext);
 		}
 	}
 
@@ -894,6 +897,7 @@ export class Crust<
 		argv: readonly string[],
 		prepared: PreparedInvocation,
 		io: InvocationIO,
+		onExtensionContext?: (context: ExtensionContext) => void,
 	): Promise<void> {
 		const { rootNode, extensions, ownedCommands } = prepared;
 
@@ -915,6 +919,7 @@ export class Crust<
 			stdout: io.stdout,
 			stderr: io.stderr,
 		});
+		onExtensionContext?.(extensionContext);
 
 		// Extension-owned inputs are validated before the hooks run (ADR-0001)
 		const routedRoot = resolved.commandPath[1];
@@ -993,6 +998,7 @@ async function renderFailure(
 	argv: readonly string[],
 	prepared: PreparedInvocation,
 	io: InvocationIO,
+	extensionContext: ExtensionContext | undefined,
 ): Promise<void> {
 	const renderDefault = (): void => {
 		const message = error instanceof Error ? error.message : String(error);
@@ -1007,20 +1013,22 @@ async function renderFailure(
 		return;
 	}
 
-	// Best-effort context: the failure may predate routing, so the resolved
-	// command falls back to the root snapshot with empty inputs.
-	const rootSnapshot = snapshotCommand(prepared.rootNode);
-	const context: ExtensionContext = Object.freeze({
-		argv: [...argv] as readonly string[],
-		rootCommand: rootSnapshot,
-		command: rootSnapshot,
-		commandPath: Object.freeze([prepared.rootNode.meta.name]),
-		args: Object.freeze({}),
-		flags: Object.freeze({}),
-		rawArgs: [],
-		stdout: io.stdout,
-		stderr: io.stderr,
-	});
+	// Routing or parsing may have failed before an invocation context existed.
+	let context = extensionContext;
+	if (context === undefined) {
+		const rootSnapshot = snapshotCommand(prepared.rootNode);
+		context = Object.freeze({
+			argv: [...argv] as readonly string[],
+			rootCommand: rootSnapshot,
+			command: rootSnapshot,
+			commandPath: Object.freeze([prepared.rootNode.meta.name]),
+			args: Object.freeze({}),
+			flags: Object.freeze({}),
+			rawArgs: [],
+			stdout: io.stdout,
+			stderr: io.stderr,
+		} satisfies ExtensionContext);
+	}
 
 	let index = -1;
 	const dispatch = async (i: number): Promise<void> => {

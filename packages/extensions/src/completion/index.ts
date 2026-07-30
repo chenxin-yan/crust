@@ -157,11 +157,8 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 			const outputDir = context.flags["output-dir"] as string | undefined;
 
 			if (outputDir === undefined) {
-				// Print path: emit the requested shell's script to stdout.
-				// Written raw (not via context.stdout) so redirection captures
-				// the script byte-for-byte without an added trailing newline.
 				const script = renderForShell(requestedShell, spec, binName, safeVersion);
-				process.stdout.write(script);
+				context.stdout(script);
 				return;
 			}
 

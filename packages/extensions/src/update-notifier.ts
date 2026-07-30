@@ -523,7 +523,7 @@ export function updateNotifierExtension(options: UpdateNotifierOptions): Extensi
 	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
 
 	return extension("update-notifier", {
-		async intercept(_context, next) {
+		async intercept(context, next) {
 			// Always let the command execute first
 			await next();
 
@@ -548,7 +548,12 @@ export function updateNotifierExtension(options: UpdateNotifierOptions): Extensi
 						isNewerVersion(currentVersion, state.latestVersion) &&
 						state.lastNotifiedVersion !== state.latestVersion
 					) {
-						emitUpdateNotice(currentVersion, state.latestVersion, resolvedUpdateCommand);
+						emitUpdateNotice(
+							currentVersion,
+							state.latestVersion,
+							resolvedUpdateCommand,
+							context.stderr,
+						);
 						await cacheAdapter.write({
 							...state,
 							lastNotifiedVersion: state.latestVersion,
@@ -581,7 +586,7 @@ export function updateNotifierExtension(options: UpdateNotifierOptions): Extensi
 					isNewerVersion(currentVersion, latestVersion) &&
 					state.lastNotifiedVersion !== latestVersion
 				) {
-					emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand);
+					emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand, context.stderr);
 					nextState.lastNotifiedVersion = latestVersion;
 				}
 
@@ -622,6 +627,7 @@ function emitUpdateNotice(
 	currentVersion: string,
 	latestVersion: string,
 	updateCommand: string,
+	stderr: (text: string) => void,
 ): void {
 	const PADDING = 3;
 
@@ -647,5 +653,5 @@ function emitUpdateNotice(
 		"",
 	];
 
-	process.stderr.write(`${lines.join("\n")}\n`);
+	stderr(lines.join("\n"));
 }

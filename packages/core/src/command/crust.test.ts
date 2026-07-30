@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { extension } from "../api/extension.ts";
+import { context } from "../api/context.ts";
+import { extension, type ExtensionContext } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
 import {
@@ -1405,6 +1406,80 @@ describe("Extension handleError chain", () => {
 		expect(received).toBeInstanceOf(CrustError);
 		expect((received as CrustError).is("COMMAND_NOT_FOUND")).toBe(true);
 		expect(process.exitCode).toBe(1);
+	});
+
+	it("preserves resolved parsed context for schema, Context, and handler failures", async () => {
+		let received: ExtensionContext | undefined;
+		const catcher = extension("catcher", {
+			handleError(_error, ctx) {
+				received = ctx;
+			},
+		});
+		const expectResolvedContext = () => {
+			expect(received?.command.meta.name).toBe("deploy");
+			expect(received?.commandPath).toEqual(["cli", "deploy"]);
+			expect(received?.args).toEqual({ target: "production" });
+			expect(received?.flags).toEqual({ force: true });
+			expect(received?.rawArgs).toEqual(["manifest.json"]);
+			received = undefined;
+		};
+		const command = (handler: () => void) =>
+			new Crust("cli").extend(catcher).command("deploy", (cmd) =>
+				cmd
+					.args([{ name: "target", type: "string", required: true }] as const)
+					.flags({ force: { type: "boolean" } })
+					.handle(handler),
+			);
+		const argv = ["deploy", "production", "--force", "--", "manifest.json"];
+
+		await command(() => {
+			throw new Error("handler failed");
+		}).execute({ argv });
+		expectResolvedContext();
+
+		const brokenContext = context("broken", () => {
+			throw new Error("Context failed");
+		});
+		await new Crust("cli")
+			.extend(catcher)
+			.command("deploy", (cmd) =>
+				cmd
+					.args([{ name: "target", type: "string", required: true }] as const)
+					.flags({ force: { type: "boolean" } })
+					.provide(brokenContext(undefined))
+					.handle(() => {}),
+			)
+			.execute({ argv });
+		expectResolvedContext();
+
+		await new Crust("cli")
+			.extend(catcher)
+			.command("deploy", (cmd) =>
+				cmd
+					.args([{ name: "target", type: "string", required: true }] as const)
+					.flags({
+						force: { type: "boolean" },
+						mode: {
+							type: "string",
+							schema: {
+								"~standard": {
+									version: 1,
+									vendor: "test",
+									validate: () => ({ issues: [{ message: "schema failed" }] }),
+								},
+							},
+						},
+					})
+					.handle(() => {}),
+			)
+			.execute({
+				argv: ["deploy", "production", "--force", "--mode", "fast", "--", "manifest.json"],
+			});
+		expect(received?.command.meta.name).toBe("deploy");
+		expect(received?.commandPath).toEqual(["cli", "deploy"]);
+		expect(received?.flags).toEqual({ force: true, mode: "fast" });
+		expect(received?.args).toEqual({ target: "production" });
+		expect(received?.rawArgs).toEqual(["manifest.json"]);
 	});
 
 	it("never runs for run() — the original error propagates unrendered", async () => {
