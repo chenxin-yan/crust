@@ -36,7 +36,6 @@
 	"scripts": {
 		"build": "bun run build:cli && bun dist/cli.js build --package --entry src/cli.ts --name crust",
 		"build:cli": "bun build src/cli.ts --target=bun --format=esm --outfile=dist/cli.js --minify --packages=external",
-		"build:dev": "bun run build:cli && bun dist/cli.js build --entry src/cli.ts --name crust",
 		"publish": "bun dist/cli.js publish --stage-dir dist/npm",
 		"dev": "bun ./src/cli.ts",
 		"start": "./dist/cli",
