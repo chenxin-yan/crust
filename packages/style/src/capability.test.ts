@@ -434,7 +434,6 @@ describe("createStyle — instance immutability", () => {
 	it("prevents property reassignment", () => {
 		const s = createStyle({ mode: "always" });
 		expect(() => {
-			// oxlint-disable-next-line typescript/no-explicit-any -- testing immutability
 			(s as any).bold = () => "hacked";
 		}).toThrow();
 	});

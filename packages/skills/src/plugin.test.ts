@@ -30,11 +30,11 @@ const realHomedir = os.homedir;
 
 function mockHomedir(path: string): void {
 	// Bun caches homedir(), so changing HOME after startup does not redirect global paths.
-	mock.module("node:os", () => ({ ...os, homedir: () => path }));
+	void mock.module("node:os", () => ({ ...os, homedir: () => path }));
 }
 
 function restoreHomedir(): void {
-	mock.module("node:os", () => ({ ...os, homedir: realHomedir }));
+	void mock.module("node:os", () => ({ ...os, homedir: realHomedir }));
 }
 
 function shortCircuitExtension() {
@@ -230,10 +230,10 @@ describe("skill extension auto-update", () => {
 
 		const stderrChunks: string[] = [];
 		const originalWrite = process.stderr.write;
-		process.stderr.write = ((chunk: unknown) => {
+		process.stderr.write = (chunk: unknown) => {
 			stderrChunks.push(String(chunk));
 			return true;
-		}) as typeof process.stderr.write;
+		};
 
 		try {
 			await withCwd(tmpDir, () => app.execute({ argv: [] }));
@@ -864,7 +864,6 @@ describe("skillPlugin customSkills validation", () => {
 					customSkills: [
 						{
 							name: "funnel-builder",
-							// oxlint-disable-next-line typescript/no-explicit-any -- deliberate type-violation for negative test
 							sourceDir: 42 as any,
 							version: "1.0.0",
 						},
@@ -1089,7 +1088,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
 
 		const originalWrite = process.stderr.write;
-		process.stderr.write = (() => true) as typeof process.stderr.write;
+		process.stderr.write = () => true;
 		const warnings: string[] = [];
 		const origWarn = console.warn;
 		console.warn = (...args: unknown[]) => {

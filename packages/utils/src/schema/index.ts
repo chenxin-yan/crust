@@ -123,9 +123,7 @@ function normalizeStandardPath(
 ): PropertyKey[] {
 	if (!path) return [];
 	return path.map((segment) =>
-		typeof segment === "object" && segment !== null && "key" in segment
-			? segment.key
-			: (segment as PropertyKey),
+		typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment,
 	);
 }
 

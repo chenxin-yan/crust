@@ -7,6 +7,8 @@ const ROOT_DIR = resolve(import.meta.dir, "..");
 const PACKAGES_DIR = join(ROOT_DIR, "packages");
 const DEFAULT_REGISTRY = "https://registry.npmjs.org";
 
+const byCodepoint = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 function parseArgs(argv) {
 	let dryRun = false;
 
@@ -108,18 +110,19 @@ function sortPackagesForPublish(packages) {
 	const queue = packages
 		.filter((pkg) => indegree.get(pkg.name) === 0)
 		.map((pkg) => pkg.name)
-		.sort();
+		.sort(byCodepoint);
 	const orderedNames = [];
 
 	while (queue.length > 0) {
 		const current = queue.shift();
 		orderedNames.push(current);
 
-		for (const dependent of [...dependents.get(current)].sort()) {
+		// Explicit codepoint comparator keeps publish order deterministic across locales
+		for (const dependent of [...dependents.get(current)].sort(byCodepoint)) {
 			indegree.set(dependent, indegree.get(dependent) - 1);
 			if (indegree.get(dependent) === 0) {
 				queue.push(dependent);
-				queue.sort();
+				queue.sort(byCodepoint);
 			}
 		}
 	}

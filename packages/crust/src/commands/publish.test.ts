@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
-
 import {
 	buildPublishCommand,
 	getPublishPlan,
@@ -19,7 +17,7 @@ async function parsePublishArgs(argv: string[]) {
 	let captured: { flags: Record<string, unknown> } | undefined;
 	await publishCommand
 		.handle((ctx) => {
-			captured = { flags: ctx.flags as Record<string, unknown> };
+			captured = { flags: ctx.flags };
 		})
 		.run(argv);
 	if (!captured) throw new Error("publish handler did not run");

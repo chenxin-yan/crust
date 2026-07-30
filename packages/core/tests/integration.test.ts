@@ -565,10 +565,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 	});
 
 	// Simulate split-file pattern: subcommand definitions as separate const functions
-	const defineListCommand = (
-		// oxlint-disable-next-line typescript/no-empty-object-type -- testing empty initial local state
-		cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
-	) =>
+	const defineListCommand = (cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>) =>
 		cmd
 			.flags({ format: { type: "string", default: "table" } } as const)
 			.args([{ name: "resource", type: "string", required: true }] as const)
@@ -578,10 +575,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 				);
 			});
 
-	const defineGetCommand = (
-		// oxlint-disable-next-line typescript/no-empty-object-type -- testing empty initial local state
-		cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
-	) =>
+	const defineGetCommand = (cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>) =>
 		cmd
 			.args([
 				{ name: "resource", type: "string", required: true },

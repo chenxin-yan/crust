@@ -100,7 +100,7 @@ export const TARGET_INFO = {
  */
 export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
 	SUPPORTED_TARGETS.map((t) => [TARGET_INFO[t].alias, t]),
-) as Record<string, BunTarget>;
+);
 
 /**
  * Resolve a user-provided target string to a valid Bun compile target.

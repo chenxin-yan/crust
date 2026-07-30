@@ -48,7 +48,7 @@ function isInstallMode(value: unknown): value is SkillInstallMode {
 function parseScopeFlag(rawScope: string | undefined): Scope | undefined {
 	if (rawScope === undefined) return undefined;
 	if (!isScope(rawScope)) {
-		throw new Error(`Invalid --scope value: ${String(rawScope)}. Expected "project" or "global".`);
+		throw new Error(`Invalid --scope value: ${rawScope}. Expected "project" or "global".`);
 	}
 	return rawScope;
 }
@@ -579,7 +579,6 @@ async function reconcileSkillInteractively(opts: {
 	}> = [];
 
 	if (universalAgents.length > 0) {
-		// oxlint-disable-next-line typescript/no-non-null-assertion -- guarded by the length check
 		const firstUniversalAgent = universalAgents[0]!;
 		const universalDir = statusMap.get(firstUniversalAgent)?.outputDir ?? "path unavailable";
 		choices.push({
@@ -765,7 +764,7 @@ async function runSkillInstallFlow(
 ): Promise<void> {
 	const meta = deriveSkillMeta(rootCmd, options);
 	const installAll = flags.all === true;
-	const isInteractive = !!process.stdin.isTTY;
+	const isInteractive = process.stdin.isTTY;
 	// `--scope` always wins when set; `--all` skips only the interactive
 	// prompt fallback, falling back to `defaultScope` or `"global"`.
 	const scope = installAll
@@ -906,7 +905,8 @@ async function runSkillUpdateFlow(
 		try {
 			await autoUpdateCustomSkill(entry, options, {
 				scopes: [entryScope],
-				onNoUpdate: (scope) => console.log(dim(`No updates needed [${entry.name}] (${scope}).`)),
+				onNoUpdate: (updatedScope) =>
+					console.log(dim(`No updates needed [${entry.name}] (${updatedScope}).`)),
 				onUpdated: (message) => console.log(`\n${bold(message)}`),
 				onConflict: (err) => {
 					const kindMismatchSuffix = err.details.kindMismatch
@@ -925,7 +925,7 @@ async function runSkillUpdateFlow(
 			const message = err instanceof Error ? err.message : String(err);
 			console.warn(
 				yellow(
-					`Skill update failed [${entry.name}]: ${message}. ` + `Continuing with remaining skills.`,
+					`Skill update failed [${entry.name}]: ${message}. Continuing with remaining skills.`,
 				),
 			);
 			failedEntries.push(entry.name);

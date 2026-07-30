@@ -224,7 +224,7 @@ describe("applyFieldDefaults", () => {
 		const result1 = applyFieldDefaults(undefined, fields);
 		const result2 = applyFieldDefaults(undefined, fields);
 
-		(result1.tags as string[]).push("c");
+		result1.tags.push("c");
 		expect(result2.tags).toEqual(["a", "b"]);
 	});
 
@@ -232,7 +232,7 @@ describe("applyFieldDefaults", () => {
 		const persisted = { tags: ["x", "y"], count: 0 };
 
 		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
-		(result.tags as string[]).push("z");
+		result.tags.push("z");
 
 		expect(persisted.tags).toEqual(["x", "y"]);
 	});

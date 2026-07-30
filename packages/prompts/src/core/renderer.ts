@@ -150,6 +150,7 @@ export class NonInteractiveError extends Error {
  * @returns `true` if stdin is a TTY, `false` otherwise
  */
 export function isTTY(): boolean {
+	// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- @types/node says boolean, but isTTY is undefined at runtime off-TTY; this API contract requires a real boolean
 	return !!process.stdin.isTTY;
 }
 

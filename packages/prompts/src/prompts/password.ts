@@ -106,7 +106,7 @@ function createHandleKey<Output>(
 				// `Error` and render its message inline (same as the schema
 				// path's first-issue rendering).
 				try {
-					await (validate as ValidateFn<string>)(state.value);
+					await validate(state.value);
 				} catch (err) {
 					return {
 						...state,
@@ -233,7 +233,7 @@ export function password<Output>(
 	},
 ): Promise<Output>;
 export function password(
-	options?: Omit<PasswordOptions<string>, "validate"> & {
+	options?: Omit<PasswordOptions, "validate"> & {
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;

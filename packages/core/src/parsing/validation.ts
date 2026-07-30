@@ -176,7 +176,7 @@ function createValidationArgv(command: CommandNode): string[] {
 	const args = command.args;
 
 	if (args) {
-		for (const def of args as readonly ArgDef[]) {
+		for (const def of args) {
 			// Skip args that are optional or have defaults.
 			if (def.required !== true || def.default !== undefined) continue;
 

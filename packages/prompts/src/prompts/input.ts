@@ -126,7 +126,7 @@ function createHandleKey<Output>(
 				// `Error` and render its message inline (same as the schema
 				// path's first-issue rendering).
 				try {
-					await (validate as ValidateFn<string>)(submitValue);
+					await validate(submitValue);
 				} catch (err) {
 					return {
 						...state,
@@ -264,7 +264,7 @@ export function input<Output>(
 	},
 ): Promise<Output>;
 export function input(
-	options?: Omit<InputOptions<string>, "validate"> & {
+	options?: Omit<InputOptions, "validate"> & {
 		readonly validate?: ValidateFn<string>;
 	},
 ): Promise<string>;

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../.oxlintrc.json"],
+  "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "react", "jsx-a11y"],
+  "env": {
+    "browser": true
+  },
+  "settings": {
+    "react": {
+      "version": "19.0"
+    }
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "jsx-a11y/prefer-tag-over-role": "off"
+  },
+  "ignorePatterns": [".source/", ".vercel/", "src/routeTree.gen.ts"]
+}

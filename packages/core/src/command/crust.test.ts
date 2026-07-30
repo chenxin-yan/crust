@@ -805,7 +805,6 @@ describe("Crust .command() type-level tests", () => {
 			type CmdLocal = (typeof cmd)["_types"]["local"];
 			type CmdArgs = (typeof cmd)["_types"]["args"];
 
-			// oxlint-disable-next-line typescript/no-empty-object-type -- verifying empty initial state
 			type _checkLocal = Expect<Equal<CmdLocal, {}>>;
 			type _checkArgs = Expect<Equal<CmdArgs, []>>;
 
@@ -844,7 +843,7 @@ describe("Crust .handle()", () => {
 			rawArgs: [],
 			command: app._node,
 		};
-		app._node.run?.(mockCtx);
+		void app._node.run?.(mockCtx);
 
 		expect(receivedCtx).toBeDefined();
 		expect((receivedCtx as unknown as Record<string, unknown>)?.args).toEqual({
@@ -1976,7 +1975,6 @@ describe("Crust .execute()", () => {
 		let receivedVerbose: boolean | undefined;
 
 		const defineSubCommand = (
-			// oxlint-disable-next-line typescript/no-empty-object-type -- testing empty initial local state
 			cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
 		) =>
 			cmd.handle((ctx) => {
@@ -2344,7 +2342,6 @@ describe("Crust .sub() type-level tests", () => {
 		type SubLocal = (typeof sub)["_types"]["local"];
 		type SubArgs = (typeof sub)["_types"]["args"];
 
-		// oxlint-disable-next-line typescript/no-empty-object-type -- verifying empty initial state
 		type _checkLocal = Expect<Equal<SubLocal, {}>>;
 		type _checkArgs = Expect<Equal<SubArgs, []>>;
 	});

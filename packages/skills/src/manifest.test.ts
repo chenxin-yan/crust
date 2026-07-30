@@ -21,7 +21,7 @@ function makeCommand(opts: {
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.args) node.args = opts.args;
 	if (opts.flags) {
 		node.localFlags = { ...opts.flags };
 		node.effectiveFlags = { ...opts.flags };

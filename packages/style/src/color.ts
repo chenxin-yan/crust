@@ -52,7 +52,7 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 	if (rgb === null) {
 		throw new TypeError(`Invalid color input: ${describeInput(input)}`);
 	}
-	return rgb as readonly [number, number, number];
+	return rgb;
 }
 
 /**
@@ -143,7 +143,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * ```
  */
 export function fgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
-	return { open: fgOpen(input as ColorInput, "truecolor"), close: FG_CLOSE };
+	return { open: fgOpen(input, "truecolor"), close: FG_CLOSE };
 }
 
 /**
@@ -181,7 +181,7 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * ```
  */
 export function bgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
-	return { open: bgOpen(input as ColorInput, "truecolor"), close: BG_CLOSE };
+	return { open: bgOpen(input, "truecolor"), close: BG_CLOSE };
 }
 
 /**
@@ -224,7 +224,7 @@ export function fg<const T extends ColorInputCandidate>(
 	input: CheckedColorInput<T>,
 	depth: ColorDepth = "truecolor",
 ): string {
-	const broadInput = input as ColorInput;
+	const broadInput = input;
 	// Validate the color BEFORE the empty-string short-circuit so callers
 	// get TypeError on bad input regardless of `text`. Otherwise
 	// `fg("", "definitely-not-a-color")` would silently return "" and mask
@@ -255,7 +255,7 @@ export function bg<const T extends ColorInputCandidate>(
 	input: CheckedColorInput<T>,
 	depth: ColorDepth = "truecolor",
 ): string {
-	const broadInput = input as ColorInput;
+	const broadInput = input;
 	// See `fg` above — validate before short-circuiting on empty `text`.
 	if (depth === "none") {
 		fgOpen(broadInput, "truecolor");

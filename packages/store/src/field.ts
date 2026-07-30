@@ -225,5 +225,5 @@ export function field<S extends StandardSchema>(
 		def.default = opts.default;
 	}
 
-	return def as unknown as SchemaFieldDef<S>;
+	return def as unknown;
 }

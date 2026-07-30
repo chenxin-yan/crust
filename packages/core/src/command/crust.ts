@@ -397,9 +397,7 @@ export class Crust<
 		name: string,
 		inheritedFlags: FlagsDef,
 		contexts: readonly ContextInstance[] = [],
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 	): Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx> {
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
 		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
 		// Override constructor defaults with parent-provided state.
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
@@ -625,10 +623,7 @@ export class Crust<
 	 * app.command(deployCmd).execute();
 	 * ```
 	 */
-	sub<N extends string>(
-		name: N,
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-	): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
+	sub<N extends string>(name: N): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
@@ -652,21 +647,7 @@ export class Crust<
 	 */
 	command<N extends string>(
 		name: N,
-		cb: (
-			// oxlint-disable-next-line typescript/no-empty-object-type -- empty initial state for child builder's Local generic
-			cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
-		) => Crust<
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any,
-			// oxlint-disable-next-line typescript/no-explicit-any -- needed for type-erased child builder return
-			any
-		>,
+		cb: (cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>) => Crust<any, any, any, any, any>,
 	): Crust<Inherited, Local, A, Eff, Ctx>;
 
 	/**
@@ -682,16 +663,11 @@ export class Crust<
 	 * @returns A new `Crust` instance with the subcommand registered
 	 * @throws {CrustError} `DEFINITION` if builder name is empty or already registered
 	 */
-	command(
-		// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust builder instance
-		builder: Crust<any, any, any, any, any>,
-	): Crust<Inherited, Local, A, Eff, Ctx>;
+	command(builder: Crust<any, any, any, any, any>): Crust<Inherited, Local, A, Eff, Ctx>;
 
 	// Implementation
 	command(
-		// oxlint-disable-next-line typescript/no-explicit-any -- union of overload parameter types
 		nameOrBuilder: string | Crust<any, any, any, any, any>,
-		// oxlint-disable-next-line typescript/no-explicit-any -- callback parameter from first overload
 		cb?: (cmd: Crust<any, any, any, any, any>) => Crust<any, any, any, any, any>,
 	): Crust<Inherited, Local, A, Eff, Ctx> {
 		if (typeof nameOrBuilder === "string") {

@@ -392,13 +392,10 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 	// bash_completionsV2.go lines 48–54.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
-	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\tcur="${COMP_WORDS[COMP_CWORD]}"');
 	lines.push(
-		// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 		'\tif (( COMP_CWORD > 0 )); then prev="${COMP_WORDS[COMP_CWORD-1]}"; else prev=""; fi',
 	);
-	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\twords=("${COMP_WORDS[@]}")');
 	lines.push("\tcword=$COMP_CWORD");
 	lines.push("}");
@@ -433,7 +430,6 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 	lines.push("\tlocal end_of_options=0");
 	lines.push("");
 	lines.push("\twhile (( i < cword )); do");
-	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal w="${words[$i]}"');
 	// `--` terminator: stop subcommand routing for the rest of the line.
 	lines.push('\t\tif [[ "$w" == "--" ]]; then');
@@ -480,9 +476,7 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 	// `--name=value` partial: split, look up, offer either choice values
 	// or fall through to default (file) completion.
 	lines.push('\tif [[ "$cur" == --*=* ]]; then');
-	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
-	// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 	lines.push('\t\tlocal _value="${cur#*=}"');
 	if (choiceCases.length > 0) {
 		// `compgen -P` prefixes every candidate with `${_flag}=` so bash's
@@ -506,10 +500,7 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 		for (const c of valueTypeCases) {
 			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
 			if (c.kind === "path") {
-				lines.push(
-					// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
-					'\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )',
-				);
+				lines.push('\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )');
 			} else {
 				lines.push("\t\t\t\tcompopt +o default 2>/dev/null");
 			}
@@ -580,7 +571,6 @@ export function renderBash(spec: CompletionSpec, binName: string, version: strin
 		lines.push("\t\tlocal _pidx_j=$i");
 		lines.push("\t\tlocal _pidx_skip_next=0");
 		lines.push("\t\twhile (( _pidx_j < cword )); do");
-		// oxlint-disable-next-line no-template-curly-in-string -- bash variable expansion
 		lines.push('\t\t\tlocal _pidx_w="${words[$_pidx_j]}"');
 		lines.push("\t\t\tif (( _pidx_skip_next )); then");
 		lines.push("\t\t\t\t_pidx_skip_next=0");

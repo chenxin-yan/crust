@@ -80,7 +80,7 @@ export function composeStyles(...styles: AnsiPair[]): AnsiPair {
 		open: styles.map((s) => s.open).join(""),
 		close: styles
 			.map((s) => s.close)
-			.reverse()
+			.toReversed()
 			.join(""),
 	};
 }

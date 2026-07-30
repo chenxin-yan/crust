@@ -16,12 +16,12 @@ let stderrOutput: string;
 function setupMocks(): void {
 	stderrOutput = "";
 
-	process.stderr.write = ((chunk: string | Uint8Array) => {
+	process.stderr.write = (chunk: string | Uint8Array) => {
 		if (typeof chunk === "string") {
 			stderrOutput += chunk;
 		}
 		return true;
-	}) as typeof process.stderr.write;
+	};
 
 	Object.defineProperty(process.stdin, "isTTY", {
 		value: true,
@@ -29,7 +29,6 @@ function setupMocks(): void {
 		configurable: true,
 	});
 
-	// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 	(process.stdin as any).setRawMode = (mode: boolean) => {
 		Object.defineProperty(process.stdin, "isRaw", {
 			value: mode,

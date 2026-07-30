@@ -769,8 +769,7 @@ type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	...infer Tail extends readonly ArgDef[],
 ]
 	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
-	: // oxlint-disable-next-line typescript/no-empty-object-type -- empty base case for recursive intersection
-		{};
+	: {};
 
 /**
  * Maps an ArgsDef tuple to resolved arg types keyed by each arg's `name`.

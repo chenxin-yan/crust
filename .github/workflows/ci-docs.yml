@@ -38,13 +38,13 @@ jobs:
           restore-keys: |
             turbo-docs-${{ runner.os }}-
 
+      - name: Type check (docs)
+        run: bun run check:types --filter=./apps/docs
+
       - name: Lint and format check (docs)
         run: |
           bun run lint apps/docs
           bun run format apps/docs
-
-      - name: Type check (docs)
-        run: bun run check:types --filter=./apps/docs
 
       - name: Build (docs)
         run: bun run build:docs

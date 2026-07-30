@@ -898,16 +898,13 @@ describe("InheritableFlags type inference", () => {
 			port: { type: "number" };
 		};
 		type Result = InheritableFlags<Flags>;
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object is the expected result
 		type _check = Expect<Equal<Result, {}>>;
 
 		expect(true).toBe(true);
 	});
 
 	it("returns empty object for empty flags", () => {
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object is the expected result
 		type Result = InheritableFlags<{}>;
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object is the expected result
 		type _check = Expect<Equal<Result, {}>>;
 
 		expect(true).toBe(true);
@@ -994,7 +991,6 @@ describe("MergeFlags type inference", () => {
 		type Parent = {
 			verbose: { type: "boolean" };
 		};
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
 		type Result = MergeFlags<Parent, {}>;
 		type _check = Expect<Equal<Result, { verbose: { type: "boolean" } }>>;
 
@@ -1005,7 +1001,6 @@ describe("MergeFlags type inference", () => {
 		type Local = {
 			output: { type: "string" };
 		};
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
 		type Result = MergeFlags<{}, Local>;
 		type _check = Expect<Equal<Result, { output: { type: "string" } }>>;
 
@@ -1013,9 +1008,7 @@ describe("MergeFlags type inference", () => {
 	});
 
 	it("returns empty when both are empty", () => {
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
 		type Result = MergeFlags<{}, {}>;
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object is the expected result
 		type _check = Expect<Equal<Result, {}>>;
 
 		expect(true).toBe(true);
@@ -1090,7 +1083,6 @@ describe("EffectiveFlags type inference", () => {
 			verbose: { type: "boolean"; inherit: true };
 			port: { type: "number" };
 		};
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
 		type Result = EffectiveFlags<Inherited, {}>;
 		type _check = Expect<Equal<Result, { verbose: { type: "boolean"; inherit: true } }>>;
 
@@ -1098,9 +1090,7 @@ describe("EffectiveFlags type inference", () => {
 	});
 
 	it("returns empty when both inherited and local are empty", () => {
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
 		type Result = EffectiveFlags<{}, {}>;
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object is the expected result
 		type _check = Expect<Equal<Result, {}>>;
 
 		expect(true).toBe(true);

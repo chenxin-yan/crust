@@ -24,7 +24,6 @@ export interface RunResult {
  *   expect(result.exitCode).toBe(0);
  */
 export async function executeCrust(
-	// oxlint-disable-next-line typescript/no-explicit-any -- accepts any Crust generic params
 	builder: Crust<any, any, any>,
 	argv?: string[],
 ): Promise<RunResult> {

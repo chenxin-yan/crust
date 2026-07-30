@@ -112,6 +112,7 @@ function readPackageJson(cwd: string): UserPackageJson {
 	} catch (error) {
 		throw new Error(
 			`Failed to parse package.json in ${cwd}: ${error instanceof Error ? error.message : String(error)}`,
+			{ cause: error },
 		);
 	}
 }

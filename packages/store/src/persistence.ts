@@ -54,7 +54,7 @@ export interface WriteJsonOptions {
  * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
-export async function readJson(filePath: string): Promise<unknown | undefined> {
+export async function readJson(filePath: string): Promise<unknown> {
 	let raw: string;
 
 	try {

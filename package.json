@@ -23,6 +23,7 @@
 		"@types/bun": "^1.3.14",
 		"oxfmt": "^0.53.0",
 		"oxlint": "^1.68.0",
+		"oxlint-tsgolint": "^7.0.2001",
 		"turbo": "^2.9.16"
 	},
 	"catalog": {

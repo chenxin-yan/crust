@@ -15,7 +15,7 @@ function schema<Input, Output>(
 			vendor: "crust-test",
 			validate: (value: unknown) => validate(value as Input),
 		},
-	} as StandardSchema<Input, Output>;
+	};
 }
 
 const port = () =>
@@ -74,10 +74,9 @@ describe("Standard Schema on arg definitions", () => {
 			"~standard": {
 				version: 1,
 				vendor: "crust-test",
-				validate: async (value: unknown) =>
-					asyncUpper["~standard"].validate(value as string | undefined),
+				validate: async (value: unknown) => asyncUpper["~standard"].validate(value),
 			},
-		} as StandardSchema<string | undefined, string>;
+		};
 
 		const app = new Crust("cli")
 			.args([{ name: "name", schema: asyncSchema }] as const)
@@ -235,26 +234,19 @@ describe("schema type inference", () => {
 describe("schema mode exclusivity", () => {
 	it("rejects mixing core value options with a schema on args", () => {
 		expect(() =>
-			new Crust("cli").args([
-				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
-				{ name: "x", schema: port(), default: "5" } as any,
-			]),
+			new Crust("cli").args([{ name: "x", schema: port(), default: "5" } as any]),
 		).toThrow(CrustError);
 	});
 
 	it("rejects a parser type on schema args (raw strings only)", () => {
 		expect(() =>
-			new Crust("cli").args([
-				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
-				{ name: "x", type: "number", schema: port() } as any,
-			]),
+			new Crust("cli").args([{ name: "x", type: "number", schema: port() } as any]),
 		).toThrow(CrustError);
 	});
 
 	it("rejects mixing core value options with a schema on flags", () => {
 		expect(() =>
 			new Crust("cli").flags({
-				// oxlint-disable-next-line typescript/no-explicit-any -- deliberately bypassing types
 				x: { type: "string", schema: port(), required: true } as any,
 			}),
 		).toThrow(CrustError);

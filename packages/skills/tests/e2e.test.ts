@@ -38,7 +38,7 @@ function makeCommand(opts: {
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.args) node.args = opts.args;
 	if (opts.flags) {
 		node.localFlags = { ...opts.flags };
 		node.effectiveFlags = { ...opts.flags };
@@ -91,7 +91,6 @@ function extractLinks(content: string): { text: string; href: string }[] {
 	const pattern = /\[([^\]]*)\]\(([^)]+)\)/g;
 	const links: { text: string; href: string }[] = [];
 	let match: RegExpExecArray | null;
-	// oxlint-disable-next-line no-cond-assign -- regex exec loop pattern
 	while ((match = pattern.exec(content)) !== null) {
 		const text = match[1] ?? "";
 		const href = match[2] ?? "";

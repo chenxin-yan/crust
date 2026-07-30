@@ -21,6 +21,7 @@ import type {
 	ChainableStyleFn,
 	ColorDepth,
 	ColorInput,
+	ColorInputCandidate,
 	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
@@ -292,12 +293,12 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		// Two call shapes (see StyleInstance.fg JSDoc):
 		//   fg(input)        → ChainableStyleFn (chain root)
 		//   fg(text, input)  → string (direct)
-		fg: ((textOrInput: string | ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
+		fg: ((textOrInput: ColorInputCandidate, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
 						kind: "pair",
-						pair: fgPairAtDepth(textOrInput as ColorInput, colorDepth),
+						pair: fgPairAtDepth(textOrInput, colorDepth),
 						isModifier: false,
 					},
 				]);
@@ -305,12 +306,12 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			return fgDirect(textOrInput as string, maybeInput, colorDepth);
 		}) as StyleInstance["fg"],
 
-		bg: ((textOrInput: string | ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
+		bg: ((textOrInput: ColorInputCandidate, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
 						kind: "pair",
-						pair: bgPairAtDepth(textOrInput as ColorInput, colorDepth),
+						pair: bgPairAtDepth(textOrInput, colorDepth),
 						isModifier: false,
 					},
 				]);
@@ -469,7 +470,6 @@ export function createForwardingChainable(name: StyleMethodName): ChainableStyle
 	// instance's chainable dispatcher detects TemplateStringsArray on its
 	// own).
 	const fn = ((...args: unknown[]) =>
-		// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 		(getRuntimeStyle()[name] as any)(...args)) as ChainableStyleFn;
 
 	// Child chain methods (bold, red, bgYellow, ...) — each property
@@ -480,7 +480,6 @@ export function createForwardingChainable(name: StyleMethodName): ChainableStyle
 			configurable: false,
 			enumerable: true,
 			get() {
-				// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 				return (getRuntimeStyle()[name] as any)[childName];
 			},
 		});
@@ -493,7 +492,6 @@ export function createForwardingChainable(name: StyleMethodName): ChainableStyle
 		configurable: false,
 		enumerable: true,
 		value: (input: ColorInput): ChainableStyleFn =>
-			// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 			(getRuntimeStyle()[name] as any).fg(input) as ChainableStyleFn,
 		writable: false,
 	});
@@ -501,7 +499,6 @@ export function createForwardingChainable(name: StyleMethodName): ChainableStyle
 		configurable: false,
 		enumerable: true,
 		value: (input: ColorInput): ChainableStyleFn =>
-			// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding
 			(getRuntimeStyle()[name] as any).bg(input) as ChainableStyleFn,
 		writable: false,
 	});
@@ -545,7 +542,6 @@ function createRuntimeStyleFacade(): StyleInstance {
 			configurable: false,
 			enumerable: true,
 			value: (...args: unknown[]) => {
-				// oxlint-disable-next-line typescript/no-explicit-any -- dynamic forwarding preserves the runtime instance signature
 				return (getRuntimeStyle()[key] as any)(...args);
 			},
 			writable: false,

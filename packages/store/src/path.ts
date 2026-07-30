@@ -40,7 +40,7 @@ export interface PlatformEnv {
 function getRuntimeEnv(): PlatformEnv {
 	return {
 		platform: process.platform,
-		env: process.env as Record<string, string | undefined>,
+		env: process.env,
 		homedir: homedir(),
 	};
 }

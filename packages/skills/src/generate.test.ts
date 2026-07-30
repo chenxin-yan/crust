@@ -27,7 +27,7 @@ function makeCommand(opts: {
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.args) node.args = opts.args;
 	if (opts.flags) {
 		node.localFlags = { ...opts.flags };
 		node.effectiveFlags = { ...opts.flags };
@@ -1175,7 +1175,6 @@ describe("generateSkill", () => {
 
 			const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
 			let match: RegExpExecArray | null;
-			// oxlint-disable-next-line no-cond-assign -- regex exec loop pattern
 			while ((match = linkPattern.exec(skill)) !== null) {
 				const linked = match[2];
 				if (linked?.startsWith("commands/")) {

@@ -97,7 +97,7 @@ function renderStaticError(message: string, theme: ProgressTheme): string {
 
 export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 	const theme = resolveTheme(options.theme);
-	const isInteractive = !!process.stderr.isTTY;
+	const isInteractive = process.stderr.isTTY;
 
 	if (!isInteractive) {
 		let currentMessage = options.message;

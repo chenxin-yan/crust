@@ -40,8 +40,8 @@ async function parseBuildArgs(argv: string[]) {
 	await buildCommand
 		.handle((ctx) => {
 			captured = {
-				args: ctx.args as Record<string, unknown>,
-				flags: ctx.flags as Record<string, unknown>,
+				args: ctx.args,
+				flags: ctx.flags,
 			};
 		})
 		.run(argv);

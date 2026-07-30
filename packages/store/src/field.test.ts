@@ -44,7 +44,6 @@ describe("field() — raw schema-backed runtime shape", () => {
 	});
 
 	it("throws CrustStoreError DEFINITION for non-Standard-Schema input", () => {
-		// oxlint-disable-next-line typescript/no-explicit-any -- testing runtime guard
 		expect(() => field({} as any)).toThrow(CrustStoreError);
 	});
 });

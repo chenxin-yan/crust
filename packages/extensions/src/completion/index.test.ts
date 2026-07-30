@@ -25,14 +25,14 @@ beforeEach(() => {
 	originalError = console.error;
 	originalExitCode = process.exitCode;
 
-	process.stdout.write = ((chunk: unknown) => {
+	process.stdout.write = (chunk: unknown) => {
 		if (typeof chunk === "string") {
 			processStdoutBuf.push(Buffer.from(chunk, "utf8"));
 		} else if (chunk instanceof Uint8Array) {
 			processStdoutBuf.push(Buffer.from(chunk));
 		}
 		return true;
-	}) as typeof process.stdout.write;
+	};
 	console.log = (...args: unknown[]) => {
 		stdoutBuf.push(Buffer.from(`${args.map(String).join(" ")}\n`, "utf8"));
 	};
@@ -45,7 +45,7 @@ afterEach(() => {
 	process.stdout.write = originalWrite;
 	console.log = originalLog;
 	console.error = originalError;
-	process.exitCode = (originalExitCode as number) ?? 0;
+	process.exitCode = originalExitCode ?? 0;
 });
 
 function getStdout(): string {

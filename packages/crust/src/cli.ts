@@ -31,4 +31,4 @@ export const crustApp = new Crust("crust")
 	.command(buildCommand)
 	.command(publishCommand);
 
-crustApp.execute();
+await crustApp.execute();

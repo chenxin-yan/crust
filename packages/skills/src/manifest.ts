@@ -120,7 +120,6 @@ function normalizeFlags(flagsDef: Record<string, FlagSnapshot> | undefined): Man
 
 	const keys = Object.keys(flagsDef).sort();
 	return keys.map((key) => {
-		// oxlint-disable-next-line typescript/no-non-null-assertion -- key comes from Object.keys so value is guaranteed
 		return normalizeFlag(key, flagsDef[key]!);
 	});
 }
@@ -166,7 +165,6 @@ function normalizeChildren(
 ): ManifestNode[] {
 	const keys = Object.keys(subCommands).sort();
 	return keys.map((key) => {
-		// oxlint-disable-next-line typescript/no-non-null-assertion -- key comes from Object.keys so value is guaranteed
 		return buildNode(subCommands[key]!, parentPath);
 	});
 }

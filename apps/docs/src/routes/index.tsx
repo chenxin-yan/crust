@@ -205,7 +205,7 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
       return [pkg, version] as const;
     }),
   );
-  return Object.fromEntries(entries) as Record<string, string | null>;
+  return Object.fromEntries(entries);
 });
 
 const CODE_EXAMPLE = `import { Crust } from "@crustjs/core";
@@ -229,7 +229,7 @@ function FurnaceHome() {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText("bun create crust my-cli");
+    void navigator.clipboard.writeText("bun create crust my-cli");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, []);

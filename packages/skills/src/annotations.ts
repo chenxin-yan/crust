@@ -16,7 +16,6 @@ export interface SkillCommandAnnotations {
 	instructions?: string[];
 }
 
-// oxlint-disable-next-line typescript/no-explicit-any -- Crust is generic; we only need the _node accessor
 type SkillCommandTarget = CommandNode | Crust<any, any, any>;
 
 const SKILL_COMMAND_ANNOTATIONS = Symbol("crust.skill.commandAnnotations");

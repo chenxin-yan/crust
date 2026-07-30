@@ -23,7 +23,7 @@ function makeCommand(opts: {
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
 	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args as ArgDef[];
+	if (opts.args) node.args = opts.args;
 	if (opts.flags) {
 		node.localFlags = { ...opts.flags };
 		node.effectiveFlags = { ...opts.flags };
@@ -1146,7 +1146,6 @@ describe("renderSkill", () => {
 			const linkRegex = /\]\(([^)]+)\)/g;
 			const links: string[] = [];
 			let match: RegExpExecArray | null = null;
-			// oxlint-disable-next-line no-cond-assign -- standard regex exec loop pattern
 			while ((match = linkRegex.exec(skillContent)) !== null) {
 				const target = match[1];
 				if (target && !target.startsWith("http") && !target.startsWith("#")) {

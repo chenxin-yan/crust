@@ -300,7 +300,6 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groups) {
-		// oxlint-disable-next-line typescript/no-non-null-assertion -- groups are seeded with an agent
 		const groupedPrimaryAgent = groupedAgents[0]!;
 
 		const state = installStates.get(outputDir);

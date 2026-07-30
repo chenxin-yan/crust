@@ -350,10 +350,10 @@ describe("updateNotifierExtension middleware", () => {
 		processStderrChunks = [];
 		originalStderrWrite = process.stderr.write;
 		originalConsoleError = console.error;
-		process.stderr.write = ((chunk: string | Uint8Array) => {
+		process.stderr.write = (chunk: string | Uint8Array) => {
 			processStderrChunks.push(String(chunk));
 			return true;
-		}) as typeof process.stderr.write;
+		};
 		console.error = (...args: unknown[]) => {
 			stderrChunks.push(args.map(String).join(" "));
 		};

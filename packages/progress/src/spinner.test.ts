@@ -13,12 +13,12 @@ let stderrOutput: string;
 function setupMocks(): void {
 	stderrOutput = "";
 
-	process.stderr.write = ((chunk: string | Uint8Array) => {
+	process.stderr.write = (chunk: string | Uint8Array) => {
 		if (typeof chunk === "string") {
 			stderrOutput += chunk;
 		}
 		return true;
-	}) as typeof process.stderr.write;
+	};
 
 	Object.defineProperty(process.stderr, "isTTY", {
 		value: true,
@@ -433,7 +433,7 @@ describe("spinner — cleanup", () => {
 
 		process.once = ((event: string | symbol, listener: (...args: [] | [unknown]) => void) => {
 			if (event === "SIGINT") {
-				registeredSigint = listener as () => void;
+				registeredSigint = listener;
 			}
 			return process;
 		}) as typeof process.once;
@@ -443,14 +443,14 @@ describe("spinner — cleanup", () => {
 			listener: (...args: [] | [unknown]) => void,
 		) => {
 			if (event === "SIGINT") {
-				removedSigint = listener as () => void;
+				removedSigint = listener;
 			}
 			return process;
 		}) as typeof process.removeListener;
 
-		process.exit = ((code?: number) => {
+		process.exit = (code?: number) => {
 			throw new Error(`exit:${code}`);
-		}) as typeof process.exit;
+		};
 
 		try {
 			await spinner({

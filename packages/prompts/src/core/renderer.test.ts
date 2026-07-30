@@ -143,12 +143,12 @@ describe("runPrompt", () => {
 		stderrOutput = "";
 
 		// Mock stderr to capture output
-		process.stderr.write = ((chunk: string | Uint8Array) => {
+		process.stderr.write = (chunk: string | Uint8Array) => {
 			if (typeof chunk === "string") {
 				stderrOutput += chunk;
 			}
 			return true;
-		}) as typeof process.stderr.write;
+		};
 
 		// Ensure stdin looks like a TTY with a working setRawMode
 		Object.defineProperty(process.stdin, "isTTY", {
@@ -158,7 +158,6 @@ describe("runPrompt", () => {
 		});
 
 		// Mock setRawMode since the test runner stdin is not a real TTY
-		// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 		(process.stdin as any).setRawMode = (mode: boolean) => {
 			Object.defineProperty(process.stdin, "isRaw", {
 				value: mode,
@@ -468,13 +467,12 @@ describe("HandleKeyResult discrimination", () => {
 	const originalStderrWrite = process.stderr.write;
 
 	beforeEach(() => {
-		process.stderr.write = (() => true) as typeof process.stderr.write;
+		process.stderr.write = () => true;
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: true,
 			writable: true,
 			configurable: true,
 		});
-		// oxlint-disable-next-line typescript/no-explicit-any -- mocking process.stdin methods for testing
 		(process.stdin as any).setRawMode = (mode: boolean) => {
 			Object.defineProperty(process.stdin, "isRaw", {
 				value: mode,

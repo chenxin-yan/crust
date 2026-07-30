@@ -41,13 +41,13 @@ jobs:
           restore-keys: |
             turbo-packages-${{ runner.os }}-
 
+      - name: Build, type check, and test (packages)
+        run: bun turbo run build check:types test --filter='./packages/*'
+
       - name: Lint and format check (packages)
         run: |
           bun run lint packages
           bun run format packages
-
-      - name: Build, type check, and test (packages)
-        run: bun turbo run build check:types test --filter='./packages/*'
 
       - name: Run package-manager smoke tests
         run: |

@@ -224,14 +224,14 @@ describe("completionExtension · --output-dir traversal", () => {
 		originalWrite = process.stdout.write.bind(process.stdout);
 		originalError = console.error;
 		originalExitCode = process.exitCode;
-		process.stdout.write = ((chunk: unknown) => {
+		process.stdout.write = (chunk: unknown) => {
 			if (typeof chunk === "string") {
 				stdoutBuf.push(Buffer.from(chunk, "utf8"));
 			} else if (chunk instanceof Uint8Array) {
 				stdoutBuf.push(Buffer.from(chunk));
 			}
 			return true;
-		}) as typeof process.stdout.write;
+		};
 		console.error = () => {};
 	});
 
