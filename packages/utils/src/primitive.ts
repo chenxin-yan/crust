@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Public — primitive type vocabulary
+// Shared — primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Supported primitive type literals shared by Crust packages. */
@@ -23,7 +23,7 @@ export type ResolvePrimitive<T extends BaseValueType> = T extends "string"
 			: never;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public — tryCoerceNumber
+// Shared — tryCoerceNumber
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -43,7 +43,7 @@ export function tryCoerceNumber(raw: string): number | undefined {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public — coerceBooleanString
+// Shared — coerceBooleanString
 // ────────────────────────────────────────────────────────────────────────────
 
 /**

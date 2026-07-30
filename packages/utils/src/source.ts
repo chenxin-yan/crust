@@ -19,9 +19,7 @@ import { fileURLToPath } from "node:url";
  * @returns The absolute path of the nearest enclosing directory containing
  *   `package.json`, or `null` if the filesystem root is reached first.
  *
- * @internal Not exported from the package's public surface.
- *   Promotion to public is tracked as tech debt and will happen when a
- *   standalone external consumer is identified.
+ * @internal Used only by {@link resolveSourceDir}.
  */
 function findNearestPackageRoot(startPath: string): string | null {
 	let current = resolve(startPath);
@@ -45,7 +43,7 @@ function findNearestPackageRoot(startPath: string): string | null {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public — resolveSourceDir
+// Shared — resolveSourceDir
 // ────────────────────────────────────────────────────────────────────────────
 
 /**

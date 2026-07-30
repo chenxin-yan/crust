@@ -12,11 +12,6 @@ const localPackageDir = join(smokeRoot, "local-packages");
 
 const localDependencyPackages = [
 	{
-		name: "@crustjs/utils",
-		dir: "utils",
-		requiredBuildOutput: "dist/primitive.js",
-	},
-	{
 		name: "@crustjs/style",
 		dir: "style",
 		requiredBuildOutput: "dist/index.js",
@@ -245,6 +240,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		});
 		assertSuccess("generated project install", installCommand, sampleDir, install);
 		expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
+		expect(existsSync(join(sampleDir, "node_modules", "@crustjs", "utils"))).toBe(false);
 		expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
 		const checkTypesCommand = npmArgv(["run", "check:types"]);

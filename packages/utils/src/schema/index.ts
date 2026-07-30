@@ -4,8 +4,8 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 // @crustjs/utils/schema — low-level Standard Schema helpers
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Public low-level subpath for portable Standard Schema helpers shared by Crust
-// packages. This module intentionally stays provider-agnostic: no vendor
+// Portable Standard Schema helpers shared internally by Crust packages. This
+// module intentionally stays provider-agnostic: no vendor
 // introspection, no metadata/default extraction, and no package-specific error
 // wrappers.
 
