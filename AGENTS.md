@@ -42,17 +42,3 @@ Before submitting:
 ## Changesets
 
 Do not edit `CHANGELOG.md` manually. Run `bunx changeset` to record user-visible changes; release tooling consumes them.
-
-## Agent skills
-
-### Issue tracker
-
-Issues are tracked in this repo's GitHub Issues. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Use the five canonical triage labels unchanged. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This repo uses a single-context domain-doc layout. See `docs/agents/domain.md`.
