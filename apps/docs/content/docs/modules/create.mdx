@@ -105,7 +105,21 @@ Copy a template directory to a destination, applying variable interpolation and 
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
 
-The `template` input is resolved by [`resolveSourceDir`](/docs/modules/utils#resolvesourcedir) from `@crustjs/utils`.
+#### Template resolution
+
+The `template` input accepts three forms:
+
+1. A `file:` URL, typically created with `new URL("./templates", import.meta.url)`, is
+   resolved with `fileURLToPath()` so it remains relative to the calling module.
+2. An absolute string path is normalized with `path.resolve()`.
+3. A relative string path is resolved from the nearest `package.json` found by walking
+   up from `process.argv[1]`. This makes `"templates/base"` resolve from the consuming
+   package root instead of the current working directory.
+
+Resolution throws a descriptive `Error` when a URL does not use the `file:` protocol,
+when `process.argv[1]` is unavailable for a relative path, or when no enclosing
+`package.json` can be found. In the latter two cases, pass an absolute path or a
+`file:` URL instead.
 
 #### Returns
 

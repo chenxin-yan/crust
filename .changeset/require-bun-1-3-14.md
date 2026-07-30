@@ -10,7 +10,6 @@
 "@crustjs/skills": minor
 "@crustjs/store": minor
 "@crustjs/style": minor
-"@crustjs/utils": minor
 ---
 
 Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.

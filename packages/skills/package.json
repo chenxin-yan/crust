@@ -47,12 +47,12 @@
 	"dependencies": {
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
-		"@crustjs/style": "workspace:^",
-		"@crustjs/utils": "workspace:^"
+		"@crustjs/style": "workspace:^"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
+		"@crustjs/utils": "workspace:*",
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {

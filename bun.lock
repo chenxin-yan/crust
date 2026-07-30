@@ -53,22 +53,20 @@
       "name": "@crustjs/core",
       "version": "0.0.19",
       "dependencies": {
-        "@crustjs/utils": "workspace:^",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
       },
     },
     "packages/create": {
       "name": "@crustjs/create",
       "version": "0.0.7",
-      "dependencies": {
-        "@crustjs/utils": "workspace:^",
-      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
       },
     },
@@ -162,11 +160,11 @@
         "@crustjs/progress": "workspace:^",
         "@crustjs/prompts": "workspace:^",
         "@crustjs/style": "workspace:^",
-        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
       },
       "peerDependencies": {
@@ -177,11 +175,11 @@
       "name": "@crustjs/store",
       "version": "0.2.0",
       "dependencies": {
-        "@crustjs/utils": "workspace:^",
         "@standard-schema/spec": "^1.1.0",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
         "zod": "^4.0.0",
       },
@@ -196,18 +194,11 @@
     },
     "packages/utils": {
       "name": "@crustjs/utils",
-      "version": "0.0.3",
+      "version": "0.0.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@standard-schema/spec": "^1.1.0",
-        "bunup": "catalog:",
       },
-      "peerDependencies": {
-        "@standard-schema/spec": "^1.1.0",
-      },
-      "optionalPeers": [
-        "@standard-schema/spec",
-      ],
     },
   },
   "catalog": {

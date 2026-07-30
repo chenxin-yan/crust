@@ -1,70 +1,22 @@
 {
 	"name": "@crustjs/utils",
-	"version": "0.0.3",
-	"description": "Shared low-level utilities for the Crust ecosystem (pre-stable)",
+	"version": "0.0.0",
+	"private": true,
 	"type": "module",
 	"license": "MIT",
-	"author": "chenxin-yan",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/utils"
-	},
-	"homepage": "https://crustjs.com",
-	"bugs": {
-		"url": "https://github.com/chenxin-yan/crust/issues"
-	},
-	"keywords": [
-		"crust",
-		"utils",
-		"utilities",
-		"resolve",
-		"package-root",
-		"bun",
-		"typescript"
-	],
-	"files": [
-		"dist"
-	],
 	"sideEffects": false,
 	"exports": {
-		"./primitive": {
-			"types": "./dist/primitive.d.ts",
-			"import": "./dist/primitive.js"
-		},
-		"./source": {
-			"types": "./dist/source.d.ts",
-			"import": "./dist/source.js"
-		},
-		"./schema": {
-			"types": "./dist/schema/index.d.ts",
-			"import": "./dist/schema/index.js"
-		}
-	},
-	"publishConfig": {
-		"access": "public"
+		"./primitive": "./src/primitive.ts",
+		"./source": "./src/source.ts",
+		"./schema": "./src/schema/index.ts"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
-		"test": "bun test",
-		"publish": "bun publish --no-git-checks",
-		"prepack": "cp ../../LICENSE LICENSE",
-		"postpack": "rm -f LICENSE"
+		"test": "bun test"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@standard-schema/spec": "^1.1.0",
-		"bunup": "catalog:"
-	},
-	"peerDependencies": {
 		"@standard-schema/spec": "^1.1.0"
-	},
-	"peerDependenciesMeta": {
-		"@standard-schema/spec": {
-			"optional": true
-		}
 	},
 	"engines": {
 		"bun": ">=1.3.14"
