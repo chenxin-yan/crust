@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
@@ -64,7 +66,7 @@ function buildSimpleManifest(): ManifestNode {
 		meta: { name: "test-cli", description: "A test CLI tool" },
 		run() {},
 	});
-	return buildManifest(cmd);
+	return buildManifest(snapshotCommand(cmd));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Version control",
@@ -203,7 +205,7 @@ describe("renderSkill", () => {
 				subCommands: { serve, build },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
@@ -236,7 +238,7 @@ describe("renderSkill", () => {
 				subCommands: { child },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
@@ -485,7 +487,7 @@ describe("renderSkill", () => {
 				subCommands: { serve },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
@@ -515,7 +517,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(hybrid);
+			const manifest = buildManifest(snapshotCommand(hybrid));
 			const meta: SkillMeta = {
 				name: "hybrid",
 				description: "Test",
@@ -548,7 +550,7 @@ describe("renderSkill", () => {
 				subCommands: { deploy: cmd },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
@@ -567,7 +569,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Server",
@@ -596,7 +598,7 @@ describe("renderSkill", () => {
 				subCommands: { deploy: cmd },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
@@ -617,7 +619,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "build",
 				description: "Build",
@@ -654,7 +656,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "copy",
 				description: "Copy",
@@ -683,7 +685,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -719,7 +721,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "build",
 				description: "Build",
@@ -749,7 +751,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "lint",
 				description: "Lint",
@@ -775,7 +777,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "install",
 				description: "Install",
@@ -793,7 +795,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -818,7 +820,7 @@ describe("renderSkill", () => {
 				],
 			);
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const files = renderSkill(manifest, {
 				name: "deploy",
 				description: "Deploy",
@@ -837,7 +839,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -869,7 +871,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -888,7 +890,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -906,7 +908,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -925,7 +927,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
@@ -946,7 +948,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
@@ -982,7 +984,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -1015,7 +1017,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(parent);
+			const manifest = buildManifest(snapshotCommand(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
@@ -1040,7 +1042,7 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const manifest = buildManifest(parent);
+			const manifest = buildManifest(snapshotCommand(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
@@ -1068,7 +1070,7 @@ describe("renderSkill", () => {
 				"Read a child command doc before recommending execution details.",
 			);
 
-			const manifest = buildManifest(parent);
+			const manifest = buildManifest(snapshotCommand(parent));
 			const files = renderSkill(manifest, {
 				name: "parent",
 				description: "Parent",
@@ -1096,7 +1098,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -1129,7 +1131,7 @@ describe("renderSkill", () => {
 				subCommands: { serve, build },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
@@ -1171,7 +1173,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -1215,7 +1217,7 @@ describe("renderSkill", () => {
 				subCommands: { serve, build },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
@@ -1296,7 +1298,7 @@ describe("renderSkill", () => {
 				subCommands: { clone, remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description:
@@ -1362,7 +1364,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "An app",
@@ -1393,7 +1395,7 @@ describe("renderSkill", () => {
 				subCommands: { level2 },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 			const meta: SkillMeta = {
 				name: "root",
 				description: "Root",
@@ -1420,7 +1422,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -1451,7 +1453,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -1477,7 +1479,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -1495,7 +1497,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(cmd);
+			const manifest = buildManifest(snapshotCommand(cmd));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",

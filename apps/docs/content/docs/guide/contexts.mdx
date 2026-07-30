@@ -1,0 +1,73 @@
+---
+title: Contexts
+description: Define lazy, typed command dependencies with native cleanup.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+A Context is a named command dependency. `context()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
+
+```ts
+import { context, Crust } from "@crustjs/core";
+
+const database = context("db", (options: { url: string }) => ({
+  query(sql: string) {
+    return `${sql} on ${options.url}`;
+  },
+}));
+
+const app = new Crust("app")
+  .provide(database({ url: "postgres://localhost/app" }))
+  .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
+```
+
+For a factory with no options, use `void` and call it with `undefined`:
+
+```ts
+const clock = context("clock", (_options: void) => ({ now: () => Date.now() }));
+const app = new Crust("app").provide(clock(undefined));
+```
+
+## Lazy construction and inheritance
+
+Context values are constructed only after a command is routed, parsed, intercepted, and validated. A short-circuiting Extension does not construct them.
+
+Contexts are inherited by descendant commands:
+
+```ts
+const app = new Crust("app")
+  .provide(database({ url: process.env.DATABASE_URL! }))
+  .command("status", (command) =>
+    command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  );
+```
+
+Factories may be synchronous or asynchronous. Contexts on the resolved path are constructed in registration order.
+
+## One name per command path
+
+Providing two different Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant replacing an inherited name. Reusing the identical inherited instance during `.sub()` composition is not a duplicate.
+
+## Native disposal
+
+Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`:
+
+```ts
+const database = context("db", async (options: { url: string }) => {
+  const connection = await connect(options.url);
+
+  return {
+    query: (sql: string) => connection.query(sql),
+    async [Symbol.asyncDispose]() {
+      await connection.close();
+    },
+  };
+});
+```
+
+Crust disposes constructed Context values in reverse construction order after success or failure. Prefer `Symbol.asyncDispose` when cleanup is asynchronous.
+
+<Callout type="info">
+  Use Contexts for command setup and cleanup. Use an Extension `intercept` only for app-wide
+  cross-cutting behavior around invocation.
+</Callout>

@@ -13,7 +13,9 @@ async function main() {
 	const name = await input({
 		message: "What is your name?",
 		placeholder: "Enter your name",
-		validate: (v) => v.length > 0 || "Name cannot be empty",
+		validate: (v) => {
+			if (v.length === 0) throw new Error("Name cannot be empty");
+		},
 	});
 	console.log(`  -> Name: ${name}\n`);
 
@@ -34,7 +36,9 @@ async function main() {
 	// ── 4. Password ────────────────────────────────────────────────────────
 	const secret = await password({
 		message: "Enter a secret password:",
-		validate: (v) => v.length >= 4 || "Password must be at least 4 characters",
+		validate: (v) => {
+			if (v.length < 4) throw new Error("Password must be at least 4 characters");
+		},
 	});
 	console.log(`  -> Password length: ${secret.length}\n`);
 

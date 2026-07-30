@@ -2,36 +2,51 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { Crust, parseArgs } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-import type { BunTarget } from "../../src/commands/build.ts";
 import {
 	buildCommand,
 	generateCmdResolver,
 	generateResolver,
-	getBinaryFilename,
-	resolveBaseName,
-	resolveBunBuildRunner,
 	resolveEnvFilePaths,
 	resolveOutfile,
-	resolveTarget,
 	resolveTargetOutfile,
+} from "../../src/commands/build.ts";
+import { resolveBaseName } from "../../src/utils/binary-name.ts";
+import type { BunTarget } from "../../src/utils/build-helpers.ts";
+import {
+	getBinaryFilename,
+	resolveBunBuildRunner,
+	resolveTarget,
 	SUPPORTED_TARGETS,
 	TARGET_ALIASES,
-	TARGET_PLATFORM_MAP,
-	TARGET_UNAME_MAP,
-} from "../../src/commands/build.ts";
+} from "../../src/utils/build-helpers.ts";
 
 /**
- * Helper to create a Crust builder with the build command registered
- * and extract its internal node for parseArgs testing.
+ * Helper to extract the build command's internal node for definition checks.
  */
 function makeBuildNode() {
-	const app = new Crust("test").command(buildCommand);
-	const node = (app as unknown as { _node: import("@crustjs/core").CommandNode })._node;
-	const buildNode = node.subCommands.build;
+	const buildNode = new Crust("test").command(buildCommand)._node.subCommands.build;
 	if (!buildNode) throw new Error("build subcommand not found");
 	return buildNode;
+}
+
+/**
+ * Parse argv against the build command's grammar through the public
+ * pipeline: swap in a capturing handler and run() the clone.
+ */
+async function parseBuildArgs(argv: string[]) {
+	let captured: { args: Record<string, unknown>; flags: Record<string, unknown> } | undefined;
+	await buildCommand
+		.handle((ctx) => {
+			captured = {
+				args: ctx.args as Record<string, unknown>,
+				flags: ctx.flags as Record<string, unknown>,
+			};
+		})
+		.run(argv);
+	if (!captured) throw new Error("build handler did not run");
+	return captured;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -45,9 +60,8 @@ describe("buildCommand definition", () => {
 		expect(node.meta.description).toBe("Compile your CLI to a standalone executable");
 	});
 
-	it("has correct default flag values", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, []);
+	it("has correct default flag values", async () => {
+		const result = await parseBuildArgs([]);
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.validate).toBe(true);
@@ -61,75 +75,63 @@ describe("buildCommand definition", () => {
 		expect(result.flags["env-file"]).toBeUndefined();
 	});
 
-	it("defines --entry/-e flag as string", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["-e", "src/main.ts"]);
+	it("defines --entry/-e flag as string", async () => {
+		const result = await parseBuildArgs(["-e", "src/main.ts"]);
 		expect(result.flags.entry).toBe("src/main.ts");
 	});
 
-	it("defines --outfile/-o flag as string", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["-o", "./my-cli"]);
+	it("defines --outfile/-o flag as string", async () => {
+		const result = await parseBuildArgs(["-o", "./my-cli"]);
 		expect(result.flags.outfile).toBe("./my-cli");
 	});
 
-	it("defines --outdir/-d flag as string with default 'dist'", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["-d", "out"]);
+	it("defines --outdir/-d flag as string with default 'dist'", async () => {
+		const result = await parseBuildArgs(["-d", "out"]);
 		expect(result.flags.outdir).toBe("out");
 	});
 
-	it("defines --name/-n flag as string", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["-n", "my-tool"]);
+	it("defines --name/-n flag as string", async () => {
+		const result = await parseBuildArgs(["-n", "my-tool"]);
 		expect(result.flags.name).toBe("my-tool");
 	});
 
-	it("defines --minify flag as boolean with default true", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, []);
+	it("defines --minify flag as boolean with default true", async () => {
+		const result = await parseBuildArgs([]);
 		expect(result.flags.minify).toBe(true);
 	});
 
-	it("supports --no-minify to disable minification", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["--no-minify"]);
+	it("supports --no-minify to disable minification", async () => {
+		const result = await parseBuildArgs(["--no-minify"]);
 		expect(result.flags.minify).toBe(false);
 	});
 
-	it("supports --no-validate to skip pre-compile validation", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["--no-validate"]);
+	it("supports --no-validate to skip pre-compile validation", async () => {
+		const result = await parseBuildArgs(["--no-validate"]);
 		expect(result.flags.validate).toBe(false);
 	});
 
-	it("defines --env-file as a repeatable string flag", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["--env-file", ".env", "--env-file", ".env.local"]);
+	it("defines --env-file as a repeatable string flag", async () => {
+		const result = await parseBuildArgs(["--env-file", ".env", "--env-file", ".env.local"]);
 		expect(result.flags["env-file"]).toEqual([".env", ".env.local"]);
 	});
 
-	it("supports --package with --stage-dir", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["--package", "--stage-dir", ".stage"]);
+	it("supports --package with --stage-dir", async () => {
+		const result = await parseBuildArgs(["--package", "--stage-dir", ".stage"]);
 		expect(result.flags.package).toBe(true);
 		expect(result.flags["stage-dir"]).toBe(".stage");
 	});
 
-	it("rejects removed --distribute flag", () => {
-		const node = makeBuildNode();
-		expect(() => parseArgs(node, ["--distribute"])).toThrow('Unknown flag "--distribute"');
+	it("rejects removed --distribute flag", async () => {
+		await expect(parseBuildArgs(["--distribute"])).rejects.toThrow('Unknown flag "--distribute"');
 	});
 
-	it("defines --target/-t as repeatable string flag", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["--target", "linux-x64", "--target", "darwin-arm64"]);
+	it("defines --target/-t as repeatable string flag", async () => {
+		const result = await parseBuildArgs(["--target", "linux-x64", "--target", "darwin-arm64"]);
 		expect(result.flags.target).toEqual(["linux-x64", "darwin-arm64"]);
 	});
 
-	it("supports -t alias for --target", () => {
-		const node = makeBuildNode();
-		const result = parseArgs(node, ["-t", "linux-x64"]);
+	it("supports -t alias for --target", async () => {
+		const result = await parseBuildArgs(["-t", "linux-x64"]);
 		expect(result.flags.target).toEqual(["linux-x64"]);
 	});
 
@@ -553,27 +555,6 @@ describe("generateCmdResolver", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Unit tests for TARGET_UNAME_MAP
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("TARGET_UNAME_MAP", () => {
-	it("maps every supported target", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			expect(TARGET_UNAME_MAP[target]).toBeDefined();
-		}
-	});
-
-	it("uses uname -s / uname -m format", () => {
-		expect(TARGET_UNAME_MAP["bun-linux-x64-baseline"]).toBe("Linux-x86_64");
-		expect(TARGET_UNAME_MAP["bun-linux-arm64"]).toBe("Linux-aarch64");
-		expect(TARGET_UNAME_MAP["bun-darwin-x64"]).toBe("Darwin-x86_64");
-		expect(TARGET_UNAME_MAP["bun-darwin-arm64"]).toBe("Darwin-arm64");
-		expect(TARGET_UNAME_MAP["bun-windows-x64-baseline"]).toBe("Windows-x64");
-		expect(TARGET_UNAME_MAP["bun-windows-arm64"]).toBe("Windows-arm64");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -666,26 +647,5 @@ describe("SUPPORTED_TARGETS", () => {
 	it("includes x64 and arm64 architectures", () => {
 		expect(SUPPORTED_TARGETS.some((t) => t.includes("x64"))).toBe(true);
 		expect(SUPPORTED_TARGETS.some((t) => t.includes("arm64"))).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// TARGET_PLATFORM_MAP constant
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("TARGET_PLATFORM_MAP", () => {
-	it("maps every supported target", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			expect(TARGET_PLATFORM_MAP[target]).toBeDefined();
-		}
-	});
-
-	it("uses process.platform-process.arch format", () => {
-		expect(TARGET_PLATFORM_MAP["bun-linux-x64-baseline"]).toBe("linux-x64");
-		expect(TARGET_PLATFORM_MAP["bun-linux-arm64"]).toBe("linux-arm64");
-		expect(TARGET_PLATFORM_MAP["bun-darwin-x64"]).toBe("darwin-x64");
-		expect(TARGET_PLATFORM_MAP["bun-darwin-arm64"]).toBe("darwin-arm64");
-		expect(TARGET_PLATFORM_MAP["bun-windows-x64-baseline"]).toBe("win32-x64");
-		expect(TARGET_PLATFORM_MAP["bun-windows-arm64"]).toBe("win32-arm64");
 	});
 });

@@ -1,0 +1,29 @@
+---
+title: No Color
+description: Control terminal color with an inherited flag.
+---
+
+```ts
+import { Crust } from "@crustjs/core";
+import { noColor } from "@crustjs/extensions";
+
+const app = new Crust("my-cli").extend(noColor()).handle(() => {});
+
+await app.execute();
+```
+
+```ts
+function noColor(): Extension;
+```
+
+`noColor()` owns an inherited boolean `color` flag. Crust's normal boolean negation provides both forms:
+
+```sh
+my-cli --color
+my-cli --no-color
+my-cli deploy --no-color
+```
+
+The flag has no default. When it is omitted, the Extension leaves the current color mode unchanged. The Extension does not read `NO_COLOR`; environment-based color detection remains the responsibility of `@crustjs/style`.
+
+Its `intercept` hook temporarily sets the global `@crustjs/style` color mode to `"always"` or `"never"`, delegates to the next hook and Command Handler, then restores the previous mode in `finally`.

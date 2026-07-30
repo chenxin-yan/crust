@@ -4,36 +4,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { interpolate } from "./interpolate.ts";
-import { isBinary } from "./isBinary.ts";
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Recursively collect all file paths under a directory.
- *
- * @param dir - The directory to walk.
- * @returns An array of absolute file paths.
- */
-function walkDir(dir: string): string[] {
-	const files: string[] = [];
-	const entries = readdirSync(dir);
-
-	for (const entry of entries) {
-		const fullPath = join(dir, entry);
-		const stat = statSync(fullPath);
-
-		if (stat.isDirectory()) {
-			files.push(...walkDir(fullPath));
-		} else {
-			files.push(fullPath);
-		}
-	}
-
-	return files;
-}
 
 /**
  * Rename dotfile convention: a single leading `_` in the filename becomes `.`.
@@ -71,13 +46,6 @@ function isNonEmptyDir(dirPath: string): boolean {
 	}
 	const entries = readdirSync(dirPath);
 	return entries.length > 0;
-}
-
-/**
- * Convert template input to a readable string for diagnostics.
- */
-function formatTemplateInput(template: string | URL): string {
-	return typeof template === "string" ? template : template.href;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -121,13 +89,13 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 
 	if (!existsSync(templateDir)) {
 		throw new Error(
-			`Template directory "${templateDir}" does not exist (from template: "${formatTemplateInput(template)}").`,
+			`Template directory "${templateDir}" does not exist (from template: "${String(template)}").`,
 		);
 	}
 
 	if (!statSync(templateDir).isDirectory()) {
 		throw new Error(
-			`Template path "${templateDir}" is not a directory (from template: "${formatTemplateInput(template)}").`,
+			`Template path "${templateDir}" is not a directory (from template: "${String(template)}").`,
 		);
 	}
 
@@ -138,8 +106,9 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 		);
 	}
 
-	// Collect all files from template directory
-	const templateFiles = walkDir(templateDir);
+	const templateFiles = readdirSync(templateDir, { recursive: true, withFileTypes: true })
+		.filter((entry) => entry.isFile())
+		.map((entry) => join(entry.parentPath, entry.name));
 	const writtenFiles: string[] = [];
 
 	for (const absolutePath of templateFiles) {
@@ -156,7 +125,7 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 		// Read source file
 		const buffer = readFileSync(absolutePath);
 
-		if (isBinary(buffer)) {
+		if (buffer.subarray(0, 8192).includes(0)) {
 			// Binary files are copied as-is
 			writeFileSync(destFilePath, buffer);
 		} else {

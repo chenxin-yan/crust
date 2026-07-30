@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
@@ -8,11 +8,7 @@ import { isInGitRepo, runSteps } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
-import {
-	type DistributionMode,
-	scaffoldCrustProject,
-	type TemplateStyle,
-} from "./create-project.ts";
+import { type DistributionMode, scaffoldCrustProject } from "./create-project.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -26,16 +22,6 @@ function validateProjectName(name: string): void {
 	if (INVALID_NAME_CHARS.test(name)) {
 		throw new Error(`Project name contains invalid characters: ${name}`);
 	}
-}
-
-function parseTemplateStyle(value: string | undefined): TemplateStyle | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	if (value === "minimal" || value === "modular") {
-		return value;
-	}
-	throw new Error(`Invalid template "${value}". Expected "minimal" or "modular".`);
 }
 
 function parseDistributionMode(value: string | undefined): DistributionMode | undefined {
@@ -55,10 +41,6 @@ function parseDistributionMode(value: string | undefined): DistributionMode | un
 const app = new Crust("create-crust")
 	.meta({ description: "Scaffold a new Crust CLI project" })
 	.flags({
-		template: {
-			type: "string",
-			description: 'Template style ("minimal" or "modular")',
-		},
 		distribution: {
 			type: "string",
 			description: 'Distribution mode ("binary" or "runtime")',
@@ -83,7 +65,7 @@ const app = new Crust("create-crust")
 			description: "Project directory to scaffold into",
 		},
 	])
-	.run(async ({ args, flags }) => {
+	.handle(async ({ args, flags }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
 
@@ -98,16 +80,23 @@ const app = new Crust("create-crust")
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
-		const templateInitial = parseTemplateStyle(flags.template);
 		const distributionInitial = parseDistributionMode(flags.distribution);
 
-		// Check if directory already exists (skip for "." — scaffolding in-place is intentional)
-		if (targetDir !== "." && existsSync(resolvedDir)) {
+		// Ask before writing into an existing destination. The cwd (".") always
+		// exists, so it only needs confirmation when non-empty; a named directory
+		// prompts whenever it already exists.
+		const needsOverwriteConfirm =
+			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
+		let overwrite = false;
+		if (needsOverwriteConfirm) {
 			if (flags.overwrite === true) {
 				console.log(`Directory "${dirName}" already exists; overwriting (--overwrite).`);
 			}
-			const overwrite = await confirm({
-				message: `Directory "${dirName}" already exists. Overwrite?`,
+			overwrite = await confirm({
+				message:
+					targetDir === "."
+						? "Current directory is not empty. Overwrite conflicting files?"
+						: `Directory "${dirName}" already exists. Overwrite?`,
 				default: false,
 				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
 			});
@@ -117,23 +106,6 @@ const app = new Crust("create-crust")
 			}
 		}
 
-		const template = await select<TemplateStyle>({
-			message: "Template style",
-			choices: [
-				{
-					label: "Minimal",
-					value: "minimal",
-					hint: "single-file starter",
-				},
-				{
-					label: "Modular",
-					value: "modular",
-					hint: "file split with .sub()",
-				},
-			],
-			default: "minimal",
-			...(templateInitial !== undefined ? { initial: templateInitial } : {}),
-		});
 		const distributionMode = await select<DistributionMode>({
 			message: "Distribution mode",
 			choices: [
@@ -181,8 +153,8 @@ const app = new Crust("create-crust")
 				scaffoldCrustProject({
 					resolvedDir,
 					name,
-					template,
 					distributionMode,
+					overwrite,
 				}),
 		});
 

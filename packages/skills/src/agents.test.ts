@@ -136,11 +136,6 @@ describe("detectInstalledAgents", () => {
 		});
 		expect(result).not.toContain("opencode");
 	});
-
-	it("accepts legacy string parameter", async () => {
-		const result = await detectInstalledAgents("/tmp");
-		expect(Array.isArray(result)).toBe(true);
-	});
 });
 
 describe("PATH-based detection (default commandChecker)", () => {
@@ -204,10 +199,8 @@ describe("PATH-based detection (default commandChecker)", () => {
 	});
 
 	it("does not detect a directory named like a command", async () => {
-		// Regression: `accessSync(X_OK)` returns success for executable directories,
-		// so the probe must additionally check that the entry is a file. The
-		// platform shape of the entry name (`claude` vs `claude.CMD`) is chosen
-		// so the probe sees this directory at all.
+		// The platform-specific name (`claude` vs `claude.CMD`) ensures the PATH
+		// lookup sees this entry and still rejects it because it is a directory.
 		const dirName = process.platform === "win32" ? "claude.CMD" : "claude";
 		const fakeDir = join(tmpDir, dirName);
 		mkdirSync(fakeDir, { recursive: true });

@@ -1,28 +1,25 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { Crust } from "@crustjs/core";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 
 export interface WriteManPageOptions {
 	/** Root Crust builder for your CLI. */
-	app: Crust;
+	app: Parameters<typeof prepareCommandSnapshot>[0];
 	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
 	name: string;
 	/** Output path (e.g. `man/mycli.1`). Parent directories are created. */
 	outfile: string;
-	/** Manual section; defaults to `1`. */
+	/**
+	 * Manual section.
+	 *
+	 * @default 1
+	 */
 	section?: number;
 	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
 	date?: string;
-	/** Synthetic argv passed to plugin `setup()`; defaults to `[]`. */
-	argv?: readonly string[];
-	/**
-	 * When `true` (default), print plugin-setup warnings to `console.warn`.
-	 * Set to `false` in tests or CI if you handle warnings yourself.
-	 */
-	logWarnings?: boolean;
 }
 
 /**
@@ -30,15 +27,9 @@ export interface WriteManPageOptions {
  * write it to `outfile`.
  */
 export async function writeManPage(options: WriteManPageOptions): Promise<void> {
-	const { app, name, outfile, section = 1, date, argv, logWarnings = true } = options;
+	const { app, name, outfile, section = 1, date } = options;
 
-	const { root, warnings } = await app.prepareCommandTree({ argv });
-
-	if (logWarnings) {
-		for (const w of warnings) {
-			console.warn(`Warning: ${w}`);
-		}
-	}
+	const root = await prepareCommandSnapshot(app);
 
 	const mdoc = renderManPageMdoc({ root, name, section, date });
 	mkdirSync(dirname(outfile), { recursive: true });

@@ -16,7 +16,7 @@ interface SpinnerFrameSet {
 	readonly interval: number;
 }
 
-const BUILTIN_SPINNERS: Record<string, SpinnerFrameSet> = {
+const BUILTIN_SPINNERS: Record<"dots" | "line" | "arc" | "bounce", SpinnerFrameSet> = {
 	dots: {
 		frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 		interval: 80,
@@ -55,7 +55,11 @@ export interface SpinnerOptions<T> {
 	readonly message: string;
 	/** The async task to run while the spinner is displayed. */
 	readonly task: (controller: SpinnerController) => Promise<T>;
-	/** Spinner animation style (defaults to `"dots"`). */
+	/**
+	 * Spinner animation style.
+	 *
+	 * @default "dots"
+	 */
 	readonly spinner?: SpinnerType;
 	/** Per-spinner theme overrides. */
 	readonly theme?: PartialProgressTheme;
@@ -63,10 +67,10 @@ export interface SpinnerOptions<T> {
 
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	if (spinnerType === undefined) {
-		return BUILTIN_SPINNERS.dots as SpinnerFrameSet;
+		return BUILTIN_SPINNERS.dots;
 	}
 	if (typeof spinnerType === "string") {
-		return BUILTIN_SPINNERS[spinnerType] as SpinnerFrameSet;
+		return BUILTIN_SPINNERS[spinnerType];
 	}
 	return spinnerType;
 }
@@ -76,11 +80,11 @@ function renderFrame(frame: string, message: string, theme: ProgressTheme): stri
 }
 
 function renderSuccess(message: string, theme: ProgressTheme): string {
-	return `${ERASE_LINE}${CURSOR_TO_START}${theme.success(SUCCESS_SYMBOL)} ${theme.message(message)}\n`;
+	return ERASE_LINE + CURSOR_TO_START + renderStaticSuccess(message, theme);
 }
 
 function renderError(message: string, theme: ProgressTheme): string {
-	return `${ERASE_LINE}${CURSOR_TO_START}${theme.error(ERROR_SYMBOL)} ${theme.message(message)}\n`;
+	return ERASE_LINE + CURSOR_TO_START + renderStaticError(message, theme);
 }
 
 function renderStaticSuccess(message: string, theme: ProgressTheme): string {
@@ -97,22 +101,17 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 
 	if (!isInteractive) {
 		let currentMessage = options.message;
-		let finished = false;
-
 		const controller: SpinnerController = {
 			updateMessage(message: string) {
-				if (finished) return;
 				currentMessage = message;
 			},
 		};
 
 		try {
 			const result = await options.task(controller);
-			finished = true;
 			process.stderr.write(renderStaticSuccess(currentMessage, theme));
 			return result;
 		} catch (error) {
-			finished = true;
 			process.stderr.write(renderStaticError(currentMessage, theme));
 			throw error;
 		}

@@ -1,0 +1,188 @@
+import { describe, expect, it } from "bun:test";
+
+import { Crust } from "../command/crust.ts";
+import { CrustError } from "../errors.ts";
+import { context } from "./context.ts";
+
+describe("context()", () => {
+	it("always returns a factory, including for zero-option setups", async () => {
+		const auth = context("auth", () => ({ user: "chenxin" }));
+
+		// The definition itself is a factory, not an instance
+		expect(typeof auth).toBe("function");
+
+		const instance = auth();
+		expect(instance.kind).toBe("context");
+		expect(instance.name).toBe("auth");
+		await expect(Promise.resolve(instance.setup())).resolves.toEqual({ user: "chenxin" });
+	});
+
+	it("factories receive only their options", async () => {
+		const db = context("db", (options: { url: string }) => ({ url: options.url }));
+
+		const instance = db({ url: "memory://test" });
+		await expect(Promise.resolve(instance.setup())).resolves.toEqual({ url: "memory://test" });
+	});
+});
+
+describe("Crust .provide()", () => {
+	it("constructs Contexts for the resolved command and exposes them as ctx", async () => {
+		const seen: string[] = [];
+		const db = context("db", (options: { url: string }) => ({ url: options.url }));
+
+		const app = new Crust("cli").provide(db({ url: "memory://x" })).handle(({ ctx }) => {
+			seen.push(ctx.db.url);
+		});
+
+		await app.run([]);
+		expect(seen).toEqual(["memory://x"]);
+	});
+
+	it("throws DEFINITION on a duplicate Context name on the same command", () => {
+		const a = context("db", () => 1);
+		const b = context("db", () => 2);
+
+		expect(() => new Crust("cli").provide(a()).provide(b())).toThrow(CrustError);
+		try {
+			new Crust("cli").provide(a()).provide(b());
+		} catch (error) {
+			expect((error as CrustError).is("DEFINITION")).toBe(true);
+		}
+	});
+
+	it("throws DEFINITION when a child re-provides a name inherited from its path", () => {
+		const parentDb = context("db", () => "parent");
+		const childDb = context("db", () => "child");
+
+		expect(() =>
+			new Crust("cli")
+				.provide(parentDb())
+				.command("sub", (cmd) => cmd.provide(childDb()).handle(() => {})),
+		).toThrow(CrustError);
+	});
+
+	it("throws DEFINITION when an attached builder's subtree re-provides a path name", () => {
+		const parentDb = context("db", () => "parent");
+		const nestedDb = context("db", () => "nested");
+
+		const sub = new Crust("sub").command("g", (cmd) => cmd.provide(nestedDb()).handle(() => {}));
+
+		expect(() => new Crust("cli").provide(parentDb()).command(sub)).toThrow(CrustError);
+	});
+
+	it("descendants of an attached builder inherit the new parent's Contexts", async () => {
+		const seen: string[] = [];
+		const db = context("db", () => "root-db");
+
+		const sub = new Crust("sub").command("g", (cmd) =>
+			cmd.handle(({ ctx }) => {
+				seen.push(String((ctx as Record<string, unknown>).db));
+			}),
+		);
+
+		await new Crust("cli").provide(db()).command(sub).run(["sub", "g"]);
+
+		expect(seen).toEqual(["root-db"]);
+	});
+
+	it("does not construct Contexts for commands off the resolved path", async () => {
+		let built = 0;
+		const lazy = context("lazy", () => {
+			built++;
+			return {};
+		});
+
+		const app = new Crust("cli")
+			.provide(lazy())
+			.command("a", (cmd) => cmd.handle(() => {}))
+			.command("b", (cmd) => cmd.handle(() => {}));
+
+		// Resolving "a" builds the inherited context once; "b" not executed
+		await app.run(["a"]);
+		expect(built).toBe(1);
+	});
+});
+
+describe("Context disposal", () => {
+	function disposableContext(name: string, log: string[]) {
+		return context(name, () => ({
+			name,
+			async [Symbol.asyncDispose]() {
+				log.push(`dispose:${name}`);
+			},
+		}));
+	}
+
+	it("disposes values in reverse construction order after success", async () => {
+		const log: string[] = [];
+		const first = disposableContext("first", log);
+		const second = disposableContext("second", log);
+
+		const app = new Crust("cli")
+			.provide(first())
+			.provide(second())
+			.handle(() => {
+				log.push("run");
+			});
+
+		await app.run([]);
+
+		expect(log).toEqual(["run", "dispose:second", "dispose:first"]);
+	});
+
+	it("supports synchronous Symbol.dispose", async () => {
+		const log: string[] = [];
+		const sync = context("sync", () => ({
+			[Symbol.dispose]() {
+				log.push("dispose:sync");
+			},
+		}));
+
+		await new Crust("cli")
+			.provide(sync())
+			.handle(() => {})
+			.run([]);
+
+		expect(log).toEqual(["dispose:sync"]);
+	});
+
+	it("disposes after a handler failure and rethrows the original error", async () => {
+		const log: string[] = [];
+		const res = disposableContext("res", log);
+		const boom = new Error("handler failed");
+
+		const app = new Crust("cli").provide(res()).handle(() => {
+			throw boom;
+		});
+
+		await expect(app.run([])).rejects.toBe(boom);
+		expect(log).toEqual(["dispose:res"]);
+	});
+
+	it("disposes already-constructed Contexts when a later setup fails", async () => {
+		const log: string[] = [];
+		const ok = disposableContext("ok", log);
+		const bad = context("bad", () => {
+			throw new Error("setup failed");
+		});
+
+		const app = new Crust("cli")
+			.provide(ok())
+			.provide(bad())
+			.handle(() => {
+				log.push("run");
+			});
+
+		await expect(app.run([])).rejects.toThrow("setup failed");
+		expect(log).toEqual(["dispose:ok"]);
+	});
+
+	it("leaves non-disposable Context values alone", async () => {
+		const plain = context("plain", () => ({ value: 42 }));
+		const app = new Crust("cli").provide(plain()).handle(({ ctx }) => {
+			expect(ctx.plain.value).toBe(42);
+		});
+
+		await expect(app.run([])).resolves.toBeUndefined();
+	});
+});

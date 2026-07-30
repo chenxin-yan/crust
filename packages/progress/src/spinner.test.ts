@@ -357,7 +357,7 @@ describe("spinner — message updates", () => {
 		expect(stderrOutput).not.toContain("Late update...");
 	});
 
-	it("works with no controller usage (backward compatible)", async () => {
+	it("works when callback ignores the controller", async () => {
 		const result = await spinner({
 			message: "Simple task...",
 			task: async () => 42,

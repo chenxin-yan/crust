@@ -25,10 +25,15 @@
 	"files": [
 		"dist"
 	],
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./tooling": {
+			"types": "./dist/tooling.d.ts",
+			"import": "./dist/tooling.js"
 		}
 	},
 	"publishConfig": {
@@ -39,16 +44,19 @@
 		"dev": "bunup --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
-		"publish": "bun publish --no-git-checks || true"
+		"publish": "bun publish --no-git-checks",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
 	},
 	"dependencies": {
-		"@crustjs/utils": "workspace:*"
+		"@crustjs/utils": "workspace:^",
+		"@standard-schema/spec": "^1.1.0"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"
 	},
-	"peerDependencies": {
-		"typescript": "catalog:"
+	"engines": {
+		"bun": ">=1.3.14"
 	}
 }

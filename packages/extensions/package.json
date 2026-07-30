@@ -1,0 +1,62 @@
+{
+	"name": "@crustjs/extensions",
+	"version": "0.1.2",
+	"description": "Official Extensions for the Crust CLI framework",
+	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/extensions"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"extension",
+		"help",
+		"version",
+		"completion",
+		"did-you-mean",
+		"bun",
+		"typescript"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test",
+		"publish": "bun publish --no-git-checks",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"dependencies": {
+		"@crustjs/style": "workspace:^"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"bunup": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:0.x"
+	},
+	"engines": {
+		"bun": ">=1.3.14"
+	}
+}

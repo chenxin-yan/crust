@@ -111,9 +111,10 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 /**
  * Defines a single field in a store's config schema.
  *
- * Discriminated by `type` and `array` for type-safe `default` values.
- * Each field can optionally include a `validate` function for per-field
- * validation and a `default` value for fallback behavior.
+ * Inline definitions are discriminated by `type` and `array` for type-safe
+ * defaults. Schema-backed definitions returned by {@link field} use the raw
+ * branches of this union and carry their Standard Schema output type through
+ * an internal marker for config inference.
  *
  * @example
  * ```ts
@@ -281,8 +282,9 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	/**
 	 * Field definitions that declare the store's config schema.
 	 *
-	 * Each key maps to a {@link FieldDef} with a `type` discriminant and optional
-	 * `default` and `validate`. Fields without a `default` are optional (`T | undefined`).
+	 * Each key maps to a {@link FieldDef}: either a typed inline definition or a
+	 * schema-backed definition returned by {@link field}. Fields without a Crust-level
+	 * `default` are optional (`T | undefined`) in the inferred config type.
 	 */
 	fields: F;
 

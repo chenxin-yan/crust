@@ -93,10 +93,3 @@ describe("field() — validate adapter", () => {
 		}
 	});
 });
-
-describe("field() — type-level integration with FieldDef", () => {
-	it("returns a value structurally compatible with store FieldDef.validate", async () => {
-		const def = field(z.string());
-		await expect(def.validate("ok")).resolves.toEqual({ value: "ok" });
-	});
-});

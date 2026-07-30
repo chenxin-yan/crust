@@ -6,23 +6,23 @@ import { scaffold } from "@crustjs/create";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
-import pluginsPackage from "../../plugins/package.json";
+import extensionsPackage from "../../extensions/package.json";
 
 const TEST_DIR = resolve(import.meta.dirname, ".tmp-scaffold-test");
+const TEMPLATE_DIR = resolve(import.meta.dirname, "../templates");
 const TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: corePackage.version,
-	crustPluginsVersion: pluginsPackage.version,
+	crustExtensionsVersion: extensionsPackage.version,
 	crustCliVersion: crustPackage.version,
 } satisfies Record<string, string>;
 const EXPECTED_CRUST_DEPENDENCIES = {
 	"@crustjs/core": `^${corePackage.version}`,
-	"@crustjs/plugins": `^${pluginsPackage.version}`,
+	"@crustjs/extensions": `^${extensionsPackage.version}`,
 };
 const EXPECTED_CRUST_DEV_DEPENDENCIES = {
 	"@crustjs/crust": `^${crustPackage.version}`,
 };
 
-type TemplateStyle = "minimal" | "modular";
 type DistributionMode = "binary" | "runtime";
 
 /**
@@ -32,35 +32,30 @@ async function scaffoldProject(
 	dest: string,
 	context: { name: string },
 	options?: {
-		style?: TemplateStyle;
 		distribution?: DistributionMode;
 		conflict?: "abort" | "overwrite";
 	},
 ): Promise<void> {
-	const style = options?.style ?? "minimal";
 	const distribution = options?.distribution ?? "binary";
 	const conflict = options?.conflict ?? "overwrite";
 	const scaffoldContext = { ...context, ...TEMPLATE_VERSION_CONTEXT };
 
 	await scaffold({
-		template: "templates/base",
+		template: resolve(TEMPLATE_DIR, "base"),
 		dest,
 		context: scaffoldContext,
 		conflict,
 	});
 
 	await scaffold({
-		template: style === "minimal" ? "templates/minimal" : "templates/modular",
+		template: resolve(TEMPLATE_DIR, "minimal"),
 		dest,
 		context: scaffoldContext,
 		conflict: "overwrite",
 	});
 
 	await scaffold({
-		template:
-			distribution === "binary"
-				? "templates/distribution/binary"
-				: "templates/distribution/runtime",
+		template: resolve(TEMPLATE_DIR, "distribution", distribution),
 		dest,
 		context: scaffoldContext,
 		conflict: "overwrite",
@@ -73,19 +68,6 @@ async function scaffoldBase(
 	conflict: "abort" | "overwrite" = "overwrite",
 ): Promise<void> {
 	await scaffoldProject(dest, context, {
-		style: "minimal",
-		distribution: "binary",
-		conflict,
-	});
-}
-
-async function scaffoldModular(
-	dest: string,
-	context: { name: string },
-	conflict: "abort" | "overwrite" = "overwrite",
-): Promise<void> {
-	await scaffoldProject(dest, context, {
-		style: "modular",
 		distribution: "binary",
 		conflict,
 	});
@@ -192,24 +174,24 @@ describe("scaffold", () => {
 
 		// No shebang — compiled binary is standalone
 		expect(cliContent.startsWith("import")).toBe(true);
-		// Uses Crust builder
+		// Uses the public Crust builder
 		expect(cliContent).toContain("new Crust(");
 		// Uses execute()
 		expect(cliContent).toContain(".execute()");
-		// Uses help/version plugins
-		expect(cliContent).toContain("helpPlugin");
-		expect(cliContent).toContain("versionPlugin");
+		// Uses help/version extensions
+		expect(cliContent).toContain("help()");
+		expect(cliContent).toContain("version(");
 		expect(cliContent).toContain('import pkg from "../package.json"');
-		expect(cliContent).toContain("versionPlugin(pkg.version)");
-		// Imports from @crustjs/core and @crustjs/plugins
+		expect(cliContent).toContain("version(pkg.version)");
+		// Imports from @crustjs/core and @crustjs/extensions
 		expect(cliContent).toContain('"@crustjs/core"');
-		expect(cliContent).toContain('"@crustjs/plugins"');
+		expect(cliContent).toContain('"@crustjs/extensions"');
 		// Contains command name
 		expect(cliContent).toContain('"test-cli"');
 		// Has a positional name argument with string literal type
 		expect(cliContent).toContain('type: "string"');
 		// Has a run function
-		expect(cliContent).toContain(".run(");
+		expect(cliContent).toContain(".handle(");
 	});
 
 	it("generates CLI file that is valid TypeScript (compile check)", async () => {
@@ -219,52 +201,31 @@ describe("scaffold", () => {
 		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
 
 		expect(cliContent).toContain("import {");
-		expect(cliContent).toContain("const cli = new Crust(");
-		expect(cliContent).toContain("await cli.execute()");
-		expect(cliContent).toContain(".use(");
-		expect(cliContent).toContain("versionPlugin(");
-		expect(cliContent).toContain("helpPlugin()");
+		expect(cliContent).toContain("const app = new Crust(");
+		expect(cliContent).toContain("await app.execute()");
+		expect(cliContent).toContain(".extend(");
+		expect(cliContent).toContain("version(");
+		expect(cliContent).toContain("help()");
 		// Has proper structure: name, args, flags, run
 		expect(cliContent).toContain('new Crust("compile-test-cli")');
 		expect(cliContent).toContain(".args([");
 		expect(cliContent).toContain(".flags(");
-		expect(cliContent).toContain(".run(");
+		expect(cliContent).toContain(".handle(");
 	});
 
-	it("generates modular template with file-splitting .sub() pattern", async () => {
-		await scaffoldModular(TEST_DIR, { name: "modular-cli" });
-
-		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(true);
-
-		const appContent = readFileSync(resolve(TEST_DIR, "src", "app.ts"), "utf-8");
-		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
-		const greetContent = readFileSync(resolve(TEST_DIR, "src", "commands", "greet.ts"), "utf-8");
-
-		expect(appContent).toContain('new Crust("modular-cli")');
-		expect(appContent).toContain("inherit: true");
-		expect(greetContent).toContain('.sub("greet")');
-		expect(greetContent).toContain("flags.greet");
-		expect(cliContent).toContain(".command(greetCmd)");
-		expect(cliContent).toContain(".execute()");
-	});
-
-	it("supports modular template with runtime distribution", async () => {
+	it("supports the minimal template with runtime distribution", async () => {
 		await scaffoldProject(
 			TEST_DIR,
-			{ name: "modular-runtime-cli" },
+			{ name: "runtime-cli" },
 			{
-				style: "modular",
 				distribution: "runtime",
 			},
 		);
 
-		expect(existsSync(resolve(TEST_DIR, "src", "app.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "commands", "greet.ts"))).toBe(true);
+		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
 
 		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
-		expect(pkg.bin["modular-runtime-cli"]).toBe("dist/cli.js");
+		expect(pkg.bin["runtime-cli"]).toBe("dist/cli.js");
 		expect(pkg.dependencies).toEqual(EXPECTED_CRUST_DEPENDENCIES);
 	});
 

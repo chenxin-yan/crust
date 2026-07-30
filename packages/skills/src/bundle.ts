@@ -7,7 +7,7 @@ import { join, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { installRenderedSkill, isValidSkillName, resolveSkillName } from "./generate.ts";
+import { installRenderedSkill, isValidSkillName } from "./generate.ts";
 import type {
 	InstallSkillBundleOptions,
 	InstallSkillBundleResult,
@@ -355,17 +355,17 @@ export async function installSkillBundle(
 
 	const { files, frontmatter } = await loadBundleFiles(sourceDir);
 
-	const resolvedName = resolveSkillName(frontmatter.name);
-	if (!isValidSkillName(resolvedName)) {
+	const name = frontmatter.name;
+	if (!isValidSkillName(name)) {
 		throw new Error(
-			`Invalid skill name "${resolvedName}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
+			`Invalid skill name "${name}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
 				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
 		);
 	}
 
-	if (expectedName !== undefined && resolvedName !== expectedName) {
+	if (expectedName !== undefined && name !== expectedName) {
 		throw new Error(
-			`Bundle SKILL.md frontmatter name "${resolvedName}" does not match the expected name "${expectedName}". ` +
+			`Bundle SKILL.md frontmatter name "${name}" does not match the expected name "${expectedName}". ` +
 				`Update the bundle's SKILL.md frontmatter \`name:\` field, or change the configured \`name\` to match.`,
 		);
 	}
@@ -375,7 +375,7 @@ export async function installSkillBundle(
 	}
 
 	const meta: SkillMeta = {
-		name: resolvedName,
+		name,
 		description: frontmatter.description,
 		version,
 	};
@@ -389,8 +389,5 @@ export async function installSkillBundle(
 		force,
 		installMode,
 		kind: "bundle",
-		// Bundles do not carry the `use-*` legacy migration history, so the
-		// legacy sweep is disabled by passing the same name.
-		legacyResolvedName: resolvedName,
 	});
 }

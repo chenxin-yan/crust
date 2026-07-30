@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
-import { helpPlugin } from "@crustjs/plugins";
+import { prepareCommandSnapshot } from "@crustjs/core/tooling";
+import { help } from "@crustjs/extensions";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 
@@ -9,13 +10,11 @@ describe("renderManPageMdoc", () => {
 	it("includes NAME SYNOPSIS SUBCOMMANDS OPTIONS", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for tests." })
-			.use(helpPlugin())
-			.flags({
-				verbose: { type: "boolean", short: "v", description: "Verbose" },
-			})
-			.command(new Crust("ping").meta({ description: "Ping" }).run(() => {}));
+			.extend(help())
+			.flags({ verbose: { type: "boolean", short: "v", description: "Verbose" } })
+			.command("ping", (cmd) => cmd.meta({ description: "Ping" }).handle(() => {}));
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh NAME");
@@ -32,9 +31,9 @@ describe("renderManPageMdoc", () => {
 	it("escapes leading dots in descriptions and .Nd", async () => {
 		const app = new Crust("x")
 			.meta({ description: ".config is read automatically." })
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
 
 		expect(mdoc).toMatch(/\.Nd .*\\&\.config is read automatically\./);
@@ -42,8 +41,8 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("uses explicit date for .Dd", async () => {
-		const app = new Crust("x").run(() => {});
-		const { root } = await app.prepareCommandTree();
+		const app = new Crust("x").handle(() => {});
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({
 			root,
 			name: "x",
@@ -56,8 +55,8 @@ describe("renderManPageMdoc", () => {
 		const prev = process.env.SOURCE_DATE_EPOCH;
 		process.env.SOURCE_DATE_EPOCH = "86400";
 		try {
-			const app = new Crust("x").run(() => {});
-			const { root } = await app.prepareCommandTree();
+			const app = new Crust("x").handle(() => {});
+			const root = await prepareCommandSnapshot(app);
 			const mdoc = renderManPageMdoc({ root, name: "x" });
 			expect(mdoc.startsWith(".Dd January 2, 1970\n")).toBe(true);
 		} finally {
@@ -75,11 +74,11 @@ describe("renderManPageMdoc", () => {
 			.command(
 				new Crust("issue")
 					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
-					.run(() => {}),
+					.handle(() => {}),
 			)
-			.command(new Crust("version").meta({ description: "Show version" }).run(() => {}));
+			.command(new Crust("version").meta({ description: "Show version" }).handle(() => {}));
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh SUBCOMMANDS");
@@ -101,14 +100,14 @@ describe("renderManPageMdoc", () => {
 		// but never appear in published man pages.
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
-			.command(new Crust("build").meta({ description: "Build the project" }).run(() => {}))
+			.command(new Crust("build").meta({ description: "Build the project" }).handle(() => {}))
 			.command(
 				new Crust("__complete")
 					.meta({ description: "Internal completion entrypoint", hidden: true })
-					.run(() => {}),
+					.handle(() => {}),
 			);
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".It Nm build");
@@ -118,11 +117,11 @@ describe("renderManPageMdoc", () => {
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
 			.command(
-				new Crust("__complete").meta({ hidden: true, description: "Internal" }).run(() => {}),
+				new Crust("__complete").meta({ hidden: true, description: "Internal" }).handle(() => {}),
 			)
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).not.toContain(".Sh SUBCOMMANDS");
@@ -139,9 +138,9 @@ describe("renderManPageMdoc", () => {
 					description: "Build target",
 				},
 			})
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".It Sy --target");
@@ -160,9 +159,9 @@ describe("renderManPageMdoc", () => {
 					description: "Target environment",
 				},
 			])
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh ARGUMENTS");
@@ -181,9 +180,9 @@ describe("renderManPageMdoc", () => {
 					description: "Where to write",
 				},
 			})
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		// Both the canonical `--output` and the alias `--out` appear in the
@@ -200,9 +199,9 @@ describe("renderManPageMdoc", () => {
 					description: "Use colour",
 				},
 			})
-			.run(() => {});
+			.handle(() => {});
 
-		const { root } = await app.prepareCommandTree();
+		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		// Canonical + alias + both negations, in declaration order.

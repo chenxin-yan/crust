@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import * as os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import type { CrustPlugin } from "@crustjs/core";
-import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { Crust, extension } from "@crustjs/core";
+import { snapshotCommand, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
 
 import { installSkillBundle } from "./bundle.ts";
 import { generateSkill } from "./generate.ts";
-import { skillPlugin } from "./plugin.ts";
-import { readInstalledVersion } from "./version.ts";
+import { skillExtension } from "./plugin.ts";
+import { readInstalledManifest } from "./version.ts";
 
 const FIXTURE_DIR = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -26,14 +26,23 @@ const FIXTURE_DIR_SECOND = join(
 	"fixtures",
 	"bundle-second",
 );
+const realHomedir = os.homedir;
 
-function shortCircuitPlugin(): CrustPlugin {
-	return {
-		name: "short-circuit",
-		async middleware() {
-			// Intentionally stop the middleware chain without calling next()
+function mockHomedir(path: string): void {
+	// Bun caches homedir(), so changing HOME after startup does not redirect global paths.
+	mock.module("node:os", () => ({ ...os, homedir: () => path }));
+}
+
+function restoreHomedir(): void {
+	mock.module("node:os", () => ({ ...os, homedir: realHomedir }));
+}
+
+function shortCircuitExtension() {
+	return extension("short-circuit", {
+		async intercept() {
+			// Intentionally stop the chain without calling next()
 		},
-	};
+	});
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -52,12 +61,12 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-describe("skillPlugin auto-update", () => {
+describe("skill extension auto-update", () => {
 	let tmpDir: string;
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -70,9 +79,9 @@ describe("skillPlugin auto-update", () => {
 	it("does not install skills that are not yet present", async () => {
 		const app = new Crust("no-auto-install")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 				}),
@@ -88,9 +97,9 @@ describe("skillPlugin auto-update", () => {
 	it("renders plugin-provided top-level instructions into SKILL.md", async () => {
 		const app = new Crust("instruction-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					instructions: [
@@ -102,7 +111,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "instruction-test",
 					description: "test",
@@ -126,9 +135,9 @@ describe("skillPlugin auto-update", () => {
 	it("renders plugin-provided markdown instructions into SKILL.md", async () => {
 		const app = new Crust("markdown-instruction-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					instructions: `Read the command docs before answering.
@@ -142,7 +151,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "markdown-instruction-test",
 					description: "test",
@@ -167,9 +176,9 @@ describe("skillPlugin auto-update", () => {
 	it("auto-updates already-installed skills when version changes", async () => {
 		const app = new Crust("update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 				}),
@@ -178,7 +187,7 @@ describe("skillPlugin auto-update", () => {
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: { name: "update-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -187,52 +196,20 @@ describe("skillPlugin auto-update", () => {
 
 		const skillDir = join(tmpDir, ".agents", "skills", "update-test");
 
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
 		// Run plugin with v2.0.0 — should auto-update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
-	});
-
-	it("auto-migrates a legacy install even when the version matches", async () => {
-		const app = new Crust("legacy-migration-test")
-			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
-					version: "1.0.0",
-					defaultScope: "project",
-				}),
-			);
-
-		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-legacy-migration-test");
-		const legacySkillDir = join(tmpDir, ".agents", "skills", "use-legacy-migration-test");
-		await mkdir(legacyCanonicalDir, { recursive: true });
-		await mkdir(legacySkillDir, { recursive: true });
-		await writeFile(
-			join(legacyCanonicalDir, "crust.json"),
-			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
-		);
-		await writeFile(
-			join(legacySkillDir, "crust.json"),
-			JSON.stringify({ name: "use-legacy-migration-test", version: "1.0.0" }),
-		);
-
-		await withCwd(tmpDir, () => app.execute({ argv: [] }));
-
-		const currentSkillDir = join(tmpDir, ".agents", "skills", "legacy-migration-test");
-		expect(await readInstalledVersion(currentSkillDir)).toBe("1.0.0");
-		expect(await exists(legacySkillDir)).toBe(false);
-		expect(await exists(legacyCanonicalDir)).toBe(false);
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("prints auto-update message with Universal label", async () => {
 		const app = new Crust("update-message-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 				}),
@@ -240,7 +217,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-message-test",
 					description: "test",
@@ -269,22 +246,24 @@ describe("skillPlugin auto-update", () => {
 		expect(stderrOutput.includes("for OpenCode")).toBe(false);
 	});
 
-	it("auto-updates even when a prior plugin short-circuits middleware", async () => {
+	it("auto-updates before a later extension short-circuits (registration order matters)", async () => {
+		// Intercepts run in registration order; registering skills first means
+		// its auto-update work happens before any later short-circuit.
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(shortCircuitPlugin())
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 				}),
-			);
+			)
+			.extend(shortCircuitExtension());
 
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: { name: "order-test", description: "test", version: "1.0.0" },
 				agents: ["opencode"],
 				scope: "project",
@@ -296,7 +275,7 @@ describe("skillPlugin auto-update", () => {
 		// Run plugin with v2.0.0 behind a short-circuit — should still update
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("does not auto-update during validation mode", async () => {
@@ -304,9 +283,9 @@ describe("skillPlugin auto-update", () => {
 
 		const app = new Crust("validation-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 				}),
@@ -315,7 +294,7 @@ describe("skillPlugin auto-update", () => {
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "validation-test",
 					description: "test",
@@ -335,15 +314,15 @@ describe("skillPlugin auto-update", () => {
 		}
 
 		// Should still be v1.0.0 — validation mode skips auto-update
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("does not auto-update when autoUpdate is false", async () => {
 		const app = new Crust("no-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -353,7 +332,7 @@ describe("skillPlugin auto-update", () => {
 		// Pre-install v1.0.0
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "no-update-test",
 					description: "test",
@@ -369,15 +348,15 @@ describe("skillPlugin auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		// Should still be v1.0.0 — autoUpdate disabled
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("prints no changes when universal skills are already installed", async () => {
 		const app = new Crust("no-change-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 				}),
@@ -385,7 +364,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "no-change-test",
 					description: "test",
@@ -424,9 +403,9 @@ describe("skillPlugin auto-update", () => {
 	it("runs manual skill update command", async () => {
 		const app = new Crust("manual-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -435,7 +414,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "manual-update-test",
 					description: "test",
@@ -447,19 +426,19 @@ describe("skillPlugin auto-update", () => {
 		);
 
 		const skillDir = join(tmpDir, ".agents", "skills", "manual-update-test");
-		expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update"] }));
 
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("reports global scope when updating from the home directory", async () => {
 		const app = new Crust("manual-home-update-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 				}),
@@ -470,11 +449,12 @@ describe("skillPlugin auto-update", () => {
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
+		mockHomedir(tmpDir);
 
 		try {
-			await withCwd(homedir(), () =>
+			await withCwd(tmpDir, () =>
 				generateSkill({
-					command: app._node,
+					command: snapshotCommand(app._node),
 					meta: {
 						name: "manual-home-update-test",
 						description: "test",
@@ -485,24 +465,15 @@ describe("skillPlugin auto-update", () => {
 				}),
 			);
 
-			const skillDir = join(homedir(), ".agents", "skills", "manual-home-update-test");
-			expect(await readInstalledVersion(skillDir)).toBe("1.0.0");
+			const skillDir = join(tmpDir, ".agents", "skills", "manual-home-update-test");
+			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 
-			await withCwd(homedir(), () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
-			expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+			expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 		} finally {
 			console.log = originalLog;
-			await rm(join(homedir(), ".agents", "skills", "manual-home-update-test"), {
-				recursive: true,
-				force: true,
-			});
-			await rm(join(homedir(), ".crust", "skills", "manual-home-update-test"), {
-				recursive: true,
-				force: true,
-			});
+			restoreHomedir();
 		}
 
 		expect(logs.some((line) => line.includes("(global)"))).toBe(true);
@@ -512,9 +483,9 @@ describe("skillPlugin auto-update", () => {
 	it("reports no updates needed with global scope from the home directory", async () => {
 		const app = new Crust("manual-home-noop-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 				}),
@@ -525,11 +496,12 @@ describe("skillPlugin auto-update", () => {
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
 		};
+		mockHomedir(tmpDir);
 
 		try {
-			await withCwd(homedir(), () =>
+			await withCwd(tmpDir, () =>
 				generateSkill({
-					command: app._node,
+					command: snapshotCommand(app._node),
 					meta: {
 						name: "manual-home-noop-test",
 						description: "test",
@@ -540,19 +512,10 @@ describe("skillPlugin auto-update", () => {
 				}),
 			);
 
-			await withCwd(homedir(), () =>
-				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
-			);
+			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 		} finally {
 			console.log = originalLog;
-			await rm(join(homedir(), ".agents", "skills", "manual-home-noop-test"), {
-				recursive: true,
-				force: true,
-			});
-			await rm(join(homedir(), ".crust", "skills", "manual-home-noop-test"), {
-				recursive: true,
-				force: true,
-			});
+			restoreHomedir();
 		}
 
 		expect(logs.some((line) => line.includes("No updates needed (global)."))).toBe(true);
@@ -562,9 +525,9 @@ describe("skillPlugin auto-update", () => {
 	it("renders top-level instructions when running manual skill update", async () => {
 		const app = new Crust("manual-update-instructions-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -577,7 +540,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "manual-update-instructions-test",
 					description: "test",
@@ -607,9 +570,9 @@ describe("skillPlugin auto-update", () => {
 	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {
 		const app = new Crust("fallback-scope-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 				}),
@@ -617,7 +580,7 @@ describe("skillPlugin auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "fallback-scope-test",
 					description: "test",
@@ -629,7 +592,7 @@ describe("skillPlugin auto-update", () => {
 		);
 
 		const projectSkillDir = join(tmpDir, ".agents", "skills", "fallback-scope-test");
-		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("1.0.0");
 
 		const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		Object.defineProperty(process.stdin, "isTTY", {
@@ -645,11 +608,11 @@ describe("skillPlugin auto-update", () => {
 			}
 		}
 
-		expect(await readInstalledVersion(projectSkillDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("1.0.0");
 
 		await withCwd(tmpDir, () => app.execute({ argv: ["skill", "update", "--scope", "project"] }));
 
-		expect(await readInstalledVersion(projectSkillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(projectSkillDir))?.version ?? null).toBe("2.0.0");
 	});
 });
 
@@ -691,9 +654,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an empty array", async () => {
 		const app = new Crust("empty-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [],
@@ -721,9 +684,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts a URL sourceDir", async () => {
 		const app = new Crust("url-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -743,9 +706,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an absolute string sourceDir", async () => {
 		const app = new Crust("abs-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -766,9 +729,9 @@ describe("skillPlugin customSkills validation", () => {
 		// Setup must not throw — resolution-time errors defer to installSkillBundle.
 		const app = new Crust("rel-custom")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -789,9 +752,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects a name that collides with the main skill", async () => {
 		const app = new Crust("collide-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -813,9 +776,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects duplicate names within the array", async () => {
 		const app = new Crust("dup-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -842,9 +805,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects an invalid skill name", async () => {
 		const app = new Crust("invalid-name-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -869,9 +832,9 @@ describe("skillPlugin customSkills validation", () => {
 		// fall through to the plugin-level fallback.
 		const app = new Crust("empty-version-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -893,9 +856,9 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects a non-string non-URL sourceDir", async () => {
 		const app = new Crust("bad-src-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -921,7 +884,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-name-mismatch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -947,7 +910,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 
 		const warnings: string[] = [];
 		const origWarn = console.warn;
@@ -957,9 +920,9 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 		const app = new Crust("name-mismatch-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -987,7 +950,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 		}
 
 		// pricing-toolkit must remain at 1.0.0 — the install was rejected.
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 		// No orphan funnel-builder dir was created.
 		await expect(stat(funnelDir)).rejects.toThrow();
 		// The mismatch warning surfaces with both names so the bundle author
@@ -1007,7 +970,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -1029,13 +992,13 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		const app = new Crust("bundle-update-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1050,7 +1013,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("does not auto-update an up-to-date bundle", async () => {
@@ -1074,9 +1037,9 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1092,7 +1055,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("continues after a per-bundle error so other bundles still update", async () => {
@@ -1109,7 +1072,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const secondDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(secondDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(secondDir))?.version ?? null).toBe("1.0.0");
 
 		// Pre-install funnel-builder at v1.0.0 too so the bogus first entry
 		// triggers a sourceDir resolution error during the install path.
@@ -1123,7 +1086,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
 
 		const originalWrite = process.stderr.write;
 		process.stderr.write = (() => true) as typeof process.stderr.write;
@@ -1135,9 +1098,9 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-resilience-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1164,9 +1127,9 @@ describe("skillPlugin customSkills auto-update", () => {
 		}
 
 		// Second bundle still updated, despite first entry's error.
-		expect(await readInstalledVersion(secondDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(secondDir))?.version ?? null).toBe("2.0.0");
 		// First bundle stayed at its previous version.
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
 		// Warning surfaced naming the failed bundle.
 		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 	});
@@ -1182,13 +1145,13 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		const app = new Crust("no-auto-update-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1204,7 +1167,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("skips bundle auto-update when invoking the skill subcommand", async () => {
@@ -1227,9 +1190,9 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("subcmd-skip-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1269,7 +1232,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		}
 
 		// Bundle stayed at v1.0.0 because the bogus sourceDir failed install.
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 		// Exactly one warning naming the failed bundle — only the `skill
 		// update` subcommand ran. If the auto-update setup hook also ran,
 		// there would be two warnings.
@@ -1282,9 +1245,9 @@ describe("skillPlugin customSkills auto-update", () => {
 		// asserts that no bundle directory is ever created.
 		const app = new Crust("identical-test")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 				}),
@@ -1292,7 +1255,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "identical-test",
 					description: "test",
@@ -1306,7 +1269,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		const skillDir = join(tmpDir, ".agents", "skills", "identical-test");
-		expect(await readInstalledVersion(skillDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
 
 		// No funnel-builder dir was created.
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
@@ -1325,15 +1288,15 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		// Plugin-level version is bumped to 2.0.0; entry omits `version`, so
 		// it should inherit and trigger a reinstall to 2.0.0.
 		const app = new Crust("inherit-version-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1349,7 +1312,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
-		expect(await readInstalledVersion(bundleDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("explicit entry version overrides plugin-level version", async () => {
@@ -1364,15 +1327,15 @@ describe("skillPlugin customSkills auto-update", () => {
 		);
 
 		const bundleDir = join(tmpDir, ".agents", "skills", "funnel-builder");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 
 		// Plugin says 2.0.0 but the entry pins itself at 0.3.0 — a vendored
 		// bundle whose cadence is independent of the consuming CLI.
 		const app = new Crust("override-version-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1389,7 +1352,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		// Bundle now records the explicit override, not the plugin-level
 		// version.
-		expect(await readInstalledVersion(bundleDir)).toBe("0.3.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("0.3.0");
 	});
 
 	it("does not reinstall an inherited-version bundle when plugin version is unchanged", async () => {
@@ -1410,9 +1373,9 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("inherit-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [{ name: "funnel-builder", sourceDir: FIXTURE_DIR }],
@@ -1422,7 +1385,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect(await readFile(sentinel, "utf8")).toBe("do-not-touch");
-		expect(await readInstalledVersion(bundleDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(bundleDir))?.version ?? null).toBe("1.0.0");
 	});
 });
 
@@ -1435,7 +1398,7 @@ describe("skillPlugin customSkills interactive command", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-cmd-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -1448,9 +1411,9 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all installs main + every bundle without prompting", async () => {
 		const app = new Crust("all-flag-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1488,17 +1451,17 @@ describe("skillPlugin customSkills interactive command", () => {
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 
-		expect(await readInstalledVersion(mainDir)).toBe("1.0.0");
-		expect(await readInstalledVersion(funnelDir)).toBe("1.0.0");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(mainDir))?.version ?? null).toBe("1.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("prints sequential per-skill output (heading mentions bundle name)", async () => {
 		const app = new Crust("sequential-output-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					defaultScope: "project",
 					customSkills: [
@@ -1543,9 +1506,9 @@ describe("skillPlugin customSkills interactive command", () => {
 		// Bundle should land in the global scope, not the project scope.
 		const app = new Crust("all-scope-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1564,24 +1527,24 @@ describe("skillPlugin customSkills interactive command", () => {
 			value: false,
 			configurable: true,
 		});
-		// Redirect HOME so global-scope writes land inside tmpDir, then
-		// restore. Crust derives the global path from `homedir()`, so
-		// overriding HOME is the canonical hook.
-		const origHome = process.env.HOME;
-		process.env.HOME = tmpDir;
+		const projectDir = join(tmpDir, "project");
+		await mkdir(projectDir);
+		mockHomedir(tmpDir);
 		const origLog = console.log;
 		console.log = () => {};
 		try {
-			await withCwd(tmpDir, () => app.execute({ argv: ["skill", "--all", "--scope", "global"] }));
+			await withCwd(projectDir, () =>
+				app.execute({ argv: ["skill", "--all", "--scope", "global"] }),
+			);
 		} finally {
 			if (originalIsTTY) {
 				Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
 			}
 			console.log = origLog;
-			process.env.HOME = origHome;
+			restoreHomedir();
 		}
 
-		const projectBundle = join(tmpDir, ".agents", "skills", "funnel-builder");
+		const projectBundle = join(projectDir, ".agents", "skills", "funnel-builder");
 		// Project-scope path must NOT exist — the explicit --scope flag wins.
 		await expect(stat(projectBundle)).rejects.toThrow();
 	});
@@ -1589,9 +1552,9 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all isolates per-bundle failures and exits non-zero", async () => {
 		const app = new Crust("all-isolation-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1637,7 +1600,7 @@ describe("skillPlugin customSkills interactive command", () => {
 
 		// Second bundle still installed.
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
-		expect(await readInstalledVersion(pricingDir)).toBe("1.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("1.0.0");
 		// First bundle was rejected.
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		await expect(stat(funnelDir)).rejects.toThrow();
@@ -1658,7 +1621,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 	beforeEach(async () => {
 		tmpDir = join(
-			tmpdir(),
+			os.tmpdir(),
 			`crust-skill-plugin-custom-update-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
 		await mkdir(join(tmpDir, ".opencode"), { recursive: true });
@@ -1671,9 +1634,9 @@ describe("skillPlugin customSkills `skill update`", () => {
 	it("updates main + every bundle in sequence", async () => {
 		const app = new Crust("update-loop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "2.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1695,7 +1658,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 		// Pre-install all three at v1.0.0.
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-loop-host",
 					description: "test",
@@ -1734,17 +1697,17 @@ describe("skillPlugin customSkills `skill update`", () => {
 		const funnelDir = join(tmpDir, ".agents", "skills", "funnel-builder");
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 
-		expect(await readInstalledVersion(mainDir)).toBe("2.0.0");
-		expect(await readInstalledVersion(funnelDir)).toBe("2.0.0");
-		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(mainDir))?.version ?? null).toBe("2.0.0");
+		expect((await readInstalledManifest(funnelDir))?.version ?? null).toBe("2.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("2.0.0");
 	});
 
 	it("reports per-skill 'No updates needed' when nothing is outdated", async () => {
 		const app = new Crust("update-noop-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1760,7 +1723,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: app._node,
+				command: snapshotCommand(app._node),
 				meta: {
 					name: "update-noop-host",
 					description: "test",
@@ -1818,9 +1781,9 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		const app = new Crust("update-isolation-host")
 			.meta({ description: "test" })
-			.run(() => {})
-			.use(
-				skillPlugin({
+			.handle(() => {})
+			.extend(
+				skillExtension({
 					version: "1.0.0",
 					autoUpdate: false,
 					defaultScope: "project",
@@ -1857,7 +1820,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		const pricingDir = join(tmpDir, ".agents", "skills", "pricing-toolkit");
 		// Second bundle updated despite first entry's failure.
-		expect(await readInstalledVersion(pricingDir)).toBe("2.0.0");
+		expect((await readInstalledManifest(pricingDir))?.version ?? null).toBe("2.0.0");
 		// Failure was logged with the bundle name.
 		expect(warnings.some((line) => line.includes("[funnel-builder]"))).toBe(true);
 		// Non-zero exit so automation notices the partial failure.

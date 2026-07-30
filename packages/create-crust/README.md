@@ -8,12 +8,21 @@ Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
 bun create crust my-cli
 ```
 
-This will prompt for your project directory, template style, distribution mode (standalone binaries recommended, or Bun runtime package), whether to install dependencies, and optionally initialize a git repository. The package name is inferred from the directory name.
+This prompts for the project directory, distribution mode (standalone binaries recommended, or Bun runtime package), whether to install dependencies, and optionally whether to initialize a git repository. The package name is inferred from the directory name.
 
-`create-crust` includes two templates:
+## Options
 
-- `Minimal` — single-file starter (`src/cli.ts`)
-- `Modular` — file-splitting pattern with `.sub()` and `.command(builder)`
+```text
+create-crust [directory] [--distribution binary|runtime] [--install|--no-install] [--git|--no-git] [--overwrite]
+```
+
+- `directory` sets the destination; omit it to be prompted.
+- `--distribution` selects standalone binaries or a Bun runtime package; omit it to choose interactively (default: `binary`).
+- `--install` / `--no-install` controls dependency installation without prompting.
+- `--git` / `--no-git` controls repository initialization without prompting when the destination is not already inside a Git repository.
+- `--overwrite` allows scaffolding into an existing destination without prompting.
+
+Generated projects use the single-file starter (`src/cli.ts`).
 
 Every generated project includes:
 
@@ -39,7 +48,7 @@ The binary templates intentionally keep `build` and `package` as separate script
 
 If you need public build-time constants, `crust build` can use Bun's cwd env by default or explicit `--env-file` inputs.
 
-> **Note:** The template's top-level `package.json` has `"files": ["dist"]` and `"bin"` pointing to `dist/cli` for local development. When publishing via `crust publish`, the staged packages in `dist/npm/` each have their own `package.json` with the correct `files` and `bin` entries — the top-level fields are not used for npm distribution.
+> **Note:** Binary projects use a top-level `bin` entry at `dist/cli` for local development. `crust build --package` generates staged packages in `dist/npm/`, each with its own platform-appropriate `files` and `bin` entries; those staged manifests are used for binary npm distribution. Runtime projects instead publish `dist/cli.js` directly.
 
 ## Documentation
 

@@ -125,6 +125,20 @@ export type ValidateFn<T> = (value: T) => void | Promise<void>;
  */
 export type PromptValidate<Output> = ValidateFn<string> | StandardSchemaV1<unknown, Output>;
 
+/** @internal Parse an initial/default value through a Standard Schema. */
+export async function parseShortCircuit<Output>(
+	schema: StandardSchemaV1<unknown, Output>,
+	value: string,
+	source: "initial" | "default",
+): Promise<Output> {
+	const result = await schema["~standard"].validate(value);
+	if (result.issues?.length) {
+		const message = result.issues[0]?.message || "Validation failed";
+		throw new Error(`${source} value rejected by schema: ${message}`);
+	}
+	return (result as { value: Output }).value;
+}
+
 /**
  * Type guard: discriminate the polymorphic `validate` slot.
  *

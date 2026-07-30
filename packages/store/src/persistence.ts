@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { CrustStoreError } from "./errors.ts";
@@ -147,8 +147,7 @@ export async function writeJson(
 		// momentarily world-readable.
 		if (fileMode !== undefined) await chmod(tempPath, fileMode);
 	} catch (err: unknown) {
-		// Best-effort cleanup of temp file
-		await cleanupTempFile(tempPath);
+		await rm(tempPath, { force: true }).catch(() => {});
 
 		throw new CrustStoreError("IO", `Failed to write config file: ${filePath}`, {
 			path: filePath,
@@ -159,8 +158,7 @@ export async function writeJson(
 	try {
 		await rename(tempPath, filePath);
 	} catch (err: unknown) {
-		// Best-effort cleanup of temp file
-		await cleanupTempFile(tempPath);
+		await rm(tempPath, { force: true }).catch(() => {});
 
 		throw new CrustStoreError("IO", `Failed to finalize config file: ${filePath}`, {
 			path: filePath,
@@ -184,13 +182,8 @@ export async function writeJson(
  */
 export async function deleteJson(filePath: string): Promise<void> {
 	try {
-		await unlink(filePath);
+		await rm(filePath, { force: true });
 	} catch (err: unknown) {
-		// File already absent — not an error for reset() semantics
-		if (isEnoent(err)) {
-			return;
-		}
-
 		throw new CrustStoreError("IO", `Failed to delete config file: ${filePath}`, {
 			path: filePath,
 			operation: "delete",
@@ -206,22 +199,5 @@ export async function deleteJson(filePath: string): Promise<void> {
  * Checks whether a thrown error is a filesystem "file not found" error.
  */
 function isEnoent(err: unknown): boolean {
-	return (
-		err !== null &&
-		typeof err === "object" &&
-		"code" in err &&
-		(err as { code: unknown }).code === "ENOENT"
-	);
-}
-
-/**
- * Best-effort cleanup of a temp file — failures are intentionally swallowed
- * since the primary error is more important to surface.
- */
-async function cleanupTempFile(tempPath: string): Promise<void> {
-	try {
-		await rm(tempPath, { force: true });
-	} catch {
-		// Intentionally swallowed — cleanup is best-effort
-	}
+	return (err as NodeJS.ErrnoException | null)?.code === "ENOENT";
 }

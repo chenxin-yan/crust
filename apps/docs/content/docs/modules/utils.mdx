@@ -21,11 +21,11 @@ bun add @crustjs/utils
 
 ## Exports
 
-| Subpath                    | Exports                                                                                 |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `@crustjs/utils/source`    | `resolveSourceDir`                                                                      |
-| `@crustjs/utils/primitive` | `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString`           |
-| `@crustjs/utils/schema`    | Standard Schema boundary checks, issue normalization helpers, and portable type aliases |
+| Subpath                    | Exports                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `@crustjs/utils/source`    | `resolveSourceDir`                                                                                |
+| `@crustjs/utils/primitive` | `BaseValueType`, `ResolvePrimitive`, `tryCoerceNumber`, `coerceBooleanString`                     |
+| `@crustjs/utils/schema`    | `StandardSchema`, `InferOutput`, `isStandardSchema`, `ValidationIssue`, `normalizeStandardIssues` |
 
 ## `resolveSourceDir`
 
@@ -135,5 +135,15 @@ or wrap errors in package-specific Crust error classes.
 `@standard-schema/spec` is an **optional peer dependency** of `@crustjs/utils`
 rather than a hard dependency, so consumers that use only the primitive or
 source subpaths do not install it. Packages that import this subpath
-(`@crustjs/validate`, `@crustjs/store`) declare `@standard-schema/spec`
+(e.g. `@crustjs/store`) declare `@standard-schema/spec`
 directly.
+
+### Schema exports
+
+| Export                                     | Purpose                                                       |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `StandardSchema<Input, Output>`            | Provider-neutral Standard Schema v1 alias                     |
+| `InferOutput<S>`                           | Infer a schema's produced value type                          |
+| `isStandardSchema(value)`                  | Check the `~standard` v1 boundary and narrow the value        |
+| `ValidationIssue`                          | Normalized `{ message, path }` issue shape                    |
+| `normalizeStandardIssues(issues, prefix?)` | Normalize provider issues and prepend an optional path prefix |

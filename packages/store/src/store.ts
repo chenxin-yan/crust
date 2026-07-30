@@ -18,14 +18,11 @@ import type {
 	StoreValidatorIssue,
 } from "./types.ts";
 
-/**
- * Narrow a `FieldDef.validate` return to the transform-result shape
- * `{ value: unknown }`. Rejects the legacy `{ ok, value }` and
- * `{ ok, issues }` shapes so they fall through to the fail-fast
- * `TypeError` migration guard instead of being silently persisted.
- */
+/** Narrow a `FieldDef.validate` return to the exact transform-result shape. */
 function isFieldValueResult(r: unknown): r is { value: unknown } {
-	return typeof r === "object" && r !== null && "value" in r && !("ok" in r);
+	return (
+		typeof r === "object" && r !== null && Object.hasOwn(r, "value") && Object.keys(r).length === 1
+	);
 }
 
 function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): WriteJsonOptions {
@@ -152,11 +149,6 @@ export function createStore<const F extends FieldsDef>(
 				continue;
 			}
 
-			// `FieldDef.validate` is contractually `void | { value }`. Anything
-			// else (notably the legacy `{ ok, value }` shape) is a caller bug
-			// and is surfaced below as a `TypeError` OUTSIDE the try/catch so
-			// it cannot be re-wrapped as `CrustStoreError("VALIDATION")`.
-
 			// Validation-only: validator returned no transformed value.
 			if (result === undefined) continue;
 
@@ -208,15 +200,7 @@ export function createStore<const F extends FieldsDef>(
 
 					record[key] = transformed;
 				}
-				continue;
 			}
-
-			// Any other return shape (e.g. legacy `{ ok, value }` or
-			// `{ ok, issues }`) is a caller bug — surface as a TypeError so
-			// it isn't misclassified as a `VALIDATION` failure.
-			throw new TypeError(
-				`FieldDef.validate must return void or { value } (see @crustjs/store validation docs).`,
-			);
 		}
 
 		if (issues.length > 0) {

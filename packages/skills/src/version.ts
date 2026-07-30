@@ -5,7 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { InstallStatus, SkillKind } from "./types.ts";
+import type { SkillKind } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -30,13 +30,7 @@ export const CRUST_MANIFEST = "crust.json";
 export interface InstalledSkillManifest {
 	/** Installed version string */
 	readonly version: string;
-	/**
-	 * Origin of the installed bundle.
-	 *
-	 * Legacy `crust.json` files (written before the `kind` field existed) are
-	 * normalized to `"generated"` for backward compatibility. New installs
-	 * always emit `kind` explicitly.
-	 */
+	/** Origin of the installed bundle. */
 	readonly kind: SkillKind;
 }
 
@@ -46,14 +40,14 @@ export interface InstalledSkillManifest {
  * - `parse-error`: `crust.json` is present but is not valid JSON.
  * - `not-an-object`: top-level JSON value is not an object.
  * - `missing-version`: `version` field is absent or not a string.
- * - `unknown-kind`: `kind` is present but is neither `"bundle"` nor `"generated"` —
- *   typically a hand-edit typo or a forward-compatible value emitted by a
- *   newer Crust release.
+ * - `missing-kind`: `kind` field is absent.
+ * - `unknown-kind`: `kind` is neither `"bundle"` nor `"generated"`.
  */
 export type InstalledManifestMalformedReason =
 	| "parse-error"
 	| "not-an-object"
 	| "missing-version"
+	| "missing-kind"
 	| "unknown-kind";
 
 /**
@@ -79,12 +73,7 @@ export type InstalledManifestStatus =
  *
  * Unlike {@link readInstalledManifest} (which collapses every failure to
  * `null`), this preserves the failure mode so callers can differentiate a
- * genuinely absent manifest from one that exists but is malformed —
- * including the typo / forward-compatible `kind` case where the previous
- * collapse would have produced a misleading "no crust.json found" error.
- *
- * Legacy `crust.json` files (written before the `kind` field was added) lack it;
- * those are normalized to `"generated"` and reported as `status: "ok"`.
+ * genuinely absent manifest from one that exists but is malformed.
  */
 export async function inspectInstalledManifest(dir: string): Promise<InstalledManifestStatus> {
 	let raw: string;
@@ -114,9 +103,7 @@ export async function inspectInstalledManifest(dir: string): Promise<InstalledMa
 	const rawKind = record.kind;
 
 	if (rawKind === undefined) {
-		// Backward-compat: legacy crust.json files written before the `kind`
-		// field was added; treat them as generated.
-		return { status: "ok", manifest: { version, kind: "generated" } };
+		return { status: "malformed", reason: "missing-kind" };
 	}
 	if (rawKind === "bundle" || rawKind === "generated") {
 		return { status: "ok", manifest: { version, kind: rawKind } };
@@ -135,11 +122,9 @@ export async function inspectInstalledManifest(dir: string): Promise<InstalledMa
 /**
  * Reads the installed manifest from a skill directory's `crust.json`.
  *
- * Returns the version string and the bundle kind. If `crust.json` exists but
- * has no `kind` field (legacy installs from before the `kind` field), the kind is
- * defaulted to `"generated"` for backward compatibility.
+ * Returns the version string and the bundle kind.
  *
- * If `kind` is **present** but holds an unrecognized value (e.g. a hand-edit
+ * If `kind` holds an unrecognized value (e.g. a hand-edit
  * typo like `"bundel"`), the manifest is treated as malformed and `null` is
  * returned. This prevents accidental cross-kind installs from slipping past
  * the conflict guard via a typo. Callers that need to distinguish "absent"
@@ -151,47 +136,4 @@ export async function inspectInstalledManifest(dir: string): Promise<InstalledMa
 export async function readInstalledManifest(dir: string): Promise<InstalledSkillManifest | null> {
 	const result = await inspectInstalledManifest(dir);
 	return result.status === "ok" ? result.manifest : null;
-}
-
-/**
- * Reads the installed version from a skill directory's `crust.json`.
- *
- * Thin wrapper around {@link readInstalledManifest} retained for backward
- * compatibility with existing call sites that only need the version string.
- *
- * @param dir - Absolute path to the skill directory
- * @returns The version string if found, or `null` if the file is missing or malformed
- */
-export async function readInstalledVersion(dir: string): Promise<string | null> {
-	const manifest = await readInstalledManifest(dir);
-	return manifest?.version ?? null;
-}
-
-/** Result from {@link checkVersion} containing the status and installed version. */
-export interface VersionCheckResult {
-	/** Installation status */
-	status: InstallStatus;
-	/** Previously installed version, or `null` if not found */
-	installedVersion: string | null;
-}
-
-/**
- * Checks whether a skill directory needs installation or update.
- *
- * @param dir - Absolute path to the skill directory
- * @param newVersion - The version being installed
- * @returns The installation status and the currently installed version (if any)
- */
-export async function checkVersion(dir: string, newVersion: string): Promise<VersionCheckResult> {
-	const installed = await readInstalledVersion(dir);
-
-	if (installed === null) {
-		return { status: "installed", installedVersion: null };
-	}
-
-	if (installed !== newVersion) {
-		return { status: "updated", installedVersion: installed };
-	}
-
-	return { status: "up-to-date", installedVersion: installed };
 }

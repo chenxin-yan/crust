@@ -7,7 +7,7 @@
  * Uses the real .execute() pipeline from the Crust builder.
  */
 
-import type { Crust } from "../src/crust.ts";
+import type { Crust } from "../src/command/crust.ts";
 
 export interface RunResult {
 	stdout: string;

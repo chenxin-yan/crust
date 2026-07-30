@@ -2,20 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { chmod, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import {
-	generateSkill,
-	isValidSkillName,
-	resolveSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
 import type { AgentResult, UninstallResult } from "./types.ts";
-import { CRUST_MANIFEST, readInstalledVersion } from "./version.ts";
+import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper — builds a CommandNode for introspection tests
@@ -91,9 +88,9 @@ async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 
 /**
  * Overrides `process.env.PATH` for the duration of a callback. Also
- * normalizes `process.env.PATHEXT` to `".CMD"` on Windows so the probe in
- * `isCommandOnPath` looks for the same extension that
- * {@link makeFakeExecutable} writes (`name.cmd`), regardless of the host's
+ * normalizes `process.env.PATHEXT` to `".CMD"` on Windows so `Bun.which`
+ * looks for the same extension that {@link makeFakeExecutable} writes
+ * (`name.cmd`), regardless of the host's
  * `PATHEXT` value.
  *
  * Used to deterministically control what `detectInstalledAgents()` returns
@@ -119,15 +116,9 @@ async function withPath<T>(dirs: string[], fn: () => Promise<T>): Promise<T> {
 
 /**
  * Creates a fake executable at `dir/name` that `detectInstalledAgents()`
- * will discover via its non-executing PATH probe. The probe is
- * platform-specific (see `isCommandOnPath` in `agents.ts`):
- *
- * - POSIX: checks `dir/name` with `X_OK`, so we write a shebang script
- *   and `chmod 0o755`.
- * - Windows: checks `dir/name + ext` for each `PATHEXT` entry. Tests rely on
- *   {@link withPath} forcing `PATHEXT=".CMD"`, so this helper writes
- *   `dir/name.cmd`. `X_OK` collapses to `R_OK` on Windows, so no `chmod`
- *   is needed.
+ * will discover via `Bun.which`. On POSIX this writes an executable shebang
+ * script; on Windows it writes `dir/name.cmd` to match the `PATHEXT` set by
+ * {@link withPath}.
  */
 async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 	if (process.platform === "win32") {
@@ -144,86 +135,67 @@ async function makeFakeExecutable(dir: string, name: string): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Simple single-command CLI (leaf, runnable). */
-function simpleCommand(): CommandNode {
-	return makeCommand({
-		meta: { name: "my-cli", description: "A simple CLI tool" },
-		args: [{ name: "file", type: "string", required: true }] as ArgDef[],
-		flags: {
-			verbose: {
-				type: "boolean",
-				description: "Enable verbose output",
-				short: "v",
+function simpleCommand(): CommandSnapshot {
+	return snapshotCommand(
+		makeCommand({
+			meta: { name: "my-cli", description: "A simple CLI tool" },
+			args: [{ name: "file", type: "string", required: true }] as ArgDef[],
+			flags: {
+				verbose: {
+					type: "boolean",
+					description: "Enable verbose output",
+					short: "v",
+				},
 			},
-		},
-		run() {},
-	});
+			run() {},
+		}),
+	);
 }
 
 /** CLI with nested subcommands (git-like). */
-function nestedCommand(): CommandNode {
-	return makeCommand({
-		meta: { name: "git", description: "A distributed VCS" },
-		subCommands: {
-			remote: makeCommand({
-				meta: { name: "remote", description: "Manage remotes" },
-				subCommands: {
-					add: makeCommand({
-						meta: { name: "add", description: "Add a remote" },
-						args: [
-							{ name: "name", type: "string", required: true },
-							{ name: "url", type: "string", required: true },
-						] as ArgDef[],
-						run() {},
-					}),
-					remove: makeCommand({
-						meta: { name: "remove", description: "Remove a remote" },
-						args: [{ name: "name", type: "string", required: true }] as ArgDef[],
-						run() {},
-					}),
-				},
-			}),
-			commit: makeCommand({
-				meta: { name: "commit", description: "Record changes" },
-				flags: {
-					message: {
-						type: "string",
-						description: "Commit message",
-						short: "m",
-						required: true,
+function nestedCommand(): CommandSnapshot {
+	return snapshotCommand(
+		makeCommand({
+			meta: { name: "git", description: "A distributed VCS" },
+			subCommands: {
+				remote: makeCommand({
+					meta: { name: "remote", description: "Manage remotes" },
+					subCommands: {
+						add: makeCommand({
+							meta: { name: "add", description: "Add a remote" },
+							args: [
+								{ name: "name", type: "string", required: true },
+								{ name: "url", type: "string", required: true },
+							] as ArgDef[],
+							run() {},
+						}),
+						remove: makeCommand({
+							meta: { name: "remove", description: "Remove a remote" },
+							args: [{ name: "name", type: "string", required: true }] as ArgDef[],
+							run() {},
+						}),
 					},
-					amend: {
-						type: "boolean",
-						description: "Amend the last commit",
+				}),
+				commit: makeCommand({
+					meta: { name: "commit", description: "Record changes" },
+					flags: {
+						message: {
+							type: "string",
+							description: "Commit message",
+							short: "m",
+							required: true,
+						},
+						amend: {
+							type: "boolean",
+							description: "Amend the last commit",
+						},
 					},
-				},
-				run() {},
-			}),
-		},
-	});
+					run() {},
+				}),
+			},
+		}),
+	);
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// resolveSkillName
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveSkillName", () => {
-	it("returns a plain name unchanged", () => {
-		expect(resolveSkillName("my-cli")).toBe("my-cli");
-	});
-
-	it("preserves a name already starting with use-", () => {
-		expect(resolveSkillName("use-my-cli")).toBe("use-my-cli");
-	});
-
-	it("handles empty string", () => {
-		expect(resolveSkillName("")).toBe("");
-	});
-
-	// NOTE: resolveSkillName is an identity function — it passes through any
-	// string, but only names satisfying isValidSkillName are accepted by
-	// generateSkill. Invalid names (e.g. "@scope/my-cli") are intentionally
-	// not tested here to avoid implying they are supported.
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // isValidSkillName
@@ -422,7 +394,7 @@ describe("generateSkill", () => {
 			expect(files).toContain(CRUST_MANIFEST);
 		});
 
-		it("does not generate manifest.json (renamed to crust.json)", async () => {
+		it("uses crust.json as the metadata file", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
 					command: simpleCommand(),
@@ -440,7 +412,7 @@ describe("generateSkill", () => {
 			expect(agent.files).not.toContain("manifest.json");
 		});
 
-		it("does not generate README.md (removed in redesign)", async () => {
+		it("does not include README.md", async () => {
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
 					command: simpleCommand(),
@@ -1033,52 +1005,6 @@ describe("generateSkill", () => {
 			expect(manifest.kind).toBe("generated");
 		});
 
-		it("updates a legacy crust.json (no kind) cleanly", async () => {
-			// Pre-install with v1.0.0
-			await withCwd(tmpDir, () =>
-				generateSkill({
-					command: simpleCommand(),
-					meta: {
-						name: "my-cli",
-						description: "Test",
-						version: "1.0.0",
-					},
-					agents: ["claude-code"],
-					scope: "project",
-				}),
-			);
-
-			// Strip `kind` from canonical crust.json to simulate a pre-`kind`-field install
-			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
-			const legacyManifest = JSON.parse(await readText(join(canonicalDir, CRUST_MANIFEST)));
-			delete legacyManifest.kind;
-			await writeFile(
-				join(canonicalDir, CRUST_MANIFEST),
-				`${JSON.stringify(legacyManifest, null, "\t")}\n`,
-			);
-
-			// Re-install with v2.0.0 — must succeed and emit kind: 'generated'
-			const result = await withCwd(tmpDir, () =>
-				generateSkill({
-					command: simpleCommand(),
-					meta: {
-						name: "my-cli",
-						description: "Test",
-						version: "2.0.0",
-					},
-					agents: ["claude-code"],
-					scope: "project",
-				}),
-			);
-
-			const content = await readText(
-				join((result.agents[0] as AgentResult).outputDir, CRUST_MANIFEST),
-			);
-			const manifest = JSON.parse(content);
-			expect(manifest.version).toBe("2.0.0");
-			expect(manifest.kind).toBe("generated");
-		});
-
 		it("throws SkillConflictError with kindMismatch when existing kind is 'bundle'", async () => {
 			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
 			await mkdir(canonicalDir, { recursive: true });
@@ -1316,7 +1242,7 @@ describe("generateSkill", () => {
 
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
-					command: cmd,
+					command: snapshotCommand(cmd),
 					meta: {
 						name: "minimal",
 						description: "Bare minimum",
@@ -1356,7 +1282,7 @@ describe("generateSkill", () => {
 
 			const result = await withCwd(tmpDir, () =>
 				generateSkill({
-					command: cmd,
+					command: snapshotCommand(cmd),
 					meta: {
 						name: "deep-tool",
 						description: "Test",
@@ -1510,11 +1436,37 @@ describe("generateSkill", () => {
 			}
 		});
 
+		it("throws SkillConflictError when canonical crust.json has no kind", async () => {
+			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
+			await mkdir(canonicalDir, { recursive: true });
+			await writeFile(
+				join(canonicalDir, CRUST_MANIFEST),
+				JSON.stringify({ name: "my-cli", description: "Test", version: "0.9.0" }),
+			);
+
+			try {
+				await withCwd(tmpDir, () =>
+					generateSkill({
+						command: simpleCommand(),
+						meta: {
+							name: "my-cli",
+							description: "Test",
+							version: "1.0.0",
+						},
+						agents: ["claude-code"],
+						scope: "project",
+					}),
+				);
+				expect(true).toBe(false);
+			} catch (err) {
+				expect(err).toBeInstanceOf(SkillConflictError);
+				const conflict = err as SkillConflictError;
+				expect(conflict.details.manifestMalformed).toEqual({ reason: "missing-kind" });
+				expect(conflict.message).toContain('no "kind" field');
+			}
+		});
+
 		it("throws SkillConflictError with manifestMalformed when canonical crust.json has unrecognized kind", async () => {
-			// Regression: previously, crust.json with an unknown `kind` (typo or
-			// forward-compatible value) collapsed to the same "no crust.json
-			// found" error as a missing manifest, misleading users into deleting
-			// a Crust-owned directory.
 			const canonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
 			await mkdir(canonicalDir, { recursive: true });
 			await writeFile(join(canonicalDir, "SKILL.md"), "# Crust-owned");
@@ -1692,80 +1644,6 @@ describe("generateSkill", () => {
 			expect((result.agents[0] as AgentResult).status).toBe("installed");
 			expect((result.agents[0] as AgentResult).files.length).toBeGreaterThan(0);
 		});
-
-		it("ignores a legacy manual directory and installs to the new path", async () => {
-			const legacySkillDir = join(tmpDir, ".agents", "skills", "use-my-cli");
-			await mkdir(legacySkillDir, { recursive: true });
-			await writeFile(join(legacySkillDir, "SKILL.md"), "# Manual legacy skill");
-
-			const result = await withCwd(tmpDir, () =>
-				generateSkill({
-					command: simpleCommand(),
-					meta: {
-						name: "my-cli",
-						description: "Test",
-						version: "1.0.0",
-					},
-					agents: ["opencode"],
-					scope: "project",
-				}),
-			);
-
-			expect((result.agents[0] as AgentResult).outputDir).toBe(
-				join(tmpDir, ".agents", "skills", "my-cli"),
-			);
-			expect(await readText(join(legacySkillDir, "SKILL.md"))).toBe("# Manual legacy skill");
-		});
-
-		it("migrates a legacy Crust install to the new path", async () => {
-			const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
-			const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
-			await mkdir(legacyCanonicalDir, { recursive: true });
-			await mkdir(legacySkillDir, { recursive: true });
-			await writeFile(
-				join(legacyCanonicalDir, CRUST_MANIFEST),
-				`${JSON.stringify(
-					{ name: "use-my-cli", description: "Test", version: "1.0.0" },
-					null,
-					"\t",
-				)}\n`,
-			);
-			await writeFile(
-				join(legacyCanonicalDir, "SKILL.md"),
-				'---\nname: use-my-cli\ndescription: Test\nmetadata:\n  version: "1.0.0"\n---\n',
-			);
-			await writeFile(
-				join(legacySkillDir, CRUST_MANIFEST),
-				`${JSON.stringify(
-					{ name: "use-my-cli", description: "Test", version: "1.0.0" },
-					null,
-					"\t",
-				)}\n`,
-			);
-
-			const result = await withCwd(tmpDir, () =>
-				generateSkill({
-					command: simpleCommand(),
-					meta: {
-						name: "my-cli",
-						description: "Test",
-						version: "1.0.0",
-					},
-					agents: ["claude-code"],
-					scope: "project",
-					installMode: "copy",
-				}),
-			);
-
-			const newSkillDir = join(tmpDir, ".claude", "skills", "my-cli");
-			const newCanonicalDir = join(tmpDir, ".crust", "skills", "my-cli");
-
-			expect((result.agents[0] as AgentResult).status).toBe("updated");
-			expect(await readInstalledVersion(newSkillDir)).toBe("1.0.0");
-			expect(await readInstalledVersion(newCanonicalDir)).toBe("1.0.0");
-			await expect(stat(legacySkillDir)).rejects.toThrow();
-			await expect(stat(legacyCanonicalDir)).rejects.toThrow();
-		});
 	});
 });
 
@@ -1817,33 +1695,6 @@ describe("uninstallSkill", () => {
 
 		const agentResult = result.agents[0] as UninstallResult["agents"][number];
 		expect(agentResult.status).toBe("not-found");
-	});
-
-	it("removes a legacy Crust-managed install", async () => {
-		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
-		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
-		await mkdir(legacyCanonicalDir, { recursive: true });
-		await mkdir(legacySkillDir, { recursive: true });
-		await writeFile(
-			join(legacyCanonicalDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
-		);
-		await writeFile(
-			join(legacySkillDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
-		);
-
-		const result = await withCwd(tmpDir, () =>
-			uninstallSkill({
-				name: "my-cli",
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-
-		expect(result.agents[0]?.status).toBe("removed");
-		await expect(stat(legacySkillDir)).rejects.toThrow();
-		await expect(stat(legacyCanonicalDir)).rejects.toThrow();
 	});
 });
 
@@ -1911,50 +1762,6 @@ describe("skillStatus", () => {
 		const opencode = status.agents.find((a) => a.agent === "opencode");
 		expect(claude?.installed).toBe(true);
 		expect(opencode?.installed).toBe(false);
-	});
-
-	it("reports a legacy Crust install using the legacy output path", async () => {
-		const legacyCanonicalDir = join(tmpDir, ".crust", "skills", "use-my-cli");
-		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
-		await mkdir(legacyCanonicalDir, { recursive: true });
-		await mkdir(legacySkillDir, { recursive: true });
-		await writeFile(
-			join(legacyCanonicalDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
-		);
-		await writeFile(
-			join(legacySkillDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "use-my-cli", version: "1.0.0" }, null, "\t") + "\n",
-		);
-
-		const status = await withCwd(tmpDir, () =>
-			skillStatus({
-				name: "my-cli",
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-
-		expect(status.agents[0]?.installed).toBe(true);
-		expect(status.agents[0]?.version).toBe("1.0.0");
-		expect(status.agents[0]?.outputDir).toBe(legacySkillDir);
-	});
-
-	it("does not treat a legacy manual directory as installed", async () => {
-		const legacySkillDir = join(tmpDir, ".claude", "skills", "use-my-cli");
-		await mkdir(legacySkillDir, { recursive: true });
-		await writeFile(join(legacySkillDir, "SKILL.md"), "# Manual legacy skill");
-
-		const status = await withCwd(tmpDir, () =>
-			skillStatus({
-				name: "my-cli",
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-
-		expect(status.agents[0]?.installed).toBe(false);
-		expect(status.agents[0]?.outputDir).toBe(join(tmpDir, ".claude", "skills", "my-cli"));
 	});
 });
 

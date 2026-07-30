@@ -1,245 +1,57 @@
 ---
-title: Manual Installation
-description: Install Crust manually with the core framework, plugins, and CLI tooling.
-icon: Download
+title: Installation
+description: Install Crust or scaffold a new project.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-import { Tab, Tabs } from "fumadocs-ui/components/tabs";
-
-<Callout>
-  If you're starting a new project, the easiest way is `bun create crust my-cli`. See the [Quick
-  Start](/docs/quick-start) guide.
-</Callout>
-
-## Install
-
-Choose the dependency layout that matches your distribution strategy:
-
-<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
-  <Tab value="Standalone binaries (recommended)">
+## Scaffold a project
 
 ```sh
-# Core framework and plugins are build-time inputs
-bun add -d @crustjs/core @crustjs/plugins
-
-# CLI tooling (crust build)
-bun add -d @crustjs/crust @types/bun typescript
+bun create crust my-cli
+cd my-cli
+bun install
 ```
 
-  </Tab>
-  <Tab value="Bun runtime package">
+`create-crust` generates one minimal TypeScript template. Choose a distribution mode when prompted: a compiled binary or a Bun runtime package. To organize a larger application, follow [Split Commands Across Files](/docs/guide/split-files).
+
+## Install manually
 
 ```sh
-# Core framework and plugins are runtime dependencies
-bun add @crustjs/core @crustjs/plugins
-
-# CLI tooling + types are dev dependencies
-bun add -d @crustjs/crust @types/bun typescript
+bun add @crustjs/core @crustjs/extensions
+bun add -d @crustjs/crust
 ```
-
-  </Tab>
-</Tabs>
 
 ```ts title="src/cli.ts"
 import { Crust } from "@crustjs/core";
-import { helpPlugin, versionPlugin } from "@crustjs/plugins";
+import { help } from "@crustjs/extensions";
+
+const app = new Crust("my-cli").extend(help()).handle(({ stdout }) => stdout("Hello"));
+
+await app.execute();
 ```
 
-<Callout type="info">
-  Standalone binaries are recommended for most CLIs because users can run them
-  without Bun or project dependencies installed.
-
-If you distribute standalone binaries (`crust build` + `dist/`), keeping all
-Crust packages in `devDependencies` is valid. If you distribute as a runtime
-package, keep `@crustjs/core` and `@crustjs/plugins` in `dependencies`.
-
-</Callout>
-
-## CLI Patterns
-
-You can structure your CLI as either a single file (minimal) or a modular file-split app using `.sub()`.
-
-<Tabs items={["Minimal", "Modular (.sub())"]}>
-  <Tab value="Minimal">
-
-Use this when your CLI is small and you want everything in one place.
-
-```ts title="src/cli.ts"
-#!/usr/bin/env bun
-
-import { Crust } from "@crustjs/core";
-
-const main = new Crust("my-cli").meta({ description: "My CLI tool" }).run(() => {
-  console.log("Hello from my CLI!");
-});
-
-await main.execute();
-```
-
-```sh
-bun run src/cli.ts
-```
-
-  </Tab>
-  <Tab value="Modular (.sub())">
-
-Use this when your CLI grows and you want commands in separate files.
-
-```ts title="src/app.ts"
-import { Crust } from "@crustjs/core";
-
-export const app = new Crust("my-cli").meta({ description: "My CLI tool" }).flags({
-  greet: {
-    type: "string",
-    description: "Greeting to use",
-    default: "Hello",
-    short: "g",
-    inherit: true,
-  },
-});
-```
-
-```ts title="src/commands/greet.ts"
-import { app } from "../app.ts";
-
-export const greetCmd = app
-  .sub("greet")
-  .meta({ description: "Greet someone" })
-  .args([
-    {
-      name: "name",
-      type: "string",
-      description: "Your name",
-      default: "world",
-    },
-  ])
-  .run(({ args, flags }) => {
-    console.log(`${flags.greet}, ${args.name}!`);
-  });
-```
-
-```ts title="src/cli.ts"
-#!/usr/bin/env bun
-
-import { helpPlugin, versionPlugin } from "@crustjs/plugins";
-import pkg from "../package.json";
-import { app } from "./app.ts";
-import { greetCmd } from "./commands/greet.ts";
-
-await app.use(versionPlugin(pkg.version)).use(helpPlugin()).command(greetCmd).execute();
-```
-
-```sh
-bun run src/cli.ts greet world
-```
-
-  </Tab>
-</Tabs>
-
-## Adding to package.json
-
-For a distributable CLI, configure your `package.json` based on the selected mode:
-
-<Tabs items={["Standalone binaries (recommended)", "Bun runtime package"]}>
-  <Tab value="Standalone binaries (recommended)">
-
-**Raw binaries** (default):
+Add scripts:
 
 ```json title="package.json"
 {
-  "name": "my-cli",
-  "version": "1.0.0",
-  "type": "module",
-  "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli"
-  },
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "crust build",
-    "prepack": "bun run build",
-    "start": "./dist/cli"
-  },
-  "devDependencies": {
-    "@crustjs/core": "latest",
-    "@crustjs/plugins": "latest",
-    "@crustjs/crust": "latest",
-    "@types/bun": "latest",
-    "typescript": "^5"
+    "build": "crust build"
   }
 }
 ```
 
-**Per-OS npm packages** (optional):
+## Packages
 
-To publish via npm with automatic platform detection, add the `package` and `publish` scripts:
+| Package               | Purpose                                                                      |
+| --------------------- | ---------------------------------------------------------------------------- |
+| `@crustjs/core`       | Commands, Contexts, Extensions, schemas, errors, and Command Snapshots       |
+| `@crustjs/extensions` | Official help, version, completion, suggestion, color, and update Extensions |
+| `@crustjs/crust`      | Build, package, and publish CLI                                              |
+| `@crustjs/prompts`    | Interactive prompts                                                          |
+| `@crustjs/progress`   | Spinners and progress output                                                 |
+| `@crustjs/style`      | Terminal styling                                                             |
+| `@crustjs/store`      | Persistent storage                                                           |
+| `@crustjs/man`        | Manual-page generation                                                       |
+| `@crustjs/skills`     | Agent skill generation                                                       |
 
-```json title="package.json"
-{
-  "name": "my-cli",
-  "version": "1.0.0",
-  "type": "module",
-  "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli"
-  },
-  "scripts": {
-    "dev": "bun run src/cli.ts",
-    "build": "crust build",
-    "package": "crust build --package",
-    "publish": "crust publish --stage-dir dist/npm",
-    "prepack": "bun run build",
-    "start": "./dist/cli"
-  },
-  "devDependencies": {
-    "@crustjs/core": "latest",
-    "@crustjs/plugins": "latest",
-    "@crustjs/crust": "latest",
-    "@types/bun": "latest",
-    "typescript": "^5"
-  }
-}
-```
-
-The `package` script creates platform-specific packages in `dist/npm/`. The `publish` script publishes them in manifest order. See [Per-OS Distribution](/docs/guide/build#per-os-distribution-with---package) for details.
-
-If you need public build-time constants, `crust build` can read `PUBLIC_*` values from Bun's cwd env by default, or you can pass `--env-file` for explicit env files. See [Environment Variables](/docs/guide/environment) for the full runtime-vs-build-time model.
-
-  </Tab>
-  <Tab value="Bun runtime package">
-
-```json title="package.json"
-{
-  "name": "my-cli",
-  "version": "1.0.0",
-  "type": "module",
-  "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli.js"
-  },
-  "scripts": {
-    "dev": "bun run src/cli.ts",
-    "build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
-    "prepack": "bun run build",
-    "start": "bun run dist/cli.js"
-  },
-  "dependencies": {
-    "@crustjs/core": "latest",
-    "@crustjs/plugins": "latest"
-  },
-  "devDependencies": {
-    "@crustjs/crust": "latest",
-    "@types/bun": "latest",
-    "typescript": "^5"
-  }
-}
-```
-
-  </Tab>
-</Tabs>
-
-## Requirements
-
-- **Bun** — Crust is built for the Bun runtime. Install from [bun.sh](https://bun.sh).
-- **TypeScript** — Recommended for full type inference. Crust works with plain JavaScript, but you'll miss out on typed args and flags.
+Bun is the supported runtime and package manager. All packages are ESM and TypeScript-first.

@@ -113,10 +113,7 @@ export function setTheme(theme?: PartialPromptTheme): void {
  * // theme.message === bold (default)
  * ```
  */
-export function getTheme(): PromptTheme {
-	if (!globalOverrides) return defaultTheme;
-	return { ...defaultTheme, ...globalOverrides };
-}
+export const getTheme = (): PromptTheme => resolveTheme();
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme Resolution (internal)

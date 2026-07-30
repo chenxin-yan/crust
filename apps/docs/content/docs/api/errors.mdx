@@ -1,120 +1,122 @@
 ---
-title: CrustError
-description: Typed error class with error codes and structured details.
+title: "Errors"
+description: CrustError codes, structured details, and error-boundary behavior.
 ---
 
-`CrustError` is the custom error class used by all Crust framework-level errors. It extends `Error` with a typed `code` for programmatic handling.
+```ts
+import { CrustError, type CrustErrorCode } from "@crustjs/core";
+```
 
-## Properties
+## `CrustError`
 
-| Property  | Type                   | Description                               |
-| --------- | ---------------------- | ----------------------------------------- |
-| `code`    | `CrustErrorCode`       | Machine-readable error code               |
-| `message` | `string`               | Human-readable error message              |
-| `details` | `CrustErrorDetails<C>` | Structured payload (typed per error code) |
-| `cause`   | `unknown`              | Optional chained original error           |
-| `name`    | `string`               | Always `"CrustError"`                     |
-
-## Error Codes
-
-| Code                | When Thrown                                                                                         | Details Type                          |
-| ------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `DEFINITION`        | Invalid command configuration (empty name, alias collision, invalid `no-` prefixed flag name/alias) | `undefined`                           |
-| `VALIDATION`        | Missing required argument or flag                                                                   | `ValidationErrorDetails \| undefined` |
-| `PARSE`             | Argv parsing failure (unknown flag, type coercion)                                                  | `undefined`                           |
-| `EXECUTION`         | Runtime command/middleware failure                                                                  | `undefined`                           |
-| `COMMAND_NOT_FOUND` | Unknown subcommand                                                                                  | `CommandNotFoundErrorDetails`         |
-
-## Methods
-
-### `.is(code)`
-
-Type-narrowing method that checks the error code:
+Framework definition, routing, parsing, and validation failures use `CrustError`.
 
 ```ts
-if (error instanceof CrustError) {
-  if (error.is("COMMAND_NOT_FOUND")) {
-    // error.details is now CommandNotFoundErrorDetails
-    console.log(error.details.input);
-    console.log(error.details.available);
-  }
+class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
+  readonly code: C;
+  readonly details: CrustErrorDetails<C>;
+  cause?: unknown;
 
-  if (error.is("VALIDATION")) {
-    // error.details is ValidationErrorDetails | undefined
-    console.log(error.message);
-    if (error.details) {
-      console.log(error.details.issues);
+  constructor(
+    code: C,
+    message: string,
+    ...details: undefined extends CrustErrorDetails<C>
+      ? [] | [CrustErrorDetails<C>]
+      : [CrustErrorDetails<C>]
+  );
+
+  is<T extends CrustErrorCode>(code: T): this is CrustError<T>;
+  withCause(cause: unknown): this;
+  toJSON(): { code: C; message: string; details: CrustErrorDetails<C> };
+
+  static commandNotFound(
+    message: string,
+    details: CommandNotFoundErrorDetails,
+  ): CrustError<"COMMAND_NOT_FOUND">;
+}
+```
+
+Use `code` or `.is(code)` instead of matching messages. The constructor's details argument is optional for codes whose entry in `CrustErrorDetailsMap` includes `undefined`; `COMMAND_NOT_FOUND` requires its details payload.
+
+```ts
+try {
+  await app.run(argv);
+} catch (error) {
+  if (error instanceof CrustError && error.is("VALIDATION")) {
+    for (const issue of error.details?.issues ?? []) {
+      console.error(`${issue.path}: ${issue.message}`);
     }
   }
 }
 ```
 
-### `.withCause(cause)`
-
-Chains an original error for debugging. Returns `this` for fluent API:
+## Codes
 
 ```ts
-throw new CrustError("EXECUTION", "Operation failed").withCause(originalError);
+type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND";
 ```
 
-## Creating Errors
+| Code                | Meaning                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `DEFINITION`        | Invalid application definition: empty names, collisions, invalid combinations, or other setup errors |
+| `PARSE`             | Argv syntax or built-in value parsing failed                                                         |
+| `VALIDATION`        | Required-value or Standard Schema validation failed                                                  |
+| `COMMAND_NOT_FOUND` | A token did not match a child command name or alias                                                  |
 
-### Framework Errors
+## Details
+
+### `CrustErrorDetailsMap`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="CrustErrorDetailsMap" />
+
+### `DefinitionErrorDetails`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
+
+### `ParseErrorDetails`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
+
+### `ValidationErrorDetails`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="ValidationErrorDetails" />
+
+Standard Schema failures are aggregated into one `VALIDATION` error. Paths are normalized under `args.<name>` or `flags.<name>`.
+
+### `CommandNotFoundErrorDetails`
+
+<auto-type-table
+  path="../../../../../packages/core/src/errors.ts"
+  name="CommandNotFoundErrorDetails"
+/>
+
+`parentCommand` is a readonly, serializable snapshot of the command whose child could not be resolved.
+
+## Propagation boundaries
+
+`.run(argv, io)` throws the original error without rendering it or changing process status. Context and Command Handler failures are not wrapped in `CrustError`.
 
 ```ts
-import { CrustError } from "@crustjs/core";
-
-throw new CrustError("VALIDATION", `Invalid value for --port: "${value}"`);
-```
-
-### With Details
-
-```ts
-throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${name}".`, {
-  input: name,
-  available: ["build", "dev"],
-  commandPath: ["my-cli"],
-  parentCommand: rootCmd,
+const failure = new Error("database unavailable");
+const app = new Crust("my-cli").handle(() => {
+  throw failure;
 });
+
+await app.run([]); // throws the same `failure` object
 ```
 
-### With Cause Chain
+`.execute()` renders a failure once, sets `process.exitCode = 1`, and resolves. Extension `handleError` hooks can replace or delegate presentation but cannot turn the invocation into success.
+
+A prompt cancellation is a standard `DOMException` named `AbortError`. Programmatic `.run()` throws it; terminal `.execute()` handles it silently and sets exit code `130`.
 
 ```ts
 try {
-  await riskyOperation();
-} catch (err) {
-  throw new CrustError("EXECUTION", "Operation failed").withCause(err);
-}
-```
-
-## Catching Errors
-
-`.execute()` catches all errors internally, prints them to stderr, and sets `process.exitCode = 1`. For programmatic error handling (e.g., in tests), you can catch errors from lower-level functions like `parseArgs` and `resolveCommand`:
-
-```ts
-import { CrustError, parseArgs, resolveCommand } from "@crustjs/core";
-
-try {
-  const route = resolveCommand(app._node, argv);
-  const result = parseArgs(route.command, route.argv);
+  await app.run(argv);
 } catch (error) {
-  if (!(error instanceof CrustError)) throw error;
-
-  switch (error.code) {
-    case "VALIDATION":
-      console.error(error.message);
-      break;
-    case "PARSE":
-      console.error(error.message);
-      break;
-    case "COMMAND_NOT_FOUND":
-      console.error(`Unknown: ${error.details.input}`);
-      break;
-    default:
-      console.error(`[${error.code}] ${error.message}`);
+  if (error instanceof Error && error.name === "AbortError") {
+    // cancellation
   }
 }
 ```
 
-In plugin middleware, you can also catch and handle errors within the middleware chain. See [Plugins](/docs/guide/plugins) for details.
+`toJSON()` returns `code`, `message`, and `details`. It intentionally omits `cause`.

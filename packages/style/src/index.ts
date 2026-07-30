@@ -4,50 +4,6 @@
 
 // ANSI codes
 export type { AnsiPair } from "./ansiCodes.ts";
-export {
-	// Background colors
-	bgBlack as bgBlackCode,
-	bgBlue as bgBlueCode,
-	bgBrightBlack as bgBrightBlackCode,
-	bgBrightBlue as bgBrightBlueCode,
-	bgBrightCyan as bgBrightCyanCode,
-	bgBrightGreen as bgBrightGreenCode,
-	bgBrightMagenta as bgBrightMagentaCode,
-	bgBrightRed as bgBrightRedCode,
-	bgBrightWhite as bgBrightWhiteCode,
-	bgBrightYellow as bgBrightYellowCode,
-	bgCyan as bgCyanCode,
-	bgGreen as bgGreenCode,
-	bgMagenta as bgMagentaCode,
-	bgRed as bgRedCode,
-	bgWhite as bgWhiteCode,
-	bgYellow as bgYellowCode,
-	// Foreground colors
-	black as blackCode,
-	blue as blueCode,
-	bold as boldCode,
-	brightBlue as brightBlueCode,
-	brightCyan as brightCyanCode,
-	brightGreen as brightGreenCode,
-	brightMagenta as brightMagentaCode,
-	brightRed as brightRedCode,
-	brightWhite as brightWhiteCode,
-	brightYellow as brightYellowCode,
-	cyan as cyanCode,
-	dim as dimCode,
-	gray as grayCode,
-	green as greenCode,
-	hidden as hiddenCode,
-	inverse as inverseCode,
-	italic as italicCode,
-	magenta as magentaCode,
-	red as redCode,
-	// Modifiers
-	strikethrough as strikethroughCode,
-	underline as underlineCode,
-	white as whiteCode,
-	yellow as yellowCode,
-} from "./ansiCodes.ts";
 // Block helpers
 export type {
 	OrderedListOptions,
@@ -62,9 +18,6 @@ export { resolveColorDepth } from "./capability.ts";
 // Style primitives — Dynamic colors (depth-aware) powered by `Bun.color()`
 export { bgCode, fgCode } from "./color.ts";
 export { createStyle, getGlobalColorMode, setGlobalColorMode, style } from "./createStyle.ts";
-// Deprecated truecolor pair factories + hex parser — superseded by
-// `fgCode` / `bgCode`. Will be removed in v1.0.0.
-export { bgHexCode, bgRgbCode, hexCode, parseHex, rgbCode } from "./dynamicColors.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
 export { linkCode } from "./hyperlinks.ts";
 export type { NamedColor } from "./namedColors.ts";
@@ -83,12 +36,8 @@ export {
 	bgBrightYellow,
 	bgCyan,
 	bgGreen,
-	// Deprecated direct helpers — superseded by `fg` / `bg`. Will be removed
-	// in v1.0.0.
-	bgHex,
 	bgMagenta,
 	bgRed,
-	bgRgb,
 	bgWhite,
 	bgYellow,
 	// Foreground
@@ -108,14 +57,12 @@ export {
 	fg,
 	gray,
 	green,
-	hex,
 	hidden,
 	inverse,
 	italic,
 	link,
 	magenta,
 	red,
-	rgb,
 	strikethrough,
 	underline,
 	white,
@@ -147,5 +94,4 @@ export type {
 	StyleFn,
 	StyleInstance,
 	StyleOptions,
-	TrueColorOverrides,
 } from "./types.ts";

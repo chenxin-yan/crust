@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 
 import { CrustStoreError } from "./errors.ts";
 
@@ -109,10 +109,7 @@ function validateDirPath(dirPath: string): void {
 		});
 	}
 
-	// Check for absolute path — Unix starts with `/`, Windows with drive letter or UNC
-	const isAbsolute = dirPath.startsWith("/") || /^[A-Za-z]:[/\\]/.test(dirPath);
-
-	if (!isAbsolute) {
+	if (!win32.isAbsolute(dirPath)) {
 		throw new CrustStoreError("PATH", "dirPath must be an absolute path", {
 			path: dirPath,
 		});
@@ -147,6 +144,18 @@ function resolveUnixDir(
 	const base =
 		xdgValue && xdgValue.trim().length > 0 ? xdgValue : join(env.homedir, ...fallbackSegments);
 	return join(base, appName);
+}
+
+function resolveWin32Dir(
+	env: PlatformEnv,
+	envVar: string,
+	fallbackSegments: string[],
+	...suffix: string[]
+): string {
+	const envValue = env.env[envVar];
+	const base =
+		envValue && envValue.trim().length > 0 ? envValue : join(env.homedir, ...fallbackSegments);
+	return join(base, ...suffix);
 }
 
 /**
@@ -196,14 +205,8 @@ export function configDir(appName: string, env?: PlatformEnv): string {
 		case "darwin":
 			return resolveUnixDir(resolvedEnv, "XDG_CONFIG_HOME", [".config"], appName);
 
-		case "win32": {
-			const appData = resolvedEnv.env.APPDATA;
-			const base =
-				appData && appData.trim().length > 0
-					? appData
-					: join(resolvedEnv.homedir, "AppData", "Roaming");
-			return join(base, appName);
-		}
+		case "win32":
+			return resolveWin32Dir(resolvedEnv, "APPDATA", ["AppData", "Roaming"], appName);
 
 		default:
 			throwUnsupportedPlatform(resolvedEnv.platform);
@@ -248,14 +251,8 @@ export function dataDir(appName: string, env?: PlatformEnv): string {
 		case "darwin":
 			return resolveUnixDir(resolvedEnv, "XDG_DATA_HOME", [".local", "share"], appName);
 
-		case "win32": {
-			const localAppData = resolvedEnv.env.LOCALAPPDATA;
-			const base =
-				localAppData && localAppData.trim().length > 0
-					? localAppData
-					: join(resolvedEnv.homedir, "AppData", "Local");
-			return join(base, appName, "Data");
-		}
+		case "win32":
+			return resolveWin32Dir(resolvedEnv, "LOCALAPPDATA", ["AppData", "Local"], appName, "Data");
 
 		default:
 			throwUnsupportedPlatform(resolvedEnv.platform);
@@ -300,14 +297,8 @@ export function stateDir(appName: string, env?: PlatformEnv): string {
 		case "darwin":
 			return resolveUnixDir(resolvedEnv, "XDG_STATE_HOME", [".local", "state"], appName);
 
-		case "win32": {
-			const localAppData = resolvedEnv.env.LOCALAPPDATA;
-			const base =
-				localAppData && localAppData.trim().length > 0
-					? localAppData
-					: join(resolvedEnv.homedir, "AppData", "Local");
-			return join(base, appName, "State");
-		}
+		case "win32":
+			return resolveWin32Dir(resolvedEnv, "LOCALAPPDATA", ["AppData", "Local"], appName, "State");
 
 		default:
 			throwUnsupportedPlatform(resolvedEnv.platform);
@@ -352,14 +343,8 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
 		case "darwin":
 			return resolveUnixDir(resolvedEnv, "XDG_CACHE_HOME", [".cache"], appName);
 
-		case "win32": {
-			const localAppData = resolvedEnv.env.LOCALAPPDATA;
-			const base =
-				localAppData && localAppData.trim().length > 0
-					? localAppData
-					: join(resolvedEnv.homedir, "AppData", "Local");
-			return join(base, appName, "Cache");
-		}
+		case "win32":
+			return resolveWin32Dir(resolvedEnv, "LOCALAPPDATA", ["AppData", "Local"], appName, "Cache");
 
 		default:
 			throwUnsupportedPlatform(resolvedEnv.platform);

@@ -8,16 +8,15 @@ import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_DOWN_INDICATOR,
-	SCROLL_UP_INDICATOR,
+	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
-	formatHeader,
 	formatSubmitted,
+	moveCursor,
 	normalizeChoices,
 } from "../core/utils.ts";
 
@@ -57,7 +56,11 @@ export interface SelectOptions<T> {
 	readonly default?: T;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: T;
-	/** Maximum number of visible choices before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible choices before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
@@ -100,26 +103,18 @@ function createHandleKey<T>(
 
 		// Up arrow or k — move cursor up with wrapping
 		if (key.name === "up" || key.name === "k") {
-			const newCursor = state.cursor <= 0 ? totalItems - 1 : state.cursor - 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
-			return { ...state, cursor: newCursor, scrollOffset: newScrollOffset };
+			return {
+				...state,
+				...moveCursor(state.cursor, totalItems, -1, state.scrollOffset, maxVisible),
+			};
 		}
 
 		// Down arrow or j — move cursor down with wrapping
 		if (key.name === "down" || key.name === "j") {
-			const newCursor = state.cursor >= totalItems - 1 ? 0 : state.cursor + 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
-			return { ...state, cursor: newCursor, scrollOffset: newScrollOffset };
+			return {
+				...state,
+				...moveCursor(state.cursor, totalItems, 1, state.scrollOffset, maxVisible),
+			};
 		}
 
 		return state;
@@ -141,12 +136,12 @@ function renderSelect<T>(
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = [formatHeader(prefix, msg)];
+	const lines: string[] = [`${prefix} ${msg}`];
 
 	// Show scroll-up indicator if items are hidden above
 	const hasScrollUp = state.scrollOffset > 0;
 	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_UP_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	// Render visible choices
@@ -168,7 +163,7 @@ function renderSelect<T>(
 	// Show scroll-down indicator if items are hidden below
 	const hasScrollDown = state.scrollOffset + visibleCount < totalItems;
 	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_DOWN_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	return lines.join("\n");

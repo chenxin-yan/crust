@@ -1,17 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import type {
-	ArgDef,
-	ArgsDef,
-	CommandMeta,
-	CommandRoute,
-	FlagDef,
-	FlagsDef,
-	InferArgs,
-	ParseResult,
-} from "../src/index";
-import { Crust, parseArgs, resolveCommand } from "../src/index";
-import type { CrustPlugin } from "../src/plugins";
+import { resolveCommand, type CommandRoute } from "../src/command/router";
+import type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../src/index";
+import { Crust, extension } from "../src/index";
+import { parseArgs } from "../src/parsing/parser";
+import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -23,7 +16,7 @@ const serveCmd = new Crust("serve")
 	.flags({
 		port: { type: "number", default: 3000, short: "p" },
 	} as const)
-	.run(({ args, flags }) => {
+	.handle(({ args, flags }) => {
 		console.log(`serve ${args.dir} on ${flags.port}`);
 	});
 
@@ -33,7 +26,7 @@ const rootCmd = new Crust("myapp")
 		help: { type: "boolean", short: "h" },
 	} as const)
 	.command("serve", () => serveCmd)
-	.run(({ flags }) => {
+	.handle(({ flags }) => {
 		if (flags.help) {
 			console.log("help");
 		}
@@ -68,7 +61,7 @@ describe("integration: core APIs", () => {
 	});
 
 	it("execute() catches errors and sets exit code", async () => {
-		const failCmd = new Crust("fail").run(() => {
+		const failCmd = new Crust("fail").handle(() => {
 			throw new Error("boom");
 		});
 
@@ -130,7 +123,7 @@ describe("integration: inherited boolean flag → subcommand receives it", () =>
 				verbose: { type: "boolean", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
 			);
@@ -146,7 +139,7 @@ describe("integration: inherited boolean flag → subcommand receives it", () =>
 				verbose: { type: "boolean", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
 			);
@@ -168,7 +161,7 @@ describe("integration: inherited flag overridden by subcommand local flag", () =
 				output: { type: "string", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "number", default: 42 } }).run((ctx) => {
+				cmd.flags({ output: { type: "number", default: 42 } }).handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 					console.log(`type=${typeof ctx.flags.output}`);
 				}),
@@ -186,7 +179,7 @@ describe("integration: inherited flag overridden by subcommand local flag", () =
 				output: { type: "string", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "number" } }).run((ctx) => {
+				cmd.flags({ output: { type: "number" } }).handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 				}),
 			);
@@ -210,7 +203,7 @@ describe("integration: deeply nested subcommand (3 levels) inherits flags", () =
 			.command("level1", (cmd) =>
 				cmd.flags({ format: { type: "string", inherit: true } }).command("level2", (cmd2) =>
 					cmd2.command("level3", (cmd3) =>
-						cmd3.run((ctx) => {
+						cmd3.handle((ctx) => {
 							console.log(`verbose=${ctx.flags.verbose}`);
 							console.log(`format=${ctx.flags.format}`);
 						}),
@@ -245,7 +238,7 @@ describe("integration: deeply nested subcommand (3 levels) inherits flags", () =
 					})
 					.command("level2", (cmd2) =>
 						cmd2.command("level3", (cmd3) =>
-							cmd3.run((ctx) => {
+							cmd3.handle((ctx) => {
 								console.log(`verbose=${ctx.flags.verbose}`);
 								console.log(`l1Inherit=${ctx.flags.l1Inherit}`);
 							}),
@@ -280,7 +273,7 @@ describe("integration: non-inherit flag not visible to subcommand", () => {
 				rootOnly: { type: "string" },
 			})
 			.command("sub", (cmd) =>
-				cmd.run(() => {
+				cmd.handle(() => {
 					console.log("should not reach here");
 				}),
 			);
@@ -302,7 +295,7 @@ describe("integration: non-inherit flag not visible to subcommand", () => {
 						l1Shared: { type: "string", inherit: true },
 					})
 					.command("level2", (cmd2) =>
-						cmd2.run(() => {
+						cmd2.handle(() => {
 							console.log("should not reach here");
 						}),
 					),
@@ -325,7 +318,7 @@ describe("integration: required inherited flag enforced on subcommand", () => {
 				token: { type: "string", required: true, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`token=${ctx.flags.token}`);
 				}),
 			);
@@ -341,7 +334,7 @@ describe("integration: required inherited flag enforced on subcommand", () => {
 				token: { type: "string", required: true, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`token=${ctx.flags.token}`);
 				}),
 			);
@@ -363,7 +356,7 @@ describe("integration: inherited flag with default value on subcommand", () => {
 				port: { type: "number", default: 3000, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`port=${ctx.flags.port}`);
 				}),
 			);
@@ -379,7 +372,7 @@ describe("integration: inherited flag with default value on subcommand", () => {
 				port: { type: "number", default: 3000, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`port=${ctx.flags.port}`);
 				}),
 			);
@@ -401,7 +394,7 @@ describe("integration: inherited flag alias works on subcommand", () => {
 				verbose: { type: "boolean", short: "v", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
 			);
@@ -422,7 +415,7 @@ describe("integration: inherited flag alias works on subcommand", () => {
 				},
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 				}),
 			);
@@ -453,7 +446,7 @@ describe("integration: .execute() full pipeline with argv override", () => {
 				dryRun: { type: "boolean", inherit: true },
 			})
 			.command("service", (cmd) =>
-				cmd.args([{ name: "name", type: "string", required: true }] as const).run((ctx) => {
+				cmd.args([{ name: "name", type: "string", required: true }] as const).handle((ctx) => {
 					console.log(
 						`deploy service=${ctx.args.name} env=${ctx.flags.env} dryRun=${ctx.flags.dryRun}`,
 					);
@@ -464,43 +457,21 @@ describe("integration: .execute() full pipeline with argv override", () => {
 		expect(result.stdout).toContain("deploy service=api env=production dryRun=true");
 		expect(result.exitCode).toBe(0);
 	});
-
-	it("full pipeline: lifecycle hooks run in order through pipeline", async () => {
-		const order: string[] = [];
-
-		const app = new Crust("cli")
-			.preRun(() => {
-				order.push("preRun");
-			})
-			.run(() => {
-				order.push("run");
-			})
-			.postRun(() => {
-				order.push("postRun");
-			});
-
-		await executeCrust(app, []);
-		expect(order).toEqual(["preRun", "run", "postRun"]);
-	});
 });
 
-describe("integration: plugin adds flag visible to subcommand handler", () => {
+describe("integration: Extension adds flag visible to subcommand handler", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("plugin-added flag on root is parsed and available to root handler", async () => {
-		const versionPlugin: CrustPlugin = {
-			name: "version-plugin",
-			setup: (ctx, actions) => {
-				actions.addFlag(ctx.rootCommand, "version", {
-					type: "boolean",
-					short: "V",
-				});
+	it("Extension flag on root is parsed and available to root handler", async () => {
+		const versionExtension = extension("version-extension", {
+			flags: {
+				version: { type: "boolean", short: "V", recursive: false },
 			},
-		};
+		});
 
-		const app = new Crust("cli").use(versionPlugin).run((ctx) => {
+		const app = new Crust("cli").extend(versionExtension).handle((ctx) => {
 			if ((ctx.flags as Record<string, unknown>).version) {
 				console.log("v1.0.0");
 			} else {
@@ -513,26 +484,25 @@ describe("integration: plugin adds flag visible to subcommand handler", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("plugin middleware wraps subcommand execution", async () => {
+	it("Extension intercept wraps subcommand execution", async () => {
 		const order: string[] = [];
 
-		const loggingPlugin: CrustPlugin = {
-			name: "logging",
-			middleware: async (ctx, next) => {
-				order.push(`middleware:before:${ctx.route?.command.meta.name}`);
+		const logging = extension("logging", {
+			async intercept(ctx, next) {
+				order.push(`intercept:before:${ctx.command.meta.name}`);
 				await next();
-				order.push(`middleware:after:${ctx.route?.command.meta.name}`);
+				order.push(`intercept:after:${ctx.command.meta.name}`);
 			},
-		};
+		});
 
-		const app = new Crust("cli").use(loggingPlugin).command("sub", (cmd) =>
-			cmd.run(() => {
+		const app = new Crust("cli").extend(logging).command("sub", (cmd) =>
+			cmd.handle(() => {
 				order.push("sub:run");
 			}),
 		);
 
 		await executeCrust(app, ["sub"]);
-		expect(order).toEqual(["middleware:before:sub", "sub:run", "middleware:after:sub"]);
+		expect(order).toEqual(["intercept:before:sub", "sub:run", "intercept:after:sub"]);
 	});
 });
 
@@ -550,7 +520,7 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 				cmd
 					.flags({ timeout: { type: "number", default: 30, inherit: true } })
 					.command("add", (cmd2) =>
-						cmd2.args([{ name: "name", type: "string", required: true }] as const).run((ctx) => {
+						cmd2.args([{ name: "name", type: "string", required: true }] as const).handle((ctx) => {
 							console.log(
 								`add remote=${ctx.args.name} verbose=${ctx.flags.verbose} timeout=${ctx.flags.timeout}`,
 							);
@@ -573,11 +543,11 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 	it("parent with run handler falls back when unknown subcommand given as positional", async () => {
 		const app = new Crust("cli")
 			.args([{ name: "input", type: "string" }] as const)
-			.run((ctx) => {
+			.handle((ctx) => {
 				console.log(`root input=${ctx.args.input}`);
 			})
 			.command("sub", (cmd) =>
-				cmd.run(() => {
+				cmd.handle(() => {
 					console.log("sub ran");
 				}),
 			);
@@ -602,7 +572,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 		cmd
 			.flags({ format: { type: "string", default: "table" } } as const)
 			.args([{ name: "resource", type: "string", required: true }] as const)
-			.run((ctx) => {
+			.handle((ctx) => {
 				console.log(
 					`list ${ctx.args.resource} format=${ctx.flags.format} verbose=${ctx.flags.verbose}`,
 				);
@@ -617,7 +587,7 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
 			] as const)
-			.run((ctx) => {
+			.handle((ctx) => {
 				console.log(`get ${ctx.args.resource}/${ctx.args.id} verbose=${ctx.flags.verbose}`);
 			});
 
@@ -675,7 +645,7 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 			.sub("deploy")
 			.meta({ description: "Deploy" })
 			.flags({ env: { type: "string", required: true } })
-			.run((ctx) => {
+			.handle((ctx) => {
 				console.log(`deploy env=${ctx.flags.env} verbose=${ctx.flags.verbose}`);
 			});
 
@@ -696,7 +666,7 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 			port: { type: "number", default: 3000, inherit: true },
 		});
 
-		const sub = app.sub("sub").run((ctx) => {
+		const sub = app.sub("sub").handle((ctx) => {
 			console.log(`verbose=${ctx.flags.verbose} port=${ctx.flags.port}`);
 		});
 
@@ -712,7 +682,7 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 
 		const deployCmd = app.sub("deploy").flags({ env: { type: "string", inherit: true } });
 
-		const statusCmd = deployCmd.sub("status").run((ctx) => {
+		const statusCmd = deployCmd.sub("status").handle((ctx) => {
 			console.log(`verbose=${ctx.flags.verbose} env=${ctx.flags.env}`);
 		});
 
@@ -733,7 +703,7 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 			rootOnly: { type: "string" },
 		});
 
-		const sub = app.sub("sub").run(() => {
+		const sub = app.sub("sub").handle(() => {
 			console.log("sub ran");
 		});
 
@@ -748,13 +718,13 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 			verbose: { type: "boolean", inherit: true },
 		});
 
-		const deployCmd = app.sub("deploy").run((ctx) => {
+		const deployCmd = app.sub("deploy").handle((ctx) => {
 			console.log(`deploy verbose=${ctx.flags.verbose}`);
 		});
 
 		const cli = app
 			.command("status", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`status verbose=${ctx.flags.verbose}`);
 				}),
 			)
@@ -781,7 +751,7 @@ describe("integration: standalone builder → .command(builder) pattern", () => 
 			.flags({
 				env: { type: "string", required: true },
 			})
-			.run((ctx) => {
+			.handle((ctx) => {
 				console.log(`deploy env=${ctx.flags.env}`);
 			});
 
@@ -794,7 +764,7 @@ describe("integration: standalone builder → .command(builder) pattern", () => 
 		const app = new Crust("cli").flags({
 			verbose: { type: "boolean", inherit: true },
 		});
-		const deploy = new Crust("deploy").run(() => {
+		const deploy = new Crust("deploy").handle(() => {
 			console.log("deploy ran");
 		});
 
@@ -815,7 +785,7 @@ describe("integration: inherited boolean flag negation", () => {
 				verbose: { type: "boolean", default: true, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
 			);
@@ -841,7 +811,7 @@ describe("integration: inherited multiple-value flag", () => {
 				tag: { type: "string", multiple: true, inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					const tags = ctx.flags.tag;
 					console.log(`tags=${JSON.stringify(tags)}`);
 				}),
@@ -868,7 +838,7 @@ describe("integration: separator (--) with subcommand and inherited flags", () =
 				verbose: { type: "boolean", inherit: true },
 			})
 			.command("sub", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 					console.log(`rawArgs=${JSON.stringify(ctx.rawArgs)}`);
 				}),
@@ -893,13 +863,12 @@ describe("integration: complex real-world CLI scenario", () => {
 	it("full CLI with global flags, multiple subcommands, plugins, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
-		const auditPlugin: CrustPlugin = {
-			name: "audit",
-			middleware: async (ctx, next) => {
-				order.push(`audit:${ctx.route?.command.meta.name}`);
+		const auditExtension = extension("audit", {
+			async intercept(ctx, next) {
+				order.push(`audit:${ctx.command.meta.name}`);
 				await next();
 			},
-		};
+		});
 
 		const app = new Crust("myctl")
 			.flags({
@@ -910,27 +879,21 @@ describe("integration: complex real-world CLI scenario", () => {
 					inherit: true,
 				},
 			})
-			.use(auditPlugin)
+			.extend(auditExtension)
 			.command("deploy", (cmd) =>
 				cmd
 					.flags({
 						env: { type: "string", required: true },
 					})
-					.preRun(() => {
-						order.push("deploy:preRun");
-					})
-					.run((ctx) => {
+					.handle((ctx) => {
 						order.push("deploy:run");
 						console.log(
 							`deploy env=${ctx.flags.env} verbose=${ctx.flags.verbose} config=${ctx.flags.config}`,
 						);
-					})
-					.postRun(() => {
-						order.push("deploy:postRun");
 					}),
 			)
 			.command("status", (cmd) =>
-				cmd.run((ctx) => {
+				cmd.handle((ctx) => {
 					order.push("status:run");
 					console.log(`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`);
 				}),
@@ -946,7 +909,7 @@ describe("integration: complex real-world CLI scenario", () => {
 		]);
 		expect(deployResult.stdout).toContain("deploy env=prod verbose=true config=/etc/myctl");
 		expect(deployResult.exitCode).toBe(0);
-		expect(order).toEqual(["audit:deploy", "deploy:preRun", "deploy:run", "deploy:postRun"]);
+		expect(order).toEqual(["audit:deploy", "deploy:run"]);
 
 		// Reset order for next test
 		order.length = 0;

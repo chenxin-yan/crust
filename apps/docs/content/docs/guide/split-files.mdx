@@ -1,0 +1,64 @@
+---
+title: Split Commands Across Files
+description: Preserve inherited types while organizing a command tree by file.
+---
+
+For a small application, prefer inline `.command(name, configure)`. When commands become large, export a parent builder, create children with `.sub()`, and attach them with `.command(builder)`.
+
+## Parent builder
+
+```ts title="src/app.ts"
+import { Crust } from "@crustjs/core";
+import { help, version } from "@crustjs/extensions";
+
+export const app = new Crust("my-cli")
+  .meta({ description: "A split-file CLI" })
+  .extend(version("0.2.0"), help())
+  .flags({
+    // no `short: "v"` — the version() Extension owns `-v`
+    verbose: { type: "boolean", inherit: true },
+  });
+```
+
+## Parent-typed child
+
+```ts title="src/commands/greet.ts"
+import { app } from "../app.ts";
+
+export const greetCommand = app
+  .sub("greet")
+  .args([{ name: "name", type: "string", default: "world" }])
+  .flags({ greeting: { type: "string", default: "Hello", short: "g" } })
+  .handle(({ args, flags, stdout }) => {
+    if (flags.verbose) stdout("Preparing greeting");
+    stdout(`${flags.greeting}, ${args.name}!`);
+  });
+```
+
+`.sub("greet")` creates a child whose Command Handler is typed with the parent's inherited flags and Contexts.
+
+## Attach and execute
+
+```ts title="src/cli.ts"
+import { app } from "./app.ts";
+import { greetCommand } from "./commands/greet.ts";
+
+await app.command(greetCommand).execute();
+```
+
+## Import-order rule
+
+The exported parent value is the type source for `.sub()`. Declare all parent flags that use `inherit: true` and all parent Contexts before any child module calls `.sub()`.
+
+```ts
+// Correct: children import this completed base value.
+export const app = new Crust("app")
+  .provide(database({ url }))
+  .flags({ verbose: { type: "boolean", inherit: true } });
+```
+
+Do not create a child from an earlier builder and add inheritable definitions to a different later builder. Immutable builders do not retroactively update previously created children.
+
+## Inline or split?
+
+Use inline `.command(name, configure)` when the command is short and local. Use `.sub()` plus `.command(builder)` when a separate file benefits readability and needs parent flag or Context types. A standalone `new Crust("child")` can also be attached, but remains type-isolated from the parent.

@@ -1,29 +1,21 @@
-import type { PostScaffoldStep } from "@crustjs/create";
-import { runSteps, scaffold } from "@crustjs/create";
+import { scaffold } from "@crustjs/create";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
-import pluginsPackage from "../../plugins/package.json";
+import extensionsPackage from "../../extensions/package.json";
 
-export type TemplateStyle = "minimal" | "modular";
 export type DistributionMode = "binary" | "runtime";
 
 export interface CreateCrustProjectOptions {
 	readonly resolvedDir: string;
 	readonly name: string;
-	readonly template: TemplateStyle;
 	readonly distributionMode: DistributionMode;
-	readonly installDeps: boolean;
-	readonly initGit: boolean;
-}
-
-interface CreateCrustProjectDependencies {
-	readonly runSteps?: (steps: PostScaffoldStep[], cwd: string) => Promise<void>;
+	readonly overwrite?: boolean;
 }
 
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: corePackage.version,
-	crustPluginsVersion: pluginsPackage.version,
+	crustExtensionsVersion: extensionsPackage.version,
 	crustCliVersion: crustPackage.version,
 } satisfies Record<string, string>;
 
@@ -32,12 +24,9 @@ const CRUST_TEMPLATE_VERSION_CONTEXT = {
  *
  * Safe to run inside a spinner since it produces no console output.
  */
-export async function scaffoldCrustProject(
-	options: Omit<CreateCrustProjectOptions, "installDeps" | "initGit">,
-): Promise<void> {
-	const { resolvedDir, name, template, distributionMode } = options;
+export async function scaffoldCrustProject(options: CreateCrustProjectOptions): Promise<void> {
+	const { resolvedDir, name, distributionMode } = options;
 
-	const styleTemplatePath = template === "minimal" ? "templates/minimal" : "templates/modular";
 	const distributionTemplatePath =
 		distributionMode === "binary"
 			? "templates/distribution/binary"
@@ -48,10 +37,11 @@ export async function scaffoldCrustProject(
 		template: "templates/base",
 		dest: resolvedDir,
 		context,
+		...(options.overwrite === true ? { conflict: "overwrite" } : {}),
 	});
 
 	await scaffold({
-		template: styleTemplatePath,
+		template: "templates/minimal",
 		dest: resolvedDir,
 		context,
 		conflict: "overwrite",
@@ -63,28 +53,4 @@ export async function scaffoldCrustProject(
 		context,
 		conflict: "overwrite",
 	});
-}
-
-/**
- * Full project creation: scaffold files, optionally install deps and init git.
- */
-export async function createCrustProject(
-	options: CreateCrustProjectOptions,
-	dependencies: CreateCrustProjectDependencies = {},
-): Promise<void> {
-	const { resolvedDir, installDeps, initGit } = options;
-	const runPostScaffoldSteps = dependencies.runSteps ?? runSteps;
-
-	await scaffoldCrustProject(options);
-
-	if (installDeps) {
-		await runPostScaffoldSteps([{ type: "install" }], resolvedDir);
-	}
-
-	if (initGit) {
-		await runPostScaffoldSteps(
-			[{ type: "git-init", commit: "chore: initial commit" }],
-			resolvedDir,
-		);
-	}
 }

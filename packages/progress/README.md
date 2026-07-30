@@ -1,10 +1,8 @@
 # @crustjs/progress
 
-Progress indicators for the [Crust](https://crustjs.com) CLI framework.
+Progress indicators for the Crust CLI ecosystem
 
-`@crustjs/progress` provides non-interactive terminal progress primitives for long-running tasks. It currently includes `spinner()`, with support for message updates, custom animations, theming, and non-TTY fallbacks.
-
-Zero runtime dependencies beyond `@crustjs/style`.
+Theme exports: `defaultTheme`, `createTheme`, and `setTheme`.
 
 ## Install
 
@@ -12,34 +10,6 @@ Zero runtime dependencies beyond `@crustjs/style`.
 bun add @crustjs/progress
 ```
 
-## Quick Start
+## Documentation
 
-```ts
-import { spinner } from "@crustjs/progress";
-
-const result = await spinner({
-	message: "Fetching data...",
-	task: async ({ updateMessage }) => {
-		await fetchStepOne();
-		updateMessage("Processing...");
-		await fetchStepTwo();
-		return { ok: true };
-	},
-});
-```
-
-## Theme
-
-`@crustjs/progress` exposes `createTheme`, `setTheme`, and `getTheme` for global progress styling.
-
-```ts
-import { createTheme, setTheme } from "@crustjs/progress";
-import { cyan, green } from "@crustjs/style";
-
-setTheme(
-	createTheme({
-		spinner: cyan,
-		success: green,
-	}),
-);
-```
+Full docs: [crustjs.com/docs/modules/progress](https://crustjs.com/docs/modules/progress)

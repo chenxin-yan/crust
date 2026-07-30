@@ -36,13 +36,25 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 export interface ConfirmOptions {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
-	/** Default value when the user presses Enter without toggling (defaults to `true`) */
+	/**
+	 * Value used when the user presses Enter without toggling.
+	 *
+	 * @default true
+	 */
 	readonly default?: boolean;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: boolean;
-	/** Label for the affirmative option (defaults to `"Yes"`) */
+	/**
+	 * Label for the affirmative option.
+	 *
+	 * @default "Yes"
+	 */
 	readonly active?: string;
-	/** Label for the negative option (defaults to `"No"`) */
+	/**
+	 * Label for the negative option.
+	 *
+	 * @default "No"
+	 */
 	readonly inactive?: string;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
@@ -66,31 +78,15 @@ function handleKey(key: KeypressEvent, state: ConfirmState): ConfirmState | Subm
 		return submit(state.value);
 	}
 
-	// Left/Right arrows toggle between yes/no
-	if (key.name === "left" || key.name === "right") {
+	if (key.name === "left" || key.name === "right" || key.name === "tab") {
 		return { value: !state.value };
 	}
 
-	// h/l (vim-style) toggle
-	if (key.name === "h") {
-		return { value: true };
-	}
-	if (key.name === "l") {
-		return { value: false };
-	}
-
-	// Tab toggles
-	if (key.name === "tab") {
-		return { value: !state.value };
-	}
-
-	// y shortcut — set to true
-	if (key.char === "y" || key.char === "Y") {
+	if (key.name === "h" || key.char === "y" || key.char === "Y") {
 		return { value: true };
 	}
 
-	// n shortcut — set to false
-	if (key.char === "n" || key.char === "N") {
+	if (key.name === "l" || key.char === "n" || key.char === "N") {
 		return { value: false };
 	}
 

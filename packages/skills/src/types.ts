@@ -2,7 +2,7 @@
 // @crustjs/skills — Public types for agent skill generation
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CommandNode } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Skill metadata — describes the generated skill bundle
@@ -155,9 +155,6 @@ export type SkillInstallMode = "auto" | "symlink" | "copy";
  * - `"generated"` — produced by {@link generateSkill} from a Crust command tree.
  * - `"bundle"` — installed by {@link installSkillBundle} from a hand-authored
  *   directory containing a `SKILL.md` and supporting files.
- *
- * Legacy `crust.json` files (written before this field existed) are read as
- * `"generated"` for backward compatibility.
  */
 export type SkillKind = "generated" | "bundle";
 
@@ -168,7 +165,7 @@ export type SkillKind = "generated" | "bundle";
 /**
  * Describes a single positional argument in the canonical manifest.
  *
- * Normalized from `ArgDef` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `ArgSnapshot` in `@crustjs/core` to a flat, serializable shape.
  */
 export interface ManifestArg {
 	/** Argument name (from `ArgDef.name`) */
@@ -188,7 +185,7 @@ export interface ManifestArg {
 /**
  * Describes a single named flag in the canonical manifest.
  *
- * Normalized from `FlagDef` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `FlagSnapshot` in `@crustjs/core` to a flat, serializable shape.
  */
 export interface ManifestFlag {
 	/** Flag name (the key from `FlagsDef`) */
@@ -297,7 +294,7 @@ export interface RenderedFile {
  */
 export interface GenerateOptions {
 	/** Root command to generate the skill from */
-	command: CommandNode;
+	command: CommandSnapshot;
 	/** Skill metadata for the generated bundle */
 	meta: SkillMeta;
 	/**
@@ -447,7 +444,7 @@ export interface InstallSkillBundleOptions {
 	 * When set, the bundle's `SKILL.md` frontmatter `name:` must equal this
 	 * string. A mismatch throws before any filesystem write.
 	 *
-	 * Used by `skillPlugin`'s `customSkills` reconciliation to keep the
+	 * Used by `skill()`'s `customSkills` reconciliation to keep the
 	 * config-level `name` (used for status / uninstall lookups) in lockstep
 	 * with the frontmatter `name` (the canonical install path), preventing
 	 * orphan installs.
@@ -583,7 +580,7 @@ export interface StatusResult {
 
 /**
  * Configuration for a single hand-authored skill bundle managed by
- * {@link skillPlugin} alongside the auto-generated command-reference skill.
+ * `skill()` alongside the auto-generated command-reference skill.
  *
  * Each entry is reconciled through the same plugin lifecycle as the main
  * skill — auto-update on version change, surfaced in the interactive `skill`
@@ -600,10 +597,10 @@ export interface StatusResult {
  *
  * @example
  * ```ts
- * import { skillPlugin } from "@crustjs/skills";
+ * import { skill } from "@crustjs/skills";
  * import pkg from "./package.json" with { type: "json" };
  *
- * skillPlugin({
+ * skill({
  *   version: pkg.version,
  *   customSkills: [
  *     // Inherits `version: pkg.version` from the plugin.
@@ -638,7 +635,7 @@ export interface CustomSkillConfig extends Pick<
 	name: string;
 	/**
 	 * Version override. When omitted, the bundle inherits the plugin's
-	 * top-level {@link SkillPluginOptions.version}. Drives auto-update
+	 * top-level {@link SkillOptions.version}. Drives auto-update
 	 * detection: a bundle is reinstalled when its recorded `crust.json`
 	 * version differs from the effective (entry-or-plugin) version.
 	 *
@@ -655,14 +652,14 @@ export interface CustomSkillConfig extends Pick<
 	version?: InstallSkillBundleOptions["version"];
 	/**
 	 * Installation scope override. When omitted, the bundle inherits
-	 * {@link SkillPluginOptions.defaultScope} resolution: explicit `--scope`
+	 * {@link SkillOptions.defaultScope} resolution: explicit `--scope`
 	 * flag wins, else `defaultScope`, else the interactive scope prompt
 	 * (or `"global"` in non-interactive mode).
 	 */
 	scope?: InstallSkillBundleOptions["scope"];
 	/**
 	 * Installation strategy override. When omitted, inherits
-	 * {@link SkillPluginOptions.installMode} (default `"auto"`).
+	 * {@link SkillOptions.installMode} (default `"auto"`).
 	 */
 	installMode?: InstallSkillBundleOptions["installMode"];
 }
@@ -697,7 +694,7 @@ export interface CustomSkillConfig extends Pick<
  * - When `process.cwd()` is the home directory, `"project"` is normalized to
  *   `"global"` for path resolution and update/status messaging.
  */
-export interface SkillPluginOptions {
+export interface SkillOptions {
 	/** Skill version string — compared against the installed crust.json */
 	version: string;
 	/**
@@ -758,7 +755,7 @@ export interface SkillPluginOptions {
 	 *
 	 * Each entry's effective `version` drives auto-update detection (compared
 	 * against the recorded `crust.json` version). When the entry omits
-	 * `version`, the plugin's top-level {@link SkillPluginOptions.version} is
+	 * `version`, the plugin's top-level {@link SkillOptions.version} is
 	 * used — the typical case when the bundle ships in the same package as
 	 * the consuming CLI.
 	 *

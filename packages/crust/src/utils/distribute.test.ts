@@ -53,6 +53,7 @@ describe("distribution manifest JSON builders", () => {
 				name: "@crustjs/crust",
 				version: "1.2.3",
 				description: "CLI tooling",
+				engines: { bun: ">=1.3.14" },
 			},
 		};
 		const targets = [
@@ -75,6 +76,7 @@ describe("distribution manifest JSON builders", () => {
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
+			engines: { bun: ">=1.3.14" },
 			files: ["bin"],
 			bin: { crust: "bin/crust.js" },
 			optionalDependencies: {
@@ -87,6 +89,7 @@ describe("distribution manifest JSON builders", () => {
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
+			engines: { bun: ">=1.3.14" },
 			files: ["bin", "man"],
 			man: ["./man/crust.1"],
 			bin: { crust: "bin/crust.js" },
@@ -106,6 +109,7 @@ describe("distribution manifest JSON builders", () => {
 				name: "@crustjs/crust",
 				version: "1.2.3",
 				description: "CLI tooling",
+				engines: { bun: ">=1.3.14" },
 			},
 		};
 		const target = {
@@ -125,6 +129,7 @@ describe("distribution manifest JSON builders", () => {
 			name: "@crustjs/crust-windows-arm64",
 			version: "1.2.3",
 			description: "CLI tooling",
+			engines: { bun: ">=1.3.14" },
 			files: ["bin"],
 			bin: { crust: "bin/crust-bun-windows-arm64.exe" },
 			os: ["win32"],
@@ -182,6 +187,7 @@ describe("runDistributeBuild", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(join(tmpDir, "src", "cli.ts"), 'console.log("hello");\n');
+		writeFileSync(join(tmpDir, "LICENSE"), "test license\n");
 	});
 
 	afterAll(() => {
@@ -224,6 +230,10 @@ describe("runDistributeBuild", () => {
 			name: "test-package-cli-darwin-arm64",
 		});
 		expect(manifest.publishOrder).toEqual(["darwin-arm64", "root"]);
+		expect(readFileSync(join(tmpDir, ".stage", "root", "LICENSE"), "utf-8")).toBe("test license\n");
+		expect(readFileSync(join(tmpDir, ".stage", "darwin-arm64", "LICENSE"), "utf-8")).toBe(
+			"test license\n",
+		);
 	});
 });
 
@@ -242,7 +252,7 @@ describe("runDistributeBuild with --man", () => {
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
 			`import { Crust } from "@crustjs/core";
-export const app = new Crust("x").run(() => {});
+export const app = new Crust("x").handle(() => {});
 `,
 		);
 		writeFileSync(

@@ -32,7 +32,7 @@ export interface KeypressEvent {
  * Symbol used internally to discriminate submit results from state updates.
  * Using a symbol prevents collisions with user-defined state types.
  */
-export const SUBMIT: unique symbol = Symbol("submit");
+const SUBMIT: unique symbol = Symbol("submit");
 
 /**
  * A submit action wrapping the final value.
@@ -146,16 +146,6 @@ export class NonInteractiveError extends Error {
 }
 
 /**
- * Error thrown when the user cancels a prompt with Ctrl+C.
- */
-export class CancelledError extends Error {
-	constructor(message?: string) {
-		super(message ?? "Prompt was cancelled.");
-		this.name = "CancelledError";
-	}
-}
-
-/**
  * Check whether stdin is an interactive TTY.
  * @returns `true` if stdin is a TTY, `false` otherwise
  */
@@ -229,13 +219,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 			return;
 		}
 
-		// TTY check inside the promise so it rejects rather than throwing synchronously
-		try {
-			assertTTY();
-		} catch (err) {
-			reject(err);
-			return;
-		}
+		assertTTY();
 
 		promptActive = true;
 
@@ -327,12 +311,12 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 				sequence?: string;
 			},
 		): void {
-			// Ctrl+C → reject with CancelledError (handle immediately)
+			// Ctrl+C → reject with a standard AbortError (handle immediately)
 			if (key?.ctrl && key.name === "c") {
 				flushRender();
 				output.write("\n");
 				cleanup();
-				reject(new CancelledError());
+				reject(new DOMException("Prompt was cancelled.", "AbortError"));
 				return;
 			}
 

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
 	assertTTY,
-	CancelledError,
 	isTTY,
 	NonInteractiveError,
 	type PromptConfig,
@@ -121,10 +120,11 @@ describe("NonInteractiveError", () => {
 	});
 });
 
-describe("CancelledError", () => {
-	it("has the correct name", () => {
-		const error = new CancelledError();
-		expect(error.name).toBe("CancelledError");
+describe("prompt cancellation error", () => {
+	it("is a standard AbortError DOMException", () => {
+		const error = new DOMException("Prompt was cancelled.", "AbortError");
+		expect(error.name).toBe("AbortError");
+		expect(error).toBeInstanceOf(DOMException);
 	});
 });
 
@@ -348,7 +348,7 @@ describe("runPrompt", () => {
 		await expect(promise).rejects.toThrow("handler error");
 	});
 
-	it("rejects with CancelledError on Ctrl+C", async () => {
+	it("rejects with an AbortError DOMException on Ctrl+C", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
 			handleKey: (_key, state) => state,
@@ -361,9 +361,9 @@ describe("runPrompt", () => {
 		await new Promise((r) => setTimeout(r, 10));
 		process.stdin.emit("keypress", undefined, { name: "c", ctrl: true });
 
-		await expect(promise).rejects.toBeInstanceOf(CancelledError);
+		await expect(promise).rejects.toBeInstanceOf(DOMException);
 		await expect(promise).rejects.toMatchObject({
-			name: "CancelledError",
+			name: "AbortError",
 		});
 	});
 

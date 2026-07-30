@@ -4,29 +4,6 @@
 
 import type { Choice } from "./types.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Prompt header formatting
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Format the header line for an active prompt.
- *
- * Produces `"prefix message"` when a message is provided, or just `"prefix"`
- * when the message is omitted — ensuring no trailing spaces or `"undefined"`.
- *
- * @internal — Used by `formatPromptLine` and list-style prompts (select, multiselect).
- *
- * @param prefix - Themed prefix string (e.g., styled "▸")
- * @param message - Optional themed message string
- * @returns Formatted header line
- */
-export function formatHeader(prefix: string, message?: string): string {
-	if (message) {
-		return `${prefix} ${message}`;
-	}
-	return prefix;
-}
-
 /**
  * Format the submitted line for a prompt.
  *
@@ -75,7 +52,7 @@ export function formatPromptLine(
 	content: string,
 	suffix?: string,
 ): string {
-	const header = formatHeader(prefix, message);
+	const header = message ? `${prefix} ${message}` : prefix;
 	const extra = suffix ?? "";
 	if (message) {
 		return `${header}${extra}\n  ${content}`;
@@ -118,6 +95,45 @@ export function calculateScrollOffset(
 	}
 
 	return scrollOffset;
+}
+
+/** @internal Move a list cursor with wrapping and keep it visible. */
+export function moveCursor(
+	cursor: number,
+	totalItems: number,
+	delta: -1 | 1,
+	scrollOffset: number,
+	maxVisible: number,
+): { cursor: number; scrollOffset: number } {
+	const nextCursor =
+		delta === -1
+			? cursor <= 0
+				? totalItems - 1
+				: cursor - 1
+			: cursor >= totalItems - 1
+				? 0
+				: cursor + 1;
+	return {
+		cursor: nextCursor,
+		scrollOffset: calculateScrollOffset(nextCursor, scrollOffset, totalItems, maxVisible),
+	};
+}
+
+/** @internal Validate required/min/max constraints shared by multi-selection prompts. */
+export function validateSelection(
+	selectedCount: number,
+	required?: boolean,
+	min?: number,
+	max?: number,
+): string | null {
+	if (required && selectedCount === 0) return "At least one item must be selected";
+	if (min !== undefined && selectedCount < min) {
+		return `Select at least ${min} item${min === 1 ? "" : "s"}`;
+	}
+	if (max !== undefined && selectedCount > max) {
+		return `Select at most ${max} item${max === 1 ? "" : "s"}`;
+	}
+	return null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

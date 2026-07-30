@@ -1,43 +1,61 @@
-import type { CommandNode } from "./node.ts";
+import type { CommandSnapshot } from "./command/snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustErrorCode — Discriminated error codes
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Details for a subcommand token that could not be resolved. */
 export interface CommandNotFoundErrorDetails {
+	/** Unrecognized subcommand token. */
 	input: string;
+	/** Canonical names of available child commands. */
 	available: string[];
+	/** Canonical path to the command whose child could not be resolved. */
 	commandPath: string[];
-	parentCommand: CommandNode;
+	/** Readonly, serializable snapshot of the parent command. */
+	parentCommand: CommandSnapshot;
 }
 
+/** Aggregated Standard Schema and required-value validation failures. */
 export interface ValidationErrorDetails {
+	/** Issues normalized under `args.<name>` or `flags.<name>`. */
 	issues: readonly { readonly message: string; readonly path: string }[];
 }
 
+/** Details for argv syntax or built-in value parsing failures. */
+export interface ParseErrorDetails {
+	readonly flag?: string;
+	readonly argument?: string;
+	readonly value?: string;
+	readonly reason?: string;
+}
+
+/** Details for invalid application definitions. */
+export interface DefinitionErrorDetails {
+	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
+	readonly name?: string;
+	readonly reason?: string;
+}
+
 export interface CrustErrorDetailsMap {
-	DEFINITION: undefined;
+	DEFINITION: DefinitionErrorDetails | undefined;
 	VALIDATION: ValidationErrorDetails | undefined;
-	PARSE: undefined;
-	EXECUTION: undefined;
+	PARSE: ParseErrorDetails | undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
-	CONFIG: undefined;
 }
 
 /**
  * All possible error codes emitted by Crust.
  *
- * - `DEFINITION` — Invalid command configuration (empty name, alias collision, bad variadic position)
+ * - `DEFINITION` — Invalid command configuration (empty name, alias collision, bad variadic position, unsupported definition such as async `parse`)
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
- * - `EXECUTION` — Runtime command/middleware failures
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
- * - `CONFIG` — Unsupported command/flag definition surfaced at setup time (e.g. async `parse`)
  *
  * @example
  * ```ts
  * try {
- *   parseArgs(cmd, argv);
+ *   await app.run(argv);
  * } catch (err) {
  *   if (err instanceof CrustError) {
  *     switch (err.code) {
@@ -68,10 +86,10 @@ export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C
  *
  * @example
  * ```ts
- * import { CrustError, parseArgs } from "@crustjs/core";
+ * import { CrustError } from "@crustjs/core";
  *
  * try {
- *   const result = parseArgs(cmd, process.argv.slice(2));
+ *   await app.run(process.argv.slice(2));
  * } catch (err) {
  *   if (err instanceof CrustError) {
  *     console.error(`[${err.code}] ${err.message}`);
@@ -100,6 +118,13 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
 
+	static commandNotFound(
+		message: string,
+		details: CommandNotFoundErrorDetails,
+	): CrustError<"COMMAND_NOT_FOUND"> {
+		return new CrustError("COMMAND_NOT_FOUND", message, details);
+	}
+
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {
 		return (this.code as CrustErrorCode) === code;
 	}
@@ -107,5 +132,17 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 	withCause(cause: unknown): this {
 		this.cause = cause;
 		return this;
+	}
+
+	toJSON(): {
+		code: C;
+		message: string;
+		details: CrustErrorDetails<C>;
+	} {
+		return {
+			code: this.code,
+			message: this.message,
+			details: this.details,
+		};
 	}
 }

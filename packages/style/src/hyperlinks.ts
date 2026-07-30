@@ -4,9 +4,6 @@ import { applyStyle } from "./styleEngine.ts";
 const OSC = "\x1b]";
 const ST = "\x1b\\";
 const HYPERLINK_CLOSE = `${OSC}8;;${ST}`;
-const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
-const PRINTABLE_ASCII_NO_SPACE = /^[\x21-\x7e]*$/;
-
 export interface HyperlinkOptions {
 	/**
 	 * Optional OSC 8 hyperlink id used by some terminals to keep visually
@@ -15,18 +12,10 @@ export interface HyperlinkOptions {
 	readonly id?: string;
 }
 
-function assertPrintableAscii(value: string, label: string): void {
-	if (!PRINTABLE_ASCII.test(value)) {
+function assertMatches(value: string, label: string, pattern: RegExp, suffix = ""): void {
+	if (!pattern.test(value)) {
 		throw new TypeError(
-			`Invalid ${label}: ${JSON.stringify(value)} must contain only printable ASCII characters.`,
-		);
-	}
-}
-
-function assertPrintableAsciiNoSpace(value: string, label: string): void {
-	if (!PRINTABLE_ASCII_NO_SPACE.test(value)) {
-		throw new TypeError(
-			`Invalid ${label}: ${JSON.stringify(value)} must contain only printable ASCII characters without spaces.`,
+			`Invalid ${label}: ${JSON.stringify(value)} must contain only printable ASCII characters${suffix}.`,
 		);
 	}
 }
@@ -37,7 +26,7 @@ function serializeParams(options?: HyperlinkOptions): string {
 		return "";
 	}
 
-	assertPrintableAscii(id, "hyperlink id");
+	assertMatches(id, "hyperlink id", /^[\x20-\x7e]*$/);
 	if (id.includes(":") || id.includes(";")) {
 		throw new TypeError('Invalid hyperlink id: ":" and ";" are reserved by the OSC 8 format.');
 	}
@@ -70,7 +59,7 @@ function serializeParams(options?: HyperlinkOptions): string {
  * ```
  */
 export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
-	assertPrintableAsciiNoSpace(url, "hyperlink URL");
+	assertMatches(url, "hyperlink URL", /^[\x21-\x7e]*$/, " without spaces");
 	const params = serializeParams(options);
 	return {
 		open: `${OSC}8;${params};${url}${ST}`,

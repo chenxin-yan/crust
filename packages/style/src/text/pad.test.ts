@@ -1,8 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import { red } from "../colors.ts";
-import { bold } from "../modifiers.ts";
+import { getGlobalColorMode, setGlobalColorMode } from "../createStyle.ts";
+import { bold, red } from "../runtimeExports.ts";
 import { center, padEnd, padStart } from "./pad.ts";
+
+const originalColorMode = getGlobalColorMode();
+beforeAll(() => setGlobalColorMode("always"));
+afterAll(() => setGlobalColorMode(originalColorMode));
 
 // ────────────────────────────────────────────────────────────────────────────
 // padStart — plain text

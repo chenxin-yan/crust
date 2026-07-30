@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { bold, cyan, green, magenta, red, yellow } from "@crustjs/style";
 
-import { createTheme, defaultTheme, getTheme, resolveTheme, setTheme } from "./theme.ts";
+import { createTheme, defaultTheme, resolveTheme, setTheme } from "./theme.ts";
 
 afterEach(() => {
 	setTheme();
@@ -31,23 +31,17 @@ describe("createTheme", () => {
 	});
 });
 
-describe("setTheme / getTheme", () => {
-	it("returns defaultTheme when no global theme is set", () => {
-		expect(getTheme()).toBe(defaultTheme);
+describe("resolveTheme", () => {
+	it("returns defaultTheme when no overrides are present", () => {
+		expect(resolveTheme()).toBe(defaultTheme);
 	});
 
 	it("applies global overrides", () => {
 		setTheme({ spinner: cyan, success: yellow });
-		const theme = getTheme();
+		const theme = resolveTheme();
 		expect(theme.spinner).toBe(cyan);
 		expect(theme.success).toBe(yellow);
 		expect(theme.message).toBe(bold);
-	});
-});
-
-describe("resolveTheme", () => {
-	it("returns defaultTheme when no overrides are present", () => {
-		expect(resolveTheme()).toBe(defaultTheme);
 	});
 
 	it("layers global and per-call overrides", () => {

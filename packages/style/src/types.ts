@@ -181,15 +181,6 @@ export interface CapabilityOverrides {
 	readonly isTTY?: boolean;
 	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
-}
-
-/**
- * Truecolor capability overrides for deterministic testing.
- *
- * These override environment variable checks used by
- * {@link resolveColorDepth} to detect 24-bit color support.
- */
-export interface TrueColorOverrides {
 	/** Override `process.env.COLORTERM`. */
 	readonly colorTerm?: string | undefined;
 	/** Override `process.env.TERM`. */
@@ -205,10 +196,13 @@ export interface TrueColorOverrides {
  * ```
  */
 export interface StyleOptions {
-	/** Color emission mode. Defaults to `"auto"`. */
+	/**
+	 * Color emission mode.
+	 * @default "auto"
+	 */
 	readonly mode?: ColorMode;
 	/** Capability overrides for deterministic testing. */
-	readonly overrides?: CapabilityOverrides & TrueColorOverrides;
+	readonly overrides?: CapabilityOverrides;
 }
 
 /**
@@ -369,38 +363,4 @@ export interface StyleInstance extends StyleMethodMap {
 		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
 		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
 	};
-
-	// ── Deprecated dynamic-color helpers ───────────────────────────────
-
-	/**
-	 * Apply a truecolor foreground RGB color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.fg | `fg(text, [r, g, b])`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly rgb: (text: string, r: number, g: number, b: number) => string;
-
-	/**
-	 * Apply a truecolor background RGB color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.bg | `bg(text, [r, g, b])`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly bgRgb: (text: string, r: number, g: number, b: number) => string;
-
-	/**
-	 * Apply a truecolor foreground hex color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.fg | `fg(text, "#rrggbb")`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly hex: (text: string, hexColor: string) => string;
-
-	/**
-	 * Apply a truecolor background hex color to text.
-	 *
-	 * @deprecated Use {@link StyleInstance.bg | `bg(text, "#rrggbb")`}
-	 * instead. Will be removed in v1.0.0.
-	 */
-	readonly bgHex: (text: string, hexColor: string) => string;
 }

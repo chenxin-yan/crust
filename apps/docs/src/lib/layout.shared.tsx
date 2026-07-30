@@ -1,13 +1,13 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
+import { siteConfig } from "./seo";
+
 // GitHub repository configuration
 export const gitConfig = {
   user: "chenxin-yan",
   repo: "crust",
   branch: "main",
 };
-
-export const discordUrl = "https://discord.gg/sQF8hdN6Ht";
 
 function DiscordIcon() {
   return (
@@ -72,7 +72,7 @@ export function baseOptions(): BaseLayoutProps {
         label: "Discord",
         icon: <DiscordIcon />,
         text: "Discord",
-        url: discordUrl,
+        url: siteConfig.discordUrl,
         external: true,
       },
     ],

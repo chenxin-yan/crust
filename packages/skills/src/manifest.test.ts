@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, CommandNode, FlagDef } from "@crustjs/core";
+import type { ArgDef, FlagDef } from "@crustjs/core";
 import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
+type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
@@ -15,8 +17,6 @@ function makeCommand(opts: {
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
-	preRun?: () => void;
-	postRun?: () => void;
 	subCommands?: Record<string, CommandNode>;
 }): CommandNode {
 	const node = new Crust(opts.meta.name)._node;
@@ -27,8 +27,6 @@ function makeCommand(opts: {
 		node.effectiveFlags = { ...opts.flags };
 	}
 	if (opts.run) node.run = opts.run;
-	if (opts.preRun) node.preRun = opts.preRun;
-	if (opts.postRun) node.postRun = opts.postRun;
 	if (opts.subCommands) {
 		node.subCommands = opts.subCommands;
 	}
@@ -46,7 +44,7 @@ describe("buildManifest", () => {
 				meta: { name: "my-cli", description: "A test CLI" },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.name).toBe("my-cli");
 			expect(node.path).toEqual(["my-cli"]);
@@ -58,7 +56,7 @@ describe("buildManifest", () => {
 				meta: { name: "  My-CLI  " },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.name).toBe("my-cli");
 			expect(node.path).toEqual(["my-cli"]);
@@ -70,7 +68,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.runnable).toBe(true);
 		});
@@ -80,7 +78,7 @@ describe("buildManifest", () => {
 				meta: { name: "app" },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.runnable).toBe(false);
 		});
@@ -90,7 +88,7 @@ describe("buildManifest", () => {
 				meta: { name: "build", usage: "build [options] <entry>" },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.usage).toBe("build [options] <entry>");
 		});
@@ -100,7 +98,7 @@ describe("buildManifest", () => {
 				meta: { name: "app" },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.description).toBeUndefined();
 			expect(node.usage).toBeUndefined();
@@ -111,7 +109,7 @@ describe("buildManifest", () => {
 				meta: { name: "app" },
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.args).toEqual([]);
 			expect(node.flags).toEqual([]);
@@ -130,7 +128,7 @@ describe("buildManifest", () => {
 				],
 			);
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.instructions).toEqual([
 				"Confirm destructive operations before execution.",
@@ -158,7 +156,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.args).toEqual([
 				{
@@ -184,7 +182,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [arg] = node.args;
 
 			expect(node.args).toHaveLength(1);
@@ -209,7 +207,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [arg] = node.args;
 
 			expect(node.args).toHaveLength(1);
@@ -229,7 +227,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [first, second, third] = node.args;
 
 			expect(node.args).toHaveLength(3);
@@ -246,7 +244,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [arg] = node.args;
 
 			expect(arg?.type).toBe("boolean");
@@ -260,7 +258,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [arg] = node.args;
 
 			expect(arg?.description).toBeUndefined();
@@ -284,7 +282,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.flags).toEqual([
 				{
@@ -312,7 +310,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.name).toBe("target");
@@ -334,7 +332,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.short).toBe("o");
@@ -354,7 +352,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.name).toBe("ignore");
@@ -381,7 +379,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const flagMap = Object.fromEntries(node.flags.map((f) => [f.name, f]));
 
 			expect(flagMap.port?.default).toBe("8080");
@@ -402,7 +400,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.default).toBe('["src/index.ts","src/cli.ts"]');
@@ -419,7 +417,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.flags.map((f) => f.name)).toEqual(["alpha", "middle", "zoo"]);
 		});
@@ -433,7 +431,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.description).toBeUndefined();
@@ -462,7 +460,7 @@ describe("buildManifest", () => {
 				subCommands: { serve, build },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const [first, second] = node.children;
 
 			expect(node.children).toHaveLength(2);
@@ -494,7 +492,7 @@ describe("buildManifest", () => {
 				subCommands: { remote },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const remoteNode = node.children[0];
 			const [addNode, removeNode] = remoteNode?.children ?? [];
 
@@ -528,7 +526,7 @@ describe("buildManifest", () => {
 				subCommands: { group },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const groupNode = node.children[0];
 
 			expect(groupNode?.children.map((c) => c.name)).toEqual(["alpha", "beta", "zeta"]);
@@ -550,7 +548,7 @@ describe("buildManifest", () => {
 				subCommands: { middle },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const middleNode = node.children[0];
 			const leafNode = middleNode?.children[0];
 
@@ -571,7 +569,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(parent);
+			const node = buildManifest(snapshotCommand(parent));
 			const [child] = node.children;
 
 			expect(node.runnable).toBe(true);
@@ -585,7 +583,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.children).toEqual([]);
 		});
@@ -604,7 +602,7 @@ describe("buildManifest", () => {
 				subCommands: { deploy },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const child = node.children[0];
 
 			expect(child?.instructions).toEqual([
@@ -616,10 +614,10 @@ describe("buildManifest", () => {
 			const deploy = annotate(
 				new Crust("deploy").meta({ description: "Deploy command" }),
 				"Read the environment carefully before execution.",
-			).run(() => {});
+			).handle(() => {});
 			const root = new Crust("app").command(deploy);
 
-			const node = buildManifest(root._node);
+			const node = buildManifest(snapshotCommand(root._node));
 			const child = node.children[0];
 
 			expect(child?.instructions).toEqual(["Read the environment carefully before execution."]);
@@ -647,8 +645,8 @@ describe("buildManifest", () => {
 				subCommands: { deploy: leaf },
 			});
 
-			const first = buildManifest(root);
-			const second = buildManifest(root);
+			const first = buildManifest(snapshotCommand(root));
+			const second = buildManifest(snapshotCommand(root));
 
 			expect(JSON.stringify(first)).toBe(JSON.stringify(second));
 		});
@@ -726,7 +724,7 @@ describe("buildManifest", () => {
 				subCommands: { clone, remote },
 			});
 
-			const manifest = buildManifest(root);
+			const manifest = buildManifest(snapshotCommand(root));
 
 			// Root
 			expect(manifest.name).toBe("git");
@@ -769,19 +767,6 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("edge cases", () => {
-		it("handles command with preRun/postRun but no run as not runnable", () => {
-			const cmd = makeCommand({
-				meta: { name: "hook-only" },
-				preRun() {},
-				postRun() {},
-			});
-
-			const node = buildManifest(cmd);
-
-			// Only `run` determines runnable, not preRun/postRun
-			expect(node.runnable).toBe(false);
-		});
-
 		it("handles deeply nested commands (4 levels)", () => {
 			const deep = makeCommand({
 				meta: { name: "deep" },
@@ -800,7 +785,7 @@ describe("buildManifest", () => {
 				subCommands: { level2 },
 			});
 
-			const node = buildManifest(root);
+			const node = buildManifest(snapshotCommand(root));
 			const deepNode = node.children[0]?.children[0]?.children[0];
 
 			expect(deepNode?.name).toBe("deep");
@@ -814,7 +799,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(cmd);
+			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.flags).toEqual([]);
 		});

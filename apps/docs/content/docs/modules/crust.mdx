@@ -1,9 +1,9 @@
 ---
 title: "Crust"
-description: CLI tooling for building and distributing standalone executables.
+description: Build and distribute Crust applications as standalone executables.
 ---
 
-The `@crustjs/crust` package provides the `crust` CLI binary for building and distributing your CLI as standalone executables. It is a **dev dependency** — the framework API comes from [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins).
+`@crustjs/crust` provides the `crust` CLI. The application API comes from [`@crustjs/core`](/docs/modules/core) and [`@crustjs/extensions`](/docs/modules/extensions).
 
 ## Install
 
@@ -11,35 +11,29 @@ The `@crustjs/crust` package provides the `crust` CLI binary for building and di
 bun add -d @crustjs/crust
 ```
 
-## CLI Binary
-
-The package includes the `crust` CLI, which provides:
+## Commands
 
 | Command                                                            | Description                                                    |
 | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [`crust build`](/docs/guide/build)                                 | Compile your CLI to standalone executables                     |
+| [`crust build`](/docs/guide/build)                                 | Validate and compile a CLI to standalone executables           |
 | [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --package` |
 
-The `crust` CLI is itself built with Crust (self-hosted), demonstrating the framework in action.
+`crust build` imports the entry point in a validation subprocess before compiling it. The build-validation protocol uses `VALIDATION_MODE_ENV` and `VALIDATION_FORCE_EXIT_ENV` from the explicitly unsupported `@crustjs/core/tooling` subpath. Application code should not set these internal environment variables.
 
-`crust build` can embed `PUBLIC_*` build-time constants from Bun's cwd env or from explicit `--env-file` inputs. Runtime env, Bun `.env` loading, and `PUBLIC_*` guidance are documented in [Environment Variables](/docs/guide/environment).
+The build command can embed `PUBLIC_*` constants from Bun's current-directory environment or explicit `--env-file` inputs. See [Environment variables](/docs/guide/environment).
 
-## When to Use
+## Distribution modes
 
-Install `@crustjs/crust` as a dev dependency when your project needs the `crust build` command for compiling to standalone executables. It is only needed at build time, not at runtime.
+### Standalone binaries
 
-For the framework API (`Crust` builder, plugins, etc.), use [`@crustjs/core`](/docs/modules/core) and [`@crustjs/plugins`](/docs/modules/plugins).
+The default `crust build` output is a raw binary and resolver script. Use it for release archives, containers, or custom distribution channels.
 
-### Distribution Modes
+### Per-platform npm packages
 
-**Standalone binaries** (default `crust build`) — Output raw binaries and a resolver script. Best for:
+`crust build --package` stages platform-specific binary packages and a root resolver package. Use [`crust publish`](/docs/guide/build#publishing-with-crust-publish) to publish the staged set.
 
-- GitHub Releases or direct binary downloads
-- Docker images with pre-installed binaries
-- Internal tools distributed via custom channels
+## Generated man pages
 
-**Per-OS npm distribution** (`crust build --package`) — Create platform-specific npm packages. Best for:
+`crust build --man` loads the exported root `Crust` builder, prepares its Command Snapshot through the unsupported tooling bridge, and writes `<outdir>/man/<name>.1`. See [`@crustjs/man`](/docs/modules/man).
 
-- Publishing to npm with automatic platform detection
-- Large CLIs where users only need one binary
-- Projects already using npm/bun as distribution channel
+Install this package only as a development dependency; generated applications do not need it at runtime.

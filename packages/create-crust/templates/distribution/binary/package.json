@@ -22,7 +22,7 @@
 	"devDependencies": {
 		"@crustjs/core": "^{{crustCoreVersion}}",
 		"@crustjs/crust": "^{{crustCliVersion}}",
-		"@crustjs/plugins": "^{{crustPluginsVersion}}",
+		"@crustjs/extensions": "^{{crustExtensionsVersion}}",
 		"@types/bun": "latest",
 		"typescript": "^6"
 	}

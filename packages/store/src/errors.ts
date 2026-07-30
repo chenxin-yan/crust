@@ -56,10 +56,7 @@ export interface ValidationErrorDetails {
  * provided schema and options — e.g. the input is not a Standard Schema v1
  * object.
  */
-export interface DefinitionErrorDetails {
-	/** The schema vendor name, when available. */
-	vendor?: string;
-}
+export interface DefinitionErrorDetails {}
 
 /**
  * Maps each {@link StoreErrorCode} to its structured details type.

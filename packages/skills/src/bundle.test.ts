@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { installSkillBundle, loadBundleFiles } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
@@ -600,7 +601,7 @@ describe("installSkillBundle", () => {
 		Object.assign(cmd.meta, { name: "funnel-builder", description: "x" });
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: snapshotCommand(cmd),
 				meta: META,
 				agents: ["claude-code"],
 				scope: "project",
@@ -633,7 +634,7 @@ describe("installSkillBundle", () => {
 		Object.assign(cmd.meta, { name: "funnel-builder", description: "x" });
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: snapshotCommand(cmd),
 				meta: META,
 				agents: ["claude-code"],
 				scope: "project",
@@ -723,7 +724,7 @@ describe("installSkillBundle", () => {
 		Object.assign(cmd.meta, { name: "funnel-builder", description: "x" });
 		await withCwd(tmpDir, () =>
 			generateSkill({
-				command: cmd,
+				command: snapshotCommand(cmd),
 				meta: META,
 				agents: ["claude-code"],
 				scope: "project",
@@ -784,7 +785,7 @@ describe("installSkillBundle", () => {
 		try {
 			await withCwd(tmpDir, () =>
 				generateSkill({
-					command: cmd,
+					command: snapshotCommand(cmd),
 					meta: { ...META, version: "2.0.0" },
 					agents: ["claude-code"],
 					scope: "project",

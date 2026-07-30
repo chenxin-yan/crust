@@ -2,9 +2,8 @@
 // Agent path resolution and detection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 
 import type { AgentClass, AgentTarget, Scope } from "./types.ts";
 
@@ -339,14 +338,8 @@ export function isUniversalAgent(agent: AgentTarget): boolean {
 }
 
 export interface DetectInstalledAgentsOptions {
-	/** Kept for backwards compatibility with previous API. */
-	scope?: Scope;
-	/** Kept for backwards compatibility with previous API. */
-	home?: string;
-	/** Working directory for PATH lookups. */
-	cwd?: string;
 	/** Test-only hook to override command detection. */
-	commandChecker?: (command: string, cwd: string) => Promise<boolean>;
+	commandChecker?: (command: string) => Promise<boolean>;
 }
 
 /**
@@ -356,14 +349,11 @@ export interface DetectInstalledAgentsOptions {
  * present them as a single optional "Universal" install target.
  */
 export async function detectInstalledAgents(
-	options?: string | DetectInstalledAgentsOptions,
+	options: DetectInstalledAgentsOptions = {},
 ): Promise<AgentTarget[]> {
-	const resolvedOptions: DetectInstalledAgentsOptions =
-		typeof options === "string" ? { home: options } : (options ?? {});
-	const cwd = resolvedOptions.cwd ?? process.cwd();
 	const commandChecker =
-		resolvedOptions.commandChecker ??
-		((command: string) => Promise.resolve(isCommandOnPath(command)));
+		options.commandChecker ??
+		((command: string) => Promise.resolve(Bun.which(command, { PATH: process.env.PATH }) !== null));
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {
@@ -371,7 +361,7 @@ export async function detectInstalledAgents(
 		let installed = false;
 
 		for (const command of commands) {
-			if (await commandChecker(command, cwd)) {
+			if (await commandChecker(command)) {
 				installed = true;
 				break;
 			}
@@ -406,57 +396,4 @@ export function resolveCanonicalSkillPath(scope: Scope, name: string): string {
 	}
 
 	return join(canonicalGlobalSkillsDir(homedir()), name);
-}
-
-/**
- * Non-executing PATH lookup. Walks `process.env.PATH` and checks whether a
- * matching executable exists using `fs.accessSync` with `X_OK`.
- *
- * On Windows, also probes `PATHEXT` extensions (`.exe`, `.cmd`, `.bat`, `.com`).
- *
- * This intentionally never spawns the target binary — some CLI tools
- * (Electron-based IDEs, etc.) interpret arguments like `version` as workspace
- * paths, causing unwanted side effects.
- */
-function isCommandOnPath(command: string): boolean {
-	const pathEnv = process.env.PATH ?? "";
-	const dirs = pathEnv.split(delimiter).filter((d) => d.length > 0);
-
-	const isWindows = process.platform === "win32";
-	const pathExts = isWindows
-		? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter((e) => e.length > 0)
-		: [];
-
-	for (const dir of dirs) {
-		// On POSIX, check for an executable file matching the command name directly.
-		// Skip this on Windows where X_OK ≡ R_OK and would false-positive on any
-		// readable file; rely solely on the PATHEXT loop instead.
-		if (!isWindows && isExecutable(join(dir, command))) {
-			return true;
-		}
-
-		if (isWindows) {
-			for (const ext of pathExts) {
-				if (isExecutable(join(dir, command + ext))) {
-					return true;
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-function isExecutable(filePath: string): boolean {
-	try {
-		// `accessSync(X_OK)` returns success for executable directories on POSIX,
-		// so verify the entry is a regular file (or symlink to one) before
-		// reporting the command as installed. `statSync` follows symlinks, so
-		// symlinked binaries are still detected.
-		if (!statSync(filePath).isFile()) return false;
-		accessSync(filePath, constants.X_OK);
-		return true;
-	} catch {
-		return false;
-	}
 }

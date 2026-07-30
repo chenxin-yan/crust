@@ -18,7 +18,7 @@ bun run build
 This template supports two distribution modes:
 
 - **Standalone binaries (recommended)**: use `bun run build` for raw binaries, then `bun run package` for npm-ready staged packages.
-- **Bun runtime package**: distribute with runtime dependencies (`@crustjs/core` and `@crustjs/plugins` in `dependencies`).
+- **Bun runtime package**: distribute with runtime dependencies (`@crustjs/core` and `@crustjs/extensions` in `dependencies`).
 
 ## Publishing
 

@@ -1,0 +1,118 @@
+---
+title: Extensions
+description: Install and author app-wide reusable capabilities.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+An Extension is an app-wide capability that owns any flags and commands it contributes. Attach Extensions once, on the root builder:
+
+```ts
+import { Crust } from "@crustjs/core";
+import {
+  completion,
+  didYouMean,
+  help,
+  noColor,
+  updateNotifier,
+  version,
+} from "@crustjs/extensions";
+
+const app = new Crust("my-cli").extend(
+  help(),
+  version("0.2.0"),
+  completion(),
+  didYouMean(),
+  noColor(),
+  updateNotifier({ packageName: "my-cli", currentVersion: "0.2.0" }),
+);
+```
+
+See the [Extensions module](/docs/modules/extensions) for each capability's options.
+
+<Callout type="warn">
+  `.extend()` is root-only. Extensions apply to the entire application, so attaching one to a child
+  is a `DEFINITION` error.
+</Callout>
+
+## Author an Extension
+
+`extension(name, config)` returns a frozen plain value:
+
+```ts
+import { Crust, extension } from "@crustjs/core";
+
+export const diagnostics = extension("diagnostics", {
+  flags: {
+    trace: {
+      type: "boolean",
+      description: "Print diagnostic timing",
+      inherit: true,
+    },
+  },
+  commands: [
+    new Crust("doctor")
+      .meta({ description: "Check the installation" })
+      .handle(({ stdout }) => stdout("ok")),
+  ],
+  async intercept(ctx, next) {
+    const start = performance.now();
+    await next();
+    if (ctx.flags.trace) ctx.stderr(`completed in ${performance.now() - start}ms`);
+  },
+  async handleError(error, ctx, next) {
+    if (error instanceof Error && error.name === "NetworkError") {
+      ctx.stderr(`Network error: ${error.message}`);
+      return;
+    }
+    await next();
+  },
+});
+```
+
+The config can contain `flags`, `commands`, `intercept`, and `handleError`.
+
+## Owned flags and commands
+
+Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `inherit` controls ordinary command inheritance and remains available on the flag definition.
+
+Extension commands are configured `Crust` builders attached at the root. Their input definitions are validated before an intercept runs.
+
+A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide either. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
+
+## Interception
+
+`intercept(ctx, next)` runs after routing and syntax parsing but before application validation, schemas, Context construction, and the Command Handler.
+
+Extensions run in `.extend()` order. Calling `await next()` enters the rest of the chain; code after it runs as the chain unwinds. Do not call `next()` to short-circuit:
+
+```ts
+const cached = extension("cached", {
+  async intercept(ctx, next) {
+    if (ctx.flags.cached) {
+      ctx.stdout("cached result");
+      return;
+    }
+    await next();
+  },
+});
+```
+
+Routing and syntax errors happen before interception and skip the intercept chain.
+
+## Error presentation
+
+`handleError(error, ctx, next)` is a presentation chain used only by `execute()`. Render a known error and return, or call `next()` to delegate. The last handler is Core's default renderer.
+
+Core sets a nonzero outcome before this chain. Handling presentation cannot turn a failure into success. Programmatic `run()` skips the chain and throws the original error.
+
+## Extension context
+
+Both hooks receive an `ExtensionContext` containing:
+
+- `argv`, syntax-parsed `args` and `flags`, and `rawArgs`
+- `rootCommand` and `command` as readonly serializable Command Snapshots
+- `commandPath`
+- injectable `stdout(text)` and `stderr(text)` writers
+
+The values are invocation data, not mutable command definitions.

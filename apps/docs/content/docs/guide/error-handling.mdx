@@ -1,182 +1,87 @@
 ---
 title: Error Handling
-description: Handle errors with typed error codes and structured details.
+description: Handle Crust failures, application errors, and cancellation.
 ---
-
-import { Callout } from "fumadocs-ui/components/callout";
-
-Crust uses a custom `CrustError` class with typed error codes for all framework-level errors. This lets you handle errors programmatically without parsing error messages.
 
 ## CrustError
 
-Every error thrown by Crust is an instance of `CrustError`:
+Crust uses exactly four framework error codes:
 
-```ts
-import { CrustError, parseArgs } from "@crustjs/core";
-
-try {
-  parseArgs(cmd._node, ["--unknown"]);
-} catch (error) {
-  if (error instanceof CrustError) {
-    console.log(error.code); // "PARSE"
-    console.log(error.message); // 'Unknown flag "--unknown"'
-  }
-}
-```
-
-## Error Codes
-
-Crust defines five error codes — `DEFINITION`, `VALIDATION`, `PARSE`, `EXECUTION`, and `COMMAND_NOT_FOUND`. See the [CrustError reference](/docs/api/errors#error-codes) for when each is thrown.
-
-## Type Narrowing with `.is()`
-
-Use `.is()` to narrow the error type:
-
-```ts
-if (error instanceof CrustError) {
-  if (error.is("COMMAND_NOT_FOUND")) {
-    // error.details is now typed as CommandNotFoundErrorDetails
-    console.log(`Unknown: ${error.details.input}`);
-    console.log(`Available: ${error.details.available.join(", ")}`);
-  }
-
-  if (error.is("VALIDATION")) {
-    console.log("Missing required input:", error.message);
-  }
-}
-```
-
-## COMMAND_NOT_FOUND Details
-
-The `COMMAND_NOT_FOUND` error includes structured details for building helpful error messages:
-
-```ts
-interface CommandNotFoundErrorDetails {
-  input: string; // What the user typed
-  available: string[]; // Valid subcommand names
-  commandPath: string[]; // Path to the parent command
-  parentCommand: CommandNode; // The parent command node
-}
-```
-
-The [Did You Mean Plugin](/docs/modules/plugins/did-you-mean) uses these details to suggest corrections.
-
-## Error Chaining with `.withCause()`
-
-Chain an original error for debugging:
-
-```ts
-try {
-  await someOperation();
-} catch (originalError) {
-  throw new CrustError("EXECUTION", "Operation failed").withCause(originalError);
-}
-```
-
-Access the original via `error.cause`.
-
-## How `.execute()` Handles Errors
-
-`.execute()` catches all errors, prints them to stderr as `Error: <message>`, and sets `process.exitCode = 1`. It never throws. This handles:
-
-- Validation errors (missing args/flags)
-- Parse errors (unknown flags, bad types)
-- Command not found errors
-- Runtime errors (exceptions in command handlers)
-- Non-CrustError exceptions are wrapped in `CrustError("EXECUTION", ...)` with the original error set as the cause
-
-## Error Wrapping
-
-When a non-`CrustError` is thrown inside a command handler, `.execute()` automatically wraps it:
-
-```ts
-// Original: throw new Error("oops")
-// Becomes: CrustError("EXECUTION", "oops") with cause set to original error
-```
-
-This ensures consistent error formatting for all errors.
-
-## Throwing Errors in Commands
-
-For framework-level errors, throw `CrustError`:
+| Code                | Meaning                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `DEFINITION`        | An invalid command, Extension, Context, flag, alias, or schema definition |
+| `PARSE`             | Argv syntax, unknown flag, or built-in conversion failure                 |
+| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues               |
+| `COMMAND_NOT_FOUND` | An unknown subcommand at the current command path                         |
 
 ```ts
 import { CrustError } from "@crustjs/core";
 
-.run(({ flags }) => {
-  if (!isValidConfig(flags.config)) {
-    throw new CrustError("VALIDATION", `Invalid config file: ${flags.config}`);
+try {
+  await app.run(argv);
+} catch (error) {
+  if (error instanceof CrustError && error.is("VALIDATION")) {
+    console.error(error.details?.issues);
   }
-})
+}
 ```
 
-For application-level errors, throw plain `Error`:
+A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
+
+`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot.
+
+## Application errors pass through
+
+Errors from Command Handlers and Context construction or disposal are not wrapped:
 
 ```ts
-.run(({ flags }) => {
-  const result = await deploy(flags.env);
-  if (!result.ok) {
-    throw new Error(`Deployment failed: ${result.message}`);
-  }
-})
+const failure = new Error("service unavailable");
+const app = new Crust("app").handle(() => {
+  throw failure;
+});
+
+try {
+  await app.run([]);
+} catch (error) {
+  console.assert(error === failure);
+}
 ```
 
-Both are handled correctly — plain errors get wrapped in `CrustError("EXECUTION", ...)` automatically.
+Use ordinary application error classes when callers need to distinguish domain failures.
 
-## Validation Layers
+## Terminal presentation
 
-Crust catches command definition mistakes through three complementary layers. Each layer guards against the same class of issues, so errors are caught as early as possible — at compile time if types are narrowed, at definition time if the builder is called, and at build time before a binary is shipped.
+Extension `handleError` hooks form the presentation chain for `execute()`:
 
-### 1. Compile-Time (TypeScript Types)
+```ts
+const serviceErrors = extension("service-errors", {
+  async handleError(error, ctx, next) {
+    if (error instanceof Error && error.name === "ServiceUnavailableError") {
+      ctx.stderr(error.message);
+      return;
+    }
+    await next();
+  },
+});
+```
 
-When you use `.flags()` and `.args()` with literal types, TypeScript catches structural issues **before your code runs**. The error appears as a red squiggle on the exact offending arg or flag.
+A hook renders and returns, or delegates with `next()`. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
 
-| Check                            | Type Utility              | Branded Error Property  | Example                                               |
-| -------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
-| Only last arg can be variadic    | `ValidateVariadicArgs`    | `FIX_VARIADIC_POSITION` | `{ name: "files", variadic: true }` as a non-last arg |
-| No alias collisions              | `ValidateFlagAliases`     | `FIX_ALIAS_COLLISION`   | Two flags both use `short: "v"`                       |
-| No `no-` prefix on names/aliases | `ValidateNoPrefixedFlags` | `FIX_NO_PREFIX`         | Flag named `no-cache` or alias `no-store`             |
+`run()` never invokes this chain. It throws the original error and leaves rendering and exit status to its caller.
 
-These checks are **bypassed** when types are widened (e.g. `as any`, dynamic construction, or non-const generics). The runtime layers below serve as defense-in-depth.
+## Cancellation
 
-### 2. Runtime (Builder Methods + parseArgs)
+Prompt cancellation and other cooperative cancellation use a `DOMException` named `"AbortError"`:
 
-Even without TypeScript or when types are erased, Crust validates definitions at runtime:
+```ts
+try {
+  await app.run(argv);
+} catch (error) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return;
+  }
+  throw error;
+}
+```
 
-**`.flags()` throws `CrustError("DEFINITION")`:**
-
-| Check                       | Error Message                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------ |
-| Flag name starts with `no-` | `Flag "--no-cache" must not use "no-" prefix; define "cache" and negate with "--no-cache"` |
-| Alias starts with `no-`     | `Alias "--no-store" on "--cache" must not use "no-" prefix (reserved for negation)`        |
-
-**Constructor throws `CrustError("DEFINITION")`:**
-
-| Check      | Error Message                          |
-| ---------- | -------------------------------------- |
-| Empty name | `meta.name must be a non-empty string` |
-
-**`parseArgs` throws `CrustError("DEFINITION")` or `CrustError("PARSE")`:**
-
-| Check                                         | Code         | Error Message                                                       |
-| --------------------------------------------- | ------------ | ------------------------------------------------------------------- |
-| Alias collision (alias->name or alias->alias) | `DEFINITION` | `Alias collision: "-v" is used by both "--verbose" and "--version"` |
-| `no-` prefixed flag name (defense-in-depth)   | `DEFINITION` | `Flag "--no-cache" must not use "no-" prefix...`                    |
-| `no-` prefixed alias (defense-in-depth)       | `DEFINITION` | `Alias "--no-store" on "--cache" must not use "no-" prefix...`      |
-| Unknown flag (strict mode)                    | `PARSE`      | `Unknown flag "--unknown"`                                          |
-| Invalid number coercion                       | `PARSE`      | `Expected number for --port, got "abc"`                             |
-| Boolean value assignment (`--flag=true`)      | `PARSE`      | `Failed to parse command arguments`                                 |
-| Negating an alias (`--no-loud`)               | `PARSE`      | `Cannot negate alias "--no-loud"; use "--no-verbose" instead`       |
-
-**`validateParsed` throws `CrustError("VALIDATION")`:**
-
-| Check                     | Error Message                        |
-| ------------------------- | ------------------------------------ |
-| Missing required argument | `Missing required argument "<name>"` |
-| Missing required flag     | `Missing required flag "--config"`   |
-
-`validateParsed` is called after middleware, so plugins like `helpPlugin` can intercept `--help` before these errors are surfaced.
-
-### 3. Pre-Compile (crust build)
-
-[`crust build`](/docs/guide/build#pre-compile-validation) runs the same definition checks above across the full command tree — including plugin-injected flags and subcommands — before compiling. This catches issues like plugin-introduced alias collisions before shipping a binary. See the [build guide](/docs/guide/build#pre-compile-validation) for details.
+`execute()` treats this as silent cancellation and sets `process.exitCode` to `130`. `run()` throws the same exception.

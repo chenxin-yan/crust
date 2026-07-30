@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
-import { fuzzyFilter } from "../core/fuzzy.ts";
+import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
 import { isTTY, runPrompt, submit } from "../core/renderer.ts";
 import {
@@ -12,8 +12,7 @@ import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_DOWN_INDICATOR,
-	SCROLL_UP_INDICATOR,
+	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
@@ -23,7 +22,9 @@ import {
 	calculateScrollOffset,
 	formatPromptLine,
 	formatSubmitted,
+	moveCursor,
 	normalizeChoices,
+	validateSelection,
 } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -42,7 +43,11 @@ export interface MultifilterOptions<T> {
 	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: readonly T[];
-	/** Whether at least one item must be selected (defaults to false) */
+	/**
+	 * Whether at least one item must be selected.
+	 *
+	 * @default false
+	 */
 	readonly required?: boolean;
 	/** Minimum number of selections required */
 	readonly min?: number;
@@ -50,7 +55,11 @@ export interface MultifilterOptions<T> {
 	readonly max?: number;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
-	/** Maximum number of visible filtered results before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible filtered results before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
@@ -97,58 +106,6 @@ function choiceIndex<T>(
 	return choices.findIndex((choice) => choice.label === item.label && choice.value === item.value);
 }
 
-function validateSelection(
-	selectedCount: number,
-	required?: boolean,
-	min?: number,
-	max?: number,
-): string | null {
-	if (required && selectedCount === 0) {
-		return "At least one item must be selected";
-	}
-
-	if (min !== undefined && selectedCount < min) {
-		return `Select at least ${min} item${min === 1 ? "" : "s"}`;
-	}
-
-	if (max !== undefined && selectedCount > max) {
-		return `Select at most ${max} item${max === 1 ? "" : "s"}`;
-	}
-
-	return null;
-}
-
-function refilter<T>(state: MultifilterState<T>, maxVisible: number): MultifilterState<T> {
-	const results = fuzzyFilter(state.query, state.choices);
-	const listCursor = 0;
-	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
-	return { ...state, results, listCursor, scrollOffset, error: null };
-}
-
-function highlightMatches(label: string, indices: readonly number[], theme: PromptTheme): string {
-	if (indices.length === 0) return label;
-
-	const indexSet = new Set(indices);
-	let result = "";
-	let i = 0;
-
-	while (i < label.length) {
-		if (indexSet.has(i)) {
-			let matchedChars = "";
-			while (i < label.length && indexSet.has(i)) {
-				matchedChars += label[i];
-				i++;
-			}
-			result += theme.filterMatch(matchedChars);
-		} else {
-			result += label[i];
-			i++;
-		}
-	}
-
-	return result;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Keypress handler
 // ────────────────────────────────────────────────────────────────────────────
@@ -191,28 +148,26 @@ function createHandleKey<T>(
 
 		if (key.name === "up") {
 			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const listCursor = state.listCursor <= 0 ? totalItems - 1 : state.listCursor - 1;
-			const scrollOffset = calculateScrollOffset(
-				listCursor,
+			const moved = moveCursor(
+				state.listCursor,
+				state.results.length,
+				-1,
 				state.scrollOffset,
-				totalItems,
 				maxVisible,
 			);
-			return { ...state, listCursor, scrollOffset, error: null };
+			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset, error: null };
 		}
 
 		if (key.name === "down") {
 			if (state.results.length === 0) return state;
-			const totalItems = state.results.length;
-			const listCursor = state.listCursor >= totalItems - 1 ? 0 : state.listCursor + 1;
-			const scrollOffset = calculateScrollOffset(
-				listCursor,
+			const moved = moveCursor(
+				state.listCursor,
+				state.results.length,
+				1,
 				state.scrollOffset,
-				totalItems,
 				maxVisible,
 			);
-			return { ...state, listCursor, scrollOffset, error: null };
+			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset, error: null };
 		}
 
 		const edit = handleTextEdit(key, state.query, state.cursorPos);
@@ -270,7 +225,7 @@ function renderMultifilter<T>(
 
 	const visibleCount = Math.min(totalResults, maxVisible);
 	if (state.scrollOffset > 0) {
-		lines.push(theme.hint(SCROLL_UP_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	for (let i = 0; i < visibleCount; i++) {
@@ -296,7 +251,7 @@ function renderMultifilter<T>(
 	}
 
 	if (state.scrollOffset + visibleCount < totalResults) {
-		lines.push(theme.hint(SCROLL_DOWN_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	if (state.error) {

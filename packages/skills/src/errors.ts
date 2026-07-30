@@ -31,10 +31,9 @@ export interface SkillKindMismatch {
  *
  * Set on {@link SkillConflictDetails.manifestMalformed} when the directory
  * contains a `crust.json` that exists but cannot be interpreted — e.g. it is
- * not valid JSON, lacks a `version`, or has an unrecognized `kind` value
- * (a hand-edit typo like `"bundel"`, or a forward-compatible value emitted by
- * a newer Crust release). Distinct from a missing `crust.json`, which keeps
- * the original "not created by Crust" semantics.
+ * not valid JSON, lacks a `version` or `kind`, or has an unrecognized `kind`
+ * value such as a hand-edit typo like `"bundel"`. Distinct from a missing
+ * `crust.json`, which keeps the original "not created by Crust" semantics.
  */
 export interface SkillManifestMalformed {
 	/** Why the manifest could not be interpreted. */
@@ -125,13 +124,17 @@ function buildSkillConflictMessage(details: SkillConflictDetails): string {
 	if (details.manifestMalformed) {
 		const { reason, rawKind } = details.manifestMalformed;
 		switch (reason) {
+			case "missing-kind":
+				return (
+					`${prefix} contains a crust.json with no "kind" field. ` +
+					`Set it to "generated" or "bundle", or pass force: true to overwrite.`
+				);
 			case "unknown-kind": {
 				const raw = rawKind ?? "<unknown>";
 				return (
 					`${prefix} was created by Crust but its crust.json declares an ` +
-					`unrecognized kind "${raw}" — likely a hand-edit typo or a ` +
-					`crust.json written by a newer Crust release. Fix the kind ` +
-					`field, upgrade Crust, or pass force: true to overwrite.`
+					`unrecognized kind "${raw}". Set it to "generated" or "bundle", ` +
+					`or pass force: true to overwrite.`
 				);
 			}
 			case "parse-error":

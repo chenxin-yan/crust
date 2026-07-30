@@ -1,500 +1,208 @@
 ---
-title: Types Reference
-description: All exported types and interfaces from @crustjs/core.
+title: "Types"
+description: Public command definitions, snapshots, Command Handler contexts, Contexts, and Extensions.
 ---
 
-Complete reference of all types exported from `@crustjs/core`.
+All types on this page are exported from `@crustjs/core`.
 
-## Command Types
-
-### `CommandNode`
-
-Internal representation of a single node in the command tree. Built by the `Crust` builder class; exported for downstream packages.
-
-```ts
-interface CommandNode {
-  meta: CommandMeta;
-  localFlags: FlagsDef;
-  effectiveFlags: FlagsDef;
-  args: ArgsDef | undefined;
-  subCommands: Record<string, CommandNode>;
-  plugins: CrustPlugin[];
-  preRun?: (ctx: unknown) => void | Promise<void>;
-  run?: (ctx: unknown) => void | Promise<void>;
-  postRun?: (ctx: unknown) => void | Promise<void>;
-}
-```
-
-- `localFlags` — Flags defined directly on this command via `.flags()`
-- `effectiveFlags` — Inherited flags merged with local flags (used by the parser and help plugin)
-- `plugins` — Plugins registered via `.use()`
-
-### `CrustCommandContext<A, F>`
-
-Runtime context passed to `preRun`, `run`, and `postRun` hooks on the `Crust` builder:
-
-```ts
-interface CrustCommandContext<A extends ArgsDef, F extends FlagsDef> {
-  args: InferArgs<A>; // Resolved positional arguments
-  flags: InferFlags<F>; // Resolved flags
-  rawArgs: string[]; // Arguments after `--`
-  command: CommandNode; // The resolved command node
-}
-```
-
-### `CommandMeta`
-
-Metadata describing a command:
-
-```ts
-interface CommandMeta {
-  name: string; // Command name (required)
-  description?: string; // Help text description
-  usage?: string; // Custom usage string
-  aliases?: readonly string[]; // Alternative names
-  hidden?: boolean; // Omit from default --help output
-}
-```
-
-#### `aliases`
-
-Alternative names that resolve to the same command. Type: `readonly string[]`. Default: `undefined`.
-
-```ts
-meta: { name: "issue", aliases: ["issues", "i"] }
-```
-
-With this metadata, `cli issue`, `cli issues`, and `cli i` all route to the same command node.
-
-**Conflict policy.** Alias strings must not collide with the command's own canonical `name`, with any sibling's `name`, or with any sibling's alias. Each alias must be a non-empty string with no whitespace and must not start with `-`. Collisions throw a `CrustError("DEFINITION", …)` at registration time. Plugin-installed subcommands (via the `addCommand` setup action) are validated when registered too: a colliding alias is skipped with a warning, mirroring how a colliding canonical name is handled today. `prepareCommandTree()` re-runs the same check against the final tree.
-
-**Display contract.** The canonical `name` is always what appears in `commandPath`, error messages, and `didYouMeanPlugin` suggestions — it does not depend on which alias the user typed. Help text renders the inline form `name (alias1, alias2)`.
-
-#### `hidden`
-
-When `true`, the command is omitted from any tooling that enumerates the command tree for users — help output, generated man pages, skill descriptors, completion candidate lists, and similar surfaces. Type: `boolean`. Default: `false`.
-
-```ts
-meta: { name: "__complete", hidden: true, description: "Internal completion entrypoint" }
-```
-
-The command is **only hidden from listings**: it stays fully invocable by name (or alias), routing is unchanged, and it can still surface through tooling that looks up specific commands rather than enumerating the tree (e.g. `didYouMeanPlugin` suggestions).
-
-**Tooling contract.** Any renderer or generator that walks `subCommands` to produce a user-facing listing should skip nodes where `meta.hidden === true`. The default `helpPlugin` follows this contract today; first-party generators (man pages, skill descriptors, completion) and any custom renderers should too.
-
-Intended for internal/runtime commands such as a `__complete` entrypoint used by shell-completion tooling. Marking a user-facing subcommand as `hidden` is supported but unusual.
-
-## Argument Types
-
-### `ArgDef`
-
-Defines a single positional argument. Discriminated union by `type` for type-safe defaults, plus a `type`-less variant for raw schema-backed parsing:
-
-```ts
-type ArgDef = StringArgDef | NumberArgDef | BooleanArgDef | RawArgDef;
-```
-
-`type` is optional. Omitting it activates the raw parser mode (see
-[`parseArgs`](/docs/api/parse-args)) and is the default produced by
-[`arg()`](/docs/modules/validate#quick-start--zod) in `@crustjs/validate`.
-
-Each variant constrains `default` to match its `type`. Boolean toggle fields (`required`, `variadic`) only accept `true`:
-
-```ts
-// String variant (Number and Boolean follow the same shape, minus `choices`)
-interface StringArgDef {
-  name: string; // Argument name
-  type: "string"; // Type discriminant
-  description?: string; // Help text
-  default?: string; // Default value (type-safe)
-  required?: true; // Error if missing
-  variadic?: true; // Collect remaining into array
-  choices?: readonly string[]; // Static enum of valid values (string only)
-}
-```
-
-#### `choices` (string args only)
-
-A static enum of valid values for the argument. Type: `readonly string[]`. Default: `undefined`. Only available on string-typed args (`StringArgDef`); not supported on number or boolean variants.
-
-```ts
-args: [{ name: "target", type: "string", choices: ["browser", "bun", "node"] }] as const;
-```
-
-**Validated at parse time.** Passing a value outside `choices` throws `CrustError("PARSE", …)` before any `parse` transform runs. Shell-completion plugins also consume `choices` to emit value candidates.
-
-### `ArgsDef`
-
-Ordered tuple of argument definitions:
-
-```ts
-type ArgsDef = readonly ArgDef[];
-```
-
-## Flag Types
-
-### `FlagDef`
-
-Defines a single named flag. Discriminated union by `type` and `multiple`:
-
-```ts
-type FlagDef =
-  | StringFlagDef
-  | NumberFlagDef
-  | BooleanFlagDef
-  | UrlFlagDef
-  | PathFlagDef
-  | JsonFlagDef // single-value
-  | StringMultiFlagDef
-  | NumberMultiFlagDef
-  | BooleanMultiFlagDef
-  | UrlMultiFlagDef
-  | PathMultiFlagDef
-  | JsonMultiFlagDef; // multi-value
-```
-
-Flags always declare `type` because it defines CLI grammar/token ownership:
-boolean flags do not consume a value, while string and number flags consume
-`--flag value` / `--flag=value`. Schema-backed flags produced by
-[`flag()`](/docs/modules/validate#quick-start--zod) still include this parser
-metadata; the schema validates and transforms the parsed value afterward.
-
-Single-value variants use `multiple?: never` (field absent); multi-value variants require `multiple: true`:
-
-```ts
-// Single-value string flag
-interface StringFlagDef {
-  type: "string"; // Type discriminant
-  description?: string; // Help text
-  default?: string; // Default value (type-safe)
-  required?: true; // Error if missing
-  short?: string; // Single-character short form (-x)
-  aliases?: string[]; // Additional aliases (single-char or long)
-  multiple?: never; // Absent for single-value flags
-  inherit?: true; // Inherited by subcommands
-  choices?: readonly string[]; // Static enum of valid values (string only)
-}
-
-// Multi-value string flag
-interface StringMultiFlagDef {
-  type: "string"; // Type discriminant
-  description?: string; // Help text
-  default?: string[]; // Default array value (type-safe)
-  required?: true; // Error if missing
-  short?: string; // Single-character short form (-x)
-  aliases?: string[]; // Additional aliases (single-char or long)
-  multiple: true; // Collect repeated values into array
-  inherit?: true; // Inherited by subcommands
-  choices?: readonly string[]; // Static enum of valid values (string only)
-}
-// Number variants follow the same pattern.
-// Boolean variants additionally support `noNegate`:
-
-interface BooleanFlagDef {
-  type: "boolean";
-  description?: string;
-  default?: boolean;
-  required?: true;
-  short?: string;
-  aliases?: string[];
-  multiple?: never;
-  inherit?: true;
-  noNegate?: true; // Hide the --no-{name} negation label
-}
-```
-
-Boolean toggle fields (`required`, `multiple`, `inherit`, `noNegate`) only accept `true` — passing `false` is a type error.
-
-`noNegate` is exclusive to boolean flag types. Setting it on a string or number flag is a compile-time error.
-
-#### `choices` (string flags only)
-
-A static enum of valid values for the flag. Type: `readonly string[]`. Default: `undefined`. Only available on string-typed flags (`StringFlagDef` and `StringMultiFlagDef`); not supported on number or boolean variants.
-
-```ts
-flags: {
-  target: { type: "string", choices: ["browser", "bun", "node"] },
-  suites: { type: "string", multiple: true, choices: ["unit", "integration"] },
-}
-```
-
-**Validated at parse time.** Passing a value outside `choices` throws `CrustError("PARSE", …)`. When combined with `parse`, the raw argv token is validated against `choices` first; `parse` only runs on values that pass the choices gate. Shell-completion plugins also consume `choices` to emit value candidates after `--flag=` or `--flag <TAB>`.
-
-#### `parse` (string flags and args only)
-
-A synchronous parser for the raw argv token: `parse?: (raw: string) => unknown`. The return type becomes the inferred runtime type of the flag/argument. Only allowed on `StringFlagDef`, `StringMultiFlagDef`, and `StringArgDef`; every non-string variant declares `parse?: never`, so misuse is rejected at compile time.
-
-```ts
-flags: {
-  port: { type: "string", parse: (s) => Number(s), default: "3000" },
-}
-// flags.port: number (3000 when argv is absent)
-```
-
-Async `parse` functions are rejected at command setup with `CrustError("CONFIG", …)`. For `multiple: true`, `parse` runs per element. When `default` is set and argv is absent, Crust runs `parse(String(default))` so the runtime value matches the inferred type. See [Types — the parse escape hatch](/docs/guide/types#the-parse-escape-hatch) for the full contract.
-
-### `FlagsDef`
-
-Record mapping flag names to definitions:
-
-```ts
-type FlagsDef = Record<string, FlagDef>;
-```
-
-## Flag Inheritance Types
-
-### `InheritableFlags<F>`
-
-Picks only the flags from `F` that have `inherit: true`:
-
-```ts
-type InheritableFlags<F extends FlagsDef> = {
-  [K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
-};
-```
-
-### `MergeFlags<Parent, Local>`
-
-Merges parent flags with local flags, where local keys override parent keys:
-
-```ts
-type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Omit<Parent, keyof Local> &
-  Local;
-```
-
-### `EffectiveFlags<Inherited, Local>`
-
-Computes the effective flags for a command by filtering inherited flags (only those with `inherit: true`) and merging with local flags:
-
-```ts
-type EffectiveFlags<Inherited extends FlagsDef, Local extends FlagsDef> = MergeFlags<
-  InheritableFlags<Inherited>,
-  Local
->;
-```
-
-This is the type-level counterpart of the runtime `computeEffectiveFlags()` function.
-
-## Inference Types
-
-### `InferArgs<A>`
-
-Maps an `ArgsDef` tuple to resolved arg types:
-
-```ts
-type InferArgs<A> = A extends ArgsDef ? /* resolved types */ : Record<string, never>;
-```
-
-**Resolution rules:**
-
-| Definition                                           | Inferred Type         |
-| ---------------------------------------------------- | --------------------- |
-| `{ type: "string" }`                                 | `string \| undefined` |
-| `{ type: "string", required: true }`                 | `string`              |
-| `{ type: "string", default: "hi" }`                  | `string`              |
-| `{ type: "number" }`                                 | `number \| undefined` |
-| `{ type: "number", default: 3000 }`                  | `number`              |
-| `{ type: "string", variadic: true }`                 | `string[]`            |
-| `{ type: "string", variadic: true, required: true }` | `string[]`            |
-| `{ name: "x" }` (no `type`)                          | `unknown`             |
-| `{ name: "x", variadic: true }` (no `type`)          | `unknown[]`           |
-
-Variadic args always resolve to `T[]`. `required` does not change the type — it only controls whether an empty array fails validation at runtime.
-
-Type-less (raw) positional args — produced by [`arg()`](/docs/modules/validate#quick-start--zod) from `@crustjs/validate` — resolve to `unknown` (or `unknown[]` when variadic). The downstream schema validator narrows them to the concrete output type.
-
-### `InferFlags<F>`
-
-Maps a `FlagsDef` record to resolved flag types:
-
-```ts
-type InferFlags<F> = F extends FlagsDef ? /* resolved types */ : Record<string, never>;
-```
-
-**Resolution rules:**
-
-| Definition                                           | Inferred Type           |
-| ---------------------------------------------------- | ----------------------- |
-| `{ type: "string" }`                                 | `string \| undefined`   |
-| `{ type: "string", required: true }`                 | `string`                |
-| `{ type: "string", default: "hi" }`                  | `string`                |
-| `{ type: "boolean" }`                                | `boolean \| undefined`  |
-| `{ type: "string", multiple: true }`                 | `string[] \| undefined` |
-| `{ type: "string", multiple: true, required: true }` | `string[]`              |
-
-## Parse Types
-
-### `ParseResult<A, F>`
-
-Output of `parseArgs`:
-
-```ts
-interface ParseResult<A extends ArgsDef, F extends FlagsDef> {
-  args: InferArgs<A>; // Resolved positional arguments
-  flags: InferFlags<F>; // Resolved flags
-  rawArgs: string[]; // Arguments after `--`
-}
-```
-
-## Routing Types
-
-### `CommandRoute`
-
-Output of `resolveCommand`:
-
-```ts
-interface CommandRoute {
-  command: CommandNode; // The resolved command
-  argv: string[]; // Remaining argv
-  commandPath: string[]; // Full command path
-}
-```
-
-## Plugin Types
-
-### `CrustPlugin`
-
-The plugin interface:
-
-```ts
-interface CrustPlugin {
-  name?: string;
-  setup?: (context: SetupContext, actions: SetupActions) => void | Promise<void>;
-  middleware?: PluginMiddleware;
-}
-```
-
-### `SetupContext`
-
-Context available during plugin setup:
-
-```ts
-interface SetupContext {
-  readonly argv: readonly string[];
-  readonly rootCommand: CommandNode;
-  readonly state: PluginState;
-}
-```
-
-### `SetupActions`
-
-Actions available during plugin setup:
-
-```ts
-interface SetupActions {
-  addFlag(command: CommandNode, name: string, def: FlagDef): void;
-  addSubCommand(parent: CommandNode, name: string, command: CommandNode): void;
-}
-```
-
-- `addFlag` — inject a flag into a command's `effectiveFlags` object (`localFlags` is unchanged). If the command already has a flag with the same name, the plugin's flag overrides it. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
-- `addSubCommand` — inject a subcommand into a command's `subCommands` record. If the parent already has a subcommand with the same name (user-defined), the call is skipped — user definitions always take priority. [`crust build`](/docs/guide/build#pre-compile-validation) emits a warning when this happens.
-
-### `MiddlewareContext`
-
-Context available during middleware execution:
-
-```ts
-interface MiddlewareContext {
-  readonly argv: readonly string[];
-  readonly rootCommand: CommandNode;
-  readonly state: PluginState;
-  route: Readonly<CommandRoute> | null;
-  input: ParseResult | null;
-}
-```
-
-### `PluginMiddleware`
-
-Middleware function type:
-
-```ts
-type PluginMiddleware = (
-  context: MiddlewareContext,
-  next: () => Promise<void>,
-) => void | Promise<void>;
-```
-
-## Other Types
+## Definition types
 
 ### `ValueType`
-
-Supported type literals for args and flags:
 
 ```ts
 type ValueType = "string" | "number" | "boolean" | "url" | "path" | "json";
 ```
 
-The three formatted built-ins resolve to:
+| Value     | Runtime value                        |
+| --------- | ------------------------------------ |
+| `string`  | `string`                             |
+| `number`  | `number`                             |
+| `boolean` | `boolean`                            |
+| `url`     | `URL`                                |
+| `path`    | Absolute `string`, with `~` expanded |
+| `json`    | `unknown` from `JSON.parse()`        |
 
-- `"url"` — [`URL`](https://developer.mozilla.org/docs/Web/API/URL) instance via `new URL(raw)`
-- `"path"` — absolute `string` via `path.resolve(process.cwd(), expand(raw))`
-- `"json"` — `unknown` via `JSON.parse(raw)`
-
-See [Types](/docs/guide/types) for semantics, error modes, and shell-completion behaviour.
-
-### `Resolve<T>`
-
-Maps a `ValueType` literal to its runtime TypeScript type. Delegates to `ResolvePrimitive<T>` from `@crustjs/utils` for the three base types.
-
-```ts
-type Resolve<T extends ValueType> = T extends "string"
-  ? string
-  : T extends "number"
-    ? number
-    : T extends "boolean"
-      ? boolean
-      : T extends "url"
-        ? URL
-        : T extends "path"
-          ? string
-          : T extends "json"
-            ? unknown
-            : never;
-```
-
-### `ResolveBaseType<F>`
-
-Resolves the inferred runtime type for a flag/arg definition. When a `parse` escape hatch is declared, the inferred type is `ReturnType<typeof parse>`; otherwise it delegates to `Resolve<F["type"]>`.
+### `ArgDef`
 
 ```ts
-type ResolveBaseType<F> = F extends { parse: (raw: string) => infer R }
-  ? R
-  : F extends { type: infer T extends ValueType }
-    ? Resolve<T>
-    : never;
+type ArgsDef = readonly ArgDef[];
 ```
 
-## Compile-Time Validation Types
+Core-value argument definitions share these fields:
 
-### `ValidateVariadicArgs<A>`
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="ArgDef" />
 
-Per-arg validation used by `.args()`. Enforces that only the last positional argument can use `variadic: true`.
+A variadic value is always an array. `parse` runs once per element for a variadic string argument.
 
 ```ts
-type ValidateVariadicArgs<A extends readonly object[]> = /* ... */;
-// On error, the offending arg gets a branded property:
-// { readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }
+const args = [
+  { name: "target", type: "string", choices: ["browser", "node"] },
+  { name: "files", type: "path", variadic: true },
+] as const satisfies ArgsDef;
 ```
 
-### `ValidateFlagAliases<F>`
-
-Per-flag validation used by `.flags()`. Enforces that aliases do not collide with other flag names or aliases.
+A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema:
 
 ```ts
-type ValidateFlagAliases<F extends Record<string, unknown>> = /* ... */;
-// On error, the offending flag gets a branded property:
-// { readonly FIX_ALIAS_COLLISION: `Alias "${...}" collides with another flag name or alias` }
+const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
 ```
 
-### `ValidateNoPrefixedFlags<F>`
+The schema receives `string | undefined`, or `string[]` for a variadic argument. It exclusively owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are not available in this variant. The schema's output type reaches the Command Handler.
 
-Per-flag validation used by `.flags()`. Reserves the `no-` prefix for boolean negation by rejecting flag names and aliases that start with `no-`.
+An argument with neither `type` nor `schema` is a raw definition and returns the raw token value.
+
+### `FlagDef`
 
 ```ts
-type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = /* ... */;
-// On error, the offending flag gets a branded property:
-// { readonly FIX_NO_PREFIX: `Flag name "${...}" must not start with "no-"; ...` }
-// or
-// { readonly FIX_NO_PREFIX: `Alias "${...}" must not start with "no-"; ...` }
+type FlagsDef = Record<string, FlagDef>;
 ```
+
+Core-value flag definitions support:
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="FlagDef" />
+
+```ts
+const flags = {
+  verbose: { type: "boolean", short: "v", inherit: true },
+  include: { type: "string", multiple: true },
+  port: { type: "number", default: 3000 },
+} satisfies FlagsDef;
+```
+
+Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, `inherit`, and `multiple`. Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
+
+```ts
+const flags = {
+  port: { type: "string", schema: z.coerce.number().int().min(1) },
+  enabled: { type: "boolean", schema: z.boolean().default(false) },
+} satisfies FlagsDef;
+```
+
+The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives the corresponding array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
+
+### `CommandMeta`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
+
+`hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+
+## Command Snapshots
+
+Command Snapshots are readonly, serializable descriptions. They contain no Command Handler, parser, schema, or Context functions and are deeply frozen at public boundaries.
+
+### `CommandSnapshot`
+
+<auto-type-table
+  path="../../../../../packages/core/src/command/snapshot.ts"
+  name="CommandSnapshot"
+/>
+
+`flags` contains effective inherited and local flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+
+### `ArgSnapshot`
+
+<auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="ArgSnapshot" />
+
+### `FlagSnapshot`
+
+<auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
+
+Snapshots omit schemas and parse functions. `URL` defaults become strings, and array defaults are copied and frozen.
+
+## Command Handler context
+
+### `CrustCommandContext<A, F, Ctx>`
+
+<auto-type-table
+  path="../../../../../packages/core/src/command/crust.ts"
+  name="CrustCommandContext"
+/>
+
+`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+
+## Context types
+
+### `ContextFactory`
+
+```ts
+interface ContextFactory<Name extends string, Options, Value> {
+  (options: Options): ContextInstance<Name, Value>;
+}
+```
+
+`context(name, setup)` always returns a factory. Invoke it even when `Options` is `void`.
+
+### `ContextInstance`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/context.ts"
+  name="ContextInstance"
+/>
+
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path.
+
+### `ContextMap`
+
+```ts
+type ContextMap = Record<string, unknown>;
+```
+
+The map shape used for inferred `ctx` values.
+
+## Extension types
+
+### `ExtensionConfig`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionConfig"
+/>
+
+### `Extension`
+
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
+
+`extension(name, config)` returns a frozen structural value.
+
+### `ExtensionFlagDef`
+
+```ts
+type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
+```
+
+An Extension owns contributed flags. `recursive` defaults to `true`; `false` contributes the flag only to the root.
+
+### `ExtensionCommand`
+
+A structural type satisfied by a configured `Crust` builder. Extension commands are contributed at the application root.
+
+### `ExtensionContext`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionContext"
+/>
+
+`args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Handler types.
+
+### Hook types
+
+```ts
+type ExtensionNext = () => Promise<void>;
+
+type ExtensionIntercept = (context: ExtensionContext, next: ExtensionNext) => void | Promise<void>;
+
+type ExtensionErrorHandler = (
+  error: unknown,
+  context: ExtensionContext,
+  next: ExtensionNext,
+) => void | Promise<void>;
+```
+
+`intercept` runs after routing and syntax parsing but before application value validation and Context construction. It short-circuits by not calling `next()`; calling `next()` more than once is a `DEFINITION` error. Extension-owned command inputs are validated before interception.
+
+`handleError` is a terminal presentation chain used by `.execute()` only. Render the error or call `next()` to delegate. Core preserves a nonzero failure outcome either way.
+
+## Error types
+
+See [Errors](/docs/api/errors) for `CrustError`, `CrustErrorCode`, `CrustErrorDetails`, `CrustErrorDetailsMap`, and the four detail interfaces.

@@ -1,9 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Plugin layer — skillPlugin with interactive command injection
+// Extension layer — skill() with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { CommandNode, CrustPlugin } from "@crustjs/core";
-import { Crust, VALIDATION_MODE_ENV } from "@crustjs/core";
+import { type CommandSnapshot, Crust, type Extension, extension } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
@@ -22,10 +21,11 @@ import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./
 import type {
 	AgentTarget,
 	CustomSkillConfig,
+	GenerateResult,
 	Scope,
 	SkillInstallMode,
 	SkillMeta,
-	SkillPluginOptions,
+	SkillOptions,
 } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -55,7 +55,7 @@ function parseScopeFlag(rawScope: string | undefined): Scope | undefined {
 
 async function resolveScopeForCommand(
 	rawScope: string | undefined,
-	options: SkillPluginOptions,
+	options: SkillOptions,
 ): Promise<Scope> {
 	const explicit = parseScopeFlag(rawScope);
 	if (explicit !== undefined) return explicit;
@@ -129,7 +129,7 @@ function formatInstallOutput(
  *
  * The returned `name` is the canonical raw CLI name (e.g. `"my-cli"`).
  */
-function deriveSkillMeta(command: CommandNode, options: SkillPluginOptions): SkillMeta {
+function deriveSkillMeta(command: CommandSnapshot, options: SkillOptions): SkillMeta {
 	return {
 		name: command.meta.name,
 		description: command.meta.description ?? "",
@@ -143,7 +143,7 @@ function deriveSkillMeta(command: CommandNode, options: SkillPluginOptions): Ski
 }
 
 /**
- * Validates and normalizes the `customSkills` array passed to {@link skillPlugin}.
+ * Validates and normalizes the `customSkills` array passed to `skill()`.
  *
  * Acts as the single boundary check (per AGENTS.md "validate untrusted input
  * once at the boundary; trust types inside"). Runs synchronously at plugin
@@ -170,7 +170,7 @@ function validateCustomSkillsConfig(
 	}
 	if (!Array.isArray(customSkills)) {
 		throw new Error(
-			`skillPlugin: customSkills must be an array, got ${
+			`skill: customSkills must be an array, got ${
 				customSkills === null ? "null" : typeof customSkills
 			}.`,
 		);
@@ -184,17 +184,17 @@ function validateCustomSkillsConfig(
 		const entry = customSkills[i];
 		if (!entry || typeof entry !== "object") {
 			throw new Error(
-				`skillPlugin: customSkills[${i}] must be an object, got ${entry === null ? "null" : typeof entry}.`,
+				`skill: customSkills[${i}] must be an object, got ${entry === null ? "null" : typeof entry}.`,
 			);
 		}
 
 		if (typeof entry.name !== "string" || entry.name.length === 0) {
-			throw new Error(`skillPlugin: customSkills[${i}].name must be a non-empty string.`);
+			throw new Error(`skill: customSkills[${i}].name must be a non-empty string.`);
 		}
 
 		if (!isValidSkillName(entry.name)) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].name "${entry.name}" is not a valid skill name. ` +
+				`skill: customSkills[${i}].name "${entry.name}" is not a valid skill name. ` +
 					`Must be 1–64 lowercase alphanumeric characters and hyphens, ` +
 					`no leading/trailing/consecutive hyphens.`,
 			);
@@ -202,14 +202,14 @@ function validateCustomSkillsConfig(
 
 		if (entry.name === mainName) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].name "${entry.name}" collides with the main skill name. ` +
+				`skill: customSkills[${i}].name "${entry.name}" collides with the main skill name. ` +
 					`Custom skill bundle names must differ from the root command name.`,
 			);
 		}
 
 		if (seen.has(entry.name)) {
 			throw new Error(
-				`skillPlugin: customSkills contains duplicate name "${entry.name}". ` +
+				`skill: customSkills contains duplicate name "${entry.name}". ` +
 					`Each entry must declare a unique name.`,
 			);
 		}
@@ -220,28 +220,28 @@ function validateCustomSkillsConfig(
 			(typeof entry.version !== "string" || entry.version.length === 0)
 		) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].version (for "${entry.name}") ` +
+				`skill: customSkills[${i}].version (for "${entry.name}") ` +
 					`must be a non-empty string when set, or omitted to inherit the plugin's \`version\`.`,
 			);
 		}
 
 		if (typeof entry.sourceDir !== "string" && !(entry.sourceDir instanceof URL)) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].sourceDir (for "${entry.name}") ` +
+				`skill: customSkills[${i}].sourceDir (for "${entry.name}") ` +
 					`must be a string or URL, got ${typeof entry.sourceDir}.`,
 			);
 		}
 
 		if (entry.scope !== undefined && !isScope(entry.scope)) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].scope (for "${entry.name}") ` +
+				`skill: customSkills[${i}].scope (for "${entry.name}") ` +
 					`must be "project" or "global", got ${JSON.stringify(entry.scope)}.`,
 			);
 		}
 
 		if (entry.installMode !== undefined && !isInstallMode(entry.installMode)) {
 			throw new Error(
-				`skillPlugin: customSkills[${i}].installMode (for "${entry.name}") ` +
+				`skill: customSkills[${i}].installMode (for "${entry.name}") ` +
 					`must be "auto", "symlink", or "copy", got ${JSON.stringify(entry.installMode)}.`,
 			);
 		}
@@ -251,7 +251,7 @@ function validateCustomSkillsConfig(
 }
 
 /** Resolves the effective scope for a custom-skill auto-update sweep. */
-function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillPluginOptions): Scope[] {
+function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillOptions): Scope[] {
 	// When the entry declares an explicit scope, only that scope is checked.
 	// Otherwise, fall through to plugin defaultScope, else mirror main-skill
 	// behavior (check both project + global, deduped via resolveEffectiveScope).
@@ -275,121 +275,99 @@ function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillPlugin
  */
 async function autoUpdateCustomSkill(
 	entry: CustomSkillConfig,
-	options: SkillPluginOptions,
+	options: SkillOptions,
+	hooks: {
+		scopes?: Scope[];
+		onNoUpdate?: (scope: Scope) => void;
+		onUpdated?: (message: string) => void;
+		onConflict?: (error: SkillConflictError, scope: Scope) => void;
+	} = {},
 ): Promise<void> {
-	const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
-	if (agents.length === 0) {
-		return;
-	}
-
-	const scopes = resolveCustomSkillScopes(entry, options);
+	const scopes = hooks.scopes ?? resolveCustomSkillScopes(entry, options);
 	const installMode = entry.installMode ?? options.installMode;
 	const effectiveVersion = entry.version ?? options.version;
 
 	for (const scope of scopes) {
-		const status = await skillStatus({
-			name: entry.name,
-			agents,
-			scope,
-		});
-
-		const needsUpdate = status.agents.filter((a) => {
-			if (!a.installed) return false;
-			const expectedOutputDir = resolveAgentPath(a.agent, scope, entry.name);
-			return a.version !== effectiveVersion || a.outputDir !== expectedOutputDir;
+		const effectiveScope = resolveEffectiveScope(scope);
+		const status = await skillStatus({ name: entry.name, scope });
+		const needsUpdate = status.agents.filter((agent) => {
+			if (!agent.installed) return false;
+			const expectedOutputDir = resolveAgentPath(agent.agent, scope, entry.name);
+			return agent.version !== effectiveVersion || agent.outputDir !== expectedOutputDir;
 		});
 
 		if (needsUpdate.length === 0) {
+			hooks.onNoUpdate?.(effectiveScope);
 			continue;
 		}
 
 		try {
 			await spinner({
-				message: `Updating ${scope} skills [${entry.name}]...`,
+				message: `Updating ${effectiveScope} skills [${entry.name}]...`,
 				task: async ({ updateMessage }) => {
-					const res = await installSkillBundle({
+					const result = await installSkillBundle({
 						sourceDir: entry.sourceDir,
-						agents: needsUpdate.map((a) => a.agent),
+						agents: needsUpdate.map((agent) => agent.agent),
 						version: effectiveVersion,
 						scope,
 						installMode,
 						expectedName: entry.name,
 					});
-
-					const updatedAgents = res.agents
-						.filter((a) => a.status === "updated")
-						.map((a) => a.agent);
-					const updatedLabels = formatAgentLabels(updatedAgents);
-
+					const updatedLabels = formatAgentLabels(
+						result.agents.filter((agent) => agent.status === "updated").map((agent) => agent.agent),
+					);
 					if (updatedLabels.length > 0) {
-						updateMessage(
-							`Updated bundle "${entry.name}" to v${effectiveVersion} for ${updatedLabels.join(", ")} (${scope})`,
-						);
+						const message = `Updated bundle "${entry.name}" to v${effectiveVersion} for ${updatedLabels.join(", ")} (${effectiveScope})`;
+						if (hooks.onUpdated) {
+							hooks.onUpdated(message);
+						} else {
+							updateMessage(message);
+						}
 					}
-
-					return res;
+					return result;
 				},
 			});
 		} catch (err) {
-			if (err instanceof SkillConflictError) {
-				const kindMismatchSuffix = err.details.kindMismatch
-					? ` (existing skill is "${err.details.kindMismatch.existing}", attempted "${err.details.kindMismatch.attempted}")`
-					: "";
-				console.warn(
-					yellow(
-						`Skill conflict [${entry.name}]: "${err.details.outputDir}" already exists ` +
-							`but conflicts with the requested install${kindMismatchSuffix}. ` +
-							`Skipping auto-update for ${scope}. ` +
-							`Delete or rename the conflicting skill to resolve.`,
-					),
-				);
-			} else {
-				throw err;
+			if (!(err instanceof SkillConflictError)) throw err;
+			if (hooks.onConflict) {
+				hooks.onConflict(err, effectiveScope);
+				continue;
 			}
+			const kindMismatchSuffix = err.details.kindMismatch
+				? ` (existing skill is "${err.details.kindMismatch.existing}", attempted "${err.details.kindMismatch.attempted}")`
+				: "";
+			console.warn(
+				yellow(
+					`Skill conflict [${entry.name}]: "${err.details.outputDir}" already exists ` +
+						`but conflicts with the requested install${kindMismatchSuffix}. ` +
+						`Skipping auto-update for ${effectiveScope}. ` +
+						`Delete or rename the conflicting skill to resolve.`,
+				),
+			);
 		}
 	}
 }
 
 function needsSkillReconciliation(
-	agent: AgentTarget,
-	scope: Scope,
 	meta: SkillMeta,
-	entry: { installed: boolean; version?: string; outputDir: string },
+	entry: { installed: boolean; version?: string },
 ): boolean {
-	// TODO(v0.1.0): Remove legacy outputDir reconciliation once `use-<cli>` ->
-	// `<cli>` migration support is dropped in @crustjs/skills.
-	if (!entry.installed) {
-		return false;
-	}
-
-	const expectedOutputDir = resolveAgentPath(agent, scope, meta.name);
-	return entry.version !== meta.version || entry.outputDir !== expectedOutputDir;
+	return entry.installed && entry.version !== meta.version;
 }
 
 /**
  * Performs automatic updates for already-installed skills when the version
- * has changed or a legacy install path needs migration.
+ * has changed.
  *
  * Runs during plugin setup so behavior is independent of middleware ordering.
  * Only updates skills that are already installed — first-time installation
  * should be done via the interactive command or programmatically by the user.
  */
 async function autoUpdateSkills(
-	rootCmd: CommandNode,
-	options: SkillPluginOptions,
+	rootCmd: CommandSnapshot,
+	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
 ): Promise<void> {
-	// Use all known agents and let skillStatus (filesystem-only) determine
-	// which ones are actually installed. This avoids any PATH probing or
-	// process spawning during normal CLI startup.
-	const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
-	if (agents.length === 0) {
-		// Still run the bundle loop — no agents means each `skillStatus` returns
-		// empty, and `installSkillBundle` is never called.
-		await autoUpdateCustomSkillsLoop(customSkills, options);
-		return;
-	}
-
 	const meta = deriveSkillMeta(rootCmd, options);
 
 	const scopesToCheck: Scope[] = [
@@ -397,15 +375,9 @@ async function autoUpdateSkills(
 	];
 
 	for (const scope of scopesToCheck) {
-		const status = await skillStatus({
-			name: meta.name,
-			agents,
-			scope,
-		});
+		const status = await skillStatus({ name: meta.name, scope });
 
-		const needsUpdate = status.agents.filter((entry) =>
-			needsSkillReconciliation(entry.agent, scope, meta, entry),
-		);
+		const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
 
 		if (needsUpdate.length === 0) {
 			continue;
@@ -462,7 +434,7 @@ async function autoUpdateSkills(
  */
 async function autoUpdateCustomSkillsLoop(
 	customSkills: readonly CustomSkillConfig[],
-	options: SkillPluginOptions,
+	options: SkillOptions,
 ): Promise<void> {
 	for (const entry of customSkills) {
 		try {
@@ -515,95 +487,88 @@ async function autoUpdateCustomSkillsLoop(
  * `skillStatus`, `generateSkill`).
  *
  * @param options - Plugin configuration with version and defaults
- * @returns A `CrustPlugin` to register in a command's `plugins` array
+ * @returns The internal plugin behind the `skill()` Extension
  *
  * @example
  * ```ts
  * import { Crust } from "@crustjs/core";
- * import { skillPlugin } from "@crustjs/skills";
+ * import { skill } from "@crustjs/skills";
  *
  * const app = new Crust("my-cli").meta({ description: "My CLI" })
- *   .use(skillPlugin({
+ *   .extend(skill({
  *     version: "1.0.0",
  *     command: "skill", // registers "my-cli skill" subcommand
  *   }))
- *   .run(() => { /* ... *�/ });
+ *   .handle(() => { /* ... *�/ });
  *
  * await app.execute();
  * ```
  */
-export function skillPlugin(options: SkillPluginOptions): CrustPlugin {
-	let rootCmd: CommandNode;
+export function skillExtension(options: SkillOptions): Extension {
+	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 
-	return {
-		name: "skills",
-		async setup(context, actions) {
-			rootCmd = context.rootCommand;
-			const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+	return extension("skills", {
+		commands: [buildSkillCommandGrammar(skillCommandName)],
+		async intercept(context, next) {
+			const rootCmd = context.rootCommand;
 
-			// Validate customSkills config up front so misconfiguration surfaces
-			// at setup rather than at first auto-update or interactive run.
+			// Validate customSkills config at the boundary so misconfiguration
+			// surfaces before any auto-update or interactive run.
 			const customSkills = validateCustomSkillsConfig(rootCmd.meta.name, options.customSkills);
 
-			actions.addSubCommand(
-				rootCmd,
-				skillCommandName,
-				buildSkillCommand(rootCmd, options, customSkills, skillCommandName),
-			);
-
-			// Build validation should never mutate user environments
-			if (process.env[VALIDATION_MODE_ENV] === "1") {
+			// The owned skill command's work happens here — the intercept is
+			// the only hook with access to the final root snapshot.
+			if (context.commandPath[1] === skillCommandName) {
+				if (context.commandPath[2] === "update") {
+					await runSkillUpdateFlow(rootCmd, options, customSkills, context.flags);
+				} else {
+					await runSkillInstallFlow(rootCmd, options, customSkills, context.flags);
+				}
 				return;
 			}
 
-			// Skip auto-update when the skill command itself is being executed
-			if (context.argv[0] === skillCommandName) {
-				return;
-			}
-
-			// Auto-update already-installed skills when version changes
+			// Auto-update already-installed skills when version changes.
+			// Build-validation mode never reaches intercepts, so it can never
+			// mutate user environments.
 			if (options.autoUpdate !== false) {
 				await autoUpdateSkills(rootCmd, options, customSkills);
 			}
+
+			await next();
 		},
-	};
+	});
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Interactive skill command builder
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Reconciles one custom-skill bundle through the interactive skill flow. */
-async function reconcileBundleInteractively(opts: {
-	entry: CustomSkillConfig;
-	options: SkillPluginOptions;
+/** Reconciles one generated skill or hand-authored bundle through the interactive flow. */
+async function reconcileSkillInteractively(opts: {
+	name: string;
+	version: string;
 	scope: Scope;
 	installAll: boolean;
 	isInteractive: boolean;
+	labelSuffix: string;
+	installNoun: "skill" | "bundle";
+	install: (agents: AgentTarget[], force?: boolean) => Promise<GenerateResult>;
 }): Promise<void> {
-	const { entry, options, scope, installAll, isInteractive } = opts;
-	const installMode = entry.installMode ?? options.installMode;
-	const effectiveVersion = entry.version ?? options.version;
-
+	const { name, version, scope, installAll, isInteractive, labelSuffix, installNoun, install } =
+		opts;
 	const detectedAgents = await detectInstalledAgents();
 	const universalAgents = getUniversalAgents();
 	const allAdditionalAgents = getAdditionalAgents();
-
-	const status = await skillStatus({
-		name: entry.name,
-		agents: [...universalAgents, ...allAdditionalAgents],
-		scope,
-	});
+	const status = await skillStatus({ name, scope });
 
 	const installedAgentSet = new Set<AgentTarget>(
-		status.agents.filter((a) => a.installed).map((a) => a.agent),
+		status.agents.filter((entry) => entry.installed).map((entry) => entry.agent),
 	);
 	const detectedAdditionalSet = new Set(detectedAgents);
-	const statusMap = new Map(status.agents.map((a) => [a.agent, a]));
+	const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 	const additionalAgents = allAdditionalAgents.filter((agent) => {
 		if (detectedAdditionalSet.has(agent)) return true;
-		const e = statusMap.get(agent);
-		return e?.installed === true;
+		return statusMap.get(agent)?.installed === true;
 	});
 	const installedAgents = additionalAgents.filter((agent) => installedAgentSet.has(agent));
 
@@ -614,12 +579,9 @@ async function reconcileBundleInteractively(opts: {
 	}> = [];
 
 	if (universalAgents.length > 0) {
-		const firstUniversalAgent = universalAgents[0];
-		if (!firstUniversalAgent) {
-			throw new Error("Expected at least one universal agent");
-		}
-		const firstUniversal = statusMap.get(firstUniversalAgent);
-		const universalDir = firstUniversal?.outputDir ?? "path unavailable";
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- guarded by the length check
+		const firstUniversalAgent = universalAgents[0]!;
+		const universalDir = statusMap.get(firstUniversalAgent)?.outputDir ?? "path unavailable";
 		choices.push({
 			label: "Universal",
 			value: UNIVERSAL_GROUP,
@@ -633,12 +595,10 @@ async function reconcileBundleInteractively(opts: {
 	}
 
 	for (const agent of additionalAgents) {
-		const e = statusMap.get(agent);
-		const hint = e?.outputDir ?? "path unavailable";
 		choices.push({
 			label: AGENT_LABELS[agent],
 			value: agent,
-			hint,
+			hint: statusMap.get(agent)?.outputDir ?? "path unavailable",
 		});
 	}
 
@@ -659,7 +619,7 @@ async function reconcileBundleInteractively(opts: {
 			choices.length === 0
 				? ([] as Array<AgentTarget | typeof UNIVERSAL_GROUP>)
 				: await multiselect({
-						message: `Select agents to install skills for [${entry.name}]`,
+						message: `Select agents to install skills for${labelSuffix}`,
 						choices,
 						default: defaultSelections,
 						required: false,
@@ -678,31 +638,23 @@ async function reconcileBundleInteractively(opts: {
 
 	const toInstall = selectedAgents.filter((agent) => !installedAgentSet.has(agent));
 	const toUpdate = selectedAgents.filter((agent) => {
-		const e = statusMap.get(agent);
-		if (!e?.installed) return false;
-		const expectedOutputDir = resolveAgentPath(agent, scope, entry.name);
-		return e.version !== effectiveVersion || e.outputDir !== expectedOutputDir;
+		const entry = statusMap.get(agent);
+		if (!entry?.installed) return false;
+		return entry.version !== version || entry.outputDir !== resolveAgentPath(agent, scope, name);
 	});
 	const toUninstall = [...installedAgentSet].filter((agent) => !selectedAgents.includes(agent));
-
 	const agentsToInstall = [...toInstall, ...toUpdate];
 
 	if (agentsToInstall.length > 0) {
 		try {
 			const result = await spinner({
-				message: `Installing skills [${entry.name}]...`,
-				task: async () =>
-					installSkillBundle({
-						sourceDir: entry.sourceDir,
-						agents: agentsToInstall,
-						version: effectiveVersion,
-						scope,
-						installMode,
-						expectedName: entry.name,
-					}),
+				message: `Installing skills${labelSuffix}...`,
+				task: async () => install(agentsToInstall),
 			});
 
-			console.log(`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`);
+			console.log(
+				`\n${bold(`Installed ${installNoun === "bundle" ? "bundle " : ""}"${name}" v${version}`)}`,
+			);
 			for (const line of formatInstallOutput(result.agents)) {
 				console.log(dim(`  ${line.label} → ${line.outputDir}`));
 			}
@@ -711,35 +663,27 @@ async function reconcileBundleInteractively(opts: {
 				const kindMismatchSuffix = err.details.kindMismatch
 					? ` (existing is a "${err.details.kindMismatch.existing}" skill, attempted "${err.details.kindMismatch.attempted}")`
 					: " but was not created by Crust";
-				const overwrite = installAll
-					? true
-					: await confirm({
-							message:
-								`"${err.details.outputDir}" already exists${kindMismatchSuffix}. ` + `Overwrite?`,
-							default: false,
-						});
+				const overwrite =
+					installAll ||
+					(await confirm({
+						message: `"${err.details.outputDir}" already exists${kindMismatchSuffix}. Overwrite?`,
+						default: false,
+					}));
 
 				if (overwrite) {
 					const result = await spinner({
-						message: `Overwriting bundle [${entry.name}]...`,
-						task: async () =>
-							installSkillBundle({
-								sourceDir: entry.sourceDir,
-								agents: [err.details.agent],
-								version: effectiveVersion,
-								scope,
-								force: true,
-								installMode,
-								expectedName: entry.name,
-							}),
+						message: `Overwriting ${installNoun}${labelSuffix}...`,
+						task: async () => install([err.details.agent], true),
 					});
 
-					console.log(`\n${bold(`Installed bundle "${entry.name}" v${effectiveVersion}`)}`);
+					console.log(
+						`\n${bold(`Installed ${installNoun === "bundle" ? "bundle " : ""}"${name}" v${version}`)}`,
+					);
 					for (const line of formatInstallOutput(result.agents)) {
 						console.log(dim(`  ${line.label} → ${line.outputDir}`));
 					}
 				} else {
-					console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]} [${entry.name}]`));
+					console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}${labelSuffix}`));
 				}
 			} else {
 				throw err;
@@ -749,25 +693,23 @@ async function reconcileBundleInteractively(opts: {
 
 	if (toUninstall.length > 0) {
 		const result = await spinner({
-			message: `Removing skills [${entry.name}]...`,
-			task: async () =>
-				uninstallSkill({
-					name: entry.name,
-					agents: toUninstall,
-					scope,
-				}),
+			message: `Removing skills${labelSuffix}...`,
+			task: async () => uninstallSkill({ name, agents: toUninstall, scope }),
 		});
-
-		const removedAgents = result.agents.filter((a) => a.status === "removed").map((a) => a.agent);
-		const removed = formatAgentLabels(removedAgents);
-
+		const removed = formatAgentLabels(
+			result.agents.filter((entry) => entry.status === "removed").map((entry) => entry.agent),
+		);
 		if (removed.length > 0) {
-			console.log(`\n${bold(`Removed bundle "${entry.name}" from ${removed.join(", ")}`)}`);
+			const message =
+				installNoun === "bundle"
+					? `Removed bundle "${name}" from ${removed.join(", ")}`
+					: `Removed from ${removed.join(", ")}`;
+			console.log(`\n${bold(message)}`);
 		}
 	}
 
 	if (agentsToInstall.length === 0 && toUninstall.length === 0) {
-		console.log(dim(`No changes [${entry.name}].`));
+		console.log(dim(`No changes${labelSuffix}.`));
 	}
 }
 
@@ -784,424 +726,212 @@ async function reconcileBundleInteractively(opts: {
  * are prompted to choose between project and global. In non-interactive mode,
  * scope falls back to global.
  */
-function buildSkillCommand(
-	rootCmd: CommandNode,
-	options: SkillPluginOptions,
-	customSkills: readonly CustomSkillConfig[],
-	commandName: string,
-): CommandNode {
-	const updateCommand = buildSkillUpdateCommand(rootCmd, options, customSkills);
-
-	return new Crust(commandName)
-		.meta({ description: "Manage agent skill installations" })
-		.flags({
-			scope: {
-				type: "string",
-				description: "Install scope (project or global)",
-			},
-			all: {
-				type: "boolean",
-				description: "Install for all detected agents non-interactively (universal + detected)",
-			},
-		})
-		.run(async (ctx) => {
-			const meta = deriveSkillMeta(rootCmd, options);
-			const installAll = ctx.flags.all === true;
-			const isInteractive = !!process.stdin.isTTY;
-			// `--scope` always wins when set; `--all` skips only the interactive
-			// prompt fallback, falling back to `defaultScope` or `"global"`.
-			const scope = installAll
-				? (parseScopeFlag(ctx.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
-				: await resolveScopeForCommand(ctx.flags.scope, options);
-
-			// Detect installed agents
-			const detectedAgents = await detectInstalledAgents();
-
-			const universalAgents = getUniversalAgents();
-			const allAdditionalAgents = getAdditionalAgents();
-
-			// Check current skill status for each agent
-			const status = await skillStatus({
-				name: meta.name,
-				agents: [...universalAgents, ...allAdditionalAgents],
-				scope,
-			});
-
-			// Build multiselect choices with status hints and pre-selection
-			const installedAgentSet = new Set<AgentTarget>(
-				status.agents.filter((entry) => entry.installed).map((entry) => entry.agent),
-			);
-			const detectedAdditionalSet = new Set(detectedAgents);
-			const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
-			const additionalAgents = allAdditionalAgents.filter((agent) => {
-				if (detectedAdditionalSet.has(agent)) {
-					return true;
-				}
-				const entry = statusMap.get(agent);
-				return entry?.installed === true;
-			});
-			const installedAgents = additionalAgents.filter((agent) => installedAgentSet.has(agent));
-
-			const choices: Array<{
-				label: string;
-				value: AgentTarget | typeof UNIVERSAL_GROUP;
-				hint: string;
-			}> = [];
-
-			if (universalAgents.length > 0) {
-				const firstUniversalAgent = universalAgents[0];
-				if (!firstUniversalAgent) {
-					throw new Error("Expected at least one universal agent");
-				}
-				const firstUniversal = statusMap.get(firstUniversalAgent);
-				const universalDir = firstUniversal?.outputDir ?? "path unavailable";
-				choices.push({
-					label: "Universal",
-					value: UNIVERSAL_GROUP,
-					hint: universalDir,
-				});
-
-				const agentLabels = universalAgents.map((agent) => AGENT_LABELS[agent]).join(", ");
-				if (isInteractive && !installAll) {
-					console.log(dim(`Agents supporting universal skills: ${agentLabels}`));
-				}
-			}
-
-			for (const agent of additionalAgents) {
-				const entry = statusMap.get(agent);
-				const hint = entry?.outputDir ?? "path unavailable";
-				choices.push({
-					label: AGENT_LABELS[agent],
-					value: agent,
-					hint,
-				});
-			}
-
-			const universalInstalled =
-				universalAgents.length > 0 &&
-				universalAgents.every((agent) => installedAgentSet.has(agent));
-			const defaultSelections: Array<AgentTarget | typeof UNIVERSAL_GROUP> = [
-				...installedAgents.filter((agent) => !universalAgents.includes(agent)),
-			];
-			if (universalInstalled) {
-				defaultSelections.unshift(UNIVERSAL_GROUP);
-			}
-
-			// When --all is set, select all universal + detected additional agents
-			// without prompting. Otherwise, show the interactive multiselect.
-			let selectedAgents: AgentTarget[];
-
-			if (installAll) {
-				selectedAgents = [...universalAgents, ...additionalAgents];
-			} else {
-				const selectedValues =
-					choices.length === 0
-						? ([] as Array<AgentTarget | typeof UNIVERSAL_GROUP>)
-						: await multiselect({
-								message: "Select agents to install skills for",
-								choices,
-								default: defaultSelections,
-								required: false,
-							});
-
-				const selected = new Set<AgentTarget>(
-					selectedValues.filter((value): value is AgentTarget => value !== UNIVERSAL_GROUP),
-				);
-				if (selectedValues.includes(UNIVERSAL_GROUP)) {
-					for (const agent of universalAgents) {
-						selected.add(agent);
-					}
-				}
-				selectedAgents = [...selected];
-			}
-
-			// Compute diff
-			const toInstall = selectedAgents.filter((agent) => !installedAgentSet.has(agent));
-			const toUpdate = selectedAgents.filter((agent) => {
-				const entry = statusMap.get(agent);
-				return entry !== undefined && needsSkillReconciliation(agent, scope, meta, entry);
-			});
-			const toUninstall = [...installedAgentSet].filter((agent) => !selectedAgents.includes(agent));
-
-			const agentsToGenerate = [...toInstall, ...toUpdate];
-
-			// Install/update selected agents
-			if (agentsToGenerate.length > 0) {
-				try {
-					const result = await spinner({
-						message: "Installing skills...",
-						task: async () =>
-							generateSkill({
-								command: rootCmd,
-								meta,
-								agents: agentsToGenerate,
-								scope,
-								installMode: options.installMode,
-							}),
-					});
-
-					console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
-					for (const line of formatInstallOutput(result.agents)) {
-						console.log(dim(`  ${line.label} → ${line.outputDir}`));
-					}
-				} catch (err) {
-					if (err instanceof SkillConflictError) {
-						const overwrite = installAll
-							? true
-							: await confirm({
-									message:
-										`"${err.details.outputDir}" already exists but was not ` +
-										`created by Crust. Overwrite?`,
-									default: false,
-								});
-
-						if (overwrite) {
-							const result = await spinner({
-								message: "Overwriting skill...",
-								task: async () =>
-									generateSkill({
-										command: rootCmd,
-										meta,
-										agents: [err.details.agent],
-										scope,
-										force: true,
-										installMode: options.installMode,
-									}),
-							});
-
-							console.log(`\n${bold(`Installed "${meta.name}" v${meta.version}`)}`);
-							for (const line of formatInstallOutput(result.agents)) {
-								console.log(dim(`  ${line.label} → ${line.outputDir}`));
-							}
-						} else {
-							console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}`));
-						}
-					} else {
-						throw err;
-					}
-				}
-			}
-
-			// Uninstall deselected agents
-			if (toUninstall.length > 0) {
-				const result = await spinner({
-					message: "Removing skills...",
-					task: async () =>
-						uninstallSkill({
-							name: meta.name,
-							agents: toUninstall,
-							scope,
-						}),
-				});
-
-				const removedAgents = result.agents
-					.filter((a) => a.status === "removed")
-					.map((a) => a.agent);
-				const removed = formatAgentLabels(removedAgents);
-
-				if (removed.length > 0) {
-					console.log(`\n${bold(`Removed from ${removed.join(", ")}`)}`);
-				}
-			}
-
-			// No changes
-			if (agentsToGenerate.length === 0 && toUninstall.length === 0) {
-				console.log(dim("No changes."));
-			}
-
-			// Custom skill bundles — sequential per-bundle prompts.
-			// Each bundle is reconciled independently; a single-entry failure
-			// aborts that entry only and subsequent entries still run, but the
-			// command exits non-zero so callers (CI, scripts) see the failure.
-			const failedEntries: string[] = [];
-			for (const entry of customSkills) {
-				const entryScope = entry.scope ?? scope;
-				try {
-					await reconcileBundleInteractively({
-						entry,
-						options,
-						scope: entryScope,
-						installAll,
-						isInteractive,
-					});
-				} catch (err) {
-					// Recoverable per-entry failure: keep reconciling siblings.
-					// SkillConflictError is already handled inside the helper; any
-					// error reaching here (filesystem, bad bundle, etc.) is logged
-					// and tracked for the final exit code.
-					const message = err instanceof Error ? err.message : String(err);
-					console.warn(
-						yellow(
-							`Skill reconciliation failed [${entry.name}]: ${message}. ` +
-								`Continuing with remaining skills.`,
-						),
-					);
-					failedEntries.push(entry.name);
-				}
-			}
-			if (failedEntries.length > 0) {
-				process.exitCode = 1;
-			}
-		})
-		.command(updateCommand)._node;
+function buildSkillCommandGrammar(commandName: string) {
+	return (
+		new Crust(commandName)
+			.meta({ description: "Manage agent skill installations" })
+			.flags({
+				scope: {
+					type: "string",
+					description: "Install scope (project or global)",
+				},
+				all: {
+					type: "boolean",
+					description: "Install for all detected agents non-interactively (universal + detected)",
+				},
+			})
+			.command("update", (cmd) =>
+				cmd
+					.meta({ description: "Update installed skills to latest version" })
+					.flags({
+						scope: {
+							type: "string",
+							description: "Update scope (project or global)",
+						},
+					})
+					// Never reached — the skills extension intercept short-circuits
+					.handle(() => {}),
+			)
+			// Never reached — the skills extension intercept short-circuits
+			.handle(() => {})
+	);
 }
 
-function buildSkillUpdateCommand(
-	rootCmd: CommandNode,
-	options: SkillPluginOptions,
+async function runSkillInstallFlow(
+	rootCmd: CommandSnapshot,
+	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
-): Crust {
-	return new Crust("update")
-		.meta({ description: "Update installed skills to latest version" })
-		.flags({
-			scope: {
-				type: "string",
-				description: "Update scope (project or global)",
-			},
-		})
-		.run(async (ctx) => {
-			const scope = await resolveScopeForCommand(ctx.flags.scope, options);
-			const effectiveScope = resolveEffectiveScope(scope);
-			// Use all known agents and let skillStatus determine which are installed.
-			// This avoids spawning external CLIs during `skill update`.
-			const agents = [...getUniversalAgents(), ...getAdditionalAgents()];
+	flags: Readonly<Record<string, unknown>>,
+): Promise<void> {
+	const meta = deriveSkillMeta(rootCmd, options);
+	const installAll = flags.all === true;
+	const isInteractive = !!process.stdin.isTTY;
+	// `--scope` always wins when set; `--all` skips only the interactive
+	// prompt fallback, falling back to `defaultScope` or `"global"`.
+	const scope = installAll
+		? (parseScopeFlag(flags.scope as string | undefined) ??
+			options.defaultScope ??
+			DEFAULT_SKILL_SCOPE)
+		: await resolveScopeForCommand(flags.scope as string | undefined, options);
 
-			const meta = deriveSkillMeta(rootCmd, options);
-			const status = await skillStatus({
-				name: meta.name,
+	await reconcileSkillInteractively({
+		name: meta.name,
+		version: meta.version,
+		scope,
+		installAll,
+		isInteractive,
+		labelSuffix: "",
+		installNoun: "skill",
+		install: (agents, force) =>
+			generateSkill({
+				command: rootCmd,
+				meta,
 				agents,
 				scope,
-			});
-			const needsUpdate = status.agents.filter((entry) =>
-				needsSkillReconciliation(entry.agent, scope, meta, entry),
-			);
+				force,
+				installMode: options.installMode,
+			}),
+	});
 
-			if (needsUpdate.length === 0) {
-				console.log(dim(`No updates needed (${effectiveScope}).`));
-			} else {
-				try {
-					const res = await spinner({
-						message: `Updating ${effectiveScope} skills...`,
-						task: async () =>
-							generateSkill({
-								command: rootCmd,
-								meta,
-								agents: needsUpdate.map((agent) => agent.agent),
-								scope,
-								installMode: options.installMode,
-							}),
-					});
-
-					const updatedAgents = res.agents
-						.filter((agent) => agent.status === "updated")
-						.map((agent) => agent.agent);
-					const updatedLabels = formatAgentLabels(updatedAgents);
-					if (updatedLabels.length > 0) {
-						console.log(
-							`\n${bold(
-								`Updated "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
-							)}`,
-						);
-					}
-				} catch (err) {
-					if (err instanceof SkillConflictError) {
-						console.warn(
-							yellow(
-								`Skipped ${AGENT_LABELS[err.details.agent]}: "${err.details.outputDir}" already exists ` +
-									`but was not created by ${meta.name}. ` +
-									`Delete or rename the conflicting directory to resolve.`,
-							),
-						);
-					} else {
-						throw err;
-					}
-				}
-			}
-
-			// Custom skill bundles — update each in turn after the main skill.
-			// SkillConflictError is logged and treated as recoverable (matches
-			// the main-skill update behavior); any other error is also logged
-			// per-entry but tracked so the command exits non-zero.
-			const failedEntries: string[] = [];
-			for (const entry of customSkills) {
-				const entryScope = entry.scope ?? scope;
-				const entryEffectiveScope = resolveEffectiveScope(entryScope);
-				const entryInstallMode = entry.installMode ?? options.installMode;
-				const entryEffectiveVersion = entry.version ?? options.version;
-				try {
-					const bundleStatus = await skillStatus({
-						name: entry.name,
+	// Custom skill bundles — sequential per-bundle prompts.
+	// Each bundle is reconciled independently; a single-entry failure
+	// aborts that entry only and subsequent entries still run, but the
+	// command exits non-zero so callers (CI, scripts) see the failure.
+	const failedEntries: string[] = [];
+	for (const entry of customSkills) {
+		const entryScope = entry.scope ?? scope;
+		try {
+			const version = entry.version ?? options.version;
+			await reconcileSkillInteractively({
+				name: entry.name,
+				version,
+				scope: entryScope,
+				installAll,
+				isInteractive,
+				labelSuffix: ` [${entry.name}]`,
+				installNoun: "bundle",
+				install: (agents, force) =>
+					installSkillBundle({
+						sourceDir: entry.sourceDir,
 						agents,
+						version,
 						scope: entryScope,
-					});
-					const bundleNeedsUpdate = bundleStatus.agents.filter((a) => {
-						if (!a.installed) return false;
-						const expectedOutputDir = resolveAgentPath(a.agent, entryScope, entry.name);
-						return a.version !== entryEffectiveVersion || a.outputDir !== expectedOutputDir;
-					});
+						force,
+						installMode: entry.installMode ?? options.installMode,
+						expectedName: entry.name,
+					}),
+			});
+		} catch (err) {
+			// Recoverable per-entry failure: keep reconciling siblings.
+			// SkillConflictError is already handled inside the helper; any
+			// error reaching here (filesystem, bad bundle, etc.) is logged
+			// and tracked for the final exit code.
+			const message = err instanceof Error ? err.message : String(err);
+			console.warn(
+				yellow(
+					`Skill reconciliation failed [${entry.name}]: ${message}. ` +
+						`Continuing with remaining skills.`,
+				),
+			);
+			failedEntries.push(entry.name);
+		}
+	}
+	if (failedEntries.length > 0) {
+		process.exitCode = 1;
+	}
+}
 
-					if (bundleNeedsUpdate.length === 0) {
-						console.log(dim(`No updates needed [${entry.name}] (${entryEffectiveScope}).`));
-						continue;
-					}
+async function runSkillUpdateFlow(
+	rootCmd: CommandSnapshot,
+	options: SkillOptions,
+	customSkills: readonly CustomSkillConfig[],
+	flags: Readonly<Record<string, unknown>>,
+): Promise<void> {
+	const scope = await resolveScopeForCommand(flags.scope as string | undefined, options);
+	const effectiveScope = resolveEffectiveScope(scope);
+	// The default status sweep checks all known agents without PATH probing.
+	const meta = deriveSkillMeta(rootCmd, options);
+	const status = await skillStatus({ name: meta.name, scope });
+	const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
 
-					const res = await spinner({
-						message: `Updating ${entryEffectiveScope} skills [${entry.name}]...`,
-						task: async () =>
-							installSkillBundle({
-								sourceDir: entry.sourceDir,
-								agents: bundleNeedsUpdate.map((a) => a.agent),
-								version: entryEffectiveVersion,
-								scope: entryScope,
-								installMode: entryInstallMode,
-								expectedName: entry.name,
-							}),
-					});
+	if (needsUpdate.length === 0) {
+		console.log(dim(`No updates needed (${effectiveScope}).`));
+	} else {
+		try {
+			const res = await spinner({
+				message: `Updating ${effectiveScope} skills...`,
+				task: async () =>
+					generateSkill({
+						command: rootCmd,
+						meta,
+						agents: needsUpdate.map((agent) => agent.agent),
+						scope,
+						installMode: options.installMode,
+					}),
+			});
 
-					const updatedAgents = res.agents
-						.filter((a) => a.status === "updated")
-						.map((a) => a.agent);
-					const updatedLabels = formatAgentLabels(updatedAgents);
-					if (updatedLabels.length > 0) {
-						console.log(
-							`\n${bold(
-								`Updated bundle "${entry.name}" to v${entryEffectiveVersion} for ${updatedLabels.join(", ")} (${entryEffectiveScope})`,
-							)}`,
-						);
-					}
-				} catch (err) {
-					if (err instanceof SkillConflictError) {
-						// Conflict matches main-skill `skill update` semantics:
-						// log and skip without failing the command (caller can
-						// resolve manually).
-						const kindMismatchSuffix = err.details.kindMismatch
-							? ` (existing is a "${err.details.kindMismatch.existing}" skill, attempted "${err.details.kindMismatch.attempted}")`
-							: "";
-						console.warn(
-							yellow(
-								`Skipped ${AGENT_LABELS[err.details.agent]} [${entry.name}]: ` +
-									`"${err.details.outputDir}" already exists${kindMismatchSuffix}. ` +
-									`Delete or rename the conflicting directory to resolve.`,
-							),
-						);
-					} else {
-						// Unexpected error (filesystem, bad bundle, frontmatter
-						// mismatch from `expectedName`, etc.). Keep updating siblings
-						// so a single bad entry does not block the rest, but track
-						// it so the command exits non-zero.
-						const message = err instanceof Error ? err.message : String(err);
-						console.warn(
-							yellow(
-								`Skill update failed [${entry.name}]: ${message}. ` +
-									`Continuing with remaining skills.`,
-							),
-						);
-						failedEntries.push(entry.name);
-					}
-				}
+			const updatedAgents = res.agents
+				.filter((agent) => agent.status === "updated")
+				.map((agent) => agent.agent);
+			const updatedLabels = formatAgentLabels(updatedAgents);
+			if (updatedLabels.length > 0) {
+				console.log(
+					`\n${bold(
+						`Updated "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
+					)}`,
+				);
 			}
-			if (failedEntries.length > 0) {
-				process.exitCode = 1;
+		} catch (err) {
+			if (err instanceof SkillConflictError) {
+				console.warn(
+					yellow(
+						`Skipped ${AGENT_LABELS[err.details.agent]}: "${err.details.outputDir}" already exists ` +
+							`but was not created by ${meta.name}. ` +
+							`Delete or rename the conflicting directory to resolve.`,
+					),
+				);
+			} else {
+				throw err;
 			}
-		});
+		}
+	}
+
+	// Custom skill bundles — update each in turn after the main skill.
+	// SkillConflictError is logged and treated as recoverable (matches
+	// the main-skill update behavior); any other error is also logged
+	// per-entry but tracked so the command exits non-zero.
+	const failedEntries: string[] = [];
+	for (const entry of customSkills) {
+		const entryScope = entry.scope ?? scope;
+		try {
+			await autoUpdateCustomSkill(entry, options, {
+				scopes: [entryScope],
+				onNoUpdate: (scope) => console.log(dim(`No updates needed [${entry.name}] (${scope}).`)),
+				onUpdated: (message) => console.log(`\n${bold(message)}`),
+				onConflict: (err) => {
+					const kindMismatchSuffix = err.details.kindMismatch
+						? ` (existing is a "${err.details.kindMismatch.existing}" skill, attempted "${err.details.kindMismatch.attempted}")`
+						: "";
+					console.warn(
+						yellow(
+							`Skipped ${AGENT_LABELS[err.details.agent]} [${entry.name}]: ` +
+								`"${err.details.outputDir}" already exists${kindMismatchSuffix}. ` +
+								`Delete or rename the conflicting directory to resolve.`,
+						),
+					);
+				},
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			console.warn(
+				yellow(
+					`Skill update failed [${entry.name}]: ${message}. ` + `Continuing with remaining skills.`,
+				),
+			);
+			failedEntries.push(entry.name);
+		}
+	}
+	if (failedEntries.length > 0) {
+		process.exitCode = 1;
+	}
 }

@@ -85,41 +85,10 @@ export function createMarkdownTheme(options?: CreateMarkdownThemeOptions): Markd
 		return base;
 	}
 
-	// Merge overrides on top of the default theme
-	const merged: MarkdownTheme = {
-		heading1: overrides.heading1 ?? base.heading1,
-		heading2: overrides.heading2 ?? base.heading2,
-		heading3: overrides.heading3 ?? base.heading3,
-		heading4: overrides.heading4 ?? base.heading4,
-		heading5: overrides.heading5 ?? base.heading5,
-		heading6: overrides.heading6 ?? base.heading6,
-		text: overrides.text ?? base.text,
-		emphasis: overrides.emphasis ?? base.emphasis,
-		strong: overrides.strong ?? base.strong,
-		strongEmphasis: overrides.strongEmphasis ?? base.strongEmphasis,
-		strikethrough: overrides.strikethrough ?? base.strikethrough,
-		inlineCode: overrides.inlineCode ?? base.inlineCode,
-		linkText: overrides.linkText ?? base.linkText,
-		linkUrl: overrides.linkUrl ?? base.linkUrl,
-		autolink: overrides.autolink ?? base.autolink,
-		blockquoteMarker: overrides.blockquoteMarker ?? base.blockquoteMarker,
-		blockquoteText: overrides.blockquoteText ?? base.blockquoteText,
-		listMarker: overrides.listMarker ?? base.listMarker,
-		orderedListMarker: overrides.orderedListMarker ?? base.orderedListMarker,
-		taskChecked: overrides.taskChecked ?? base.taskChecked,
-		taskUnchecked: overrides.taskUnchecked ?? base.taskUnchecked,
-		codeFence: overrides.codeFence ?? base.codeFence,
-		codeInfo: overrides.codeInfo ?? base.codeInfo,
-		codeText: overrides.codeText ?? base.codeText,
-		thematicBreak: overrides.thematicBreak ?? base.thematicBreak,
-		tableHeader: overrides.tableHeader ?? base.tableHeader,
-		tableCell: overrides.tableCell ?? base.tableCell,
-		tableBorder: overrides.tableBorder ?? base.tableBorder,
-		imageAltText: overrides.imageAltText ?? base.imageAltText,
-		imageUrl: overrides.imageUrl ?? base.imageUrl,
-	};
-
-	return Object.freeze(merged);
+	const definedOverrides = Object.fromEntries(
+		Object.entries(overrides).filter(([, value]) => value !== undefined),
+	);
+	return Object.freeze({ ...base, ...definedOverrides });
 }
 
 /**

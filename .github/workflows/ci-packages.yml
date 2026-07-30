@@ -48,3 +48,10 @@ jobs:
 
       - name: Build, type check, and test (packages)
         run: bun turbo run build check:types test --filter='./packages/*'
+
+      - name: Run package-manager smoke tests
+        run: |
+          npm install --global pnpm@10
+          for package_manager in bun npm pnpm; do
+            CRUST_SMOKE_PM="$package_manager" bun test ./packages/crust/tests/package-manager.smoke.test.ts
+          done

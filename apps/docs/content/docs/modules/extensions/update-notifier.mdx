@@ -1,0 +1,87 @@
+---
+title: Update Notifier
+description: Check npm for a newer stable version after a command succeeds.
+---
+
+## Usage
+
+```ts
+import { Crust } from "@crustjs/core";
+import { updateNotifier } from "@crustjs/extensions";
+import pkg from "../package.json";
+
+const app = new Crust("my-cli")
+  .extend(
+    updateNotifier({
+      packageName: pkg.name,
+      currentVersion: pkg.version,
+    }),
+  )
+  .handle(({ stdout }) => stdout("Done"));
+
+await app.execute();
+```
+
+## API
+
+```ts
+function updateNotifier(options: UpdateNotifierOptions): Extension;
+```
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierOptions"
+/>
+
+The `intercept` hook first awaits the Command Handler, then checks for an update. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. The notice is written to process stderr. Version comparison uses stable `major.minor.patch` values and ignores prerelease/build suffixes.
+
+Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed.
+
+## Cache adapter
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierCacheConfig"
+/>
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierCacheAdapter"
+/>
+
+The adapter reads and writes this structural state shape; `UpdateNotifierState` itself is not exported from the package root:
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierState"
+/>
+
+The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierInstallScope`, and `UpdateNotifierPackageManager` alongside `UpdateNotifierOptions`.
+
+```ts
+import { createStore, stateDir } from "@crustjs/store";
+import { updateNotifier, type UpdateNotifierCacheAdapter } from "@crustjs/extensions";
+
+const store = createStore({
+  dirPath: stateDir("my-cli"),
+  name: "update-notifier",
+  fields: {
+    lastCheckedAt: { type: "number", default: 0 },
+    latestVersion: { type: "string" },
+    lastNotifiedVersion: { type: "string" },
+  },
+});
+
+const adapter: UpdateNotifierCacheAdapter = {
+  read: () => store.read(),
+  write: (state) => store.write(state),
+};
+
+const notifier = updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+  packageManager: "bun",
+  installScope: "global",
+  cache: { adapter },
+});
+```

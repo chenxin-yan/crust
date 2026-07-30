@@ -15,7 +15,7 @@
 		"check:types": "turbo run check:types",
 		"test": "turbo run test",
 		"changeset": "changeset",
-		"packages:version": "changeset version && bun update",
+		"packages:version": "changeset version && bun install",
 		"packages:publish": "bun ./scripts/publish-packages.mjs"
 	},
 	"devDependencies": {
@@ -29,10 +29,7 @@
 		"bunup": "^0.16.31",
 		"typescript": "^6.0.3"
 	},
-	"engines": {
-		"node": ">=18"
-	},
-	"packageManager": "bun@1.3.10",
+	"packageManager": "bun@1.3.14",
 	"workspaces": [
 		"apps/*",
 		"packages/*"

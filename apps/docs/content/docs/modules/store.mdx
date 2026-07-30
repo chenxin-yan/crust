@@ -169,13 +169,7 @@ const store = createStore(options);
 
 #### Parameters
 
-| Option         | Type                                                              | Required | Description                                                                                                  |
-| -------------- | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `dirPath`      | `string`                                                          | Yes      | Absolute directory path where the JSON file is stored.                                                       |
-| `name`         | `string`                                                          | No       | Store name used as filename (default `"config"` → `config.json`).                                            |
-| `fields`       | `FieldsDef`                                                       | Yes      | Field definitions defining the store's data shape, types, defaults, and optional validation.                 |
-| `pruneUnknown` | `boolean`                                                         | No       | Drop unknown persisted keys on read (default `true`).                                                        |
-| `access`       | `"default" \| "private" \| { file?: number; directory?: number }` | No       | Persistence visibility. Use `"private"` for owner-only secret stores, or pass explicit Unix permission bits. |
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="CreateStoreOptions" />
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
 
@@ -422,7 +416,15 @@ value at use sites.
 
 `field()` throws `CrustStoreError("DEFINITION")` when handed a value that
 is not a Standard Schema v1 object. `type` is optional for schema-backed
-fields; pass it through `opts` only as legacy metadata for tooling.
+fields; include it in `opts` when tooling needs primitive-type metadata.
+
+### Operation behavior
+
+- **Write:** validates each field before persisting. Schema transforms replace the input value; hand-written validators cannot transform it.
+- **Read:** applies defaults, then validates. Schema transform output is discarded so the returned value matches the persisted value.
+- **Update:** reads the current config, applies the updater, validates, then persists any schema-transformed output.
+- **Patch:** shallow-merges the partial input, validates, then persists any schema-transformed output.
+- **Reset:** removes the persisted file without validation.
 
 ## Error Handling
 
@@ -434,7 +436,7 @@ All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a 
 | `PARSE`      | Malformed JSON in persisted file                          | `{ path: string }`      |
 | `IO`         | Filesystem read, write, or delete failure                 | `{ path, operation }`   |
 | `VALIDATION` | One or more field validators rejected the state           | `{ operation, issues }` |
-| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{ vendor? }`           |
+| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{}`                    |
 
 ### Catching Errors
 
@@ -511,22 +513,35 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-| Type                     | Description                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `CreateStoreOptions`     | Options object for `createStore()`.                                                |
-| `Store`                  | Store instance with `read`, `write`, `update`, `patch`, `reset`.                   |
-| `StoreUpdater`           | Updater function type `(current: T) => T`.                                         |
-| `FieldDef`               | Single field definition with `type`, optional `default`, and optional `validate`.  |
-| `FieldsDef`              | Record of field names to `FieldDef` definitions.                                   |
-| `InferStoreConfig`       | Inferred store state type from a `FieldsDef` definition.                           |
-| `FieldOptions`           | Optional Crust metadata accepted by the `field()` factory.                         |
-| `StoreValidatorIssue`    | Issue object with `{ message: string, path: string }`.                             |
-| `ValidationErrorDetails` | Details for `VALIDATION` errors: `{ operation, issues }`.                          |
-| `DefinitionErrorDetails` | Details for `DEFINITION` errors: `{ vendor? }`.                                    |
-| `StoreErrorCode`         | Union of error codes: `"PATH" \| "PARSE" \| "IO" \| "VALIDATION" \| "DEFINITION"`. |
-| `ValueType`              | Supported field type literals: `"string" \| "number" \| "boolean"`.                |
-| `PlatformEnv`            | Injectable platform environment for testing path helpers.                          |
-| `CrustStoreError`        | Typed error class with `code`, `details`, and `cause`.                             |
+`FieldDef` accepts typed inline definitions and schema-backed definitions returned by `field()`. Inline fields declare their metadata and validation directly; the schema-backed branch carries the Standard Schema output type.
+
+#### `FieldDef`
+
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="FieldDef" />
+
+#### `FieldOptions`
+
+<auto-type-table path="../../../../../packages/store/src/field.ts" name="FieldOptions" />
+
+#### `Store`
+
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="Store" />
+
+#### Store access
+
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="StorePermissionBits" />
+
+`StoreAccess` is `"default" | "private" | StorePermissionBits`.
+
+#### Validation issues
+
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="StoreValidatorIssue" />
+
+#### Platform environment
+
+<auto-type-table path="../../../../../packages/store/src/path.ts" name="PlatformEnv" />
+
+The package also exports `CreateStoreOptions`, `StoreUpdater`, `FieldsDef`, `InferStoreConfig`, `ValidationErrorDetails`, `DefinitionErrorDetails`, `StoreErrorCode`, `ValueType`, and the `CrustStoreError` class.
 
 ## Design
 
@@ -539,3 +554,5 @@ if (err instanceof CrustStoreError) {
 - Sync API variants
 - Encryption or keychain integration
 - Remote/cloud synchronization
+- Automatic migration of invalid persisted config
+- Domain-specific migration frameworks

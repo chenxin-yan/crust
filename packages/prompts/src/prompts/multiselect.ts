@@ -10,18 +10,12 @@ import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_DOWN_INDICATOR,
-	SCROLL_UP_INDICATOR,
+	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import {
-	calculateScrollOffset,
-	formatHeader,
-	formatSubmitted,
-	normalizeChoices,
-} from "../core/utils.ts";
+import { formatSubmitted, moveCursor, normalizeChoices, validateSelection } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -61,13 +55,21 @@ export interface MultiselectOptions<T> {
 	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: readonly T[];
-	/** Whether at least one item must be selected (defaults to false) */
+	/**
+	 * Whether at least one item must be selected.
+	 *
+	 * @default false
+	 */
 	readonly required?: boolean;
 	/** Minimum number of selections required */
 	readonly min?: number;
 	/** Maximum number of selections allowed */
 	readonly max?: number;
-	/** Maximum number of visible choices before scrolling (defaults to 10) */
+	/**
+	 * Maximum number of visible choices before scrolling.
+	 *
+	 * @default 10
+	 */
 	readonly maxVisible?: number;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
@@ -90,35 +92,6 @@ interface MultiselectState<T> {
 	readonly selected: ReadonlySet<number>;
 	readonly scrollOffset: number;
 	readonly error: string | null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Validate the current selection against required/min/max constraints.
- * Returns `null` if valid, or an error message string if invalid.
- */
-function validateSelection(
-	selectedCount: number,
-	required?: boolean,
-	min?: number,
-	max?: number,
-): string | null {
-	if (required && selectedCount === 0) {
-		return "At least one item must be selected";
-	}
-
-	if (min !== undefined && selectedCount < min) {
-		return `Select at least ${min} item${min === 1 ? "" : "s"}`;
-	}
-
-	if (max !== undefined && selectedCount > max) {
-		return `Select at most ${max} item${max === 1 ? "" : "s"}`;
-	}
-
-	return null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -190,34 +163,18 @@ function createHandleKey<T>(
 
 		// Up arrow or k — move cursor up with wrapping
 		if (key.name === "up" || key.name === "k") {
-			const newCursor = state.cursor <= 0 ? totalItems - 1 : state.cursor - 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
 			return {
 				...state,
-				cursor: newCursor,
-				scrollOffset: newScrollOffset,
+				...moveCursor(state.cursor, totalItems, -1, state.scrollOffset, maxVisible),
 				error: null,
 			};
 		}
 
 		// Down arrow or j — move cursor down with wrapping
 		if (key.name === "down" || key.name === "j") {
-			const newCursor = state.cursor >= totalItems - 1 ? 0 : state.cursor + 1;
-			const newScrollOffset = calculateScrollOffset(
-				newCursor,
-				state.scrollOffset,
-				totalItems,
-				maxVisible,
-			);
 			return {
 				...state,
-				cursor: newCursor,
-				scrollOffset: newScrollOffset,
+				...moveCursor(state.cursor, totalItems, 1, state.scrollOffset, maxVisible),
 				error: null,
 			};
 		}
@@ -241,7 +198,7 @@ function renderMultiselect<T>(
 	const totalItems = state.choices.length;
 	const visibleCount = Math.min(totalItems, maxVisible);
 
-	const lines: string[] = [formatHeader(prefix, msg)];
+	const lines: string[] = [`${prefix} ${msg}`];
 
 	// Show hint line with keybinding instructions
 	lines.push(theme.hint(HINT_LINE));
@@ -249,7 +206,7 @@ function renderMultiselect<T>(
 	// Show scroll-up indicator if items are hidden above
 	const hasScrollUp = state.scrollOffset > 0;
 	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_UP_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	// Render visible choices
@@ -275,7 +232,7 @@ function renderMultiselect<T>(
 	// Show scroll-down indicator if items are hidden below
 	const hasScrollDown = state.scrollOffset + visibleCount < totalItems;
 	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_DOWN_INDICATOR));
+		lines.push(theme.hint(SCROLL_INDICATOR));
 	}
 
 	// Show error message if validation failed

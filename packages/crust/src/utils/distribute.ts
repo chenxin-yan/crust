@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
 
+import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
@@ -11,8 +12,7 @@ import {
 	TARGET_INFO,
 	type TargetInfo,
 	validateEntrypoint,
-} from "../commands/build.ts";
-import { resolveBaseName } from "./binary-name.ts";
+} from "./build-helpers.ts";
 import { generateManPageFromEntry } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
@@ -26,6 +26,7 @@ const METADATA_KEYS = [
 	"keywords",
 	"publishConfig",
 	"funding",
+	"engines",
 ] as const;
 
 type NpmOs = TargetInfo["os"];
@@ -52,6 +53,7 @@ type PublishPackageJson = {
 	keywords?: string[];
 	publishConfig?: Record<string, unknown>;
 	funding?: string | Record<string, unknown> | Array<Record<string, unknown>>;
+	engines?: Record<string, string>;
 };
 
 type UserPackageJson = Omit<PublishPackageJson, "bin"> & {
@@ -384,7 +386,16 @@ function copyRootReadme(cwd: string, rootDir: string): void {
 	}
 }
 
-export function writeDistributionManifest(
+function copyLicense(cwd: string, packageDirs: readonly string[]): void {
+	const licensePath = join(cwd, "LICENSE");
+	if (!existsSync(licensePath)) return;
+
+	for (const packageDir of packageDirs) {
+		copyFileSync(licensePath, join(packageDir, "LICENSE"));
+	}
+}
+
+function writeDistributionManifest(
 	stageDir: string,
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
@@ -452,6 +463,7 @@ function stageDistributionPackages(
 		);
 	}
 
+	copyLicense(cwd, [rootDir, ...targets.map((target) => target.packageDir)]);
 	writeDistributionManifest(stageDir, metadata, targets);
 }
 

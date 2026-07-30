@@ -1,144 +1,85 @@
 ---
 title: Arguments
-description: Define positional arguments with types, defaults, and validation.
+description: Define typed positional inputs for a command.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Arguments are positional values passed to your CLI without a flag name. They're defined as an ordered array via `.args()`, and Crust maps them to named, typed values.
-
-```sh
-my-cli serve 3000 localhost
-#            ^^^^  ^^^^^^^^^
-#            arg 1  arg 2
-```
-
-## Defining Arguments
-
-Arguments are defined with the `.args()` method. Order matters — the first argument definition maps to the first positional value:
+Arguments map positional tokens to names in definition order.
 
 ```ts
-const cmd = new Crust("serve")
+const command = new Crust("serve")
   .args([
     { name: "port", type: "number", default: 3000 },
     { name: "host", type: "string", default: "localhost" },
   ])
-  .run(({ args }) => {
-    console.log(`Listening on ${args.host}:${args.port}`);
-  });
+  .handle(({ args, stdout }) => stdout(`${args.host}:${args.port}`));
 ```
 
-## Argument Properties
-
-Each argument is an `ArgDef` object with properties like `name`, `type`, `description`, `default`, `required`, and `variadic`. See the [ArgDef reference](/docs/api/types#argdef) for the full property table.
-
-## Types
-
-Positional arguments accept the same six built-in `type` literals as flags: `string`, `number`, `boolean`, `url`, `path`, and `json`. See [Types](/docs/guide/types) for the full semantics, error modes, and the `parse` escape hatch for custom transformations.
-
-## Required Arguments
-
-Mark an argument as `required` to error when it's missing:
+## Required, optional, and defaulted
 
 ```ts
 .args([
-  { name: "name", type: "string", required: true },
+  { name: "input", type: "path", required: true },
+  { name: "format", type: "string", default: "json" },
+  { name: "label", type: "string" },
 ])
 ```
 
-```sh
-$ my-cli
-# Error: Missing required argument "<name>"
-```
+The inferred types are `string`, `string`, and `string | undefined`, respectively. See [`ArgDef`](/docs/api/types#argdef) for all properties.
 
-When required is `true`, the inferred type is guaranteed (no `| undefined`).
+## Variadic arguments
 
-## Default Values
-
-Provide a `default` for optional arguments:
+Only the final argument can be variadic:
 
 ```ts
-.args([
-  { name: "port", type: "number", default: 3000 },
-])
-```
-
-When a default is set, the argument is always present in `args` — the inferred type is guaranteed (no `| undefined`).
-
-## Optional Arguments
-
-Arguments without `required` or `default` are optional. Their type includes `| undefined`:
-
-```ts
-new Crust("example").args([{ name: "name", type: "string" }]).run(({ args }) => {
-  args.name; // string | undefined
-});
-```
-
-## Variadic Arguments
-
-The last argument can be `variadic`, collecting all remaining positional values into an array:
-
-```ts
-const cmd = new Crust("copy")
+new Crust("copy")
   .args([
-    { name: "destination", type: "string", required: true },
-    { name: "files", type: "string", variadic: true },
+    { name: "destination", type: "path", required: true },
+    { name: "files", type: "path", variadic: true },
   ])
-  .run(({ args }) => {
-    args.destination; // string
+  .handle(({ args }) => {
     args.files; // string[]
-    for (const file of args.files) {
-      console.log(`Copying ${file} to ${args.destination}`);
-    }
   });
 ```
 
-```sh
-my-cli /output file1.txt file2.txt file3.txt
-```
-
-<Callout type="warn">
-  Only the **last** argument can be variadic. Crust enforces this at both compile time and runtime.
-  Placing `variadic: true` on a non-last argument produces a type error.
-</Callout>
-
-Variadic arguments with `required: true` error when no values are provided. Without `required`, an empty array is returned.
-
-The inferred TypeScript type is always `T[]` — never `T[] | undefined` — regardless of `required`. The `required` flag only controls whether an empty array fails validation; it does not change the runtime shape or the inferred type.
+A variadic value is always an array. `required: true` rejects an empty array.
 
 ## Choices
 
-Use `choices` on a string positional argument to declare a static enum of valid values:
+Use `choices` for a static string set:
 
 ```ts
-const cmd = new Crust("deploy")
-  .args([{ name: "target", type: "string", choices: ["browser", "bun", "node"] }] as const)
-  .run(({ args }) => {
-    args.target; // string
+.args([{ name: "target", type: "string", choices: ["bun", "node"] }] as const)
+```
+
+Invalid choices produce a `PARSE` error.
+
+## Standard Schemas
+
+A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Handler's output type:
+
+```ts
+import { z } from "zod";
+
+new Crust("serve")
+  .args([{ name: "port", schema: z.coerce.number().int().positive() }] as const)
+  .handle(({ args }) => {
+    args.port; // number
   });
 ```
 
-`choices` is **validated at parse time** — passing a value outside the list throws `CrustError("PARSE", …)` before any `parse` transform runs. Shell-completion plugins also consume `choices` to emit value candidates. `choices` is only available on string-typed args; using it on number or boolean args is a compile-time error. See the [API reference](/docs/api/types#argdef) for details.
+<Callout type="warn">
+  Schema-backed arguments cannot also use core value options such as `type`, `default`, `required`,
+  `choices`, or `parse`. The schema owns coercion, defaults, requiredness, choices, and validation.
+</Callout>
 
-## The `--` Separator
+See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions).
 
-Arguments after `--` are collected into `rawArgs` and **not** processed as positional arguments or flags:
+## Forwarding raw tokens
+
+Tokens after `--` bypass argument and flag parsing and appear in `rawArgs`:
 
 ```ts
-.run(({ args, rawArgs }) => {
-  // rawArgs contains everything after --
-  console.log("Raw args:", rawArgs);
-})
+new Crust("wrap").handle(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
 ```
-
-```sh
-my-cli build -- --some-flag --passed-through
-# rawArgs: ["--some-flag", "--passed-through"]
-```
-
-This is useful for forwarding arguments to child processes.
-
-## Type Inference
-
-Crust infers argument types from your definitions — `required` and `default` guarantee the value, otherwise it's `T | undefined`. Variadic arguments always return an array. See the [full inference rules](/docs/api/types#inferargsa) for all cases.

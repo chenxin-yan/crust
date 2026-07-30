@@ -11,7 +11,6 @@ import type {
 	InferFlags,
 	InheritableFlags,
 	MergeFlags,
-	ValidateCrossCollisions,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
@@ -500,10 +499,10 @@ describe("FlagDef choices field", () => {
 		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad1: FlagDef = { type: "boolean", choices: ["a", "b"] };
 
+		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad2: FlagDef = {
 			type: "boolean",
 			multiple: true,
-			// @ts-expect-error — `choices` is only supported on string-typed flags
 			choices: ["a", "b"],
 		};
 
@@ -704,140 +703,6 @@ describe("ValidateFlagAliases type inference", () => {
 		};
 		type Result = ValidateFlagAliases<Flags>;
 		type _check = Expect<Equal<Result, Flags>>;
-
-		expect(true).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// ValidateCrossCollisions type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("ValidateCrossCollisions type inference", () => {
-	it("resolves to identity when no cross-collisions exist", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; short: "v" };
-		};
-		type Local = {
-			output: { type: "string"; short: "o" };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<Equal<Result, Local>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("brands flag whose alias collides with inherited flag name", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true };
-		};
-		type Local = {
-			output: { type: "string"; aliases: ["verbose"] };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<
-			Equal<
-				Result["output"],
-				Local["output"] & {
-					readonly FIX_INHERITED_COLLISION: '"verbose" collides with inherited flag';
-				}
-			>
-		>;
-
-		expect(true).toBe(true);
-	});
-
-	it("brands flag whose alias collides with inherited flag alias", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; short: "v" };
-		};
-		type Local = {
-			version: { type: "boolean"; short: "v" };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<
-			Equal<
-				Result["version"],
-				Local["version"] & {
-					readonly FIX_INHERITED_COLLISION: '"v" collides with inherited flag';
-				}
-			>
-		>;
-
-		expect(true).toBe(true);
-	});
-
-	it("brands flag whose name collides with inherited flag alias", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; short: "v" };
-		};
-		type Local = {
-			v: { type: "string" };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<
-			Equal<
-				Result["v"],
-				Local["v"] & {
-					readonly FIX_INHERITED_COLLISION: '"v" collides with inherited flag';
-				}
-			>
-		>;
-
-		expect(true).toBe(true);
-	});
-
-	it("allows intentional name override (child redefines inherited flag by name)", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true; short: "v" };
-		};
-		type Local = {
-			verbose: { type: "string" };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<Equal<Result, Local>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("skips validation when Inherited is the wide FlagsDef type (root command)", () => {
-		type Local = {
-			output: { type: "string"; aliases: ["verbose"] };
-		};
-		type Result = ValidateCrossCollisions<FlagsDef, Local>;
-		type _check = Expect<Equal<Result, Local>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("resolves to identity for empty inherited flags", () => {
-		// oxlint-disable-next-line typescript/no-empty-object-type -- empty object for testing
-		type Inherited = {};
-		type Local = {
-			output: { type: "string"; short: "o" };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<Equal<Result, Local>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("detects collision with inherited alias array entry", () => {
-		type Inherited = {
-			output: { type: "string"; inherit: true; short: "o"; aliases: ["out"] };
-		};
-		type Local = {
-			other: { type: "string"; aliases: ["out"] };
-		};
-		type Result = ValidateCrossCollisions<Inherited, Local>;
-		type _check = Expect<
-			Equal<
-				Result["other"],
-				Local["other"] & {
-					readonly FIX_INHERITED_COLLISION: '"out" collides with inherited flag';
-				}
-			>
-		>;
 
 		expect(true).toBe(true);
 	});

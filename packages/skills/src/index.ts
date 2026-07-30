@@ -2,6 +2,11 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { Extension } from "@crustjs/core";
+
+import { skillExtension } from "./plugin.ts";
+import type { SkillOptions } from "./types.ts";
+
 // Agent detection
 export {
 	detectInstalledAgents,
@@ -19,16 +24,12 @@ export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } 
 export { SkillConflictError } from "./errors.ts";
 
 // Primitives
-export {
-	generateSkill,
-	isValidSkillName,
-	resolveSkillName,
-	skillStatus,
-	uninstallSkill,
-} from "./generate.ts";
+export { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
 
-// Plugin
-export { skillPlugin } from "./plugin.ts";
+// Extension
+export function skill(options: SkillOptions): Extension {
+	return skillExtension(options);
+}
 
 // Types
 export type {
@@ -45,7 +46,7 @@ export type {
 	SkillInstallMode,
 	SkillKind,
 	SkillMeta,
-	SkillPluginOptions,
+	SkillOptions,
 	StatusOptions,
 	StatusResult,
 	UninstallOptions,

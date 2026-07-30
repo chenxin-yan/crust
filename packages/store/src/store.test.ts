@@ -1101,7 +1101,7 @@ describe("field validation", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// FieldDef.validate contract — fail-fast migration guard
+// FieldDef.validate error handling
 // ─────────────────────────────────────────────────────────────────────────
 
 describe("FieldDef.validate contract", () => {
@@ -1116,72 +1116,8 @@ describe("FieldDef.validate contract", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	// Regression: previously the migration guard accepted any object with
-	// a `"value" in result` key, so `{ ok: false, value: "bad" }` was
-	// silently persisted as `"bad"` instead of throwing TypeError. The
-	// guard now rejects any return shape carrying an `ok` key.
-	it("surfaces legacy { ok, value } validator return as TypeError", async () => {
-		const fields = {
-			name: {
-				type: "string",
-				default: "ok",
-				validate: ((_v: string) => ({ ok: false, value: "bad" }) as never) as (v: string) => void,
-			},
-		} as const satisfies FieldsDef;
-
-		const store = createStore({ dirPath: tempDir, fields });
-
-		let caught: unknown;
-		try {
-			await store.write({ name: "input" });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			caught = err;
-		}
-
-		expect(caught).toBeInstanceOf(TypeError);
-		expect(caught).not.toBeInstanceOf(CrustStoreError);
-		// Critically: the legacy `value: "bad"` was NOT persisted.
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(false);
-	});
-
-	it("surfaces a buggy validator (returns a value) as TypeError, not CrustStoreError", async () => {
-		// Regression: previously the migration guard `throw new TypeError`
-		// ran inside the same try/catch that captures legitimate validation
-		// rejections, so consumers branching on `err.code === "VALIDATION"`
-		// silently misclassified a caller bug as a bad config value.
-		const fields = {
-			legacy: {
-				type: "string",
-				default: "x",
-				// Legacy `{ ok, issues }` return shape — a caller bug.
-				validate: ((_v: string) =>
-					({ ok: false, issues: [{ message: "bad", path: "" }] }) as never) as (v: string) => void,
-			},
-		} as const satisfies FieldsDef;
-
-		const store = createStore({ dirPath: tempDir, fields });
-
-		let caught: unknown;
-		try {
-			await store.write({ legacy: "anything" });
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			caught = err;
-		}
-
-		expect(caught).toBeInstanceOf(TypeError);
-		expect((caught as TypeError).message).toContain("FieldDef.validate must return void");
-		// Critically: it is NOT a CrustStoreError("VALIDATION").
-		expect(caught).not.toBeInstanceOf(CrustStoreError);
-	});
-
 	it("collects user-thrown TypeError as a regular validation issue", async () => {
-		// Counterpart guarantee: a user that legitimately throws TypeError
-		// from their validator (e.g. `throw new TypeError("expected string")`)
-		// must still be captured as a normal validation rejection — not
-		// confused with the migration guard’s TypeError.
+		// A user-thrown TypeError is a normal validation rejection.
 		const fields = {
 			name: {
 				type: "string",
@@ -1385,9 +1321,7 @@ describe("schema transform persistence", () => {
 		expect(result.theme).toBe("dark");
 	});
 
-	// Pin: hand-rolled void-returning `validate` callbacks keep their
-	// current contract — accept on no-throw, reject on throw. The widened
-	// FieldDef.validate signature must remain backward-compatible.
+	// Void-returning `validate` callbacks accept on no-throw and reject on throw.
 	it("hand-rolled void-return validate keeps current contract", async () => {
 		const fields = {
 			port: {

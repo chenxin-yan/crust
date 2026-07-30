@@ -20,13 +20,7 @@ export { runSteps } from "./steps.ts";
 // Utilities
 // ────────────────────────────────────────────────────────────────────────────
 
-export {
-	detectPackageManager,
-	getGitUser,
-	isGitInstalled,
-	isInGitRepo,
-	type PackageManager,
-} from "./utils.ts";
+export { detectPackageManager, isGitInstalled, isInGitRepo, type PackageManager } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

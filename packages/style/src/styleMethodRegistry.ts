@@ -1,13 +1,7 @@
 import type { AnsiPair } from "./ansiCodes.ts";
 import * as codes from "./ansiCodes.ts";
 
-function readStyleMethodPairs(): Omit<typeof codes, "reset"> {
-	const { reset: _reset, ...pairs } = codes;
-	void _reset;
-	return pairs;
-}
-
-const styleMethodPairs: Omit<typeof codes, "reset"> = Object.freeze(readStyleMethodPairs());
+const styleMethodPairs: typeof codes = codes;
 
 export type StyleMethodName = keyof typeof styleMethodPairs;
 

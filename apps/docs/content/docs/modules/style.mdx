@@ -157,28 +157,46 @@ A naive wrapper like `<T extends NamedColor>(c: T) => fg("x", c)` will not compi
 
 ### Types
 
-| Type                         | Description                                                                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AnsiPair`                   | Open/close ANSI escape sequence pair                                                                                                        |
-| `ColorMode`                  | `"auto" \| "always" \| "never"`                                                                                                             |
-| `StyleOptions`               | Options for `createStyle`                                                                                                                   |
-| `CapabilityOverrides`        | Injectable TTY/NO_COLOR overrides for testing                                                                                               |
-| `TrueColorOverrides`         | Injectable COLORTERM/TERM overrides for truecolor testing                                                                                   |
-| `HyperlinkOptions`           | Optional OSC 8 hyperlink parameters such as `id`                                                                                            |
-| `StyleFn`                    | `(text: string) => string` style function                                                                                                   |
-| `StyleInstance`              | Configured style object with all styling methods. Exposes `enabled`, `colorsEnabled`, `trueColorEnabled`, and `colorDepth` capability flags |
-| `ColorDepth`                 | `"truecolor" \| "256" \| "16" \| "none"`                                                                                                    |
-| `WrapOptions`                | Options for `wrapText`                                                                                                                      |
-| `ColumnAlignment`            | `"left" \| "right" \| "center"`                                                                                                             |
-| `TableOptions`               | Options for `table`                                                                                                                         |
-| `UnorderedListOptions`       | Options for `unorderedList`                                                                                                                 |
-| `OrderedListOptions`         | Options for `orderedList`                                                                                                                   |
-| `TaskListItem`               | `{ text: string; checked: boolean }`                                                                                                        |
-| `TaskListOptions`            | Options for `taskList`                                                                                                                      |
-| `MarkdownTheme`              | Semantic theme contract with 30 GFM slots                                                                                                   |
-| `PartialMarkdownTheme`       | Partial override type for theme customization                                                                                               |
-| `ThemeSlotFn`                | `(value: string) => string` theme slot function                                                                                             |
-| `CreateMarkdownThemeOptions` | Options for `createMarkdownTheme`                                                                                                           |
+Scalar and callable contracts remain concise in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleFn` is `(text: string) => string`; `ColumnAlignment` is `"left" | "right" | "center"`. The package also exports `AnsiPair`, `ColorInput`, its strict-wrapper helper types, `StyleInstance`, `MarkdownTheme`, `PartialMarkdownTheme`, and `ThemeSlotFn`.
+
+#### Style configuration
+
+<auto-type-table path="../../../../../packages/style/src/types.ts" name="StyleOptions" />
+
+<auto-type-table path="../../../../../packages/style/src/types.ts" name="CapabilityOverrides" />
+
+#### Hyperlink and wrapping options
+
+<auto-type-table path="../../../../../packages/style/src/hyperlinks.ts" name="HyperlinkOptions" />
+
+<auto-type-table path="../../../../../packages/style/src/text/wrap.ts" name="WrapOptions" />
+
+#### List options
+
+<auto-type-table
+  path="../../../../../packages/style/src/blocks/lists.ts"
+  name="UnorderedListOptions"
+/>
+
+<auto-type-table
+  path="../../../../../packages/style/src/blocks/lists.ts"
+  name="OrderedListOptions"
+/>
+
+<auto-type-table path="../../../../../packages/style/src/blocks/lists.ts" name="TaskListItem" />
+
+<auto-type-table path="../../../../../packages/style/src/blocks/lists.ts" name="TaskListOptions" />
+
+#### Table options
+
+<auto-type-table path="../../../../../packages/style/src/blocks/tables.ts" name="TableOptions" />
+
+#### Markdown theme options
+
+<auto-type-table
+  path="../../../../../packages/style/src/theme/createMarkdownTheme.ts"
+  name="CreateMarkdownThemeOptions"
+/>
 
 ## Usage
 
@@ -243,9 +261,20 @@ getGlobalColorMode();
 <Callout type="info">
 Instances returned by `createStyle()` capture their mode at creation time and are **not** affected by `setGlobalColorMode`. The override only applies to the default `style` facade and the named re-exports.
 
-For a scoped override that only lasts for a single CLI run, use [`noColorPlugin()`](/docs/modules/plugins/no-color).
+For a scoped override that only lasts for a single CLI run, use [`noColor()`](/docs/modules/extensions/no-color).
 
 </Callout>
+
+### Deterministic capability testing
+
+Pass capability overrides to simulate terminal environments without mutating process globals:
+
+```ts
+const testStyle = createStyle({
+  mode: "auto",
+  overrides: { isTTY: true, noColor: undefined, colorTerm: "truecolor" },
+});
+```
 
 ### Composing Styles
 
@@ -271,9 +300,7 @@ console.log(style.bold`Build ${style.cyan`./dist`} in ${ms}ms`); // nested
 #### 3. AnsiPair composition
 
 Every chainable doubles as an `AnsiPair` (`open` / `close` properties), so
-it can be passed to `composeStyles` and `applyStyle` directly. The
-pre-built `*Code` exports are still available for callers that prefer
-pure data:
+it can be passed to `composeStyles` and `applyStyle` directly:
 
 ```ts
 import { applyStyle, composeStyles, bold, red, bgYellow, fgCode } from "@crustjs/style";
@@ -301,6 +328,18 @@ style.fg("rebeccapurple").italic.underline("emphasis");
   `chain(text)` for emission and reserve `chain.open` / `chain.close` for `composeStyles` /
   `applyStyle`.
 </Callout>
+
+#### Captured chain references
+
+Top-level helpers and first-level properties such as `style.bold` are forwarders that re-resolve the global color mode on every call. A deeper chain such as `style.bold.red` captures the mode at access time. Capture the first-level helper and continue the chain at the call site when it must follow later global overrides:
+
+```ts
+import { setGlobalColorMode, style } from "@crustjs/style";
+
+const bold = style.bold;
+setGlobalColorMode("never");
+bold.red("plain text"); // re-resolves through the captured forwarder
+```
 
 ### Dynamic Colors
 
@@ -331,12 +370,12 @@ console.log(bg("slate", { r: 100, g: 116, b: 139 }));
 Pair factories work with `applyStyle` and `composeStyles`:
 
 ```ts
-import { fgCode, bgCode, applyStyle, composeStyles, boldCode } from "@crustjs/style";
+import { fgCode, bgCode, applyStyle, composeStyles, bold } from "@crustjs/style";
 
 const coral = fgCode("#ff7f50");
 console.log(applyStyle("coral text", coral));
 
-const boldCoral = composeStyles(boldCode, fgCode([255, 127, 80]));
+const boldCoral = composeStyles(bold, fgCode([255, 127, 80]));
 console.log(applyStyle("bold coral", boldCoral));
 ```
 
@@ -351,13 +390,6 @@ console.log(s.bg("text", "rebeccapurple"));
 ```
 
 In `"auto"` mode, `fg` and `bg` automatically pick the best `Bun.color()` format the terminal supports — see [Color Depth & Auto-Fallback](#color-depth--auto-fallback) below. Standard 16-color methods continue to work normally at every depth.
-
-<Callout type="info">
-  The earlier `rgb` / `bgRgb` / `hex` / `bgHex` helpers (and their `*Code` pair-factory variants,
-  plus matching `style.*` instance methods) still ship and behave exactly as before, but are marked
-  `@deprecated` and will be removed in v1.0.0. IDEs and `tsc` surface the deprecation with a
-  one-line replacement hint at every call site — prefer `fg` / `bg` for new code.
-</Callout>
 
 ### Color Depth & Auto-Fallback
 
@@ -393,14 +425,14 @@ Nullish text (e.g. `fg(undefined, "#f00")`, `bold(null)`) returns `""` defensive
 ### Hyperlinks (OSC 8)
 
 ```ts
-import { createStyle, linkCode, composeStyles, applyStyle, underlineCode } from "@crustjs/style";
+import { createStyle, linkCode, composeStyles, applyStyle, underline } from "@crustjs/style";
 
 const s = createStyle({ mode: "always" });
 
 console.log(s.link("Crust docs", "https://crustjs.com"));
 console.log(s.link("API reference", "https://crustjs.com/docs", { id: "docs-link" }));
 
-const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underlineCode);
+const underlinedLink = composeStyles(linkCode("https://crustjs.com"), underline);
 console.log(applyStyle("Visit Crust", underlinedLink));
 ```
 
@@ -431,6 +463,21 @@ const output = table(
 );
 console.log(output);
 ```
+
+List helpers support indentation, custom markers, and multiline alignment:
+
+```ts
+import { orderedList, taskList, unorderedList } from "@crustjs/style";
+
+unorderedList(["apples", "bananas"]);
+orderedList(["first", "second"], { start: 3 });
+taskList([
+  { text: "Write tests", checked: true },
+  { text: "Update docs", checked: false },
+]);
+```
+
+Tables support per-column alignment, custom padding and separators, and ANSI-styled cells while preserving visible alignment.
 
 ### Markdown Theme
 

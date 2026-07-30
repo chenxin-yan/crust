@@ -1,4 +1,7 @@
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
+import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
+
+import type { Simplify } from "./api/context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
@@ -24,7 +27,7 @@ export type ValueType = BaseValueType | "url" | "path" | "json";
  * three formatted types (`"url"`, `"path"`, `"json"`) to `URL`, `string`,
  * and `unknown` respectively.
  */
-export type Resolve<T extends ValueType> = T extends BaseValueType
+type Resolve<T extends ValueType> = T extends BaseValueType
 	? ResolvePrimitive<T>
 	: T extends "url"
 		? URL
@@ -41,7 +44,7 @@ export type Resolve<T extends ValueType> = T extends BaseValueType
  * variants), the inferred type is `ReturnType<typeof parse>`. Otherwise it
  * delegates to {@link Resolve} on the declared `type`.
  */
-export type ResolveBaseType<F> = F extends {
+type ResolveBaseType<F> = F extends {
 	parse: (raw: string) => infer R;
 }
 	? R
@@ -66,6 +69,8 @@ interface ArgDefBase {
 	 * value is still `T[]`, just rejected when it has length 0.
 	 */
 	required?: true;
+	/** Not supported with core value options — see {@link SchemaArgDef} */
+	schema?: never;
 	/**
 	 * When `true`, collects all remaining positional values into an array.
 	 *
@@ -88,7 +93,7 @@ interface StringArgDef extends ArgDefBase {
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion plugins
-	 * (e.g. `@crustjs/plugins/completion`) to emit value candidates.
+	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed args; not supported on number/boolean.
 	 *
@@ -151,6 +156,41 @@ interface JsonArgDef extends ArgDefBase {
 	parse?: never;
 }
 
+interface RawArgDef extends ArgDefBase {
+	/** Optional parser hint. Omit for raw schema-backed validation. */
+	type?: never;
+	/** Raw default value when the argument is not provided */
+	default?: unknown;
+	choices?: readonly string[];
+	/** Not supported on raw args — schema validators own the transform. */
+	parse?: never;
+}
+
+/**
+ * A positional argument validated by a Standard Schema (exclusive mode).
+ *
+ * The schema receives the raw string token (`string | undefined` when the
+ * argument is absent; `string[]` for variadic args) and exclusively owns
+ * coercion, defaults, requiredness, choices, and validation. Its inferred
+ * output type reaches the Command Handler. Core value options (`type`,
+ * `default`, `required`, `choices`, `parse`) cannot be mixed in.
+ */
+interface SchemaArgDef {
+	/** The argument name (used as the key in the parsed result and in help text) */
+	name: string;
+	/** Human-readable description for help text */
+	description?: string;
+	/** When `true`, collects all remaining raw tokens into a `string[]` for the schema */
+	variadic?: true;
+	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
+	schema: StandardSchema;
+	type?: never;
+	required?: never;
+	default?: never;
+	choices?: never;
+	parse?: never;
+}
+
 /**
  * Defines a single positional argument for a CLI command.
  *
@@ -166,16 +206,6 @@ interface JsonArgDef extends ArgDefBase {
  * ] as const satisfies ArgsDef;
  * ```
  */
-interface RawArgDef extends ArgDefBase {
-	/** Optional parser hint. Omit for raw schema-backed validation. */
-	type?: never;
-	/** Raw default value when the argument is not provided */
-	default?: unknown;
-	choices?: readonly string[];
-	/** Not supported on raw args — schema validators own the transform. */
-	parse?: never;
-}
-
 export type ArgDef =
 	| StringArgDef
 	| NumberArgDef
@@ -183,6 +213,7 @@ export type ArgDef =
 	| UrlArgDef
 	| PathArgDef
 	| JsonArgDef
+	| SchemaArgDef
 	| RawArgDef;
 
 /** Ordered tuple of positional argument definitions */
@@ -204,6 +235,8 @@ interface FlagDefBase {
 	required?: true;
 	/** When `true`, the flag is inherited by subcommands */
 	inherit?: true;
+	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
+	schema?: never;
 }
 
 // ── Single-value flags ────────────────────────────────────────────────────
@@ -225,7 +258,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion plugins
-	 * (e.g. `@crustjs/plugins/completion`) to emit value candidates.
+	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed flags; not supported on number/boolean.
 	 *
@@ -243,7 +276,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 *
 	 * Constraints:
 	 * - Synchronous only. `async` parsers are rejected at command setup
-	 *   with `CrustError("CONFIG", …)`.
+	 *   with `CrustError("DEFINITION", …)`.
 	 * - Only allowed on `type: "string"` (single + multi) and string args.
 	 *   `parse?: never` on every non-string variant prevents misuse at
 	 *   compile time.
@@ -322,7 +355,7 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * Each element is validated at parse time before `parse` runs. Passing
 	 * a value outside `choices` throws `CrustError("PARSE", …)` before any
 	 * `parse` transform is applied. Also consumed by shell-completion
-	 * plugins (e.g. `@crustjs/plugins/completion`) to emit value candidates.
+	 * plugins (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed multi-flags; not supported on number/boolean.
 	 *
@@ -385,6 +418,49 @@ interface JsonMultiFlagDef extends MultiFlagBase {
 	parse?: never;
 }
 
+/** Shared fields for schema-backed flags (exclusive mode) */
+interface SchemaFlagBase {
+	/** Human-readable description for help text */
+	description?: string;
+	/** Single-character short alias (e.g. `"v"` → `-v`) */
+	short?: string;
+	/** Additional long aliases (e.g. `["out"]` → `--out`) */
+	aliases?: string[];
+	/** When `true`, the flag is inherited by subcommands */
+	inherit?: true;
+	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
+	schema: StandardSchema;
+	required?: never;
+	default?: never;
+	choices?: never;
+	parse?: never;
+}
+
+/**
+ * A schema-backed flag that consumes a value token (`--flag value`).
+ * The schema receives the raw string (`string | undefined`, or `string[]`
+ * with `multiple: true`) and exclusively owns coercion, defaults,
+ * requiredness, and validation. `type` declares token consumption only.
+ */
+interface SchemaStringFlagDef extends SchemaFlagBase {
+	type: "string";
+	/** When `true`, the flag is repeatable and the schema receives `string[]` */
+	multiple?: true;
+	noNegate?: never;
+}
+
+/**
+ * A schema-backed toggle flag (no value token). The schema receives the raw
+ * `boolean | undefined` (or `boolean[]` with `multiple: true`).
+ */
+interface SchemaBooleanFlagDef extends SchemaFlagBase {
+	type: "boolean";
+	/** When `true`, the flag is repeatable and the schema receives `boolean[]` */
+	multiple?: true;
+	/** When `true`, disables the auto-generated `--no-<name>` negation */
+	noNegate?: true;
+}
+
 /**
  * Defines a single named flag for a CLI command.
  *
@@ -407,6 +483,8 @@ export type FlagDef =
 	| UrlFlagDef
 	| PathFlagDef
 	| JsonFlagDef
+	| SchemaStringFlagDef
+	| SchemaBooleanFlagDef
 	| StringMultiFlagDef
 	| NumberMultiFlagDef
 	| BooleanMultiFlagDef
@@ -497,67 +575,6 @@ export type ValidateFlagAliases<F extends Record<string, unknown>> = {
 				readonly FIX_ALIAS_COLLISION: `Alias "${CollidingAliases<F, K>}" collides with another flag name or alias`;
 			};
 };
-
-// ────────────────────────────────────────────────────────────────────────────
-// Inherited flag cross-collision detection (compile-time, per-flag granularity)
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Collects aliases from inherited flags, excluding those whose keys the
- * child overrides (intentional override — child redefines a flag by name).
- */
-type InheritedAliasesExcluding<I extends Record<string, unknown>, OverrideKeys extends string> = {
-	[K in Exclude<keyof I & string, OverrideKeys>]: ExtractAllAliases<I[K]>;
-}[Exclude<keyof I & string, OverrideKeys>];
-
-/**
- * Per-flag cross-collision detection between a child flag K (from local
- * flags F) and the inherited flag set I. Resolves to the colliding
- * identifier, or `never` when no collision exists.
- *
- * Detects three collision classes:
- * 1. Child alias → inherited flag name
- * 2. Child alias → inherited flag alias
- * 3. Child flag name → inherited flag alias
- *
- * Intentional name overrides (child defines a flag with the same key as
- * an inherited flag) are excluded — those are handled by `MergeFlags`.
- */
-type CrossCollision<
-	I extends Record<string, unknown>,
-	F extends Record<string, unknown>,
-	K extends keyof F & string,
-> =
-	| (ExtractAllAliases<F[K]> & Exclude<keyof I & string, keyof F & string>) // child alias → inherited name (excluding overrides)
-	| (ExtractAllAliases<F[K]> & InheritedAliasesExcluding<I, keyof F & string>) // child alias → inherited alias
-	| (K & InheritedAliasesExcluding<I, keyof F & string>); // child name → inherited alias
-
-/**
- * Per-flag validation mapped type for cross-collisions between inherited
- * and local flags. Resolves to `F` when no collisions exist.
- *
- * When `Inherited` is the wide `FlagsDef` type (root commands with no
- * parent), the validation is skipped to avoid false positives since
- * `keyof FlagsDef` is `string`.
- *
- * ```
- * Property 'FIX_INHERITED_COLLISION' is missing in type '{ type: "string"; aliases: ["verbose"] }'
- *   but required in type
- *     '{ readonly FIX_INHERITED_COLLISION: "\"verbose\" collides with inherited flag" }'.
- * ```
- */
-export type ValidateCrossCollisions<
-	I extends Record<string, unknown>,
-	F extends Record<string, unknown>,
-> = string extends keyof I
-	? F // Wide type (root command) — skip validation
-	: {
-			[K in keyof F & string]: CrossCollision<I, F, K> extends never
-				? F[K]
-				: F[K] & {
-						readonly FIX_INHERITED_COLLISION: `"${CrossCollision<I, F, K> & string}" collides with inherited flag`;
-					};
-		};
 
 // ────────────────────────────────────────────────────────────────────────────
 // "no-" prefix validation (compile-time, per-flag granularity)
@@ -717,25 +734,29 @@ export type EffectiveFlags<
  * `required` only gates empty-array validation, not the type.
  */
 type InferArgValue<A extends ArgDef> = A extends {
-	type: infer _T extends ValueType;
+	schema: infer S extends StandardSchema;
 }
-	? A extends { variadic: true }
-		? ResolveBaseType<A>[]
-		: A extends { required: true }
-			? ResolveBaseType<A>
-			: // Narrow on `default` presence, not its type. When `parse` is
-				// present the raw default is a string while `ResolveBaseType<A>`
-				// is the parsed return type, so a typed-default check would miss.
-				// ArgDef's discriminated interfaces already constrain the default
-				// shape at the call site.
-				A extends { default: unknown }
+	? InferOutput<S>
+	: A extends {
+				type: infer _T extends ValueType;
+		  }
+		? A extends { variadic: true }
+			? ResolveBaseType<A>[]
+			: A extends { required: true }
 				? ResolveBaseType<A>
-				: ResolveBaseType<A> | undefined
-	: A extends { variadic: true }
-		? unknown[]
-		: A extends { required: true } | { default: unknown }
-			? unknown
-			: unknown;
+				: // Narrow on `default` presence, not its type. When `parse` is
+					// present the raw default is a string while `ResolveBaseType<A>`
+					// is the parsed return type, so a typed-default check would miss.
+					// ArgDef's discriminated interfaces already constrain the default
+					// shape at the call site.
+					A extends { default: unknown }
+					? ResolveBaseType<A>
+					: ResolveBaseType<A> | undefined
+		: A extends { variadic: true }
+			? unknown[]
+			: A extends { required: true } | { default: unknown }
+				? unknown
+				: unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
@@ -750,9 +771,6 @@ type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
 	: // oxlint-disable-next-line typescript/no-empty-object-type -- empty base case for recursive intersection
 		{};
-
-/** Flattens an intersection of objects into a single object type for readability */
-type Simplify<T> = { [K in keyof T]: T[K] };
 
 /**
  * Maps an ArgsDef tuple to resolved arg types keyed by each arg's `name`.
@@ -777,23 +795,27 @@ export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Rec
  * - otherwise → `primitive | undefined`
  */
 type InferFlagValue<F extends FlagDef> = F extends {
-	type: infer _T extends ValueType;
+	schema: infer S extends StandardSchema;
 }
-	? F extends { multiple: true }
-		? F extends { required: true }
-			? ResolveBaseType<F>[]
-			: // See InferArgValue: narrow on default presence. With `parse`,
-				// the raw default is `string[]` while ResolveBaseType<F> is the
-				// parsed element type.
-				F extends { default: readonly unknown[] }
+	? InferOutput<S>
+	: F extends {
+				type: infer _T extends ValueType;
+		  }
+		? F extends { multiple: true }
+			? F extends { required: true }
 				? ResolveBaseType<F>[]
-				: ResolveBaseType<F>[] | undefined
-		: F extends { required: true }
-			? ResolveBaseType<F>
-			: F extends { default: unknown }
+				: // See InferArgValue: narrow on default presence. With `parse`,
+					// the raw default is `string[]` while ResolveBaseType<F> is the
+					// parsed element type.
+					F extends { default: readonly unknown[] }
+					? ResolveBaseType<F>[]
+					: ResolveBaseType<F>[] | undefined
+			: F extends { required: true }
 				? ResolveBaseType<F>
-				: ResolveBaseType<F> | undefined
-	: never;
+				: F extends { default: unknown }
+					? ResolveBaseType<F>
+					: ResolveBaseType<F> | undefined
+		: never;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.

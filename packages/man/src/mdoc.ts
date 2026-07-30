@@ -1,19 +1,5 @@
-import type { ArgDef, CommandMeta, CommandNode, FlagDef, FlagsDef } from "@crustjs/core";
-
-const MONTH_NAMES = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December",
-] as const;
+import type { ArgSnapshot, CommandMeta, FlagSnapshot } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 
 /** Escape a line so it is not interpreted as an mdoc directive. */
 function escapeMdocBodyLine(line: string): string {
@@ -31,40 +17,34 @@ function formatDefaultValue(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-function formatDefaultSuffix(value: unknown): string {
-	return `[default: ${formatDefaultValue(value)}]`;
-}
-
 function formatDescription(description: string | undefined, defaultValue: unknown): string {
 	if (defaultValue === undefined) {
 		return description ?? "";
 	}
-	const suffix = formatDefaultSuffix(defaultValue);
+	const suffix = `[default: ${formatDefaultValue(defaultValue)}]`;
 	if (!description) return suffix;
 	return `${description} ${suffix}`;
 }
 
-function formatArgToken(arg: ArgDef): string {
+function formatArgToken(arg: ArgSnapshot): string {
 	const base = arg.variadic ? `${arg.name}...` : arg.name;
 	return arg.required ? `<${base}>` : `[${base}]`;
 }
 
-function formatUsagePlain(meta: CommandMeta, command: CommandNode, path: string[]): string {
+function formatUsagePlain(meta: CommandMeta, command: CommandSnapshot, path: string[]): string {
 	if (meta.usage) return meta.usage;
 
 	const parts: string[] = [path.join(" ")];
 
-	if (Object.keys(command.subCommands).length > 0 && !command.run) {
+	if (Object.keys(command.subCommands).length > 0 && !command.hasHandler) {
 		parts.push("<command>");
 	}
 
-	if (command.args) {
-		for (const arg of command.args) {
-			parts.push(formatArgToken(arg));
-		}
+	for (const arg of command.args) {
+		parts.push(formatArgToken(arg));
 	}
 
-	if (Object.keys(command.effectiveFlags).length > 0) {
+	if (Object.keys(command.flags).length > 0) {
 		parts.push("[options]");
 	}
 
@@ -85,7 +65,7 @@ function formatUsagePlain(meta: CommandMeta, command: CommandNode, path: string[
  * the canonical name and have no way to discover that `--out` is
  * equivalent.
  */
-function formatFlagLabels(name: string, def: FlagDef): string {
+function formatFlagLabels(name: string, def: FlagSnapshot): string {
 	const longNames: string[] = [name];
 	if (def.aliases) {
 		for (const alias of def.aliases) longNames.push(alias);
@@ -144,14 +124,10 @@ function ndOneLine(text: string): string {
 
 /** Single-line `.Nd` argument must not start with `.` (troff directive). */
 function ndArgument(text: string): string {
-	const line = ndOneLine(text);
-	if (line.startsWith(".")) {
-		return `\\&${line}`;
-	}
-	return line;
+	return escapeMdocBodyLine(ndOneLine(text));
 }
 
-function longestFlagWidth(flags: FlagsDef): string {
+function longestFlagWidth(flags: Readonly<Record<string, FlagSnapshot>>): string {
 	let max = 8;
 	for (const [name, def] of Object.entries(flags)) {
 		max = Math.max(max, formatFlagLabels(name, def).length);
@@ -173,7 +149,7 @@ function formatSubcommandLabel(name: string, aliases: readonly string[] | undefi
 	return `${name} (${aliases.join(", ")})`;
 }
 
-function longestSubcommandWidth(command: CommandNode): string {
+function longestSubcommandWidth(command: CommandSnapshot): string {
 	let max = 8;
 	for (const [name, sub] of Object.entries(command.subCommands)) {
 		// Hidden subcommands are not rendered (see SUBCOMMANDS loop) and
@@ -197,20 +173,31 @@ function resolveDdLine(explicit?: string): string {
 	if (epoch !== undefined) {
 		const sec = Number.parseInt(epoch, 10);
 		if (!Number.isNaN(sec) && sec >= 0) {
-			const d = new Date(sec * 1000);
-			return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+			return new Date(sec * 1000).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+				timeZone: "UTC",
+			});
 		}
 	}
-	const now = new Date();
-	return `${MONTH_NAMES[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+	return new Date().toLocaleDateString("en-US", {
+		month: "long",
+		day: "numeric",
+		year: "numeric",
+	});
 }
 
 export interface RenderManPageMdocOptions {
-	/** Frozen root command node (e.g. from `prepareCommandTree()`). */
-	root: CommandNode;
+	/** Frozen root Command Snapshot (e.g. from `prepareCommandSnapshot()`). */
+	root: CommandSnapshot;
 	/** Name shown in `man <name>` / `.Nm` (often matches the binary). */
 	name: string;
-	/** Manual section; user commands use `1`. */
+	/**
+	 * Manual section; user commands use `1`.
+	 *
+	 * @default 1
+	 */
 	section?: number;
 	/**
 	 * Override the `.Dd` date (e.g. `"April 1, 2026"`). If omitted, uses
@@ -275,10 +262,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 
-	const flagEntries = Object.entries(root.effectiveFlags).sort(([a], [b]) => a.localeCompare(b));
+	const flagEntries = Object.entries(root.flags).sort(([a], [b]) => a.localeCompare(b));
 	if (flagEntries.length > 0) {
 		lines.push(".Sh OPTIONS");
-		lines.push(`.Bl -tag -width ${longestFlagWidth(root.effectiveFlags)}`);
+		lines.push(`.Bl -tag -width ${longestFlagWidth(root.flags)}`);
 		for (const [flagName, def] of flagEntries) {
 			const labels = formatFlagLabels(flagName, def);
 			lines.push(`.It Sy ${labels}`);
@@ -294,7 +281,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 
-	if (root.args && root.args.length > 0) {
+	if (root.args.length > 0) {
 		lines.push(".Sh ARGUMENTS");
 		lines.push(".Bl -tag -width 12n");
 		for (const arg of root.args) {
