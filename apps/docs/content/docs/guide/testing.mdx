@@ -1,0 +1,79 @@
+---
+title: Testing
+description: Test Crust applications and custom prompts without process-global stream patches.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+`@crustjs/testing` runs a Crust application with captured output or fake terminal streams. It is for application developers; install it alongside `@crustjs/core`.
+
+```sh
+bun add -d @crustjs/testing
+```
+
+## Capture command output
+
+Use `captureRun()` for commands that write ordinary stdout or stderr. It returns joined strings and returns a thrown application error instead of discarding output that occurred before it.
+
+```ts
+import { expect, test } from "bun:test";
+import { captureRun } from "@crustjs/testing";
+
+import { app } from "./cli.ts";
+
+test("greets a name", async () => {
+  const result = await captureRun(app, ["Ada"]);
+
+  expect(result.stdout).toBe("Hello, Ada!");
+  expect(result.stderr).toBe("");
+  expect(result.error).toBeUndefined();
+});
+```
+
+## Test interactive commands
+
+Use `interactiveRun()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
+
+```ts
+import { expect, test } from "bun:test";
+import { interactiveRun } from "@crustjs/testing";
+
+import { app } from "./cli.ts";
+
+test("collects a name", async () => {
+  const run = interactiveRun(app, []);
+  await run.waitFor(/Name\?/);
+
+  run.type("Ada");
+  run.keys("return");
+  await run.done;
+
+  expect(run.screen()).toContain("Hello, Ada!");
+});
+```
+
+`done` rejects with the original application error, matching `app.run()`.
+
+## For custom prompt authors
+
+<Callout type="warn" title="Built-in prompts are already covered">
+  You do not test built-in prompts. The library covers them. Use this only when authoring a custom
+  `(options, io?)` prompt.
+</Callout>
+
+Use `@crustjs/prompts/testing` directly for custom prompt functions:
+
+```ts
+import { expect, test } from "bun:test";
+import { renderPrompt } from "@crustjs/prompts/testing";
+
+import { myPrompt } from "./my-prompt.ts";
+
+test("collects a name", async () => {
+  const prompt = renderPrompt(myPrompt, { message: "Name?" });
+  prompt.type("Ada");
+  prompt.keys("return");
+
+  expect(await prompt.answer).toBe("Ada");
+});
+```

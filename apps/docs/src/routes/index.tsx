@@ -151,9 +151,9 @@ const MODULES: Array<{
     doc: "modules/man",
   },
   {
-    pkg: "@crustjs/test",
+    pkg: "@crustjs/testing",
     desc: "CLI testing helpers",
-    upcoming: true,
+    doc: "modules/testing",
   },
   {
     pkg: "@crustjs/render",
