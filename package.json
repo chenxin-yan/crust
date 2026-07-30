@@ -29,7 +29,7 @@
 		"bunup": "^0.16.31",
 		"typescript": "^6.0.3"
 	},
-	"packageManager": "bun@1.3.10",
+	"packageManager": "bun@1.3.14",
 	"workspaces": [
 		"apps/*",
 		"packages/*"

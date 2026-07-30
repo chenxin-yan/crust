@@ -50,16 +50,11 @@ function registerDisposable(value: unknown, disposal: AsyncDisposableStack): voi
 		[Symbol.dispose]?: () => void;
 		[Symbol.asyncDispose]?: () => PromiseLike<void>;
 	};
-	if (typeof candidate[Symbol.asyncDispose] === "function") {
-		disposal.use(candidate as AsyncDisposable);
-	} else {
-		const dispose = candidate[Symbol.dispose];
-		if (typeof dispose === "function") {
-			// Bun 1.3.10 rejects sync-only values passed to AsyncDisposableStack.use().
-			disposal.defer(() => {
-				dispose.call(candidate);
-			});
-		}
+	if (
+		typeof candidate[Symbol.asyncDispose] === "function" ||
+		typeof candidate[Symbol.dispose] === "function"
+	) {
+		disposal.use(candidate as Disposable | AsyncDisposable);
 	}
 }
 

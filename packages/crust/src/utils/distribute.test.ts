@@ -53,7 +53,7 @@ describe("distribution manifest JSON builders", () => {
 				name: "@crustjs/crust",
 				version: "1.2.3",
 				description: "CLI tooling",
-				engines: { bun: ">=1.3.10" },
+				engines: { bun: ">=1.3.14" },
 			},
 		};
 		const targets = [
@@ -76,7 +76,7 @@ describe("distribution manifest JSON builders", () => {
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
-			engines: { bun: ">=1.3.10" },
+			engines: { bun: ">=1.3.14" },
 			files: ["bin"],
 			bin: { crust: "bin/crust.js" },
 			optionalDependencies: {
@@ -89,7 +89,7 @@ describe("distribution manifest JSON builders", () => {
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
-			engines: { bun: ">=1.3.10" },
+			engines: { bun: ">=1.3.14" },
 			files: ["bin", "man"],
 			man: ["./man/crust.1"],
 			bin: { crust: "bin/crust.js" },
@@ -109,7 +109,7 @@ describe("distribution manifest JSON builders", () => {
 				name: "@crustjs/crust",
 				version: "1.2.3",
 				description: "CLI tooling",
-				engines: { bun: ">=1.3.10" },
+				engines: { bun: ">=1.3.14" },
 			},
 		};
 		const target = {
@@ -129,7 +129,7 @@ describe("distribution manifest JSON builders", () => {
 			name: "@crustjs/crust-windows-arm64",
 			version: "1.2.3",
 			description: "CLI tooling",
-			engines: { bun: ">=1.3.10" },
+			engines: { bun: ">=1.3.14" },
 			files: ["bin"],
 			bin: { crust: "bin/crust-bun-windows-arm64.exe" },
 			os: ["win32"],

@@ -10,7 +10,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) `1.3.10`
+- [Bun](https://bun.sh) `1.3.14`
 - Node.js `>=18`
 - Git
 
