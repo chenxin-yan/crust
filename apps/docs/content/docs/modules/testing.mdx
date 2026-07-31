@@ -13,7 +13,7 @@ bun add -d @crustjs/testing
 
 ## `captureRun(app, argv)`
 
-Run an application with captured output. The returned `stdout` and `stderr` fields are joined strings. If the application throws, `error` contains that value and output written before the failure is retained.
+Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
@@ -27,6 +27,8 @@ console.log(result.stdout);
 ## `interactiveRun(app, argv)`
 
 Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`.
+
+`waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application throws before the pattern matches, `waitFor()` rethrows that error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
 
 ```ts
 import { interactiveRun } from "@crustjs/testing";

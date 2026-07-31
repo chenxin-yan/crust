@@ -13,7 +13,7 @@ bun add -d @crustjs/testing
 
 ## Capture command output
 
-Use `captureRun()` for commands that write ordinary stdout or stderr. It returns joined strings and returns a thrown application error instead of discarding output that occurred before it.
+Use `captureRun()` for commands that write ordinary stdout or stderr. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults), and a thrown application error is returned instead of discarding output that occurred before it.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -52,7 +52,7 @@ test("collects a name", async () => {
 });
 ```
 
-`done` rejects with the original application error, matching `app.run()`.
+`done` rejects with the original application error, matching `app.run()`. `waitFor()` never hangs on a failed or finished run: it rethrows the application error, or throws with the current screen when the pattern can no longer match or its timeout (default 5000ms) elapses.
 
 ## For custom prompt authors
 
