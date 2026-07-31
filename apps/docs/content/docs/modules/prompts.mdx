@@ -49,9 +49,50 @@ const addons = await multifilter({
 });
 ```
 
+## Injecting IO
+
+Every prompt accepts an optional second `io` argument. Prompt input and UI output resolve in this order: the explicit argument, the current `withPromptIO()` scope, then `process.stdin` and `process.stderr`. Prompt UI writes to the resolved output stream — stderr by default, keeping stdout clean for piped output.
+
+```ts
+import { select, withPromptIO, type PromptIO } from "@crustjs/prompts";
+
+declare const io: PromptIO;
+
+const choice = await select({ message: "Pick one", choices: ["a", "b"] }, io);
+
+const scopedChoice = await withPromptIO(io, () =>
+  select({ message: "Pick one", choices: ["a", "b"] }),
+);
+```
+
+`io` is a `PromptIO` object with optional `input` and `output` streams. Omit it in normal CLI code.
+
+## Testing Custom Prompts
+
+Use the `@crustjs/prompts/testing` subpath to drive a prompt with fake TTY streams. `screen()` returns the latest ANSI-stripped terminal frame, while `answer` resolves after submission.
+
+```ts
+import { expect, test } from "bun:test";
+import { renderPrompt } from "@crustjs/prompts/testing";
+
+import { myPrompt } from "./my-prompt.ts";
+
+test("accepts a name", async () => {
+  const prompt = renderPrompt(myPrompt, { message: "Name?" });
+
+  prompt.type("Ada");
+  prompt.keys("return");
+
+  expect(prompt.screen()).toContain("Ada");
+  expect(await prompt.answer).toBe("Ada");
+});
+```
+
+Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks.
+
 ## Prompts
 
-### `input(options)`
+### `input(options, io?)`
 
 Single-line text input with cursor editing, placeholder, default value, and validation.
 
@@ -70,7 +111,7 @@ const name = await input({
 
 See [Validation](#validation) for the schema shape and typed return values.
 
-### `password(options)`
+### `password(options, io?)`
 
 Masked text input. Characters are displayed as the mask character, which defaults to `*`. After submission, a fixed-length mask is shown to avoid revealing password length.
 
@@ -120,7 +161,7 @@ const email = await input({ message: "Email?", validate: Email });
 //    ^? string
 ```
 
-### `confirm(options)`
+### `confirm(options, io?)`
 
 Yes/no boolean prompt. Toggle with arrow keys, `h`/`l`, `y`/`n`, or Tab. Confirm with Enter.
 
@@ -138,7 +179,7 @@ const proceed = await confirm({
   name="ConfirmOptions"
 />
 
-### `select(options)`
+### `select(options, io?)`
 
 Single selection from a list. Navigate with Up/Down or `k`/`j`, then confirm with Enter. Scrolls when the list exceeds `maxVisible`.
 
@@ -158,7 +199,7 @@ const port = await select({
   name="SelectOptions"
 />
 
-### `multiselect(options)`
+### `multiselect(options, io?)`
 
 Checkbox-style multi-selection. Use Space to toggle, `a` to toggle all, `i` to invert, and Enter to confirm.
 
@@ -183,7 +224,7 @@ const features = await multiselect({
   name="MultiselectOptions"
 />
 
-### `filter(options)`
+### `filter(options, io?)`
 
 Fuzzy-search selection. Type to filter, navigate with Up/Down, and confirm with Enter. Matched characters are highlighted in results.
 
@@ -202,7 +243,7 @@ const lang = await filter({
   name="FilterOptions"
 />
 
-### `multifilter(options)`
+### `multifilter(options, io?)`
 
 Fuzzy-search multi-selection. Type to filter, navigate with Up/Down, use Space to toggle the highlighted result, and confirm with Enter. Selected values are returned in original choice order.
 
@@ -299,7 +340,7 @@ For non-interactive async progress output, use [`@crustjs/progress`](/docs/modul
 
 ## Custom Prompts
 
-The low-level `runPrompt` API lets you build custom interactive prompts with full control over state, rendering, and keypress handling.
+The low-level `runPrompt(config, io?)` API lets you build custom interactive prompts with full control over state, rendering, and keypress handling.
 
 ```ts
 import { runPrompt, submit } from "@crustjs/prompts";
@@ -340,7 +381,7 @@ if (edit) {
 
 `handleTextEdit` handles backspace, delete, left, right, home, end, and printable character insertion. It returns `null` for non-text-editing keys so you can handle them separately.
 
-Only one prompt can be active at a time. Running a second prompt while one is already active rejects with an error.
+Only one prompt can be active per input or output stream. Prompts on fully distinct streams can run concurrently; a second prompt sharing an input or output stream rejects with an error.
 
 ## Exports
 
@@ -367,12 +408,14 @@ Only one prompt can be active at a time. Running a second prompt while one is al
 
 ### Renderer
 
-| Export                | Description                                       |
-| --------------------- | ------------------------------------------------- |
-| `runPrompt`           | Low-level prompt runner for custom prompts        |
-| `submit`              | Create a submit result to resolve a prompt        |
-| `assertTTY`           | Throw `NonInteractiveError` if stdin is not a TTY |
-| `NonInteractiveError` | Error thrown when a TTY is required but absent    |
+| Export                | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `runPrompt`           | Low-level prompt runner; accepts optional `PromptIO` |
+| `submit`              | Create a submit result to resolve a prompt           |
+| `assertTTY`           | Throw `NonInteractiveError` if stdin is not a TTY    |
+| `withPromptIO`        | Scope prompt IO for nested async prompt calls        |
+| `PromptIO`            | Optional input/output streams for prompts            |
+| `NonInteractiveError` | Error thrown when a TTY is required but absent       |
 
 Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` — check `err.name === "AbortError"`.
 
@@ -420,8 +463,8 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 
 Key design decisions:
 
-- **stderr rendering**: All prompt UI writes to stderr, keeping stdout clean for piped output.
+- **stderr rendering by default**: Prompt UI writes to the resolved output stream — `process.stderr` unless IO is injected — keeping stdout clean for piped output.
 - **`initial` escape hatch**: Every prompt accepts `initial` to skip interactivity in CI and scripted usage.
-- **Single active prompt**: Only one prompt can run at a time; concurrent calls are rejected with a clear error.
+- **Single active prompt per stream**: Prompts on fully distinct input/output streams can run concurrently; concurrent calls sharing an input or output stream are rejected with a clear error.
 - **Composable themes**: Three-layer resolution with `StyleFn` slots from `@crustjs/style`.
 - **Shared text editing**: Common cursor-editing logic lives in `handleTextEdit` for consistency and reuse in custom prompts.

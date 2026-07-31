@@ -1,99 +1,51 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { confirm } from "./confirm.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { confirm, type ConfirmOptions } from "./confirm.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
+function start(options: ConfirmOptions): Promise<boolean> {
+	const prompt = renderPrompt<ConfirmOptions, boolean>(confirm, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
-}
-
-/**
- * Emit a keypress event on stdin.
- */
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
 }
 
-/**
- * Wait briefly for async event processing.
- */
+function screen(): string {
+	return activePrompt.screen();
+}
+
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
 // ────────────────────────────────────────────────────────────────────────────
 // Default value
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — default value", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("defaults to true when no default is specified", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		pressKey("", { name: "return" });
@@ -103,7 +55,7 @@ describe("confirm — default value", () => {
 	});
 
 	it("uses default: false when specified", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Continue?",
 			default: false,
 		});
@@ -116,7 +68,7 @@ describe("confirm — default value", () => {
 	});
 
 	it("uses default: true when specified", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Continue?",
 			default: true,
 		});
@@ -134,11 +86,8 @@ describe("confirm — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — toggle", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("left arrow toggles value", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		// Default is true, left should toggle to false
@@ -151,7 +100,7 @@ describe("confirm — toggle", () => {
 	});
 
 	it("right arrow toggles value", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		// Default is true, right should toggle to false
@@ -164,7 +113,7 @@ describe("confirm — toggle", () => {
 	});
 
 	it("tab toggles value", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		// Default is true, tab should toggle to false
@@ -177,7 +126,7 @@ describe("confirm — toggle", () => {
 	});
 
 	it("double toggle returns to original value", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		// Toggle twice — should be back to true
@@ -197,11 +146,8 @@ describe("confirm — toggle", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — shortcuts", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("y key sets value to true", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Continue?",
 			default: false,
 		});
@@ -216,7 +162,7 @@ describe("confirm — shortcuts", () => {
 	});
 
 	it("Y key sets value to true", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Continue?",
 			default: false,
 		});
@@ -231,7 +177,7 @@ describe("confirm — shortcuts", () => {
 	});
 
 	it("n key sets value to false", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		pressKey("n");
@@ -243,7 +189,7 @@ describe("confirm — shortcuts", () => {
 	});
 
 	it("N key sets value to false", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		pressKey("N", { name: "n", shift: true });
@@ -255,7 +201,7 @@ describe("confirm — shortcuts", () => {
 	});
 
 	it("h key sets value to true (yes/active)", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Continue?",
 			default: false,
 		});
@@ -270,7 +216,7 @@ describe("confirm — shortcuts", () => {
 	});
 
 	it("l key sets value to false (no/inactive)", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		pressKey("l", { name: "l" });
@@ -287,37 +233,34 @@ describe("confirm — shortcuts", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — custom labels", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders custom active and inactive labels", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Accept terms?",
 			active: "Agree",
 			inactive: "Decline",
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Agree");
-		expect(stderrOutput).toContain("Decline");
+		expect(screen()).toContain("Agree");
+		expect(screen()).toContain("Decline");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders default Yes/No labels when not customized", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
-		expect(stderrOutput).toContain("Yes");
-		expect(stderrOutput).toContain("No");
+		expect(screen()).toContain("Yes");
+		expect(screen()).toContain("No");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("shows selected custom label on submit", async () => {
-		const promise = confirm({
+		const promise = start({
 			message: "Accept?",
 			active: "Accept",
 			inactive: "Reject",
@@ -331,7 +274,7 @@ describe("confirm — custom labels", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Accept");
+		expect(screen()).toContain("Accept");
 	});
 });
 
@@ -340,31 +283,28 @@ describe("confirm — custom labels", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — rendering", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders message on initial display", async () => {
-		const promise = confirm({ message: "Deploy to production?" });
+		const promise = start({ message: "Deploy to production?" });
 
 		await tick();
-		expect(stderrOutput).toContain("Deploy to production?");
+		expect(screen()).toContain("Deploy to production?");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders separator between options", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
-		expect(stderrOutput).toContain(" · ");
+		expect(screen()).toContain(" · ");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = confirm({ message: "Continue?" });
+		const promise = start({ message: "Continue?" });
 
 		await tick();
 		pressKey("n");
@@ -373,7 +313,7 @@ describe("confirm — rendering", () => {
 
 		await promise;
 		// After submission, the selected answer should appear
-		expect(stderrOutput).toContain("No");
+		expect(screen()).toContain("No");
 	});
 });
 
@@ -382,17 +322,14 @@ describe("confirm — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — no message", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders default message when message is omitted", async () => {
-		const promise = confirm({});
+		const promise = start({});
 
 		await tick();
-		expect(stderrOutput).toContain("Are you sure?");
-		expect(stderrOutput).not.toContain("undefined");
-		expect(stderrOutput).toContain("Yes");
-		expect(stderrOutput).toContain("No");
+		expect(screen()).toContain("Are you sure?");
+		expect(screen()).not.toContain("undefined");
+		expect(screen()).toContain("Yes");
+		expect(screen()).toContain("No");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -400,14 +337,14 @@ describe("confirm — no message", () => {
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = confirm({});
+		const promise = start({});
 
 		await tick();
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Are you sure?");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Are you sure?");
+		expect(screen()).not.toContain("undefined");
 	});
 });
 
@@ -416,27 +353,16 @@ describe("confirm — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY(options: ConfirmOptions): Promise<boolean> {
+		return confirm(options, nonTTYIO());
+	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		await expect(confirm({ message: "Continue?" })).rejects.toThrow("interactive terminal");
+		await expect(nonTTY({ message: "Continue?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await confirm({
+		const result = await nonTTY({
 			message: "Continue?",
 			initial: false,
 		});
@@ -445,13 +371,7 @@ describe("confirm — non-TTY", () => {
 	});
 
 	it("returns explicit default value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await confirm({
+		const result = await nonTTY({
 			message: "Continue?",
 			default: false,
 		});
@@ -460,13 +380,7 @@ describe("confirm — non-TTY", () => {
 	});
 
 	it("returns explicit default true in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await confirm({
+		const result = await nonTTY({
 			message: "Continue?",
 			default: true,
 		});
@@ -475,23 +389,11 @@ describe("confirm — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no explicit default in non-TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		await expect(confirm({ message: "Continue?" })).rejects.toThrow("interactive terminal");
+		await expect(nonTTY({ message: "Continue?" })).rejects.toThrow("interactive terminal");
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await confirm({
+		const result = await nonTTY({
 			message: "Continue?",
 			initial: true,
 			default: false,

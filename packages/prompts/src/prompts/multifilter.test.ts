@@ -1,83 +1,44 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { multifilter } from "./multifilter.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { multifilter, type MultifilterOptions } from "./multifilter.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
-}
-
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
+function start<T>(options: MultifilterOptions<T>): Promise<T[]> {
+	const prompt = renderPrompt<MultifilterOptions<T>, T[]>(multifilter, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
+}
+
+function screen(): string {
+	return activePrompt.screen();
 }
 
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial/default short-circuits
 // ────────────────────────────────────────────────────────────────────────────
@@ -112,17 +73,12 @@ describe("multifilter — initial / default", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multifilter — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY<T>(options: MultifilterOptions<T>): Promise<T[]> {
+		return multifilter(options, nonTTYIO());
+	}
 
 	it("returns default array in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await multifilter({
+		const result = await nonTTY({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			default: ["b", "c"],
@@ -132,14 +88,8 @@ describe("multifilter — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			multifilter({
+			nonTTY({
 				message: "Search",
 				choices: ["a", "b", "c"],
 			}),
@@ -147,13 +97,7 @@ describe("multifilter — non-TTY", () => {
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await multifilter({
+		const result = await nonTTY({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			initial: ["a"],
@@ -169,11 +113,8 @@ describe("multifilter — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multifilter — interactive", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("Space toggles selection; Enter submits values in choice order", async () => {
-		const promise = multifilter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -192,14 +133,14 @@ describe("multifilter — interactive", () => {
 	});
 
 	it("pre-selects from default", async () => {
-		const promise = multifilter({
+		const promise = start({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			default: ["c"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("●");
+		expect(screen()).toContain("●");
 		pressKey("", { name: "return" });
 
 		const result = await promise;
@@ -207,7 +148,7 @@ describe("multifilter — interactive", () => {
 	});
 
 	it("Enter with required and no selection shows error", async () => {
-		const promise = multifilter({
+		const promise = start({
 			message: "Search",
 			choices: ["x", "y"],
 			required: true,
@@ -217,7 +158,7 @@ describe("multifilter — interactive", () => {
 		pressKey("", { name: "return" });
 		await tick();
 
-		expect(stderrOutput).toContain("At least one");
+		expect(screen()).toContain("At least one");
 
 		pressKey("", { name: "space" });
 		await tick();
@@ -228,7 +169,7 @@ describe("multifilter — interactive", () => {
 	});
 
 	it("keeps selections when query filters the list", async () => {
-		const promise = multifilter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -247,7 +188,7 @@ describe("multifilter — interactive", () => {
 		pressKey("m", { name: "m" });
 		await tick();
 
-		expect(stderrOutput).toContain("gamma");
+		expect(screen()).toContain("gamma");
 		pressKey("", { name: "return" });
 
 		const result = await promise;

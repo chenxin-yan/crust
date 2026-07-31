@@ -4,8 +4,8 @@
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
@@ -231,15 +231,21 @@ export function password<Output>(
 	options: PasswordOptions<Output> & {
 		readonly validate: StandardSchemaV1<unknown, Output>;
 	},
+	io?: PromptIO,
 ): Promise<Output>;
 export function password(
 	options?: Omit<PasswordOptions, "validate"> & {
 		readonly validate?: ValidateFn<string>;
 	},
+	io?: PromptIO,
 ): Promise<string>;
-export function password<Output>(options: PasswordOptions<Output>): Promise<Output | string>;
+export function password<Output>(
+	options: PasswordOptions<Output>,
+	io?: PromptIO,
+): Promise<Output | string>;
 export async function password<Output>(
 	options: PasswordOptions<Output> = {},
+	io?: PromptIO,
 ): Promise<Output | string> {
 	// Short-circuit: return initial value immediately without rendering.
 	// When `validate` is a Standard Schema we MUST parse the short-circuit
@@ -253,6 +259,8 @@ export async function password<Output>(
 		return options.initial;
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	const theme = resolveTheme(options.theme);
 	const mask = options.mask ?? "*";
 
@@ -262,11 +270,14 @@ export async function password<Output>(
 		error: null,
 	};
 
-	return runPrompt<PasswordState, Output | string>({
-		initialState,
-		theme,
-		render: (state, t) => renderPassword(state, t, options.message, mask),
-		handleKey: createHandleKey<Output>(options.validate),
-		renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),
-	});
+	return runPrompt<PasswordState, Output | string>(
+		{
+			initialState,
+			theme,
+			render: (state, t) => renderPassword(state, t, options.message, mask),
+			handleKey: createHandleKey<Output>(options.validate),
+			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),
+		},
+		promptIO,
+	);
 }

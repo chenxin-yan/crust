@@ -2,8 +2,8 @@
 // Select — Single selection from a list of choices for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent, SubmitResult } from "../core/renderer.ts";
-import { isTTY, runPrompt, submit } from "../core/renderer.ts";
+import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
@@ -235,14 +235,16 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-export async function select<T>(options: SelectOptions<T>): Promise<T> {
+export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {
 		return options.initial;
 	}
 
+	const promptIO = resolvePromptIO(io);
+
 	// Non-interactive fallback: return default value when stdin is not a TTY
-	if (!isTTY() && options.default !== undefined) {
+	if (!isTTY(promptIO.input) && options.default !== undefined) {
 		return options.default;
 	}
 
@@ -268,12 +270,15 @@ export async function select<T>(options: SelectOptions<T>): Promise<T> {
 		scrollOffset: initialScrollOffset,
 	};
 
-	return runPrompt<SelectState<T>, T>({
-		initialState,
-		theme,
-		render: (state, t) => renderSelect(state, t, options.message, maxVisible),
-		handleKey: createHandleKey<T>(maxVisible),
-		renderSubmitted: (state, value, t) =>
-			renderSubmitted(state, value, t, options.message, choices, state.cursor),
-	});
+	return runPrompt<SelectState<T>, T>(
+		{
+			initialState,
+			theme,
+			render: (state, t) => renderSelect(state, t, options.message, maxVisible),
+			handleKey: createHandleKey<T>(maxVisible),
+			renderSubmitted: (state, value, t) =>
+				renderSubmitted(state, value, t, options.message, choices, state.cursor),
+		},
+		promptIO,
+	);
 }

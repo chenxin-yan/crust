@@ -1,89 +1,44 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { filter } from "./filter.ts";
+import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { filter, type FilterOptions } from "./filter.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-const originalIsTTY = process.stdin.isTTY;
-const originalSetRawMode = process.stdin.setRawMode;
-const originalIsRaw = process.stdin.isRaw;
-const originalStderrWrite = process.stderr.write;
+let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
-let stderrOutput: string;
-
-function setupMocks(): void {
-	stderrOutput = "";
-
-	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
-			stderrOutput += chunk;
-		}
-		return true;
-	};
-
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: true,
-		writable: true,
-		configurable: true,
-	});
-
-	(process.stdin as any).setRawMode = (mode: boolean) => {
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: mode,
-			writable: true,
-			configurable: true,
-		});
-		return process.stdin;
-	};
+function start<T>(options: FilterOptions<T>): Promise<T> {
+	const prompt = renderPrompt<FilterOptions<T>, T>(filter, options);
+	activePrompt = prompt;
+	return prompt.answer;
 }
 
-function restoreMocks(): void {
-	Object.defineProperty(process.stdin, "isTTY", {
-		value: originalIsTTY,
-		writable: true,
-		configurable: true,
-	});
-	Object.defineProperty(process.stdin, "isRaw", {
-		value: originalIsRaw,
-		writable: true,
-		configurable: true,
-	});
-	if (originalSetRawMode) {
-		process.stdin.setRawMode = originalSetRawMode;
-	}
-	process.stderr.write = originalStderrWrite;
-	process.stdin.removeAllListeners("keypress");
-}
-
-/**
- * Emit a keypress event on stdin.
- */
 function pressKey(
 	char: string,
-	key?: Partial<{
-		name: string;
-		ctrl: boolean;
-		meta: boolean;
-		shift: boolean;
-	}>,
+	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
 ): void {
-	process.stdin.emit("keypress", char, {
-		name: key?.name ?? char,
-		ctrl: key?.ctrl ?? false,
-		meta: key?.meta ?? false,
-		shift: key?.shift ?? false,
-	});
+	if (key?.ctrl) {
+		activePrompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		activePrompt.keys(key?.name ?? "");
+	} else {
+		activePrompt.type(char);
+	}
 }
 
-/**
- * Wait briefly for async event processing.
- */
+function screen(): string {
+	return activePrompt.screen();
+}
+
 function tick(ms = 10): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function nonTTYIO() {
+	return createPromptIO({ isTTY: false }).io;
+}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
@@ -110,11 +65,8 @@ describe("filter — initial value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — default value", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("sets initial cursor to matching default value", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 			default: "Rust",
@@ -129,7 +81,7 @@ describe("filter — default value", () => {
 	});
 
 	it("defaults cursor to first item when no default is provided", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
@@ -142,7 +94,7 @@ describe("filter — default value", () => {
 	});
 
 	it("defaults cursor to first item when default value is not found", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 			default: "Python",
@@ -161,26 +113,23 @@ describe("filter — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — typing filters the list", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("empty query shows all items", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("TypeScript");
-		expect(stderrOutput).toContain("JavaScript");
-		expect(stderrOutput).toContain("Rust");
+		expect(screen()).toContain("TypeScript");
+		expect(screen()).toContain("JavaScript");
+		expect(screen()).toContain("Rust");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("typing a character filters the results", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust", "Python", "Go"],
 		});
@@ -193,7 +142,7 @@ describe("filter — typing filters the list", () => {
 		await tick();
 
 		// "Python" should be visible, "Go" should not
-		expect(stderrOutput).toContain("Python");
+		expect(screen()).toContain("Python");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -201,7 +150,7 @@ describe("filter — typing filters the list", () => {
 	});
 
 	it("backspace removes filter character and re-filters", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
@@ -224,7 +173,7 @@ describe("filter — typing filters the list", () => {
 	});
 
 	it("shows 'No matches' when nothing matches the query", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
@@ -238,7 +187,7 @@ describe("filter — typing filters the list", () => {
 		pressKey("z", { name: "z" });
 		await tick();
 
-		expect(stderrOutput).toContain("No matches");
+		expect(screen()).toContain("No matches");
 
 		// Backspace to clear and get matches again, then submit
 		pressKey("", { name: "backspace" });
@@ -257,11 +206,8 @@ describe("filter — typing filters the list", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — navigation", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("down arrow moves to next result", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -276,7 +222,7 @@ describe("filter — navigation", () => {
 	});
 
 	it("up arrow moves to previous result", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -295,7 +241,7 @@ describe("filter — navigation", () => {
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -310,7 +256,7 @@ describe("filter — navigation", () => {
 	});
 
 	it("wraps to first item when moving down from last", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -330,7 +276,7 @@ describe("filter — navigation", () => {
 	});
 
 	it("Enter selects the highlighted result", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
@@ -347,7 +293,7 @@ describe("filter — navigation", () => {
 	});
 
 	it("ignores navigation when no results", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta"],
 		});
@@ -384,11 +330,8 @@ describe("filter — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — query editing", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("left/right arrow moves cursor in query", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["abc", "xyz"],
 		});
@@ -413,7 +356,7 @@ describe("filter — query editing", () => {
 	});
 
 	it("delete key removes character at cursor", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["ab", "cd"],
 		});
@@ -442,7 +385,7 @@ describe("filter — query editing", () => {
 	});
 
 	it("home/end keys move cursor to start/end", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["xab", "other"],
 		});
@@ -471,66 +414,63 @@ describe("filter — query editing", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — rendering", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders message on initial display", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Find a language",
 			choices: ["TypeScript", "JavaScript"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Find a language");
+		expect(screen()).toContain("Find a language");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders placeholder when query is empty", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["TypeScript"],
 			placeholder: "Type to filter...",
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Type to filter...");
+		expect(screen()).toContain("Type to filter...");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders all choices initially", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("alpha");
-		expect(stderrOutput).toContain("beta");
-		expect(stderrOutput).toContain("gamma");
+		expect(screen()).toContain("alpha");
+		expect(screen()).toContain("beta");
+		expect(screen()).toContain("gamma");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders cursor indicator on active result", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices: ["alpha", "beta"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("›");
+		expect(screen()).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = filter({
+		const promise = start({
 			message: "Pick a fruit",
 			choices: ["apple", "banana", "cherry"],
 		});
@@ -541,11 +481,11 @@ describe("filter — rendering", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("banana");
+		expect(screen()).toContain("banana");
 	});
 
 	it("renders labels for object choices", async () => {
-		const promise = filter<number>({
+		const promise = start({
 			message: "Pick",
 			choices: [
 				{ label: "Option A", value: 1 },
@@ -554,8 +494,8 @@ describe("filter — rendering", () => {
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Option A");
-		expect(stderrOutput).toContain("Option B");
+		expect(screen()).toContain("Option A");
+		expect(screen()).toContain("Option B");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -567,12 +507,9 @@ describe("filter — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — viewport scrolling", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("limits visible results to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices,
 			maxVisible: 5,
@@ -580,9 +517,9 @@ describe("filter — viewport scrolling", () => {
 
 		await tick();
 		// Only first 5 items should be visible
-		expect(stderrOutput).toContain("item-0");
-		expect(stderrOutput).toContain("item-4");
-		expect(stderrOutput).not.toContain("item-5");
+		expect(screen()).toContain("item-0");
+		expect(screen()).toContain("item-4");
+		expect(screen()).not.toContain("item-5");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -590,14 +527,14 @@ describe("filter — viewport scrolling", () => {
 
 	it("shows scroll indicator when more items below", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("...");
+		expect(screen()).toContain("...");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -605,7 +542,7 @@ describe("filter — viewport scrolling", () => {
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = filter({
+		const promise = start({
 			message: "Search",
 			choices,
 			maxVisible: 3,
@@ -621,7 +558,7 @@ describe("filter — viewport scrolling", () => {
 		await tick();
 
 		// item-3 should now be visible
-		expect(stderrOutput).toContain("item-3");
+		expect(screen()).toContain("item-3");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -634,18 +571,15 @@ describe("filter — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — no message", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
 	it("renders default message when message is omitted", async () => {
-		const promise = filter({
+		const promise = start({
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		expect(stderrOutput).toContain("Search and select");
-		expect(stderrOutput).not.toContain("undefined");
-		expect(stderrOutput).toContain("apple");
+		expect(screen()).toContain("Search and select");
+		expect(screen()).not.toContain("undefined");
+		expect(screen()).toContain("apple");
 
 		pressKey("", { name: "return" });
 		const result = await promise;
@@ -653,7 +587,7 @@ describe("filter — no message", () => {
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = filter({
+		const promise = start({
 			choices: ["apple", "banana", "cherry"],
 		});
 
@@ -661,8 +595,8 @@ describe("filter — no message", () => {
 		pressKey("", { name: "return" });
 
 		await promise;
-		expect(stderrOutput).toContain("Search and select");
-		expect(stderrOutput).not.toContain("undefined");
+		expect(screen()).toContain("Search and select");
+		expect(screen()).not.toContain("undefined");
 	});
 });
 
@@ -671,18 +605,13 @@ describe("filter — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — non-TTY", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
+	function nonTTY<T>(options: FilterOptions<T>): Promise<T> {
+		return filter(options, nonTTYIO());
+	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			filter({
+			nonTTY({
 				message: "Search",
 				choices: ["a", "b", "c"],
 			}),
@@ -690,13 +619,7 @@ describe("filter — non-TTY", () => {
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await filter({
+		const result = await nonTTY({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			initial: "b",
@@ -706,13 +629,7 @@ describe("filter — non-TTY", () => {
 	});
 
 	it("returns default value in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await filter({
+		const result = await nonTTY({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			default: "b",
@@ -722,14 +639,8 @@ describe("filter — non-TTY", () => {
 	});
 
 	it("throws NonInteractiveError when no default or initial in non-TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		await expect(
-			filter({
+			nonTTY({
 				message: "Search",
 				choices: ["a", "b", "c"],
 			}),
@@ -737,13 +648,7 @@ describe("filter — non-TTY", () => {
 	});
 
 	it("prefers initial over default in non-TTY environment", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		const result = await filter({
+		const result = await nonTTY({
 			message: "Search",
 			choices: ["a", "b", "c"],
 			initial: "a",

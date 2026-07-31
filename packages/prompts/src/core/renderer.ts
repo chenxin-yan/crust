@@ -2,7 +2,9 @@
 // Renderer — Core terminal rendering engine for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as readline from "node:readline";
+import type { Readable, Writable } from "node:stream";
 
 import { visibleWidth } from "@crustjs/style";
 
@@ -11,6 +13,39 @@ import type { PromptTheme } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
+
+/** A readable stream that can drive an interactive terminal prompt. */
+export type PromptInput = Readable & {
+	readonly isTTY?: boolean;
+	readonly isRaw?: boolean;
+	setRawMode?: (mode: boolean) => unknown;
+};
+
+export type PromptOutput = Writable & {
+	readonly columns?: number;
+};
+
+/** Streams used to render and receive input for a prompt. */
+export interface PromptIO {
+	readonly input?: PromptInput;
+	readonly output?: PromptOutput;
+}
+
+const promptIOStorage = new AsyncLocalStorage<PromptIO>();
+
+/** Run a function with prompt streams available to prompts created in its async scope. */
+export function withPromptIO<T>(io: PromptIO, fn: () => T): T {
+	return promptIOStorage.run(io, fn);
+}
+
+/** Resolve explicit, ambient, then process-global prompt streams. */
+export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
+	const ambient = promptIOStorage.getStore();
+	return {
+		input: io?.input ?? ambient?.input ?? process.stdin,
+		output: io?.output ?? ambient?.output ?? process.stderr,
+	};
+}
 
 /**
  * Structured keypress event parsed from raw terminal input.
@@ -94,8 +129,10 @@ export interface PromptConfig<S, T> {
 // ANSI escape sequences
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Tracks whether a prompt is currently active to prevent concurrent prompts */
-let promptActive = false;
+/** Tracks active prompts so a stream can only drive one prompt at a time. */
+const activeInputs = new WeakSet<PromptInput>();
+/** Tracks active outputs — concurrent frames on one stream would erase each other. */
+const activeOutputs = new WeakSet<PromptOutput>();
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -149,17 +186,16 @@ export class NonInteractiveError extends Error {
  * Check whether stdin is an interactive TTY.
  * @returns `true` if stdin is a TTY, `false` otherwise
  */
-export function isTTY(): boolean {
-	// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- @types/node says boolean, but isTTY is undefined at runtime off-TTY; this API contract requires a real boolean
-	return !!process.stdin.isTTY;
+export function isTTY(input: Pick<PromptInput, "isTTY"> = process.stdin): boolean {
+	return !!input.isTTY;
 }
 
 /**
  * Check that stdin is an interactive TTY.
  * @throws {NonInteractiveError} when stdin is not a TTY
  */
-export function assertTTY(): void {
-	if (!isTTY()) {
+export function assertTTY(input: Pick<PromptInput, "isTTY"> = process.stdin): void {
+	if (!isTTY(input)) {
 		throw new NonInteractiveError();
 	}
 }
@@ -206,41 +242,41 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * });
  * ```
  */
-export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
+export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Promise<T> {
 	const { render, handleKey, initialState, theme, renderSubmitted } = config;
+	const { input: stdin, output } = resolvePromptIO(io);
 
 	return new Promise<T>((resolve, reject) => {
-		// Guard against concurrent prompts — only one prompt can be active at a time
-		if (promptActive) {
+		// Guard against concurrent prompts sharing an input stream.
+		if (activeInputs.has(stdin) || activeOutputs.has(output)) {
 			reject(
 				new Error(
-					"Cannot run multiple prompts concurrently. Await each prompt before starting the next.",
+					"Cannot run multiple prompts concurrently on the same input or output stream. Await each prompt before starting the next.",
 				),
 			);
 			return;
 		}
 
-		assertTTY();
-
-		promptActive = true;
+		assertTTY(stdin);
+		activeInputs.add(stdin);
+		activeOutputs.add(output);
 
 		let state = initialState;
 		let prevLineCount = 0;
 		let isCleanedUp = false;
-
-		const stdin = process.stdin;
-		const output = process.stderr;
+		let rawModeEnabled = false;
 
 		// ── Cleanup helper ──────────────────────────────────────────────
 		function cleanup(): void {
 			if (isCleanedUp) return;
 			isCleanedUp = true;
-			promptActive = false;
+			activeInputs.delete(stdin);
+			activeOutputs.delete(output);
 
 			stdin.removeListener("keypress", onKeypress);
 
-			if (stdin.isTTY && stdin.isRaw) {
-				stdin.setRawMode(false);
+			if (rawModeEnabled) {
+				stdin.setRawMode?.(false);
 			}
 
 			stdin.pause();
@@ -364,7 +400,10 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>): Promise<T> {
 		// ── Initialize ──────────────────────────────────────────────────
 		try {
 			readline.emitKeypressEvents(stdin);
-			stdin.setRawMode(true);
+			if (stdin.setRawMode) {
+				stdin.setRawMode(true);
+				rawModeEnabled = true;
+			}
 			stdin.resume();
 			output.write(HIDE_CURSOR);
 
