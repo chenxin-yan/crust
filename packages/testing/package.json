@@ -1,0 +1,58 @@
+{
+	"name": "@crustjs/testing",
+	"version": "0.0.1",
+	"description": "Testing helpers for Crust CLI applications",
+	"type": "module",
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/testing"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"testing",
+		"crust",
+		"bun",
+		"typescript"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test",
+		"publish": "bun publish --no-git-checks",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"@crustjs/prompts": "workspace:*",
+		"bunup": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:0.x",
+		"@crustjs/prompts": "workspace:0.x"
+	},
+	"engines": {
+		"bun": ">=1.3.14"
+	}
+}

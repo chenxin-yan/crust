@@ -18,49 +18,7 @@ await app.execute();
 
 ## Test programmatically
 
-Use `run(argv, io)` to avoid global console and exit-state changes:
-
-```ts
-import { expect, test } from "bun:test";
-
-const output: string[] = [];
-
-test("greets a name", async () => {
-  await app.run(["Ada"], {
-    stdout: (line) => output.push(line),
-    stderr: (line) => output.push(line),
-  });
-
-  expect(output).toEqual(["Hello, Ada!"]);
-});
-```
-
-`run()` throws the original error, so tests can assert identity or application error classes directly:
-
-```ts
-await expect(app.run(["missing"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
-```
-
-## Test custom prompts
-
-Prompt authors can drive `(options, io?)` prompt functions with fake TTY streams instead of patching process globals:
-
-```ts
-import { expect, test } from "bun:test";
-import { renderPrompt } from "@crustjs/prompts/testing";
-
-import { myPrompt } from "./my-prompt.ts";
-
-test("collects a name", async () => {
-  const prompt = renderPrompt(myPrompt, { message: "Name?" });
-  prompt.type("Ada");
-  prompt.keys("return");
-
-  expect(await prompt.answer).toBe("Ada");
-});
-```
-
-Use `prompt.screen()` to inspect the latest ANSI-stripped frame, or `createPromptIO({ isTTY: false })` to test a prompt's non-interactive fallback.
+Use the [Testing guide](/docs/guide/testing) for `captureRun()` and `interactiveRun()` helpers. It also explains when custom prompt authors should use `@crustjs/prompts/testing` directly.
 
 ## Validate definitions
 

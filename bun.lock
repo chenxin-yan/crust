@@ -192,6 +192,20 @@
         "bunup": "catalog:",
       },
     },
+    "packages/testing": {
+      "name": "@crustjs/testing",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "@crustjs/prompts": "workspace:*",
+        "bunup": "catalog:",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:0.x",
+        "@crustjs/prompts": "workspace:0.x",
+      },
+    },
     "packages/utils": {
       "name": "@crustjs/utils",
       "version": "0.0.0",
@@ -323,6 +337,8 @@
     "@crustjs/store": ["@crustjs/store@workspace:packages/store"],
 
     "@crustjs/style": ["@crustjs/style@workspace:packages/style"],
+
+    "@crustjs/testing": ["@crustjs/testing@workspace:packages/testing"],
 
     "@crustjs/utils": ["@crustjs/utils@workspace:packages/utils"],
 
