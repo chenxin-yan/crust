@@ -4,6 +4,10 @@
   "compatibility_date": "2026-02-17",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  // Opt out of uploading dependency metadata (enabled by default since Wrangler ~4.110)
+  "dependencies_instrumentation": {
+    "enabled": false,
+  },
   "routes": [
     {
       "pattern": "crustjs.com",

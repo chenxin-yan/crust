@@ -247,8 +247,8 @@ async function installRenderedSkill(options: InstallRenderedSkillOptions): Promi
 	}
 
 	// Append crust.json (kind-aware) and sort for deterministic output
-	const allFiles: RenderedFile[] = [...files, renderDistributionMetadata(meta, kind)].sort((a, b) =>
-		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+	const allFiles: RenderedFile[] = [...files, renderDistributionMetadata(meta, kind)].sort(
+		(a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
 	);
 	const allFilePaths = allFiles.map((file) => file.path);
 
