@@ -61,4 +61,4 @@ Do not create a child from an earlier builder and add inheritable definitions to
 
 ## Inline or split?
 
-Use inline `.command(name, configure)` when the command is short and local. Use `.sub()` plus `.command(builder)` when a separate file benefits readability and needs parent flag or Context types. A standalone `new Crust("child")` can also be attached, but remains type-isolated from the parent.
+Use inline `.command(name, configure)` when the command is short and local. Use `.sub()` plus `.command(builder)` when a separate file benefits readability and needs parent flag or Context types.

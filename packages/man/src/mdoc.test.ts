@@ -71,12 +71,10 @@ describe("renderManPageMdoc", () => {
 	it("renders subcommand aliases inline next to the canonical name", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for alias tests." })
-			.command(
-				new Crust("issue")
-					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
-					.handle(() => {}),
+			.command("issue", (cmd) =>
+				cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
 			)
-			.command(new Crust("version").meta({ description: "Show version" }).handle(() => {}));
+			.command("version", (cmd) => cmd.meta({ description: "Show version" }).handle(() => {}));
 
 		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -100,11 +98,9 @@ describe("renderManPageMdoc", () => {
 		// but never appear in published man pages.
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
-			.command(new Crust("build").meta({ description: "Build the project" }).handle(() => {}))
-			.command(
-				new Crust("__complete")
-					.meta({ description: "Internal completion entrypoint", hidden: true })
-					.handle(() => {}),
+			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).handle(() => {}))
+			.command("__complete", (cmd) =>
+				cmd.meta({ description: "Internal completion entrypoint", hidden: true }).handle(() => {}),
 			);
 
 		const root = await prepareCommandSnapshot(app);
@@ -116,8 +112,8 @@ describe("renderManPageMdoc", () => {
 
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
-			.command(
-				new Crust("__complete").meta({ hidden: true, description: "Internal" }).handle(() => {}),
+			.command("__complete", (cmd) =>
+				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
 			)
 			.handle(() => {});
 

@@ -1,6 +1,6 @@
 ---
 title: Subcommands
-description: Compose nested command trees inline or from pre-built command builders.
+description: Compose nested command trees inline or from child builders created with .sub().
 ---
 
 ## Inline commands
@@ -21,16 +21,9 @@ const app = new Crust("git")
 
 Nest `.command()` calls to any depth. Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command.
 
-## Pre-built commands
+## Split-file children
 
-Attach an existing builder with `.command(builder)`:
-
-```ts
-const status = new Crust("status").handle(({ stdout }) => stdout("clean"));
-const app = new Crust("git").command(status);
-```
-
-A standalone builder is isolated from parent flag types. For a separate-file child that inherits parent flags and Contexts, create it with `parent.sub(name)`:
+Create a separate-file child with `parent.sub(name)` and attach it with `.command(builder)`. The child inherits the parent's `inherit: true` flags and Contexts, fully typed:
 
 ```ts
 const base = new Crust("git").flags({ verbose: { type: "boolean", inherit: true } });
@@ -38,11 +31,11 @@ const clone = base.sub("clone").handle(({ flags }) => flags.verbose);
 const app = base.command(clone);
 ```
 
-See [Split Commands Across Files](/docs/guide/split-files) for the import-order rule and a complete layout.
+`.command(builder)` accepts only child builders created with `.sub()` — a standalone `new Crust(name)` is not attachable. See [Split Commands Across Files](/docs/guide/split-files) for the import-order rule and a complete layout.
 
 ## Context inheritance
 
-Contexts attached to a parent are available to descendants. `.sub()` carries their types into a separate-file child; attaching the child merges the parent path's Context instances at runtime.
+Contexts attached to a parent are available to descendants. `.sub()` captures the parent path's Context instances and their types when the child is created — finalize parent Contexts before calling `.sub()`.
 
 ## Unknown commands
 

@@ -254,10 +254,15 @@ command without extending the public `@crustjs/core` builder API.
 import { Crust } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
+const app = new Crust("my-cli");
+
 const deploy = annotate(
-  new Crust("deploy").meta({ description: "Deploy the application" }).handle(() => {
-    // ...
-  }),
+  app
+    .sub("deploy")
+    .meta({ description: "Deploy the application" })
+    .handle(() => {
+      // ...
+    }),
   [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",

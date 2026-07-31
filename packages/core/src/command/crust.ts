@@ -253,39 +253,6 @@ function deepCloneFlags(flags: FlagsDef): FlagsDef {
  * Deep-clone a command subtree so plugin `setup()` can run without mutating
  * the original builder graph.
  */
-/**
- * Recursively merge parent-path Contexts into an attached subtree.
- *
- * Builders made with `.sub()` already carry the parent's Context instances —
- * identical instances are inheritance, not duplicates; a same-name different
- * instance anywhere on the path is a definition error per the
- * one-name-per-path rule (ADR-0002).
- */
-function mergeContextsIntoSubtree(
-	node: CommandNode,
-	parentContexts: readonly ContextInstance[],
-): CommandNode {
-	const merged = [...parentContexts];
-	for (const contextInstance of node.contexts) {
-		if (merged.includes(contextInstance)) continue;
-		if (merged.some((existing) => existing.name === contextInstance.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Context "${contextInstance.name}" is already provided on this command path`,
-				{ subject: "context", name: contextInstance.name, reason: "duplicate-context" },
-			);
-		}
-		merged.push(contextInstance);
-	}
-
-	const subCommands: Record<string, CommandNode> = {};
-	for (const [name, sub] of Object.entries(node.subCommands)) {
-		subCommands[name] = mergeContextsIntoSubtree(sub, merged);
-	}
-
-	return { ...node, contexts: merged, subCommands };
-}
-
 function deepCloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};
 	for (const [name, sub] of Object.entries(node.subCommands)) {
@@ -326,6 +293,54 @@ function freezeTree(node: CommandNode): void {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Root/child builder surfaces
+// ────────────────────────────────────────────────────────────────────────────
+
+declare const rootKind: unique symbol;
+declare const childKind: unique symbol;
+
+/** Phantom marker for builders created with the `Crust` constructor. */
+type RootKind = typeof rootKind;
+/** Phantom marker for builders created with `.sub()` / `.command(name, cb)`. */
+type ChildKind = typeof childKind;
+type BuilderKind = RootKind | ChildKind;
+
+/**
+ * Preserve the receiver's surface across fluent methods: roots stay `Crust`
+ * (with `.extend()`), children stay {@link ChildCrust} (without it).
+ */
+type BuilderView<
+	Kind extends BuilderKind,
+	Inherited extends FlagsDef,
+	Local extends FlagsDef,
+	A extends ArgsDef,
+	Eff extends FlagsDef,
+	Ctx extends ContextMap,
+> = Kind extends ChildKind
+	? ChildCrust<Inherited, Local, A, Eff, Ctx>
+	: Crust<Inherited, Local, A, Eff, Ctx, RootKind>;
+
+/**
+ * A subcommand builder created with `.sub()` or received inside
+ * `.command(name, callback)`.
+ *
+ * Structurally a {@link Crust} without root-only members (`.extend()`), plus
+ * a phantom brand so `.command(builder)` accepts only real child builders —
+ * a standalone `new Crust(name)` is not attachable.
+ */
+export type ChildCrust<
+	Inherited extends FlagsDef = FlagsDef,
+	Local extends FlagsDef = FlagsDef,
+	A extends ArgsDef = ArgsDef,
+	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
+	Ctx extends ContextMap = {},
+> = Omit<Crust<Inherited, Local, A, Eff, Ctx, ChildKind>, "extend"> & {
+	readonly [childKind]: true;
+};
+
+type AnyChildCrust = ChildCrust<any, any, any, any, any>;
+
+// ────────────────────────────────────────────────────────────────────────────
 // Crust — Chainable builder class
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -356,6 +371,7 @@ export class Crust<
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
 	Ctx extends ContextMap = {},
+	Kind extends BuilderKind = RootKind,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -372,11 +388,8 @@ export class Crust<
 	/** @internal — The inherited flags record (runtime counterpart of Inherited generic) */
 	readonly _inheritedFlags: FlagsDef;
 
-	/** @internal — True for builders created via `.sub()` / `.command(name, cb)`; gates root-only APIs */
-	readonly _isChild: boolean = false;
-
 	/**
-	 * Create a new root or standalone command builder.
+	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
 	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
@@ -397,13 +410,13 @@ export class Crust<
 		name: string,
 		inheritedFlags: FlagsDef,
 		contexts: readonly ContextInstance[] = [],
-	): Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx> {
+	): ChildCrust<I, {}, [], EffectiveFlags<I, {}>, Ctx> {
 		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
 		// Override constructor defaults with parent-provided state.
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
-		(instance as { _isChild: boolean })._isChild = true;
 		(instance._node as { contexts: ContextInstance[] }).contexts = [...contexts];
-		return instance;
+		// The child brand is phantom — same runtime instance, narrower surface.
+		return instance as unknown as ChildCrust<I, {}, [], EffectiveFlags<I, {}>, Ctx>;
 	}
 
 	/**
@@ -425,7 +438,6 @@ export class Crust<
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
 		(cloned as { _inheritedFlags: FlagsDef })._inheritedFlags = this._inheritedFlags;
-		(cloned as { _isChild: boolean })._isChild = this._isChild;
 		return cloned;
 	}
 
@@ -448,10 +460,10 @@ export class Crust<
 	 * )
 	 * ```
 	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff, Ctx> {
+	meta(meta: Omit<CommandMeta, "name">): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -470,7 +482,7 @@ export class Crust<
 	 */
 	flags<const F extends FlagsDef>(
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
+	): BuilderView<Kind, Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
 		// Runtime validation
 		for (const [name, def] of Object.entries(defs)) {
 			validateSchemaExclusivity("flag", name, def as unknown as Record<string, unknown>);
@@ -485,7 +497,7 @@ export class Crust<
 		return this._clone({
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
-		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
+		}) as unknown as BuilderView<Kind, Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
 	}
 
 	/**
@@ -499,7 +511,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
-	): Crust<Inherited, Local, NewA, Eff, Ctx> {
+	): BuilderView<Kind, Inherited, Local, NewA, Eff, Ctx> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
 			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
@@ -517,7 +529,7 @@ export class Crust<
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Inherited, Local, NewA, Eff, Ctx>;
+		}) as unknown as BuilderView<Kind, Inherited, Local, NewA, Eff, Ctx>;
 	}
 
 	/**
@@ -534,7 +546,7 @@ export class Crust<
 	 */
 	provide<const C extends ContextInstance>(
 		context: C,
-	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
+	): BuilderView<Kind, Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
 		if (this._node.contexts.some((existing) => existing.name === context.name)) {
 			throw new CrustError(
 				"DEFINITION",
@@ -544,7 +556,14 @@ export class Crust<
 		}
 		return this._clone({
 			contexts: [...this._node.contexts, context],
-		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
+		}) as unknown as BuilderView<
+			Kind,
+			Inherited,
+			Local,
+			A,
+			Eff,
+			MergeContext<Ctx, ContextOutput<C>>
+		>;
 	}
 
 	/**
@@ -563,32 +582,26 @@ export class Crust<
 	 */
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Inherited, Local, A, Eff, Ctx> {
+	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
 	 * Register one or more CLI Extensions on the application root.
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
-	 * contribute. Registering an Extension on a child builder is a definition
-	 * error.
-	 *
-	 * @throws {CrustError} `DEFINITION` when called on a child builder
+	 * contribute. Child builders ({@link ChildCrust}) do not expose this
+	 * method.
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff, Ctx> {
-		if (this._isChild) {
-			throw new CrustError(
-				"DEFINITION",
-				"Extensions are application-wide: call .extend() on the root builder, not on a subcommand",
-				{ subject: "command", name: this._node.meta.name, reason: "extend-on-child" },
-			);
-		}
+	extend(
+		this: Crust<Inherited, Local, A, Eff, Ctx, RootKind>,
+		...extensions: readonly Extension[]
+	): Crust<Inherited, Local, A, Eff, Ctx, RootKind> {
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx, RootKind>;
 	}
 
 	/**
@@ -623,7 +636,7 @@ export class Crust<
 	 * app.command(deployCmd).execute();
 	 * ```
 	 */
-	sub<N extends string>(name: N): Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
+	sub<N extends string>(name: N): ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
 		}
@@ -636,9 +649,10 @@ export class Crust<
 	/**
 	 * Register a named subcommand via inline callback.
 	 *
-	 * The callback receives a fresh `Crust` builder pre-typed with this
+	 * The callback receives a fresh child builder pre-typed with this
 	 * command's effective inheritable flags, enabling TypeScript contextual
-	 * typing to flow inherited flag types into subcommand definitions.
+	 * typing to flow inherited flag types into subcommand definitions. It must
+	 * return a child builder.
 	 *
 	 * @param name - Subcommand name (must be non-empty, unique among siblings)
 	 * @param cb - Callback that receives a child builder and returns the configured builder
@@ -647,29 +661,29 @@ export class Crust<
 	 */
 	command<N extends string>(
 		name: N,
-		cb: (cmd: Crust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>) => Crust<any, any, any, any, any>,
-	): Crust<Inherited, Local, A, Eff, Ctx>;
+		cb: (cmd: ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>) => AnyChildCrust,
+	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 
 	/**
-	 * Register a pre-built subcommand builder.
+	 * Register a pre-built child builder created with `.sub()`.
 	 *
-	 * The builder's name (from its constructor or `.sub()`) is used as the
-	 * subcommand name. Builders created with `.sub()` inherit the parent's
-	 * `inherit: true` flags; standalone `new Crust(name)` builders remain
-	 * isolated. This is the complement to `.sub()` for the file-splitting
-	 * pattern.
+	 * The child's name (from `.sub(name)`) is used as the subcommand name.
+	 * Children carry the parent path's `inherit: true` flags and Contexts
+	 * captured when `.sub()` was called. This is the complement to `.sub()`
+	 * for the file-splitting pattern.
 	 *
-	 * @param builder - A pre-configured `Crust` builder instance
+	 * @param builder - A child builder created with `.sub()`
 	 * @returns A new `Crust` instance with the subcommand registered
-	 * @throws {CrustError} `DEFINITION` if builder name is empty or already registered
+	 * @throws {CrustError} `DEFINITION` if the name is already registered
 	 */
-	command(builder: Crust<any, any, any, any, any>): Crust<Inherited, Local, A, Eff, Ctx>;
+	command(builder: AnyChildCrust): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 
 	// Implementation
 	command(
-		nameOrBuilder: string | Crust<any, any, any, any, any>,
-		cb?: (cmd: Crust<any, any, any, any, any>) => Crust<any, any, any, any, any>,
-	): Crust<Inherited, Local, A, Eff, Ctx> {
+		nameOrBuilder: string | AnyChildCrust,
+		// biome-ignore-free loose impl signature: overloads own the public contract
+		cb?: (cmd: any) => AnyChildCrust,
+	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
 		if (typeof nameOrBuilder === "string") {
 			// ── Inline callback path ──────────────────────────────────────────
 			const name = nameOrBuilder;
@@ -722,26 +736,12 @@ export class Crust<
 					...this._node.subCommands,
 					[name]: childNode,
 				},
-			}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+			}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 		}
 
-		// ── Pre-built builder path ──────────────────────────────────────────
+		// ── Pre-built child builder path ────────────────────────────────────
 		const builder = nameOrBuilder;
 		const name = builder._node.meta.name;
-
-		if (!name.trim()) {
-			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
-		}
-
-		// Extensions are application-wide and root-only. A standalone builder
-		// that called .extend() cannot be attached as a subcommand.
-		if (builder._node.extensions.length > 0) {
-			throw new CrustError(
-				"DEFINITION",
-				`Subcommand "${name}" carries Extensions: call .extend() on the root builder instead`,
-				{ subject: "command", name, reason: "extend-on-child" },
-			);
-		}
 
 		if (this._node.subCommands[name]) {
 			throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
@@ -754,10 +754,11 @@ export class Crust<
 			name,
 		);
 
-		// Merge parent-path Contexts into the whole attached subtree (also
-		// clones the node so the original builder's _node is not mutated).
+		// Shallow-clone the node so registration doesn't mutate the original
+		// builder. A `.sub()` child already snapshots the parent path's
+		// Contexts and inheritable flags at creation time.
 		const childNode = {
-			...mergeContextsIntoSubtree(builder._node, this._node.contexts),
+			...builder._node,
 			effectiveFlags: computeEffectiveFlags(builder._inheritedFlags, builder._node.localFlags),
 		};
 
@@ -766,7 +767,7 @@ export class Crust<
 				...this._node.subCommands,
 				[name]: childNode,
 			},
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx>;
+		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**

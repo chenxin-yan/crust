@@ -61,26 +61,29 @@ describe("Crust .provide()", () => {
 		).toThrow(CrustError);
 	});
 
-	it("throws DEFINITION when an attached builder's subtree re-provides a path name", () => {
+	it("throws DEFINITION when a split-file child's subtree re-provides a path name", () => {
 		const parentDb = context("db", () => "parent");
 		const nestedDb = context("db", () => "nested");
 
-		const sub = new Crust("sub").command("g", (cmd) => cmd.provide(nestedDb()).handle(() => {}));
+		const root = new Crust("cli").provide(parentDb());
 
-		expect(() => new Crust("cli").provide(parentDb()).command(sub)).toThrow(CrustError);
+		expect(() =>
+			root.sub("sub").command("g", (cmd) => cmd.provide(nestedDb()).handle(() => {})),
+		).toThrow(CrustError);
 	});
 
-	it("descendants of an attached builder inherit the new parent's Contexts", async () => {
+	it("descendants of a split-file child inherit the parent path's Contexts", async () => {
 		const seen: string[] = [];
 		const db = context("db", () => "root-db");
 
-		const sub = new Crust("sub").command("g", (cmd) =>
+		const root = new Crust("cli").provide(db());
+		const sub = root.sub("sub").command("g", (cmd) =>
 			cmd.handle(({ ctx }) => {
-				seen.push(String((ctx as Record<string, unknown>).db));
+				seen.push(ctx.db);
 			}),
 		);
 
-		await new Crust("cli").provide(db()).command(sub).run(["sub", "g"]);
+		await root.command(sub).run(["sub", "g"]);
 
 		expect(seen).toEqual(["root-db"]);
 	});

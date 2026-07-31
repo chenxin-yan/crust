@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import { resolveCommand, type CommandRoute } from "../src/command/router";
 import type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../src/index";
+import type { ChildCrust } from "../src/index";
 import { Crust, extension } from "../src/index";
 import { parseArgs } from "../src/parsing/parser";
 import type { InferArgs, ParseResult } from "../src/types";
@@ -11,7 +12,12 @@ import { executeCrust } from "./helpers";
 // Shared fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-const serveCmd = new Crust("serve")
+const rootBase = new Crust("myapp").meta({ description: "Integration test app" }).flags({
+	help: { type: "boolean", short: "h" },
+} as const);
+
+const serveCmd = rootBase
+	.sub("serve")
 	.args([{ name: "dir", type: "string", default: "." }] as const)
 	.flags({
 		port: { type: "number", default: 3000, short: "p" },
@@ -20,17 +26,11 @@ const serveCmd = new Crust("serve")
 		console.log(`serve ${args.dir} on ${flags.port}`);
 	});
 
-const rootCmd = new Crust("myapp")
-	.meta({ description: "Integration test app" })
-	.flags({
-		help: { type: "boolean", short: "h" },
-	} as const)
-	.command("serve", () => serveCmd)
-	.handle(({ flags }) => {
-		if (flags.help) {
-			console.log("help");
-		}
-	});
+const rootCmd = rootBase.command(serveCmd).handle(({ flags }) => {
+	if (flags.help) {
+		console.log("help");
+	}
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Core API integration tests (existing)
@@ -565,7 +565,9 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 	});
 
 	// Simulate split-file pattern: subcommand definitions as separate const functions
-	const defineListCommand = (cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>) =>
+	const defineListCommand = (
+		cmd: ChildCrust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
+	) =>
 		cmd
 			.flags({ format: { type: "string", default: "table" } } as const)
 			.args([{ name: "resource", type: "string", required: true }] as const)
@@ -575,7 +577,9 @@ describe("integration: split-file .command() callback pattern end-to-end", () =>
 				);
 			});
 
-	const defineGetCommand = (cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>) =>
+	const defineGetCommand = (
+		cmd: ChildCrust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
+	) =>
 		cmd
 			.args([
 				{ name: "resource", type: "string", required: true },
@@ -731,40 +735,6 @@ describe("integration: .sub() factory → .command(builder) pattern", () => {
 		const statusResult = await executeCrust(cli, ["status", "--verbose"]);
 		expect(statusResult.stdout).toContain("status verbose=true");
 		expect(statusResult.exitCode).toBe(0);
-	});
-});
-
-describe("integration: standalone builder → .command(builder) pattern", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
-	it("registers a standalone `new Crust(name)` builder end-to-end", async () => {
-		const app = new Crust("cli");
-		const deploy = new Crust("deploy")
-			.flags({
-				env: { type: "string", required: true },
-			})
-			.handle((ctx) => {
-				console.log(`deploy env=${ctx.flags.env}`);
-			});
-
-		const result = await executeCrust(app.command(deploy), ["deploy", "--env", "production"]);
-		expect(result.stdout).toContain("deploy env=production");
-		expect(result.exitCode).toBe(0);
-	});
-
-	it("does not inherit parent flags when the builder was created with `new Crust(name)`", async () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		const deploy = new Crust("deploy").handle(() => {
-			console.log("deploy ran");
-		});
-
-		const result = await executeCrust(app.command(deploy), ["deploy", "--verbose"]);
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("Unknown flag");
 	});
 });
 

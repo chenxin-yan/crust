@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
+import { crustBase } from "../app.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
 type PublishPackageJson = {
@@ -221,7 +221,8 @@ export async function publishStagedPackages(
 	console.log(`\n${green("✓")} Published ${bold(String(plan.length))} staged package(s).`);
 }
 
-export const publishCommand = new Crust("publish")
+export const publishCommand = crustBase
+	.sub("publish")
 	.meta({
 		description: "Publish staged npm packages created by crust build --package",
 	})

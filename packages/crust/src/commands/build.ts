@@ -1,9 +1,9 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
+import { crustBase } from "../app.ts";
 import { resolveBaseName } from "../utils/binary-name.ts";
 import {
 	type BunTarget,
@@ -268,7 +268,8 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-export const buildCommand = new Crust("build")
+export const buildCommand = crustBase
+	.sub("build")
 	.meta({ description: "Compile your CLI to a standalone executable" })
 	.flags({
 		entry: {

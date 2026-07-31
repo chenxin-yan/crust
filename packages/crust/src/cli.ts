@@ -1,9 +1,6 @@
 #!/usr/bin/env bun
 
-import { Crust } from "@crustjs/core";
-import { didYouMean, help, updateNotifier, version } from "@crustjs/extensions";
-
-import pkg from "../package.json";
+import { crustBase } from "./app.ts";
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
 
@@ -17,18 +14,6 @@ import { publishCommand } from "./commands/publish.ts";
  * - `crust build` - Compile your CLI to a standalone Bun executable
  * - `crust publish` - Publish staged npm packages in manifest order
  */
-export const crustApp = new Crust("crust")
-	.meta({ description: pkg.description })
-	.extend(
-		version(pkg.version),
-		updateNotifier({
-			currentVersion: pkg.version,
-			packageName: pkg.name,
-		}),
-		didYouMean({ mode: "help" }),
-		help(),
-	)
-	.command(buildCommand)
-	.command(publishCommand);
+export const crustApp = crustBase.command(buildCommand).command(publishCommand);
 
 await crustApp.execute();

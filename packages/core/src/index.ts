@@ -16,7 +16,7 @@ export { extension } from "./api/extension.ts";
 // Command snapshots
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
 // Command context
-export type { CrustCommandContext } from "./command/crust.ts";
+export type { ChildCrust, CrustCommandContext } from "./command/crust.ts";
 export { Crust } from "./command/crust.ts";
 // Errors
 export type {

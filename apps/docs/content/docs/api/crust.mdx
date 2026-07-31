@@ -9,7 +9,7 @@ import { Callout } from "fumadocs-ui/components/callout";
 import { Crust } from "@crustjs/core";
 ```
 
-Every definition method returns a new builder. The original builder is unchanged.
+Every definition method returns a new builder. The original builder is unchanged. Fluent methods preserve the builder surface: a root stays a `Crust` and a child created with `.sub()` or inside `.command(name, callback)` stays a `ChildCrust` — identical except that root-only `.extend()` is absent.
 
 ## Constructor
 
@@ -17,7 +17,7 @@ Every definition method returns a new builder. The original builder is unchanged
 new Crust(name: string)
 ```
 
-Creates a root or standalone command. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
+Creates a root command builder. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
 
 ```ts
 const app = new Crust("my-cli");
@@ -124,7 +124,7 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions on the root builder.
+Registers application-wide Extensions. `.extend()` exists only on root builders — child builders (`ChildCrust`) do not expose it.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
@@ -132,7 +132,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 ```
 
-Calling `.extend()` on a child builder, or attaching a standalone builder that already carries Extensions as a subcommand, throws `DEFINITION`. Extension-owned command or flag name and alias collisions also throw `DEFINITION` when the application is prepared.
+Extension-owned command or flag name and alias collisions throw `DEFINITION` when the application is prepared.
 
 See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
@@ -161,11 +161,11 @@ The context contains typed `args`, typed effective `flags`, typed Context values
 ```ts
 command(
   name: string,
-  callback: (command: Crust) => Crust,
+  callback: (command: ChildCrust) => ChildCrust,
 ): Crust
 ```
 
-Creates and registers a child command. The callback receives a builder typed with the parent's `inherit: true` flags and Contexts.
+Creates and registers a child command. The callback receives a child builder typed with the parent's `inherit: true` flags and Contexts, and must return a child builder.
 
 ```ts
 const app = new Crust("my-cli")
@@ -181,15 +181,15 @@ const app = new Crust("my-cli")
 ## `.command(builder)`
 
 ```ts
-command(builder: Crust): Crust
+command(builder: ChildCrust): Crust
 ```
 
-Registers a pre-built command using its existing name. A standalone `new Crust(name)` builder does not infer parent flags. Use `.sub(name)` when a split-file child needs typed inherited flags.
+Registers an unattached child builder created with `.sub(name)`, using the child's existing name. Only child builders are accepted — a standalone `new Crust(name)` is not attachable.
 
 ## `.sub(name)`
 
 ```ts
-sub<N extends string>(name: N): Crust
+sub<N extends string>(name: N): ChildCrust
 ```
 
 Creates an unattached child builder typed with the parent's effective flags and Contexts. Register it with `.command(builder)`.

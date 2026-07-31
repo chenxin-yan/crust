@@ -5,6 +5,7 @@ import { extension, type ExtensionContext } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
 import {
+	type ChildCrust,
 	Crust,
 	type CrustCommandContext,
 	prepareCommandSnapshot,
@@ -119,7 +120,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		],
 		[
 			".command(builder)",
-			(a) => a.command(new Crust("deploy")) as Crust,
+			(a) => a.command(a.sub("deploy")) as Crust,
 			(a) => {
 				expect(a._node.subCommands).toEqual({});
 			},
@@ -553,7 +554,7 @@ describe("Crust .command()", () => {
 	});
 
 	it("callback receives a fresh builder (not the parent)", () => {
-		let receivedBuilder: Crust | undefined;
+		let receivedBuilder: ChildCrust | undefined;
 
 		const app = new Crust("cli")
 			.flags({ verbose: { type: "boolean", inherit: true } })
@@ -1564,37 +1565,6 @@ describe("Crust .run()", () => {
 	});
 });
 
-describe("Crust .extend() root-only", () => {
-	it("throws DEFINITION when called on a child builder from .sub()", () => {
-		const app = new Crust("cli");
-		const child = app.sub("deploy");
-
-		expect(() => child.extend(extension("x"))).toThrow(CrustError);
-		try {
-			child.extend(extension("x"));
-		} catch (error) {
-			expect((error as CrustError).is("DEFINITION")).toBe(true);
-		}
-	});
-
-	it("throws DEFINITION when called inside a .command() callback", () => {
-		expect(() =>
-			new Crust("cli").command("sub", (cmd) => cmd.extend(extension("x")).handle(() => {})),
-		).toThrow(CrustError);
-	});
-
-	it("throws DEFINITION when attaching a standalone builder that carries Extensions", () => {
-		const sub = new Crust("sub").extend(extension("p")).handle(() => {});
-
-		expect(() => new Crust("cli").command(sub)).toThrow(CrustError);
-		try {
-			new Crust("cli").command(sub);
-		} catch (error) {
-			expect((error as CrustError).is("DEFINITION")).toBe(true);
-		}
-	});
-});
-
 describe("Crust .execute()", () => {
 	// Save/restore console and process.exitCode around each test
 	let originalLog: typeof console.log;
@@ -1975,7 +1945,7 @@ describe("Crust .execute()", () => {
 		let receivedVerbose: boolean | undefined;
 
 		const defineSubCommand = (
-			cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
+			cmd: ChildCrust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
 		) =>
 			cmd.handle((ctx) => {
 				receivedVerbose = ctx.flags.verbose;
@@ -2392,6 +2362,68 @@ describe("Crust .sub() type-level tests", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Root vs child builder surface — Type-level tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("root vs child builder surface (type-level)", () => {
+	it("rejects a standalone root builder as an attachable subcommand", () => {
+		const root = new Crust("root");
+
+		// @ts-expect-error standalone `new Crust()` builders are not attachable
+		root.command(new Crust("child"));
+
+		// @ts-expect-error inline callbacks must return the child builder they receive
+		root.command("child", () => new Crust("foreign"));
+
+		expect(root._node.subCommands).toEqual({});
+	});
+
+	it("accepts .sub() children and keeps .extend() off their surface", () => {
+		const root = new Crust("root");
+		const child = root.sub("child");
+
+		type ChildHasExtend = "extend" extends keyof typeof child ? true : false;
+		type _noExtend = Expect<Equal<ChildHasExtend, false>>;
+
+		// @ts-expect-error Extensions are root-only
+		child.extend(extension("x"));
+
+		const app = root.command(child);
+		expect(app._node.subCommands.child).toBeDefined();
+	});
+
+	it("keeps the child surface (no .extend) through the full fluent chain", () => {
+		const root = new Crust("root");
+		const db = context("db", () => ({ ok: true }));
+
+		const chained = root
+			.sub("child")
+			.meta({ description: "child" })
+			.flags({ env: { type: "string" } })
+			.args([{ name: "target", type: "string" }] as const)
+			.provide(db())
+			.handle(() => {});
+
+		type ChainedHasExtend = "extend" extends keyof typeof chained ? true : false;
+		type _noExtend = Expect<Equal<ChainedHasExtend, false>>;
+
+		const app = root.command(chained);
+		expect(app._node.subCommands.child).toBeDefined();
+	});
+
+	it("inline callback children have no .extend() and roots keep it", () => {
+		const app = new Crust("root").command("inline", (cmd) => {
+			type InlineHasExtend = "extend" extends keyof typeof cmd ? true : false;
+			type _noExtend = Expect<Equal<InlineHasExtend, false>>;
+			return cmd.handle(() => {});
+		});
+
+		const extended = app.extend(extension("x"));
+		expect(extended._node.extensions.length).toBe(1);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // .command(builder) — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -2435,7 +2467,7 @@ describe("Crust .command(builder)", () => {
 
 	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
 		const app = new Crust("cli").command("deploy", (cmd) => cmd);
-		const deploy = new Crust("deploy");
+		const deploy = app.sub("deploy");
 
 		try {
 			app.command(deploy);
@@ -2444,21 +2476,6 @@ describe("Crust .command(builder)", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("DEFINITION");
 			expect((err as CrustError).message).toContain("already registered");
-		}
-	});
-
-	it("throws CrustError DEFINITION if builder has empty name", () => {
-		// We can't create Crust("") directly (it throws), so we test the path
-		// by using a valid name that's already handled.
-		// This test validates that the code path exists; the empty-name constructor
-		// already prevents creating such builders.
-		const app = new Crust("cli");
-		try {
-			app.command(new Crust("   "));
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
 		}
 	});
 
@@ -2629,10 +2646,17 @@ describe("Crust .command() aliases", () => {
 	});
 
 	it("applies the same checks on the .command(builder) path", () => {
-		const issue = new Crust("issue").meta({ aliases: ["i"] }).handle(() => {});
-		const conflicting = new Crust("info").meta({ aliases: ["i"] }).handle(() => {});
+		const root = new Crust("cli");
+		const issue = root
+			.sub("issue")
+			.meta({ aliases: ["i"] })
+			.handle(() => {});
+		const conflicting = root
+			.sub("info")
+			.meta({ aliases: ["i"] })
+			.handle(() => {});
 
-		const app = new Crust("cli").command(issue);
+		const app = root.command(issue);
 		expect(() => app.command(conflicting)).toThrow(/collides with alias of sibling "issue"/);
 	});
 

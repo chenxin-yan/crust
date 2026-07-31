@@ -46,7 +46,7 @@ Factories may be synchronous or asynchronous. Contexts on the resolved path are 
 
 ## One name per command path
 
-Providing two different Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant replacing an inherited name. Reusing the identical inherited instance during `.sub()` composition is not a duplicate.
+Providing two Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant re-providing a name it inherited. A `.sub()` child carries the parent path's instances as inheritance, not duplicates — finalize parent Contexts before creating children with `.sub()`.
 
 ## Native disposal
 
