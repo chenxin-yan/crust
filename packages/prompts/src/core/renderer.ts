@@ -131,6 +131,8 @@ export interface PromptConfig<S, T> {
 
 /** Tracks active prompts so a stream can only drive one prompt at a time. */
 const activeInputs = new WeakSet<PromptInput>();
+/** Tracks active outputs — concurrent frames on one stream would erase each other. */
+const activeOutputs = new WeakSet<PromptOutput>();
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -246,10 +248,10 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 	return new Promise<T>((resolve, reject) => {
 		// Guard against concurrent prompts sharing an input stream.
-		if (activeInputs.has(stdin)) {
+		if (activeInputs.has(stdin) || activeOutputs.has(output)) {
 			reject(
 				new Error(
-					"Cannot run multiple prompts concurrently on the same input stream. Await each prompt before starting the next.",
+					"Cannot run multiple prompts concurrently on the same input or output stream. Await each prompt before starting the next.",
 				),
 			);
 			return;
@@ -257,6 +259,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 		assertTTY(stdin);
 		activeInputs.add(stdin);
+		activeOutputs.add(output);
 
 		let state = initialState;
 		let prevLineCount = 0;
@@ -268,6 +271,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 			if (isCleanedUp) return;
 			isCleanedUp = true;
 			activeInputs.delete(stdin);
+			activeOutputs.delete(output);
 
 			stdin.removeListener("keypress", onKeypress);
 

@@ -10,7 +10,7 @@ bun add @crustjs/prompts
 
 ## Injectable IO
 
-All prompt functions accept an optional `io` argument with `input` and `output` streams. This keeps prompt UI on stderr while allowing applications and tests to provide their own streams.
+All prompt functions accept an optional `io` argument with `input` and `output` streams. Prompt UI writes to the resolved output stream — stderr by default — while allowing applications and tests to provide their own streams.
 
 ```ts
 import { input, withPromptIO, type PromptIO } from "@crustjs/prompts";

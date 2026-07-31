@@ -51,7 +51,7 @@ const addons = await multifilter({
 
 ## Injecting IO
 
-Every prompt accepts an optional second `io` argument. Prompt input and UI output resolve in this order: the explicit argument, the current `withPromptIO()` scope, then `process.stdin` and `process.stderr`. Prompt UI always writes to stderr.
+Every prompt accepts an optional second `io` argument. Prompt input and UI output resolve in this order: the explicit argument, the current `withPromptIO()` scope, then `process.stdin` and `process.stderr`. Prompt UI writes to the resolved output stream — stderr by default, keeping stdout clean for piped output.
 
 ```ts
 import { select, withPromptIO, type PromptIO } from "@crustjs/prompts";
@@ -381,7 +381,7 @@ if (edit) {
 
 `handleTextEdit` handles backspace, delete, left, right, home, end, and printable character insertion. It returns `null` for non-text-editing keys so you can handle them separately.
 
-Only one prompt can be active per input stream. Prompts on distinct input streams can run concurrently; a second prompt sharing an input stream rejects with an error.
+Only one prompt can be active per input or output stream. Prompts on fully distinct streams can run concurrently; a second prompt sharing an input or output stream rejects with an error.
 
 ## Exports
 
@@ -463,8 +463,8 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 
 Key design decisions:
 
-- **stderr rendering**: All prompt UI writes to stderr, keeping stdout clean for piped output.
+- **stderr rendering by default**: Prompt UI writes to the resolved output stream — `process.stderr` unless IO is injected — keeping stdout clean for piped output.
 - **`initial` escape hatch**: Every prompt accepts `initial` to skip interactivity in CI and scripted usage.
-- **Single active prompt per input stream**: Prompts on distinct input streams can run concurrently; concurrent calls sharing an input stream are rejected with a clear error.
+- **Single active prompt per stream**: Prompts on fully distinct input/output streams can run concurrently; concurrent calls sharing an input or output stream are rejected with a clear error.
 - **Composable themes**: Three-layer resolution with `StyleFn` slots from `@crustjs/style`.
 - **Shared text editing**: Common cursor-editing logic lives in `handleTextEdit` for consistency and reuse in custom prompts.

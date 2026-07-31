@@ -301,8 +301,26 @@ describe("runPrompt", () => {
 		};
 
 		const answer = runPrompt(config, harness.io);
-		await expect(runPrompt(config, harness.io)).rejects.toThrow("same input stream");
+		await expect(runPrompt(config, harness.io)).rejects.toThrow("same input or output stream");
 		harness.type("x");
+		await answer;
+	});
+
+	it("rejects concurrent prompts sharing an output stream", async () => {
+		const first = createPromptIO();
+		const second = createPromptIO();
+		const config: PromptConfig<undefined, string> = {
+			render: () => "prompt",
+			handleKey: () => submit("done"),
+			initialState: undefined,
+			theme: defaultTheme,
+		};
+
+		const answer = runPrompt(config, first.io);
+		await expect(
+			runPrompt(config, { input: second.io.input, output: first.io.output }),
+		).rejects.toThrow("same input or output stream");
+		first.type("x");
 		await answer;
 	});
 

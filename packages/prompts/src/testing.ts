@@ -7,29 +7,40 @@ export function stripAnsi(text: string): string {
 	return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
-/** Encode a named terminal key as its raw input sequence. */
+const namedKeys: Record<string, string> = {
+	return: "\r",
+	enter: "\r",
+	backspace: "\x7f",
+	delete: "\x1B[3~",
+	up: "\x1B[A",
+	down: "\x1B[B",
+	right: "\x1B[C",
+	left: "\x1B[D",
+	home: "\x1B[H",
+	end: "\x1B[F",
+	tab: "\t",
+	space: " ",
+	escape: "\x1B",
+};
+
+/**
+ * Encode a named terminal key as its raw input sequence.
+ *
+ * Accepts names from the key table, `ctrl+<letter>` combinations, and single
+ * printable characters. Anything else throws — silently typing a misspelled
+ * key name (e.g. `"pageup"`) into the prompt would corrupt the test input.
+ */
 export function encodeKey(key: string): string {
-	const namedKeys: Record<string, string> = {
-		return: "\r",
-		enter: "\r",
-		backspace: "\x7f",
-		delete: "\x1B[3~",
-		up: "\x1B[A",
-		down: "\x1B[B",
-		right: "\x1B[C",
-		left: "\x1B[D",
-		home: "\x1B[H",
-		end: "\x1B[F",
-		tab: "\t",
-		space: " ",
-		escape: "\x1B",
-	};
 	if (key in namedKeys) return namedKeys[key] ?? "";
 
 	const ctrl = /^ctrl\+([a-z])$/i.exec(key);
 	if (ctrl?.[1]) return String.fromCharCode(ctrl[1].toUpperCase().charCodeAt(0) & 0x1f);
 
-	return key;
+	if (key.length === 1) return key;
+
+	throw new Error(
+		`Unsupported key name: ${JSON.stringify(key)}. Use one of ${Object.keys(namedKeys).join(", ")}, ctrl+<letter>, a single character, or type() for literal text.`,
+	);
 }
 
 class FakeTerminal {
