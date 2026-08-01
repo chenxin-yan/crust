@@ -104,7 +104,7 @@ const app = new Crust("app").provide(session()).command("billing", (command) =>
 A definition can require a parent Context and derive command-local values from it:
 
 ```ts
-const account = defineCommand<{ ctx: { session: { userId: string } } }>()((command) =>
+const account = defineCommand<{ ctx: { session: { userId: string } } }>((command) =>
   command
     .derive("user", ({ ctx }) => ({ id: ctx.session.userId }))
     .handle(({ ctx, stdout }) => stdout(ctx.user.id)),
@@ -148,7 +148,7 @@ import { defineCommand } from "@crustjs/core";
 
 const status = defineCommand<{
   ctx: { db: { query(sql: string): string } };
-}>()((command) =>
+}>((command) =>
   command.command("check", (child) =>
     child.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
   ),

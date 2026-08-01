@@ -254,7 +254,7 @@ command without extending the public `@crustjs/core` builder API.
 import { Crust, defineCommand } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
-const deploy = defineCommand()((command) =>
+const deploy = defineCommand((command) =>
   annotate(command.meta({ description: "Deploy the application" }), [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",

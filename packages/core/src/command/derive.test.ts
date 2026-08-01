@@ -150,7 +150,7 @@ describe("Crust .derive()", () => {
 
 	it("satisfies a mounted definition's Context requirement before deriving local values", async () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
-		const account = defineCommand<{ ctx: { session: { userId: string } } }>()((command) =>
+		const account = defineCommand<{ ctx: { session: { userId: string } } }>((command) =>
 			command
 				.derive("user", ({ ctx }) => ({ id: ctx.session.userId }))
 				.handle(({ ctx }) => {
@@ -192,7 +192,7 @@ describe("Crust .derive()", () => {
 			IsEqual<(typeof root)["_types"]["ctx"], { config: { url: string }; client: { url: string } }>
 		>;
 
-		defineCommand<{ ctx: { session: { userId: string } } }>()((command) =>
+		defineCommand<{ ctx: { session: { userId: string } } }>((command) =>
 			command.derive("user", ({ ctx }) => {
 				type _Session = Assert<IsEqual<typeof ctx.session, { userId: string }>>;
 				return { id: ctx.session.userId };

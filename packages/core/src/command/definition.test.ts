@@ -13,7 +13,7 @@ type IsEqual<A, B> =
 describe("command definitions", () => {
 	it("stays inert and materializes a fresh named node for each mount", () => {
 		let configured = 0;
-		const definition = defineCommand()((command) => {
+		const definition = defineCommand((command) => {
 			configured++;
 			return command.flags({ output: { type: "string" } });
 		});
@@ -28,8 +28,8 @@ describe("command definitions", () => {
 	});
 
 	it("does not backfill nested definitions with later inheritable flags", async () => {
-		const nested = defineCommand()((command) => command.handle(() => {}));
-		const outer = defineCommand()((command) =>
+		const nested = defineCommand((command) => command.handle(() => {}));
+		const outer = defineCommand((command) =>
 			command.mount("nested", nested).flags({ late: { type: "boolean", inherit: true } }),
 		);
 		const app = new Crust("cli").mount("outer", outer);
@@ -43,7 +43,7 @@ describe("command definitions", () => {
 		const status = defineCommand<{
 			flags: { verbose: { type: "boolean"; inherit: true } };
 			ctx: { db: string };
-		}>()((command) =>
+		}>((command) =>
 			command.handle(({ flags, ctx }) => {
 				calls.push(`${ctx.db}:${String(flags.verbose)}`);
 			}),
@@ -51,7 +51,7 @@ describe("command definitions", () => {
 		const deploy = defineCommand<{
 			flags: { verbose: { type: "boolean"; inherit: true } };
 			ctx: { db: string };
-		}>()((command) => command.mount("status", status));
+		}>((command) => command.mount("status", status));
 		const app = new Crust("cli")
 			.flags({ verbose: { type: "boolean", inherit: true } })
 			.provide(db())
@@ -64,7 +64,7 @@ describe("command definitions", () => {
 
 	it("clones annotations and isolates mounts across parents", () => {
 		const annotation = Symbol("annotation");
-		const definition = defineCommand()((command) => {
+		const definition = defineCommand((command) => {
 			const configured = command.meta({ description: "Reusable" });
 			((configured as unknown as Crust)._node as unknown as Record<symbol, unknown>)[annotation] =
 				"preserved";
@@ -83,7 +83,7 @@ describe("command definitions", () => {
 
 	it("rejects duplicate inherited Contexts during materialization", () => {
 		const db = defineContext("db", () => "database");
-		const definition = defineCommand()((command) => command.provide(db()));
+		const definition = defineCommand((command) => command.provide(db()));
 
 		expect(() => new Crust("cli").provide(db()).mount("users", definition)).toThrow(
 			/Context "db" is already provided/,
@@ -91,7 +91,7 @@ describe("command definitions", () => {
 	});
 
 	it("excludes non-inheritable parent flags from mounted commands", async () => {
-		const definition = defineCommand()((command) => command.handle(() => {}));
+		const definition = defineCommand((command) => command.handle(() => {}));
 		const app = new Crust("cli").flags({ secret: { type: "string" } }).mount("users", definition);
 
 		await expect(app.run(["users", "--secret", "value"])).rejects.toThrow(/Unknown flag/);
@@ -99,7 +99,7 @@ describe("command definitions", () => {
 
 	it("runs mounted definitions through run and execute", async () => {
 		let calls = 0;
-		const definition = defineCommand()((command) =>
+		const definition = defineCommand((command) =>
 			command.handle(() => {
 				calls++;
 			}),
@@ -119,7 +119,7 @@ describe("command definitions", () => {
 	});
 
 	it("validates canonical names and aliases on every mount", () => {
-		const definition = defineCommand()((command) =>
+		const definition = defineCommand((command) =>
 			command.meta({ aliases: ["b"] }).handle(() => {}),
 		);
 		const app = new Crust("cli").mount("build", definition);
@@ -128,24 +128,24 @@ describe("command definitions", () => {
 		expect(() =>
 			app.mount(
 				"b",
-				defineCommand()((command) => command),
+				defineCommand((command) => command),
 			),
 		).toThrow(/collides with alias of sibling "build"/);
 		expect(() =>
 			new Crust("cli")
 				.mount(
 					"b",
-					defineCommand()((command) => command),
+					defineCommand((command) => command),
 				)
 				.mount("build", definition),
 		).toThrow(/collides with sibling canonical name "b"/);
 	});
 
 	it("rejects unrelated returned builders and nested Extensions", () => {
-		const unrelated = defineCommand()(() => new Crust("other") as never);
+		const unrelated = defineCommand(() => new Crust("other") as never);
 		expect(() => new Crust("cli").mount("bad", unrelated)).toThrow(/same command builder/);
 
-		const nestedExtension = defineCommand()(
+		const nestedExtension = defineCommand(
 			(command) => (command as unknown as Crust).extend(defineExtension("nested")) as never,
 		);
 		expect(() => new Crust("cli").mount("bad", nestedExtension)).toThrow(
@@ -167,7 +167,7 @@ describe("command definitions", () => {
 		const definition = defineCommand<{
 			flags: { verbose: typeof verbose };
 			ctx: { auth: { user: string } };
-		}>()((command) =>
+		}>((command) =>
 			command
 				.args([{ name: "target", type: "string", required: true }])
 				.flags({ force: { type: "boolean", required: true } })
@@ -195,7 +195,7 @@ describe("command definitions", () => {
 		} as const;
 		const strictDefinition = defineCommand<{
 			flags: { token: typeof requiredToken };
-		}>()((command) => command);
+		}>((command) => command);
 		new Crust("cli")
 			.flags({
 				token: {
@@ -237,7 +237,7 @@ describe("command definitions", () => {
 			IsEqual<"extend" extends keyof CommandDefinitionBuilder ? true : false, false>
 		>;
 
-		defineCommand()((command) => {
+		defineCommand((command) => {
 			// @ts-expect-error -- Extensions are root-only
 			command.extend(defineExtension("nested"));
 			const configured = command
@@ -253,12 +253,12 @@ describe("command definitions", () => {
 
 	it("checks nested requirements at the enclosing mount point", () => {
 		const required = defineFlag({ type: "boolean", inherit: true });
-		const nested = defineCommand<{ flags: { verbose: typeof required } }>()((command) => command);
+		const nested = defineCommand<{ flags: { verbose: typeof required } }>((command) => command);
 
-		defineCommand<{ flags: { verbose: typeof required } }>()((command) =>
+		defineCommand<{ flags: { verbose: typeof required } }>((command) =>
 			command.mount("nested", nested),
 		);
-		defineCommand()((command) => {
+		defineCommand((command) => {
 			// @ts-expect-error -- missing inherited flags: verbose
 			return command.mount("nested", nested);
 		});

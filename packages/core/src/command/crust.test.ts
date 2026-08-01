@@ -125,7 +125,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 			(a) =>
 				a.mount(
 					"deploy",
-					defineCommand()((command) => command),
+					defineCommand((command) => command),
 				) as Crust,
 			(a) => {
 				expect(a._node.subCommands).toEqual({});
@@ -1801,7 +1801,7 @@ describe("Crust .execute()", () => {
 	it("inherited flags work across file-boundary pattern", async () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag({ type: "boolean", inherit: true });
-		const sub = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
+		const sub = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
 			command.handle(({ flags }) => {
 				receivedVerbose = flags.verbose;
 			}),
@@ -2127,8 +2127,8 @@ describe("Crust .command() aliases", () => {
 	});
 
 	it("applies the same checks on the .mount() path", () => {
-		const issue = defineCommand()((command) => command.meta({ aliases: ["i"] }).handle(() => {}));
-		const conflicting = defineCommand()((command) =>
+		const issue = defineCommand((command) => command.meta({ aliases: ["i"] }).handle(() => {}));
+		const conflicting = defineCommand((command) =>
 			command.meta({ aliases: ["i"] }).handle(() => {}),
 		);
 		const app = new Crust("cli").mount("issue", issue);

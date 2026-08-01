@@ -24,7 +24,7 @@ const rootBase = new Crust("myapp").meta({ description: "Integration test app" }
 	help: { type: "boolean", short: "h" },
 } as const);
 
-const serveCmd = defineCommand()((command) =>
+const serveCmd = defineCommand((command) =>
 	command
 		.args([{ name: "dir", type: "string", default: "." }] as const)
 		.flags({
@@ -106,7 +106,7 @@ describe("integration: exported types", () => {
 		type ResolvedArgs = InferArgs<TestArgs>;
 		const inferred: ResolvedArgs = { file: "index.ts" };
 		type Requirements = CommandRequirements & { flags: {} };
-		const definition: CommandDefinition<Requirements> = defineCommand<Requirements>()(
+		const definition: CommandDefinition<Requirements> = defineCommand<Requirements>(
 			(command: CommandDefinitionBuilder) => command,
 		);
 
@@ -579,7 +579,7 @@ describe("integration: split-file definitions end-to-end", () => {
 	});
 
 	const verbose = defineFlag({ type: "boolean", inherit: true });
-	const listCommand = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
+	const listCommand = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
 		command
 			.flags({ format: { type: "string", default: "table" } } as const)
 			.args([{ name: "resource", type: "string", required: true }] as const)
@@ -587,7 +587,7 @@ describe("integration: split-file definitions end-to-end", () => {
 				console.log(`list ${args.resource} format=${flags.format} verbose=${flags.verbose}`);
 			}),
 	);
-	const getCommand = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
+	const getCommand = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
 		command
 			.args([
 				{ name: "resource", type: "string", required: true },
@@ -635,12 +635,12 @@ describe("integration: mounted definitions", () => {
 		const env = defineFlag({ type: "string", inherit: true });
 		const status = defineCommand<{
 			flags: { verbose: typeof verbose; env: typeof env };
-		}>()((command) =>
+		}>((command) =>
 			command.handle(({ flags }) => {
 				console.log(`verbose=${flags.verbose} env=${flags.env}`);
 			}),
 		);
-		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
+		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
 			command.flags({ env }).mount("status", status),
 		);
 		const app = new Crust("cli").flags({ verbose }).mount("deploy", deploy);
@@ -651,7 +651,7 @@ describe("integration: mounted definitions", () => {
 	});
 
 	it("excludes non-inheritable flags from mounted commands", async () => {
-		const sub = defineCommand()((command) => command.handle(() => console.log("sub ran")));
+		const sub = defineCommand((command) => command.handle(() => console.log("sub ran")));
 		const app = new Crust("cli").flags({ rootOnly: { type: "string" } }).mount("sub", sub);
 
 		const result = await executeCrust(app, ["sub", "--rootOnly", "val"]);
@@ -660,7 +660,7 @@ describe("integration: mounted definitions", () => {
 	});
 
 	it("mixes inline commands and mounted definitions", async () => {
-		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
+		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
 			command.handle(({ flags }) => console.log(`deploy verbose=${flags.verbose}`)),
 		);
 		const app = new Crust("cli")

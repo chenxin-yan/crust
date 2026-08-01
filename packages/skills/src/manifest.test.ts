@@ -611,7 +611,7 @@ describe("buildManifest", () => {
 		});
 
 		it("preserves instructions across Crust builder cloning", () => {
-			const deploy = defineCommand()((command) =>
+			const deploy = defineCommand((command) =>
 				annotate(
 					command.meta({ description: "Deploy command" }),
 					"Read the environment carefully before execution.",

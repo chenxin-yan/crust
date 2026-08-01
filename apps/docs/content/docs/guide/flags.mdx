@@ -79,7 +79,7 @@ const verbose = defineFlag({ type: "boolean", inherit: true });
 
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };
-}>()((command) => command.handle(({ flags }) => flags.verbose));
+}>((command) => command.handle(({ flags }) => flags.verbose));
 
 const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
 ```

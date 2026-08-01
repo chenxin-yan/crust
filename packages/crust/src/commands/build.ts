@@ -268,7 +268,7 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-export const buildCommand = defineCommand()((command) =>
+export const buildCommand = defineCommand((command) =>
 	command
 		.meta({ description: "Compile your CLI to a standalone executable" })
 		.flags({

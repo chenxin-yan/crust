@@ -72,13 +72,15 @@ interface CommandDefinition<R extends CommandRequirements = {}> {
 
 A `CommandDefinition<R>` is an opaque frozen value containing only the configure recipe. It has no name, command node, or execution methods.
 
-### `defineCommand<R>()(configure)`
+### `defineCommand<R>(configure)`
 
 ```ts
-defineCommand<const R extends CommandRequirements = {}>(): CommandDefinitionFactory<R>
+defineCommand<const R extends CommandRequirements = {}>(
+  configure: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
+): CommandDefinition<R>
 ```
 
-Creates an inert reusable definition. The double call lets TypeScript fix requirements before it infers the configured command's local inputs:
+Creates an inert reusable definition. Pass requirements as the explicit type argument; the configure callback is typed from them:
 
 ```ts
 const verbose = defineFlag({ type: "boolean", inherit: true });
@@ -87,7 +89,7 @@ const auth = defineContext("auth", () => ({ user: "Ada" }));
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };
   ctx: { auth: { user: string } };
-}>()((command) =>
+}>((command) =>
   command
     .args([{ name: "target", type: "string", required: true }])
     .handle(({ args, flags, ctx, stdout }) => {

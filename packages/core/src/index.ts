@@ -21,7 +21,6 @@ export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snaps
 export type {
 	CommandDefinition,
 	CommandDefinitionBuilder,
-	CommandDefinitionFactory,
 	CommandRequirements,
 	CrustCommandContext,
 } from "./command/crust.ts";

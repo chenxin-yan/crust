@@ -47,7 +47,7 @@ describe("public beta API", () => {
 		const deploy = defineCommand<{
 			flags: { verbose: typeof verbose };
 			ctx: { auth: { user: string } };
-		}>()((command) =>
+		}>((command) =>
 			command
 				.args([{ name: "target", type: "string", required: true }])
 				.handle(({ args, flags, ctx }) => {

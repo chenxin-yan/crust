@@ -27,7 +27,7 @@ Inline commands are convenient sugar for defining and materializing a command at
 
 ## Reusable command definitions
 
-`defineCommand<Requirements>()(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
+`defineCommand<Requirements>(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -40,7 +40,7 @@ const repository = defineContext("repository", (_options: void) => ({
 const clone = defineCommand<{
   flags: { verbose: typeof verbose };
   ctx: { repository: { defaultBranch: string } };
-}>()((command) =>
+}>((command) =>
   command
     .args([{ name: "url", type: "url", required: true }])
     .handle(({ args, flags, ctx, stdout }) => {
@@ -75,7 +75,7 @@ const environment = defineFlag({ type: "string", inherit: true });
 
 const status = defineCommand<{
   flags: { verbose: typeof verbose; environment: typeof environment };
-}>()((command) =>
+}>((command) =>
   command.handle(({ flags, stdout }) => {
     stdout(`${flags.environment} ${flags.verbose}`);
   }),
@@ -83,7 +83,7 @@ const status = defineCommand<{
 
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };
-}>()((command) => command.flags({ environment }).mount("status", status));
+}>((command) => command.flags({ environment }).mount("status", status));
 
 const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
 ```

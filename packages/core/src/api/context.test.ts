@@ -64,7 +64,7 @@ describe("Crust .provide()", () => {
 	it("throws DEFINITION when a mounted subtree re-provides a path name", () => {
 		const parentDb = defineContext("db", () => "parent");
 		const nestedDb = defineContext("db", () => "nested");
-		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
+		const sub = defineCommand<{ ctx: { db: string } }>((command) =>
 			command.command("g", (child) => child.provide(nestedDb()).handle(() => {})),
 		);
 
@@ -74,7 +74,7 @@ describe("Crust .provide()", () => {
 	it("seeds mounted descendants with the parent Context path", async () => {
 		const seen: string[] = [];
 		const db = defineContext("db", () => "root-db");
-		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
+		const sub = defineCommand<{ ctx: { db: string } }>((command) =>
 			command.command("g", (child) =>
 				child.handle(({ ctx }) => {
 					seen.push(ctx.db);
@@ -90,7 +90,7 @@ describe("Crust .provide()", () => {
 
 	it("checks Context requirements at the mount call", () => {
 		const db = defineContext("db", () => "root-db");
-		const sub = defineCommand<{ ctx: { db: string } }>()((command) => command);
+		const sub = defineCommand<{ ctx: { db: string } }>((command) => command);
 
 		new Crust("cli").provide(db()).mount("sub", sub);
 		// @ts-expect-error -- missing Contexts: db

@@ -221,7 +221,7 @@ export async function publishStagedPackages(
 	console.log(`\n${green("✓")} Published ${bold(String(plan.length))} staged package(s).`);
 }
 
-export const publishCommand = defineCommand()((command) =>
+export const publishCommand = defineCommand((command) =>
 	command
 		.meta({
 			description: "Publish staged npm packages created by crust build --package",

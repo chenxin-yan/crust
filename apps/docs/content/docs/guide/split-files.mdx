@@ -30,7 +30,7 @@ A command file imports `defineCommand` and shared requirements, never the applic
 import { defineCommand } from "@crustjs/core";
 import type { AppCommandRequirements } from "../shared.ts";
 
-export const greetCommand = defineCommand<AppCommandRequirements>()((command) =>
+export const greetCommand = defineCommand<AppCommandRequirements>((command) =>
   command
     .args([{ name: "name", type: "string", default: "world" }])
     .flags({ greeting: { type: "string", default: "Hello", short: "g" } })
@@ -93,4 +93,4 @@ A later `.flags()` or `.provide()` call creates a new parent builder; it does no
 
 ## Inline or split?
 
-Use inline `.command(name, configure)` when the implementation is short and local. Use `defineCommand<Requirements>()(configure)` plus `.mount(name, definition)` when a separate file improves readability or when the same command should be mounted more than once.
+Use inline `.command(name, configure)` when the implementation is short and local. Use `defineCommand<Requirements>(configure)` plus `.mount(name, definition)` when a separate file improves readability or when the same command should be mounted more than once.
