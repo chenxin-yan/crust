@@ -54,6 +54,54 @@ describe("Crust .derive()", () => {
 		expect(events).toEqual(["disposed"]);
 	});
 
+	it("disposes mixed provided and derived values in reverse registration order", async () => {
+		const events: string[] = [];
+		const resource = defineContext("resource", () => ({
+			[Symbol.dispose]() {
+				events.push("resource disposed");
+			},
+		}));
+		const app = new Crust("cli")
+			.provide(resource())
+			.derive("db", () => ({
+				[Symbol.dispose]() {
+					events.push("db disposed");
+				},
+			}))
+			.handle(() => {
+				events.push("handled");
+			});
+
+		await app.run([]);
+
+		expect(events).toEqual(["handled", "db disposed", "resource disposed"]);
+	});
+
+	it("disposes a provided value before a failing later derive in reverse order", async () => {
+		const events: string[] = [];
+		const resource = defineContext("resource", () => ({
+			[Symbol.dispose]() {
+				events.push("resource disposed");
+			},
+		}));
+		const app = new Crust("cli")
+			.provide(resource())
+			.derive("db", () => ({
+				[Symbol.dispose]() {
+					events.push("db disposed");
+				},
+			}))
+			.derive("user", () => {
+				throw new Error("Unauthenticated");
+			})
+			.handle(() => {
+				events.push("handled");
+			});
+
+		await expect(app.run([])).rejects.toThrow("Unauthenticated");
+		expect(events).toEqual(["db disposed", "resource disposed"]);
+	});
+
 	it("rejects duplicate provided and derived Context names", () => {
 		const shared = defineContext("shared", () => "provided");
 
@@ -84,6 +132,20 @@ describe("Crust .derive()", () => {
 
 		expect(earlyDerived).toBe(true);
 		expect(lateProvided).toBe(false);
+	});
+
+	it("does not backfill mounted children with later parent derives", async () => {
+		let lateDerived = false;
+		const app = new Crust("cli")
+			.command("status", (command) => command.handle(() => {}))
+			.derive("late", () => {
+				lateDerived = true;
+				return "late";
+			});
+
+		await app.run(["status"]);
+
+		expect(lateDerived).toBe(false);
 	});
 
 	it("satisfies a mounted definition's Context requirement before deriving local values", async () => {

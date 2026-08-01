@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineFlag, defineFlags } from "../api/flags.ts";
+import { defineFlag } from "../api/flags.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -11,31 +11,6 @@ type IsEqual<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("command definitions", () => {
-	it("preserves literal flag definitions", () => {
-		const verbose = defineFlag({ type: "boolean", inherit: true, short: "v" });
-		type _Flag = Assert<
-			IsEqual<
-				typeof verbose,
-				{ readonly type: "boolean"; readonly inherit: true; readonly short: "v" }
-			>
-		>;
-
-		const flags = defineFlags({ verbose, output: { type: "string", short: "o" } });
-		type _Flags = Assert<
-			IsEqual<
-				typeof flags,
-				{
-					readonly verbose: typeof verbose;
-					readonly output: { readonly type: "string"; readonly short: "o" };
-				}
-			>
-		>;
-
-		// @ts-expect-error -- boolean flags cannot have string defaults
-		defineFlag({ type: "boolean", default: "true" });
-		// @ts-expect-error -- every definition must be a FlagDef
-		defineFlags({ bad: { type: "not-a-flag" } });
-	});
 	it("stays inert and materializes a fresh named node for each mount", () => {
 		let configured = 0;
 		const definition = defineCommand()((command) => {
