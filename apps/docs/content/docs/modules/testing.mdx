@@ -13,7 +13,7 @@ bun add -d @crustjs/testing
 
 ## `captureRun(app, argv)`
 
-Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
+Run an application with captured output. `app` is anything with a `run(argv, io)` method — a root `Crust` builder or a `.sub()` child builder. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
 
 ```ts
 import { captureRun } from "@crustjs/testing";

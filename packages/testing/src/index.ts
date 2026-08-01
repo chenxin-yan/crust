@@ -1,6 +1,19 @@
-import type { Crust } from "@crustjs/core";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
+
+/**
+ * Minimal surface the helpers invoke. Both root `Crust` builders and `.sub()`
+ * child builders (`ChildCrust`) satisfy it.
+ */
+export interface RunnableApp {
+	run(
+		argv: readonly string[],
+		io?: {
+			stdout?: (text: string) => void;
+			stderr?: (text: string) => void;
+		},
+	): Promise<void>;
+}
 
 export interface CapturedRun {
 	readonly stdout: string;
@@ -9,7 +22,7 @@ export interface CapturedRun {
 }
 
 /** Run an application and capture its text output without throwing invocation errors. */
-export async function captureRun(app: Crust, argv: readonly string[]): Promise<CapturedRun> {
+export async function captureRun(app: RunnableApp, argv: readonly string[]): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -45,7 +58,7 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function interactiveRun(app: Crust, argv: readonly string[]): InteractiveRun {
+export function interactiveRun(app: RunnableApp, argv: readonly string[]): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output!;
 	const done = withPromptIO(harness.io, () =>

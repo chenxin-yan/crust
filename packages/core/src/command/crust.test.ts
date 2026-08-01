@@ -2411,6 +2411,22 @@ describe("root vs child builder surface (type-level)", () => {
 		expect(app._node.subCommands.child).toBeDefined();
 	});
 
+	it("rejects children configured from a differently-typed parent", () => {
+		const root = new Crust("root").flags({ verbose: { type: "boolean", inherit: true } });
+		const foreign = new Crust("other")
+			.flags({ region: { type: "string", inherit: true } })
+			.provide(context("cache", () => new Map())());
+		const foreignChild = foreign.sub("deploy").handle(() => {});
+
+		// @ts-expect-error child carries a foreign parent's flag/Context types
+		root.command(foreignChild);
+
+		// @ts-expect-error inline callbacks cannot return a foreign parent's child
+		root.command("deploy", () => foreignChild);
+
+		expect(root._node.subCommands).toEqual({});
+	});
+
 	it("inline callback children have no .extend() and roots keep it", () => {
 		const app = new Crust("root").command("inline", (cmd) => {
 			type InlineHasExtend = "extend" extends keyof typeof cmd ? true : false;

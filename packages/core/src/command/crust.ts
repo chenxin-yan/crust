@@ -414,6 +414,9 @@ export class Crust<
 		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
 		// Override constructor defaults with parent-provided state.
 		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
+		// Seed effective flags so the child parses inherited flags even when run
+		// directly (e.g. testing helpers) rather than through an attached root.
+		instance._node.effectiveFlags = computeEffectiveFlags(inheritedFlags, {});
 		(instance._node as { contexts: ContextInstance[] }).contexts = [...contexts];
 		// The child brand is phantom — same runtime instance, narrower surface.
 		return instance as unknown as ChildCrust<I, {}, [], EffectiveFlags<I, {}>, Ctx>;
@@ -654,6 +657,10 @@ export class Crust<
 	 * typing to flow inherited flag types into subcommand definitions. It must
 	 * return a child builder.
 	 *
+	 * The returned child must carry this command's inherited flag and Context
+	 * types, so a child configured from a differently-typed parent is rejected
+	 * at compile time.
+	 *
 	 * @param name - Subcommand name (must be non-empty, unique among siblings)
 	 * @param cb - Callback that receives a child builder and returns the configured builder
 	 * @returns A new `Crust` instance with the subcommand registered
@@ -661,7 +668,9 @@ export class Crust<
 	 */
 	command<N extends string>(
 		name: N,
-		cb: (cmd: ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>) => AnyChildCrust,
+		cb: (
+			cmd: ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
+		) => ChildCrust<Eff, any, any, any, Ctx>,
 	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 
 	/**
@@ -672,11 +681,18 @@ export class Crust<
 	 * captured when `.sub()` was called. This is the complement to `.sub()`
 	 * for the file-splitting pattern.
 	 *
+	 * The child must carry this command's inherited flag and Context types —
+	 * i.e. come from this parent's `.sub()` (or an identically-typed one) — so
+	 * attaching a child of a differently-typed parent is rejected at compile
+	 * time.
+	 *
 	 * @param builder - A child builder created with `.sub()`
 	 * @returns A new `Crust` instance with the subcommand registered
 	 * @throws {CrustError} `DEFINITION` if the name is already registered
 	 */
-	command(builder: AnyChildCrust): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
+	command(
+		builder: ChildCrust<Eff, any, any, any, Ctx>,
+	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
 
 	// Implementation
 	command(

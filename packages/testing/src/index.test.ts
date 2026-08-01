@@ -32,6 +32,18 @@ describe("captureRun", () => {
 		expect(result.stderr).toBe("problem");
 		expect(result.error).toBe(error);
 	});
+
+	it("accepts a .sub() child builder directly", async () => {
+		const root = new Crust("cli").flags({ verbose: { type: "boolean", inherit: true } });
+		const build = root.sub("build").handle(({ flags, stdout }) => {
+			stdout(flags.verbose ? "verbose build" : "build");
+		});
+
+		expect(await captureRun(build, ["--verbose"])).toEqual({
+			stdout: "verbose build",
+			stderr: "",
+		});
+	});
 });
 
 describe("interactiveRun", () => {
