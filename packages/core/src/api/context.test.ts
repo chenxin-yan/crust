@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust } from "../command/crust.ts";
+import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import { context } from "./context.ts";
 
@@ -61,31 +61,40 @@ describe("Crust .provide()", () => {
 		).toThrow(CrustError);
 	});
 
-	it("throws DEFINITION when a split-file child's subtree re-provides a path name", () => {
+	it("throws DEFINITION when a mounted subtree re-provides a path name", () => {
 		const parentDb = context("db", () => "parent");
 		const nestedDb = context("db", () => "nested");
-
-		const root = new Crust("cli").provide(parentDb());
-
-		expect(() =>
-			root.sub("sub").command("g", (cmd) => cmd.provide(nestedDb()).handle(() => {})),
-		).toThrow(CrustError);
-	});
-
-	it("descendants of a split-file child inherit the parent path's Contexts", async () => {
-		const seen: string[] = [];
-		const db = context("db", () => "root-db");
-
-		const root = new Crust("cli").provide(db());
-		const sub = root.sub("sub").command("g", (cmd) =>
-			cmd.handle(({ ctx }) => {
-				seen.push(ctx.db);
-			}),
+		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
+			command.command("g", (child) => child.provide(nestedDb()).handle(() => {})),
 		);
 
-		await root.command(sub).run(["sub", "g"]);
+		expect(() => new Crust("cli").provide(parentDb()).mount("sub", sub)).toThrow(CrustError);
+	});
+
+	it("seeds mounted descendants with the parent Context path", async () => {
+		const seen: string[] = [];
+		const db = context("db", () => "root-db");
+		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
+			command.command("g", (child) =>
+				child.handle(({ ctx }) => {
+					seen.push(ctx.db);
+				}),
+			),
+		);
+		const root = new Crust("cli").provide(db()).mount("sub", sub);
+
+		await root.run(["sub", "g"]);
 
 		expect(seen).toEqual(["root-db"]);
+	});
+
+	it("checks Context requirements at the mount call", () => {
+		const db = context("db", () => "root-db");
+		const sub = defineCommand<{ ctx: { db: string } }>()((command) => command);
+
+		new Crust("cli").provide(db()).mount("sub", sub);
+		// @ts-expect-error -- missing Contexts: db
+		new Crust("cli").mount("sub", sub).provide(db());
 	});
 
 	it("does not construct Contexts for commands off the resolved path", async () => {

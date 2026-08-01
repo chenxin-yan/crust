@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { Crust } from "@crustjs/core";
+
 import {
 	buildPublishCommand,
 	getPublishPlan,
@@ -12,14 +14,15 @@ import {
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
-/** Parse argv against the publish command's grammar through the public pipeline. */
+/** Parse argv against the mounted publish command's grammar. */
 async function parsePublishArgs(argv: string[]) {
 	let captured: { flags: Record<string, unknown> } | undefined;
-	await publishCommand
-		.handle((ctx) => {
-			captured = { flags: ctx.flags };
-		})
-		.run(argv);
+	const app = new Crust("test").mount("publish", publishCommand);
+	const node = app._node.subCommands.publish!;
+	node.run = (ctx) => {
+		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };
+	};
+	await app.run(["publish", ...argv]);
 	if (!captured) throw new Error("publish handler did not run");
 	return captured;
 }

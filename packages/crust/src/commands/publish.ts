@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
-import { crustBase } from "../app.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
 type PublishPackageJson = {
@@ -221,51 +221,52 @@ export async function publishStagedPackages(
 	console.log(`\n${green("✓")} Published ${bold(String(plan.length))} staged package(s).`);
 }
 
-export const publishCommand = crustBase
-	.sub("publish")
-	.meta({
-		description: "Publish staged npm packages created by crust build --package",
-	})
-	.flags({
-		"stage-dir": {
-			type: "string",
-			description: "Directory containing a staged manifest.json",
-			default: "dist/npm",
-		},
-		tag: {
-			type: "string",
-			description: "Override the npm dist-tag passed to bun publish",
-		},
-		access: {
-			type: "string",
-			description: "npm access level passed to bun publish",
-			default: "public",
-		},
-		"dry-run": {
-			type: "boolean",
-			description: "Print publish order and commands without publishing",
-			default: false,
-		},
-		verify: {
-			type: "boolean",
-			description: "Verify staged directories and metadata before publishing",
-			default: true,
-		},
-		registry: {
-			type: "string",
-			description: "Override the registry passed to bun publish",
-		},
-	} as const)
-	.handle(async ({ flags }) => {
-		const stageDir = resolve(process.cwd(), flags["stage-dir"]);
-		const manifest = readPublishManifest(stageDir);
+export const publishCommand = defineCommand()((command) =>
+	command
+		.meta({
+			description: "Publish staged npm packages created by crust build --package",
+		})
+		.flags({
+			"stage-dir": {
+				type: "string",
+				description: "Directory containing a staged manifest.json",
+				default: "dist/npm",
+			},
+			tag: {
+				type: "string",
+				description: "Override the npm dist-tag passed to bun publish",
+			},
+			access: {
+				type: "string",
+				description: "npm access level passed to bun publish",
+				default: "public",
+			},
+			"dry-run": {
+				type: "boolean",
+				description: "Print publish order and commands without publishing",
+				default: false,
+			},
+			verify: {
+				type: "boolean",
+				description: "Verify staged directories and metadata before publishing",
+				default: true,
+			},
+			registry: {
+				type: "string",
+				description: "Override the registry passed to bun publish",
+			},
+		} as const)
+		.handle(async ({ flags }) => {
+			const stageDir = resolve(process.cwd(), flags["stage-dir"]);
+			const manifest = readPublishManifest(stageDir);
 
-		await publishStagedPackages(manifest, {
-			stageDir,
-			access: flags.access,
-			tag: flags.tag,
-			registry: flags.registry,
-			dryRun: flags["dry-run"],
-			verify: flags.verify,
-		});
-	});
+			await publishStagedPackages(manifest, {
+				stageDir,
+				access: flags.access,
+				tag: flags.tag,
+				registry: flags.registry,
+				dryRun: flags["dry-run"],
+				verify: flags.verify,
+			});
+		}),
+);

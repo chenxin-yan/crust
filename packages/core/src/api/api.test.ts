@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { context, Crust, extension } from "../index.ts";
+import { context, Crust, defineCommand, extension } from "../index.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -38,26 +38,28 @@ describe("public beta API", () => {
 		expect(calls).toEqual(["memory://test:api:prod:true"]);
 	});
 
-	it("passes typed command context into parent-typed split subcommands", async () => {
+	it("passes typed command context into standalone definitions", async () => {
 		const seen: string[] = [];
+		const verbose = { type: "boolean", inherit: true } as const;
 		const auth = context("auth", () => ({
 			user: "chenxin",
 		}));
-		const app = new Crust("my-cli")
-			.provide(auth())
-			.flags({ verbose: { type: "boolean", inherit: true } });
+		const deploy = defineCommand<{
+			flags: { verbose: typeof verbose };
+			ctx: { auth: { user: string } };
+		}>()((command) =>
+			command
+				.args([{ name: "target", type: "string", required: true }])
+				.handle(({ args, flags, ctx }) => {
+					type _target = Expect<Equal<typeof args.target, string>>;
+					type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
+					type _user = Expect<Equal<typeof ctx.auth.user, string>>;
+					seen.push(`${ctx.auth.user}:${args.target}:${flags.verbose}`);
+				}),
+		);
+		const app = new Crust("my-cli").provide(auth()).flags({ verbose }).mount("deploy", deploy);
 
-		const deploy = app
-			.sub("deploy")
-			.args([{ name: "target", type: "string", required: true }])
-			.handle(({ args, flags, ctx }) => {
-				type _target = Expect<Equal<typeof args.target, string>>;
-				type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
-				type _user = Expect<Equal<typeof ctx.auth.user, string>>;
-				seen.push(`${ctx.auth.user}:${args.target}:${flags.verbose}`);
-			});
-
-		await app.command(deploy).execute({ argv: ["deploy", "api", "--verbose"] });
+		await app.execute({ argv: ["deploy", "api", "--verbose"] });
 
 		expect(seen).toEqual(["chenxin:api:true"]);
 	});

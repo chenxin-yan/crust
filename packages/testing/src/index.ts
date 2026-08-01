@@ -1,10 +1,7 @@
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 
-/**
- * Minimal surface the helpers invoke. Both root `Crust` builders and `.sub()`
- * child builders (`ChildCrust`) satisfy it.
- */
+/** Minimal structural surface invoked by the testing helpers. */
 export interface RunnableApp {
 	run(
 		argv: readonly string[],
