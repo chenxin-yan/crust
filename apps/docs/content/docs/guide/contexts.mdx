@@ -44,9 +44,33 @@ const app = new Crust("app")
 
 Factories may be synchronous or asynchronous. Contexts on the resolved path are constructed in registration order.
 
+## Context requirements in definitions
+
+A reusable command declares the Context value types it needs. Mounting seeds a fresh command scope with the parent's current Context path:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+
+const status = defineCommand<{
+  ctx: { db: { query(sql: string): string } };
+}>()((command) =>
+  command.command("check", (child) =>
+    child.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  ),
+);
+
+const app = new Crust("app")
+  .provide(database({ url: "postgres://localhost/app" }))
+  .mount("status", status);
+```
+
+The requirement is checked at `.mount()`, so call `.provide()` before mounting. A Context added on a later builder does not backfill an earlier mount.
+
 ## One name per command path
 
-Providing two Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant re-providing a name it inherited. A `.sub()` child carries the parent path's instances as inheritance, not duplicates — finalize parent Contexts before creating children with `.sub()`.
+Providing two Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant re-providing a name it inherited.
+
+Mounted definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.mount()`.
 
 ## Native disposal
 

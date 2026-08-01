@@ -1,13 +1,15 @@
 ---
 title: Subcommands
-description: Compose nested command trees inline or from child builders created with .sub().
+description: Compose nested command trees inline or from reusable command definitions.
 ---
 
 ## Inline commands
 
-`.command(name, configure)` creates a child typed from its parent:
+`.command(name, configure)` creates and mounts a child typed from its parent:
 
 ```ts
+import { Crust } from "@crustjs/core";
+
 const app = new Crust("git")
   .flags({ verbose: { type: "boolean", inherit: true } })
   .command("clone", (command) =>
@@ -21,21 +23,74 @@ const app = new Crust("git")
 
 Nest `.command()` calls to any depth. Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command.
 
-## Split-file children
+Inline commands are convenient sugar for defining and materializing a command at the same point. Use a standalone definition when a command belongs in another file or should be reused.
 
-Create a separate-file child with `parent.sub(name)` and attach it with `.command(builder)`. The child inherits the parent's `inherit: true` flags and Contexts, fully typed:
+## Reusable command definitions
+
+`defineCommand<Requirements>()(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
 
 ```ts
-const base = new Crust("git").flags({ verbose: { type: "boolean", inherit: true } });
-const clone = base.sub("clone").handle(({ flags }) => flags.verbose);
-const app = base.command(clone);
+import { context, Crust, defineCommand } from "@crustjs/core";
+
+const verbose = { type: "boolean", inherit: true } as const;
+const repository = context("repository", (_options: void) => ({
+  defaultBranch: "main",
+}));
+
+const clone = defineCommand<{
+  flags: { verbose: typeof verbose };
+  ctx: { repository: { defaultBranch: string } };
+}>()((command) =>
+  command
+    .args([{ name: "url", type: "url", required: true }])
+    .handle(({ args, flags, ctx, stdout }) => {
+      stdout(`${args.url} ${ctx.repository.defaultBranch} ${flags.verbose}`);
+    }),
+);
+
+const app = new Crust("git")
+  .flags({ verbose })
+  .provide(repository(undefined))
+  .mount("clone", clone);
 ```
 
-`.command(builder)` accepts only child builders created with `.sub()` — a standalone `new Crust(name)` is not attachable. See [Split Commands Across Files](/docs/guide/split-files) for the import-order rule and a complete layout.
+The definition has no name and cannot run by itself. `.mount(name, definition)` supplies the routing name, checks the requirements at that call, and creates a fresh command node. The same definition can therefore be mounted under different names or into different satisfying parents:
+
+```ts
+const git = new Crust("git")
+  .flags({ verbose })
+  .provide(repository(undefined))
+  .mount("clone", clone)
+  .mount("copy", clone);
+```
+
+Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`. A same-named parent flag only counts when it has `inherit: true`.
+
+## Nested definitions
+
+Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
+
+```ts
+const environment = { type: "string", inherit: true } as const;
+
+const status = defineCommand<{
+  flags: { verbose: typeof verbose; environment: typeof environment };
+}>()((command) =>
+  command.handle(({ flags, stdout }) => {
+    stdout(`${flags.environment} ${flags.verbose}`);
+  }),
+);
+
+const deploy = defineCommand<{
+  flags: { verbose: typeof verbose };
+}>()((command) => command.flags({ environment }).mount("status", status));
+
+const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
+```
 
 ## Context inheritance
 
-Contexts attached to a parent are available to descendants. `.sub()` captures the parent path's Context instances and their types when the child is created — finalize parent Contexts before calling `.sub()`.
+Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
 
 ## Unknown commands
 

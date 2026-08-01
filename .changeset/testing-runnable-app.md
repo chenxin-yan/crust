@@ -2,4 +2,6 @@
 "@crustjs/testing": patch
 ---
 
-Accept any `run()`-capable builder in `captureRun` and `interactiveRun`, so `.sub()` child builders (`ChildCrust`) can be tested directly without a cast. The parameter is the new structural `RunnableApp` interface.
+Export the structural `RunnableApp` contract and accept any application with its `run(argv, io)` shape in `captureRun` and `interactiveRun`.
+
+Inert command definitions are not directly runnable; mount them into an application before passing them to either helper.

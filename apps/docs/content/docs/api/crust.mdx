@@ -1,15 +1,97 @@
 ---
 title: "Crust"
-description: Immutable command builder, programmatic invocation, and terminal execution.
+description: Immutable command builders, reusable definitions, and execution.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
 ```ts
-import { Crust } from "@crustjs/core";
+import {
+  Crust,
+  defineCommand,
+  type CommandDefinition,
+  type CommandDefinitionBuilder,
+  type CommandRequirements,
+} from "@crustjs/core";
 ```
 
-Every definition method returns a new builder. The original builder is unchanged. Fluent methods preserve the builder surface: a root stays a `Crust` and a child created with `.sub()` or inside `.command(name, callback)` stays a `ChildCrust` — identical except that root-only `.extend()` is absent.
+`Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that become commands only when mounted. Every fluent method returns a new builder; the original is unchanged.
+
+## Reusable command definitions
+
+### `CommandRequirements`
+
+```ts
+interface CommandRequirements {
+  readonly flags?: Record<string, FlagDef & { inherit: true }>;
+  readonly ctx?: ContextMap;
+}
+```
+
+Requirements describe values supplied by the parent at a mount point:
+
+- `flags` lists required inherited flag definitions. Every required flag must have `inherit: true`.
+- `ctx` maps required Context names to their constructed value types.
+
+Requirements are type-only. They do not create flags, Contexts, or a runtime validation schema.
+
+### `CommandDefinitionBuilder`
+
+```ts
+interface CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx> {
+  meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder;
+  flags(defs: FlagsDef): CommandDefinitionBuilder;
+  args(defs: ArgsDef): CommandDefinitionBuilder;
+  provide(context: ContextInstance): CommandDefinitionBuilder;
+  handle(
+    handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+  ): CommandDefinitionBuilder;
+  command(
+    name: string,
+    callback: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
+  ): CommandDefinitionBuilder;
+  mount(name: string, definition: CommandDefinition): CommandDefinitionBuilder;
+}
+```
+
+This is the configure-only builder passed to `defineCommand()` and inline `.command()`. Its fluent methods preserve and refine argument, flag, and Context types. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+
+### `CommandDefinition`
+
+```ts
+interface CommandDefinition<R extends CommandRequirements = {}> {
+  // Opaque command recipe
+}
+```
+
+A `CommandDefinition<R>` is an opaque frozen value containing only the configure recipe. It has no name, command node, or execution methods.
+
+### `defineCommand<R>()(configure)`
+
+```ts
+defineCommand<const R extends CommandRequirements = {}>(): (
+  configure: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
+) => CommandDefinition<R>
+```
+
+Creates an inert reusable definition. The function is curried so requirements are fixed before TypeScript infers the configured command's local inputs:
+
+```ts
+const verbose = { type: "boolean", inherit: true } as const;
+
+const deploy = defineCommand<{
+  flags: { verbose: typeof verbose };
+  ctx: { auth: { user: string } };
+}>()((command) =>
+  command
+    .args([{ name: "target", type: "string", required: true }])
+    .handle(({ args, flags, ctx, stdout }) => {
+      stdout(`${ctx.auth.user}:${args.target}:${flags.verbose}`);
+    }),
+);
+```
+
+The recipe does not execute when the definition is created. It executes once for each `.mount()`, so keep configuration side-effect-free.
 
 ## Constructor
 
@@ -29,7 +111,7 @@ const app = new Crust("my-cli");
 meta(meta: Omit<CommandMeta, "name">): Crust
 ```
 
-Sets `description`, `usage`, `aliases`, or `hidden`. The constructor, `.sub()`, or inline `.command()` supplies the name.
+Sets `description`, `usage`, `aliases`, or `hidden`. The constructor, inline `.command()`, or `.mount()` supplies the name.
 
 ```ts
 const app = new Crust("issue").meta({
@@ -83,7 +165,7 @@ const app = new Crust("serve").flags({
 });
 ```
 
-`inherit: true` exposes a flag to descendant commands. Boolean flags support generated `--no-name` negation unless `noNegate: true` is set. Names and aliases beginning with `no-` are reserved.
+`inherit: true` exposes a flag to descendant commands and allows it to satisfy mounted definition requirements. Boolean flags support generated `--no-name` negation unless `noNegate: true` is set. Names and aliases beginning with `no-` are reserved.
 
 Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
 
@@ -124,13 +206,15 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. `.extend()` exists only on root builders — child builders (`ChildCrust`) do not expose it.
+Registers application-wide Extensions. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
 
 const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 ```
+
+Mounted definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-owned command builders remain unchanged.
 
 Extension-owned command or flag name and alias collisions throw `DEFINITION` when the application is prepared.
 
@@ -161,11 +245,11 @@ The context contains typed `args`, typed effective `flags`, typed Context values
 ```ts
 command(
   name: string,
-  callback: (command: ChildCrust) => ChildCrust,
+  callback: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): Crust
 ```
 
-Creates and registers a child command. The callback receives a child builder typed with the parent's `inherit: true` flags and Contexts, and must return a child builder.
+Defines and immediately mounts an inline child. The callback builder is typed with the parent's current inheritable flags and Contexts:
 
 ```ts
 const app = new Crust("my-cli")
@@ -178,44 +262,45 @@ const app = new Crust("my-cli")
   );
 ```
 
-## `.command(builder)`
+Inline `.command()` uses the same materialization path as `.mount()`. Use it for local one-off commands; use `defineCommand()` when the definition should live separately or be reused.
+
+## `.mount(name, definition)`
 
 ```ts
-command(builder: ChildCrust): Crust
+mount<const R extends CommandRequirements>(
+  name: string,
+  definition: CommandDefinition<R> & Mountable<Eff, Ctx, NoInfer<R>>,
+): Crust
 ```
 
-Registers an unattached child builder created with `.sub(name)`, using the child's existing name. Only child builders are accepted — a standalone `new Crust(name)` is not attachable.
-
-## `.sub(name)`
+Materializes an inert definition as a fresh child command. `name` controls routing and can differ between mounts:
 
 ```ts
-sub<N extends string>(name: N): ChildCrust
+const first = new Crust("first").flags({ verbose }).provide(auth()).mount("deploy", deploy);
+
+const second = new Crust("second")
+  .flags({ verbose: { ...verbose, required: true } })
+  .provide(auth())
+  .mount("release", deploy);
 ```
 
-Creates an unattached child builder typed with the parent's effective flags and Contexts. Register it with `.command(builder)`.
+`Mountable` is internal declaration machinery that checks requirements. On failure, TypeScript reports one or more readable structural properties at the `.mount()` call:
 
-```ts title="app.ts"
-export const app = new Crust("my-cli").flags({
-  verbose: { type: "boolean", inherit: true },
-});
-```
+- `"missing inherited flags"`
+- `"incompatible inherited flags"`
+- `"missing Contexts"`
+- `"incompatible Contexts"`
 
-```ts title="commands/deploy.ts"
-import { app } from "../app.ts";
+Only `inherit: true` parent flags are considered. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement. Context values use the same provided-to-required assignability direction.
 
-export const deploy = app.sub("deploy").handle(({ flags }) => {
-  flags.verbose;
-});
-```
+At runtime, empty names, duplicate sibling names, alias collisions, duplicate Contexts, unrelated callback returns, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
 
-```ts title="cli.ts"
-import { app } from "./app.ts";
-import { deploy } from "./commands/deploy.ts";
+A definition can contain inline `.command()` calls and nested `.mount()` calls. Nested requirements are checked against the enclosing definition builder at that exact point.
 
-await app.command(deploy).execute();
-```
-
-See [Split command files](/docs/guide/split-files) for the import-order rule.
+<Callout type="info">
+  Finalize inheritable flags and Contexts on the builder used for `.mount()`. Later fluent calls
+  create a new builder and do not backfill an existing mount.
+</Callout>
 
 ## `.run(argv, io?)`
 
@@ -257,5 +342,5 @@ await app.execute();
 
 <Callout type="warn">
   Use `.handle(handler)` to define behavior. `.run(argv, io)` is only programmatic invocation;
-  `.execute()` is the terminal entry point.
+  `.execute()` is the terminal entry point. Command definitions are inert and expose neither.
 </Callout>

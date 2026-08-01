@@ -68,7 +68,23 @@ const app = new Crust("app")
   );
 ```
 
-The flag is parsed and shown in help at each descendant. Declare inherited flags before creating a child with `.sub()`; see [Split Commands Across Files](/docs/guide/split-files).
+The flag is parsed and shown in help at each descendant.
+
+Reusable definitions declare inherited flag requirements explicitly:
+
+```ts
+import { Crust, defineCommand } from "@crustjs/core";
+
+const verbose = { type: "boolean", inherit: true } as const;
+
+const deploy = defineCommand<{
+  flags: { verbose: typeof verbose };
+}>()((command) => command.handle(({ flags }) => flags.verbose));
+
+const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
+```
+
+`.mount()` checks the parent's current builder. Define required flags with `inherit: true` before mounting. A same-named non-inheritable flag is treated as missing, and incompatible inferred value types are rejected. Flags added on a later builder do not backfill an earlier mount.
 
 ## Standard Schemas
 
