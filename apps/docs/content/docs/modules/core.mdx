@@ -32,15 +32,15 @@ await app.execute();
 
 ## Runtime exports
 
-| Export                             | Description                                                                                  |
-| ---------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)         | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                  |
-| `defineContext(name, setup)`       | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
-| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                            |
-| `defineFlag(definition)`           | Preserve one literal flag definition                                                         |
-| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                   |
-| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                    |
+| Export                             | Description                                                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`Crust`](/docs/api/crust)         | Immutable command builder with Context `.provide()`/`.derive()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                                                    |
+| `defineContext(name, setup)`       | Define a named Context factory; invoke it and attach the instance with `.provide()`                                            |
+| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                                                              |
+| `defineFlag(definition)`           | Preserve one literal flag definition                                                                                           |
+| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                                                     |
+| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                                                      |
 
 ## Definition types
 

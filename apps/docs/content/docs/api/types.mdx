@@ -129,7 +129,7 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
   name="CrustCommandContext"
 />
 
-`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, `.provide()`, and `.derive()` infer these fields without explicit generic arguments.
 
 ## Context types
 
@@ -150,7 +150,7 @@ interface ContextFactory<Name extends string, Options, Value> {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the resolved path.
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path; use `.derive()` to create a value from earlier Contexts.
 
 ### `ContextMap`
 

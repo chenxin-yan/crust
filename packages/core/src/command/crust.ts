@@ -1,8 +1,11 @@
 import {
 	buildContexts,
+	type Awaitable,
+	type ContextEntry,
 	type ContextInstance,
 	type ContextMap,
 	type ContextOutput,
+	type DerivedContextInstance,
 	type MergeContext,
 } from "../api/context.ts";
 import type {
@@ -405,6 +408,17 @@ export interface CommandDefinitionBuilder<
 		context: C,
 	): CommandDefinitionBuilder<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
 
+	derive<const N extends string, V>(
+		name: N,
+		setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<V>,
+	): CommandDefinitionBuilder<
+		Inherited,
+		Local,
+		A,
+		Eff,
+		MergeContext<Ctx, { [K in N]: Awaited<V> }>
+	>;
+
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
@@ -621,16 +635,38 @@ export class Crust<
 	provide<const C extends ContextInstance>(
 		context: C,
 	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
-		if (this._node.contexts.some((existing) => existing.name === context.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Context "${context.name}" is already provided on this command path`,
-				{ subject: "context", name: context.name, reason: "duplicate-context" },
-			);
-		}
+		this._assertContextNameAvailable(context.name);
 		return this._clone({
 			contexts: [...this._node.contexts, context],
 		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
+	}
+
+	/**
+	 * Derive a Context value from Contexts registered earlier on this command path.
+	 */
+	derive<const N extends string, V>(
+		name: N,
+		setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<V>,
+	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, { [K in N]: Awaited<V> }>> {
+		this._assertContextNameAvailable(name);
+		const context: DerivedContextInstance<N, V> = {
+			kind: "derive",
+			name,
+			setup: (input) => setup(input as { ctx: Readonly<Ctx> }),
+		};
+		return this._clone({
+			contexts: [...this._node.contexts, context],
+		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, { [K in N]: Awaited<V> }>>;
+	}
+
+	private _assertContextNameAvailable(name: string): void {
+		if (this._node.contexts.some((existing) => existing.name === name)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${name}" is already provided on this command path`,
+				{ subject: "context", name, reason: "duplicate-context" },
+			);
+		}
 	}
 
 	/**
@@ -710,7 +746,7 @@ export class Crust<
 		const child = new Crust(name);
 		(child as { _inheritedFlags: FlagsDef })._inheritedFlags = parentEffective;
 		child._node.effectiveFlags = computeEffectiveFlags(parentEffective, {});
-		(child._node as { contexts: ContextInstance[] }).contexts = [...this._node.contexts];
+		(child._node as { contexts: ContextEntry[] }).contexts = [...this._node.contexts];
 
 		const configured = recipe(child as unknown as AnyCommandDefinitionBuilder) as unknown as
 			| Crust

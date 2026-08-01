@@ -45,6 +45,10 @@ interface CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx> {
   flags(defs: FlagsDef): CommandDefinitionBuilder;
   args(defs: ArgsDef): CommandDefinitionBuilder;
   provide(context: ContextInstance): CommandDefinitionBuilder;
+  derive(
+    name: string,
+    setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<unknown>,
+  ): CommandDefinitionBuilder;
   handle(
     handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
@@ -201,6 +205,26 @@ const app = new Crust("my-cli")
 
 Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name on one command path throws `DEFINITION`.
 
+## `.derive(name, setup)`
+
+```ts
+derive<const N extends string, V>(
+  name: N,
+  setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<V>,
+): Crust
+```
+
+Derives a named Context value from earlier provided or derived values on the command path. `.provide()` when the factory needs only options; `.derive()` when it needs `ctx`.
+
+Derivations share `.provide()`'s registration-ordered construction, snapshot inheritance, duplicate-name rule, and native disposal. A throw aborts before the Command Handler and disposes values already constructed.
+
+```ts
+const app = new Crust("app")
+  .provide(config({ url: "https://api.example.com" }))
+  .derive("client", ({ ctx }) => createClient(ctx.config.url))
+  .handle(({ ctx }) => ctx.client.close());
+```
+
 ## `.extend(...extensions)`
 
 ```ts
@@ -294,7 +318,7 @@ const second = new Crust("second")
 
 Only `inherit: true` parent flags are considered. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement. Context values use the same provided-to-required assignability direction.
 
-At runtime, empty names, duplicate sibling names, alias collisions, duplicate Contexts, unrelated callback returns, values that are not `defineCommand()` definitions, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
+At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided or derived Context names, unrelated callback returns, values that are not `defineCommand()` definitions, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
 
 A definition can contain inline `.command()` calls and nested `.mount()` calls. Nested requirements are checked against the enclosing definition builder at that exact point.
 

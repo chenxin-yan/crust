@@ -20,6 +20,16 @@ export interface ContextFactory<Name extends string, Options, Value> {
 	(options: Options): ContextInstance<Name, Value>;
 }
 
+/** @internal — a Context value derived from earlier values on the command path. */
+export interface DerivedContextInstance<Name extends string = string, Value = unknown> {
+	readonly kind: "derive";
+	readonly name: Name;
+	setup(input: { ctx: Readonly<ContextMap> }): Awaitable<Value>;
+}
+
+/** @internal — one registration-ordered Context construction entry. */
+export type ContextEntry = ContextInstance | DerivedContextInstance;
+
 /**
  * Define a Context — a named command dependency.
  *
@@ -63,12 +73,12 @@ function registerDisposable(value: unknown, disposal: AsyncDisposableStack): voi
  * values on `disposal` so they are torn down in reverse construction order.
  */
 export async function buildContexts(
-	contexts: readonly ContextInstance[],
+	contexts: readonly ContextEntry[],
 	disposal: AsyncDisposableStack,
 ): Promise<ContextMap> {
 	const values: ContextMap = {};
 	for (const item of contexts) {
-		const value = await item.setup();
+		const value = await (item.kind === "derive" ? item.setup({ ctx: values }) : item.setup());
 		values[item.name] = value;
 		registerDisposable(value, disposal);
 	}
