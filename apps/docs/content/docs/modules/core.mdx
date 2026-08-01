@@ -32,23 +32,27 @@ await app.execute();
 
 ## Runtime exports
 
-| Export                           | Description                                                                                  |
-| -------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)       | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
-| `context(name, setup)`           | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
-| `extension(name, config)`        | Define a frozen, application-wide Extension value                                            |
-| [`CrustError`](/docs/api/errors) | Framework error for definition, routing, parsing, and validation failures                    |
+| Export                             | Description                                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)         | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                  |
+| `context(name, setup)`             | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
+| `extension(name, config)`          | Define a frozen, application-wide Extension value                                            |
+| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                    |
 
 ## Definition types
 
-| Type          | Description                                                        |
-| ------------- | ------------------------------------------------------------------ |
-| `ArgDef`      | Core-value, raw, or Standard Schema positional argument definition |
-| `ArgsDef`     | Readonly ordered argument definitions                              |
-| `FlagDef`     | Core-value or Standard Schema flag definition                      |
-| `FlagsDef`    | Flag-name-to-definition record                                     |
-| `CommandMeta` | Name, description, usage, aliases, and visibility                  |
-| `ValueType`   | String, number, boolean, URL, path, or JSON value literal          |
+| Type                                          | Description                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `ArgDef`                                      | Core-value, raw, or Standard Schema positional argument definition |
+| `ArgsDef`                                     | Readonly ordered argument definitions                              |
+| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                        |
+| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                 |
+| `CommandMeta`                                 | Name, description, usage, aliases, and visibility                  |
+| [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time      |
+| `FlagDef`                                     | Core-value or Standard Schema flag definition                      |
+| `FlagsDef`                                    | Flag-name-to-definition record                                     |
+| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal          |
 
 See [Types](/docs/api/types) for field-level definitions.
 

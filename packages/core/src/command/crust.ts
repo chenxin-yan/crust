@@ -724,7 +724,6 @@ export class Crust<
 
 		const childNode = deepCloneCommandNode(configured._node);
 		childNode.meta.name = name;
-		applyInheritedFlagsToSubtree(childNode, parentEffective);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [name]: childNode },

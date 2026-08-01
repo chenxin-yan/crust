@@ -26,6 +26,16 @@ describe("command definitions", () => {
 		expect(app._node.subCommands.build).not.toBe(app._node.subCommands.compile);
 	});
 
+	it("does not backfill nested definitions with later inheritable flags", async () => {
+		const nested = defineCommand()((command) => command.handle(() => {}));
+		const outer = defineCommand()((command) =>
+			command.mount("nested", nested).flags({ late: { type: "boolean", inherit: true } }),
+		);
+		const app = new Crust("cli").mount("outer", outer);
+
+		await expect(app.run(["outer", "nested", "--late"])).rejects.toThrow(/Unknown flag/);
+	});
+
 	it("inherits flags and Contexts through nested definitions", async () => {
 		const calls: string[] = [];
 		const db = context("db", () => "database");
