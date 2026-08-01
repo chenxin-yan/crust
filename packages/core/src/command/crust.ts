@@ -24,6 +24,7 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	InheritableFlags,
 	ValidateFlagAliases,
 	ValidateNoPrefixedFlags,
 	ValidateVariadicArgs,
@@ -293,52 +294,139 @@ function freezeTree(node: CommandNode): void {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Root/child builder surfaces
+// Reusable command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-declare const rootKind: unique symbol;
-declare const childKind: unique symbol;
+export interface CommandRequirements {
+	readonly flags?: Record<string, FlagDef & { inherit: true }>;
+	readonly ctx?: ContextMap;
+}
 
-/** Phantom marker for builders created with the `Crust` constructor. */
-type RootKind = typeof rootKind;
-/** Phantom marker for builders created with `.sub()` / `.command(name, cb)`. */
-type ChildKind = typeof childKind;
-type BuilderKind = RootKind | ChildKind;
+type RequirementFlags<R extends CommandRequirements> = R extends {
+	flags: infer F extends FlagsDef;
+}
+	? F
+	: {};
 
-/**
- * Preserve the receiver's surface across fluent methods: roots stay `Crust`
- * (with `.extend()`), children stay {@link ChildCrust} (without it).
- */
-type BuilderView<
-	Kind extends BuilderKind,
-	Inherited extends FlagsDef,
-	Local extends FlagsDef,
-	A extends ArgsDef,
-	Eff extends FlagsDef,
+type RequirementContext<R extends CommandRequirements> = R extends {
+	ctx: infer C extends ContextMap;
+}
+	? C
+	: {};
+
+type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any>;
+
+type CommandRecipe<R extends CommandRequirements> = (
+	command: CommandDefinitionBuilder<
+		RequirementFlags<R>,
+		{},
+		[],
+		EffectiveFlags<RequirementFlags<R>, {}>,
+		RequirementContext<R>
+	>,
+) => AnyCommandDefinitionBuilder;
+
+const commandDefinitionRecipe: unique symbol = Symbol("crust.commandDefinitionRecipe");
+
+export interface CommandDefinition<R extends CommandRequirements = {}> {
+	readonly [commandDefinitionRecipe]: CommandRecipe<R>;
+}
+
+type FlagValue<D extends FlagDef> = InferFlags<{ value: D }>["value"];
+
+type MissingInheritedFlagNames<ParentEff extends FlagsDef, R extends CommandRequirements> = Exclude<
+	keyof RequirementFlags<R>,
+	keyof InheritableFlags<ParentEff>
+> &
+	string;
+
+type IncompatibleInheritedFlagNames<
+	ParentEff extends FlagsDef,
+	R extends CommandRequirements,
+	Provided extends FlagsDef = InheritableFlags<ParentEff>,
+	Required extends FlagsDef = RequirementFlags<R>,
+> = {
+	[K in keyof Required & keyof Provided]: FlagValue<Provided[K]> extends FlagValue<Required[K]>
+		? never
+		: K;
+}[keyof Required & keyof Provided] &
+	string;
+
+type MissingContextNames<Ctx extends ContextMap, R extends CommandRequirements> = Exclude<
+	keyof RequirementContext<R>,
+	keyof Ctx
+> &
+	string;
+
+type IncompatibleContextNames<Ctx extends ContextMap, R extends CommandRequirements> = {
+	[K in keyof RequirementContext<R> & keyof Ctx]: Ctx[K] extends RequirementContext<R>[K]
+		? never
+		: K;
+}[keyof RequirementContext<R> & keyof Ctx] &
+	string;
+
+type Mountable<
+	ParentEff extends FlagsDef,
 	Ctx extends ContextMap,
-> = Kind extends ChildKind
-	? ChildCrust<Inherited, Local, A, Eff, Ctx>
-	: Crust<Inherited, Local, A, Eff, Ctx, RootKind>;
+	R extends CommandRequirements,
+> = ([MissingInheritedFlagNames<ParentEff, R>] extends [never]
+	? {}
+	: { readonly "missing inherited flags": MissingInheritedFlagNames<ParentEff, R> }) &
+	([IncompatibleInheritedFlagNames<ParentEff, R>] extends [never]
+		? {}
+		: {
+				readonly "incompatible inherited flags": IncompatibleInheritedFlagNames<ParentEff, R>;
+			}) &
+	([MissingContextNames<Ctx, R>] extends [never]
+		? {}
+		: { readonly "missing Contexts": MissingContextNames<Ctx, R> }) &
+	([IncompatibleContextNames<Ctx, R>] extends [never]
+		? {}
+		: { readonly "incompatible Contexts": IncompatibleContextNames<Ctx, R> });
 
-/**
- * A subcommand builder created with `.sub()` or received inside
- * `.command(name, callback)`.
- *
- * Structurally a {@link Crust} without root-only members (`.extend()`), plus
- * a phantom brand so `.command(builder)` accepts only real child builders —
- * a standalone `new Crust(name)` is not attachable.
- */
-export type ChildCrust<
+export interface CommandDefinitionBuilder<
 	Inherited extends FlagsDef = FlagsDef,
 	Local extends FlagsDef = FlagsDef,
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
 	Ctx extends ContextMap = {},
-> = Omit<Crust<Inherited, Local, A, Eff, Ctx, ChildKind>, "extend"> & {
-	readonly [childKind]: true;
-};
+> {
+	meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
 
-type AnyChildCrust = ChildCrust<any, any, any, any, any>;
+	flags<const F extends FlagsDef>(
+		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
+	): CommandDefinitionBuilder<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
+
+	args<const NewA extends ArgsDef>(
+		defs: NewA & ValidateVariadicArgs<NewA>,
+	): CommandDefinitionBuilder<Inherited, Local, NewA, Eff, Ctx>;
+
+	provide<const C extends ContextInstance>(
+		context: C,
+	): CommandDefinitionBuilder<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
+
+	handle(
+		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
+
+	command<N extends string>(
+		name: N,
+		cb: (
+			command: CommandDefinitionBuilder<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
+		) => AnyCommandDefinitionBuilder,
+	): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
+
+	mount<const R extends CommandRequirements>(
+		name: string,
+		definition: CommandDefinition<R> & Mountable<Eff, Ctx, NoInfer<R>>,
+	): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
+}
+
+export function defineCommand<const R extends CommandRequirements = {}>(): (
+	configure: CommandRecipe<R>,
+) => CommandDefinition<R> {
+	return (configure) => Object.freeze({ [commandDefinitionRecipe]: configure });
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Crust — Chainable builder class
@@ -371,7 +459,6 @@ export class Crust<
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Inherited, Local>,
 	Ctx extends ContextMap = {},
-	Kind extends BuilderKind = RootKind,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -403,26 +490,6 @@ export class Crust<
 	}
 
 	/**
-	 * @internal — Create a child builder with pre-populated inherited flags.
-	 * Used by `.command()` to propagate parent flags to the child.
-	 */
-	static _createChild<I extends FlagsDef, Ctx extends ContextMap = {}>(
-		name: string,
-		inheritedFlags: FlagsDef,
-		contexts: readonly ContextInstance[] = [],
-	): ChildCrust<I, {}, [], EffectiveFlags<I, {}>, Ctx> {
-		const instance = new Crust<I, {}, [], EffectiveFlags<I, {}>, Ctx>(name);
-		// Override constructor defaults with parent-provided state.
-		(instance as { _inheritedFlags: FlagsDef })._inheritedFlags = inheritedFlags;
-		// Seed effective flags so the child parses inherited flags even when run
-		// directly (e.g. testing helpers) rather than through an attached root.
-		instance._node.effectiveFlags = computeEffectiveFlags(inheritedFlags, {});
-		(instance._node as { contexts: ContextInstance[] }).contexts = [...contexts];
-		// The child brand is phantom — same runtime instance, narrower surface.
-		return instance as unknown as ChildCrust<I, {}, [], EffectiveFlags<I, {}>, Ctx>;
-	}
-
-	/**
 	 * @internal — Clone this builder with a new node, preserving generics.
 	 */
 	private _clone(nodeOverrides: Partial<CommandNode>): this {
@@ -447,8 +514,7 @@ export class Crust<
 	/**
 	 * Set metadata (description, usage) for this command.
 	 *
-	 * The command name is already set by the builder source (constructor,
-	 * `.sub()`, or the child builder passed into `.command(name, cb)`).
+	 * The command name is already set by the constructor or mount call.
 	 * Provide `description`, `usage`, and/or `aliases` here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
@@ -463,10 +529,10 @@ export class Crust<
 	 * )
 	 * ```
 	 */
-	meta(meta: Omit<CommandMeta, "name">): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
+	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
+		}) as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
@@ -485,7 +551,7 @@ export class Crust<
 	 */
 	flags<const F extends FlagsDef>(
 		defs: F & ValidateNoPrefixedFlags<ValidateFlagAliases<F>>,
-	): BuilderView<Kind, Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
+	): Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx> {
 		// Runtime validation
 		for (const [name, def] of Object.entries(defs)) {
 			validateSchemaExclusivity("flag", name, def as unknown as Record<string, unknown>);
@@ -500,7 +566,7 @@ export class Crust<
 		return this._clone({
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._inheritedFlags, copiedFlags),
-		}) as unknown as BuilderView<Kind, Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
+		}) as unknown as Crust<Inherited, F, A, EffectiveFlags<Inherited, F>, Ctx>;
 	}
 
 	/**
@@ -514,7 +580,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		defs: NewA & ValidateVariadicArgs<NewA>,
-	): BuilderView<Kind, Inherited, Local, NewA, Eff, Ctx> {
+	): Crust<Inherited, Local, NewA, Eff, Ctx> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
 			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
@@ -532,7 +598,7 @@ export class Crust<
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as BuilderView<Kind, Inherited, Local, NewA, Eff, Ctx>;
+		}) as unknown as Crust<Inherited, Local, NewA, Eff, Ctx>;
 	}
 
 	/**
@@ -549,7 +615,7 @@ export class Crust<
 	 */
 	provide<const C extends ContextInstance>(
 		context: C,
-	): BuilderView<Kind, Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
+	): Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>> {
 		if (this._node.contexts.some((existing) => existing.name === context.name)) {
 			throw new CrustError(
 				"DEFINITION",
@@ -559,14 +625,7 @@ export class Crust<
 		}
 		return this._clone({
 			contexts: [...this._node.contexts, context],
-		}) as unknown as BuilderView<
-			Kind,
-			Inherited,
-			Local,
-			A,
-			Eff,
-			MergeContext<Ctx, ContextOutput<C>>
-		>;
+		}) as unknown as Crust<Inherited, Local, A, Eff, MergeContext<Ctx, ContextOutput<C>>>;
 	}
 
 	/**
@@ -585,205 +644,91 @@ export class Crust<
 	 */
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
+	): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
+		}) as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**
 	 * Register one or more CLI Extensions on the application root.
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
-	 * contribute. Child builders ({@link ChildCrust}) do not expose this
-	 * method.
+	 * contribute. Command definition builders do not expose this method.
 	 */
-	extend(
-		this: Crust<Inherited, Local, A, Eff, Ctx, RootKind>,
-		...extensions: readonly Extension[]
-	): Crust<Inherited, Local, A, Eff, Ctx, RootKind> {
+	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, A, Eff, Ctx> {
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as unknown as Crust<Inherited, Local, A, Eff, Ctx, RootKind>;
+		}) as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
-	/**
-	 * Create a subcommand builder pre-typed with this command's inheritable flags.
-	 *
-	 * This is the factory method for the file-splitting pattern. The returned
-	 * builder carries this command's effective flags (filtered for `inherit: true`)
-	 * as its `Inherited` generic, enabling full type inference in split files
-	 * without needing `Crust<any, any, any>`.
-	 *
-	 * Register the resulting builder with `.command(builder)` on the parent.
-	 *
-	 * @param name - Subcommand name (must be non-empty)
-	 * @returns A new `Crust` builder pre-typed with inherited flags
-	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
-	 *
-	 * @example
-	 * ```ts
-	 * // shared.ts
-	 * export const app = new Crust("my-cli")
-	 *   .flags({ verbose: { type: "boolean", inherit: true } });
-	 *
-	 * // commands/deploy.ts
-	 * export const deployCmd = app.sub("deploy")
-	 *   .flags({ env: { type: "string", required: true } })
-	 *   .handle(({ flags }) => {
-	 *     flags.verbose; // boolean | undefined  — typed!
-	 *     flags.env;     // string               — typed!
-	 *   });
-	 *
-	 * // cli.ts
-	 * app.command(deployCmd).execute();
-	 * ```
-	 */
-	sub<N extends string>(name: N): ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx> {
-		if (!name.trim()) {
-			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
-		}
-
-		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
-
-		return Crust._createChild<Eff, Ctx>(name, parentEffective, this._node.contexts);
-	}
-
-	/**
-	 * Register a named subcommand via inline callback.
-	 *
-	 * The callback receives a fresh child builder pre-typed with this
-	 * command's effective inheritable flags, enabling TypeScript contextual
-	 * typing to flow inherited flag types into subcommand definitions. It must
-	 * return a child builder.
-	 *
-	 * The returned child must carry this command's inherited flag and Context
-	 * types, so a child configured from a differently-typed parent is rejected
-	 * at compile time.
-	 *
-	 * @param name - Subcommand name (must be non-empty, unique among siblings)
-	 * @param cb - Callback that receives a child builder and returns the configured builder
-	 * @returns A new `Crust` instance with the subcommand registered
-	 * @throws {CrustError} `DEFINITION` if name is empty or already registered
-	 */
+	/** Register a named inline subcommand through the definition materializer. */
 	command<N extends string>(
 		name: N,
 		cb: (
-			cmd: ChildCrust<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
-		) => ChildCrust<Eff, any, any, any, Ctx>,
-	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
-
-	/**
-	 * Register a pre-built child builder created with `.sub()`.
-	 *
-	 * The child's name (from `.sub(name)`) is used as the subcommand name.
-	 * Children carry the parent path's `inherit: true` flags and Contexts
-	 * captured when `.sub()` was called. This is the complement to `.sub()`
-	 * for the file-splitting pattern.
-	 *
-	 * The child must carry this command's inherited flag and Context types —
-	 * i.e. come from this parent's `.sub()` (or an identically-typed one) — so
-	 * attaching a child of a differently-typed parent is rejected at compile
-	 * time.
-	 *
-	 * @param builder - A child builder created with `.sub()`
-	 * @returns A new `Crust` instance with the subcommand registered
-	 * @throws {CrustError} `DEFINITION` if the name is already registered
-	 */
-	command(
-		builder: ChildCrust<Eff, any, any, any, Ctx>,
-	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
-
-	// Implementation
-	command(
-		nameOrBuilder: string | AnyChildCrust,
-		// biome-ignore-free loose impl signature: overloads own the public contract
-		cb?: (cmd: any) => AnyChildCrust,
-	): BuilderView<Kind, Inherited, Local, A, Eff, Ctx> {
-		if (typeof nameOrBuilder === "string") {
-			// ── Inline callback path ──────────────────────────────────────────
-			const name = nameOrBuilder;
-
-			if (!cb) {
-				throw new CrustError("DEFINITION", "command(name, cb) requires a callback");
-			}
-
-			// Validate name
-			if (!name.trim()) {
-				throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
-			}
-
-			// Check for duplicate subcommand
-			if (this._node.subCommands[name]) {
-				throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
-			}
-
-			// Compute the effective flags for this node (inherited + local merged)
-			const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
-
-			// Create a child builder pre-typed with the parent's effective flags
-			const childBuilder = Crust._createChild<Eff, Ctx>(name, parentEffective, this._node.contexts);
-
-			// Pass the child builder to the callback to let the user configure it
-			const configuredChild = cb(childBuilder);
-
-			// Eager alias collision detection. Mirrors commander v12:
-			// fail at registration time rather than risk silent shadowing at
-			// resolve time. Also catches the reverse-order case where a previously
-			// registered sibling reserved an alias that equals this command's name.
-			validateIncomingAliases(
-				{ canonicalName: name, aliases: configuredChild._node.meta.aliases },
-				this._node.subCommands,
-				name,
-			);
-
-			// Extract the internal node from the configured child and register it
-			// Clone the node to avoid mutating the original builder's _node
-			const childNode = {
-				...configuredChild._node,
-				effectiveFlags: computeEffectiveFlags(
-					configuredChild._inheritedFlags,
-					configuredChild._node.localFlags,
-				),
-			};
-
-			return this._clone({
-				subCommands: {
-					...this._node.subCommands,
-					[name]: childNode,
-				},
-			}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
+			command: CommandDefinitionBuilder<Eff, {}, [], EffectiveFlags<Eff, {}>, Ctx>,
+		) => AnyCommandDefinitionBuilder,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
+		if (typeof cb !== "function") {
+			throw new CrustError("DEFINITION", "command(name, cb) requires a callback");
 		}
+		return this._mountDefinition(name, cb);
+	}
 
-		// ── Pre-built child builder path ────────────────────────────────────
-		const builder = nameOrBuilder;
-		const name = builder._node.meta.name;
+	/** Materialize and register an inert reusable command definition. */
+	mount<const R extends CommandRequirements>(
+		name: string,
+		definition: CommandDefinition<R> & Mountable<Eff, Ctx, NoInfer<R>>,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
+		return this._mountDefinition(name, definition[commandDefinitionRecipe]);
+	}
 
+	private _mountDefinition(
+		name: string,
+		recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder,
+	): Crust<Inherited, Local, A, Eff, Ctx> {
+		if (!name.trim()) {
+			throw new CrustError("DEFINITION", "Subcommand name must be a non-empty string");
+		}
 		if (this._node.subCommands[name]) {
 			throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
 		}
 
-		// Eager alias collision detection for the pre-built builder path.
+		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
+		const child = new Crust(name);
+		(child as { _inheritedFlags: FlagsDef })._inheritedFlags = parentEffective;
+		child._node.effectiveFlags = computeEffectiveFlags(parentEffective, {});
+		(child._node as { contexts: ContextInstance[] }).contexts = [...this._node.contexts];
+
+		const configured = recipe(child as unknown as AnyCommandDefinitionBuilder) as unknown as
+			| Crust
+			| undefined;
+		if (configured?._inheritedFlags !== parentEffective) {
+			throw new CrustError(
+				"DEFINITION",
+				"Command definition must return the same command builder it received",
+			);
+		}
+		if (configured._node.extensions.length > 0) {
+			throw new CrustError(
+				"DEFINITION",
+				"Extensions cannot be registered inside command definitions",
+			);
+		}
+
 		validateIncomingAliases(
-			{ canonicalName: name, aliases: builder._node.meta.aliases },
+			{ canonicalName: name, aliases: configured._node.meta.aliases },
 			this._node.subCommands,
 			name,
 		);
 
-		// Shallow-clone the node so registration doesn't mutate the original
-		// builder. A `.sub()` child already snapshots the parent path's
-		// Contexts and inheritable flags at creation time.
-		const childNode = {
-			...builder._node,
-			effectiveFlags: computeEffectiveFlags(builder._inheritedFlags, builder._node.localFlags),
-		};
+		const childNode = deepCloneCommandNode(configured._node);
+		childNode.meta.name = name;
+		applyInheritedFlagsToSubtree(childNode, parentEffective);
 
 		return this._clone({
-			subCommands: {
-				...this._node.subCommands,
-				[name]: childNode,
-			},
-		}) as unknown as BuilderView<Kind, Inherited, Local, A, Eff, Ctx>;
+			subCommands: { ...this._node.subCommands, [name]: childNode },
+		}) as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 
 	/**

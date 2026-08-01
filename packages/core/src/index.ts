@@ -15,9 +15,14 @@ export { extension } from "./api/extension.ts";
 
 // Command snapshots
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
-// Command context
-export type { ChildCrust, CrustCommandContext } from "./command/crust.ts";
-export { Crust } from "./command/crust.ts";
+// Command definitions and context
+export type {
+	CommandDefinition,
+	CommandDefinitionBuilder,
+	CommandRequirements,
+	CrustCommandContext,
+} from "./command/crust.ts";
+export { Crust, defineCommand } from "./command/crust.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
