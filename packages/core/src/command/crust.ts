@@ -680,7 +680,14 @@ export class Crust<
 		name: string,
 		definition: CommandDefinition<R> & Mountable<Eff, Ctx, NoInfer<R>>,
 	): Crust<Inherited, Local, A, Eff, Ctx> {
-		return this._mountDefinition(name, definition[commandDefinitionRecipe]);
+		const recipe = (definition as Partial<CommandDefinition> | null)?.[commandDefinitionRecipe];
+		if (typeof recipe !== "function") {
+			throw new CrustError(
+				"DEFINITION",
+				"mount(name, definition) requires a command definition created by defineCommand()",
+			);
+		}
+		return this._mountDefinition(name, recipe);
 	}
 
 	private _mountDefinition(

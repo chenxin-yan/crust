@@ -152,6 +152,14 @@ describe("command definitions", () => {
 		);
 	});
 
+	it("rejects values that are not command definitions", () => {
+		for (const bad of [{}, null, undefined, "definition"]) {
+			expect(() => new Crust("cli").mount("bad", bad as never)).toThrow(
+				/requires a command definition created by defineCommand/,
+			);
+		}
+	});
+
 	it("checks requirements while preserving fluent handler types", () => {
 		const verbose = { type: "boolean", inherit: true } as const;
 		const auth = context("auth", () => ({ user: "yan" }));

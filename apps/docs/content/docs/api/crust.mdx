@@ -295,7 +295,7 @@ const second = new Crust("second")
 
 Only `inherit: true` parent flags are considered. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement. Context values use the same provided-to-required assignability direction.
 
-At runtime, empty names, duplicate sibling names, alias collisions, duplicate Contexts, unrelated callback returns, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
+At runtime, empty names, duplicate sibling names, alias collisions, duplicate Contexts, unrelated callback returns, values that are not `defineCommand()` definitions, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
 
 A definition can contain inline `.command()` calls and nested `.mount()` calls. Nested requirements are checked against the enclosing definition builder at that exact point.
 
