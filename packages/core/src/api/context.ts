@@ -25,13 +25,13 @@ export interface ContextFactory<Name extends string, Options, Value> {
  *
  * Always returns a factory that must be invoked, including zero-option
  * setups, so the API reads uniformly as
- * `context("db", factory)` → `.provide(db(options))` → `ctx.db`.
+ * `defineContext("db", factory)` → `.provide(db(options))` → `ctx.db`.
  *
  * Factories receive only their options. Cleanup belongs to the value
  * itself: implement `Symbol.dispose` or `Symbol.asyncDispose` and Core
  * disposes constructed values in reverse order after success or failure.
  */
-export function context<Name extends string, Value, Options = void>(
+export function defineContext<Name extends string, Value, Options = void>(
 	name: Name,
 	setup: (options: Options) => Awaitable<Value>,
 ): ContextFactory<Name, Options, Value> {

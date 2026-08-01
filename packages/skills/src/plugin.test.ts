@@ -4,7 +4,7 @@ import * as os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Crust, extension } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { snapshotCommand, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
 
 import { installSkillBundle } from "./bundle.ts";
@@ -38,7 +38,7 @@ function restoreHomedir(): void {
 }
 
 function shortCircuitExtension() {
-	return extension("short-circuit", {
+	return defineExtension("short-circuit", {
 		async intercept() {
 			// Intentionally stop the chain without calling next()
 		},

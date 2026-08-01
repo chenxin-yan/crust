@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, extension } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
@@ -47,7 +47,7 @@ function stripAnsi(text: string) {
 }
 
 function lateSkillExtension() {
-	return extension("late-skill", {
+	return defineExtension("late-skill", {
 		commands: [
 			new Crust("skill")
 				.meta({ description: "Manage agent skills" })

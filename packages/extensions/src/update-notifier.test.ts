@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { Crust, extension } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import {
@@ -1138,7 +1138,7 @@ describe("updateNotifierExtension middleware", () => {
 			let commandExecuted = false;
 
 			// Combine with a custom no-op extension
-			const otherPlugin = extension("test-other", {
+			const otherPlugin = defineExtension("test-other", {
 				async intercept(_ctx, next) {
 					await next();
 				},

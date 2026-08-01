@@ -5,12 +5,12 @@ description: Define lazy, typed command dependencies with native cleanup.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-A Context is a named command dependency. `context()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
+A Context is a named command dependency. `defineContext()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
 
 ```ts
-import { context, Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 
-const database = context("db", (options: { url: string }) => ({
+const database = defineContext("db", (options: { url: string }) => ({
   query(sql: string) {
     return `${sql} on ${options.url}`;
   },
@@ -24,7 +24,7 @@ const app = new Crust("app")
 For a factory with no options, use `void` and call it with `undefined`:
 
 ```ts
-const clock = context("clock", (_options: void) => ({ now: () => Date.now() }));
+const clock = defineContext("clock", (_options: void) => ({ now: () => Date.now() }));
 const app = new Crust("app").provide(clock(undefined));
 ```
 
@@ -77,7 +77,7 @@ Mounted definitions use the same rule. Because materialization starts with the p
 Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`:
 
 ```ts
-const database = context("db", async (options: { url: string }) => {
+const database = defineContext("db", async (options: { url: string }) => {
   const connection = await connect(options.url);
 
   return {

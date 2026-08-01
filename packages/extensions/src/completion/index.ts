@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
-import { Crust, type Extension, extension } from "@crustjs/core";
+import { Crust, type Extension, defineExtension } from "@crustjs/core";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -134,7 +134,7 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 			// Never reached — the extension intercept short-circuits first.
 		});
 
-	return extension("completion", {
+	return defineExtension("completion", {
 		commands: [completionCommand],
 		async intercept(context, next) {
 			if (context.commandPath[1] !== subcommandName) {

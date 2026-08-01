@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { context, Crust, defineCommand, extension } from "../index.ts";
+import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "../index.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -9,7 +9,7 @@ type Equal<A, B> =
 describe("public beta API", () => {
 	it("passes typed command context into inline commands", async () => {
 		const calls: string[] = [];
-		const db = context("db", (options: { url: string }) => ({
+		const db = defineContext("db", (options: { url: string }) => ({
 			url: options.url,
 			query(sql: string) {
 				calls.push(`${options.url}:${sql}`);
@@ -40,8 +40,8 @@ describe("public beta API", () => {
 
 	it("passes typed command context into standalone definitions", async () => {
 		const seen: string[] = [];
-		const verbose = { type: "boolean", inherit: true } as const;
-		const auth = context("auth", () => ({
+		const verbose = defineFlag({ type: "boolean", inherit: true });
+		const auth = defineContext("auth", () => ({
 			user: "chenxin",
 		}));
 		const deploy = defineCommand<{
@@ -66,7 +66,7 @@ describe("public beta API", () => {
 
 	it("loads extensions separately from command context", async () => {
 		let wrapperCalled = false;
-		const version = extension("version", {
+		const version = defineExtension("version", {
 			flags: {
 				version: { type: "boolean" },
 			},
@@ -88,7 +88,7 @@ describe("public beta API", () => {
 
 	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {
 		let runCount = 0;
-		const debug = extension("debug", {
+		const debug = defineExtension("debug", {
 			flags: {
 				debug: { type: "boolean" },
 			},

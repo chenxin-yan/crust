@@ -3,7 +3,7 @@ import {
 	type CommandMeta,
 	type CommandSnapshot,
 	type Extension,
-	extension,
+	defineExtension,
 	type FlagSnapshot,
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
@@ -229,7 +229,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 }
 
 export function helpExtension(): Extension {
-	return extension("help", {
+	return defineExtension("help", {
 		flags: {
 			help: {
 				type: "boolean",

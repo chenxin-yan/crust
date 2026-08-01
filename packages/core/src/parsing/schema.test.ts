@@ -171,11 +171,11 @@ describe("Standard Schema on flag definitions", () => {
 
 describe("schema interaction with Extensions", () => {
 	it("intercepts observe raw values while the handler sees schema outputs", async () => {
-		const { extension } = await import("../api/extension.ts");
+		const { defineExtension } = await import("../api/extension.ts");
 		let interceptSaw: unknown;
 		let handlerSaw: unknown;
 
-		const probe = extension("probe", {
+		const probe = defineExtension("probe", {
 			async intercept(ctx, next) {
 				interceptSaw = ctx.flags.port;
 				await next();
@@ -201,8 +201,8 @@ describe("schema interaction with Extensions", () => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const { extension } = await import("../api/extension.ts");
-		const gate = extension("gate", { intercept() {} });
+		const { defineExtension } = await import("../api/extension.ts");
+		const gate = defineExtension("gate", { intercept() {} });
 
 		const app = new Crust("cli")
 			.flags({ x: { type: "string", schema: spy } })

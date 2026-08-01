@@ -12,8 +12,10 @@ All exports on these pages come from `@crustjs/core`.
 | Export                           | Description                                                  |
 | -------------------------------- | ------------------------------------------------------------ |
 | [`Crust`](/docs/api/crust)       | Immutable, chainable command builder and invocation boundary |
-| `context(name, setup)`           | Define a named command dependency factory                    |
-| `extension(name, config)`        | Define an application-wide Extension                         |
+| `defineContext(name, setup)`     | Define a named command dependency factory                    |
+| `defineExtension(name, config)`  | Define an application-wide Extension                         |
+| `defineFlag(definition)`         | Preserve one literal flag definition                         |
+| `defineFlags(definitions)`       | Preserve literal definitions in a flag map                   |
 | [`CrustError`](/docs/api/errors) | Structured framework error with one of four stable codes     |
 
 ## Types

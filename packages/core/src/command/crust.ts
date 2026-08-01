@@ -422,9 +422,14 @@ export interface CommandDefinitionBuilder<
 	): CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx>;
 }
 
-export function defineCommand<const R extends CommandRequirements = {}>(): (
-	configure: CommandRecipe<R>,
-) => CommandDefinition<R> {
+/** The curried form lets TypeScript infer requirements before it types the configure callback. */
+export interface CommandDefinitionFactory<R extends CommandRequirements = {}> {
+	(configure: CommandRecipe<R>): CommandDefinition<R>;
+}
+
+export function defineCommand<
+	const R extends CommandRequirements = {},
+>(): CommandDefinitionFactory<R> {
 	return (configure) => Object.freeze({ [commandDefinitionRecipe]: configure });
 }
 

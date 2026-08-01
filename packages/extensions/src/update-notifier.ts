@@ -4,7 +4,7 @@
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
-import { type Extension, extension } from "@crustjs/core";
+import { type Extension, defineExtension } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, visibleWidth, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
@@ -522,7 +522,7 @@ export function updateNotifierExtension(options: UpdateNotifierOptions): Extensi
 	const intervalMs = cache?.intervalMs ?? DEFAULT_INTERVAL_MS;
 	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
 
-	return extension("update-notifier", {
+	return defineExtension("update-notifier", {
 		async intercept(context, next) {
 			// Always let the command execute first
 			await next();

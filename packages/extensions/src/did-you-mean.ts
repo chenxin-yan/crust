@@ -1,4 +1,4 @@
-import { type CommandSnapshot, CrustError, type Extension, extension } from "@crustjs/core";
+import { type CommandSnapshot, CrustError, type Extension, defineExtension } from "@crustjs/core";
 
 import { renderHelp } from "./help.ts";
 
@@ -95,7 +95,7 @@ function findSuggestions(
 export function didYouMeanExtension(options: DidYouMeanOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
-	return extension("did-you-mean", {
+	return defineExtension("did-you-mean", {
 		async handleError(error, context, next) {
 			if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) {
 				await next();

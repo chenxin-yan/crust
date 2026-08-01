@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { context } from "../api/context.ts";
-import { extension, type ExtensionContext } from "../api/extension.ts";
+import { defineContext } from "../api/context.ts";
+import { defineExtension, type ExtensionContext } from "../api/extension.ts";
+import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
 import {
@@ -114,7 +115,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		],
 		[
 			".extend()",
-			(a) => a.extend(extension("test-extension")) as Crust,
+			(a) => a.extend(defineExtension("test-extension")) as Crust,
 			(a) => {
 				expect(a._node.extensions.length).toBe(0);
 			},
@@ -875,7 +876,7 @@ describe("Crust .handle() type-level tests", () => {
 
 describe("Crust .extend()", () => {
 	it("registers an Extension on the node's extensions array", () => {
-		const ext = extension("test-extension");
+		const ext = defineExtension("test-extension");
 		const app = new Crust("test").extend(ext);
 
 		expect(app._node.extensions.length).toBe(1);
@@ -883,25 +884,25 @@ describe("Crust .extend()", () => {
 	});
 
 	it("multiple .extend() calls chain in registration order", () => {
-		const one = extension("one");
-		const two = extension("two");
-		const three = extension("three");
+		const one = defineExtension("one");
+		const two = defineExtension("two");
+		const three = defineExtension("three");
 
 		const app = new Crust("test").extend(one).extend(two, three);
 
 		expect(app._node.extensions.map((e) => e.name)).toEqual(["one", "two", "three"]);
 	});
 
-	it("extension() returns a frozen plain config", () => {
-		const ext = extension("frozen", { flags: { x: { type: "boolean" } } });
+	it("defineExtension() returns a frozen plain config", () => {
+		const ext = defineExtension("frozen", { flags: { x: { type: "boolean" } } });
 
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
 		expect(ext.flags?.x?.type).toBe("boolean");
 	});
 
-	it("extension() rejects an empty name", () => {
-		expect(() => extension("  ")).toThrow(CrustError);
+	it("defineExtension() rejects an empty name", () => {
+		expect(() => defineExtension("  ")).toThrow(CrustError);
 	});
 
 	it("preserves flags, args, handler, and subcommands when extending", () => {
@@ -910,7 +911,7 @@ describe("Crust .extend()", () => {
 			.args([{ name: "file", type: "string" }])
 			.command("sub", (cmd) => cmd)
 			.handle(() => {})
-			.extend(extension("test-extension"));
+			.extend(defineExtension("test-extension"));
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
@@ -920,8 +921,8 @@ describe("Crust .extend()", () => {
 	});
 
 	it("intermediate builder retains its own extensions independently", () => {
-		const one = extension("one");
-		const two = extension("two");
+		const one = defineExtension("one");
+		const two = defineExtension("two");
 
 		const base = new Crust("test").extend(one);
 		const extended = base.extend(two);
@@ -934,7 +935,7 @@ describe("Crust .extend()", () => {
 describe("Extension application at prepare time", () => {
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
-		const debug = extension("debug", {
+		const debug = defineExtension("debug", {
 			flags: { debug: { type: "boolean", inherit: true } },
 		});
 
@@ -950,7 +951,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
-		const version = extension("version", {
+		const version = defineExtension("version", {
 			flags: { version: { type: "boolean", recursive: false } },
 		});
 
@@ -961,7 +962,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
-		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
 		const app = new Crust("cli")
 			.flags({ verbose: { type: "boolean" } })
 			.extend(clash)
@@ -971,7 +972,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
-		const clash = extension("clash", {
+		const clash = defineExtension("clash", {
 			flags: { loud: { type: "boolean", short: "v" } },
 		});
 		const app = new Crust("cli")
@@ -983,8 +984,8 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = extension("a", { flags: { shared: { type: "boolean" } } });
-		const b = extension("b", { flags: { shared: { type: "boolean" } } });
+		const a = defineExtension("a", { flags: { shared: { type: "boolean" } } });
+		const b = defineExtension("b", { flags: { shared: { type: "boolean" } } });
 		const app = new Crust("cli").extend(a, b).handle(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
@@ -992,7 +993,7 @@ describe("Extension application at prepare time", () => {
 
 	it("Extension commands are routable and their inputs validated before hooks", async () => {
 		const lines: string[] = [];
-		const completion = extension("completion", {
+		const completion = defineExtension("completion", {
 			commands: [
 				new Crust("completion")
 					.args([{ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] }])
@@ -1019,7 +1020,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension command colliding with an application command is a DEFINITION error", async () => {
-		const clash = extension("clash", {
+		const clash = defineExtension("clash", {
 			commands: [new Crust("sub").handle(() => {})],
 		});
 		const app = new Crust("cli").command("sub", (cmd) => cmd.handle(() => {})).extend(clash);
@@ -1029,7 +1030,7 @@ describe("Extension application at prepare time", () => {
 
 	it("does not mutate the source builder across executions", async () => {
 		let runCount = 0;
-		const debug = extension("debug", { flags: { debug: { type: "boolean" } } });
+		const debug = defineExtension("debug", { flags: { debug: { type: "boolean" } } });
 		const app = new Crust("repeat").extend(debug).handle(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) runCount++;
 		});
@@ -1045,14 +1046,14 @@ describe("Extension application at prepare time", () => {
 describe("Extension intercept chain", () => {
 	it("runs intercepts in registration order around the Command Handler", async () => {
 		const order: string[] = [];
-		const first = extension("first", {
+		const first = defineExtension("first", {
 			async intercept(_context, next) {
 				order.push("first:before");
 				await next();
 				order.push("first:after");
 			},
 		});
-		const second = extension("second", {
+		const second = defineExtension("second", {
 			async intercept(_context, next) {
 				order.push("second:before");
 				await next();
@@ -1071,7 +1072,7 @@ describe("Extension intercept chain", () => {
 
 	it("short-circuiting an intercept skips validation and the Command Handler", async () => {
 		let ran = false;
-		const gate = extension("gate", {
+		const gate = defineExtension("gate", {
 			intercept() {
 				// no next() — short-circuit
 			},
@@ -1091,7 +1092,7 @@ describe("Extension intercept chain", () => {
 
 	it("intercept runs before application value validation but after parsing", async () => {
 		const observed: unknown[] = [];
-		const observer = extension("observer", {
+		const observer = defineExtension("observer", {
 			async intercept(context, next) {
 				observed.push(context.flags.port);
 				await next();
@@ -1114,7 +1115,7 @@ describe("Extension intercept chain", () => {
 
 	it("routing failures flow directly to the caller — intercepts never observe them", async () => {
 		let intercepted = false;
-		const watcher = extension("watcher", {
+		const watcher = defineExtension("watcher", {
 			async intercept(_context, next) {
 				intercepted = true;
 				await next();
@@ -1129,7 +1130,7 @@ describe("Extension intercept chain", () => {
 
 	it("intercept receives readonly serializable snapshots and injected io", async () => {
 		const lines: string[] = [];
-		const probe = extension("probe", {
+		const probe = defineExtension("probe", {
 			async intercept(context, next) {
 				expect(Object.isFrozen(context.rootCommand)).toBe(true);
 				expect(Object.isFrozen(context.command)).toBe(true);
@@ -1146,7 +1147,7 @@ describe("Extension intercept chain", () => {
 	});
 
 	it("calling next() twice is a DEFINITION error", async () => {
-		const rogue = extension("rogue", {
+		const rogue = defineExtension("rogue", {
 			async intercept(_context, next) {
 				await next();
 				await next();
@@ -1193,13 +1194,13 @@ describe("Extension handleError chain", () => {
 
 	it("handlers run in registration order and next() reaches Core's default renderer", async () => {
 		const order: string[] = [];
-		const first = extension("first", {
+		const first = defineExtension("first", {
 			async handleError(_error, _ctx, next) {
 				order.push("first");
 				await next();
 			},
 		});
-		const second = extension("second", {
+		const second = defineExtension("second", {
 			async handleError(_error, _ctx, next) {
 				order.push("second");
 				await next();
@@ -1216,7 +1217,7 @@ describe("Extension handleError chain", () => {
 
 	it("a handler that renders and returns replaces the default renderer but keeps a nonzero exit", async () => {
 		const lines: string[] = [];
-		const presenter = extension("presenter", {
+		const presenter = defineExtension("presenter", {
 			handleError(error, ctx) {
 				ctx.stderr(`pretty: ${(error as Error).message}`);
 				lines.push("rendered");
@@ -1235,7 +1236,7 @@ describe("Extension handleError chain", () => {
 	});
 
 	it("a handler that throws falls back to default rendering of the original error", async () => {
-		const broken = extension("broken", {
+		const broken = defineExtension("broken", {
 			handleError() {
 				throw new Error("renderer exploded");
 			},
@@ -1249,7 +1250,7 @@ describe("Extension handleError chain", () => {
 
 	it("receives routing failures (COMMAND_NOT_FOUND) with the original error object", async () => {
 		let received: unknown;
-		const catcher = extension("catcher", {
+		const catcher = defineExtension("catcher", {
 			handleError(error, ctx) {
 				received = error;
 				ctx.stderr("handled");
@@ -1267,7 +1268,7 @@ describe("Extension handleError chain", () => {
 
 	it("preserves resolved parsed context for schema, Context, and handler failures", async () => {
 		let received: ExtensionContext | undefined;
-		const catcher = extension("catcher", {
+		const catcher = defineExtension("catcher", {
 			handleError(_error, ctx) {
 				received = ctx;
 			},
@@ -1294,7 +1295,7 @@ describe("Extension handleError chain", () => {
 		}).execute({ argv });
 		expectResolvedContext();
 
-		const brokenContext = context("broken", () => {
+		const brokenContext = defineContext("broken", () => {
 			throw new Error("Context failed");
 		});
 		await new Crust("cli")
@@ -1341,7 +1342,7 @@ describe("Extension handleError chain", () => {
 
 	it("never runs for run() — the original error propagates unrendered", async () => {
 		let handlerRan = false;
-		const presenter = extension("presenter", {
+		const presenter = defineExtension("presenter", {
 			handleError() {
 				handlerRan = true;
 			},
@@ -1563,7 +1564,7 @@ describe("Crust .execute()", () => {
 	it("runs the intercept chain around the handler", async () => {
 		const order: string[] = [];
 
-		const wrap = extension("wrap", {
+		const wrap = defineExtension("wrap", {
 			async intercept(_ctx, next) {
 				order.push("intercept:before");
 				await next();
@@ -1583,14 +1584,14 @@ describe("Crust .execute()", () => {
 	it("runs multiple intercepts in registration order", async () => {
 		const order: string[] = [];
 
-		const e1 = extension("e1", {
+		const e1 = defineExtension("e1", {
 			async intercept(_ctx, next) {
 				order.push("e1:before");
 				await next();
 				order.push("e1:after");
 			},
 		});
-		const e2 = extension("e2", {
+		const e2 = defineExtension("e2", {
 			async intercept(_ctx, next) {
 				order.push("e2:before");
 				await next();
@@ -1684,7 +1685,7 @@ describe("Crust .execute()", () => {
 	it("Extension-owned flags are recognized by the parser", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const version = extension("version", {
+		const version = defineExtension("version", {
 			flags: { version: { type: "boolean", short: "V" } },
 		});
 
@@ -1700,10 +1701,10 @@ describe("Crust .execute()", () => {
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const helpLike = extension("help-like", {
+		const helpLike = defineExtension("help-like", {
 			flags: { help: { type: "boolean", inherit: true } },
 		});
-		const skillLike = extension("inject-subcommand", {
+		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
 				new Crust("skill").command("update", (cmd) =>
 					cmd.handle((runCtx) => {
@@ -1759,7 +1760,7 @@ describe("Crust .execute()", () => {
 		let interceptedName = "";
 		let interceptedFlags: Record<string, unknown> = {};
 
-		const inspect = extension("inspect", {
+		const inspect = defineExtension("inspect", {
 			async intercept(ctx, next) {
 				interceptedName = ctx.command.meta.name;
 				interceptedFlags = { ...ctx.flags };
@@ -1782,7 +1783,7 @@ describe("Crust .execute()", () => {
 	it("intercept can short-circuit execution", async () => {
 		let handlerRan = false;
 
-		const gate = extension("short-circuit", {
+		const gate = defineExtension("short-circuit", {
 			intercept: async (_ctx, _next) => {
 				// Don't call next() — short circuit
 			},
@@ -1799,7 +1800,7 @@ describe("Crust .execute()", () => {
 
 	it("inherited flags work across file-boundary pattern", async () => {
 		let receivedVerbose: boolean | undefined;
-		const verbose = { type: "boolean", inherit: true } as const;
+		const verbose = defineFlag({ type: "boolean", inherit: true });
 		const sub = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
 			command.handle(({ flags }) => {
 				receivedVerbose = flags.verbose;
@@ -1849,7 +1850,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("Extension apply error is rendered and sets exitCode", async () => {
-		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
 		const app = new Crust("test")
 			.flags({ verbose: { type: "boolean" } })
 			.extend(clash)
@@ -1862,7 +1863,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats intercept-time prompt cancellation as a silent user abort", async () => {
-		const cancel = extension("cancel", {
+		const cancel = defineExtension("cancel", {
 			intercept: () => {
 				throw new DOMException("Prompt was cancelled.", "AbortError");
 			},
@@ -2015,7 +2016,7 @@ describe("Crust .execute() validation mode", () => {
 
 describe("prepareCommandSnapshot (tooling)", () => {
 	it("returns a frozen snapshot with Extension flags applied, without mutating the builder", async () => {
-		const docs = extension("doc-test", {
+		const docs = defineExtension("doc-test", {
 			flags: {
 				extra: { type: "boolean", description: "Injected for docs" },
 			},
@@ -2138,7 +2139,7 @@ describe("Crust .command() aliases", () => {
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
 		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
-		const rogue = extension("rogue", {
+		const rogue = defineExtension("rogue", {
 			commands: [new Crust("info").meta({ aliases: ["i"] }).handle(() => {})],
 		});
 

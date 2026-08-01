@@ -80,6 +80,17 @@ const flags = {
 
 The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives the corresponding array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
 
+### `defineFlag` and `defineFlags`
+
+Use these const-generic identity helpers when a flag definition is declared separately from `.flags()`. They preserve literal fields and validate the definition at its declaration site without `as const`:
+
+```ts
+import { defineFlag, defineFlags } from "@crustjs/core";
+
+const verbose = defineFlag({ type: "boolean", inherit: true, short: "v" });
+const sharedFlags = defineFlags({ verbose, format: { type: "string", default: "text" } });
+```
+
 ### `CommandMeta`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
@@ -130,7 +141,7 @@ interface ContextFactory<Name extends string, Options, Value> {
 }
 ```
 
-`context(name, setup)` always returns a factory. Invoke it even when `Options` is `void`.
+`defineContext(name, setup)` always returns a factory. Invoke it even when `Options` is `void`.
 
 ### `ContextInstance`
 
@@ -162,7 +173,7 @@ The map shape used for inferred `ctx` values.
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`extension(name, config)` returns a frozen structural value.
+`defineExtension(name, config)` returns a frozen structural value.
 
 ### `ExtensionFlagDef`
 

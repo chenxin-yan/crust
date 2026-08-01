@@ -10,9 +10,9 @@ For a small application, prefer inline `.command(name, configure)`. When a comma
 Keep reusable flag definitions and requirement types in a dependency-free shared module:
 
 ```ts title="src/shared.ts"
-import type { CommandRequirements } from "@crustjs/core";
+import { defineFlag, type CommandRequirements } from "@crustjs/core";
 
-export const verbose = { type: "boolean", inherit: true } as const;
+export const verbose = defineFlag({ type: "boolean", inherit: true });
 
 export interface AppCommandRequirements extends CommandRequirements {
   flags: { verbose: typeof verbose };
@@ -48,11 +48,11 @@ The configure callback is typed from the declared requirements. The exported def
 Define the root and its application-wide Extensions independently:
 
 ```ts title="src/app.ts"
-import { context, Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 import { verbose } from "./shared.ts";
 
-const logger = context("logger", (_options: void) => ({
+const logger = defineContext("logger", (_options: void) => ({
   write(message: string) {
     console.error(message);
   },

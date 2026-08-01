@@ -14,10 +14,10 @@ bun add @crustjs/core
 ## Quick example
 
 ```ts
-import { context, Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
-const config = context("config", (options: { environment: string }) => options);
+const config = defineContext("config", (options: { environment: string }) => options);
 
 const app = new Crust("deploy")
   .extend(help())
@@ -36,8 +36,10 @@ await app.execute();
 | ---------------------------------- | -------------------------------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)         | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                  |
-| `context(name, setup)`             | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
-| `extension(name, config)`          | Define a frozen, application-wide Extension value                                            |
+| `defineContext(name, setup)`       | Define a named Context factory; invoke it and attach the instance with `.provide()`          |
+| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                            |
+| `defineFlag(definition)`           | Preserve one literal flag definition                                                         |
+| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                   |
 | [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                    |
 
 ## Definition types
@@ -69,7 +71,7 @@ See [Types](/docs/api/types) for field-level definitions.
 
 | Type              | Description                                                 |
 | ----------------- | ----------------------------------------------------------- |
-| `ContextFactory`  | Factory returned by `context()`                             |
+| `ContextFactory`  | Factory returned by `defineContext()`                       |
 | `ContextInstance` | Named lazy dependency attached with `.provide()`            |
 | `ContextMap`      | Record shape used for inferred Command Handler `ctx` values |
 

@@ -73,9 +73,9 @@ The flag is parsed and shown in help at each descendant.
 Reusable definitions declare inherited flag requirements explicitly:
 
 ```ts
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, defineFlag } from "@crustjs/core";
 
-const verbose = { type: "boolean", inherit: true } as const;
+const verbose = defineFlag({ type: "boolean", inherit: true });
 
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };

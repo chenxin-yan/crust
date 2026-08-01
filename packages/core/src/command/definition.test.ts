@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import { context } from "../api/context.ts";
-import { extension } from "../api/extension.ts";
+import { defineContext } from "../api/context.ts";
+import { defineExtension } from "../api/extension.ts";
+import { defineFlag, defineFlags } from "../api/flags.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -10,6 +11,31 @@ type IsEqual<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("command definitions", () => {
+	it("preserves literal flag definitions", () => {
+		const verbose = defineFlag({ type: "boolean", inherit: true, short: "v" });
+		type _Flag = Assert<
+			IsEqual<
+				typeof verbose,
+				{ readonly type: "boolean"; readonly inherit: true; readonly short: "v" }
+			>
+		>;
+
+		const flags = defineFlags({ verbose, output: { type: "string", short: "o" } });
+		type _Flags = Assert<
+			IsEqual<
+				typeof flags,
+				{
+					readonly verbose: typeof verbose;
+					readonly output: { readonly type: "string"; readonly short: "o" };
+				}
+			>
+		>;
+
+		// @ts-expect-error -- boolean flags cannot have string defaults
+		defineFlag({ type: "boolean", default: "true" });
+		// @ts-expect-error -- every definition must be a FlagDef
+		defineFlags({ bad: { type: "not-a-flag" } });
+	});
 	it("stays inert and materializes a fresh named node for each mount", () => {
 		let configured = 0;
 		const definition = defineCommand()((command) => {
@@ -38,7 +64,7 @@ describe("command definitions", () => {
 
 	it("inherits flags and Contexts through nested definitions", async () => {
 		const calls: string[] = [];
-		const db = context("db", () => "database");
+		const db = defineContext("db", () => "database");
 		const status = defineCommand<{
 			flags: { verbose: { type: "boolean"; inherit: true } };
 			ctx: { db: string };
@@ -81,7 +107,7 @@ describe("command definitions", () => {
 	});
 
 	it("rejects duplicate inherited Contexts during materialization", () => {
-		const db = context("db", () => "database");
+		const db = defineContext("db", () => "database");
 		const definition = defineCommand()((command) => command.provide(db()));
 
 		expect(() => new Crust("cli").provide(db()).mount("users", definition)).toThrow(
@@ -145,7 +171,7 @@ describe("command definitions", () => {
 		expect(() => new Crust("cli").mount("bad", unrelated)).toThrow(/same command builder/);
 
 		const nestedExtension = defineCommand()(
-			(command) => (command as unknown as Crust).extend(extension("nested")) as never,
+			(command) => (command as unknown as Crust).extend(defineExtension("nested")) as never,
 		);
 		expect(() => new Crust("cli").mount("bad", nestedExtension)).toThrow(
 			/Extensions cannot be registered inside command definitions/,
@@ -161,8 +187,8 @@ describe("command definitions", () => {
 	});
 
 	it("checks requirements while preserving fluent handler types", () => {
-		const verbose = { type: "boolean", inherit: true } as const;
-		const auth = context("auth", () => ({ user: "yan" }));
+		const verbose = defineFlag({ type: "boolean", inherit: true });
+		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const definition = defineCommand<{
 			flags: { verbose: typeof verbose };
 			ctx: { auth: { user: string } };
@@ -170,7 +196,7 @@ describe("command definitions", () => {
 			command
 				.args([{ name: "target", type: "string", required: true }])
 				.flags({ force: { type: "boolean", required: true } })
-				.provide(context("region", () => "us-east-1")())
+				.provide(defineContext("region", () => "us-east-1")())
 				.handle(({ args, flags, ctx }) => {
 					type _Target = Assert<IsEqual<typeof args.target, string>>;
 					type _Verbose = Assert<IsEqual<typeof flags.verbose, boolean | undefined>>;
@@ -183,7 +209,7 @@ describe("command definitions", () => {
 		new Crust("cli").flags({ verbose }).provide(auth()).mount("deploy", definition);
 		new Crust("other")
 			.flags({ verbose: { ...verbose, required: true } })
-			.provide(context("auth", () => ({ user: "other", admin: true }))())
+			.provide(defineContext("auth", () => ({ user: "other", admin: true }))())
 			.mount("deploy", definition);
 
 		const requiredToken = {
@@ -226,7 +252,7 @@ describe("command definitions", () => {
 		new Crust("cli").flags({ verbose }).mount("deploy", definition);
 		new Crust("cli")
 			.flags({ verbose })
-			.provide(context("auth", () => "wrong")())
+			.provide(defineContext("auth", () => "wrong")())
 			// @ts-expect-error -- incompatible Contexts: auth
 			.mount("deploy", definition);
 	});
@@ -238,11 +264,11 @@ describe("command definitions", () => {
 
 		defineCommand()((command) => {
 			// @ts-expect-error -- Extensions are root-only
-			command.extend(extension("nested"));
+			command.extend(defineExtension("nested"));
 			const configured = command
 				.args([{ name: "target", type: "string" }])
 				.flags({ force: { type: "boolean" } })
-				.provide(context("region", () => "us")());
+				.provide(defineContext("region", () => "us")());
 			type _StillNoExtend = Assert<
 				IsEqual<"extend" extends keyof typeof configured ? true : false, false>
 			>;
@@ -251,7 +277,7 @@ describe("command definitions", () => {
 	});
 
 	it("checks nested requirements at the enclosing mount point", () => {
-		const required = { type: "boolean", inherit: true } as const;
+		const required = defineFlag({ type: "boolean", inherit: true });
 		const nested = defineCommand<{ flags: { verbose: typeof required } }>()((command) => command);
 
 		defineCommand<{ flags: { verbose: typeof required } }>()((command) =>

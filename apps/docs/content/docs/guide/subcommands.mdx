@@ -30,10 +30,10 @@ Inline commands are convenient sugar for defining and materializing a command at
 `defineCommand<Requirements>()(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
 
 ```ts
-import { context, Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
-const verbose = { type: "boolean", inherit: true } as const;
-const repository = context("repository", (_options: void) => ({
+const verbose = defineFlag({ type: "boolean", inherit: true });
+const repository = defineContext("repository", (_options: void) => ({
   defaultBranch: "main",
 }));
 
@@ -71,7 +71,7 @@ Missing or incompatible inherited flags and Contexts are TypeScript errors on `.
 Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
 
 ```ts
-const environment = { type: "string", inherit: true } as const;
+const environment = defineFlag({ type: "string", inherit: true });
 
 const status = defineCommand<{
   flags: { verbose: typeof verbose; environment: typeof environment };

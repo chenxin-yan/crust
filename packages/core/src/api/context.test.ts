@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
-import { context } from "./context.ts";
+import { defineContext } from "./context.ts";
 
-describe("context()", () => {
+describe("defineContext()", () => {
 	it("always returns a factory, including for zero-option setups", async () => {
-		const auth = context("auth", () => ({ user: "chenxin" }));
+		const auth = defineContext("auth", () => ({ user: "chenxin" }));
 
 		// The definition itself is a factory, not an instance
 		expect(typeof auth).toBe("function");
@@ -18,7 +18,7 @@ describe("context()", () => {
 	});
 
 	it("factories receive only their options", async () => {
-		const db = context("db", (options: { url: string }) => ({ url: options.url }));
+		const db = defineContext("db", (options: { url: string }) => ({ url: options.url }));
 
 		const instance = db({ url: "memory://test" });
 		await expect(Promise.resolve(instance.setup())).resolves.toEqual({ url: "memory://test" });
@@ -28,7 +28,7 @@ describe("context()", () => {
 describe("Crust .provide()", () => {
 	it("constructs Contexts for the resolved command and exposes them as ctx", async () => {
 		const seen: string[] = [];
-		const db = context("db", (options: { url: string }) => ({ url: options.url }));
+		const db = defineContext("db", (options: { url: string }) => ({ url: options.url }));
 
 		const app = new Crust("cli").provide(db({ url: "memory://x" })).handle(({ ctx }) => {
 			seen.push(ctx.db.url);
@@ -39,8 +39,8 @@ describe("Crust .provide()", () => {
 	});
 
 	it("throws DEFINITION on a duplicate Context name on the same command", () => {
-		const a = context("db", () => 1);
-		const b = context("db", () => 2);
+		const a = defineContext("db", () => 1);
+		const b = defineContext("db", () => 2);
 
 		expect(() => new Crust("cli").provide(a()).provide(b())).toThrow(CrustError);
 		try {
@@ -51,8 +51,8 @@ describe("Crust .provide()", () => {
 	});
 
 	it("throws DEFINITION when a child re-provides a name inherited from its path", () => {
-		const parentDb = context("db", () => "parent");
-		const childDb = context("db", () => "child");
+		const parentDb = defineContext("db", () => "parent");
+		const childDb = defineContext("db", () => "child");
 
 		expect(() =>
 			new Crust("cli")
@@ -62,8 +62,8 @@ describe("Crust .provide()", () => {
 	});
 
 	it("throws DEFINITION when a mounted subtree re-provides a path name", () => {
-		const parentDb = context("db", () => "parent");
-		const nestedDb = context("db", () => "nested");
+		const parentDb = defineContext("db", () => "parent");
+		const nestedDb = defineContext("db", () => "nested");
 		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
 			command.command("g", (child) => child.provide(nestedDb()).handle(() => {})),
 		);
@@ -73,7 +73,7 @@ describe("Crust .provide()", () => {
 
 	it("seeds mounted descendants with the parent Context path", async () => {
 		const seen: string[] = [];
-		const db = context("db", () => "root-db");
+		const db = defineContext("db", () => "root-db");
 		const sub = defineCommand<{ ctx: { db: string } }>()((command) =>
 			command.command("g", (child) =>
 				child.handle(({ ctx }) => {
@@ -89,7 +89,7 @@ describe("Crust .provide()", () => {
 	});
 
 	it("checks Context requirements at the mount call", () => {
-		const db = context("db", () => "root-db");
+		const db = defineContext("db", () => "root-db");
 		const sub = defineCommand<{ ctx: { db: string } }>()((command) => command);
 
 		new Crust("cli").provide(db()).mount("sub", sub);
@@ -99,7 +99,7 @@ describe("Crust .provide()", () => {
 
 	it("does not construct Contexts for commands off the resolved path", async () => {
 		let built = 0;
-		const lazy = context("lazy", () => {
+		const lazy = defineContext("lazy", () => {
 			built++;
 			return {};
 		});
@@ -117,7 +117,7 @@ describe("Crust .provide()", () => {
 
 describe("Context disposal", () => {
 	function disposableContext(name: string, log: string[]) {
-		return context(name, () => ({
+		return defineContext(name, () => ({
 			name,
 			async [Symbol.asyncDispose]() {
 				log.push(`dispose:${name}`);
@@ -144,7 +144,7 @@ describe("Context disposal", () => {
 
 	it("supports synchronous Symbol.dispose", async () => {
 		const log: string[] = [];
-		const sync = context("sync", () => ({
+		const sync = defineContext("sync", () => ({
 			[Symbol.dispose]() {
 				log.push("dispose:sync");
 			},
@@ -174,7 +174,7 @@ describe("Context disposal", () => {
 	it("disposes already-constructed Contexts when a later setup fails", async () => {
 		const log: string[] = [];
 		const ok = disposableContext("ok", log);
-		const bad = context("bad", () => {
+		const bad = defineContext("bad", () => {
 			throw new Error("setup failed");
 		});
 
@@ -190,7 +190,7 @@ describe("Context disposal", () => {
 	});
 
 	it("leaves non-disposable Context values alone", async () => {
-		const plain = context("plain", () => ({ value: 42 }));
+		const plain = defineContext("plain", () => ({ value: 42 }));
 		const app = new Crust("cli").provide(plain()).handle(({ ctx }) => {
 			expect(ctx.plain.value).toBe(42);
 		});

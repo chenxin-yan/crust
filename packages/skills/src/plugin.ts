@@ -2,7 +2,7 @@
 // Extension layer — skill() with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { type CommandSnapshot, Crust, type Extension, extension } from "@crustjs/core";
+import { type CommandSnapshot, Crust, type Extension, defineExtension } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
@@ -507,7 +507,7 @@ async function autoUpdateCustomSkillsLoop(
 export function skillExtension(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 
-	return extension("skills", {
+	return defineExtension("skills", {
 		commands: [buildSkillCommandGrammar(skillCommandName)],
 		async intercept(context, next) {
 			const rootCmd = context.rootCommand;

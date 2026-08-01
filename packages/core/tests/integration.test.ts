@@ -11,7 +11,7 @@ import type {
 	FlagDef,
 	FlagsDef,
 } from "../src/index";
-import { Crust, defineCommand, extension } from "../src/index";
+import { Crust, defineCommand, defineExtension, defineFlag } from "../src/index";
 import { parseArgs } from "../src/parsing/parser";
 import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
@@ -479,7 +479,7 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 	});
 
 	it("Extension flag on root is parsed and available to root handler", async () => {
-		const versionExtension = extension("version-extension", {
+		const versionExtension = defineExtension("version-extension", {
 			flags: {
 				version: { type: "boolean", short: "V", recursive: false },
 			},
@@ -501,7 +501,7 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 	it("Extension intercept wraps subcommand execution", async () => {
 		const order: string[] = [];
 
-		const logging = extension("logging", {
+		const logging = defineExtension("logging", {
 			async intercept(ctx, next) {
 				order.push(`intercept:before:${ctx.command.meta.name}`);
 				await next();
@@ -578,7 +578,7 @@ describe("integration: split-file definitions end-to-end", () => {
 		process.exitCode = 0;
 	});
 
-	const verbose = { type: "boolean", inherit: true } as const;
+	const verbose = defineFlag({ type: "boolean", inherit: true });
 	const listCommand = defineCommand<{ flags: { verbose: typeof verbose } }>()((command) =>
 		command
 			.flags({ format: { type: "string", default: "table" } } as const)
@@ -629,10 +629,10 @@ describe("integration: mounted definitions", () => {
 		process.exitCode = 0;
 	});
 
-	const verbose = { type: "boolean", inherit: true } as const;
+	const verbose = defineFlag({ type: "boolean", inherit: true });
 
 	it("mounts nested definitions end-to-end", async () => {
-		const env = { type: "string", inherit: true } as const;
+		const env = defineFlag({ type: "string", inherit: true });
 		const status = defineCommand<{
 			flags: { verbose: typeof verbose; env: typeof env };
 		}>()((command) =>
@@ -768,7 +768,7 @@ describe("integration: complex real-world CLI scenario", () => {
 	it("full CLI with global flags, multiple subcommands, plugins, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
-		const auditExtension = extension("audit", {
+		const auditExtension = defineExtension("audit", {
 			async intercept(ctx, next) {
 				order.push(`audit:${ctx.command.meta.name}`);
 				await next();

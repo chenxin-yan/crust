@@ -7,9 +7,10 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 ```ts
 import {
-  context,
   Crust,
   defineCommand,
+  defineContext,
+  defineFlag,
   type CommandDefinition,
   type CommandDefinitionBuilder,
   type CommandRequirements,
@@ -70,16 +71,14 @@ A `CommandDefinition<R>` is an opaque frozen value containing only the configure
 ### `defineCommand<R>()(configure)`
 
 ```ts
-defineCommand<const R extends CommandRequirements = {}>(): (
-  configure: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-) => CommandDefinition<R>
+defineCommand<const R extends CommandRequirements = {}>(): CommandDefinitionFactory<R>
 ```
 
-Creates an inert reusable definition. The function is curried so requirements are fixed before TypeScript infers the configured command's local inputs:
+Creates an inert reusable definition. The double call lets TypeScript fix requirements before it infers the configured command's local inputs:
 
 ```ts
-const verbose = { type: "boolean", inherit: true } as const;
-const auth = context("auth", () => ({ user: "Ada" }));
+const verbose = defineFlag({ type: "boolean", inherit: true });
+const auth = defineContext("auth", () => ({ user: "Ada" }));
 
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };
@@ -183,12 +182,12 @@ const app = new Crust("serve").flags({
 provide<const C extends ContextInstance>(context: C): Crust
 ```
 
-Attaches a Context produced by invoking a `context()` factory. Contexts are inherited by descendants, constructed in registration order only for the resolved command path, and available through `ctx` in the Command Handler.
+Attaches a Context produced by invoking a `defineContext()` factory. Contexts are inherited by descendants, constructed in registration order only for the resolved command path, and available through `ctx` in the Command Handler.
 
 ```ts
-import { context, Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 
-const database = context("database", (options: { url: string }) => ({
+const database = defineContext("database", (options: { url: string }) => ({
   url: options.url,
   async [Symbol.asyncDispose]() {},
 }));
