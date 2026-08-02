@@ -3,11 +3,11 @@
 "@crustjs/crust": patch
 ---
 
-Add inert reusable command definitions with `defineCommand<Requirements>(configure)` and checked mounting with `.mount(name, definition)`.
+Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked mounting with the variadic `.mount(...definitions)`.
 
-Definitions declare the inherited flags and Context value types they require. Missing or incompatible requirements now fail at the `.mount()` call, including same-named flags that do not use `inherit: true`. Every mount materializes a fresh command under the explicit name, so one definition can be reused under multiple names, across multiple parents, and inside other definitions.
+A definition carries its own name and declares what it needs from its mount site as value arrays: `requirements.flags` (named flag definitions it expects to inherit) and `requirements.ctx` (Context factories whose instances must be provided on the parent path). Every requirement is checked at the `.mount()` call — compile-time for missing/incompatible inherited flags and Contexts, and at runtime for Context requirement names missing from the parent path. Every mount materializes a fresh command under the definition's carried name; use `.as(newName)` to mount one definition under multiple names or parents, and definitions can `.mount()` other definitions.
 
-Remove `.sub()`, `.command(builder)`, and the exported `ChildCrust` type. Inline `.command(name, callback)` remains as the convenient spelling for one-off commands and uses the same materialization behavior.
+Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.mount(defineCommand("up", (command) => ...))`.
 
 Migration:
 
@@ -17,12 +17,15 @@ const deploy = parent.sub("deploy").handle(({ flags, ctx }) => {});
 const app = parent.command(deploy);
 
 // After
-const deploy = defineCommand<{
-  flags: { verbose: typeof verbose };
-  ctx: { auth: Auth };
-}>((command) => command.handle(({ flags, ctx }) => {}));
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const auth = defineContext("auth", () => createAuthClient());
 
-const app = parent.mount("deploy", deploy);
+const deploy = defineCommand("deploy", { flags: [verbose], ctx: [auth] }, (command) =>
+	command.handle(({ flags, ctx }) => {}),
+);
+
+const app = parent.mount(deploy);
+const shipToo = parent.mount(deploy.as("ship"));
 ```
 
-Finalize required inheritable flags and Contexts on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
+Declare inheritable flags with `.flags()` and provide Contexts with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.

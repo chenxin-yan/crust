@@ -42,7 +42,7 @@ function getHostTarget(): string | null {
 }
 
 async function runBuild(argv: string[]) {
-	const app = new Crust("test").mount("build", buildCommand);
+	const app = new Crust("test").mount(buildCommand);
 	process.cwd = () => tmpDir;
 	await app.execute({ argv: ["build", ...argv] });
 }

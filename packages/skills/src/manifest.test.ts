@@ -611,13 +611,13 @@ describe("buildManifest", () => {
 		});
 
 		it("preserves instructions across Crust builder cloning", () => {
-			const deploy = defineCommand((command) =>
+			const deploy = defineCommand("deploy", (command) =>
 				annotate(
 					command.meta({ description: "Deploy command" }),
 					"Read the environment carefully before execution.",
 				).handle(() => {}),
 			);
-			const root = new Crust("app").mount("deploy", deploy);
+			const root = new Crust("app").mount(deploy);
 
 			const node = buildManifest(snapshotCommand(root._node));
 			const child = node.children[0];

@@ -9,15 +9,15 @@ All exports on these pages come from `@crustjs/core`.
 
 ## Runtime API
 
-| Export                               | Description                                                  |
-| ------------------------------------ | ------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)           | Immutable, chainable command builder and invocation boundary |
-| [`defineCommand()`](/docs/api/crust) | Define an inert reusable command definition for `.mount()`   |
-| `defineContext(name, setup)`         | Define a named command dependency factory                    |
-| `defineExtension(name, config)`      | Define an application-wide Extension                         |
-| `defineFlag(definition)`             | Preserve one literal flag definition                         |
-| `defineFlags(definitions)`           | Preserve literal definitions in a flag map                   |
-| [`CrustError`](/docs/api/errors)     | Structured framework error with one of four stable codes     |
+| Export                                                  | Description                                                      |
+| ------------------------------------------------------- | ---------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)                              | Immutable, chainable command builder and invocation boundary     |
+| [`defineCommand(name, reqs?, recipe)`](/docs/api/crust) | Define a named, inert reusable command definition for `.mount()` |
+| `defineContext(name, reqs?, setup)`                     | Define a named command dependency factory                        |
+| `defineExtension(name, config)`                         | Define an application-wide Extension                             |
+| `defineFlag(name, definition)`                          | Define one named flag, preserving its literal definition         |
+| `defineArg(name, definition)`                           | Define one named positional argument                             |
+| [`CrustError`](/docs/api/errors)                        | Structured framework error with one of four stable codes         |
 
 ## Types
 

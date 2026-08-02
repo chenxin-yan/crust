@@ -221,41 +221,47 @@ export async function publishStagedPackages(
 	console.log(`\n${green("✓")} Published ${bold(String(plan.length))} staged package(s).`);
 }
 
-export const publishCommand = defineCommand((command) =>
+export const publishCommand = defineCommand("publish", (command) =>
 	command
 		.meta({
 			description: "Publish staged npm packages created by crust build --package",
 		})
-		.flags({
-			"stage-dir": {
+		.flags(
+			{
+				name: "stage-dir",
 				type: "string",
 				description: "Directory containing a staged manifest.json",
 				default: "dist/npm",
 			},
-			tag: {
+			{
+				name: "tag",
 				type: "string",
 				description: "Override the npm dist-tag passed to bun publish",
 			},
-			access: {
+			{
+				name: "access",
 				type: "string",
 				description: "npm access level passed to bun publish",
 				default: "public",
 			},
-			"dry-run": {
+			{
+				name: "dry-run",
 				type: "boolean",
 				description: "Print publish order and commands without publishing",
 				default: false,
 			},
-			verify: {
+			{
+				name: "verify",
 				type: "boolean",
 				description: "Verify staged directories and metadata before publishing",
 				default: true,
 			},
-			registry: {
+			{
+				name: "registry",
 				type: "string",
 				description: "Override the registry passed to bun publish",
 			},
-		} as const)
+		)
 		.handle(async ({ flags }) => {
 			const stageDir = resolve(process.cwd(), flags["stage-dir"]);
 			const manifest = readPublishManifest(stageDir);

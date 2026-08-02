@@ -254,7 +254,7 @@ command without extending the public `@crustjs/core` builder API.
 import { Crust, defineCommand } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
-const deploy = defineCommand((command) =>
+const deploy = defineCommand("deploy", (command) =>
   annotate(command.meta({ description: "Deploy the application" }), [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",
@@ -263,7 +263,7 @@ const deploy = defineCommand((command) =>
   }),
 );
 
-const app = new Crust("my-cli").mount("deploy", deploy);
+const app = new Crust("my-cli").mount(deploy);
 ```
 
 ## Name Validation

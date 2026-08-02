@@ -1,96 +1,80 @@
 ---
 title: Subcommands
-description: Compose nested command trees inline or from reusable command definitions.
+description: Compose nested command trees from named command definitions.
 ---
 
-## Inline commands
+## Mounting commands
 
-`.command(name, configure)` creates and mounts a child typed from its parent:
+`defineCommand(name, recipe)` creates an inert definition that carries its name; `.mount(...definitions)` materializes definitions as child commands:
 
 ```ts
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 
-const app = new Crust("git")
-  .flags({ verbose: { type: "boolean", inherit: true } })
-  .command("clone", (command) =>
+const app = new Crust("git").mount(
+  defineCommand("clone", (command) =>
     command
-      .args([{ name: "url", type: "url", required: true }])
-      .handle(({ args, flags, stdout }) => {
-        stdout(`${flags.verbose ? "Cloning" : "clone"} ${args.url}`);
-      }),
-  );
+      .args({ name: "url", type: "url", required: true })
+      .handle(({ args, stdout }) => stdout(`clone ${args.url}`)),
+  ),
+);
 ```
 
-Nest `.command()` calls to any depth. Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command.
+Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command. Nest `.mount()` calls inside definitions to any depth.
 
-Inline commands are convenient sugar for defining and materializing a command at the same point. Use a standalone definition when a command belongs in another file or should be reused.
+## Requirements
 
-## Reusable command definitions
-
-`defineCommand<Requirements>(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
+A definition declares the inheritable flags and Contexts it expects from any parent as arrays of defined values. The recipe builder — and the handler's `flags` and `ctx` — are typed from them:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag({ type: "boolean", inherit: true });
-const repository = defineContext("repository", (_options: void) => ({
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const repository = defineContext("repository", () => ({
   defaultBranch: "main",
 }));
 
-const clone = defineCommand<{
-  flags: { verbose: typeof verbose };
-  ctx: { repository: { defaultBranch: string } };
-}>((command) =>
+const clone = defineCommand("clone", { flags: [verbose], ctx: [repository] }, (command) =>
   command
-    .args([{ name: "url", type: "url", required: true }])
+    .args({ name: "url", type: "url", required: true })
     .handle(({ args, flags, ctx, stdout }) => {
       stdout(`${args.url} ${ctx.repository.defaultBranch} ${flags.verbose}`);
     }),
 );
 
-const app = new Crust("git")
-  .flags({ verbose })
-  .provide(repository(undefined))
-  .mount("clone", clone);
+const app = new Crust("git").flags(verbose).provide(repository()).mount(clone);
 ```
 
-The definition has no name and cannot run by itself. `.mount(name, definition)` supplies the routing name, checks the requirements at that call, and creates a fresh command node. The same definition can therefore be mounted under different names or into different satisfying parents:
+`.mount()` checks the requirements at each call — compile-time and runtime — and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
 
 ```ts
-const git = new Crust("git")
-  .flags({ verbose })
-  .provide(repository(undefined))
-  .mount("clone", clone)
-  .mount("copy", clone);
+const git = new Crust("git").flags(verbose).provide(repository()).mount(clone, clone.as("copy"));
 ```
 
-Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`. A same-named parent flag only counts when it has `inherit: true`.
+Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`; a ctx requirement name not provided on the parent path is a runtime `DEFINITION` error. A same-named parent flag only counts when it has `inherit: true`.
 
 ## Nested definitions
 
 Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
 
 ```ts
-const environment = defineFlag({ type: "string", inherit: true });
+const environment = defineFlag("environment", { type: "string", inherit: true });
 
-const status = defineCommand<{
-  flags: { verbose: typeof verbose; environment: typeof environment };
-}>((command) =>
+const status = defineCommand("status", { flags: [verbose, environment] }, (command) =>
   command.handle(({ flags, stdout }) => {
     stdout(`${flags.environment} ${flags.verbose}`);
   }),
 );
 
-const deploy = defineCommand<{
-  flags: { verbose: typeof verbose };
-}>((command) => command.flags({ environment }).mount("status", status));
+const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
+  command.flags(environment).mount(status),
+);
 
-const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
+const app = new Crust("app").flags(verbose).mount(deploy);
 ```
 
 ## Context inheritance
 
-Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
+Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; declare `requirements.ctx` to see them in the handler's types. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
 
 ## Unknown commands
 

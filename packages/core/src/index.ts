@@ -1,5 +1,12 @@
 // v0.1 builder API
-export type { ContextFactory, ContextInstance, ContextMap } from "./api/context.ts";
+export type {
+	AnyContextFactory,
+	ContextFactory,
+	ContextInstance,
+	ContextMap,
+	ContextRequirements,
+	ContextSetup,
+} from "./api/context.ts";
 export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
@@ -12,8 +19,8 @@ export type {
 	ExtensionNext,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
-export { defineFlag, defineFlags } from "./api/flags.ts";
-export type { DefineFlag, DefineFlags } from "./api/flags.ts";
+export { defineArg, defineFlag } from "./api/flags.ts";
+export type { UnnamedArgDef } from "./api/flags.ts";
 
 // Command snapshots
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
@@ -37,4 +44,12 @@ export type {
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 // Core types
-export type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef, ValueType } from "./types.ts";
+export type {
+	ArgDef,
+	ArgsDef,
+	CommandMeta,
+	FlagDef,
+	FlagsDef,
+	NamedFlagDef,
+	ValueType,
+} from "./types.ts";

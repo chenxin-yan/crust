@@ -268,77 +268,89 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-export const buildCommand = defineCommand((command) =>
+export const buildCommand = defineCommand("build", (command) =>
 	command
 		.meta({ description: "Compile your CLI to a standalone executable" })
-		.flags({
-			entry: {
+		.flags(
+			{
+				name: "entry",
 				type: "string",
 				description: "Entry file path",
 				default: "src/cli.ts",
 				short: "e",
 			},
-			outfile: {
+			{
+				name: "outfile",
 				type: "string",
 				description: "Output file path (single-target builds only)",
 				short: "o",
 			},
-			name: {
+			{
+				name: "name",
 				type: "string",
 				description: "Binary name (defaults to package.json name or entry filename)",
 				short: "n",
 			},
-			minify: {
+			{
+				name: "minify",
 				type: "boolean",
 				description: "Minify the output",
 				default: true,
 			},
-			target: {
+			{
+				name: "target",
 				type: "string",
 				multiple: true,
 				description:
 					"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
 				short: "t",
 			},
-			outdir: {
+			{
+				name: "outdir",
 				type: "string",
 				description: "Output directory for compiled binaries",
 				default: "dist",
 				short: "d",
 			},
-			resolver: {
+			{
+				name: "resolver",
 				type: "string",
 				description: "Filename for the resolver script (multi-target builds, no extension)",
 				default: "cli",
 				short: "r",
 			},
-			validate: {
+			{
+				name: "validate",
 				type: "boolean",
 				description: "Validate command runtime rules before compiling (disable with --no-validate)",
 				default: true,
 			},
-			"env-file": {
+			{
+				name: "env-file",
 				type: "string",
 				multiple: true,
 				description: "Explicit env file(s) used for build-time constants; repeatable",
 			},
-			package: {
+			{
+				name: "package",
 				type: "boolean",
 				description: "Stage npm packages in dist/npm instead of raw binaries",
 				default: false,
 			},
-			"stage-dir": {
+			{
+				name: "stage-dir",
 				type: "string",
 				description: "Directory to stage npm packages into when using --package",
 				default: "dist/npm",
 			},
-			man: {
+			{
+				name: "man",
 				type: "boolean",
 				description:
 					"Write an mdoc(7) page to <outdir>/man/<name>.1 (entry must export a Crust as `app` or default)",
 				default: false,
 			},
-		} as const)
+		)
 		.handle(async ({ flags }) => {
 			const cwd = process.cwd();
 

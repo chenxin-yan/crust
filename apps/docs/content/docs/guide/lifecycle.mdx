@@ -26,13 +26,13 @@ It requires explicit argv, honors injected writers, throws the original error, d
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions (duplicate provided or derived Context names are rejected earlier, at definition time).
+1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions (duplicate Context names are rejected earlier, at the `.provide()` call).
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
 4. **Intercept** — run Extension intercepts in `.extend()` order. An intercept can stop here by not calling `next()`.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
-7. **Construct Contexts** — create provided and derived Context values for the resolved path in registration order.
+7. **Construct Contexts** — create the Context values provided on the resolved path in topological order of their declared ctx requirements (registration order among independent Contexts), passing each setup the validated flags it declared.
 8. **Run the Command Handler**.
 9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
 

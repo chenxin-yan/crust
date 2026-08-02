@@ -17,12 +17,15 @@ bun add @crustjs/core
 import { defineContext, Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
-const config = defineContext("config", (options: { environment: string }) => options);
+const config = defineContext(
+  "config",
+  ({ options }: { options: { environment: string } }) => options,
+);
 
 const app = new Crust("deploy")
   .extend(help())
+  .flags({ name: "verbose", type: "boolean", short: "v" })
   .provide(config({ environment: "production" }))
-  .flags({ verbose: { type: "boolean", short: "v" } })
   .handle(({ flags, ctx, stdout }) => {
     stdout(`${ctx.config.environment}: verbose=${flags.verbose ?? false}`);
   });
@@ -32,15 +35,15 @@ await app.execute();
 
 ## Runtime exports
 
-| Export                             | Description                                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)         | Immutable command builder with Context `.provide()`/`.derive()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                                                    |
-| `defineContext(name, setup)`       | Define a named Context factory; invoke it and attach the instance with `.provide()`                                            |
-| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                                                              |
-| `defineFlag(definition)`           | Preserve one literal flag definition                                                                                           |
-| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                                                     |
-| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                                                      |
+| Export                              | Description                                                                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`Crust`](/docs/api/crust)          | Immutable command builder with Context `.provide()`, `.mount()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)  | Create a named, inert reusable command definition                                                                              |
+| `defineContext(name, reqs?, setup)` | Define a named Context factory; invoke it and attach the instance with `.provide()`                                            |
+| `defineExtension(name, config)`     | Define a frozen, application-wide Extension value                                                                              |
+| `defineFlag(name, definition)`      | Define one named flag, preserving its literal definition                                                                       |
+| `defineArg(name, definition)`       | Define one named positional argument, preserving its literal definition                                                        |
+| [`CrustError`](/docs/api/errors)    | Framework error for definition, routing, parsing, and validation failures                                                      |
 
 ## Definition types
 
@@ -54,6 +57,8 @@ await app.execute();
 | [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time      |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                      |
 | `FlagsDef`                                    | Flag-name-to-definition record                                     |
+| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)   |
+| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)     |
 | `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal          |
 
 See [Types](/docs/api/types) for field-level definitions.
@@ -69,11 +74,14 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Context types
 
-| Type              | Description                                                 |
-| ----------------- | ----------------------------------------------------------- |
-| `ContextFactory`  | Factory returned by `defineContext()`                       |
-| `ContextInstance` | Named lazy dependency attached with `.provide()`            |
-| `ContextMap`      | Record shape used for inferred Command Handler `ctx` values |
+| Type                  | Description                                                           |
+| --------------------- | --------------------------------------------------------------------- |
+| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()` |
+| `AnyContextFactory`   | Requirement-array element type for `requirements.ctx`                 |
+| `ContextInstance`     | Named lazy dependency attached with `.provide()`                      |
+| `ContextRequirements` | Declared flag and ctx requirements of a Context                       |
+| `ContextSetup`        | Typed setup input: `options`, validated `flags`, dependency `ctx`     |
+| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values           |
 
 ## Extension types
 

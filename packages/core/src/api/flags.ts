@@ -1,16 +1,32 @@
-import type { FlagDef, FlagsDef } from "../types.ts";
+import type { ArgDef, FlagDef } from "../types.ts";
+import type { Simplify } from "./context.ts";
 
-/** Define one flag while preserving its literal definition type. */
-export interface DefineFlag {
-	<const F extends FlagDef>(definition: F): F;
+/** Distribute `Omit<_, "name">` over the {@link ArgDef} union. */
+type OmitName<T> = T extends { name: string } ? Omit<T, "name"> : never;
+
+/** A positional argument definition without its name — the `defineArg` input shape. */
+export type UnnamedArgDef = OmitName<ArgDef>;
+
+/**
+ * Define one named flag while preserving its literal definition type.
+ *
+ * The returned value carries its `name` and is attached with the variadic
+ * `.flags(...defs)` or referenced in `requirements.flags` arrays.
+ */
+export function defineFlag<const N extends string, const D extends FlagDef>(
+	name: N,
+	def: D,
+): Simplify<{ readonly name: N } & D> {
+	return { ...def, name } as Simplify<{ readonly name: N } & D>;
 }
 
-/** Define a named flag map while preserving each literal definition type. */
-export interface DefineFlags {
-	<const F extends FlagsDef>(definitions: F): F;
+/**
+ * Define one named positional argument while preserving its literal
+ * definition type. Attach with the variadic `.args(...defs)`.
+ */
+export function defineArg<const N extends string, const D extends UnnamedArgDef>(
+	name: N,
+	def: D,
+): Simplify<{ readonly name: N } & D> {
+	return { ...def, name } as Simplify<{ readonly name: N } & D>;
 }
-
-export const defineFlag: DefineFlag = <const F extends FlagDef>(definition: F): F => definition;
-
-export const defineFlags: DefineFlags = <const F extends FlagsDef>(definitions: F): F =>
-	definitions;

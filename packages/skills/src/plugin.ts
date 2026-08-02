@@ -2,7 +2,13 @@
 // Extension layer — skill() with interactive command injection
 // ────────────────────────────────────────────────────────────────────────────
 
-import { type CommandSnapshot, Crust, type Extension, defineExtension } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	Crust,
+	type Extension,
+	defineCommand,
+	defineExtension,
+} from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
@@ -729,27 +735,30 @@ function buildSkillCommandGrammar(commandName: string) {
 	return (
 		new Crust(commandName)
 			.meta({ description: "Manage agent skill installations" })
-			.flags({
-				scope: {
+			.flags(
+				{
+					name: "scope",
 					type: "string",
 					description: "Install scope (project or global)",
 				},
-				all: {
+				{
+					name: "all",
 					type: "boolean",
 					description: "Install for all detected agents non-interactively (universal + detected)",
 				},
-			})
-			.command("update", (cmd) =>
-				cmd
-					.meta({ description: "Update installed skills to latest version" })
-					.flags({
-						scope: {
+			)
+			.mount(
+				defineCommand("update", (cmd) =>
+					cmd
+						.meta({ description: "Update installed skills to latest version" })
+						.flags({
+							name: "scope",
 							type: "string",
 							description: "Update scope (project or global)",
-						},
-					})
-					// Never reached — the skills extension intercept short-circuits
-					.handle(() => {}),
+						})
+						// Never reached — the skills extension intercept short-circuits
+						.handle(() => {}),
+				),
 			)
 			// Never reached — the skills extension intercept short-circuits
 			.handle(() => {})

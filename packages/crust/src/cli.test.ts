@@ -91,8 +91,8 @@ function makeCrustApp() {
 			didYouMean({ mode: "help" }),
 			help(),
 		)
-		.mount("build", buildCommand)
-		.mount("publish", publishCommand);
+		.mount(buildCommand)
+		.mount(publishCommand);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

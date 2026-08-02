@@ -114,21 +114,18 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 		.meta({
 			description: "Generate shell tab-completion scripts",
 		})
-		.args([
-			{
-				name: "shell",
-				type: "string",
-				required: true,
-				description: "Shell to generate completion for",
-				choices: SUPPORTED_SHELLS,
-			},
-		] as const)
+		.args({
+			name: "shell",
+			type: "string",
+			required: true,
+			description: "Shell to generate completion for",
+			choices: SUPPORTED_SHELLS,
+		})
 		.flags({
-			"output-dir": {
-				type: "string",
-				description:
-					"Write all configured shells' scripts into this directory instead of printing to stdout",
-			},
+			name: "output-dir",
+			type: "string",
+			description:
+				"Write all configured shells' scripts into this directory instead of printing to stdout",
 		})
 		.handle(() => {
 			// Never reached — the extension intercept short-circuits first.

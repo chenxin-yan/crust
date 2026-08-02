@@ -5,13 +5,12 @@ import type {
 	ArgDef,
 	ArgsDef,
 	CommandDefinition,
-	CommandDefinitionBuilder,
 	CommandMeta,
-	CommandRequirements,
 	FlagDef,
 	FlagsDef,
+	NamedFlagDef,
 } from "../src/index";
-import { Crust, defineCommand, defineExtension, defineFlag } from "../src/index";
+import { Crust, defineArg, defineCommand, defineExtension, defineFlag } from "../src/index";
 import { parseArgs } from "../src/parsing/parser";
 import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
@@ -20,22 +19,20 @@ import { executeCrust } from "./helpers";
 // Shared fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-const rootBase = new Crust("myapp").meta({ description: "Integration test app" }).flags({
-	help: { type: "boolean", short: "h" },
-} as const);
+const rootBase = new Crust("myapp")
+	.meta({ description: "Integration test app" })
+	.flags({ name: "help", type: "boolean", short: "h" });
 
-const serveCmd = defineCommand((command) =>
+const serveCmd = defineCommand("serve", (command) =>
 	command
-		.args([{ name: "dir", type: "string", default: "." }] as const)
-		.flags({
-			port: { type: "number", default: 3000, short: "p" },
-		} as const)
+		.args({ name: "dir", type: "string", default: "." })
+		.flags({ name: "port", type: "number", default: 3000, short: "p" })
 		.handle(({ args, flags }) => {
 			console.log(`serve ${args.dir} on ${flags.port}`);
 		}),
 );
 
-const rootCmd = rootBase.mount("serve", serveCmd).handle(({ flags }) => {
+const rootCmd = rootBase.mount(serveCmd).handle(({ flags }) => {
 	if (flags.help) {
 		console.log("help");
 	}
@@ -88,6 +85,7 @@ describe("integration: exported types", () => {
 		const meta: CommandMeta = { name: "typed" };
 		const argDef: ArgDef = { name: "name", type: "string" };
 		const flagDef: FlagDef = { type: "boolean" };
+		const namedFlagDef: NamedFlagDef = { name: "verbose", type: "boolean" };
 		const argsDef: ArgsDef = [argDef];
 		const flagsDef: FlagsDef = { verbose: flagDef };
 
@@ -105,15 +103,13 @@ describe("integration: exported types", () => {
 		type TestArgs = [{ name: "file"; type: "string"; required: true }];
 		type ResolvedArgs = InferArgs<TestArgs>;
 		const inferred: ResolvedArgs = { file: "index.ts" };
-		type Requirements = CommandRequirements & { flags: {} };
-		const definition: CommandDefinition<Requirements> = defineCommand<Requirements>(
-			(command: CommandDefinitionBuilder) => command,
-		);
+		const definition: CommandDefinition = defineCommand("typed", (command) => command);
 
 		void definition;
 		void meta;
 		void argDef;
 		void flagDef;
+		void namedFlagDef;
 		void argsDef;
 		void flagsDef;
 		void parsed;
@@ -131,33 +127,22 @@ describe("integration: inherited boolean flag → subcommand receives it", () =>
 		process.exitCode = 0;
 	});
 
-	it("subcommand handler receives inherited boolean flag value", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`verbose=${ctx.flags.verbose}`);
-				}),
-			);
+	const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+	const app = new Crust("cli").flags(verbose).mount(
+		defineCommand("sub", { flags: [verbose] }, (cmd) =>
+			cmd.handle((ctx) => {
+				console.log(`verbose=${ctx.flags.verbose}`);
+			}),
+		),
+	);
 
+	it("subcommand handler receives inherited boolean flag value", async () => {
 		const result = await executeCrust(app, ["sub", "--verbose"]);
 		expect(result.stdout).toContain("verbose=true");
 		expect(result.exitCode).toBe(0);
 	});
 
 	it("inherited boolean flag defaults to undefined when not passed", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`verbose=${ctx.flags.verbose}`);
-				}),
-			);
-
 		const result = await executeCrust(app, ["sub"]);
 		expect(result.stdout).toContain("verbose=undefined");
 		expect(result.exitCode).toBe(0);
@@ -170,16 +155,14 @@ describe("integration: inherited flag overridden by subcommand local flag", () =
 	});
 
 	it("child override replaces inherited flag type (string → number)", async () => {
-		const app = new Crust("cli")
-			.flags({
-				output: { type: "string", inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "number", default: 42 } }).handle((ctx) => {
+		const app = new Crust("cli").flags({ name: "output", type: "string", inherit: true }).mount(
+			defineCommand("sub", (cmd) =>
+				cmd.flags({ name: "output", type: "number", default: 42 }).handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 					console.log(`type=${typeof ctx.flags.output}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub"]);
 		expect(result.stdout).toContain("output=42");
@@ -188,15 +171,13 @@ describe("integration: inherited flag overridden by subcommand local flag", () =
 	});
 
 	it("child override replaces inherited flag and accepts new type value", async () => {
-		const app = new Crust("cli")
-			.flags({
-				output: { type: "string", inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "number" } }).handle((ctx) => {
+		const app = new Crust("cli").flags({ name: "output", type: "string", inherit: true }).mount(
+			defineCommand("sub", (cmd) =>
+				cmd.flags({ name: "output", type: "number" }).handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub", "--output", "99"]);
 		expect(result.stdout).toContain("output=99");
@@ -210,20 +191,24 @@ describe("integration: deeply nested subcommand (3 levels) inherits flags", () =
 	});
 
 	it("3-level deep subcommand receives root inherited flag", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-			})
-			.command("level1", (cmd) =>
-				cmd.flags({ format: { type: "string", inherit: true } }).command("level2", (cmd2) =>
-					cmd2.command("level3", (cmd3) =>
-						cmd3.handle((ctx) => {
-							console.log(`verbose=${ctx.flags.verbose}`);
-							console.log(`format=${ctx.flags.format}`);
-						}),
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const format = defineFlag("format", { type: "string", inherit: true });
+		const app = new Crust("cli").flags(verbose).mount(
+			defineCommand("level1", { flags: [verbose] }, (cmd) =>
+				cmd.flags(format).mount(
+					defineCommand("level2", { flags: [verbose, format] }, (cmd2) =>
+						cmd2.mount(
+							defineCommand("level3", { flags: [verbose, format] }, (cmd3) =>
+								cmd3.handle((ctx) => {
+									console.log(`verbose=${ctx.flags.verbose}`);
+									console.log(`format=${ctx.flags.format}`);
+								}),
+							),
+						),
 					),
 				),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, [
 			"level1",
@@ -239,26 +224,24 @@ describe("integration: deeply nested subcommand (3 levels) inherits flags", () =
 	});
 
 	it("3-level deep subcommand only inherits flags marked inherit: true", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				rootOnly: { type: "string" },
-			})
-			.command("level1", (cmd) =>
-				cmd
-					.flags({
-						l1Inherit: { type: "string", inherit: true },
-						l1Only: { type: "number" },
-					})
-					.command("level2", (cmd2) =>
-						cmd2.command("level3", (cmd3) =>
-							cmd3.handle((ctx) => {
-								console.log(`verbose=${ctx.flags.verbose}`);
-								console.log(`l1Inherit=${ctx.flags.l1Inherit}`);
-							}),
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const l1Inherit = defineFlag("l1Inherit", { type: "string", inherit: true });
+		const app = new Crust("cli").flags(verbose, { name: "rootOnly", type: "string" }).mount(
+			defineCommand("level1", { flags: [verbose] }, (cmd) =>
+				cmd.flags(l1Inherit, { name: "l1Only", type: "number" }).mount(
+					defineCommand("level2", { flags: [verbose, l1Inherit] }, (cmd2) =>
+						cmd2.mount(
+							defineCommand("level3", { flags: [verbose, l1Inherit] }, (cmd3) =>
+								cmd3.handle((ctx) => {
+									console.log(`verbose=${ctx.flags.verbose}`);
+									console.log(`l1Inherit=${ctx.flags.l1Inherit}`);
+								}),
+							),
 						),
 					),
-			);
+				),
+			),
+		);
 
 		// verbose and l1Inherit should be recognized at level3
 		const result = await executeCrust(app, [
@@ -282,14 +265,16 @@ describe("integration: non-inherit flag not visible to subcommand", () => {
 
 	it("passing non-inherited parent flag to subcommand causes error", async () => {
 		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				rootOnly: { type: "string" },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle(() => {
-					console.log("should not reach here");
-				}),
+			.flags(
+				{ name: "verbose", type: "boolean", inherit: true },
+				{ name: "rootOnly", type: "string" },
+			)
+			.mount(
+				defineCommand("sub", (cmd) =>
+					cmd.handle(() => {
+						console.log("should not reach here");
+					}),
+				),
 			);
 
 		const result = await executeCrust(app, ["sub", "--rootOnly", "something"]);
@@ -298,22 +283,22 @@ describe("integration: non-inherit flag not visible to subcommand", () => {
 	});
 
 	it("non-inherited flag from level1 not visible to level2", async () => {
-		const app = new Crust("cli")
-			.flags({
-				global: { type: "boolean", inherit: true },
-			})
-			.command("level1", (cmd) =>
+		const app = new Crust("cli").flags({ name: "global", type: "boolean", inherit: true }).mount(
+			defineCommand("level1", (cmd) =>
 				cmd
-					.flags({
-						l1Local: { type: "string" },
-						l1Shared: { type: "string", inherit: true },
-					})
-					.command("level2", (cmd2) =>
-						cmd2.handle(() => {
-							console.log("should not reach here");
-						}),
+					.flags(
+						{ name: "l1Local", type: "string" },
+						{ name: "l1Shared", type: "string", inherit: true },
+					)
+					.mount(
+						defineCommand("level2", (cmd2) =>
+							cmd2.handle(() => {
+								console.log("should not reach here");
+							}),
+						),
 					),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["level1", "level2", "--l1Local", "val"]);
 		expect(result.exitCode).toBe(1);
@@ -326,33 +311,22 @@ describe("integration: required inherited flag enforced on subcommand", () => {
 		process.exitCode = 0;
 	});
 
-	it("missing required inherited flag on subcommand produces error", async () => {
-		const app = new Crust("cli")
-			.flags({
-				token: { type: "string", required: true, inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`token=${ctx.flags.token}`);
-				}),
-			);
+	const token = defineFlag("token", { type: "string", required: true, inherit: true });
+	const app = new Crust("cli").flags(token).mount(
+		defineCommand("sub", { flags: [token] }, (cmd) =>
+			cmd.handle((ctx) => {
+				console.log(`token=${ctx.flags.token}`);
+			}),
+		),
+	);
 
+	it("missing required inherited flag on subcommand produces error", async () => {
 		const result = await executeCrust(app, ["sub"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("Missing required");
 	});
 
 	it("providing required inherited flag on subcommand succeeds", async () => {
-		const app = new Crust("cli")
-			.flags({
-				token: { type: "string", required: true, inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`token=${ctx.flags.token}`);
-				}),
-			);
-
 		const result = await executeCrust(app, ["sub", "--token", "secret123"]);
 		expect(result.stdout).toContain("token=secret123");
 		expect(result.exitCode).toBe(0);
@@ -364,33 +338,22 @@ describe("integration: inherited flag with default value on subcommand", () => {
 		process.exitCode = 0;
 	});
 
-	it("subcommand receives inherited flag default when not explicitly passed", async () => {
-		const app = new Crust("cli")
-			.flags({
-				port: { type: "number", default: 3000, inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`port=${ctx.flags.port}`);
-				}),
-			);
+	const port = defineFlag("port", { type: "number", default: 3000, inherit: true });
+	const app = new Crust("cli").flags(port).mount(
+		defineCommand("sub", { flags: [port] }, (cmd) =>
+			cmd.handle((ctx) => {
+				console.log(`port=${ctx.flags.port}`);
+			}),
+		),
+	);
 
+	it("subcommand receives inherited flag default when not explicitly passed", async () => {
 		const result = await executeCrust(app, ["sub"]);
 		expect(result.stdout).toContain("port=3000");
 		expect(result.exitCode).toBe(0);
 	});
 
 	it("subcommand inherits default and allows override", async () => {
-		const app = new Crust("cli")
-			.flags({
-				port: { type: "number", default: 3000, inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`port=${ctx.flags.port}`);
-				}),
-			);
-
 		const result = await executeCrust(app, ["sub", "--port", "8080"]);
 		expect(result.stdout).toContain("port=8080");
 		expect(result.exitCode).toBe(0);
@@ -403,15 +366,14 @@ describe("integration: inherited flag alias works on subcommand", () => {
 	});
 
 	it("inherited single-char alias is recognized on subcommand", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", short: "v", inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const verbose = defineFlag("verbose", { type: "boolean", short: "v", inherit: true });
+		const app = new Crust("cli").flags(verbose).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
 				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub", "-v"]);
 		expect(result.stdout).toContain("verbose=true");
@@ -419,20 +381,19 @@ describe("integration: inherited flag alias works on subcommand", () => {
 	});
 
 	it("inherited multi-alias flag is recognized on subcommand", async () => {
-		const app = new Crust("cli")
-			.flags({
-				output: {
-					type: "string",
-					short: "o",
-					aliases: ["out"],
-					inherit: true,
-				},
-			})
-			.command("sub", (cmd) =>
+		const output = defineFlag("output", {
+			type: "string",
+			short: "o",
+			aliases: ["out"],
+			inherit: true,
+		});
+		const app = new Crust("cli").flags(output).mount(
+			defineCommand("sub", { flags: [output] }, (cmd) =>
 				cmd.handle((ctx) => {
 					console.log(`output=${ctx.flags.output}`);
 				}),
-			);
+			),
+		);
 
 		const resultO = await executeCrust(app, ["sub", "-o", "file.txt"]);
 		expect(resultO.stdout).toContain("output=file.txt");
@@ -454,18 +415,17 @@ describe("integration: .execute() full pipeline with argv override", () => {
 	});
 
 	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
-		const app = new Crust("deploy")
-			.flags({
-				env: { type: "string", default: "staging", inherit: true },
-				dryRun: { type: "boolean", inherit: true },
-			})
-			.command("service", (cmd) =>
-				cmd.args([{ name: "name", type: "string", required: true }] as const).handle((ctx) => {
+		const env = defineFlag("env", { type: "string", default: "staging", inherit: true });
+		const dryRun = defineFlag("dryRun", { type: "boolean", inherit: true });
+		const app = new Crust("deploy").flags(env, dryRun).mount(
+			defineCommand("service", { flags: [env, dryRun] }, (cmd) =>
+				cmd.args(defineArg("name", { type: "string", required: true })).handle((ctx) => {
 					console.log(
 						`deploy service=${ctx.args.name} env=${ctx.flags.env} dryRun=${ctx.flags.dryRun}`,
 					);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["service", "api", "--env", "production", "--dryRun"]);
 		expect(result.stdout).toContain("deploy service=api env=production dryRun=true");
@@ -509,10 +469,12 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 			},
 		});
 
-		const app = new Crust("cli").extend(logging).command("sub", (cmd) =>
-			cmd.handle(() => {
-				order.push("sub:run");
-			}),
+		const app = new Crust("cli").extend(logging).mount(
+			defineCommand("sub", (cmd) =>
+				cmd.handle(() => {
+					order.push("sub:run");
+				}),
+			),
 		);
 
 		await executeCrust(app, ["sub"]);
@@ -520,27 +482,27 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 	});
 });
 
-describe("integration: inline nested .command() chains end-to-end", () => {
+describe("integration: nested mounted definitions end-to-end", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("3-level inline chained commands execute correctly", async () => {
-		const app = new Crust("git")
-			.flags({
-				verbose: { type: "boolean", short: "v", inherit: true },
-			})
-			.command("remote", (cmd) =>
-				cmd
-					.flags({ timeout: { type: "number", default: 30, inherit: true } })
-					.command("add", (cmd2) =>
-						cmd2.args([{ name: "name", type: "string", required: true }] as const).handle((ctx) => {
+	it("3-level nested definitions execute correctly", async () => {
+		const verbose = defineFlag("verbose", { type: "boolean", short: "v", inherit: true });
+		const timeout = defineFlag("timeout", { type: "number", default: 30, inherit: true });
+		const app = new Crust("git").flags(verbose).mount(
+			defineCommand("remote", { flags: [verbose] }, (cmd) =>
+				cmd.flags(timeout).mount(
+					defineCommand("add", { flags: [verbose, timeout] }, (cmd2) =>
+						cmd2.args({ name: "name", type: "string", required: true }).handle((ctx) => {
 							console.log(
 								`add remote=${ctx.args.name} verbose=${ctx.flags.verbose} timeout=${ctx.flags.timeout}`,
 							);
 						}),
 					),
-			);
+				),
+			),
+		);
 
 		const result = await executeCrust(app, [
 			"remote",
@@ -556,14 +518,16 @@ describe("integration: inline nested .command() chains end-to-end", () => {
 
 	it("parent with run handler falls back when unknown subcommand given as positional", async () => {
 		const app = new Crust("cli")
-			.args([{ name: "input", type: "string" }] as const)
+			.args({ name: "input", type: "string" })
 			.handle((ctx) => {
 				console.log(`root input=${ctx.args.input}`);
 			})
-			.command("sub", (cmd) =>
-				cmd.handle(() => {
-					console.log("sub ran");
-				}),
+			.mount(
+				defineCommand("sub", (cmd) =>
+					cmd.handle(() => {
+						console.log("sub ran");
+					}),
+				),
 			);
 
 		// "unknown" is not a subcommand, so root handler runs with it as positional
@@ -578,31 +542,28 @@ describe("integration: split-file definitions end-to-end", () => {
 		process.exitCode = 0;
 	});
 
-	const verbose = defineFlag({ type: "boolean", inherit: true });
-	const listCommand = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
+	const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+	const listCommand = defineCommand("list", { flags: [verbose] }, (command) =>
 		command
-			.flags({ format: { type: "string", default: "table" } } as const)
-			.args([{ name: "resource", type: "string", required: true }] as const)
+			.flags({ name: "format", type: "string", default: "table" })
+			.args({ name: "resource", type: "string", required: true })
 			.handle(({ args, flags }) => {
 				console.log(`list ${args.resource} format=${flags.format} verbose=${flags.verbose}`);
 			}),
 	);
-	const getCommand = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
+	const getCommand = defineCommand("get", { flags: [verbose] }, (command) =>
 		command
-			.args([
+			.args(
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
-			] as const)
+			)
 			.handle(({ args, flags }) => {
 				console.log(`get ${args.resource}/${args.id} verbose=${flags.verbose}`);
 			}),
 	);
 
 	it("runs standalone definitions through the full pipeline", async () => {
-		const app = new Crust("kubectl")
-			.flags({ verbose })
-			.mount("list", listCommand)
-			.mount("get", getCommand);
+		const app = new Crust("kubectl").flags(verbose).mount(listCommand, getCommand);
 
 		const listResult = await executeCrust(app, ["list", "pods", "--verbose", "--format", "json"]);
 		expect(listResult.stdout).toContain("list pods format=json verbose=true");
@@ -613,11 +574,11 @@ describe("integration: split-file definitions end-to-end", () => {
 		expect(getResult.exitCode).toBe(0);
 	});
 
-	it("reuses a definition across satisfying parents", async () => {
-		const first = new Crust("first").flags({ verbose }).mount("list", listCommand);
+	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
+		const first = new Crust("first").flags(verbose).mount(listCommand);
 		const second = new Crust("second")
-			.flags({ verbose: { ...verbose, default: true } })
-			.mount("show", listCommand);
+			.flags({ ...verbose, default: true })
+			.mount(listCommand.as("show"));
 
 		expect((await executeCrust(first, ["list", "pods"])).stdout).toContain("verbose=undefined");
 		expect((await executeCrust(second, ["show", "pods"])).stdout).toContain("verbose=true");
@@ -629,21 +590,19 @@ describe("integration: mounted definitions", () => {
 		process.exitCode = 0;
 	});
 
-	const verbose = defineFlag({ type: "boolean", inherit: true });
+	const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 
 	it("mounts nested definitions end-to-end", async () => {
-		const env = defineFlag({ type: "string", inherit: true });
-		const status = defineCommand<{
-			flags: { verbose: typeof verbose; env: typeof env };
-		}>((command) =>
+		const env = defineFlag("env", { type: "string", inherit: true });
+		const status = defineCommand("status", { flags: [verbose, env] }, (command) =>
 			command.handle(({ flags }) => {
 				console.log(`verbose=${flags.verbose} env=${flags.env}`);
 			}),
 		);
-		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
-			command.flags({ env }).mount("status", status),
+		const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
+			command.flags(env).mount(status),
 		);
-		const app = new Crust("cli").flags({ verbose }).mount("deploy", deploy);
+		const app = new Crust("cli").flags(verbose).mount(deploy);
 
 		const result = await executeCrust(app, ["deploy", "status", "--verbose", "--env", "staging"]);
 		expect(result.stdout).toContain("verbose=true env=staging");
@@ -651,24 +610,22 @@ describe("integration: mounted definitions", () => {
 	});
 
 	it("excludes non-inheritable flags from mounted commands", async () => {
-		const sub = defineCommand((command) => command.handle(() => console.log("sub ran")));
-		const app = new Crust("cli").flags({ rootOnly: { type: "string" } }).mount("sub", sub);
+		const sub = defineCommand("sub", (command) => command.handle(() => console.log("sub ran")));
+		const app = new Crust("cli").flags({ name: "rootOnly", type: "string" }).mount(sub);
 
 		const result = await executeCrust(app, ["sub", "--rootOnly", "val"]);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("Unknown flag");
 	});
 
-	it("mixes inline commands and mounted definitions", async () => {
-		const deploy = defineCommand<{ flags: { verbose: typeof verbose } }>((command) =>
+	it("mounts multiple definitions in one call", async () => {
+		const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
 			command.handle(({ flags }) => console.log(`deploy verbose=${flags.verbose}`)),
 		);
-		const app = new Crust("cli")
-			.flags({ verbose })
-			.command("status", (command) =>
-				command.handle(({ flags }) => console.log(`status verbose=${flags.verbose}`)),
-			)
-			.mount("deploy", deploy);
+		const status = defineCommand("status", { flags: [verbose] }, (command) =>
+			command.handle(({ flags }) => console.log(`status verbose=${flags.verbose}`)),
+		);
+		const app = new Crust("cli").flags(verbose).mount(status, deploy);
 
 		expect((await executeCrust(app, ["deploy", "--verbose"])).stdout).toContain(
 			"deploy verbose=true",
@@ -685,15 +642,14 @@ describe("integration: inherited boolean flag negation", () => {
 	});
 
 	it("--no-verbose negates inherited boolean flag on subcommand", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", default: true, inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const verbose = defineFlag("verbose", { type: "boolean", default: true, inherit: true });
+		const app = new Crust("cli").flags(verbose).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
 				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub", "--no-verbose"]);
 		expect(result.stdout).toContain("verbose=false");
@@ -711,16 +667,15 @@ describe("integration: inherited multiple-value flag", () => {
 	});
 
 	it("inherited multiple-value flag collects values on subcommand", async () => {
-		const app = new Crust("cli")
-			.flags({
-				tag: { type: "string", multiple: true, inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const tag = defineFlag("tag", { type: "string", multiple: true, inherit: true });
+		const app = new Crust("cli").flags(tag).mount(
+			defineCommand("sub", { flags: [tag] }, (cmd) =>
 				cmd.handle((ctx) => {
 					const tags = ctx.flags.tag;
 					console.log(`tags=${JSON.stringify(tags)}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub", "--tag", "a", "--tag", "b", "--tag", "c"]);
 		expect(result.stdout).toContain('tags=["a","b","c"]');
@@ -738,16 +693,15 @@ describe("integration: separator (--) with subcommand and inherited flags", () =
 	});
 
 	it("rawArgs captured correctly on subcommand with inherited flags", async () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const app = new Crust("cli").flags(verbose).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
 				cmd.handle((ctx) => {
 					console.log(`verbose=${ctx.flags.verbose}`);
 					console.log(`rawArgs=${JSON.stringify(ctx.rawArgs)}`);
 				}),
-			);
+			),
+		);
 
 		const result = await executeCrust(app, ["sub", "--verbose", "--", "extra1", "extra2"]);
 		expect(result.stdout).toContain("verbose=true");
@@ -775,33 +729,27 @@ describe("integration: complex real-world CLI scenario", () => {
 			},
 		});
 
+		const verbose = defineFlag("verbose", { type: "boolean", short: "v", inherit: true });
+		const config = defineFlag("config", { type: "string", default: "~/.myctl", inherit: true });
+
 		const app = new Crust("myctl")
-			.flags({
-				verbose: { type: "boolean", short: "v", inherit: true },
-				config: {
-					type: "string",
-					default: "~/.myctl",
-					inherit: true,
-				},
-			})
+			.flags(verbose, config)
 			.extend(auditExtension)
-			.command("deploy", (cmd) =>
-				cmd
-					.flags({
-						env: { type: "string", required: true },
-					})
-					.handle((ctx) => {
+			.mount(
+				defineCommand("deploy", { flags: [verbose, config] }, (cmd) =>
+					cmd.flags({ name: "env", type: "string", required: true }).handle((ctx) => {
 						order.push("deploy:run");
 						console.log(
 							`deploy env=${ctx.flags.env} verbose=${ctx.flags.verbose} config=${ctx.flags.config}`,
 						);
 					}),
-			)
-			.command("status", (cmd) =>
-				cmd.handle((ctx) => {
-					order.push("status:run");
-					console.log(`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`);
-				}),
+				),
+				defineCommand("status", { flags: [verbose, config] }, (cmd) =>
+					cmd.handle((ctx) => {
+						order.push("status:run");
+						console.log(`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`);
+					}),
+				),
 			);
 
 		const deployResult = await executeCrust(app, [

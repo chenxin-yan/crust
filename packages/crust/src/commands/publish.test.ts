@@ -17,7 +17,7 @@ import type { DistributionManifest } from "../utils/distribute.ts";
 /** Parse argv against the mounted publish command's grammar. */
 async function parsePublishArgs(argv: string[]) {
 	let captured: { flags: Record<string, unknown> } | undefined;
-	const app = new Crust("test").mount("publish", publishCommand);
+	const app = new Crust("test").mount(publishCommand);
 	const node = app._node.subCommands.publish!;
 	node.run = (ctx) => {
 		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };

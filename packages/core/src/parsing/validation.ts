@@ -1,3 +1,4 @@
+import { sortContexts } from "../api/context.ts";
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgDef, FlagDef } from "../types.ts";
@@ -10,7 +11,7 @@ import { parseArgs, validateParsed } from "./parser.ts";
 // Both registration time (`crust.ts`) and tree-walk validation
 // (`validateCommandTree`) reuse these helpers so the policy lives in one
 // place and surfaces as the same `DEFINITION` error shape regardless of
-// how a subcommand was installed (`.command()` vs. plugin-installed via
+// how a subcommand was installed (`.mount()` vs. plugin-installed via
 // the `addCommand` action / direct `node.subCommands` mutation).
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,9 @@ export function validateCommandTree(root: CommandNode): void {
 		try {
 			const parsed = parseArgs(command, createValidationArgv(command));
 			validateParsed(command, parsed);
+			// Context dependency resolution (missing deps, cycles) fails at
+			// build validation, not first dispatch.
+			sortContexts(command.contexts, `the "${path.join(" ")}" command path`);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Unknown validation error";
 			throw new CrustError(
@@ -233,7 +237,7 @@ export function validateCommandTree(root: CommandNode): void {
 		}
 
 		// Detect alias collisions among children. Catches plugin-installed
-		// subcommands that bypassed `.command()` (where collision detection
+		// subcommands that bypassed `.mount()` (where collision detection
 		// already runs eagerly). We re-run the full check by walking the
 		// children and validating each one against the children registered
 		// before it in iteration order.

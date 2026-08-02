@@ -3,37 +3,38 @@ title: Split Commands Across Files
 description: Declare command requirements without coupling command files to the application root.
 ---
 
-For a small application, prefer inline `.command(name, configure)`. When a command becomes large or reusable, export an inert definition and mount it by name at the root.
+For a small application, mount definitions inline at the root. When a command becomes large or reusable, export an inert definition from its own file and mount it at the composition root.
 
-## Shared requirements
+## Shared definitions
 
-Keep reusable flag definitions and requirement types in a dependency-free shared module:
+Keep the flag definitions and Context factories that commands require in a dependency-free shared module:
 
 ```ts title="src/shared.ts"
-import { defineFlag, type CommandRequirements } from "@crustjs/core";
+import { defineContext, defineFlag } from "@crustjs/core";
 
-export const verbose = defineFlag({ type: "boolean", inherit: true });
+export const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 
-export interface AppCommandRequirements extends CommandRequirements {
-  flags: { verbose: typeof verbose };
-  ctx: { logger: { write(message: string): void } };
-}
+export const logger = defineContext("logger", () => ({
+  write(message: string) {
+    console.error(message);
+  },
+}));
 ```
 
-Using the same flag constant makes the required value shape and the root definition agree.
+Requirements are arrays of these values, so the required shape and the root definition are the same object — they cannot drift.
 
 ## Standalone command definition
 
-A command file imports `defineCommand` and shared requirements, never the application builder:
+A command file imports `defineCommand` and the shared values, never the application builder:
 
 ```ts title="src/commands/greet.ts"
 import { defineCommand } from "@crustjs/core";
-import type { AppCommandRequirements } from "../shared.ts";
+import { logger, verbose } from "../shared.ts";
 
-export const greetCommand = defineCommand<AppCommandRequirements>((command) =>
+export const greetCommand = defineCommand("greet", { flags: [verbose], ctx: [logger] }, (command) =>
   command
-    .args([{ name: "name", type: "string", default: "world" }])
-    .flags({ greeting: { type: "string", default: "Hello", short: "g" } })
+    .args({ name: "name", type: "string", default: "world" })
+    .flags({ name: "greeting", type: "string", default: "Hello", short: "g" })
     .handle(({ args, flags, ctx, stdout }) => {
       if (flags.verbose) ctx.logger.write("Preparing greeting");
       stdout(`${flags.greeting}, ${args.name}!`);
@@ -41,56 +42,47 @@ export const greetCommand = defineCommand<AppCommandRequirements>((command) =>
 );
 ```
 
-The configure callback is typed from the declared requirements. The exported definition is inert: importing it does not build or run a command.
+The recipe builder is typed from the declared requirements. The exported definition is inert and carries its own name: importing it does not build or run a command.
 
 ## Completed root
 
 Define the root and its application-wide Extensions independently:
 
 ```ts title="src/app.ts"
-import { defineContext, Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
-import { verbose } from "./shared.ts";
-
-const logger = defineContext("logger", (_options: void) => ({
-  write(message: string) {
-    console.error(message);
-  },
-}));
+import { logger, verbose } from "./shared.ts";
 
 export const app = new Crust("my-cli")
   .meta({ description: "A split-file CLI" })
   .extend(version("0.2.0"), help())
-  .flags({ verbose })
-  .provide(logger(undefined));
+  .flags(verbose)
+  .provide(logger());
 ```
 
 ## Mount and execute
 
-The composition root imports both sides and chooses the routing name:
+The composition root imports both sides:
 
 ```ts title="src/cli.ts"
 import { app } from "./app.ts";
 import { greetCommand } from "./commands/greet.ts";
 
-await app.mount("greet", greetCommand).execute();
+await app.mount(greetCommand).execute();
 ```
 
-`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context. Missing or incompatible requirements are reported at this line.
+`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context. Missing or incompatible requirements are reported at this line — compile-time, and at runtime for Context names. Use `greetCommand.as("hello")` to mount the same definition under another name.
 
 ## Finalize before mounting
 
 Fluent builders are immutable, and a mount captures the parent scope used at that call. Add required `inherit: true` flags and Contexts before `.mount()`:
 
 ```ts
-const complete = new Crust("app")
-  .flags({ verbose })
-  .provide(logger(undefined))
-  .mount("greet", greetCommand);
+const complete = new Crust("app").flags(verbose).provide(logger()).mount(greetCommand);
 ```
 
 A later `.flags()` or `.provide()` call creates a new parent builder; it does not backfill a definition that was already mounted.
 
 ## Inline or split?
 
-Use inline `.command(name, configure)` when the implementation is short and local. Use `defineCommand<Requirements>(configure)` plus `.mount(name, definition)` when a separate file improves readability or when the same command should be mounted more than once.
+Mount `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a requirements array, when a separate file improves readability or when the same command should be mounted more than once.
