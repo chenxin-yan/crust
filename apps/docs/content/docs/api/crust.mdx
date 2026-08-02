@@ -9,7 +9,6 @@ import { Callout } from "fumadocs-ui/components/callout";
 import {
   Crust,
   defineCommand,
-  defineContext,
   defineFlag,
   type CommandDefinition,
   type CommandDefinitionBuilder,
@@ -26,31 +25,22 @@ import {
 ```ts
 interface CommandRequirements {
   readonly flags?: Record<string, FlagDef & { inherit: true }>;
-  readonly ctx?: ContextMap;
 }
 ```
 
-Requirements describe values supplied by the parent at a mount point:
+Requirements describe inherited flags supplied by the parent at a mount point. Every required flag must have `inherit: true`.
 
-- `flags` lists required inherited flag definitions. Every required flag must have `inherit: true`.
-- `ctx` maps required Context names to their constructed value types.
-
-Requirements are type-only. They do not create flags, Contexts, or a runtime validation schema.
+Requirements are type-only. They do not create flags or a runtime validation schema.
 
 ### `CommandDefinitionBuilder`
 
 ```ts
-interface CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx> {
+interface CommandDefinitionBuilder<Inherited, Local, A, Eff> {
   meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder;
   flags(defs: FlagsDef): CommandDefinitionBuilder;
   args(defs: ArgsDef): CommandDefinitionBuilder;
-  provide(context: ContextInstance): CommandDefinitionBuilder;
-  derive(
-    name: string,
-    setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<unknown>,
-  ): CommandDefinitionBuilder;
   handle(
-    handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+    handler: (context: CrustCommandContext<A, Eff>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
   command(
     name: string,
@@ -60,7 +50,7 @@ interface CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx> {
 }
 ```
 
-This is the configure-only builder passed to `defineCommand()` and inline `.command()`. Its fluent methods preserve and refine argument, flag, and Context types. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to `defineCommand()` and inline `.command()`. Its fluent methods preserve and refine argument and flag types. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -84,16 +74,14 @@ Creates an inert reusable definition. Pass requirements as the explicit type arg
 
 ```ts
 const verbose = defineFlag({ type: "boolean", inherit: true });
-const auth = defineContext("auth", () => ({ user: "Ada" }));
 
 const deploy = defineCommand<{
   flags: { verbose: typeof verbose };
-  ctx: { auth: { user: string } };
 }>((command) =>
   command
     .args([{ name: "target", type: "string", required: true }])
-    .handle(({ args, flags, ctx, stdout }) => {
-      stdout(`${ctx.auth.user}:${args.target}:${flags.verbose}`);
+    .handle(({ args, flags, stdout }) => {
+      stdout(`${args.target}:${flags.verbose}`);
     }),
 );
 ```
@@ -182,51 +170,6 @@ const app = new Crust("serve").flags({
 });
 ```
 
-## `.provide(context)`
-
-```ts
-provide<const C extends ContextInstance>(context: C): Crust
-```
-
-Attaches a Context produced by invoking a `defineContext()` factory. Contexts are inherited by descendants, constructed in registration order only for the resolved command path, and available through `ctx` in the Command Handler.
-
-```ts
-import { defineContext, Crust } from "@crustjs/core";
-
-const database = defineContext("database", (options: { url: string }) => ({
-  url: options.url,
-  async [Symbol.asyncDispose]() {},
-}));
-
-const app = new Crust("my-cli")
-  .provide(database({ url: "postgres://localhost/app" }))
-  .handle(({ ctx }) => {
-    ctx.database.url;
-  });
-```
-
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name on one command path throws `DEFINITION`.
-
-## `.derive(name, setup)`
-
-```ts
-derive<const N extends string, V>(
-  name: N,
-  setup: (input: { ctx: Readonly<Ctx> }) => Awaitable<V>,
-): Crust
-```
-
-Derives a named Context value from earlier provided or derived values on the command path. `.provide()` when the factory needs only options; `.derive()` when it needs `ctx`.
-
-Derivations share `.provide()`'s registration-ordered construction, snapshot inheritance, duplicate-name rule, and native disposal. A throw aborts before the Command Handler and disposes values already constructed.
-
-```ts
-const app = new Crust("app")
-  .provide(config({ url: "https://api.example.com" }))
-  .derive("client", ({ ctx }) => createClient(ctx.config.url))
-  .handle(({ ctx }) => ctx.client.close());
-```
-
 ## `.extend(...extensions)`
 
 ```ts
@@ -251,21 +194,21 @@ See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
 ```ts
 handle(
-  handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+  handler: (context: CrustCommandContext<A, Eff>) => void | Promise<void>,
 ): Crust
 ```
 
-Defines the Command Handler. It runs after routing, parsing, validation, Extension interception, and Context construction.
+Defines the Command Handler. It runs after routing, parsing, validation, schema application, and Extension interception.
 
 ```ts
 const app = new Crust("greet")
   .args([{ name: "name", type: "string", required: true }] as const)
-  .handle(({ args, flags, ctx, rawArgs, command, stdout, stderr }) => {
+  .handle(({ args, flags, rawArgs, command, stdout, stderr }) => {
     stdout(`Hello, ${args.name}!`);
   });
 ```
 
-The context contains typed `args`, typed effective `flags`, typed Context values in `ctx`, `rawArgs` after `--`, the resolved `CommandSnapshot`, and injectable `stdout(text)` and `stderr(text)` callbacks.
+The context contains typed `args`, typed effective `flags`, `rawArgs` after `--`, the resolved `CommandSnapshot`, and injectable `stdout(text)` and `stderr(text)` callbacks.
 
 ## `.command(name, callback)`
 
@@ -276,7 +219,7 @@ command(
 ): Crust
 ```
 
-Defines and immediately mounts an inline child. The callback builder is typed with the parent's current inheritable flags and Contexts:
+Defines and immediately mounts an inline child. The callback builder is typed with the parent's current inheritable flags:
 
 ```ts
 const app = new Crust("my-cli")
@@ -296,18 +239,17 @@ Inline `.command()` uses the same materialization path as `.mount()`. Use it for
 ```ts
 mount<const R extends CommandRequirements>(
   name: string,
-  definition: CommandDefinition<R> & Mountable<Eff, Ctx, NoInfer<R>>,
+  definition: CommandDefinition<R> & Mountable<Eff, NoInfer<R>>,
 ): Crust
 ```
 
 Materializes an inert definition as a fresh child command. `name` controls routing and can differ between mounts:
 
 ```ts
-const first = new Crust("first").flags({ verbose }).provide(auth()).mount("deploy", deploy);
+const first = new Crust("first").flags({ verbose }).mount("deploy", deploy);
 
 const second = new Crust("second")
   .flags({ verbose: { ...verbose, required: true } })
-  .provide(auth())
   .mount("release", deploy);
 ```
 
@@ -315,18 +257,16 @@ const second = new Crust("second")
 
 - `"missing inherited flags"`
 - `"incompatible inherited flags"`
-- `"missing Contexts"`
-- `"incompatible Contexts"`
 
-Only `inherit: true` parent flags are considered. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement. Context values use the same provided-to-required assignability direction.
+Only `inherit: true` parent flags are considered. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement.
 
-At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided or derived Context names, unrelated callback returns, values that are not `defineCommand()` definitions, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
+At runtime, empty names, duplicate sibling names, alias collisions, unrelated callback returns, values that are not `defineCommand()` definitions, and Extensions forced into an untyped definition throw `CrustError` code `DEFINITION`.
 
 A definition can contain inline `.command()` calls and nested `.mount()` calls. Nested requirements are checked against the enclosing definition builder at that exact point.
 
 <Callout type="info">
-  Finalize inheritable flags and Contexts on the builder used for `.mount()`. Later fluent calls
-  create a new builder and do not backfill an existing mount.
+  Finalize inheritable flags on the builder used for `.mount()`. Later fluent calls create a new
+  builder and do not backfill an existing mount.
 </Callout>
 
 ## `.run(argv, io?)`
@@ -351,7 +291,7 @@ await app.run(["Ada"], {
 });
 ```
 
-`run()` resolves after successful cleanup. It does not render errors, run Extension `handleError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Handler, and cancellation failures are thrown unchanged.
+`run()` resolves after successful cleanup. It does not render errors, run Extension `handleError` hooks, or change `process.exitCode`. Definition, parse, Command Handler, and cancellation failures are thrown unchanged.
 
 ## `.execute(options?)`
 

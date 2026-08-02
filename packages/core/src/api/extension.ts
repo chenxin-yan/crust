@@ -1,8 +1,7 @@
 import type { CommandNode } from "../command/node.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
-import type { FlagDef } from "../types.ts";
-import type { Awaitable } from "./context.ts";
+import type { Awaitable, FlagDef } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Extension — the public integration contract (ADR-0001)
@@ -36,7 +35,7 @@ export type ExtensionNext = () => Promise<void>;
 
 /**
  * The one interception primitive. Executes after routing and syntax parsing
- * but before application value validation and Context construction, so an
+ * but before application value validation and the Command Handler, so an
  * Extension can short-circuit (by not calling `next()`) without exposing
  * nullable parser state. Extension-owned inputs are validated before the
  * hook; routing and syntax failures flow directly to error handling.

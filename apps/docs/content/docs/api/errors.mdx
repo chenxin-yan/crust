@@ -94,7 +94,7 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 ## Propagation boundaries
 
-`.run(argv, io)` throws the original error without rendering it or changing process status. Context and Command Handler failures are not wrapped in `CrustError`.
+`.run(argv, io)` throws the original error without rendering it or changing process status. Command Handler failures are not wrapped in `CrustError`.
 
 ```ts
 const failure = new Error("database unavailable");

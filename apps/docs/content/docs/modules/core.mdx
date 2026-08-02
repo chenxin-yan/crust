@@ -3,7 +3,7 @@ title: "Core"
 description: Supported command-authoring runtime for Crust applications and Extensions.
 ---
 
-`@crustjs/core` defines commands, routes and validates argv, constructs Contexts, applies Extensions, and runs Command Handlers.
+`@crustjs/core` defines commands, routes and validates argv, applies Extensions, and runs Command Handlers.
 
 ## Install
 
@@ -14,17 +14,14 @@ bun add @crustjs/core
 ## Quick example
 
 ```ts
-import { defineContext, Crust } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
-
-const config = defineContext("config", (options: { environment: string }) => options);
 
 const app = new Crust("deploy")
   .extend(help())
-  .provide(config({ environment: "production" }))
   .flags({ verbose: { type: "boolean", short: "v" } })
-  .handle(({ flags, ctx, stdout }) => {
-    stdout(`${ctx.config.environment}: verbose=${flags.verbose ?? false}`);
+  .handle(({ flags, stdout }) => {
+    stdout(`verbose=${flags.verbose ?? false}`);
   });
 
 await app.execute();
@@ -32,15 +29,14 @@ await app.execute();
 
 ## Runtime exports
 
-| Export                             | Description                                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)         | Immutable command builder with Context `.provide()`/`.derive()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                                                    |
-| `defineContext(name, setup)`       | Define a named Context factory; invoke it and attach the instance with `.provide()`                                            |
-| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                                                              |
-| `defineFlag(definition)`           | Preserve one literal flag definition                                                                                           |
-| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                                                     |
-| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                                                      |
+| Export                             | Description                                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)         | Immutable command builder with `.handle()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust) | Create an inert reusable command definition                                                  |
+| `defineExtension(name, config)`    | Define a frozen, application-wide Extension value                                            |
+| `defineFlag(definition)`           | Preserve one literal flag definition                                                         |
+| `defineFlags(definitions)`         | Preserve literal definitions in a flag map                                                   |
+| [`CrustError`](/docs/api/errors)   | Framework error for definition, routing, parsing, and validation failures                    |
 
 ## Definition types
 
@@ -51,7 +47,7 @@ await app.execute();
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                        |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                 |
 | `CommandMeta`                                 | Name, description, usage, aliases, and visibility                  |
-| [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time      |
+| [`CommandRequirements`](/docs/api/crust)      | Inherited flag requirements checked at mount time                  |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                      |
 | `FlagsDef`                                    | Flag-name-to-definition record                                     |
 | `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal          |
@@ -66,14 +62,6 @@ See [Types](/docs/api/types) for field-level definitions.
 | `CommandSnapshot`     | Readonly, serializable command description |
 | `ArgSnapshot`         | Serializable argument projection           |
 | `FlagSnapshot`        | Serializable flag projection               |
-
-## Context types
-
-| Type              | Description                                                 |
-| ----------------- | ----------------------------------------------------------- |
-| `ContextFactory`  | Factory returned by `defineContext()`                       |
-| `ContextInstance` | Named lazy dependency attached with `.provide()`            |
-| `ContextMap`      | Record shape used for inferred Command Handler `ctx` values |
 
 ## Extension types
 

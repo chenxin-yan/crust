@@ -27,44 +27,31 @@ Inline commands are convenient sugar for defining and materializing a command at
 
 ## Reusable command definitions
 
-`defineCommand<Requirements>(configure)` creates an inert command definition. Requirements declare the inheritable flags and Context values that the definition expects from any parent:
+`defineCommand<Requirements>(configure)` creates an inert command definition. Requirements declare the inheritable flags that the definition expects from any parent:
 
 ```ts
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { Crust, defineCommand, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag({ type: "boolean", inherit: true });
-const repository = defineContext("repository", (_options: void) => ({
-  defaultBranch: "main",
-}));
 
 const clone = defineCommand<{
   flags: { verbose: typeof verbose };
-  ctx: { repository: { defaultBranch: string } };
 }>((command) =>
-  command
-    .args([{ name: "url", type: "url", required: true }])
-    .handle(({ args, flags, ctx, stdout }) => {
-      stdout(`${args.url} ${ctx.repository.defaultBranch} ${flags.verbose}`);
-    }),
+  command.args([{ name: "url", type: "url", required: true }]).handle(({ args, flags, stdout }) => {
+    stdout(`${flags.verbose ? "Cloning" : "clone"} ${args.url}`);
+  }),
 );
 
-const app = new Crust("git")
-  .flags({ verbose })
-  .provide(repository(undefined))
-  .mount("clone", clone);
+const app = new Crust("git").flags({ verbose }).mount("clone", clone);
 ```
 
 The definition has no name and cannot run by itself. `.mount(name, definition)` supplies the routing name, checks the requirements at that call, and creates a fresh command node. The same definition can therefore be mounted under different names or into different satisfying parents:
 
 ```ts
-const git = new Crust("git")
-  .flags({ verbose })
-  .provide(repository(undefined))
-  .mount("clone", clone)
-  .mount("copy", clone);
+const git = new Crust("git").flags({ verbose }).mount("clone", clone).mount("copy", clone);
 ```
 
-Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`. A same-named parent flag only counts when it has `inherit: true`.
+Missing or incompatible inherited flags are TypeScript errors on `.mount()`. A same-named parent flag only counts when it has `inherit: true`.
 
 ## Nested definitions
 
@@ -87,10 +74,6 @@ const deploy = defineCommand<{
 
 const app = new Crust("app").flags({ verbose }).mount("deploy", deploy);
 ```
-
-## Context inheritance
-
-Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
 
 ## Unknown commands
 

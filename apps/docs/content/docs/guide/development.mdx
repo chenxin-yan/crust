@@ -30,8 +30,8 @@ Build validation prepares the complete command graph, including Extension-owned 
 
 ## Inspect input
 
-A Command Handler receives validated `args`, `flags`, Context values under `ctx`, forwarded `rawArgs`, a readonly `command` snapshot, and injectable writers. Extension hooks receive syntax-parsed invocation data and Command Snapshots.
+A Command Handler receives validated `args` and `flags`, forwarded `rawArgs`, a readonly `command` snapshot, and injectable writers. Extension hooks receive syntax-parsed invocation data and Command Snapshots.
 
 ## Project structure
 
-Start with one `src/cli.ts`. When command files become large, export the root builder and use the [split-file pattern](/docs/guide/split-files). Keep Extensions at the root and place reusable setup in [Contexts](/docs/guide/contexts).
+Start with one `src/cli.ts`. When command files become large, export the root builder and use the [split-file pattern](/docs/guide/split-files). Keep Extensions at the root and put reusable setup in ordinary modules.

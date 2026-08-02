@@ -1,4 +1,3 @@
-import type { ContextEntry } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 
@@ -25,8 +24,6 @@ export interface CommandNode {
 	args: ArgsDef | undefined;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
-	/** Context providers and derivations available to this command */
-	contexts: ContextEntry[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Handler */
@@ -51,7 +48,6 @@ export function createCommandNode(name: string): CommandNode {
 		effectiveFlags: {},
 		args: undefined,
 		subCommands: {},
-		contexts: [],
 		extensions: [],
 		run: undefined,
 	};

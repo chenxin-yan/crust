@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { defineContext } from "../api/context.ts";
 import { defineExtension, type ExtensionContext } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
@@ -1266,7 +1265,7 @@ describe("Extension handleError chain", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
-	it("preserves resolved parsed context for schema, Context, and handler failures", async () => {
+	it("preserves resolved parsed context for schema and handler failures", async () => {
 		let received: ExtensionContext | undefined;
 		const catcher = defineExtension("catcher", {
 			handleError(_error, ctx) {
@@ -1293,21 +1292,6 @@ describe("Extension handleError chain", () => {
 		await command(() => {
 			throw new Error("handler failed");
 		}).execute({ argv });
-		expectResolvedContext();
-
-		const brokenContext = defineContext("broken", () => {
-			throw new Error("Context failed");
-		});
-		await new Crust("cli")
-			.extend(catcher)
-			.command("deploy", (cmd) =>
-				cmd
-					.args([{ name: "target", type: "string", required: true }] as const)
-					.flags({ force: { type: "boolean" } })
-					.provide(brokenContext(undefined))
-					.handle(() => {}),
-			)
-			.execute({ argv });
 		expectResolvedContext();
 
 		await new Crust("cli")

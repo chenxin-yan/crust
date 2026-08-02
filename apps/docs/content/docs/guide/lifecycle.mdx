@@ -26,23 +26,21 @@ It requires explicit argv, honors injected writers, throws the original error, d
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions (duplicate provided or derived Context names are rejected earlier, at definition time).
+1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions.
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
 4. **Intercept** — run Extension intercepts in `.extend()` order. An intercept can stop here by not calling `next()`.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
-7. **Construct Contexts** — create provided and derived Context values for the resolved path in registration order.
-8. **Run the Command Handler**.
-9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
+7. **Run the Command Handler**.
 
-Code after `await next()` in an intercept runs while the chain unwinds, after the Command Handler and Context disposal beneath it.
+Code after `await next()` in an intercept runs while the chain unwinds, after the Command Handler beneath it.
 
 ## Error flow
 
-Definition, routing, and parse failures occur before intercepts. Validation, schema, Context, and Command Handler failures can unwind through intercepts that called `next()`.
+Definition, routing, and parse failures occur before intercepts. Validation, schema, and Command Handler failures can unwind through intercepts that called `next()`.
 
-With `run()`, the original value is thrown to the caller. Handler and Context failures are never wrapped in `CrustError`.
+With `run()`, the original value is thrown to the caller. Handler failures are never wrapped in `CrustError`.
 
 With `execute()`, Crust first establishes a nonzero status, then invokes Extension `handleError` hooks in `.extend()` order. A hook can render and return or call `next()`; Core's default renderer terminates the chain.
 
@@ -50,10 +48,4 @@ A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets 
 
 ## Setup and cleanup
 
-Choose the mechanism that matches the setup's scope:
-
-- use a Context for command-specific setup and native disposal
-- use Extension `intercept` for app-wide behavior around invocation
-- keep ordinary local setup in the Command Handler when it is not reusable
-
-This keeps dependency construction lazy and guarantees reverse-order cleanup.
+Use ordinary modules and closures for command-specific dependencies. Construct resources in the Command Handler and use `using` or `await using` for native, reverse-order cleanup. Use Extension `intercept` only for app-wide behavior around invocation.
