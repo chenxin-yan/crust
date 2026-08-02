@@ -84,7 +84,7 @@ A contributed command name or alias cannot collide with the application or anoth
 
 ## Interception
 
-`intercept(ctx, next)` runs after routing and syntax parsing but before application validation, schemas, and the Command Handler.
+`intercept(ctx, next)` runs after routing and syntax parsing but before application validation, schemas, Context construction, and the Command Handler.
 
 Extensions run in `.extend()` order. Calling `await next()` enters the rest of the chain; code after it runs as the chain unwinds. Do not call `next()` to short-circuit:
 

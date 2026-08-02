@@ -1,4 +1,6 @@
 // v0.1 builder API
+export type { ContextFactory, ContextInstance, ContextMap } from "./api/context.ts";
+export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
 	ExtensionCommand,

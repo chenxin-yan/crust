@@ -13,7 +13,7 @@ bun add -d @crustjs/testing
 
 ## Capture command output
 
-Use `captureRun()` for commands that write ordinary stdout or stderr. Each handler `stdout()`/`stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults), and a thrown application error is returned instead of discarding output that occurred before it.
+Use `captureRun()` for commands that write ordinary stdout or stderr. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults), and a thrown application error is returned instead of discarding output that occurred before it.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -32,7 +32,7 @@ test("greets a name", async () => {
 
 ## Test interactive commands
 
-Use `interactiveRun()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and handler `stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
+Use `interactiveRun()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
 
 ```ts
 import { expect, test } from "bun:test";

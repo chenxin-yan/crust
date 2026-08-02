@@ -2,7 +2,7 @@
 "@crustjs/core": minor
 ---
 
-Rename `extension()` to `defineExtension()`.
+Rename `context()` to `defineContext()` and `extension()` to `defineExtension()`.
 
 Add `defineFlag()` and `defineFlags()` const-generic identity helpers for validating and preserving separately declared flag definitions without `as const`.
 

@@ -1,11 +1,7 @@
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
-/** Resolve to `T` or a promise of `T` — accepted wherever setup work may be async. */
-export type Awaitable<T> = T | Promise<T>;
-
-/** Flatten an intersection into a single readable object type. */
-export type Simplify<T> = { [K in keyof T]: T[K] };
+import type { Simplify } from "./api/context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary

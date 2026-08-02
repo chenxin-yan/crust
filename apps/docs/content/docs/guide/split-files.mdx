@@ -16,10 +16,7 @@ export const verbose = defineFlag({ type: "boolean", inherit: true });
 
 export interface AppCommandRequirements extends CommandRequirements {
   flags: { verbose: typeof verbose };
-}
-
-export function log(message: string): void {
-  console.error(message);
+  ctx: { logger: { write(message: string): void } };
 }
 ```
 
@@ -31,14 +28,14 @@ A command file imports `defineCommand` and shared requirements, never the applic
 
 ```ts title="src/commands/greet.ts"
 import { defineCommand } from "@crustjs/core";
-import { log, type AppCommandRequirements } from "../shared.ts";
+import type { AppCommandRequirements } from "../shared.ts";
 
 export const greetCommand = defineCommand<AppCommandRequirements>((command) =>
   command
     .args([{ name: "name", type: "string", default: "world" }])
     .flags({ greeting: { type: "string", default: "Hello", short: "g" } })
-    .handle(({ args, flags, stdout }) => {
-      if (flags.verbose) log("Preparing greeting");
+    .handle(({ args, flags, ctx, stdout }) => {
+      if (flags.verbose) ctx.logger.write("Preparing greeting");
       stdout(`${flags.greeting}, ${args.name}!`);
     }),
 );
@@ -51,14 +48,21 @@ The configure callback is typed from the declared requirements. The exported def
 Define the root and its application-wide Extensions independently:
 
 ```ts title="src/app.ts"
-import { Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 import { verbose } from "./shared.ts";
+
+const logger = defineContext("logger", (_options: void) => ({
+  write(message: string) {
+    console.error(message);
+  },
+}));
 
 export const app = new Crust("my-cli")
   .meta({ description: "A split-file CLI" })
   .extend(version("0.2.0"), help())
-  .flags({ verbose });
+  .flags({ verbose })
+  .provide(logger(undefined));
 ```
 
 ## Mount and execute
@@ -72,35 +76,20 @@ import { greetCommand } from "./commands/greet.ts";
 await app.mount("greet", greetCommand).execute();
 ```
 
-`.mount()` checks that `app` provides a compatible inheritable `verbose` flag. Missing or incompatible requirements are reported at this line.
+`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context. Missing or incompatible requirements are reported at this line.
 
 ## Finalize before mounting
 
-Fluent builders are immutable, and a mount captures the parent scope used at that call. Add required `inherit: true` flags before `.mount()`:
+Fluent builders are immutable, and a mount captures the parent scope used at that call. Add required `inherit: true` flags and Contexts before `.mount()`:
 
 ```ts
-const complete = new Crust("app").flags({ verbose }).mount("greet", greetCommand);
+const complete = new Crust("app")
+  .flags({ verbose })
+  .provide(logger(undefined))
+  .mount("greet", greetCommand);
 ```
 
-A later `.flags()` call creates a new parent builder; it does not backfill a definition that was already mounted.
-
-## Command dependencies
-
-Use ordinary modules and closures for command dependencies. Construct resources in the handler that consumes them; use the native explicit resource-management protocol when cleanup is required:
-
-```ts title="src/commands/report.ts"
-import { defineCommand } from "@crustjs/core";
-import { connectDatabase } from "../database.ts";
-
-export const reportCommand = defineCommand((command) =>
-  command.handle(async ({ stdout }) => {
-    await using db = await connectDatabase();
-    stdout(await db.createReport());
-  }),
-);
-```
-
-Tests can pass dependencies to a command factory or replace a closure directly—no framework-specific container is required.
+A later `.flags()` or `.provide()` call creates a new parent builder; it does not backfill a definition that was already mounted.
 
 ## Inline or split?
 

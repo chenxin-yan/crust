@@ -24,6 +24,7 @@ function makeNode(partial: Partial<CommandNode> & { name: string }): CommandNode
 		effectiveFlags: partial.effectiveFlags ?? flags,
 		args: partial.args,
 		subCommands: partial.subCommands ?? {},
+		contexts: [],
 		extensions: [],
 		run: undefined,
 	};

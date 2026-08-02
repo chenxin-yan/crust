@@ -7,12 +7,12 @@ description: Handle Crust failures, application errors, and cancellation.
 
 Crust uses exactly four framework error codes:
 
-| Code                | Meaning                                                          |
-| ------------------- | ---------------------------------------------------------------- |
-| `DEFINITION`        | An invalid command, Extension, flag, alias, or schema definition |
-| `PARSE`             | Argv syntax, unknown flag, or built-in conversion failure        |
-| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues      |
-| `COMMAND_NOT_FOUND` | An unknown subcommand at the current command path                |
+| Code                | Meaning                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `DEFINITION`        | An invalid command, Extension, Context, flag, alias, or schema definition |
+| `PARSE`             | Argv syntax, unknown flag, or built-in conversion failure                 |
+| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues               |
+| `COMMAND_NOT_FOUND` | An unknown subcommand at the current command path                         |
 
 ```ts
 import { CrustError } from "@crustjs/core";
@@ -32,7 +32,7 @@ A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code
 
 ## Application errors pass through
 
-Errors from Command Handlers are not wrapped:
+Errors from Command Handlers and Context construction or disposal are not wrapped:
 
 ```ts
 const failure = new Error("service unavailable");

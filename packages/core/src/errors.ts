@@ -32,7 +32,7 @@ export interface ParseErrorDetails {
 
 /** Details for invalid application definitions. */
 export interface DefinitionErrorDetails {
-	readonly subject?: "arg" | "command" | "extension" | "flag";
+	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
 	readonly name?: string;
 	readonly reason?: string;
 }

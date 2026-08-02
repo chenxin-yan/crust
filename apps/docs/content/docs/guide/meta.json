@@ -8,6 +8,7 @@
     "types",
     "subcommands",
     "extensions",
+    "contexts",
     "lifecycle",
     "split-files",
     "environment",

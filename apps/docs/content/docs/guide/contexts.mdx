@@ -1,0 +1,192 @@
+---
+title: Contexts
+description: Define lazy, typed command dependencies with native cleanup.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+A Context is a named command dependency. `defineContext()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
+
+```ts
+import { defineContext, Crust } from "@crustjs/core";
+
+const database = defineContext("db", (options: { url: string }) => ({
+  query(sql: string) {
+    return `${sql} on ${options.url}`;
+  },
+}));
+
+const app = new Crust("app")
+  .provide(database({ url: "postgres://localhost/app" }))
+  .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
+```
+
+For a factory with no options, use `void` and call it with `undefined`:
+
+```ts
+const clock = defineContext("clock", (_options: void) => ({ now: () => Date.now() }));
+const app = new Crust("app").provide(clock(undefined));
+```
+
+## Lazy construction and inheritance
+
+Context values are constructed only after a command is routed, parsed, intercepted, and validated. A short-circuiting Extension does not construct them.
+
+Contexts are inherited by descendant commands:
+
+```ts
+const app = new Crust("app")
+  .provide(database({ url: process.env.DATABASE_URL! }))
+  .command("status", (command) =>
+    command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  );
+```
+
+Factories may be synchronous or asynchronous. Contexts on the resolved path are constructed in registration order.
+
+## Deriving Contexts
+
+`.provide()` when the factory needs only options; `.derive()` when it needs `ctx`.
+
+A derive receives only the Context values registered before it—never args or flags—and adds its result to `ctx` for later derives and the Command Handler. It runs in the same construction pass as provided Contexts, before args and flags reach the handler.
+
+### Authenticate once, then guard
+
+A derived value can turn a session into a user and abort the invocation before the handler when no user is present:
+
+```ts
+const session = defineContext("session", () => ({ user: undefined as { id: string } | undefined }));
+
+const app = new Crust("app")
+  .provide(session())
+  .derive("user", ({ ctx }) => {
+    if (!ctx.session.user) throw new Error("Unauthenticated");
+    return ctx.session.user;
+  })
+  .handle(({ ctx, stdout }) => stdout(`Welcome ${ctx.user.id}`));
+```
+
+### Build dependent values in order
+
+Each derive sees every Context and derive registered before it:
+
+```ts
+const config = defineContext("config", () => ({ workspace: "crust" }));
+
+const app = new Crust("app")
+  .provide(config())
+  .derive("client", ({ ctx }) => ({ workspace: ctx.config.workspace }))
+  .derive("workspace", ({ ctx }) => `workspace:${ctx.client.workspace}`)
+  .handle(({ ctx, stdout }) => stdout(ctx.workspace));
+```
+
+### Scope a guard to a subtree
+
+Put the derive on the command where its guard begins. Here, only `billing` and its descendants require a user:
+
+```ts
+const session = defineContext("session", () => ({ user: undefined as { id: string } | undefined }));
+
+const app = new Crust("app").provide(session()).command("billing", (command) =>
+  command
+    .derive("user", ({ ctx }) => {
+      if (!ctx.session.user) throw new Error("Unauthenticated");
+      return ctx.session.user;
+    })
+    .command("invoices", (child) =>
+      child.handle(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
+    ),
+);
+```
+
+### Keep definitions portable
+
+A definition can require a parent Context and derive command-local values from it:
+
+```ts
+const account = defineCommand<{ ctx: { session: { userId: string } } }>((command) =>
+  command
+    .derive("user", ({ ctx }) => ({ id: ctx.session.userId }))
+    .handle(({ ctx, stdout }) => stdout(ctx.user.id)),
+);
+
+const session = defineContext("session", () => ({ userId: "yan" }));
+const app = new Crust("app").provide(session()).mount("account", account);
+```
+
+The mount still requires `session`; deriving `user` inside the definition does not add a new requirement category.
+
+### Dispose derived resources
+
+Derived values use the same native disposal protocol as provided Contexts:
+
+```ts
+const config = defineContext("config", () => ({ databaseUrl: "postgres://localhost/app" }));
+
+const app = new Crust("app")
+  .provide(config())
+  .derive("db", async ({ ctx }) => {
+    const connection = await connect(ctx.config.databaseUrl);
+    return {
+      query: (sql: string) => connection.query(sql),
+      async [Symbol.asyncDispose]() {
+        await connection.close();
+      },
+    };
+  })
+  .handle(async ({ ctx }) => {
+    await ctx.db.query("select 1");
+  });
+```
+
+## Context requirements in definitions
+
+A reusable command declares the Context value types it needs. Mounting seeds a fresh command scope with the parent's current Context path:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+
+const status = defineCommand<{
+  ctx: { db: { query(sql: string): string } };
+}>((command) =>
+  command.command("check", (child) =>
+    child.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  ),
+);
+
+const app = new Crust("app")
+  .provide(database({ url: "postgres://localhost/app" }))
+  .mount("status", status);
+```
+
+The requirement is checked at `.mount()`, so call `.provide()` before mounting. A Context provided or derived on a later builder does not backfill an earlier mount.
+
+## One name per command path
+
+Providing or deriving two Context values with the same name on one command path is a `DEFINITION` error. This includes a descendant re-providing or re-deriving a name it inherited.
+
+Mounted definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides or derives the same name is rejected during `.mount()`.
+
+## Native disposal
+
+Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`:
+
+```ts
+const database = defineContext("db", async (options: { url: string }) => {
+  const connection = await connect(options.url);
+
+  return {
+    query: (sql: string) => connection.query(sql),
+    async [Symbol.asyncDispose]() {
+      await connection.close();
+    },
+  };
+});
+```
+
+Crust disposes constructed Context values in reverse construction order after success or failure. Prefer `Symbol.asyncDispose` when cleanup is asynchronous.
+
+<Callout type="info">
+  Use Contexts for command setup and cleanup. Use an Extension `intercept` only for app-wide
+  cross-cutting behavior around invocation.
+</Callout>

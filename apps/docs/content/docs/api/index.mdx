@@ -13,6 +13,7 @@ All exports on these pages come from `@crustjs/core`.
 | ------------------------------------ | ------------------------------------------------------------ |
 | [`Crust`](/docs/api/crust)           | Immutable, chainable command builder and invocation boundary |
 | [`defineCommand()`](/docs/api/crust) | Define an inert reusable command definition for `.mount()`   |
+| `defineContext(name, setup)`         | Define a named command dependency factory                    |
 | `defineExtension(name, config)`      | Define an application-wide Extension                         |
 | `defineFlag(definition)`             | Preserve one literal flag definition                         |
 | `defineFlags(definitions)`           | Preserve literal definitions in a flag map                   |
@@ -20,7 +21,7 @@ All exports on these pages come from `@crustjs/core`.
 
 ## Types
 
-See [Types](/docs/api/types) for command definitions, Command Snapshots, Command Handler contexts, Extensions, and error detail types.
+See [Types](/docs/api/types) for command definitions, Command Snapshots, Command Handler contexts, Contexts, Extensions, and error detail types.
 
 <Callout type="warn">
   `@crustjs/core/tooling` is an unsupported bridge for first-party build, man-page, and skill

@@ -1,6 +1,6 @@
 ---
 title: "Types"
-description: Public command definitions, snapshots, Command Handler contexts, and Extensions.
+description: Public command definitions, snapshots, Command Handler contexts, Contexts, and Extensions.
 ---
 
 All types on this page are exported from `@crustjs/core`.
@@ -99,7 +99,7 @@ const sharedFlags = defineFlags({ verbose, format: { type: "string", default: "t
 
 ## Command Snapshots
 
-Command Snapshots are readonly, serializable descriptions. They contain no Command Handler, parser, or schema functions and are deeply frozen at public boundaries.
+Command Snapshots are readonly, serializable descriptions. They contain no Command Handler, parser, schema, or Context functions and are deeply frozen at public boundaries.
 
 ### `CommandSnapshot`
 
@@ -122,14 +122,43 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 
 ## Command Handler context
 
-### `CrustCommandContext<A, F>`
+### `CrustCommandContext<A, F, Ctx>`
 
 <auto-type-table
   path="../../../../../packages/core/src/command/crust.ts"
   name="CrustCommandContext"
 />
 
-`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()` and `.flags()` infer these fields without explicit generic arguments.
+`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, `.provide()`, and `.derive()` infer these fields without explicit generic arguments.
+
+## Context types
+
+### `ContextFactory`
+
+```ts
+interface ContextFactory<Name extends string, Options, Value> {
+  (options: Options): ContextInstance<Name, Value>;
+}
+```
+
+`defineContext(name, setup)` always returns a factory. Invoke it even when `Options` is `void`.
+
+### `ContextInstance`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/context.ts"
+  name="ContextInstance"
+/>
+
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path; use `.derive()` to create a value from earlier Contexts.
+
+### `ContextMap`
+
+```ts
+type ContextMap = Record<string, unknown>;
+```
+
+The map shape used for inferred `ctx` values.
 
 ## Extension types
 
@@ -181,7 +210,7 @@ type ExtensionErrorHandler = (
 ) => void | Promise<void>;
 ```
 
-`intercept` runs after routing and syntax parsing but before application value validation and the Command Handler. It short-circuits by not calling `next()`; calling `next()` more than once is a `DEFINITION` error. Extension-owned command inputs are validated before interception.
+`intercept` runs after routing and syntax parsing but before application value validation and Context construction. It short-circuits by not calling `next()`; calling `next()` more than once is a `DEFINITION` error. Extension-owned command inputs are validated before interception.
 
 `handleError` is a terminal presentation chain used by `.execute()` only. Render the error or call `next()` to delegate. Core preserves a nonzero failure outcome either way.
 
