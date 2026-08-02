@@ -251,18 +251,19 @@ command without extending the public `@crustjs/core` builder API.
 - `annotate()` renders command guidance as bullets in the command doc.
 
 ```ts
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
-const deploy = annotate(
-  new Crust("deploy").meta({ description: "Deploy the application" }).handle(() => {
-    // ...
-  }),
-  [
+const deploy = defineCommand("deploy", (command) =>
+  annotate(command.meta({ description: "Deploy the application" }), [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",
-  ],
+  ]).handle(() => {
+    // ...
+  }),
 );
+
+const app = new Crust("my-cli").mount(deploy);
 ```
 
 ## Name Validation

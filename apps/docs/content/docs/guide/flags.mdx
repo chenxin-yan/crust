@@ -5,23 +5,25 @@ description: Define typed named inputs, aliases, repeated values, and inherited 
 
 import { Callout } from "fumadocs-ui/components/callout";
 
+`.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
+
 ```ts
 const command = new Crust("serve")
-  .flags({
-    port: { type: "number", default: 3000, short: "p" },
-    verbose: { type: "boolean", short: "v" },
-  })
+  .flags(
+    { name: "port", type: "number", default: 3000, short: "p" },
+    { name: "verbose", type: "boolean", short: "v" },
+  )
   .handle(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
 ```
 
-See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
+See [`FlagDef`](/docs/api/types#flagdef) for the complete definition. Repeated `.flags()` calls replace the local flags; a duplicate name within one call is a `DEFINITION` error.
 
 ## Aliases and negation
 
 `short` defines one single-character form. `aliases` adds other short or long forms:
 
 ```ts
-.flags({ output: { type: "path", short: "o", aliases: ["out"] } })
+.flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
 ```
 
 Boolean flags support canonical `--no-name` negation. They do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved; violations are `DEFINITION` errors.
@@ -29,10 +31,10 @@ Boolean flags support canonical `--no-name` negation. They do not accept `--name
 ## Required and defaulted values
 
 ```ts
-.flags({
-  token: { type: "string", required: true },
-  format: { type: "string", default: "json" },
-})
+.flags(
+  { name: "token", type: "string", required: true },
+  { name: "format", type: "string", default: "json" },
+)
 ```
 
 Both values are non-optional in the Command Handler. Other flags include `undefined` in their inferred type.
@@ -40,7 +42,7 @@ Both values are non-optional in the Command Handler. Other flags include `undefi
 ## Repeated values
 
 ```ts
-.flags({ target: { type: "string", multiple: true, short: "t" } })
+.flags({ name: "target", type: "string", multiple: true, short: "t" })
 ```
 
 `--target linux --target darwin` produces `string[]`. Repeated boolean flags also collect booleans when `multiple: true`.
@@ -48,7 +50,7 @@ Both values are non-optional in the Command Handler. Other flags include `undefi
 ## Choices
 
 ```ts
-.flags({ target: { type: "string", choices: ["bun", "node"] } })
+.flags({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
 Choices are supported on string flags and invalid values produce `PARSE` errors.
@@ -58,17 +60,25 @@ Choices are supported on string flags and invalid values produce `PARSE` errors.
 Set `inherit: true` to expose a parent flag to descendant Command Handlers:
 
 ```ts
-const app = new Crust("app")
-  .flags({ verbose: { type: "boolean", inherit: true } })
-  .command("deploy", (command) =>
-    command.flags({ env: { type: "string", required: true } }).handle(({ flags }) => {
-      flags.verbose; // boolean | undefined
-      flags.env; // string
-    }),
-  );
+import { Crust, defineCommand, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+
+const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
+  command.flags({ name: "env", type: "string", required: true }).handle(({ flags }) => {
+    flags.verbose; // boolean | undefined
+    flags.env; // string
+  }),
+);
+
+const app = new Crust("app").flags(verbose).mount(deploy);
 ```
 
-The flag is parsed and shown in help at each descendant. Declare inherited flags before creating a child with `.sub()`; see [Split Commands Across Files](/docs/guide/split-files).
+The flag is parsed and shown in help at each descendant. `defineFlag(name, def)` preserves the literal definition, so the requirement array and the parent's `.flags()` call reference the same value.
+
+`.mount()` checks the parent's current builder. Define required flags with `inherit: true` before mounting. A same-named non-inheritable flag is treated as missing, and incompatible inferred value types are rejected. Flags added on a later builder do not backfill an earlier mount.
+
+A command mounted without a flag requirement still inherits `inherit: true` flags at runtime, but its handler's `flags` type does not include them — declare requirements to see them.
 
 ## Standard Schemas
 
@@ -78,7 +88,7 @@ For a schema-backed flag, `type` controls token grammar only: `"string"` consume
 import { z } from "zod";
 
 new Crust("serve")
-  .flags({ port: { type: "string", schema: z.coerce.number().int() } })
+  .flags({ name: "port", type: "string", schema: z.coerce.number().int() })
   .handle(({ flags }) => {
     flags.port; // number
   });

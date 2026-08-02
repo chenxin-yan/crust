@@ -31,18 +31,20 @@ const app = new Crust("my-cli").extend(
 See the [Extensions module](/docs/modules/extensions) for each capability's options.
 
 <Callout type="warn">
-  `.extend()` is root-only. Extensions apply to the entire application, so attaching one to a child
-  is a `DEFINITION` error.
+  `.extend()` is root-only. `CommandDefinitionBuilder` does not expose it, so Extensions cannot be
+  registered inside `defineCommand()` callbacks.
 </Callout>
+
+Mounted definitions are materialized into ordinary command nodes before root Extensions prepare the application. Root Extensions therefore apply to mounted and inline commands alike. Extension-owned flags are not represented in the root builder's TypeScript generics, so they cannot satisfy a reusable definition's compile-time flag requirements; declare required inheritable flags on the root itself.
 
 ## Author an Extension
 
-`extension(name, config)` returns a frozen plain value:
+`defineExtension(name, config)` returns a frozen plain value:
 
 ```ts
-import { Crust, extension } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-export const diagnostics = extension("diagnostics", {
+export const diagnostics = defineExtension("diagnostics", {
   flags: {
     trace: {
       type: "boolean",
@@ -76,7 +78,7 @@ The config can contain `flags`, `commands`, `intercept`, and `handleError`.
 
 Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `inherit` controls ordinary command inheritance and remains available on the flag definition.
 
-Extension commands are configured `Crust` builders attached at the root. Their input definitions are validated before an intercept runs.
+Extension commands remain configured `Crust` builders attached at the root; this surface is unchanged by reusable command definitions. Their input definitions are validated before an intercept runs.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide either. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 
@@ -87,7 +89,7 @@ A contributed command name or alias cannot collide with the application or anoth
 Extensions run in `.extend()` order. Calling `await next()` enters the rest of the chain; code after it runs as the chain unwinds. Do not call `next()` to short-circuit:
 
 ```ts
-const cached = extension("cached", {
+const cached = defineExtension("cached", {
   async intercept(ctx, next) {
     if (ctx.flags.cached) {
       ctx.stdout("cached result");

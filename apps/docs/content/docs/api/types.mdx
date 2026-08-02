@@ -80,6 +80,27 @@ const flags = {
 
 The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives the corresponding array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
 
+### `NamedFlagDef`
+
+```ts
+type NamedFlagDef = FlagDef & { readonly name: string };
+```
+
+The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requirements.flags` arrays, and `defineFlag()` all use it.
+
+### `defineFlag` and `defineArg`
+
+Use these const-generic helpers when a definition is declared separately from `.flags()` or `.args()`. They preserve literal fields without `as const`:
+
+```ts
+import { defineArg, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true, short: "v" });
+const target = defineArg("target", { type: "string", required: true });
+```
+
+`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
+
 ### `CommandMeta`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
@@ -125,12 +146,31 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value> {
-  (options: Options): ContextInstance<Name, Value>;
+interface ContextFactory<Name extends string, Options, Value, RF, RC> {
+  (options: Options): ContextInstance<Name, Value, RF, RC>;
+  readonly contextName: Name;
+  of(value: Value): ContextInstance<Name, Value>;
 }
 ```
 
-`context(name, setup)` always returns a factory. Invoke it even when `Options` is `void`.
+`defineContext(name, setup)` and `defineContext(name, requirements, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets requirement arrays reference the factory directly; `.of(value)` produces an instance returning the precomputed value with requirements considered satisfied — for test doubles. `AnyContextFactory` is the requirement-array element type.
+
+### `ContextRequirements` and `ContextSetup`
+
+```ts
+interface ContextRequirements {
+  readonly flags?: readonly NamedFlagDef[];
+  readonly ctx?: readonly AnyContextFactory[];
+}
+
+interface ContextSetup<Options, RF, RC> {
+  readonly options: Options;
+  readonly flags: InferFlags<RF>;
+  readonly ctx: Readonly<RC>;
+}
+```
+
+`ContextRequirements` declares the flags a Context reads and the Contexts it depends on. `ContextSetup` is the typed input every setup receives: the factory argument, the validated parsed flags narrowed to the declared requirements, and the values of the declared ctx dependencies.
 
 ### `ContextInstance`
 
@@ -139,7 +179,7 @@ interface ContextFactory<Name extends string, Options, Value> {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the resolved path.
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared ctx requirements.
 
 ### `ContextMap`
 
@@ -162,7 +202,7 @@ The map shape used for inferred `ctx` values.
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`extension(name, config)` returns a frozen structural value.
+`defineExtension(name, config)` returns a frozen structural value.
 
 ### `ExtensionFlagDef`
 

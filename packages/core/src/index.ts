@@ -1,6 +1,13 @@
 // v0.1 builder API
-export type { ContextFactory, ContextInstance, ContextMap } from "./api/context.ts";
-export { context } from "./api/context.ts";
+export type {
+	AnyContextFactory,
+	ContextFactory,
+	ContextInstance,
+	ContextMap,
+	ContextRequirements,
+	ContextSetup,
+} from "./api/context.ts";
+export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
 	ExtensionCommand,
@@ -11,13 +18,20 @@ export type {
 	ExtensionIntercept,
 	ExtensionNext,
 } from "./api/extension.ts";
-export { extension } from "./api/extension.ts";
+export { defineExtension } from "./api/extension.ts";
+export { defineArg, defineFlag } from "./api/flags.ts";
+export type { UnnamedArgDef } from "./api/flags.ts";
 
 // Command snapshots
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
-// Command context
-export type { CrustCommandContext } from "./command/crust.ts";
-export { Crust } from "./command/crust.ts";
+// Command definitions and context
+export type {
+	CommandDefinition,
+	CommandDefinitionBuilder,
+	CommandRequirements,
+	CrustCommandContext,
+} from "./command/crust.ts";
+export { Crust, defineCommand } from "./command/crust.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
@@ -30,4 +44,12 @@ export type {
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
 // Core types
-export type { ArgDef, ArgsDef, CommandMeta, FlagDef, FlagsDef, ValueType } from "./types.ts";
+export type {
+	ArgDef,
+	ArgsDef,
+	CommandMeta,
+	FlagDef,
+	FlagsDef,
+	NamedFlagDef,
+	ValueType,
+} from "./types.ts";

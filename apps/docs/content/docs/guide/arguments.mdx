@@ -5,25 +5,25 @@ description: Define typed positional inputs for a command.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Arguments map positional tokens to names in definition order.
+`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Pass values from `defineArg(name, def)` or inline literals:
 
 ```ts
 const command = new Crust("serve")
-  .args([
+  .args(
     { name: "port", type: "number", default: 3000 },
     { name: "host", type: "string", default: "localhost" },
-  ])
+  )
   .handle(({ args, stdout }) => stdout(`${args.host}:${args.port}`));
 ```
 
 ## Required, optional, and defaulted
 
 ```ts
-.args([
+.args(
   { name: "input", type: "path", required: true },
   { name: "format", type: "string", default: "json" },
   { name: "label", type: "string" },
-])
+)
 ```
 
 The inferred types are `string`, `string`, and `string | undefined`, respectively. See [`ArgDef`](/docs/api/types#argdef) for all properties.
@@ -34,10 +34,10 @@ Only the final argument can be variadic:
 
 ```ts
 new Crust("copy")
-  .args([
+  .args(
     { name: "destination", type: "path", required: true },
     { name: "files", type: "path", variadic: true },
-  ])
+  )
   .handle(({ args }) => {
     args.files; // string[]
   });
@@ -50,7 +50,7 @@ A variadic value is always an array. `required: true` rejects an empty array.
 Use `choices` for a static string set:
 
 ```ts
-.args([{ name: "target", type: "string", choices: ["bun", "node"] }] as const)
+.args({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
 Invalid choices produce a `PARSE` error.
@@ -63,7 +63,7 @@ A `schema` receives the raw positional token (`string | undefined`, or `string[]
 import { z } from "zod";
 
 new Crust("serve")
-  .args([{ name: "port", schema: z.coerce.number().int().positive() }] as const)
+  .args({ name: "port", schema: z.coerce.number().int().positive() })
   .handle(({ args }) => {
     args.port; // number
   });

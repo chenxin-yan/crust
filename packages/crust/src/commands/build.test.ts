@@ -26,25 +26,24 @@ import {
  * Helper to extract the build command's internal node for definition checks.
  */
 function makeBuildNode() {
-	const buildNode = new Crust("test").command(buildCommand)._node.subCommands.build;
+	const buildNode = new Crust("test").mount(buildCommand)._node.subCommands.build;
 	if (!buildNode) throw new Error("build subcommand not found");
 	return buildNode;
 }
 
-/**
- * Parse argv against the build command's grammar through the public
- * pipeline: swap in a capturing handler and run() the clone.
- */
+/** Parse argv against the mounted build command's grammar. */
 async function parseBuildArgs(argv: string[]) {
 	let captured: { args: Record<string, unknown>; flags: Record<string, unknown> } | undefined;
-	await buildCommand
-		.handle((ctx) => {
-			captured = {
-				args: ctx.args,
-				flags: ctx.flags,
-			};
-		})
-		.run(argv);
+	const app = new Crust("test").mount(buildCommand);
+	const node = app._node.subCommands.build!;
+	node.run = (ctx) => {
+		const commandContext = ctx as {
+			args: Record<string, unknown>;
+			flags: Record<string, unknown>;
+		};
+		captured = commandContext;
+	};
+	await app.run(["build", ...argv]);
 	if (!captured) throw new Error("build handler did not run");
 	return captured;
 }
@@ -576,7 +575,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").command(buildCommand);
+			const app = new Crust("test").mount(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--entry", "nonexistent.ts", "--target", "linux-x64"],
@@ -611,7 +610,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").command(buildCommand);
+			const app = new Crust("test").mount(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--outfile", "./out"],

@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 
 import { completionExtension } from "./index.ts";
@@ -60,29 +60,30 @@ function buildCli() {
 	return new Crust("mycli")
 		.meta({ description: "Test CLI" })
 		.extend(completionExtension({ version: "1.2.3" }))
-		.command("build", (cmd) =>
-			cmd
-				.meta({ description: "Build artifact" })
-				.flags({
-					target: { type: "string", choices: ["browser", "bun", "node"] },
-				})
-				.handle(() => {}),
-		)
-		.command("deploy", (cmd) =>
-			cmd
-				.meta({ description: "Deploy", aliases: ["dep"] })
-				.command("prod", (sub) =>
-					sub
-						.meta({ description: "Production deploy" })
-						.flags({
-							env: {
-								type: "string",
-								choices: ["dev", "staging", "prod"],
-							},
-						})
-						.handle(() => {}),
-				)
-				.handle(() => {}),
+		.mount(
+			defineCommand("build", (cmd) =>
+				cmd
+					.meta({ description: "Build artifact" })
+					.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+					.handle(() => {}),
+			),
+			defineCommand("deploy", (cmd) =>
+				cmd
+					.meta({ description: "Deploy", aliases: ["dep"] })
+					.mount(
+						defineCommand("prod", (sub) =>
+							sub
+								.meta({ description: "Production deploy" })
+								.flags({
+									name: "env",
+									type: "string",
+									choices: ["dev", "staging", "prod"],
+								})
+								.handle(() => {}),
+						),
+					)
+					.handle(() => {}),
+			),
 		)
 		.handle(() => {});
 }

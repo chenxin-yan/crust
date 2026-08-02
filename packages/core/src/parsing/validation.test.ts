@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { defineContext } from "../api/context.ts";
 import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
 import { validateCommandTree } from "./validation.ts";
 
@@ -48,6 +49,32 @@ describe("validateCommandTree", () => {
 		expect(() => validateCommandTree(root)).toThrow(
 			'Command "root generate leaf" failed runtime validation',
 		);
+	});
+
+	it("throws when a Context dependency is missing from a node's path", () => {
+		const config = defineContext("config", () => ({}));
+		const client = defineContext("client", { ctx: [config] }, () => ({}));
+
+		const node = createCommandNode("root");
+		node.contexts = [client()];
+
+		expect(() => validateCommandTree(node)).toThrow(/Context "client" requires Context "config"/);
+		expect(() => {
+			node.contexts = [config(), client()];
+			validateCommandTree(node);
+		}).not.toThrow();
+	});
+
+	it("throws when Contexts on a node form a dependency cycle", () => {
+		const a = defineContext("a", () => "a")();
+		const b = defineContext("b", () => "b")();
+		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
+		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
+
+		const node = createCommandNode("root");
+		node.contexts = [a, b];
+
+		expect(() => validateCommandTree(node)).toThrow(/dependency cycle/);
 	});
 });
 
@@ -269,7 +296,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 // validateCommandTree — alias collisions
 //
-// Catches plugin-installed subcommands that bypass `.command()` (where
+// Catches plugin-installed subcommands that bypass `.mount()` (where
 // collision detection runs eagerly).
 // ──────────────────────────────────────────────────────────────────────────────
 

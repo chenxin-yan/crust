@@ -1,17 +1,18 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 
-import { captureRun, interactiveRun } from "./index.ts";
+import { captureRun, interactiveRun, type RunnableApp } from "./index.ts";
 
 describe("captureRun", () => {
-	it("captures output as lines, matching core's console.log defaults", async () => {
-		const app = new Crust("test").handle(({ stdout, stderr }) => {
-			stdout("first");
-			stdout("second");
-			stderr("warning");
-		});
+	it("captures output from a structural runnable as lines", async () => {
+		const app: RunnableApp = {
+			async run(_argv, io) {
+				io?.stdout?.("first");
+				io?.stdout?.("second");
+				io?.stderr?.("warning");
+			},
+		};
 
 		expect(await captureRun(app, [])).toEqual({
 			stdout: "first\nsecond",
@@ -21,11 +22,13 @@ describe("captureRun", () => {
 
 	it("returns errors after preserving output", async () => {
 		const error = new Error("failed");
-		const app = new Crust("test").handle(({ stdout, stderr }) => {
-			stdout("before");
-			stderr("problem");
-			throw error;
-		});
+		const app: RunnableApp = {
+			async run(_argv, io) {
+				io?.stdout?.("before");
+				io?.stderr?.("problem");
+				throw error;
+			},
+		};
 
 		const result = await captureRun(app, []);
 		expect(result.stdout).toBe("before");
@@ -35,12 +38,14 @@ describe("captureRun", () => {
 });
 
 describe("interactiveRun", () => {
-	it("drives prompts and merges application stderr with prompt frames", async () => {
-		const app = new Crust("test").handle(async ({ stderr }) => {
-			stderr("Starting");
-			const name = await input({ message: "Name?" });
-			stderr(`Hello, ${name}!`);
-		});
+	it("drives prompts from a structural runnable and merges stderr with prompt frames", async () => {
+		const app: RunnableApp = {
+			async run(_argv, io) {
+				io?.stderr?.("Starting");
+				const name = await input({ message: "Name?" });
+				io?.stderr?.(`Hello, ${name}!`);
+			},
+		};
 
 		const run = interactiveRun(app, []);
 		await run.waitFor(/Name\?/);
@@ -54,18 +59,22 @@ describe("interactiveRun", () => {
 
 	it("waitFor rethrows the application error instead of hanging", async () => {
 		const error = new Error("boom");
-		const app = new Crust("test").handle(() => {
-			throw error;
-		});
+		const app: RunnableApp = {
+			async run() {
+				throw error;
+			},
+		};
 
 		const run = interactiveRun(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toBe(error);
 	});
 
 	it("waitFor fails when the application completes without matching", async () => {
-		const app = new Crust("test").handle(({ stderr }) => {
-			stderr("done");
-		});
+		const app: RunnableApp = {
+			async run(_argv, io) {
+				io?.stderr?.("done");
+			},
+		};
 
 		const run = interactiveRun(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toThrow("already completed");

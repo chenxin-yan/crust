@@ -1,45 +1,196 @@
+import { CrustError } from "../errors.ts";
+import type { FlagsDef, InferFlags, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
+
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
 export type MergeContext<A, B> = Simplify<A & B>;
-export type ContextOutput<S> =
-	S extends ContextInstance<infer Name, infer Value> ? { [K in Name]: Awaited<Value> } : never;
+
+/**
+ * Requirements a Context declares about its command path: flags it reads
+ * (as named flag definitions) and other Contexts it depends on (as their
+ * factories). Flag requirements are checked at the `.provide()` call site;
+ * ctx requirements drive topological construction order and are checked
+ * when the resolved command path is constructed.
+ */
+export interface ContextRequirements {
+	readonly flags?: readonly NamedFlagDef[];
+	readonly ctx?: readonly AnyContextFactory[];
+}
+
+/** The runtime input every Context setup receives (typed per-factory by `defineContext`). */
+interface ContextSetupInput {
+	readonly flags: Record<string, unknown>;
+	readonly ctx: Readonly<ContextMap>;
+}
 
 /**
  * A named command dependency produced by invoking a Context factory.
  * Attach with `.provide()`; the value is constructed only when the
  * resolved command path executes.
+ *
+ * Generic parameters `RF`/`RC` carry the declared flag and ctx
+ * requirements for compile-time checking at attach sites.
  */
-export interface ContextInstance<Name extends string = string, Value = unknown> {
+export interface ContextInstance<
+	Name extends string = string,
+	Value = unknown,
+	RF extends FlagsDef = {},
+	RC extends ContextMap = {},
+> {
 	readonly kind: "context";
 	readonly name: Name;
-	setup(): Awaitable<Value>;
+	/** @internal — declared flag requirements, keyed by flag name */
+	readonly requiredFlags: FlagsDef;
+	/** @internal — declared ctx dependency names (topological ordering) */
+	readonly requiredCtx: readonly string[];
+	/** @internal */
+	setup(input: ContextSetupInput): Awaitable<Value>;
+	/** @internal — phantom carrying requirement types for attach-site checks */
+	readonly _requires?: { flags: RF; ctx: RC };
 }
 
-export interface ContextFactory<Name extends string, Options, Value> {
-	(options: Options): ContextInstance<Name, Value>;
+/** The typed setup input for one Context factory. */
+export interface ContextSetup<Options, RF extends FlagsDef, RC extends ContextMap> {
+	/** The factory argument */
+	readonly options: Options;
+	/** Validated parsed flags of the resolved invocation, narrowed to the declared requirements */
+	readonly flags: InferFlags<RF>;
+	/** Values of the declared ctx dependencies */
+	readonly ctx: Readonly<RC>;
 }
+
+export interface ContextFactory<
+	Name extends string,
+	Options,
+	Value,
+	RF extends FlagsDef = {},
+	RC extends ContextMap = {},
+> {
+	(options: Options): ContextInstance<Name, Value, RF, RC>;
+	/** The Context name this factory produces (used in `requirements.ctx` arrays). */
+	readonly contextName: Name;
+	/**
+	 * Produce an instance whose setup returns the precomputed `value`
+	 * (requirements considered satisfied/absent) — for test doubles.
+	 */
+	of(value: Value): ContextInstance<Name, Value>;
+}
+
+export type AnyContextFactory = ContextFactory<string, any, any, any, any>;
+
+export type ContextOutput<C> =
+	C extends ContextInstance<infer Name, infer Value, any, any>
+		? { [K in Name]: Awaited<Value> }
+		: never;
+
+/** Merged outputs of a tuple of Context instances (as attached by one `.provide()` call). */
+export type ContextsOutput<Cs extends readonly ContextInstance[]> = Cs extends readonly [
+	infer H,
+	...infer T extends readonly ContextInstance[],
+]
+	? ContextOutput<H> & ContextsOutput<T>
+	: {};
+
+type FactoryOutput<F> =
+	F extends ContextFactory<infer Name, any, infer Value, any, any>
+		? { [K in Name]: Awaited<Value> }
+		: never;
+
+/** Merged outputs of a tuple of Context factories (as declared in `requirements.ctx`). */
+export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+	infer H,
+	...infer T extends readonly AnyContextFactory[],
+]
+	? FactoryOutput<H> & FactoriesOutput<T>
+	: {};
+
+/** @internal — flag requirements of a `{ flags, ctx }` requirements object, as a record. */
+export type RequirementFlagsOf<R extends ContextRequirements> = R extends {
+	flags: infer F extends readonly NamedFlagDef[];
+}
+	? NamedFlagsRecord<F>
+	: {};
+
+/** @internal — merged ctx outputs of a `{ flags, ctx }` requirements object. */
+export type RequirementCtxOf<R extends ContextRequirements> = R extends {
+	ctx: infer C extends readonly AnyContextFactory[];
+}
+	? FactoriesOutput<C>
+	: {};
 
 /**
  * Define a Context — a named command dependency.
  *
  * Always returns a factory that must be invoked, including zero-option
  * setups, so the API reads uniformly as
- * `context("db", factory)` → `.provide(db(options))` → `ctx.db`.
+ * `defineContext("db", factory)` → `.provide(db(options))` → `ctx.db`.
  *
- * Factories receive only their options. Cleanup belongs to the value
- * itself: implement `Symbol.dispose` or `Symbol.asyncDispose` and Core
- * disposes constructed values in reverse order after success or failure.
+ * With a `requirements` argument the setup additionally receives the
+ * validated parsed `flags` it declared and the values of the Contexts it
+ * depends on (`ctx`). Dependencies drive construction order: Contexts on
+ * the resolved command path are constructed topologically, regardless of
+ * `.provide()` order.
+ *
+ * Cleanup belongs to the value itself: implement `Symbol.dispose` or
+ * `Symbol.asyncDispose` and Core disposes constructed values in reverse
+ * construction order after success or failure.
  */
-export function context<Name extends string, Value, Options = void>(
+export function defineContext<Name extends string, Value, Options = void>(
 	name: Name,
-	setup: (options: Options) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value> {
-	return (options: Options) => ({
-		kind: "context" as const,
+	setup: (input: ContextSetup<Options, {}, {}>) => Awaitable<Value>,
+): ContextFactory<Name, Options, Value>;
+export function defineContext<
+	Name extends string,
+	const R extends ContextRequirements,
+	Value,
+	Options = void,
+>(
+	name: Name,
+	requirements: R,
+	setup: (
+		input: ContextSetup<Options, RequirementFlagsOf<R>, RequirementCtxOf<R>>,
+	) => Awaitable<Value>,
+): ContextFactory<Name, Options, Value, RequirementFlagsOf<R>, RequirementCtxOf<R>>;
+export function defineContext(
+	name: string,
+	requirementsOrSetup: ContextRequirements | ((input: never) => unknown),
+	maybeSetup?: (input: never) => unknown,
+): AnyContextFactory {
+	const hasRequirements = typeof requirementsOrSetup !== "function";
+	const requirements = hasRequirements ? requirementsOrSetup : {};
+	const setup = hasRequirements ? maybeSetup : requirementsOrSetup;
+	if (typeof setup !== "function") {
+		throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`, {
+			subject: "context",
+			name,
+			reason: "missing-setup",
+		});
+	}
+
+	const requiredFlags: FlagsDef = {};
+	for (const def of requirements.flags ?? []) {
+		const { name: flagName, ...rest } = def;
+		requiredFlags[flagName] = rest;
+	}
+	const requiredCtx = (requirements.ctx ?? []).map((dep) => dep.contextName);
+
+	const factory = (options: unknown): ContextInstance => ({
+		kind: "context",
 		name,
-		setup: () => setup(options),
+		requiredFlags,
+		requiredCtx,
+		setup: (input) => setup({ options, flags: input.flags, ctx: input.ctx } as never),
 	});
+	factory.contextName = name;
+	factory.of = (value: unknown): ContextInstance => ({
+		kind: "context",
+		name,
+		requiredFlags: {},
+		requiredCtx: [],
+		setup: () => value,
+	});
+	return factory as AnyContextFactory;
 }
 
 function registerDisposable(value: unknown, disposal: AsyncDisposableStack): void {
@@ -59,16 +210,67 @@ function registerDisposable(value: unknown, disposal: AsyncDisposableStack): voi
 }
 
 /**
- * Construct Context values in registration order, registering disposable
+ * Order Context instances topologically by their declared ctx
+ * requirements, preserving registration order among independent Contexts.
+ *
+ * @param where - Attach-site label used in error messages (e.g. the command path)
+ * @throws {CrustError} `DEFINITION` on a missing dependency or a dependency cycle
+ */
+export function sortContexts(
+	contexts: readonly ContextInstance[],
+	where: string,
+): ContextInstance[] {
+	const provided = new Set(contexts.map((context) => context.name));
+	for (const context of contexts) {
+		for (const dep of context.requiredCtx) {
+			if (!provided.has(dep)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Context "${context.name}" requires Context "${dep}", which is not provided on ${where}`,
+					{ subject: "context", name: context.name, reason: "missing-context-dependency" },
+				);
+			}
+		}
+	}
+
+	const sorted: ContextInstance[] = [];
+	const constructed = new Set<string>();
+	let remaining = [...contexts];
+	while (remaining.length > 0) {
+		const ready = remaining.filter((context) =>
+			context.requiredCtx.every((dep) => constructed.has(dep)),
+		);
+		if (ready.length === 0) {
+			const names = remaining.map((context) => `"${context.name}"`).join(", ");
+			throw new CrustError("DEFINITION", `Contexts ${names} form a dependency cycle on ${where}`, {
+				subject: "context",
+				reason: "context-cycle",
+			});
+		}
+		for (const context of ready) {
+			sorted.push(context);
+			constructed.add(context.name);
+		}
+		remaining = remaining.filter((context) => !constructed.has(context.name));
+	}
+	return sorted;
+}
+
+/**
+ * Construct Context values in topological order, registering disposable
  * values on `disposal` so they are torn down in reverse construction order.
+ *
+ * @param flags - The validated parsed flags of the resolved invocation
  */
 export async function buildContexts(
 	contexts: readonly ContextInstance[],
+	flags: Record<string, unknown>,
 	disposal: AsyncDisposableStack,
+	where: string,
 ): Promise<ContextMap> {
 	const values: ContextMap = {};
-	for (const item of contexts) {
-		const value = await item.setup();
+	for (const item of sortContexts(contexts, where)) {
+		const value = await item.setup({ flags, ctx: values });
 		values[item.name] = value;
 		registerDisposable(value, disposal);
 	}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, extension } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
@@ -47,12 +47,14 @@ function stripAnsi(text: string) {
 }
 
 function lateSkillExtension() {
-	return extension("late-skill", {
+	return defineExtension("late-skill", {
 		commands: [
 			new Crust("skill")
 				.meta({ description: "Manage agent skills" })
-				.command("update", (cmd) =>
-					cmd.meta({ description: "Update installed skills" }).handle(() => {}),
+				.mount(
+					defineCommand("update", (cmd) =>
+						cmd.meta({ description: "Update installed skills" }).handle(() => {}),
+					),
 				)
 				.handle(() => {}),
 		],
@@ -67,28 +69,28 @@ describe("built-in plugins", () => {
 
 		const command = new Crust("app")
 			.meta({ description: "Test app" })
-			.flags({
-				verbose: {
+			.flags(
+				{
+					name: "verbose",
 					type: "boolean",
 					short: "v",
 					description: "Enable verbose logging",
 					default: true,
 				},
-				port: {
+				{
+					name: "port",
 					type: "number",
 					description: "Port number",
 					default: 3000,
 				},
+			)
+			.args({
+				name: "dir",
+				type: "string",
+				description: "Output directory",
+				default: ".",
 			})
-			.args([
-				{
-					name: "dir",
-					type: "string",
-					description: "Output directory",
-					default: ".",
-				},
-			] as const)
-			.command("build", (cmd) => cmd.meta({ description: "Build the project" }))._node;
+			.mount(defineCommand("build", (cmd) => cmd.meta({ description: "Build the project" })))._node;
 
 		const output = renderHelp(snapshotCommand(command));
 		const plain = stripAnsi(output);
@@ -106,10 +108,9 @@ describe("built-in plugins", () => {
 
 	it("renderHelp shows canonical boolean negation instead of negated aliases", () => {
 		const command = new Crust("app").flags({
-			verbose: {
-				type: "boolean",
-				aliases: ["loud"],
-			},
+			name: "verbose",
+			type: "boolean",
+			aliases: ["loud"],
 		})._node;
 
 		const output = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -119,11 +120,10 @@ describe("built-in plugins", () => {
 
 	it("renderHelp hides negation labels when noNegate is set", () => {
 		const command = new Crust("app").flags({
-			help: {
-				type: "boolean",
-				short: "h",
-				noNegate: true,
-			},
+			name: "help",
+			type: "boolean",
+			short: "h",
+			noNegate: true,
 		})._node;
 
 		const output = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -133,28 +133,28 @@ describe("built-in plugins", () => {
 
 	it("renderHelp keeps stripped columns aligned with styled labels", () => {
 		const command = new Crust("app")
-			.flags({
-				verbose: {
+			.flags(
+				{
+					name: "verbose",
 					type: "boolean",
 					short: "v",
 					description: "Enable verbose logging",
 					default: true,
 				},
-				port: {
+				{
+					name: "port",
 					type: "number",
 					short: "p",
 					description: "Port number",
 					default: 3000,
 				},
-			})
-			.args([
-				{
-					name: "dir",
-					type: "string",
-					description: "Output directory",
-					default: ".",
-				},
-			] as const)._node;
+			)
+			.args({
+				name: "dir",
+				type: "string",
+				description: "Output directory",
+				default: ".",
+			})._node;
 
 		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
 
@@ -169,10 +169,9 @@ describe("built-in plugins", () => {
 
 	it("renderHelp preserves non-finite numeric defaults", () => {
 		const command = new Crust("app").flags({
-			timeout: {
-				type: "number",
-				default: Infinity,
-			},
+			name: "timeout",
+			type: "number",
+			default: Infinity,
 		})._node;
 
 		const output = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -183,7 +182,7 @@ describe("built-in plugins", () => {
 	it("help plugin renders generated help for no-run command", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.command("build", (cmd) => cmd.handle(() => {}));
+			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -200,7 +199,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.command("build", (cmd) => cmd.handle(() => {}));
+			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -275,7 +274,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.command("build", (cmd) => cmd.handle(() => {}));
+			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["build", "--help"] });
 
@@ -286,8 +285,10 @@ describe("built-in plugins", () => {
 	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.command("create", (cmd) =>
-				cmd.args([{ name: "name", type: "string", required: true }] as const).handle(() => {}),
+			.mount(
+				defineCommand("create", (cmd) =>
+					cmd.args({ name: "name", type: "string", required: true }).handle(() => {}),
+				),
 			);
 
 		await app.execute({ argv: ["create", "--help"] });
@@ -302,8 +303,10 @@ describe("built-in plugins", () => {
 	it("help plugin shows help instead of error when --help is used with missing required flag", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.command("deploy", (cmd) =>
-				cmd.flags({ target: { type: "string", required: true } }).handle(() => {}),
+			.mount(
+				defineCommand("deploy", (cmd) =>
+					cmd.flags({ name: "target", type: "string", required: true }).handle(() => {}),
+				),
 			);
 
 		await app.execute({ argv: ["deploy", "--help"] });
@@ -321,10 +324,12 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.meta({ description: "Test app" })
 			.extend(helpExtension())
-			.command("build", (cmd) =>
-				cmd.handle((ctx) => {
-					capturedRawArgs = [...ctx.rawArgs];
-				}),
+			.mount(
+				defineCommand("build", (cmd) =>
+					cmd.handle((ctx) => {
+						capturedRawArgs = [...ctx.rawArgs];
+					}),
+				),
 			);
 
 		await app.execute({ argv: ["build", "--", "--help"] });
@@ -407,10 +412,12 @@ describe("built-in plugins", () => {
 	it("version plugin only triggers on root command", async () => {
 		let ran = false;
 
-		const app = new Crust("app").extend(versionExtension("1.0.0")).command("build", (cmd) =>
-			cmd.handle(() => {
-				ran = true;
-			}),
+		const app = new Crust("app").extend(versionExtension("1.0.0")).mount(
+			defineCommand("build", (cmd) =>
+				cmd.handle(() => {
+					ran = true;
+				}),
+			),
 		);
 
 		await app.execute({ argv: ["build"] });
@@ -446,13 +453,15 @@ describe("built-in plugins", () => {
 	// ──────────────────────────────────────────────────────────────────────────────
 
 	it("renderHelp renders aliases inline next to the canonical command name", () => {
-		const command = new Crust("app").command("issue", (cmd) =>
-			cmd
-				.meta({
-					description: "Manage issues",
-					aliases: ["issues", "i"],
-				})
-				.handle(() => {}),
+		const command = new Crust("app").mount(
+			defineCommand("issue", (cmd) =>
+				cmd
+					.meta({
+						description: "Manage issues",
+						aliases: ["issues", "i"],
+					})
+					.handle(() => {}),
+			),
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -462,8 +471,10 @@ describe("built-in plugins", () => {
 	});
 
 	it("renderHelp renders unchanged for a command without aliases", () => {
-		const command = new Crust("app").command("build", (cmd) =>
-			cmd.meta({ description: "Build the project" }).handle(() => {}),
+		const command = new Crust("app").mount(
+			defineCommand("build", (cmd) =>
+				cmd.meta({ description: "Build the project" }).handle(() => {}),
+			),
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -475,16 +486,20 @@ describe("built-in plugins", () => {
 
 	it("renderHelp keeps description column aligned when aliases overflow the column", () => {
 		const command = new Crust("app")
-			.command("issue", (cmd) =>
-				cmd
-					.meta({
-						description: "Manage issues",
-						aliases: ["issues", "i"],
-					})
-					.handle(() => {}),
+			.mount(
+				defineCommand("issue", (cmd) =>
+					cmd
+						.meta({
+							description: "Manage issues",
+							aliases: ["issues", "i"],
+						})
+						.handle(() => {}),
+				),
 			)
-			.command("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }).handle(() => {}),
+			.mount(
+				defineCommand("build", (cmd) =>
+					cmd.meta({ description: "Build the project" }).handle(() => {}),
+				),
 			)._node;
 
 		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
@@ -503,14 +518,20 @@ describe("built-in plugins", () => {
 
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
 		const command = new Crust("app")
-			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).handle(() => {}))
-			.command("__complete", (cmd) =>
-				cmd
-					.meta({
-						description: "Internal completion entrypoint",
-						hidden: true,
-					})
-					.handle(() => {}),
+			.mount(
+				defineCommand("build", (cmd) =>
+					cmd.meta({ description: "Build the project" }).handle(() => {}),
+				),
+			)
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd
+						.meta({
+							description: "Internal completion entrypoint",
+							hidden: true,
+						})
+						.handle(() => {}),
+				),
 			)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -522,8 +543,10 @@ describe("built-in plugins", () => {
 
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", () => {
 		const command = new Crust("app")
-			.command("__complete", (cmd) =>
-				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+				),
 			)
 			.handle(() => {})._node;
 
@@ -536,8 +559,10 @@ describe("built-in plugins", () => {
 		// Regression: formatUsage previously counted hidden subcommands when
 		// deciding whether to emit `<command>`, producing the incoherent
 		// `USAGE: app <command>` with no COMMANDS section below it.
-		const command = new Crust("app").command("__complete", (cmd) =>
-			cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+		const command = new Crust("app").mount(
+			defineCommand("__complete", (cmd) =>
+				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+			),
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -551,17 +576,21 @@ describe("built-in plugins", () => {
 		// A hidden subcommand with aliases should be entirely absent. A visible
 		// subcommand with aliases should still render `name (a, b)`.
 		const command = new Crust("app")
-			.command("issue", (cmd) =>
-				cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
+			.mount(
+				defineCommand("issue", (cmd) =>
+					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
+				),
 			)
-			.command("__complete", (cmd) =>
-				cmd
-					.meta({
-						description: "Internal",
-						aliases: ["__c"],
-						hidden: true,
-					})
-					.handle(() => {}),
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd
+						.meta({
+							description: "Internal",
+							aliases: ["__c"],
+							hidden: true,
+						})
+						.handle(() => {}),
+				),
 			)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -575,11 +604,17 @@ describe("built-in plugins", () => {
 		let didRun = false;
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.command("build", (cmd) => cmd.meta({ description: "Build the project" }).handle(() => {}))
-			.command("__complete", (cmd) =>
-				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {
-					didRun = true;
-				}),
+			.mount(
+				defineCommand("build", (cmd) =>
+					cmd.meta({ description: "Build the project" }).handle(() => {}),
+				),
+			)
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {
+						didRun = true;
+					}),
+				),
 			);
 
 		await app.execute({ argv: ["__complete"] });
@@ -594,11 +629,10 @@ describe("built-in plugins", () => {
 		const command = new Crust("app")
 			.meta({ description: "Build artifact" })
 			.flags({
-				target: {
-					type: "string",
-					choices: ["browser", "bun", "node"],
-					description: "Build target",
-				},
+				name: "target",
+				type: "string",
+				choices: ["browser", "bun", "node"],
+				description: "Build target",
 			})
 			.handle(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -610,15 +644,13 @@ describe("built-in plugins", () => {
 	it("renderHelp surfaces positional-arg `choices` in the ARGS section", () => {
 		const command = new Crust("app")
 			.meta({ description: "Deploy to an env" })
-			.args([
-				{
-					name: "env",
-					type: "string",
-					required: true,
-					choices: ["dev", "staging", "prod"],
-					description: "Target environment",
-				},
-			])
+			.args({
+				name: "env",
+				type: "string",
+				required: true,
+				choices: ["dev", "staging", "prod"],
+				description: "Target environment",
+			})
 			.handle(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		// The ARGS section heading is the marker the rest of the
@@ -632,12 +664,11 @@ describe("built-in plugins", () => {
 	it("renderHelp composes `[default: ...]` and `[choices: ...]` when both are present", () => {
 		const command = new Crust("app")
 			.flags({
-				target: {
-					type: "string",
-					choices: ["a", "b"],
-					default: "a",
-					description: "Build target",
-				},
+				name: "target",
+				type: "string",
+				choices: ["a", "b"],
+				default: "a",
+				description: "Build target",
 			})
 			.handle(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));

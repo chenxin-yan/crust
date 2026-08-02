@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
-import { Crust, type Extension, extension } from "@crustjs/core";
+import { Crust, type Extension, defineExtension } from "@crustjs/core";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -114,27 +114,24 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 		.meta({
 			description: "Generate shell tab-completion scripts",
 		})
-		.args([
-			{
-				name: "shell",
-				type: "string",
-				required: true,
-				description: "Shell to generate completion for",
-				choices: SUPPORTED_SHELLS,
-			},
-		] as const)
+		.args({
+			name: "shell",
+			type: "string",
+			required: true,
+			description: "Shell to generate completion for",
+			choices: SUPPORTED_SHELLS,
+		})
 		.flags({
-			"output-dir": {
-				type: "string",
-				description:
-					"Write all configured shells' scripts into this directory instead of printing to stdout",
-			},
+			name: "output-dir",
+			type: "string",
+			description:
+				"Write all configured shells' scripts into this directory instead of printing to stdout",
 		})
 		.handle(() => {
 			// Never reached — the extension intercept short-circuits first.
 		});
 
-	return extension("completion", {
+	return defineExtension("completion", {
 		commands: [completionCommand],
 		async intercept(context, next) {
 			if (context.commandPath[1] !== subcommandName) {

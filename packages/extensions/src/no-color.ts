@@ -1,8 +1,8 @@
-import { type Extension, extension } from "@crustjs/core";
+import { type Extension, defineExtension } from "@crustjs/core";
 import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 export function noColorExtension(): Extension {
-	return extension("no-color", {
+	return defineExtension("no-color", {
 		flags: {
 			color: {
 				type: "boolean",

@@ -8,16 +8,18 @@ The completion Extension contributes a `completion <shell>` root command. It rea
 ## Usage
 
 ```ts
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { completion } from "@crustjs/extensions";
 import pkg from "../package.json";
 
 const app = new Crust("my-cli")
   .extend(completion({ version: pkg.version }))
-  .command("build", (command) =>
-    command
-      .flags({ target: { type: "string", choices: ["browser", "bun", "node"] } })
-      .handle(() => {}),
+  .mount(
+    defineCommand("build", (command) =>
+      command
+        .flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+        .handle(() => {}),
+    ),
   );
 
 await app.execute();

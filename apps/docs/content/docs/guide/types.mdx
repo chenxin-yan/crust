@@ -9,8 +9,8 @@ Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `j
 
 ```ts
 new Crust("inspect")
-  .args([{ name: "file", type: "path", required: true }])
-  .flags({ config: { type: "json" } })
+  .args({ name: "file", type: "path", required: true })
+  .flags({ name: "config", type: "json" })
   .handle(({ args, flags }) => {
     args.file; // string
     flags.config; // unknown | undefined
@@ -25,10 +25,9 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 
 ```ts
 .flags({
-  date: {
-    type: "string",
-    parse: (value) => new Date(value),
-  },
+  name: "date",
+  type: "string",
+  parse: (value) => new Date(value),
 })
 ```
 
@@ -42,11 +41,11 @@ Crust accepts any [Standard Schema](https://standardschema.dev/) directly on an 
 import { z } from "zod";
 
 const command = new Crust("serve")
-  .args([{ name: "port", schema: z.coerce.number().int().positive() }] as const)
-  .flags({
-    host: { type: "string", schema: z.string().default("localhost") },
-    secure: { type: "boolean", schema: z.boolean().default(false) },
-  })
+  .args({ name: "port", schema: z.coerce.number().int().positive() })
+  .flags(
+    { name: "host", type: "string", schema: z.string().default("localhost") },
+    { name: "secure", type: "boolean", schema: z.boolean().default(false) },
+  )
   .handle(({ args, flags }) => {
     args.port; // number
     flags.host; // string

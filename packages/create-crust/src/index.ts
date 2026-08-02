@@ -40,31 +40,33 @@ function parseDistributionMode(value: string | undefined): DistributionMode | un
 
 const app = new Crust("create-crust")
 	.meta({ description: "Scaffold a new Crust CLI project" })
-	.flags({
-		distribution: {
+	.flags(
+		{
+			name: "distribution",
 			type: "string",
 			description: 'Distribution mode ("binary" or "runtime")',
 		},
-		install: {
+		{
+			name: "install",
 			type: "boolean",
 			description: "Install dependencies after scaffolding",
 		},
-		git: {
+		{
+			name: "git",
 			type: "boolean",
 			description: "Initialize a git repository after scaffolding",
 		},
-		overwrite: {
+		{
+			name: "overwrite",
 			type: "boolean",
 			description: "Overwrite the destination directory if it already exists",
 		},
+	)
+	.args({
+		name: "directory",
+		type: "string",
+		description: "Project directory to scaffold into",
 	})
-	.args([
-		{
-			name: "directory",
-			type: "string",
-			description: "Project directory to scaffold into",
-		},
-	])
 	.handle(async ({ args, flags }) => {
 		// ── Collect all prompts before any file operations ──────────────
 		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.

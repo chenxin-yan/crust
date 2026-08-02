@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completionExtension } from "./index.ts";
@@ -28,23 +28,22 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.command("two words" as string, (c) => c.handle(() => {}))
+			.mount(defineCommand("two words" as string, (c) => c.handle(() => {})))
 			.handle(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } } as never).handle(() => {});
+		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" } as never).handle(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid flag name/);
 	});
 
 	it("rejects choice values containing spaces", () => {
 		const cli = new Crust("bad")
 			.flags({
-				target: {
-					type: "string",
-					choices: ["a", "two words", "c"],
-				},
+				name: "target",
+				type: "string",
+				choices: ["a", "two words", "c"],
 			})
 			.handle(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
@@ -52,9 +51,7 @@ describe("walker · validation", () => {
 
 	it("rejects choice values containing single quotes", () => {
 		const cli = new Crust("bad")
-			.flags({
-				target: { type: "string", choices: ["a", "it's", "c"] },
-			})
+			.flags({ name: "target", type: "string", choices: ["a", "it's", "c"] })
 			.handle(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
 	});

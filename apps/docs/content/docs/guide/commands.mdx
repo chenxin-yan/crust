@@ -12,8 +12,8 @@ import { Crust } from "@crustjs/core";
 
 const app = new Crust("greet")
   .meta({ description: "Print a greeting", aliases: ["hello"] })
-  .args([{ name: "name", type: "string", required: true }])
-  .flags({ loud: { type: "boolean", short: "l" } })
+  .args({ name: "name", type: "string", required: true })
+  .flags({ name: "loud", type: "boolean", short: "l" })
   .handle(({ args, flags, stdout }) => {
     const text = `Hello, ${args.name}!`;
     stdout(flags.loud ? text.toUpperCase() : text);

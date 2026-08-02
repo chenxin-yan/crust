@@ -30,18 +30,16 @@ const port = () =>
 describe("Standard Schema on arg definitions", () => {
 	it("passes the raw string token to the schema and hands the output to the handler", async () => {
 		let received: unknown;
-		const app = new Crust("cli")
-			.args([{ name: "port", schema: port() }] as const)
-			.handle(({ args }) => {
-				received = args.port;
-			});
+		const app = new Crust("cli").args({ name: "port", schema: port() }).handle(({ args }) => {
+			received = args.port;
+		});
 
 		await app.run(["8080"]);
 		expect(received).toBe(8080);
 	});
 
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
-		const app = new Crust("cli").args([{ name: "port", schema: port() }] as const).handle(() => {});
+		const app = new Crust("cli").args({ name: "port", schema: port() }).handle(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({
 			code: "VALIDATION",
@@ -56,7 +54,7 @@ describe("Standard Schema on arg definitions", () => {
 		}));
 
 		const app = new Crust("cli")
-			.args([{ name: "files", variadic: true, schema: upper }] as const)
+			.args({ name: "files", variadic: true, schema: upper })
 			.handle(({ args }) => {
 				received = args.files;
 			});
@@ -78,11 +76,9 @@ describe("Standard Schema on arg definitions", () => {
 			},
 		};
 
-		const app = new Crust("cli")
-			.args([{ name: "name", schema: asyncSchema }] as const)
-			.handle(({ args }) => {
-				received = args.name;
-			});
+		const app = new Crust("cli").args({ name: "name", schema: asyncSchema }).handle(({ args }) => {
+			received = args.name;
+		});
 
 		await app.run(["chenxin"]);
 		expect(received).toBe("CHENXIN");
@@ -93,7 +89,7 @@ describe("Standard Schema on flag definitions", () => {
 	it("string flags consume a token and pass the raw string to the schema", async () => {
 		let received: unknown;
 		const app = new Crust("cli")
-			.flags({ port: { type: "string", schema: port() } })
+			.flags({ name: "port", type: "string", schema: port() })
 			.handle(({ flags }) => {
 				received = flags.port;
 			});
@@ -108,7 +104,7 @@ describe("Standard Schema on flag definitions", () => {
 			value: raw === true ? "on" : "off",
 		}));
 		const app = new Crust("cli")
-			.flags({ loud: { type: "boolean", schema: onOff } })
+			.flags({ name: "loud", type: "boolean", schema: onOff })
 			.handle(({ flags }) => {
 				received = flags.loud;
 			});
@@ -122,8 +118,8 @@ describe("Standard Schema on flag definitions", () => {
 
 	it("aggregates issues across args and flags into one VALIDATION error", async () => {
 		const app = new Crust("cli")
-			.args([{ name: "input", schema: port() }] as const)
-			.flags({ port: { type: "string", schema: port() } })
+			.args({ name: "input", schema: port() })
+			.flags({ name: "port", type: "string", schema: port() })
 			.handle(() => {});
 
 		try {
@@ -144,7 +140,7 @@ describe("Standard Schema on flag definitions", () => {
 		let received: unknown;
 		const probe = schema<boolean | undefined, string>((raw) => ({ value: String(raw) }));
 		const app = new Crust("cli")
-			.flags({ loud: { type: "boolean", schema: probe } })
+			.flags({ name: "loud", type: "boolean", schema: probe })
 			.handle(({ flags }) => {
 				received = flags.loud;
 			});
@@ -159,7 +155,7 @@ describe("Standard Schema on flag definitions", () => {
 			value: (raw ?? []).join(","),
 		}));
 		const app = new Crust("cli")
-			.flags({ tag: { type: "string", multiple: true, schema: csv } })
+			.flags({ name: "tag", type: "string", multiple: true, schema: csv })
 			.handle(({ flags }) => {
 				received = flags.tag;
 			});
@@ -171,11 +167,11 @@ describe("Standard Schema on flag definitions", () => {
 
 describe("schema interaction with Extensions", () => {
 	it("intercepts observe raw values while the handler sees schema outputs", async () => {
-		const { extension } = await import("../api/extension.ts");
+		const { defineExtension } = await import("../api/extension.ts");
 		let interceptSaw: unknown;
 		let handlerSaw: unknown;
 
-		const probe = extension("probe", {
+		const probe = defineExtension("probe", {
 			async intercept(ctx, next) {
 				interceptSaw = ctx.flags.port;
 				await next();
@@ -183,7 +179,7 @@ describe("schema interaction with Extensions", () => {
 		});
 
 		const app = new Crust("cli")
-			.flags({ port: { type: "string", schema: port() } })
+			.flags({ name: "port", type: "string", schema: port() })
 			.extend(probe)
 			.handle(({ flags }) => {
 				handlerSaw = flags.port;
@@ -201,11 +197,11 @@ describe("schema interaction with Extensions", () => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const { extension } = await import("../api/extension.ts");
-		const gate = extension("gate", { intercept() {} });
+		const { defineExtension } = await import("../api/extension.ts");
+		const gate = defineExtension("gate", { intercept() {} });
 
 		const app = new Crust("cli")
-			.flags({ x: { type: "string", schema: spy } })
+			.flags({ name: "x", type: "string", schema: spy })
 			.extend(gate)
 			.handle(() => {});
 
@@ -221,8 +217,8 @@ describe("schema type inference", () => {
 
 	it("the schema output type reaches the Command Handler", () => {
 		new Crust("cli")
-			.args([{ name: "port", schema: port() }] as const)
-			.flags({ tag: { type: "string", schema: port() } })
+			.args({ name: "port", schema: port() })
+			.flags({ name: "tag", type: "string", schema: port() })
 			.handle((_ctx) => {
 				type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
 				type _flagOutput = Expect<Equal<(typeof _ctx.flags)["tag"], number>>;
@@ -233,21 +229,22 @@ describe("schema type inference", () => {
 
 describe("schema mode exclusivity", () => {
 	it("rejects mixing core value options with a schema on args", () => {
-		expect(() =>
-			new Crust("cli").args([{ name: "x", schema: port(), default: "5" } as any]),
-		).toThrow(CrustError);
+		expect(() => new Crust("cli").args({ name: "x", schema: port(), default: "5" } as any)).toThrow(
+			CrustError,
+		);
 	});
 
 	it("rejects a parser type on schema args (raw strings only)", () => {
 		expect(() =>
-			new Crust("cli").args([{ name: "x", type: "number", schema: port() } as any]),
+			new Crust("cli").args({ name: "x", type: "number", schema: port() } as any),
 		).toThrow(CrustError);
 	});
 
 	it("rejects mixing core value options with a schema on flags", () => {
 		expect(() =>
 			new Crust("cli").flags({
-				x: { type: "string", schema: port(), required: true } as any,
+				...({ type: "string", schema: port(), required: true } as any),
+				name: "x",
 			}),
 		).toThrow(CrustError);
 	});

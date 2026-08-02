@@ -11,6 +11,24 @@ description: Test Crust applications with captured output and fake interactive t
 bun add -d @crustjs/testing
 ```
 
+## `RunnableApp`
+
+Both helpers accept the exported structural contract:
+
+```ts
+interface RunnableApp {
+  run(
+    argv: readonly string[],
+    io?: {
+      stdout?: (text: string) => void;
+      stderr?: (text: string) => void;
+    },
+  ): Promise<void>;
+}
+```
+
+Any application that implements this `run()` shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` does not implement `run()` and must first be mounted into a runnable application.
+
 ## `captureRun(app, argv)`
 
 Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.

@@ -25,7 +25,7 @@ export interface CommandNode {
 	args: ArgsDef | undefined;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
-	/** Context providers available to this command */
+	/** Context instances available to this command (constructed topologically) */
 	contexts: ContextInstance[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
@@ -611,11 +611,13 @@ describe("buildManifest", () => {
 		});
 
 		it("preserves instructions across Crust builder cloning", () => {
-			const deploy = annotate(
-				new Crust("deploy").meta({ description: "Deploy command" }),
-				"Read the environment carefully before execution.",
-			).handle(() => {});
-			const root = new Crust("app").command(deploy);
+			const deploy = defineCommand("deploy", (command) =>
+				annotate(
+					command.meta({ description: "Deploy command" }),
+					"Read the environment carefully before execution.",
+				).handle(() => {}),
+			);
+			const root = new Crust("app").mount(deploy);
 
 			const node = buildManifest(snapshotCommand(root._node));
 			const child = node.children[0];

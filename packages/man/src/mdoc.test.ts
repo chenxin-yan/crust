@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 import { help } from "@crustjs/extensions";
 
@@ -11,8 +11,8 @@ describe("renderManPageMdoc", () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for tests." })
 			.extend(help())
-			.flags({ verbose: { type: "boolean", short: "v", description: "Verbose" } })
-			.command("ping", (cmd) => cmd.meta({ description: "Ping" }).handle(() => {}));
+			.flags({ name: "verbose", type: "boolean", short: "v", description: "Verbose" })
+			.mount(defineCommand("ping", (cmd) => cmd.meta({ description: "Ping" }).handle(() => {})));
 
 		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -71,12 +71,16 @@ describe("renderManPageMdoc", () => {
 	it("renders subcommand aliases inline next to the canonical name", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo CLI for alias tests." })
-			.command(
-				new Crust("issue")
-					.meta({ description: "Manage issues", aliases: ["issues", "i"] })
-					.handle(() => {}),
+			.mount(
+				defineCommand("issue", (cmd) =>
+					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
+				),
 			)
-			.command(new Crust("version").meta({ description: "Show version" }).handle(() => {}));
+			.mount(
+				defineCommand("version", (cmd) =>
+					cmd.meta({ description: "Show version" }).handle(() => {}),
+				),
+			);
 
 		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -100,11 +104,17 @@ describe("renderManPageMdoc", () => {
 		// but never appear in published man pages.
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
-			.command(new Crust("build").meta({ description: "Build the project" }).handle(() => {}))
-			.command(
-				new Crust("__complete")
-					.meta({ description: "Internal completion entrypoint", hidden: true })
-					.handle(() => {}),
+			.mount(
+				defineCommand("build", (cmd) =>
+					cmd.meta({ description: "Build the project" }).handle(() => {}),
+				),
+			)
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd
+						.meta({ description: "Internal completion entrypoint", hidden: true })
+						.handle(() => {}),
+				),
 			);
 
 		const root = await prepareCommandSnapshot(app);
@@ -116,8 +126,10 @@ describe("renderManPageMdoc", () => {
 
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
-			.command(
-				new Crust("__complete").meta({ hidden: true, description: "Internal" }).handle(() => {}),
+			.mount(
+				defineCommand("__complete", (cmd) =>
+					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+				),
 			)
 			.handle(() => {});
 
@@ -132,11 +144,10 @@ describe("renderManPageMdoc", () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
 			.flags({
-				target: {
-					type: "string",
-					choices: ["browser", "bun", "node"],
-					description: "Build target",
-				},
+				name: "target",
+				type: "string",
+				choices: ["browser", "bun", "node"],
+				description: "Build target",
 			})
 			.handle(() => {});
 
@@ -150,15 +161,13 @@ describe("renderManPageMdoc", () => {
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
-			.args([
-				{
-					name: "env",
-					type: "string",
-					required: true,
-					choices: ["dev", "staging", "prod"],
-					description: "Target environment",
-				},
-			])
+			.args({
+				name: "env",
+				type: "string",
+				required: true,
+				choices: ["dev", "staging", "prod"],
+				description: "Target environment",
+			})
 			.handle(() => {});
 
 		const root = await prepareCommandSnapshot(app);
@@ -173,12 +182,11 @@ describe("renderManPageMdoc", () => {
 		const app = new Crust("demo")
 			.meta({ description: "Demo." })
 			.flags({
-				output: {
-					type: "string",
-					short: "o",
-					aliases: ["out"],
-					description: "Where to write",
-				},
+				name: "output",
+				type: "string",
+				short: "o",
+				aliases: ["out"],
+				description: "Where to write",
 			})
 			.handle(() => {});
 
@@ -193,11 +201,10 @@ describe("renderManPageMdoc", () => {
 	it("includes `--no-` negation for every long-form spelling of a boolean flag", async () => {
 		const app = new Crust("demo")
 			.flags({
-				color: {
-					type: "boolean",
-					aliases: ["colour"],
-					description: "Use colour",
-				},
+				name: "color",
+				type: "boolean",
+				aliases: ["colour"],
+				description: "Use colour",
 			})
 			.handle(() => {});
 

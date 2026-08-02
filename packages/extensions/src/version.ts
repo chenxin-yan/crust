@@ -1,9 +1,9 @@
-import { type Extension, extension } from "@crustjs/core";
+import { type Extension, defineExtension } from "@crustjs/core";
 
 export type VersionValue = string | (() => string);
 
 export function versionExtension(versionValue: VersionValue = "0.0.0"): Extension {
-	return extension("version", {
+	return defineExtension("version", {
 		flags: {
 			version: {
 				type: "boolean",

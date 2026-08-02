@@ -84,7 +84,7 @@ export interface ExtensionConfig {
 
 /**
  * An application-wide reusable capability. A plain frozen structural value —
- * see {@link extension}.
+ * see {@link defineExtension}.
  */
 export interface Extension extends ExtensionConfig {
 	readonly name: string;
@@ -98,7 +98,7 @@ export interface Extension extends ExtensionConfig {
  * other Extension definitions (collisions are definition errors, surfaced
  * when the application runs).
  */
-export function extension(name: string, config: ExtensionConfig = {}): Extension {
+export function defineExtension(name: string, config: ExtensionConfig = {}): Extension {
 	if (!name.trim()) {
 		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
 			subject: "extension",

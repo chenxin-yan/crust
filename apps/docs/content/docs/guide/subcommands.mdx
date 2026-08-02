@@ -1,48 +1,80 @@
 ---
 title: Subcommands
-description: Compose nested command trees inline or from pre-built command builders.
+description: Compose nested command trees from named command definitions.
 ---
 
-## Inline commands
+## Mounting commands
 
-`.command(name, configure)` creates a child typed from its parent:
+`defineCommand(name, recipe)` creates an inert definition that carries its name; `.mount(...definitions)` materializes definitions as child commands:
 
 ```ts
-const app = new Crust("git")
-  .flags({ verbose: { type: "boolean", inherit: true } })
-  .command("clone", (command) =>
+import { Crust, defineCommand } from "@crustjs/core";
+
+const app = new Crust("git").mount(
+  defineCommand("clone", (command) =>
     command
-      .args([{ name: "url", type: "url", required: true }])
-      .handle(({ args, flags, stdout }) => {
-        stdout(`${flags.verbose ? "Cloning" : "clone"} ${args.url}`);
-      }),
-  );
+      .args({ name: "url", type: "url", required: true })
+      .handle(({ args, stdout }) => stdout(`clone ${args.url}`)),
+  ),
+);
 ```
 
-Nest `.command()` calls to any depth. Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command.
+Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command. Nest `.mount()` calls inside definitions to any depth.
 
-## Pre-built commands
+## Requirements
 
-Attach an existing builder with `.command(builder)`:
+A definition declares the inheritable flags and Contexts it expects from any parent as arrays of defined values. The recipe builder — and the handler's `flags` and `ctx` — are typed from them:
 
 ```ts
-const status = new Crust("status").handle(({ stdout }) => stdout("clean"));
-const app = new Crust("git").command(status);
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const repository = defineContext("repository", () => ({
+  defaultBranch: "main",
+}));
+
+const clone = defineCommand("clone", { flags: [verbose], ctx: [repository] }, (command) =>
+  command
+    .args({ name: "url", type: "url", required: true })
+    .handle(({ args, flags, ctx, stdout }) => {
+      stdout(`${args.url} ${ctx.repository.defaultBranch} ${flags.verbose}`);
+    }),
+);
+
+const app = new Crust("git").flags(verbose).provide(repository()).mount(clone);
 ```
 
-A standalone builder is isolated from parent flag types. For a separate-file child that inherits parent flags and Contexts, create it with `parent.sub(name)`:
+`.mount()` checks the requirements at each call — compile-time and runtime — and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
 
 ```ts
-const base = new Crust("git").flags({ verbose: { type: "boolean", inherit: true } });
-const clone = base.sub("clone").handle(({ flags }) => flags.verbose);
-const app = base.command(clone);
+const git = new Crust("git").flags(verbose).provide(repository()).mount(clone, clone.as("copy"));
 ```
 
-See [Split Commands Across Files](/docs/guide/split-files) for the import-order rule and a complete layout.
+Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`; a ctx requirement name not provided on the parent path is a runtime `DEFINITION` error. A same-named parent flag only counts when it has `inherit: true`.
+
+## Nested definitions
+
+Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
+
+```ts
+const environment = defineFlag("environment", { type: "string", inherit: true });
+
+const status = defineCommand("status", { flags: [verbose, environment] }, (command) =>
+  command.handle(({ flags, stdout }) => {
+    stdout(`${flags.environment} ${flags.verbose}`);
+  }),
+);
+
+const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
+  command.flags(environment).mount(status),
+);
+
+const app = new Crust("app").flags(verbose).mount(deploy);
+```
 
 ## Context inheritance
 
-Contexts attached to a parent are available to descendants. `.sub()` carries their types into a separate-file child; attaching the child merges the parent path's Context instances at runtime.
+Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; declare `requirements.ctx` to see them in the handler's types. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
 
 ## Unknown commands
 

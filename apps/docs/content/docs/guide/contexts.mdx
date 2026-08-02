@@ -1,16 +1,16 @@
 ---
 title: Contexts
-description: Define lazy, typed command dependencies with native cleanup.
+description: Define lazy, typed command dependencies with declared requirements and native cleanup.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-A Context is a named command dependency. `context()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
+A Context is a named command dependency. `defineContext()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
 
 ```ts
-import { context, Crust } from "@crustjs/core";
+import { defineContext, Crust } from "@crustjs/core";
 
-const database = context("db", (options: { url: string }) => ({
+const database = defineContext("db", ({ options }: { options: { url: string } }) => ({
   query(sql: string) {
     return `${sql} on ${options.url}`;
   },
@@ -21,39 +21,145 @@ const app = new Crust("app")
   .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
-For a factory with no options, use `void` and call it with `undefined`:
+The setup receives one input object: `options` is the factory argument. A zero-option factory is still a factory — invoke it with no argument:
 
 ```ts
-const clock = context("clock", (_options: void) => ({ now: () => Date.now() }));
-const app = new Crust("app").provide(clock(undefined));
+const clock = defineContext("clock", () => ({ now: () => Date.now() }));
+const app = new Crust("app").provide(clock());
 ```
 
 ## Lazy construction and inheritance
 
-Context values are constructed only after a command is routed, parsed, intercepted, and validated. A short-circuiting Extension does not construct them.
+Context values are constructed only after a command is routed, parsed, intercepted, and validated — and only for the resolved command path. A short-circuiting Extension does not construct them.
 
-Contexts are inherited by descendant commands:
+Contexts are inherited by descendant commands. A mounted command declares the factories it depends on in `requirements.ctx`, which types `ctx` in its handler:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+
+const status = defineCommand("status", { ctx: [database] }, (command) =>
+  command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+);
+
+const app = new Crust("app").provide(database({ url: process.env.DATABASE_URL! })).mount(status);
+```
+
+Setups may be synchronous or asynchronous.
+
+## Requirements
+
+`defineContext(name, requirements, setup)` declares what a Context needs: flags it reads and other Contexts it depends on. Requirements are arrays of defined values:
+
+```ts
+import { defineContext, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
+
+const database = defineContext("db", { flags: [verbose], ctx: [config] }, ({ flags, ctx }) => {
+  if (flags.verbose) console.error(`connecting to ${ctx.config.url}`);
+  return { query: (sql: string) => `${sql} on ${ctx.config.url}` };
+});
+```
+
+The setup input carries three fields:
+
+- `options` — the factory argument
+- `flags` — the validated parsed flags of the resolved invocation, narrowed to the declared flag definitions. These are the same values the Command Handler receives, after schema application.
+- `ctx` — the constructed values of the declared ctx dependencies
+
+### Flag requirements
+
+Flag requirements are checked at the `.provide()` call site — compile-time and runtime. Each required flag must already be declared with `inherit: true` on the builder, so declare flags before `.provide()`:
 
 ```ts
 const app = new Crust("app")
-  .provide(database({ url: process.env.DATABASE_URL! }))
-  .command("status", (command) =>
-    command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
-  );
+  .flags(verbose)
+  .provide(config(), database())
+  .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
-Factories may be synchronous or asynchronous. Contexts on the resolved path are constructed in registration order.
+A missing or non-inheritable required flag is a `DEFINITION` error at `.provide()`.
+
+### Ctx requirements and construction order
+
+Provide order is free: dependencies may be provided after their dependents. At invocation time, the Contexts on the resolved command path are constructed **topologically** by their declared `ctx` requirements; independent Contexts keep registration order.
+
+```ts
+// Equivalent — construction order is config, then database, either way:
+new Crust("app").flags(verbose).provide(config(), database());
+new Crust("app").flags(verbose).provide(database(), config());
+```
+
+A ctx dependency that is not provided on the path, or a dependency cycle, is a `CrustError` with code `DEFINITION`, raised at dispatch and also caught by [`crust build`](/docs/guide/build)'s command-tree validation.
+
+## Test doubles with `.of()`
+
+Every factory carries `.of(value)`: it produces an instance whose setup returns the precomputed value under the same name and value type, with requirements considered satisfied. Use it to swap a real Context for a fake in tests:
+
+```ts
+const fake = database.of({ query: (sql) => `fake: ${sql}` });
+
+const app = new Crust("app").provide(fake).handle(({ ctx, stdout }) => {
+  stdout(ctx.db.query("select 1"));
+});
+```
+
+Because the fake declares no requirements, no flags or dependency Contexts are needed.
+
+## Scope a guard to a subtree
+
+Provide a guarding Context on the command where its rule begins. Here, only `billing` and its descendants require a user:
+
+```ts
+const session = defineContext("session", () => ({
+  user: undefined as { id: string } | undefined,
+}));
+
+const user = defineContext("user", { ctx: [session] }, ({ ctx }) => {
+  if (!ctx.session.user) throw new Error("Unauthenticated");
+  return ctx.session.user;
+});
+
+const invoices = defineCommand("invoices", { ctx: [user] }, (child) =>
+  child.handle(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
+);
+
+const billing = defineCommand("billing", { ctx: [session] }, (command) =>
+  command.provide(user()).mount(invoices),
+);
+
+const app = new Crust("app").provide(session()).mount(billing);
+```
+
+A throwing setup aborts the invocation before the Command Handler and disposes the values already constructed.
+
+## Context requirements in definitions
+
+A reusable command declares the Context factories it needs, and every `.mount()` checks them — compile-time against the parent's provided value types, and at runtime by name:
+
+```ts
+const status = defineCommand("status", { ctx: [database] }, (command) =>
+  command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+);
+
+const app = new Crust("app").flags(verbose).provide(config(), database()).mount(status);
+```
+
+Call `.provide()` before `.mount()`: a Context provided on a later builder does not backfill an earlier mount, and a missing requirement name is a `DEFINITION` error at the mount.
 
 ## One name per command path
 
-Providing two different Context instances with the same name on one command path is a `DEFINITION` error. This includes a descendant replacing an inherited name. Reusing the identical inherited instance during `.sub()` composition is not a duplicate.
+Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited.
+
+Mounted definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.mount()`.
 
 ## Native disposal
 
 Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`:
 
 ```ts
-const database = context("db", async (options: { url: string }) => {
+const database = defineContext("db", async ({ options }: { options: { url: string } }) => {
   const connection = await connect(options.url);
 
   return {
@@ -65,7 +171,7 @@ const database = context("db", async (options: { url: string }) => {
 });
 ```
 
-Crust disposes constructed Context values in reverse construction order after success or failure. Prefer `Symbol.asyncDispose` when cleanup is asynchronous.
+Crust disposes constructed Context values in reverse construction order after success or failure — with topological construction, dependents are always disposed before their dependencies. Prefer `Symbol.asyncDispose` when cleanup is asynchronous.
 
 <Callout type="info">
   Use Contexts for command setup and cleanup. Use an Extension `intercept` only for app-wide

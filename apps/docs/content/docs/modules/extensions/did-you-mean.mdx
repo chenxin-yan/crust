@@ -6,12 +6,12 @@ description: Present command-not-found errors with typo suggestions.
 ## Usage
 
 ```ts
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { didYouMean } from "@crustjs/extensions";
 
 const app = new Crust("my-cli")
   .extend(didYouMean())
-  .command("deploy", (command) => command.handle(() => {}));
+  .mount(defineCommand("deploy", (command) => command.handle(() => {})));
 
 await app.execute();
 ```

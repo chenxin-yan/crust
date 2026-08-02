@@ -54,7 +54,9 @@ Use ordinary application error classes when callers need to distinguish domain f
 Extension `handleError` hooks form the presentation chain for `execute()`:
 
 ```ts
-const serviceErrors = extension("service-errors", {
+import { defineExtension } from "@crustjs/core";
+
+const serviceErrors = defineExtension("service-errors", {
   async handleError(error, ctx, next) {
     if (error instanceof Error && error.name === "ServiceUnavailableError") {
       ctx.stderr(error.message);

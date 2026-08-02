@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { context } from "../api/context.ts";
-import { extension, type ExtensionContext } from "../api/extension.ts";
+import { defineContext } from "../api/context.ts";
+import { defineExtension, type ExtensionContext } from "../api/extension.ts";
+import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
-import type { FlagsDef, ValidateFlagAliases, ValidateNoPrefixedFlags } from "../types.ts";
+import type { FlagsDef } from "../types.ts";
 import {
+	type CommandDefinitionBuilder,
 	Crust,
+	defineCommand,
 	type CrustCommandContext,
 	prepareCommandSnapshot,
 	VALIDATION_FORCE_EXIT_ENV,
@@ -76,7 +79,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 	const builderCases: readonly BuilderCase[] = [
 		[
 			".flags()",
-			(a) => a.flags({ verbose: { type: "boolean" } }) as Crust,
+			(a) => a.flags({ name: "verbose", type: "boolean" }) as Crust,
 			(a) => {
 				expect(a._node.localFlags).toEqual({});
 				expect(a._node.effectiveFlags).toEqual({});
@@ -84,7 +87,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		],
 		[
 			".args()",
-			(a) => a.args([{ name: "file", type: "string" }]) as Crust,
+			(a) => a.args({ name: "file", type: "string" }) as Crust,
 			(a) => {
 				expect(a._node.args).toBeUndefined();
 			},
@@ -97,8 +100,8 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 			},
 		],
 		[
-			".command(name, cb)",
-			(a) => a.command("sub", (cmd) => cmd) as Crust,
+			".mount(defineCommand(name, cb))",
+			(a) => a.mount(defineCommand("sub", (cmd) => cmd)) as Crust,
 			(a) => {
 				expect(a._node.subCommands).toEqual({});
 			},
@@ -112,14 +115,14 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		],
 		[
 			".extend()",
-			(a) => a.extend(extension("test-extension")) as Crust,
+			(a) => a.extend(defineExtension("test-extension")) as Crust,
 			(a) => {
 				expect(a._node.extensions.length).toBe(0);
 			},
 		],
 		[
-			".command(builder)",
-			(a) => a.command(new Crust("deploy")) as Crust,
+			".mount()",
+			(a) => a.mount(defineCommand("deploy", (command) => command)) as Crust,
 			(a) => {
 				expect(a._node.subCommands).toEqual({});
 			},
@@ -148,10 +151,10 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 describe("Crust .flags()", () => {
 	it("returns new instance with correct flags", () => {
 		const app = new Crust("test");
-		const withFlags = app.flags({
-			verbose: { type: "boolean", short: "v" },
-			port: { type: "number", default: 3000 },
-		});
+		const withFlags = app.flags(
+			{ name: "verbose", type: "boolean", short: "v" },
+			{ name: "port", type: "number", default: 3000 },
+		);
 
 		expect(withFlags._node.localFlags).toEqual({
 			verbose: { type: "boolean", short: "v" },
@@ -164,53 +167,71 @@ describe("Crust .flags()", () => {
 	});
 
 	it("deep copies flag definitions (decoupled from caller)", () => {
-		const flagDefs = {
-			verbose: { type: "boolean" as const, short: "v" },
-		};
+		const flagDef = { name: "verbose" as const, type: "boolean" as const, short: "v" };
 
-		const app = new Crust("test").flags(flagDefs);
+		const app = new Crust("test").flags(flagDef);
 
-		// Mutating the original defs should not affect the builder
-		flagDefs.verbose.short = "V";
+		// Mutating the original def should not affect the builder
+		flagDef.short = "V";
 		expect(app._node.localFlags.verbose?.short).toBe("v");
 	});
 
 	it("preserves meta from original builder", () => {
 		const app = new Crust("my-cli").meta({ description: "desc" });
-		const withFlags = app.flags({ verbose: { type: "boolean" } });
+		const withFlags = app.flags({ name: "verbose", type: "boolean" });
 
 		expect(withFlags._node.meta.name).toBe("my-cli");
 		expect(withFlags._node.meta.description).toBe("desc");
 	});
 
 	it("throws CrustError DEFINITION at parse time on flag name starting with no-", async () => {
-		const app = new Crust("test").flags({ "no-cache": { type: "boolean" } } as FlagsDef &
-			ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+		const app = new Crust("test").flags({ name: "no-cache", type: "boolean" } as never);
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
 	it("throws CrustError DEFINITION at parse time on aliases starting with no-", async () => {
 		const app = new Crust("test").flags({
-			cache: { type: "boolean", aliases: ["no-store"] },
-		} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+			name: "cache",
+			type: "boolean",
+			aliases: ["no-store"],
+		} as never);
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
 	it("throws CrustError DEFINITION at parse time on short aliases starting with no-", async () => {
 		const app = new Crust("test").flags({
-			cache: { type: "boolean", short: "no-c" },
-		} as FlagsDef & ValidateNoPrefixedFlags<ValidateFlagAliases<FlagsDef>>);
+			name: "cache",
+			type: "boolean",
+			short: "no-c",
+		} as never);
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
+	it("repeated .flags() calls replace local flags", () => {
+		const app = new Crust("test")
+			.flags({ name: "first", type: "boolean" })
+			.flags({ name: "second", type: "string" });
+
+		expect(app._node.localFlags).toEqual({ second: { type: "string" } });
+	});
+
+	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
+		expect(() =>
+			new Crust("test").flags(
+				{ name: "verbose", type: "boolean" },
+				{ name: "verbose", type: "string" },
+			),
+		).toThrow(/defined more than once/);
+	});
+
 	it("accepts flags with inherit: true", () => {
-		const app = new Crust("test").flags({
-			verbose: { type: "boolean", inherit: true },
-			port: { type: "number" },
-		});
+		const app = new Crust("test").flags(
+			{ name: "verbose", type: "boolean", inherit: true },
+			{ name: "port", type: "number" },
+		);
 
 		expect(app._node.localFlags.verbose?.inherit).toBe(true);
 		expect(app._node.localFlags.port?.inherit).toBeUndefined();
@@ -224,10 +245,10 @@ describe("Crust .flags()", () => {
 describe("Crust .args()", () => {
 	it("returns new instance with correct args", () => {
 		const app = new Crust("test");
-		const withArgs = app.args([
+		const withArgs = app.args(
 			{ name: "file", type: "string", required: true },
 			{ name: "count", type: "number", default: 1 },
-		]);
+		);
 
 		expect(withArgs._node.args).toBeDefined();
 		expect(withArgs._node.args?.length).toBe(2);
@@ -242,17 +263,17 @@ describe("Crust .args()", () => {
 			{ name: "file" as const, type: "string" as const, description: "orig" },
 		] as const;
 
-		const app = new Crust("test").args(argDefs);
+		const app = new Crust("test").args(...argDefs);
 
 		// Original arg should be decoupled — check node has a copy
 		expect(app._node.args?.[0]?.description).toBe("orig");
 	});
 
 	it("preserves meta and flags from original builder", () => {
-		const app = new Crust("my-cli").meta({ description: "desc" }).flags({
-			verbose: { type: "boolean" },
-		});
-		const withArgs = app.args([{ name: "file", type: "string" }]);
+		const app = new Crust("my-cli")
+			.meta({ description: "desc" })
+			.flags({ name: "verbose", type: "boolean" });
+		const withArgs = app.args({ name: "file", type: "string" });
 
 		expect(withArgs._node.meta.name).toBe("my-cli");
 		expect(withArgs._node.meta.description).toBe("desc");
@@ -267,11 +288,11 @@ describe("Crust .args()", () => {
 describe("Crust chaining", () => {
 	it(".flags().args() preserves both on the final builder", () => {
 		const app = new Crust("test")
-			.flags({
-				verbose: { type: "boolean", short: "v" },
-				port: { type: "number", default: 3000 },
-			})
-			.args([{ name: "file", type: "string", required: true }]);
+			.flags(
+				{ name: "verbose", type: "boolean", short: "v" },
+				{ name: "port", type: "number", default: 3000 },
+			)
+			.args({ name: "file", type: "string", required: true });
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.localFlags.port).toBeDefined();
@@ -281,8 +302,8 @@ describe("Crust chaining", () => {
 
 	it(".args().flags() preserves both on the final builder", () => {
 		const app = new Crust("test")
-			.args([{ name: "file", type: "string" }])
-			.flags({ verbose: { type: "boolean" } });
+			.args({ name: "file", type: "string" })
+			.flags({ name: "verbose", type: "boolean" });
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
@@ -290,8 +311,8 @@ describe("Crust chaining", () => {
 
 	it("does not mutate intermediate builders", () => {
 		const base = new Crust("test");
-		const withFlags = base.flags({ verbose: { type: "boolean" } });
-		const withArgs = withFlags.args([{ name: "file", type: "string" }]);
+		const withFlags = base.flags({ name: "verbose", type: "boolean" });
+		const withArgs = withFlags.args({ name: "file", type: "string" });
 
 		expect(base._node.localFlags).toEqual({});
 		expect(base._node.args).toBeUndefined();
@@ -326,8 +347,8 @@ describe("Crust .meta()", () => {
 
 	it("preserves flags and args from original builder", () => {
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }])
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" })
 			.meta({ description: "desc" });
 
 		expect(app._node.localFlags.verbose).toBeDefined();
@@ -338,8 +359,8 @@ describe("Crust .meta()", () => {
 	it("can be chained before .flags() and .args()", () => {
 		const app = new Crust("test")
 			.meta({ description: "desc" })
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }]);
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" });
 
 		expect(app._node.meta.description).toBe("desc");
 		expect(app._node.localFlags.verbose).toBeDefined();
@@ -353,8 +374,10 @@ describe("Crust .meta()", () => {
 	});
 
 	it("works in subcommand callbacks", () => {
-		const app = new Crust("cli").command("sub", (cmd) =>
-			cmd.meta({ description: "A subcommand", usage: "cli sub [options]" }),
+		const app = new Crust("cli").mount(
+			defineCommand("sub", (cmd) =>
+				cmd.meta({ description: "A subcommand", usage: "cli sub [options]" }),
+			),
 		);
 
 		const subNode = app._node.subCommands.sub;
@@ -370,10 +393,10 @@ describe("Crust .meta()", () => {
 
 describe("Crust type-level tests", () => {
 	it(".flags() updates Local generic", () => {
-		const app = new Crust("test").flags({
-			verbose: { type: "boolean", short: "v" },
-			port: { type: "number", default: 3000 },
-		});
+		const app = new Crust("test").flags(
+			{ name: "verbose", type: "boolean", short: "v" },
+			{ name: "port", type: "number", default: 3000 },
+		);
 
 		// Extract the Local type from the phantom _types property
 		type AppLocal = (typeof app)["_types"]["local"];
@@ -387,10 +410,10 @@ describe("Crust type-level tests", () => {
 	});
 
 	it(".args() updates A generic", () => {
-		const app = new Crust("test").args([
+		const app = new Crust("test").args(
 			{ name: "file", type: "string", required: true },
 			{ name: "count", type: "number", default: 1 },
-		]);
+		);
 
 		type AppArgs = (typeof app)["_types"]["args"];
 
@@ -415,11 +438,11 @@ describe("Crust type-level tests", () => {
 
 	it("chaining .flags().args() preserves both generics", () => {
 		const app = new Crust("test")
-			.flags({
-				verbose: { type: "boolean", short: "v" },
-				port: { type: "number", default: 3000 },
-			})
-			.args([{ name: "file", type: "string", required: true }]);
+			.flags(
+				{ name: "verbose", type: "boolean", short: "v" },
+				{ name: "port", type: "number", default: 3000 },
+			)
+			.args({ name: "file", type: "string", required: true });
 
 		// Verify flags Local generic is preserved
 		type AppLocal = (typeof app)["_types"]["local"];
@@ -454,35 +477,14 @@ describe("Crust type-level tests", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Crust._createChild — internal factory
+// .mount() — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust._createChild", () => {
-	it("creates a child builder with inherited flags", () => {
-		const child = Crust._createChild("sub", {
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		expect(child._node.meta.name).toBe("sub");
-		expect(child._inheritedFlags).toEqual({
-			verbose: { type: "boolean", inherit: true },
-		});
-	});
-
-	it("child starts with empty local flags and no args", () => {
-		const child = Crust._createChild("sub", {});
-		expect(child._node.localFlags).toEqual({});
-		expect(child._node.args).toBeUndefined();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// .command() — Runtime tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .command()", () => {
+describe("Crust .mount() with inline definitions", () => {
 	it("registers a subcommand in the node's subCommands", () => {
-		const app = new Crust("cli").command("sub", (cmd) => cmd.flags({ output: { type: "string" } }));
+		const app = new Crust("cli").mount(
+			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
+		);
 
 		const subNode = app._node.subCommands.sub;
 		expect(subNode).toBeDefined();
@@ -490,7 +492,9 @@ describe("Crust .command()", () => {
 	});
 
 	it("subcommand node has correct local flags", () => {
-		const app = new Crust("cli").command("sub", (cmd) => cmd.flags({ output: { type: "string" } }));
+		const app = new Crust("cli").mount(
+			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
+		);
 
 		expect(app._node.subCommands.sub?.localFlags).toEqual({
 			output: { type: "string" },
@@ -499,11 +503,8 @@ describe("Crust .command()", () => {
 
 	it("subcommand node computes effectiveFlags from inherited + local", () => {
 		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				port: { type: "number" },
-			})
-			.command("sub", (cmd) => cmd.flags({ output: { type: "string" } }));
+			.flags({ name: "verbose", type: "boolean", inherit: true }, { name: "port", type: "number" })
+			.mount(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
 
 		const subNode = app._node.subCommands.sub;
 		expect(subNode).toBeDefined();
@@ -520,7 +521,7 @@ describe("Crust .command()", () => {
 	it("throws CrustError DEFINITION on empty subcommand name", () => {
 		const app = new Crust("cli");
 		try {
-			app.command("", (cmd) => cmd);
+			app.mount(defineCommand("", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -532,7 +533,7 @@ describe("Crust .command()", () => {
 	it("throws CrustError DEFINITION on whitespace-only subcommand name", () => {
 		const app = new Crust("cli");
 		try {
-			app.command("   ", (cmd) => cmd);
+			app.mount(defineCommand("   ", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -541,9 +542,9 @@ describe("Crust .command()", () => {
 	});
 
 	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
-		const app = new Crust("cli").command("sub", (cmd) => cmd);
+		const app = new Crust("cli").mount(defineCommand("sub", (cmd) => cmd));
 		try {
-			app.command("sub", (cmd) => cmd);
+			app.mount(defineCommand("sub", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -553,38 +554,37 @@ describe("Crust .command()", () => {
 	});
 
 	it("callback receives a fresh builder (not the parent)", () => {
-		let receivedBuilder: Crust | undefined;
+		let receivedBuilder: CommandDefinitionBuilder | undefined;
 
-		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean", inherit: true } })
-			.command("sub", (cmd) => {
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", inherit: true }).mount(
+			defineCommand("sub", (cmd) => {
 				receivedBuilder = cmd;
 				return cmd;
-			});
+			}),
+		);
 
 		expect(receivedBuilder).toBeDefined();
 		expect(receivedBuilder).not.toBe(app);
-		expect(receivedBuilder?._node.meta.name).toBe("sub");
-		// Child should start with empty local flags
-		expect(receivedBuilder?._node.localFlags).toEqual({});
+		const runtimeBuilder = receivedBuilder as unknown as Crust;
+		expect(runtimeBuilder._node.meta.name).toBe("sub");
+		expect(runtimeBuilder._node.localFlags).toEqual({});
 	});
 
 	it("callback child builder carries parent effective flags at runtime", () => {
 		let childInherited: FlagsDef = {};
 
 		new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				port: { type: "number" },
-			})
-			.command("sub", (cmd) => {
-				childInherited = cmd._inheritedFlags;
-				return cmd;
-			});
+			.flags({ name: "verbose", type: "boolean", inherit: true }, { name: "port", type: "number" })
+			.mount(
+				defineCommand("sub", (cmd) => {
+					childInherited = (cmd as unknown as Crust)._inheritedFlags;
+					return cmd;
+				}),
+			);
 
 		// _inheritedFlags carries ALL parent effective flags (not just inheritable)
 		// The filtering for inherit:true happens when computeEffectiveFlags is called
-		// during the child's own .command() or effectiveFlags computation
+		// during the child's own .mount() or effectiveFlags computation
 		expect(childInherited.verbose).toEqual({
 			type: "boolean",
 			inherit: true,
@@ -594,13 +594,17 @@ describe("Crust .command()", () => {
 		});
 	});
 
-	it("nested .command() chains work", () => {
+	it("nested mounted definitions work", () => {
 		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean", inherit: true } })
-			.command("level1", (cmd) =>
-				cmd
-					.flags({ output: { type: "string", inherit: true } })
-					.command("level2", (cmd2) => cmd2.flags({ format: { type: "string" } })),
+			.flags({ name: "verbose", type: "boolean", inherit: true })
+			.mount(
+				defineCommand("level1", (cmd) =>
+					cmd
+						.flags({ name: "output", type: "string", inherit: true })
+						.mount(
+							defineCommand("level2", (cmd2) => cmd2.flags({ name: "format", type: "string" })),
+						),
+				),
 			);
 
 		const level1 = app._node.subCommands.level1;
@@ -622,8 +626,8 @@ describe("Crust .command()", () => {
 
 	it("multiple subcommands can be registered", () => {
 		const app = new Crust("cli")
-			.command("sub1", (cmd) => cmd.flags({ a: { type: "string" } }))
-			.command("sub2", (cmd) => cmd.flags({ b: { type: "number" } }));
+			.mount(defineCommand("sub1", (cmd) => cmd.flags({ name: "a", type: "string" })))
+			.mount(defineCommand("sub2", (cmd) => cmd.flags({ name: "b", type: "number" })));
 
 		expect(app._node.subCommands.sub1).toBeDefined();
 		expect(app._node.subCommands.sub2).toBeDefined();
@@ -633,9 +637,9 @@ describe("Crust .command()", () => {
 
 	it("preserves parent flags and args when registering subcommand", () => {
 		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }])
-			.command("sub", (cmd) => cmd);
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" })
+			.mount(defineCommand("sub", (cmd) => cmd));
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
@@ -643,14 +647,12 @@ describe("Crust .command()", () => {
 	});
 
 	it("child flag override replaces inherited flag at runtime", () => {
-		const app = new Crust("cli")
-			.flags({
-				output: { type: "string", inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const app = new Crust("cli").flags({ name: "output", type: "string", inherit: true }).mount(
+			defineCommand("sub", (cmd) =>
 				// Override output with a number type
-				cmd.flags({ output: { type: "number", default: 42 } }),
-			);
+				cmd.flags({ name: "output", type: "number", default: 42 }),
+			),
+		);
 
 		const subNode = app._node.subCommands.sub;
 		expect(subNode).toBeDefined();
@@ -662,154 +664,30 @@ describe("Crust .command()", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .command() — Type-level tests
+// .mount() — Type-level tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .command() type-level tests", () => {
-	it("callback parameter carries parent effective flags as Inherited", () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				port: { type: "number" },
-			})
-			.command("sub", (cmd) => {
-				// The callback's Inherited = EffectiveFlags<ParentInherited, ParentLocal>
-				// Since root Inherited defaults to FlagsDef (broad), EffectiveFlags
-				// computes to just the parent's Local flags.
-				type CmdInherited = (typeof cmd)["_types"]["inherited"];
-
-				// verbose should be present in inherited
-				type _checkVerbose = Expect<
-					Equal<CmdInherited["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-				>;
-
-				// port is also present in the Inherited generic (all parent effective flags)
-				// but will be filtered out by InheritableFlags when computing the child's
-				// EffectiveFlags in .handle() or further .command() calls
-				type _checkPort = Expect<Equal<CmdInherited["port"], { readonly type: "number" }>>;
-
-				return cmd;
-			});
-
-		expect(app).toBeDefined();
-	});
-
-	it("override flag in child replaces inherited type", () => {
-		new Crust("cli")
-			.flags({
-				output: { type: "string", inherit: true },
-			})
-			.command("sub", (cmd) => {
-				const configured = cmd.flags({
-					output: { type: "number", default: 42 },
-				});
-
-				type ConfiguredLocal = (typeof configured)["_types"]["local"];
-				type _checkOutput = Expect<
-					Equal<ConfiguredLocal["output"], { readonly type: "number"; readonly default: 42 }>
-				>;
-
-				return configured;
-			});
-	});
-
-	it("deeply nested command inherits through chain", () => {
-		new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				rootOnly: { type: "string" },
-			})
-			.command("level1", (cmd) => {
-				// level1 inherits verbose from root
-				type L1Inherited = (typeof cmd)["_types"]["inherited"];
-				type _checkVerboseL1 = Expect<
-					Equal<L1Inherited["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-				>;
-
-				return cmd
-					.flags({ l1Flag: { type: "string", inherit: true } })
-					.command("level2", (cmd2) => {
-						// level2's Inherited = EffectiveFlags of level1
-						// EffectiveFlags<L1Inherited, L1Local> filters L1Inherited
-						// for inherit:true (only verbose) then merges with l1Flag
-						type L2Inherited = (typeof cmd2)["_types"]["inherited"];
-						type _checkVerboseL2 = Expect<
-							Equal<L2Inherited["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-						>;
-						type _checkL1FlagL2 = Expect<
-							Equal<L2Inherited["l1Flag"], { readonly type: "string"; readonly inherit: true }>
-						>;
-
-						// rootOnly has no inherit:true, so it's filtered by
-						// EffectiveFlags at level1→level2 boundary
-						// Verify only verbose and l1Flag are keys (rootOnly excluded)
-						type _checkKeys = Expect<Equal<keyof L2Inherited, "verbose" | "l1Flag">>;
-
-						return cmd2;
-					});
-			});
-	});
-
-	it("non-inherit flags filtered at nested boundary via EffectiveFlags", () => {
-		new Crust("cli")
-			.flags({
-				local1: { type: "string" },
-				global: { type: "boolean", inherit: true },
-			})
-			.command("level1", (cmd) =>
-				cmd.flags({ l1Local: { type: "number" } }).command("level2", (cmd2) => {
-					// At level2, Inherited = EffectiveFlags<Level1Inherited, Level1Local>
-					// Level1Inherited includes both local1 and global (from root)
-					// InheritableFlags<Level1Inherited> filters to only global
-					// Then merges with l1Local → level2 Inherited = { global, l1Local }
-					type L2Inherited = (typeof cmd2)["_types"]["inherited"];
-
-					type _checkGlobal = Expect<
-						Equal<L2Inherited["global"], { readonly type: "boolean"; readonly inherit: true }>
-					>;
-					type _checkL1Local = Expect<Equal<L2Inherited["l1Local"], { readonly type: "number" }>>;
-
-					// local1 should NOT be in L2Inherited (filtered by EffectiveFlags)
-					// Verify only global and l1Local are keys (local1 excluded)
-					type _checkKeys = Expect<Equal<keyof L2Inherited, "global" | "l1Local">>;
-
-					return cmd2;
-				}),
-			);
-	});
-
-	it(".command() preserves parent's Inherited and Local generics", () => {
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", short: "v" },
-				port: { type: "number", default: 3000 },
-			})
-			.command("sub", (cmd) => cmd);
-
-		// Parent's Local generic should be preserved
-		type AppLocal = (typeof app)["_types"]["local"];
-		type _checkVerbose = Expect<
-			Equal<AppLocal["verbose"], { readonly type: "boolean"; readonly short: "v" }>
-		>;
-		type _checkPort = Expect<
-			Equal<AppLocal["port"], { readonly type: "number"; readonly default: 3000 }>
-		>;
-	});
-
-	it("child with no parent flags has empty Inherited via EffectiveFlags", () => {
-		new Crust("cli").command("sub", (cmd) => {
-			// No flags on parent. The parent's default generics are FlagsDef (broad).
-			// EffectiveFlags<FlagsDef, FlagsDef> resolves through InheritableFlags
-			// and MergeFlags, producing a broad type. We verify the child starts
-			// with empty local flags and args at runtime.
-			type CmdLocal = (typeof cmd)["_types"]["local"];
-			type CmdArgs = (typeof cmd)["_types"]["args"];
-
-			type _checkLocal = Expect<Equal<CmdLocal, {}>>;
-			type _checkArgs = Expect<Equal<CmdArgs, []>>;
-
-			return cmd;
-		});
+describe("Crust .mount() type-level tests", () => {
+	it("types inherited and refined values in handlers", () => {
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const output = defineFlag("output", { type: "string", inherit: true });
+		new Crust("cli").flags(verbose, { name: "rootOnly", type: "string" }).mount(
+			defineCommand("level1", { flags: [verbose] }, (command) =>
+				command.flags(output).mount(
+					defineCommand("level2", { flags: [verbose, output] }, (child) =>
+						child
+							.args({ name: "target", type: "string", required: true })
+							.handle(({ args, flags }) => {
+								type _target = Expect<Equal<typeof args.target, string>>;
+								type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
+								type _output = Expect<Equal<typeof flags.output, string | undefined>>;
+								// @ts-expect-error -- non-inheritable root flags are not available
+								void flags.rootOnly;
+							}),
+					),
+				),
+			),
+		);
 	});
 });
 
@@ -830,8 +708,8 @@ describe("Crust .handle()", () => {
 		let receivedCtx: CrustCommandContext | undefined;
 
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string", required: true }])
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string", required: true })
 			.handle((ctx) => {
 				receivedCtx = ctx as unknown as CrustCommandContext;
 			});
@@ -856,16 +734,16 @@ describe("Crust .handle()", () => {
 
 	it("preserves flags and args when adding run handler", () => {
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }])
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" })
 			.handle(() => {});
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
 	});
 
-	it("can chain .handle() after .command()", () => {
-		const app = new Crust("cli").command("sub", (cmd) => cmd).handle(() => {});
+	it("can chain .handle() after .mount()", () => {
+		const app = new Crust("cli").mount(defineCommand("sub", (cmd) => cmd)).handle(() => {});
 
 		expect(app._node.run).toBeDefined();
 		expect(app._node.subCommands.sub).toBeDefined();
@@ -879,10 +757,10 @@ describe("Crust .handle()", () => {
 describe("Crust .handle() type-level tests", () => {
 	it("run handler receives InferArgs<A> for args", () => {
 		new Crust("test")
-			.args([
+			.args(
 				{ name: "file", type: "string", required: true },
 				{ name: "count", type: "number", default: 5 },
-			])
+			)
 			.handle((_ctx) => {
 				type CtxArgs = typeof _ctx.args;
 				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
@@ -891,49 +769,44 @@ describe("Crust .handle() type-level tests", () => {
 	});
 
 	it("run handler receives EffectiveFlags (inherited + local merged) for flags", () => {
-		new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				port: { type: "number", default: 3000 },
-			})
-			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "string", required: true } }).handle((_ctx) => {
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		new Crust("cli").flags(verbose, { name: "port", type: "number", default: 3000 }).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
+				cmd.flags({ name: "output", type: "string", required: true }).handle((_ctx) => {
 					type CtxFlags = typeof _ctx.flags;
 					// inherited verbose (inherit: true) should be present
 					type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean | undefined>>;
 					// local output (required) should be present
 					type _checkOutput = Expect<Equal<CtxFlags["output"], string>>;
 				}),
-			);
+			),
+		);
 	});
 
-	it("inherited flags visible in handler without manual annotation", () => {
-		new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true, default: false },
-			})
-			.command("sub", (cmd) =>
+	it("declared flag requirements are visible in mounted handlers", () => {
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true, default: false });
+		new Crust("cli").flags(verbose).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
 				cmd.handle((_ctx) => {
-					// The handler should see verbose as a flag even though
-					// the subcommand has no local flags
+					// The handler sees the required flag even though the
+					// subcommand has no local flags
 					type CtxFlags = typeof _ctx.flags;
 					type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
 				}),
-			);
+			),
+		);
 	});
 
 	it("override flag shows overridden type in handler", () => {
-		new Crust("cli")
-			.flags({
-				output: { type: "string", inherit: true },
-			})
-			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "number", default: 42 } }).handle((_ctx) => {
+		new Crust("cli").flags({ name: "output", type: "string", inherit: true }).mount(
+			defineCommand("sub", (cmd) =>
+				cmd.flags({ name: "output", type: "number", default: 42 }).handle((_ctx) => {
 					type CtxFlags = typeof _ctx.flags;
 					// output was overridden from string to number
 					type _checkOutput = Expect<Equal<CtxFlags["output"], number>>;
 				}),
-			);
+			),
+		);
 	});
 
 	it("handler with no flags/args gets empty types", () => {
@@ -946,8 +819,8 @@ describe("Crust .handle() type-level tests", () => {
 
 	it("handler receives typed flags and args", () => {
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean", default: false } })
-			.args([{ name: "file", type: "string", required: true }]);
+			.flags({ name: "verbose", type: "boolean", default: false })
+			.args({ name: "file", type: "string", required: true });
 
 		const withHandler = app.handle((_ctx) => {
 			type CtxFlags = typeof _ctx.flags;
@@ -960,7 +833,7 @@ describe("Crust .handle() type-level tests", () => {
 	});
 
 	it("variadic args resolve to array type in handler", () => {
-		new Crust("test").args([{ name: "files", type: "string", variadic: true }]).handle((_ctx) => {
+		new Crust("test").args({ name: "files", type: "string", variadic: true }).handle((_ctx) => {
 			type CtxArgs = typeof _ctx.args;
 			type _checkFiles = Expect<Equal<CtxArgs["files"], string[]>>;
 		});
@@ -968,9 +841,7 @@ describe("Crust .handle() type-level tests", () => {
 
 	it("multiple flag resolves to array type in handler", () => {
 		new Crust("test")
-			.flags({
-				tags: { type: "string", multiple: true, required: true },
-			})
+			.flags({ name: "tags", type: "string", multiple: true, required: true })
 			.handle((_ctx) => {
 				type CtxFlags = typeof _ctx.flags;
 				type _checkTags = Expect<Equal<CtxFlags["tags"], string[]>>;
@@ -978,36 +849,24 @@ describe("Crust .handle() type-level tests", () => {
 	});
 
 	it("optional flag resolves to union with undefined in handler", () => {
-		new Crust("test")
-			.flags({
-				port: { type: "number" },
-			})
-			.handle((_ctx) => {
-				type CtxFlags = typeof _ctx.flags;
-				type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
-			});
+		new Crust("test").flags({ name: "port", type: "number" }).handle((_ctx) => {
+			type CtxFlags = typeof _ctx.flags;
+			type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
+		});
 	});
 
 	it("required flag resolves to non-optional type in handler", () => {
-		new Crust("test")
-			.flags({
-				name: { type: "string", required: true },
-			})
-			.handle((_ctx) => {
-				type CtxFlags = typeof _ctx.flags;
-				type _checkName = Expect<Equal<CtxFlags["name"], string>>;
-			});
+		new Crust("test").flags({ name: "name", type: "string", required: true }).handle((_ctx) => {
+			type CtxFlags = typeof _ctx.flags;
+			type _checkName = Expect<Equal<CtxFlags["name"], string>>;
+		});
 	});
 
 	it("flag with default resolves to non-optional type in handler", () => {
-		new Crust("test")
-			.flags({
-				port: { type: "number", default: 3000 },
-			})
-			.handle((_ctx) => {
-				type CtxFlags = typeof _ctx.flags;
-				type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
-			});
+		new Crust("test").flags({ name: "port", type: "number", default: 3000 }).handle((_ctx) => {
+			type CtxFlags = typeof _ctx.flags;
+			type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
+		});
 	});
 });
 
@@ -1017,7 +876,7 @@ describe("Crust .handle() type-level tests", () => {
 
 describe("Crust .extend()", () => {
 	it("registers an Extension on the node's extensions array", () => {
-		const ext = extension("test-extension");
+		const ext = defineExtension("test-extension");
 		const app = new Crust("test").extend(ext);
 
 		expect(app._node.extensions.length).toBe(1);
@@ -1025,34 +884,34 @@ describe("Crust .extend()", () => {
 	});
 
 	it("multiple .extend() calls chain in registration order", () => {
-		const one = extension("one");
-		const two = extension("two");
-		const three = extension("three");
+		const one = defineExtension("one");
+		const two = defineExtension("two");
+		const three = defineExtension("three");
 
 		const app = new Crust("test").extend(one).extend(two, three);
 
 		expect(app._node.extensions.map((e) => e.name)).toEqual(["one", "two", "three"]);
 	});
 
-	it("extension() returns a frozen plain config", () => {
-		const ext = extension("frozen", { flags: { x: { type: "boolean" } } });
+	it("defineExtension() returns a frozen plain config", () => {
+		const ext = defineExtension("frozen", { flags: { x: { type: "boolean" } } });
 
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
 		expect(ext.flags?.x?.type).toBe("boolean");
 	});
 
-	it("extension() rejects an empty name", () => {
-		expect(() => extension("  ")).toThrow(CrustError);
+	it("defineExtension() rejects an empty name", () => {
+		expect(() => defineExtension("  ")).toThrow(CrustError);
 	});
 
 	it("preserves flags, args, handler, and subcommands when extending", () => {
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }])
-			.command("sub", (cmd) => cmd)
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" })
+			.mount(defineCommand("sub", (cmd) => cmd))
 			.handle(() => {})
-			.extend(extension("test-extension"));
+			.extend(defineExtension("test-extension"));
 
 		expect(app._node.localFlags.verbose).toBeDefined();
 		expect(app._node.args?.length).toBe(1);
@@ -1062,8 +921,8 @@ describe("Crust .extend()", () => {
 	});
 
 	it("intermediate builder retains its own extensions independently", () => {
-		const one = extension("one");
-		const two = extension("two");
+		const one = defineExtension("one");
+		const two = defineExtension("two");
 
 		const base = new Crust("test").extend(one);
 		const extended = base.extend(two);
@@ -1076,14 +935,16 @@ describe("Crust .extend()", () => {
 describe("Extension application at prepare time", () => {
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
-		const debug = extension("debug", {
+		const debug = defineExtension("debug", {
 			flags: { debug: { type: "boolean", inherit: true } },
 		});
 
-		const app = new Crust("cli").extend(debug).command("sub", (cmd) =>
-			cmd.handle(({ flags }) => {
-				seen.push(flags);
-			}),
+		const app = new Crust("cli").extend(debug).mount(
+			defineCommand("sub", (cmd) =>
+				cmd.handle(({ flags }) => {
+					seen.push(flags);
+				}),
+			),
 		);
 
 		await app.run(["sub", "--debug"]);
@@ -1092,20 +953,22 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
-		const version = extension("version", {
+		const version = defineExtension("version", {
 			flags: { version: { type: "boolean", recursive: false } },
 		});
 
-		const app = new Crust("cli").extend(version).command("sub", (cmd) => cmd.handle(() => {}));
+		const app = new Crust("cli")
+			.extend(version)
+			.mount(defineCommand("sub", (cmd) => cmd.handle(() => {})));
 
 		// --version is unknown on the subcommand → PARSE error
 		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({ code: "PARSE" });
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
-		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
 		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean" } })
+			.flags({ name: "verbose", type: "boolean" })
 			.extend(clash)
 			.handle(() => {});
 
@@ -1113,11 +976,11 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
-		const clash = extension("clash", {
+		const clash = defineExtension("clash", {
 			flags: { loud: { type: "boolean", short: "v" } },
 		});
 		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean", short: "v" } })
+			.flags({ name: "verbose", type: "boolean", short: "v" })
 			.extend(clash)
 			.handle(() => {});
 
@@ -1125,8 +988,8 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = extension("a", { flags: { shared: { type: "boolean" } } });
-		const b = extension("b", { flags: { shared: { type: "boolean" } } });
+		const a = defineExtension("a", { flags: { shared: { type: "boolean" } } });
+		const b = defineExtension("b", { flags: { shared: { type: "boolean" } } });
 		const app = new Crust("cli").extend(a, b).handle(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
@@ -1134,10 +997,10 @@ describe("Extension application at prepare time", () => {
 
 	it("Extension commands are routable and their inputs validated before hooks", async () => {
 		const lines: string[] = [];
-		const completion = extension("completion", {
+		const completion = defineExtension("completion", {
 			commands: [
 				new Crust("completion")
-					.args([{ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] }])
+					.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] })
 					.handle(() => {}),
 			],
 			async intercept(context, next) {
@@ -1161,17 +1024,19 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension command colliding with an application command is a DEFINITION error", async () => {
-		const clash = extension("clash", {
+		const clash = defineExtension("clash", {
 			commands: [new Crust("sub").handle(() => {})],
 		});
-		const app = new Crust("cli").command("sub", (cmd) => cmd.handle(() => {})).extend(clash);
+		const app = new Crust("cli")
+			.mount(defineCommand("sub", (cmd) => cmd.handle(() => {})))
+			.extend(clash);
 
 		await expect(app.run(["sub"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
 	it("does not mutate the source builder across executions", async () => {
 		let runCount = 0;
-		const debug = extension("debug", { flags: { debug: { type: "boolean" } } });
+		const debug = defineExtension("debug", { flags: { debug: { type: "boolean" } } });
 		const app = new Crust("repeat").extend(debug).handle(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) runCount++;
 		});
@@ -1187,14 +1052,14 @@ describe("Extension application at prepare time", () => {
 describe("Extension intercept chain", () => {
 	it("runs intercepts in registration order around the Command Handler", async () => {
 		const order: string[] = [];
-		const first = extension("first", {
+		const first = defineExtension("first", {
 			async intercept(_context, next) {
 				order.push("first:before");
 				await next();
 				order.push("first:after");
 			},
 		});
-		const second = extension("second", {
+		const second = defineExtension("second", {
 			async intercept(_context, next) {
 				order.push("second:before");
 				await next();
@@ -1213,7 +1078,7 @@ describe("Extension intercept chain", () => {
 
 	it("short-circuiting an intercept skips validation and the Command Handler", async () => {
 		let ran = false;
-		const gate = extension("gate", {
+		const gate = defineExtension("gate", {
 			intercept() {
 				// no next() — short-circuit
 			},
@@ -1221,7 +1086,7 @@ describe("Extension intercept chain", () => {
 
 		// Required arg missing would normally fail validation
 		const app = new Crust("cli")
-			.args([{ name: "file", type: "string", required: true }])
+			.args({ name: "file", type: "string", required: true })
 			.extend(gate)
 			.handle(() => {
 				ran = true;
@@ -1233,7 +1098,7 @@ describe("Extension intercept chain", () => {
 
 	it("intercept runs before application value validation but after parsing", async () => {
 		const observed: unknown[] = [];
-		const observer = extension("observer", {
+		const observer = defineExtension("observer", {
 			async intercept(context, next) {
 				observed.push(context.flags.port);
 				await next();
@@ -1241,7 +1106,7 @@ describe("Extension intercept chain", () => {
 		});
 
 		const app = new Crust("cli")
-			.flags({ port: { type: "number", required: true } })
+			.flags({ name: "port", type: "number", required: true })
 			.extend(observer)
 			.handle(() => {});
 
@@ -1256,14 +1121,16 @@ describe("Extension intercept chain", () => {
 
 	it("routing failures flow directly to the caller — intercepts never observe them", async () => {
 		let intercepted = false;
-		const watcher = extension("watcher", {
+		const watcher = defineExtension("watcher", {
 			async intercept(_context, next) {
 				intercepted = true;
 				await next();
 			},
 		});
 
-		const app = new Crust("cli").extend(watcher).command("known", (cmd) => cmd.handle(() => {}));
+		const app = new Crust("cli")
+			.extend(watcher)
+			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
 
 		await expect(app.run(["unknown"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
 		expect(intercepted).toBe(false);
@@ -1271,7 +1138,7 @@ describe("Extension intercept chain", () => {
 
 	it("intercept receives readonly serializable snapshots and injected io", async () => {
 		const lines: string[] = [];
-		const probe = extension("probe", {
+		const probe = defineExtension("probe", {
 			async intercept(context, next) {
 				expect(Object.isFrozen(context.rootCommand)).toBe(true);
 				expect(Object.isFrozen(context.command)).toBe(true);
@@ -1288,7 +1155,7 @@ describe("Extension intercept chain", () => {
 	});
 
 	it("calling next() twice is a DEFINITION error", async () => {
-		const rogue = extension("rogue", {
+		const rogue = defineExtension("rogue", {
 			async intercept(_context, next) {
 				await next();
 				await next();
@@ -1335,13 +1202,13 @@ describe("Extension handleError chain", () => {
 
 	it("handlers run in registration order and next() reaches Core's default renderer", async () => {
 		const order: string[] = [];
-		const first = extension("first", {
+		const first = defineExtension("first", {
 			async handleError(_error, _ctx, next) {
 				order.push("first");
 				await next();
 			},
 		});
-		const second = extension("second", {
+		const second = defineExtension("second", {
 			async handleError(_error, _ctx, next) {
 				order.push("second");
 				await next();
@@ -1358,7 +1225,7 @@ describe("Extension handleError chain", () => {
 
 	it("a handler that renders and returns replaces the default renderer but keeps a nonzero exit", async () => {
 		const lines: string[] = [];
-		const presenter = extension("presenter", {
+		const presenter = defineExtension("presenter", {
 			handleError(error, ctx) {
 				ctx.stderr(`pretty: ${(error as Error).message}`);
 				lines.push("rendered");
@@ -1377,7 +1244,7 @@ describe("Extension handleError chain", () => {
 	});
 
 	it("a handler that throws falls back to default rendering of the original error", async () => {
-		const broken = extension("broken", {
+		const broken = defineExtension("broken", {
 			handleError() {
 				throw new Error("renderer exploded");
 			},
@@ -1391,14 +1258,16 @@ describe("Extension handleError chain", () => {
 
 	it("receives routing failures (COMMAND_NOT_FOUND) with the original error object", async () => {
 		let received: unknown;
-		const catcher = extension("catcher", {
+		const catcher = defineExtension("catcher", {
 			handleError(error, ctx) {
 				received = error;
 				ctx.stderr("handled");
 			},
 		});
 
-		const app = new Crust("cli").extend(catcher).command("known", (cmd) => cmd.handle(() => {}));
+		const app = new Crust("cli")
+			.extend(catcher)
+			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["unknown"] });
 
@@ -1409,7 +1278,7 @@ describe("Extension handleError chain", () => {
 
 	it("preserves resolved parsed context for schema, Context, and handler failures", async () => {
 		let received: ExtensionContext | undefined;
-		const catcher = extension("catcher", {
+		const catcher = defineExtension("catcher", {
 			handleError(_error, ctx) {
 				received = ctx;
 			},
@@ -1423,12 +1292,16 @@ describe("Extension handleError chain", () => {
 			received = undefined;
 		};
 		const command = (handler: () => void) =>
-			new Crust("cli").extend(catcher).command("deploy", (cmd) =>
-				cmd
-					.args([{ name: "target", type: "string", required: true }] as const)
-					.flags({ force: { type: "boolean" } })
-					.handle(handler),
-			);
+			new Crust("cli")
+				.extend(catcher)
+				.mount(
+					defineCommand("deploy", (cmd) =>
+						cmd
+							.args({ name: "target", type: "string", required: true })
+							.flags({ name: "force", type: "boolean" })
+							.handle(handler),
+					),
+				);
 		const argv = ["deploy", "production", "--force", "--", "manifest.json"];
 
 		await command(() => {
@@ -1436,40 +1309,45 @@ describe("Extension handleError chain", () => {
 		}).execute({ argv });
 		expectResolvedContext();
 
-		const brokenContext = context("broken", () => {
+		const brokenContext = defineContext("broken", () => {
 			throw new Error("Context failed");
 		});
 		await new Crust("cli")
 			.extend(catcher)
-			.command("deploy", (cmd) =>
-				cmd
-					.args([{ name: "target", type: "string", required: true }] as const)
-					.flags({ force: { type: "boolean" } })
-					.provide(brokenContext(undefined))
-					.handle(() => {}),
+			.mount(
+				defineCommand("deploy", (cmd) =>
+					cmd
+						.args({ name: "target", type: "string", required: true })
+						.flags({ name: "force", type: "boolean" })
+						.provide(brokenContext(undefined))
+						.handle(() => {}),
+				),
 			)
 			.execute({ argv });
 		expectResolvedContext();
 
 		await new Crust("cli")
 			.extend(catcher)
-			.command("deploy", (cmd) =>
-				cmd
-					.args([{ name: "target", type: "string", required: true }] as const)
-					.flags({
-						force: { type: "boolean" },
-						mode: {
-							type: "string",
-							schema: {
-								"~standard": {
-									version: 1,
-									vendor: "test",
-									validate: () => ({ issues: [{ message: "schema failed" }] }),
+			.mount(
+				defineCommand("deploy", (cmd) =>
+					cmd
+						.args({ name: "target", type: "string", required: true })
+						.flags(
+							{ name: "force", type: "boolean" },
+							{
+								name: "mode",
+								type: "string",
+								schema: {
+									"~standard": {
+										version: 1,
+										vendor: "test",
+										validate: () => ({ issues: [{ message: "schema failed" }] }),
+									},
 								},
 							},
-						},
-					})
-					.handle(() => {}),
+						)
+						.handle(() => {}),
+				),
 			)
 			.execute({
 				argv: ["deploy", "production", "--force", "--mode", "fast", "--", "manifest.json"],
@@ -1483,7 +1361,7 @@ describe("Extension handleError chain", () => {
 
 	it("never runs for run() — the original error propagates unrendered", async () => {
 		let handlerRan = false;
-		const presenter = extension("presenter", {
+		const presenter = defineExtension("presenter", {
 			handleError() {
 				handlerRan = true;
 			},
@@ -1514,7 +1392,7 @@ describe("Crust .run()", () => {
 
 	it("throws the original CrustError without rendering or setting exitCode", async () => {
 		const stderrLines: string[] = [];
-		const app = new Crust("test").flags({ port: { type: "number" } }).handle(() => {});
+		const app = new Crust("test").flags({ name: "port", type: "number" }).handle(() => {});
 
 		await expect(
 			app.run(["--unknown"], { stderr: (text) => stderrLines.push(text) }),
@@ -1552,8 +1430,8 @@ describe("Crust .run()", () => {
 	it("parses argv exactly like execute", async () => {
 		let received: unknown;
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
-			.args([{ name: "file", type: "string" }] as const)
+			.flags({ name: "verbose", type: "boolean" })
+			.args({ name: "file", type: "string" })
 			.handle((ctx) => {
 				received = { args: ctx.args, flags: ctx.flags };
 			});
@@ -1561,37 +1439,6 @@ describe("Crust .run()", () => {
 		await app.run(["a.txt", "--verbose"]);
 
 		expect(received).toEqual({ args: { file: "a.txt" }, flags: { verbose: true } });
-	});
-});
-
-describe("Crust .extend() root-only", () => {
-	it("throws DEFINITION when called on a child builder from .sub()", () => {
-		const app = new Crust("cli");
-		const child = app.sub("deploy");
-
-		expect(() => child.extend(extension("x"))).toThrow(CrustError);
-		try {
-			child.extend(extension("x"));
-		} catch (error) {
-			expect((error as CrustError).is("DEFINITION")).toBe(true);
-		}
-	});
-
-	it("throws DEFINITION when called inside a .command() callback", () => {
-		expect(() =>
-			new Crust("cli").command("sub", (cmd) => cmd.extend(extension("x")).handle(() => {})),
-		).toThrow(CrustError);
-	});
-
-	it("throws DEFINITION when attaching a standalone builder that carries Extensions", () => {
-		const sub = new Crust("sub").extend(extension("p")).handle(() => {});
-
-		expect(() => new Crust("cli").command(sub)).toThrow(CrustError);
-		try {
-			new Crust("cli").command(sub);
-		} catch (error) {
-			expect((error as CrustError).is("DEFINITION")).toBe(true);
-		}
 	});
 });
 
@@ -1636,7 +1483,7 @@ describe("Crust .execute()", () => {
 		let receivedFlags: Record<string, unknown> = {};
 
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean", short: "v" } })
+			.flags({ name: "verbose", type: "boolean", short: "v" })
 			.handle((ctx) => {
 				receivedFlags = ctx.flags;
 			});
@@ -1650,7 +1497,7 @@ describe("Crust .execute()", () => {
 		let receivedArgs: Record<string, unknown> = {};
 
 		const app = new Crust("test")
-			.args([{ name: "file", type: "string", required: true }])
+			.args({ name: "file", type: "string", required: true })
 			.handle((ctx) => {
 				receivedArgs = ctx.args;
 			});
@@ -1664,11 +1511,8 @@ describe("Crust .execute()", () => {
 		let receivedCtx: CrustCommandContext | undefined;
 
 		const app = new Crust("test")
-			.flags({
-				port: { type: "number", default: 3000 },
-				verbose: { type: "boolean" },
-			})
-			.args([{ name: "dir", type: "string", default: "." }])
+			.flags({ name: "port", type: "number", default: 3000 }, { name: "verbose", type: "boolean" })
+			.args({ name: "dir", type: "string", default: "." })
 			.handle((ctx) => {
 				receivedCtx = ctx as unknown as CrustCommandContext;
 			});
@@ -1687,10 +1531,12 @@ describe("Crust .execute()", () => {
 			.handle(() => {
 				handlerRan = "root";
 			})
-			.command("sub", (cmd) =>
-				cmd.handle(() => {
-					handlerRan = "sub";
-				}),
+			.mount(
+				defineCommand("sub", (cmd) =>
+					cmd.handle(() => {
+						handlerRan = "sub";
+					}),
+				),
 			);
 
 		await app.execute({ argv: ["sub"] });
@@ -1702,14 +1548,16 @@ describe("Crust .execute()", () => {
 		let subFlags: Record<string, unknown> = {};
 
 		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", inherit: true },
-				port: { type: "number", default: 3000 },
-			})
-			.command("sub", (cmd) =>
-				cmd.handle((ctx) => {
-					subFlags = ctx.flags;
-				}),
+			.flags(
+				{ name: "verbose", type: "boolean", inherit: true },
+				{ name: "port", type: "number", default: 3000 },
+			)
+			.mount(
+				defineCommand("sub", (cmd) =>
+					cmd.handle((ctx) => {
+						subFlags = ctx.flags;
+					}),
+				),
 			);
 
 		await app.execute({ argv: ["sub", "--verbose"] });
@@ -1723,7 +1571,7 @@ describe("Crust .execute()", () => {
 		let receivedDir = "";
 
 		const app = new Crust("test")
-			.args([{ name: "dir", type: "string", default: "." }])
+			.args({ name: "dir", type: "string", default: "." })
 			.handle((ctx) => {
 				receivedDir = ctx.args.dir as string;
 			});
@@ -1736,7 +1584,7 @@ describe("Crust .execute()", () => {
 	it("runs the intercept chain around the handler", async () => {
 		const order: string[] = [];
 
-		const wrap = extension("wrap", {
+		const wrap = defineExtension("wrap", {
 			async intercept(_ctx, next) {
 				order.push("intercept:before");
 				await next();
@@ -1756,14 +1604,14 @@ describe("Crust .execute()", () => {
 	it("runs multiple intercepts in registration order", async () => {
 		const order: string[] = [];
 
-		const e1 = extension("e1", {
+		const e1 = defineExtension("e1", {
 			async intercept(_ctx, next) {
 				order.push("e1:before");
 				await next();
 				order.push("e1:after");
 			},
 		});
-		const e2 = extension("e2", {
+		const e2 = defineExtension("e2", {
 			async intercept(_ctx, next) {
 				order.push("e2:before");
 				await next();
@@ -1817,7 +1665,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("handles unknown flag error", async () => {
-		const app = new Crust("test").flags({ verbose: { type: "boolean" } }).handle(() => {});
+		const app = new Crust("test").flags({ name: "verbose", type: "boolean" }).handle(() => {});
 
 		await app.execute({ argv: ["--unknown"] });
 
@@ -1827,7 +1675,7 @@ describe("Crust .execute()", () => {
 
 	it("handles missing required flag error", async () => {
 		const app = new Crust("test")
-			.flags({ name: { type: "string", required: true } })
+			.flags({ name: "name", type: "string", required: true })
 			.handle(() => {});
 
 		await app.execute({ argv: [] });
@@ -1837,7 +1685,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("command not found error with no run on parent", async () => {
-		const app = new Crust("cli").command("sub", (cmd) => cmd.handle(() => {}));
+		const app = new Crust("cli").mount(defineCommand("sub", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["unknown-sub"] });
 
@@ -1846,7 +1694,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("no run handler is a no-op (no error)", async () => {
-		const app = new Crust("test").flags({ verbose: { type: "boolean" } });
+		const app = new Crust("test").flags({ name: "verbose", type: "boolean" });
 
 		await app.execute({ argv: ["--verbose"] });
 
@@ -1857,7 +1705,7 @@ describe("Crust .execute()", () => {
 	it("Extension-owned flags are recognized by the parser", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const version = extension("version", {
+		const version = defineExtension("version", {
 			flags: { version: { type: "boolean", short: "V" } },
 		});
 
@@ -1873,15 +1721,17 @@ describe("Crust .execute()", () => {
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const helpLike = extension("help-like", {
+		const helpLike = defineExtension("help-like", {
 			flags: { help: { type: "boolean", inherit: true } },
 		});
-		const skillLike = extension("inject-subcommand", {
+		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
-				new Crust("skill").command("update", (cmd) =>
-					cmd.handle((runCtx) => {
-						receivedFlags = runCtx.flags as Record<string, unknown>;
-					}),
+				new Crust("skill").mount(
+					defineCommand("update", (cmd) =>
+						cmd.handle((runCtx) => {
+							receivedFlags = runCtx.flags as Record<string, unknown>;
+						}),
+					),
 				),
 			],
 		});
@@ -1899,17 +1749,21 @@ describe("Crust .execute()", () => {
 	it("deeply nested subcommand routing works", async () => {
 		let handlerRan = "";
 
-		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean", inherit: true } })
-			.command("level1", (cmd) =>
-				cmd.command("level2", (cmd2) =>
-					cmd2.command("level3", (cmd3) =>
-						cmd3.handle(() => {
-							handlerRan = "level3";
-						}),
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", inherit: true }).mount(
+			defineCommand("level1", (cmd) =>
+				cmd.mount(
+					defineCommand("level2", (cmd2) =>
+						cmd2.mount(
+							defineCommand("level3", (cmd3) =>
+								cmd3.handle(() => {
+									handlerRan = "level3";
+								}),
+							),
+						),
 					),
 				),
-			);
+			),
+		);
 
 		await app.execute({ argv: ["level1", "level2", "level3"] });
 
@@ -1919,7 +1773,7 @@ describe("Crust .execute()", () => {
 	it("rawArgs are passed through", async () => {
 		let receivedRawArgs: string[] = [];
 
-		const app = new Crust("test").flags({ verbose: { type: "boolean" } }).handle((ctx) => {
+		const app = new Crust("test").flags({ name: "verbose", type: "boolean" }).handle((ctx) => {
 			receivedRawArgs = ctx.rawArgs;
 		});
 
@@ -1932,7 +1786,7 @@ describe("Crust .execute()", () => {
 		let interceptedName = "";
 		let interceptedFlags: Record<string, unknown> = {};
 
-		const inspect = extension("inspect", {
+		const inspect = defineExtension("inspect", {
 			async intercept(ctx, next) {
 				interceptedName = ctx.command.meta.name;
 				interceptedFlags = { ...ctx.flags };
@@ -1942,8 +1796,10 @@ describe("Crust .execute()", () => {
 
 		const app = new Crust("cli")
 			.extend(inspect)
-			.command("sub", (cmd) =>
-				cmd.flags({ output: { type: "string", default: "stdout" } }).handle(() => {}),
+			.mount(
+				defineCommand("sub", (cmd) =>
+					cmd.flags({ name: "output", type: "string", default: "stdout" }).handle(() => {}),
+				),
 			);
 
 		await app.execute({ argv: ["sub", "--output", "file.txt"] });
@@ -1955,7 +1811,7 @@ describe("Crust .execute()", () => {
 	it("intercept can short-circuit execution", async () => {
 		let handlerRan = false;
 
-		const gate = extension("short-circuit", {
+		const gate = defineExtension("short-circuit", {
 			intercept: async (_ctx, _next) => {
 				// Don't call next() — short circuit
 			},
@@ -1971,19 +1827,14 @@ describe("Crust .execute()", () => {
 	});
 
 	it("inherited flags work across file-boundary pattern", async () => {
-		// Simulate split-file pattern: define subcommand callback as separate function
 		let receivedVerbose: boolean | undefined;
-
-		const defineSubCommand = (
-			cmd: Crust<{ verbose: { type: "boolean"; inherit: true } }, {}, []>,
-		) =>
-			cmd.handle((ctx) => {
-				receivedVerbose = ctx.flags.verbose;
-			});
-
-		const app = new Crust("cli")
-			.flags({ verbose: { type: "boolean", inherit: true } })
-			.command("sub", defineSubCommand);
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const sub = defineCommand("sub", { flags: [verbose] }, (command) =>
+			command.handle(({ flags }) => {
+				receivedVerbose = flags.verbose;
+			}),
+		);
+		const app = new Crust("cli").flags(verbose).mount(sub);
 
 		await app.execute({ argv: ["sub", "--verbose"] });
 
@@ -1992,16 +1843,15 @@ describe("Crust .execute()", () => {
 
 	it("default flag values work on subcommands", async () => {
 		let receivedPort: number | undefined;
+		const port = defineFlag("port", { type: "number", default: 3000, inherit: true });
 
-		const app = new Crust("cli")
-			.flags({
-				port: { type: "number", default: 3000, inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const app = new Crust("cli").flags(port).mount(
+			defineCommand("sub", { flags: [port] }, (cmd) =>
 				cmd.handle((ctx) => {
-					receivedPort = ctx.flags.port as number;
+					receivedPort = ctx.flags.port;
 				}),
-			);
+			),
+		);
 
 		await app.execute({ argv: ["sub"] });
 
@@ -2010,16 +1860,15 @@ describe("Crust .execute()", () => {
 
 	it("inherited flag short alias works on subcommand", async () => {
 		let receivedVerbose: boolean | undefined;
+		const verbose = defineFlag("verbose", { type: "boolean", short: "v", inherit: true });
 
-		const app = new Crust("cli")
-			.flags({
-				verbose: { type: "boolean", short: "v", inherit: true },
-			})
-			.command("sub", (cmd) =>
+		const app = new Crust("cli").flags(verbose).mount(
+			defineCommand("sub", { flags: [verbose] }, (cmd) =>
 				cmd.handle((ctx) => {
 					receivedVerbose = ctx.flags.verbose;
 				}),
-			);
+			),
+		);
 
 		await app.execute({ argv: ["sub", "-v"] });
 
@@ -2027,9 +1876,9 @@ describe("Crust .execute()", () => {
 	});
 
 	it("Extension apply error is rendered and sets exitCode", async () => {
-		const clash = extension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
 		const app = new Crust("test")
-			.flags({ verbose: { type: "boolean" } })
+			.flags({ name: "verbose", type: "boolean" })
 			.extend(clash)
 			.handle(() => {});
 
@@ -2040,7 +1889,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats intercept-time prompt cancellation as a silent user abort", async () => {
-		const cancel = extension("cancel", {
+		const cancel = defineExtension("cancel", {
 			intercept: () => {
 				throw new DOMException("Prompt was cancelled.", "AbortError");
 			},
@@ -2082,7 +1931,7 @@ describe("Crust .execute()", () => {
 	it("command context contains a serializable snapshot of the resolved command", async () => {
 		let receivedCommand: unknown;
 
-		const app = new Crust("test").flags({ verbose: { type: "boolean" } }).handle((ctx) => {
+		const app = new Crust("test").flags({ name: "verbose", type: "boolean" }).handle((ctx) => {
 			receivedCommand = ctx.command;
 		});
 
@@ -2191,334 +2040,9 @@ describe("Crust .execute() validation mode", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// .sub() — Runtime tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .sub()", () => {
-	it("returns a new Crust instance with correct name", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		const sub = app.sub("deploy");
-
-		expect(sub._node.meta.name).toBe("deploy");
-	});
-
-	it("carries parent's inheritable flags in _inheritedFlags", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-			port: { type: "number" },
-		});
-		const sub = app.sub("deploy");
-
-		// _inheritedFlags should contain ALL parent effective flags
-		// (filtering for inherit:true happens in computeEffectiveFlags)
-		expect(sub._inheritedFlags.verbose).toEqual({
-			type: "boolean",
-			inherit: true,
-		});
-		expect(sub._inheritedFlags.port).toEqual({ type: "number" });
-	});
-
-	it("starts with empty local flags and no args", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		const sub = app.sub("deploy");
-
-		expect(sub._node.localFlags).toEqual({});
-		expect(sub._node.args).toBeUndefined();
-	});
-
-	it("throws CrustError DEFINITION on empty name", () => {
-		const app = new Crust("cli");
-		try {
-			app.sub("");
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("non-empty");
-		}
-	});
-
-	it("throws CrustError DEFINITION on whitespace-only name", () => {
-		const app = new Crust("cli");
-		try {
-			app.sub("   ");
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-		}
-	});
-
-	it("chaining .sub().flags().args().handle() works", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		const deploy = app
-			.sub("deploy")
-			.meta({ description: "Deploy something" })
-			.flags({ env: { type: "string", required: true } })
-			.args([{ name: "target", type: "string", required: true }])
-			.handle(() => {});
-
-		expect(deploy._node.meta.name).toBe("deploy");
-		expect(deploy._node.meta.description).toBe("Deploy something");
-		expect(deploy._node.localFlags.env).toBeDefined();
-		expect(deploy._node.args?.length).toBe(1);
-		expect(deploy._node.run).toBeDefined();
-	});
-
-	it("nested .sub() chains carry flags through", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		const deploy = app.sub("deploy").flags({
-			env: { type: "string", inherit: true },
-		});
-
-		const status = deploy.sub("status");
-
-		// status should have inherited flags from deploy (which includes verbose + env)
-		expect(status._inheritedFlags.verbose).toEqual({
-			type: "boolean",
-			inherit: true,
-		});
-		expect(status._inheritedFlags.env).toEqual({
-			type: "string",
-			inherit: true,
-		});
-	});
-
-	it("does not mutate the parent builder", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		app.sub("deploy");
-
-		// Parent should be untouched
-		expect(app._node.subCommands).toEqual({});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// .sub() — Type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .sub() type-level tests", () => {
-	it("sub builder Inherited = EffectiveFlags<ParentInherited, ParentLocal>", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-			port: { type: "number" },
-		});
-
-		const sub = app.sub("deploy");
-
-		type SubInherited = (typeof sub)["_types"]["inherited"];
-
-		// verbose is inherited (inherit: true), so present
-		type _checkVerbose = Expect<
-			Equal<SubInherited["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-		>;
-
-		// port has no inherit:true, but it's in the parent's Local, so it shows
-		// up in EffectiveFlags at the type level (it goes through InheritableFlags
-		// filtering when the sub's own child is created)
-		type _checkPort = Expect<Equal<SubInherited["port"], { readonly type: "number" }>>;
-	});
-
-	it("sub builder starts with empty Local and Args", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		const sub = app.sub("deploy");
-
-		type SubLocal = (typeof sub)["_types"]["local"];
-		type SubArgs = (typeof sub)["_types"]["args"];
-
-		type _checkLocal = Expect<Equal<SubLocal, {}>>;
-		type _checkArgs = Expect<Equal<SubArgs, []>>;
-	});
-
-	it("inherited flags correctly typed in .handle() handler after .sub()", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-			port: { type: "number" },
-		});
-
-		app
-			.sub("deploy")
-			.flags({ env: { type: "string", required: true } })
-			.handle((_ctx) => {
-				type CtxFlags = typeof _ctx.flags;
-				// verbose inherits (inherit: true)
-				type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean | undefined>>;
-				// env is local required
-				type _checkEnv = Expect<Equal<CtxFlags["env"], string>>;
-			});
-	});
-
-	it("nested .sub().sub() carries inheritable flags through at type level", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-			rootOnly: { type: "string" },
-		});
-
-		const l1 = app.sub("l1").flags({
-			l1Flag: { type: "string", inherit: true },
-		});
-
-		const l2 = l1.sub("l2");
-
-		type L2Inherited = (typeof l2)["_types"]["inherited"];
-
-		// verbose cascades (inherit: true at root level)
-		type _checkVerbose = Expect<
-			Equal<L2Inherited["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-		>;
-		// l1Flag cascades (inherit: true at l1 level)
-		type _checkL1Flag = Expect<
-			Equal<L2Inherited["l1Flag"], { readonly type: "string"; readonly inherit: true }>
-		>;
-		// rootOnly should be filtered out (no inherit:true)
-		type _checkKeys = Expect<Equal<keyof L2Inherited, "verbose" | "l1Flag">>;
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// .command(builder) — Runtime tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .command(builder)", () => {
-	it("registers the subcommand by name from builder", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		const deploy = app.sub("deploy").flags({
-			env: { type: "string", required: true },
-		});
-
-		const result = app.command(deploy);
-
-		expect(result._node.subCommands.deploy).toBeDefined();
-		expect(result._node.subCommands.deploy?.meta.name).toBe("deploy");
-	});
-
-	it("computes effectiveFlags correctly", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-			port: { type: "number" },
-		});
-		const deploy = app.sub("deploy").flags({ env: { type: "string", required: true } });
-
-		const result = app.command(deploy);
-		const subNode = result._node.subCommands.deploy;
-
-		// effectiveFlags = inherited(verbose) + local(env)
-		// port is NOT inherited (no inherit: true)
-		expect(subNode?.effectiveFlags.verbose).toEqual({
-			type: "boolean",
-			inherit: true,
-		});
-		expect(subNode?.effectiveFlags.env).toEqual({
-			type: "string",
-			required: true,
-		});
-		expect(subNode?.effectiveFlags.port).toBeUndefined();
-	});
-
-	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
-		const app = new Crust("cli").command("deploy", (cmd) => cmd);
-		const deploy = new Crust("deploy");
-
-		try {
-			app.command(deploy);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("already registered");
-		}
-	});
-
-	it("throws CrustError DEFINITION if builder has empty name", () => {
-		// We can't create Crust("") directly (it throws), so we test the path
-		// by using a valid name that's already handled.
-		// This test validates that the code path exists; the empty-name constructor
-		// already prevents creating such builders.
-		const app = new Crust("cli");
-		try {
-			app.command(new Crust("   "));
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-		}
-	});
-
-	it("both overloads can be mixed: .command(name, cb).command(builder)", () => {
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-		const deploy = app.sub("deploy").handle(() => {});
-
-		const result = app.command("status", (cmd) => cmd.handle(() => {})).command(deploy);
-
-		expect(result._node.subCommands.status).toBeDefined();
-		expect(result._node.subCommands.deploy).toBeDefined();
-	});
-
-	it("full pipeline: .sub() → .command(builder) → .execute()", async () => {
-		let receivedFlags: Record<string, unknown> = {};
-
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		const deploy = app
-			.sub("deploy")
-			.flags({ env: { type: "string", default: "staging" } })
-			.handle((ctx) => {
-				receivedFlags = ctx.flags;
-			});
-
-		await app.command(deploy).execute({ argv: ["deploy", "--verbose"] });
-
-		expect(receivedFlags.verbose).toBe(true);
-		expect(receivedFlags.env).toBe("staging");
-	});
-
-	it("nested .sub() → .command(builder) works end-to-end", async () => {
-		let receivedFlags: Record<string, unknown> = {};
-
-		const app = new Crust("cli").flags({
-			verbose: { type: "boolean", inherit: true },
-		});
-
-		const deployCmd = app.sub("deploy").flags({ env: { type: "string", inherit: true } });
-
-		const statusCmd = deployCmd.sub("status").handle((ctx) => {
-			receivedFlags = ctx.flags;
-		});
-
-		await app
-			.command(deployCmd.command(statusCmd))
-			.execute({ argv: ["deploy", "status", "--verbose", "--env", "prod"] });
-
-		expect(receivedFlags.verbose).toBe(true);
-		expect(receivedFlags.env).toBe("prod");
-	});
-});
-
 describe("prepareCommandSnapshot (tooling)", () => {
 	it("returns a frozen snapshot with Extension flags applied, without mutating the builder", async () => {
-		const docs = extension("doc-test", {
+		const docs = defineExtension("doc-test", {
 			flags: {
 				extra: { type: "boolean", description: "Injected for docs" },
 			},
@@ -2549,13 +2073,13 @@ describe("prepareCommandSnapshot (tooling)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// .command() aliases
+// .mount() aliases
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .command() aliases", () => {
+describe("Crust .mount() aliases", () => {
 	it("plumbs aliases from meta() into the registered subcommand node", () => {
-		const app = new Crust("cli").command("issue", (cmd) =>
-			cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}),
+		const app = new Crust("cli").mount(
+			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
 		);
 		expect(app._node.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
@@ -2563,89 +2087,103 @@ describe("Crust .command() aliases", () => {
 	it("registers without error when no sibling collides", () => {
 		expect(() =>
 			new Crust("cli")
-				.command("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {}))
-				.command("version", (cmd) => cmd.handle(() => {})),
+				.mount(
+					defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
+				)
+				.mount(defineCommand("version", (cmd) => cmd.handle(() => {}))),
 		).not.toThrow();
 	});
 
 	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
-		const app = new Crust("cli").command("build", (cmd) => cmd.handle(() => {}));
+		const app = new Crust("cli").mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
 		expect(() =>
-			app.command("compile", (cmd) => cmd.meta({ aliases: ["build"] }).handle(() => {})),
+			app.mount(
+				defineCommand("compile", (cmd) => cmd.meta({ aliases: ["build"] }).handle(() => {})),
+			),
 		).toThrow(/collides with sibling canonical name "build"/);
 	});
 
 	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
-		const app = new Crust("cli").command("issue", (cmd) =>
-			cmd.meta({ aliases: ["i"] }).handle(() => {}),
+		const app = new Crust("cli").mount(
+			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})),
 		);
 		expect(() =>
-			app.command("info", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})),
+			app.mount(defineCommand("info", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}))),
 		).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
-		const app = new Crust("cli").command("issue", (cmd) =>
-			cmd.meta({ aliases: ["i"] }).handle(() => {}),
+		const app = new Crust("cli").mount(
+			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})),
 		);
 		// Now try to register a *new* command whose canonical name == existing alias.
-		expect(() => app.command("i", (cmd) => cmd.handle(() => {}))).toThrow(
+		expect(() => app.mount(defineCommand("i", (cmd) => cmd.handle(() => {})))).toThrow(
 			/canonical name "i" collides with alias of sibling "issue"/,
 		);
 	});
 
 	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) =>
-				cmd.meta({ aliases: ["i", "i"] }).handle(() => {}),
+			new Crust("cli").mount(
+				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i", "i"] }).handle(() => {})),
 			),
 		).toThrow(/lists alias "i" more than once/);
 	});
 
 	it("throws DEFINITION on an alias equal to its own canonical name", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) => cmd.meta({ aliases: ["issue"] }).handle(() => {})),
+			new Crust("cli").mount(
+				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issue"] }).handle(() => {})),
+			),
 		).toThrow(/must not equal its own canonical name/);
 	});
 
 	it("throws DEFINITION on an empty alias", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) => cmd.meta({ aliases: [""] }).handle(() => {})),
+			new Crust("cli").mount(
+				defineCommand("issue", (cmd) => cmd.meta({ aliases: [""] }).handle(() => {})),
+			),
 		).toThrow(/must be a non-empty string/);
 	});
 
 	it("throws DEFINITION on an alias containing whitespace", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) =>
-				cmd.meta({ aliases: ["my issue"] }).handle(() => {}),
+			new Crust("cli").mount(
+				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["my issue"] }).handle(() => {})),
 			),
 		).toThrow(/must not contain whitespace/);
 	});
 
 	it("throws DEFINITION on an alias starting with '-'", () => {
 		expect(() =>
-			new Crust("cli").command("issue", (cmd) => cmd.meta({ aliases: ["-i"] }).handle(() => {})),
+			new Crust("cli").mount(
+				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["-i"] }).handle(() => {})),
+			),
 		).toThrow(/must not start with "-"/);
 	});
 
-	it("applies the same checks on the .command(builder) path", () => {
-		const issue = new Crust("issue").meta({ aliases: ["i"] }).handle(() => {});
-		const conflicting = new Crust("info").meta({ aliases: ["i"] }).handle(() => {});
+	it("applies the same checks on the .mount() path", () => {
+		const issue = defineCommand("issue", (command) =>
+			command.meta({ aliases: ["i"] }).handle(() => {}),
+		);
+		const conflicting = defineCommand("info", (command) =>
+			command.meta({ aliases: ["i"] }).handle(() => {}),
+		);
+		const app = new Crust("cli").mount(issue);
 
-		const app = new Crust("cli").command(issue);
-		expect(() => app.command(conflicting)).toThrow(/collides with alias of sibling "issue"/);
+		expect(() => app.mount(conflicting)).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
 		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
-		const rogue = extension("rogue", {
+		const rogue = defineExtension("rogue", {
 			commands: [new Crust("info").meta({ aliases: ["i"] }).handle(() => {})],
 		});
 
 		const app = new Crust("cli")
 			.extend(rogue)
-			.command("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}));
+			.mount(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})));
 
 		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
