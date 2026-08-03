@@ -39,9 +39,7 @@ function restoreHomedir(): void {
 
 function shortCircuitExtension() {
 	return defineExtension("short-circuit", {
-		async intercept() {
-			// Intentionally stop the chain without calling next()
-		},
+		hooks: { preRun: (context) => context.finish() },
 	});
 }
 
@@ -247,7 +245,7 @@ describe("skill extension auto-update", () => {
 	});
 
 	it("auto-updates before a later extension short-circuits (registration order matters)", async () => {
-		// Intercepts run in registration order; registering skills first means
+		// Pre-run hooks run in registration order; registering skills first means
 		// its auto-update work happens before any later short-circuit.
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
