@@ -105,7 +105,7 @@ const app = new Crust("my-cli").handle(() => {
 await app.run([]); // throws the same `failure` object
 ```
 
-`.execute()` renders a failure once, sets `process.exitCode = 1`, and resolves. Extension `handleError` hooks can replace or delegate presentation but cannot turn the invocation into success.
+`.execute()` renders a failure once, sets `process.exitCode = 1`, and resolves. Extension `onError` hooks can render or delegate presentation but cannot turn the invocation into success.
 
 A prompt cancellation is a standard `DOMException` named `AbortError`. Programmatic `.run()` throws it; terminal `.execute()` handles it silently and sets exit code `130`.
 

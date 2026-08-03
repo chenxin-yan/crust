@@ -178,7 +178,7 @@ uninstall the existing skill first.
 
 | Context                         | Conflict behavior                                             |
 | ------------------------------- | ------------------------------------------------------------- |
-| **Auto-update intercept**       | Logs a warning and skips — the CLI continues running normally |
+| **Auto-update hook**            | Logs a warning and skips — the CLI continues running normally |
 | **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
 | **`skill update` command**      | Logs a warning and skips the conflicting agent                |
 | **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite  |

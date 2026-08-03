@@ -139,7 +139,7 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
   name="CrustCommandContext"
 />
 
-`InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+`rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
 
 ## Context types
 
@@ -225,23 +225,29 @@ A structural type satisfied by a configured `Crust` builder. Extension commands 
 
 `args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Handler types.
 
-### Hook types
+### `ExtensionHooks`
 
-```ts
-type ExtensionNext = () => Promise<void>;
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionHooks"
+/>
 
-type ExtensionIntercept = (context: ExtensionContext, next: ExtensionNext) => void | Promise<void>;
+`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it runs for every Extension after a completed, finished, or failed invocation. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
 
-type ExtensionErrorHandler = (
-  error: unknown,
-  context: ExtensionContext,
-  next: ExtensionNext,
-) => void | Promise<void>;
-```
+### `Finished`
 
-`intercept` runs after routing and syntax parsing but before application value validation and Context construction. It short-circuits by not calling `next()`; calling `next()` more than once is a `DEFINITION` error. Extension-owned command inputs are validated before interception.
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Finished" />
 
-`handleError` is a terminal presentation chain used by `.execute()` only. Render the error or call `next()` to delegate. Core preserves a nonzero failure outcome either way.
+`ctx.finish()` returns this opaque token. Return that exact value from `preRun`; do not construct one yourself.
+
+### `InvocationOutcome`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="InvocationOutcome"
+/>
+
+`postRun` receives `completed` after a Command Handler completes, `finished` when an Extension short-circuits with `ctx.finish()`, or `failed` with the thrown value.
 
 ## Error types
 

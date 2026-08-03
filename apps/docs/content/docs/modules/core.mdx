@@ -65,12 +65,12 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Command boundary types
 
-| Type                  | Description                                |
-| --------------------- | ------------------------------------------ |
-| `CrustCommandContext` | Typed context passed to a Command Handler  |
-| `CommandSnapshot`     | Readonly, serializable command description |
-| `ArgSnapshot`         | Serializable argument projection           |
-| `FlagSnapshot`        | Serializable flag projection               |
+| Type                  | Description                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| `CrustCommandContext` | Typed context passed to a Command Handler, including `rootCommand` |
+| `CommandSnapshot`     | Readonly, serializable command description                         |
+| `ArgSnapshot`         | Serializable argument projection                                   |
+| `FlagSnapshot`        | Serializable flag projection                                       |
 
 ## Context types
 
@@ -85,16 +85,16 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Extension types
 
-| Type                    | Description                                              |
-| ----------------------- | -------------------------------------------------------- |
-| `Extension`             | Named frozen Extension value                             |
-| `ExtensionConfig`       | Owned flags/commands and `intercept`/`handleError` hooks |
-| `ExtensionCommand`      | Structural configured-command contribution               |
-| `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope     |
-| `ExtensionContext`      | Readonly invocation view passed to Extension hooks       |
-| `ExtensionNext`         | `() => Promise<void>` chain continuation                 |
-| `ExtensionIntercept`    | Cross-cutting interception hook                          |
-| `ExtensionErrorHandler` | Terminal error-presentation hook                         |
+| Type                | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| `Extension`         | Named frozen Extension value                            |
+| `ExtensionConfig`   | Owned flags, commands, and named hooks                  |
+| `ExtensionCommand`  | Structural configured-command contribution              |
+| `ExtensionFlagDef`  | Extension-owned flag with optional `recursive` scope    |
+| `ExtensionContext`  | Readonly invocation view, including `finish()`          |
+| `ExtensionHooks`    | `preRun`, `postRun`, and `onError` hook slots           |
+| `Finished`          | Opaque token returned by `ExtensionContext.finish()`    |
+| `InvocationOutcome` | Completed, short-circuited, or failed invocation result |
 
 ## Error types
 
