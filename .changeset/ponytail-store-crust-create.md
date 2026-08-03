@@ -5,4 +5,4 @@
 "create-crust": patch
 ---
 
-Remove unused APIs and simplify scaffolding, build, path, and persistence internals.
+Remove the unused `isGitInstalled` API and simplify scaffolding, build, path, and persistence internals.

@@ -118,13 +118,6 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
 
-	static commandNotFound(
-		message: string,
-		details: CommandNotFoundErrorDetails,
-	): CrustError<"COMMAND_NOT_FOUND"> {
-		return new CrustError("COMMAND_NOT_FOUND", message, details);
-	}
-
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {
 		return (this.code as CrustErrorCode) === code;
 	}

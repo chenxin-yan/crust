@@ -2,4 +2,4 @@
 "@crustjs/extensions": patch
 ---
 
-Simplify extension internals by reusing shared and runtime utilities.
+Use Bun's SemVer precedence for update notifications, including notifying prerelease users when the matching stable release becomes available, and simplify extension internals.

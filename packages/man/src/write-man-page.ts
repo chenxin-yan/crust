@@ -1,6 +1,3 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
 
 import { renderManPageMdoc } from "./mdoc.ts";
@@ -32,6 +29,5 @@ export async function writeManPage(options: WriteManPageOptions): Promise<void> 
 	const root = await prepareCommandSnapshot(app);
 
 	const mdoc = renderManPageMdoc({ root, name, section, date });
-	mkdirSync(dirname(outfile), { recursive: true });
-	writeFileSync(outfile, mdoc, "utf8");
+	await Bun.write(outfile, mdoc);
 }

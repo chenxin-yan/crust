@@ -246,30 +246,27 @@ function resolveDefault(
  * `CrustError("DEFINITION", …)` for each offender. Called at the top of
  * {@link parseArgs} so misconfigured commands fail fast.
  */
+function assertSyncParse(
+	parse: ((raw: string) => unknown) | undefined,
+	subject: "flag" | "arg",
+	name: string,
+): void {
+	if (parse?.constructor.name !== "AsyncFunction") return;
+
+	const label = subject === "flag" ? `flag --${name}` : `argument <${name}>`;
+	throw new CrustError(
+		"DEFINITION",
+		`Async parse not supported for ${label}. Use a sync parser; do async work in run().`,
+		{ subject, name, reason: "async-parse" },
+	);
+}
+
 function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | undefined): void {
-	if (flagsDef) {
-		for (const [name, def] of Object.entries(flagsDef)) {
-			const parse = (def as { parse?: (raw: string) => unknown }).parse;
-			if (parse && parse.constructor.name === "AsyncFunction") {
-				throw new CrustError(
-					"DEFINITION",
-					`Async parse not supported for flag --${name}. Use a sync parser; do async work in run().`,
-					{ subject: "flag", name, reason: "async-parse" },
-				);
-			}
-		}
+	for (const [name, def] of Object.entries(flagsDef ?? {})) {
+		assertSyncParse((def as { parse?: (raw: string) => unknown }).parse, "flag", name);
 	}
-	if (argsDef) {
-		for (const def of argsDef) {
-			const parse = (def as { parse?: (raw: string) => unknown }).parse;
-			if (parse && parse.constructor.name === "AsyncFunction") {
-				throw new CrustError(
-					"DEFINITION",
-					`Async parse not supported for argument <${(def as ArgDef).name}>. Use a sync parser; do async work in run().`,
-					{ subject: "arg", name: (def as ArgDef).name, reason: "async-parse" },
-				);
-			}
-		}
+	for (const def of argsDef ?? []) {
+		assertSyncParse(def.parse, "arg", def.name);
 	}
 }
 

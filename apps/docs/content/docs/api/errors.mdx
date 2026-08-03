@@ -28,11 +28,6 @@ class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
   is<T extends CrustErrorCode>(code: T): this is CrustError<T>;
   withCause(cause: unknown): this;
   toJSON(): { code: C; message: string; details: CrustErrorDetails<C> };
-
-  static commandNotFound(
-    message: string,
-    details: CommandNotFoundErrorDetails,
-  ): CrustError<"COMMAND_NOT_FOUND">;
 }
 ```
 

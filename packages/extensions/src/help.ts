@@ -18,66 +18,23 @@ function formatArgToken(arg: ArgSnapshot): string {
 	return arg.required ? yellow(token) : dim(yellow(token));
 }
 
-function formatDefaultValue(value: unknown): string {
-	if (typeof value === "number" && !Number.isFinite(value)) {
-		return String(value);
-	}
-	if (Array.isArray(value)) return value.map(String).join(", ");
-
-	return JSON.stringify(value);
-}
-
-function formatDefaultSuffix(value: unknown): string {
-	return dim(`[default: ${formatDefaultValue(value)}]`);
-}
-
-function formatDescription(description: string | undefined, defaultValue: unknown): string {
-	if (defaultValue === undefined) {
-		return description ?? "";
-	}
-
-	const defaultSuffix = formatDefaultSuffix(defaultValue);
-	if (!description) {
-		return defaultSuffix;
-	}
-
-	return `${description} ${defaultSuffix}`;
-}
-
-/**
- * Render a `[choices: a, b, c]` hint when a non-empty `choices` list is
- * present. The hint is colour-dimmed so it blends with the default-value
- * suffix style. Returns the empty string when no choices are declared
- * so the caller can unconditionally concatenate.
- *
- * Takes the raw `choices` array directly rather than a `def` object.
- * `FlagDef` and `ArgDef` are discriminated unions whose number/boolean
- * variants do not carry `choices` at all, so a structural `{ choices? }`
- * parameter would fail TS excess-property checks at every call site.
- * Each caller already has access to `def.choices` (typed as
- * `readonly string[] | undefined`), so passing it directly is clearer
- * and avoids the union narrowing.
- */
-function formatChoicesSuffix(choices: readonly string[] | undefined): string {
-	if (!choices || choices.length === 0) return "";
-	return dim(`[choices: ${choices.join(", ")}]`);
-}
-
-/**
- * Compose description + default + choices suffixes into a single help
- * body line. Each segment is optional; separators collapse so we never
- * emit a stray double-space when one piece is missing.
- */
-function formatDescriptionWithChoices(
+function formatDescription(
 	description: string | undefined,
 	defaultValue: unknown,
 	choices: readonly string[] | undefined,
 ): string {
-	const base = formatDescription(description, defaultValue);
-	const suffix = formatChoicesSuffix(choices);
-	if (!suffix) return base;
-	if (!base) return suffix;
-	return `${base} ${suffix}`;
+	const parts = description ? [description] : [];
+	if (defaultValue !== undefined) {
+		const value =
+			typeof defaultValue === "number" && !Number.isFinite(defaultValue)
+				? String(defaultValue)
+				: Array.isArray(defaultValue)
+					? defaultValue.map(String).join(", ")
+					: JSON.stringify(defaultValue);
+		parts.push(dim(`[default: ${value}]`));
+	}
+	if (choices?.length) parts.push(dim(`[choices: ${choices.join(", ")}]`));
+	return parts.join(" ");
 }
 
 function formatUsage(
@@ -130,7 +87,7 @@ function formatFlagsSection(flags: Readonly<Record<string, FlagSnapshot>>): stri
 	for (const [name, def] of Object.entries(flags)) {
 		const rendered = `${padEnd(formatFlagName(name, def), FLAG_COLUMN_WIDTH, " ")} `;
 		lines.push(
-			`  ${rendered}${formatDescriptionWithChoices(def.description, def.default, def.choices)}`.trimEnd(),
+			`  ${rendered}${formatDescription(def.description, def.default, def.choices)}`.trimEnd(),
 		);
 	}
 
@@ -144,7 +101,7 @@ function formatArgsSection(command: CommandSnapshot): string[] {
 	for (const arg of command.args) {
 		const rendered = `${padEnd(formatArgToken(arg), ARG_COLUMN_WIDTH, " ")} `;
 		lines.push(
-			`  ${rendered}${formatDescriptionWithChoices(arg.description, arg.default, arg.choices)}`.trimEnd(),
+			`  ${rendered}${formatDescription(arg.description, arg.default, arg.choices)}`.trimEnd(),
 		);
 	}
 

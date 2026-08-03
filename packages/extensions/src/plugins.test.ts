@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { stripVTControlCharacters } from "node:util";
 
 import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
@@ -62,9 +63,7 @@ function getStderr() {
 	return stderrChunks.join("\n");
 }
 
-function stripAnsi(text: string) {
-	return Bun.stripANSI(text);
-}
+const stripAnsi = stripVTControlCharacters;
 
 function lateSkillExtension() {
 	return defineExtension("late-skill", {

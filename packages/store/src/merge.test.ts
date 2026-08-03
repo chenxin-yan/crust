@@ -213,7 +213,7 @@ describe("applyFieldDefaults", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
-	// Immutability — cloned arrays
+	// Immutability — cloned defaults
 	// ──────────────────────────────────────────────────────────────────────
 
 	it("should shallow-copy array defaults to prevent shared mutation", () => {
@@ -226,15 +226,6 @@ describe("applyFieldDefaults", () => {
 
 		result1.tags.push("c");
 		expect(result2.tags).toEqual(["a", "b"]);
-	});
-
-	it("should clone persisted arrays to detach from parsed input", () => {
-		const persisted = { tags: ["x", "y"], count: 0 };
-
-		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
-		result.tags.push("z");
-
-		expect(persisted.tags).toEqual(["x", "y"]);
 	});
 
 	it("should handle pruneUnknown=false with no persisted data", () => {

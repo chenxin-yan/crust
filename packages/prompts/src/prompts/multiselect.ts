@@ -161,20 +161,12 @@ function createHandleKey<T>(
 			return { ...state, selected: newSelected, error: null };
 		}
 
-		// Up arrow or k — move cursor up with wrapping
-		if (key.name === "up" || key.name === "k") {
+		// Arrow keys or vim bindings — move cursor with wrapping
+		if (["up", "down", "k", "j"].includes(key.name)) {
+			const delta = key.name === "up" || key.name === "k" ? -1 : 1;
 			return {
 				...state,
-				...moveCursor(state.cursor, totalItems, -1, state.scrollOffset, maxVisible),
-				error: null,
-			};
-		}
-
-		// Down arrow or j — move cursor down with wrapping
-		if (key.name === "down" || key.name === "j") {
-			return {
-				...state,
-				...moveCursor(state.cursor, totalItems, 1, state.scrollOffset, maxVisible),
+				...moveCursor(state.cursor, totalItems, delta, state.scrollOffset, maxVisible),
 				error: null,
 			};
 		}

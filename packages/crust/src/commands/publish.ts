@@ -15,12 +15,6 @@ type PublishPackageJson = {
 	optionalDependencies?: Record<string, string>;
 };
 
-type PublishPlanEntry = {
-	dir: string;
-	relativeDir: string;
-	command: string[];
-};
-
 type PublishOptions = {
 	stageDir: string;
 	access: string;
@@ -156,18 +150,6 @@ export function buildPublishCommand(args: {
 	return command;
 }
 
-export function getPublishPlan(
-	stageDir: string,
-	manifest: DistributionManifest,
-	command: string[],
-): PublishPlanEntry[] {
-	return manifest.publishOrder.map((relativeDir) => ({
-		dir: join(stageDir, relativeDir),
-		relativeDir,
-		command,
-	}));
-}
-
 async function defaultSpawnPublish(dir: string, command: string[]): Promise<number> {
 	const proc = Bun.spawn(command, {
 		cwd: dir,
@@ -195,11 +177,9 @@ export async function publishStagedPackages(
 		tag: options.tag,
 		registry: options.registry,
 	});
-	const plan = getPublishPlan(options.stageDir, manifest, command);
-
 	console.log(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
-	for (const entry of plan) {
-		console.log(`  ${cyan("→")} ${entry.relativeDir}: ${dim(entry.command.join(" "))}`);
+	for (const relativeDir of manifest.publishOrder) {
+		console.log(`  ${cyan("→")} ${relativeDir}: ${dim(command.join(" "))}`);
 	}
 
 	if (options.dryRun) {
@@ -208,17 +188,18 @@ export async function publishStagedPackages(
 
 	const spawnPublish = options.spawnPublish ?? defaultSpawnPublish;
 
-	for (const entry of plan) {
-		console.log(`\nPublishing ${bold(entry.relativeDir)} from ${dim(entry.dir)}...`);
-		const exitCode = await spawnPublish(entry.dir, entry.command);
+	for (const relativeDir of manifest.publishOrder) {
+		const dir = join(options.stageDir, relativeDir);
+		console.log(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
+		const exitCode = await spawnPublish(dir, command);
 		if (exitCode !== 0) {
-			throw new Error(
-				`bun publish failed for ${entry.relativeDir} (${entry.dir}) with exit code ${exitCode}`,
-			);
+			throw new Error(`bun publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
 		}
 	}
 
-	console.log(`\n${green("✓")} Published ${bold(String(plan.length))} staged package(s).`);
+	console.log(
+		`\n${green("✓")} Published ${bold(String(manifest.publishOrder.length))} staged package(s).`,
+	);
 }
 
 export const publishCommand = defineCommand("publish", (command) =>

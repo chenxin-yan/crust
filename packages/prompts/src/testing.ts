@@ -1,10 +1,11 @@
 import { PassThrough, Writable } from "node:stream";
+import { stripVTControlCharacters } from "node:util";
 
 import type { PromptIO } from "./core/renderer.ts";
 
 /** Remove ANSI control sequences from terminal output. */
 export function stripAnsi(text: string): string {
-	return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+	return stripVTControlCharacters(text);
 }
 
 const namedKeys: Record<string, string> = {
@@ -85,6 +86,11 @@ class FakeTerminal {
 		} else if (command === "B") {
 			this.row += count;
 			this.ensureLine();
+		} else if (command === "G") {
+			this.column = count - 1;
+		} else if (command === "J") {
+			this.lines[this.row] = (this.lines[this.row] ?? "").slice(0, this.column);
+			this.lines.length = this.row + 1;
 		} else if (command === "K") {
 			this.lines[this.row] = "";
 		}

@@ -135,14 +135,6 @@ const activeOutputs = new WeakSet<PromptOutput>();
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
-const ERASE_LINE = `${ESC}2K`;
-
-/**
- * Move cursor up `n` lines.
- */
-function cursorUp(n: number): string {
-	return n > 0 ? `${ESC}${n}A` : "";
-}
 
 /**
  * Count the number of physical terminal lines a string occupies,
@@ -287,18 +279,9 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 			// Erase previous frame
 			if (prevLineCount > 0) {
-				output.write(`${cursorUp(prevLineCount - 1)}\r`);
-				for (let i = 0; i < prevLineCount; i++) {
-					output.write(ERASE_LINE);
-					if (i < prevLineCount - 1) {
-						output.write(`${ESC}1B`); // cursor down
-					}
-				}
-				// Move back to top
-				if (prevLineCount > 1) {
-					output.write(cursorUp(prevLineCount - 1));
-				}
-				output.write(`\r`);
+				readline.cursorTo(output, 0);
+				readline.moveCursor(output, 0, -(prevLineCount - 1));
+				readline.clearScreenDown(output);
 			}
 
 			output.write(content);

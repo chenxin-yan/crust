@@ -93,26 +93,14 @@ function createHandleKey<T>(
 			return state;
 		}
 
-		// Up arrow — move list cursor up with wrapping
-		if (key.name === "up") {
+		// Arrow keys — move list cursor with wrapping
+		if (key.name === "up" || key.name === "down") {
 			if (state.results.length === 0) return state;
+			const delta = key.name === "up" ? -1 : 1;
 			const moved = moveCursor(
 				state.listCursor,
 				state.results.length,
-				-1,
-				state.scrollOffset,
-				maxVisible,
-			);
-			return { ...state, listCursor: moved.cursor, scrollOffset: moved.scrollOffset };
-		}
-
-		// Down arrow — move list cursor down with wrapping
-		if (key.name === "down") {
-			if (state.results.length === 0) return state;
-			const moved = moveCursor(
-				state.listCursor,
-				state.results.length,
-				1,
+				delta,
 				state.scrollOffset,
 				maxVisible,
 			);

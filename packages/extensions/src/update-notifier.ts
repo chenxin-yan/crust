@@ -164,74 +164,16 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Internal utilities — version parsing & comparison
+// Internal utilities — version comparison
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Parsed representation of a standard semver version (major.minor.patch).
- * Prerelease and build metadata are intentionally ignored — the plugin
- * only compares stable release versions.
- */
-interface SemverParts {
-	major: number;
-	minor: number;
-	patch: number;
-}
-
-/**
- * Attempt to parse a version string into numeric semver parts.
- *
- * Accepts `"major.minor.patch"` with an optional leading `"v"`.
- * Returns `null` for any input that does not match the expected format
- * or contains non-finite numeric segments.
- *
- * **Note:** Prerelease suffixes (e.g. `-beta.1`) and build metadata
- * (e.g. `+sha.abc`) are intentionally stripped before parsing. The
- * plugin treats prerelease versions as equivalent to their base version
- * for comparison purposes, which avoids false-positive update notices for
- * users on prerelease channels.
- *
- * @internal
- */
-export function parseSemver(version: string): SemverParts | null {
-	// Strip optional leading "v"
-	const cleaned = version.startsWith("v") ? version.slice(1) : version;
-
-	// Strip prerelease / build-metadata suffix (anything after first - or +)
-	const base = cleaned.split(/[-+]/)[0] ?? "";
-
-	const parts = base.split(".");
-	if (parts.length !== 3) return null;
-
-	const [rawMajor, rawMinor, rawPatch] = parts as [string, string, string];
-	const major = Number(rawMajor);
-	const minor = Number(rawMinor);
-	const patch = Number(rawPatch);
-
-	if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
-		return null;
-	}
-
-	if (major < 0 || minor < 0 || patch < 0) return null;
-
-	return { major, minor, patch };
-}
-
-/**
- * Returns `true` when `latest` represents a strictly newer stable version
- * than `current`. Returns `false` for equal versions, older versions, or
- * when either input is unparsable.
- *
- * @internal
- */
+/** Returns whether `latest` is newer, or false when either version is invalid. */
 export function isNewerVersion(current: string, latest: string): boolean {
-	const cur = parseSemver(current);
-	const lat = parseSemver(latest);
-	if (!cur || !lat) return false;
-
-	if (lat.major !== cur.major) return lat.major > cur.major;
-	if (lat.minor !== cur.minor) return lat.minor > cur.minor;
-	return lat.patch > cur.patch;
+	try {
+		return Bun.semver.order(latest, current) === 1;
+	} catch {
+		return false;
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────

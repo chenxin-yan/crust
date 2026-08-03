@@ -31,9 +31,7 @@ export function applyFieldDefaults<F extends FieldsDef>(
 
 	for (const [key, def] of Object.entries(fields)) {
 		if (persisted && key in persisted) {
-			const value = persisted[key];
-			// Shallow-copy arrays to prevent shared mutation
-			result[key] = Array.isArray(value) ? [...value] : value;
+			result[key] = persisted[key];
 		} else if ("default" in def && def.default !== undefined) {
 			// Shallow-copy array defaults to prevent shared mutation
 			result[key] = Array.isArray(def.default) ? [...def.default] : def.default;
@@ -45,7 +43,7 @@ export function applyFieldDefaults<F extends FieldsDef>(
 	if (!pruneUnknown && persisted !== undefined) {
 		for (const [key, value] of Object.entries(persisted)) {
 			if (!(key in fields)) {
-				result[key] = Array.isArray(value) ? [...value] : value;
+				result[key] = value;
 			}
 		}
 	}

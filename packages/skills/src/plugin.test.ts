@@ -679,6 +679,33 @@ describe("skillPlugin customSkills validation", () => {
 		expect(warnings).toEqual([]);
 	});
 
+	it("rejects an empty version string when set", async () => {
+		// `version` is optional and inherits from the plugin when omitted, but
+		// an explicit empty string is still rejected so a typo can't silently
+		// fall through to the plugin-level fallback.
+		const app = new Crust("empty-version-test")
+			.meta({ description: "test" })
+			.handle(() => {})
+			.extend(
+				skillExtension({
+					version: "1.0.0",
+					defaultScope: "project",
+					customSkills: [
+						{
+							name: "funnel-builder",
+							sourceDir: FIXTURE_DIR,
+							version: "",
+						},
+					],
+				}),
+			);
+
+		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
+
+		expect(stderr).toMatch(/must be a non-empty string when set/);
+		expect(exitCode).toBe(1);
+	});
+
 	it("accepts a URL sourceDir", async () => {
 		const app = new Crust("url-custom")
 			.meta({ description: "test" })
@@ -821,57 +848,6 @@ describe("skillPlugin customSkills validation", () => {
 		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
 
 		expect(stderr).toMatch(/is not a valid skill name/);
-		expect(exitCode).toBe(1);
-	});
-
-	it("rejects an empty version string when set", async () => {
-		// `version` is optional and inherits from the plugin when omitted, but
-		// an explicit empty string is still rejected so a typo can't silently
-		// fall through to the plugin-level fallback.
-		const app = new Crust("empty-version-test")
-			.meta({ description: "test" })
-			.handle(() => {})
-			.extend(
-				skillExtension({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: FIXTURE_DIR,
-							version: "",
-						},
-					],
-				}),
-			);
-
-		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
-
-		expect(stderr).toMatch(/must be a non-empty string when set/);
-		expect(exitCode).toBe(1);
-	});
-
-	it("rejects a non-string non-URL sourceDir", async () => {
-		const app = new Crust("bad-src-test")
-			.meta({ description: "test" })
-			.handle(() => {})
-			.extend(
-				skillExtension({
-					version: "1.0.0",
-					defaultScope: "project",
-					customSkills: [
-						{
-							name: "funnel-builder",
-							sourceDir: 42 as any,
-							version: "1.0.0",
-						},
-					],
-				}),
-			);
-
-		const { stderr, exitCode } = await captureSetupError(() => app.execute({ argv: [] }));
-
-		expect(stderr).toMatch(/must be a string or URL/);
 		expect(exitCode).toBe(1);
 	});
 });

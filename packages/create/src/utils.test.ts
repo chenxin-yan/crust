@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { detectPackageManager, isGitInstalled, isInGitRepo } from "./utils.ts";
+import { detectPackageManager, isInGitRepo } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // detectPackageManager()
@@ -135,16 +135,5 @@ describe("isInGitRepo", () => {
 	it("defaults to process.cwd() when no argument is provided", () => {
 		// cwd is inside the monorepo
 		expect(isInGitRepo()).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// isGitInstalled()
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("isGitInstalled", () => {
-	it("returns true when git is available", () => {
-		// Git is expected to be available in the test environment
-		expect(isGitInstalled()).toBe(true);
 	});
 });

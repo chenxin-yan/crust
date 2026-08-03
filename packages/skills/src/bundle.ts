@@ -33,86 +33,30 @@ interface BundleFrontmatter {
 	description: string | null;
 }
 
-/**
- * Lightweight scan of a SKILL.md head for top-level `name:` and `description:`
- * keys inside the leading YAML frontmatter block (between the first two `---`
- * lines).
- *
- * Returns whichever fields were found; missing fields are reported as `null`.
- * Callers decide whether absence is fatal. Hand-authored bundles require both,
- * but `loadBundleFiles` is left agnostic so unit tests can exercise the parser
- * directly.
- *
- * **`metadata.version` is intentionally not read.** The Agent Skills spec
- * lets bundles declare a version under `metadata.version`, but Crust treats
- * the `version` option passed to `installSkillBundle()` as the sole source
- * of truth for `crust.json` and update detection. The unindented-only
- * matching rule below already excludes nested `metadata.*` keys; this is
- * deliberate, not an oversight.
- *
- * Strictness rules (chosen to avoid false positives from nested keys and to
- * keep the parser dependency-free):
- * - Only **unindented** top-level lines are matched, so a nested block like
- *   `metadata:\n  name: other` is ignored.
- * - The opening fence must be `---` (after stripping a UTF-8 BOM and skipping
- *   blank lines); the closing fence is `---` with optional trailing whitespace.
- * - An unquoted value's trailing `# comment` is stripped (a quoted value keeps
- *   `#` verbatim).
- * - Quoted values (`"..."` or `'...'`) have a single matching pair of quotes
- *   stripped; everything else is taken verbatim and trimmed. Multi-line
- *   scalars, arrays, anchors, etc. are not parsed — bundle authors must keep
- *   `name` and `description` as simple single-line scalars.
- * - First occurrence wins for each key.
- */
+/** Reads top-level `name` and `description` from leading YAML frontmatter. */
 function probeFrontmatter(content: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
 	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
-	const lines = normalized.split(/\r?\n/, 51);
+	const lines = normalized.split(/\r?\n/);
 
-	let cursor = 0;
-	while (cursor < lines.length && lines[cursor]?.trim() === "") cursor++;
-	if (cursor >= lines.length || lines[cursor] !== "---") return result;
-	cursor++; // step past the opening fence
+	let opening = 0;
+	while (lines[opening]?.trim() === "") opening++;
+	if (lines[opening] !== "---") return result;
 
-	const limit = Math.min(50, lines.length);
-	for (let i = cursor; i < limit; i++) {
-		const line = lines[i];
-		if (line === undefined) break;
-		if (/^---\s*$/.test(line)) break;
+	const closing = lines.findIndex((line, index) => index > opening && /^---\s*$/.test(line));
+	if (closing === -1) return result;
 
-		const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*?)\s*$/);
-		if (!m) continue;
-		const key = m[1];
-		if (key !== "name" && key !== "description") continue;
-		if (result[key] !== null) continue; // first wins
-		result[key] = parseFrontmatterScalar(m[2] ?? "");
+	try {
+		const parsed = Bun.YAML.parse(lines.slice(opening + 1, closing).join("\n"));
+		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
+		const frontmatter = parsed as Record<string, unknown>;
+		return {
+			name: frontmatter.name == null ? null : String(frontmatter.name),
+			description: frontmatter.description == null ? null : String(frontmatter.description),
+		};
+	} catch {
+		return result;
 	}
-
-	return result;
-}
-
-/**
- * Strips quotes (or an unquoted trailing `# comment`) from a frontmatter
- * scalar value the parser captured. Mirrors the limited YAML rules called out
- * in {@link probeFrontmatter}'s docstring.
- */
-function parseFrontmatterScalar(raw: string): string {
-	// Quoted form: locate the matching closing quote, return its interior, and
-	// discard anything after it (whitespace + optional `# comment`). This keeps
-	// `#` verbatim when it appears *inside* the quotes, while still stripping
-	// a trailing inline comment that follows the closing quote.
-	const first = raw[0];
-	if (first === '"' || first === "'") {
-		const close = raw.indexOf(first, 1);
-		if (close !== -1) return raw.slice(1, close);
-		// Unbalanced quote — fall through and treat as an unquoted scalar.
-	}
-
-	// Unquoted form: YAML treats `#` as a comment only when preceded by
-	// whitespace (or at the start of the remainder). Anything before such a
-	// marker is the value.
-	const commentIdx = raw.search(/(^|\s)#/);
-	return commentIdx === -1 ? raw : raw.slice(0, commentIdx).trimEnd();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
