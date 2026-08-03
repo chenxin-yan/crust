@@ -1022,6 +1022,27 @@ describe("Extension application at prepare time", () => {
 		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
 	});
 
+	it("Extension command requirements reject missing inherited flags", async () => {
+		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		let recipeRan = false;
+		const tools = defineExtension("tools", {
+			commands: [
+				defineCommand("status", { flags: [verbose] }, (command) => {
+					recipeRan = true;
+					return command.handle(() => {});
+				}),
+			],
+		});
+
+		await expect(new Crust("cli").extend(tools).run(["status"])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message:
+				'Extension "tools" command "status" requires flag "--verbose", which is not declared with inherit: true on application root "cli"',
+			details: { subject: "flag", name: "verbose", reason: "missing-required-flag" },
+		});
+		expect(recipeRan).toBe(false);
+	});
+
 	it("Extension command requirements name the Extension and missing Context", async () => {
 		const db = defineContext("db", () => "database");
 		const databaseTools = defineExtension("database-tools", {

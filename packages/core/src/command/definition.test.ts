@@ -249,13 +249,17 @@ describe("command definitions", () => {
 			// @ts-expect-error -- an optional parent flag cannot satisfy a required requirement
 			.mount(strictDefinition);
 
-		// @ts-expect-error -- missing inherited flags: verbose
-		new Crust("cli").provide(auth()).mount(definition);
-		new Crust("cli")
-			.flags({ name: "verbose", type: "boolean" })
-			.provide(auth())
+		expect(() =>
 			// @ts-expect-error -- missing inherited flags: verbose
-			.mount(definition);
+			new Crust("cli").provide(auth()).mount(definition),
+		).toThrow(/requires flag "--verbose"/);
+		expect(() =>
+			new Crust("cli")
+				.flags({ name: "verbose", type: "boolean" })
+				.provide(auth())
+				// @ts-expect-error -- missing inherited flags: verbose
+				.mount(definition),
+		).toThrow(/requires flag "--verbose"/);
 		new Crust("cli")
 			.flags({ name: "verbose", type: "string", inherit: true })
 			.provide(auth())

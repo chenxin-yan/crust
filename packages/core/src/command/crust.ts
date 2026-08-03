@@ -295,7 +295,8 @@ function freezeTree(node: CommandNode): void {
  * verified at runtime when the definition is mounted.
  *
  * Structurally identical to {@link ContextRequirements} — the shared
- * shape is defined once in `api/context.ts`.
+ * shape is defined once in `api/context.ts`. Both requirement kinds are
+ * verified at runtime as a backstop for untyped mount sites.
  */
 export type CommandRequirements = ContextRequirements;
 
@@ -319,7 +320,8 @@ const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefini
 
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
-	/** Context requirement names, runtime-checked at each mount site */
+	/** Requirement names, runtime-checked at each mount site */
+	readonly requiredFlagNames: readonly string[];
 	readonly requiredCtxNames: readonly string[];
 }
 
@@ -369,6 +371,19 @@ function materializeCommandDefinition(
 			);
 		}
 		throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
+	}
+
+	for (const flagName of internal.requiredFlagNames) {
+		if (parentEffective[flagName]?.inherit !== true) {
+			const message = extensionName
+				? `Extension "${extensionName}" command "${name}" requires flag "--${flagName}", which is not declared with inherit: true on application root "${parent.meta.name}"`
+				: `Command "${name}" requires flag "--${flagName}", which is not declared with inherit: true on "${parent.meta.name}" — declare flags before .mount()`;
+			throw new CrustError("DEFINITION", message, {
+				subject: "flag",
+				name: flagName,
+				reason: "missing-required-flag",
+			});
+		}
 	}
 
 	const providedNames = new Set(parent.contexts.map((context) => context.name));
@@ -578,6 +593,7 @@ export function defineCommand(
 	}
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
+		requiredFlagNames: (requirements.flags ?? []).map((flag) => flag.name),
 		requiredCtxNames: (requirements.ctx ?? []).map((dep) => dep.contextName),
 	};
 	const named = (defName: string): CommandDefinition<CommandRequirements> => {

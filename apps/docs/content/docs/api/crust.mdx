@@ -35,7 +35,7 @@ Requirements are arrays of defined values describing what a mount site must supp
 - `flags` lists named flag definitions (from `defineFlag()`) the parent must provide as inheritable flags. Every required flag must have `inherit: true`.
 - `ctx` lists Context factories (from `defineContext()`) whose instances must be provided on the mount path.
 
-The same shape types `defineContext()` requirements. Requirements do not create flags or Contexts — they type the recipe builder and are checked at every `.mount()`: compile-time for flags and Contexts, plus a runtime check that each Context requirement name is provided on the parent path.
+The same shape types `defineContext()` requirements. Requirements do not create flags or Contexts — they type the recipe builder and are checked at every `.mount()`: compile-time for flags and Contexts, plus runtime checks that required inheritable flags and Context names are provided on the parent path.
 
 ### `CommandDefinitionBuilder`
 
