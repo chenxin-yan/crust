@@ -13,15 +13,15 @@ export function versionExtension(versionValue: VersionValue = "0.0.0"): Extensio
 				recursive: false,
 			},
 		},
-		async intercept(context, next) {
-			// Root invocation with --version only
-			if (context.commandPath.length !== 1 || context.flags.version !== true) {
-				await next();
-				return;
-			}
+		hooks: {
+			preRun(context) {
+				// Root invocation with --version only
+				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 
-			const version = typeof versionValue === "function" ? versionValue() : versionValue;
-			context.stdout(`${context.rootCommand.meta.name} v${version}`);
+				const version = typeof versionValue === "function" ? versionValue() : versionValue;
+				context.stdout(`${context.rootCommand.meta.name} v${version}`);
+				return context.finish();
+			},
 		},
 	});
 }

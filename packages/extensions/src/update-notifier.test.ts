@@ -320,10 +320,10 @@ describe("fetchLatestVersion", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// updateNotifierExtension — middleware integration tests
+// updateNotifierExtension — post-run integration tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("updateNotifierExtension middleware", () => {
+describe("updateNotifierExtension post-run hook", () => {
 	const originalFetch = globalThis.fetch;
 	const originalProcessArgv = [...process.argv];
 	const originalUserAgent = process.env.npm_config_user_agent;
@@ -410,9 +410,7 @@ describe("updateNotifierExtension middleware", () => {
 		return snapshotCommand(new Crust(name).handle(() => {})._node);
 	}
 
-	/**
-	 * Helper to invoke the extension intercept directly with controlled context.
-	 */
+	/** Helper to invoke the extension post-run hook with a completed outcome. */
 	async function runPluginMiddleware(
 		options: {
 			currentVersion: string;
@@ -446,11 +444,6 @@ describe("updateNotifierExtension middleware", () => {
 		};
 		const plugin = updateNotifierExtension(pluginOptions);
 
-		if (!plugin.intercept) {
-			return { plugin, ran: false };
-		}
-
-		let commandRan = false;
 		const rootCommand = makeCommandSnapshot(overrides?.commandName ?? options.packageName);
 
 		const context = {
@@ -461,17 +454,16 @@ describe("updateNotifierExtension middleware", () => {
 			args: {},
 			flags: {},
 			rawArgs: [] as readonly string[],
+			finish: () => undefined as never,
 			stdout: () => {},
 			stderr: (text: string) => stderrChunks.push(text),
 		};
 
-		const next = async () => {
-			commandRan = true;
-		};
+		const postRun = plugin.hooks?.postRun;
+		if (!postRun) throw new Error("update notifier must define a post-run hook");
+		await postRun(context, { status: "completed" });
 
-		await plugin.intercept(context, next);
-
-		return { plugin, ran: commandRan };
+		return { plugin };
 	}
 
 	// ── Update available flow ─────────────────────────────────────────────
@@ -727,8 +719,7 @@ describe("updateNotifierExtension middleware", () => {
 			});
 			const elapsed = Date.now() - start;
 
-			// Command should have run
-			expect(result.ran).toBe(true);
+			expect(result.plugin.hooks?.postRun).toBeDefined();
 			// Should complete quickly (timeout + overhead), not hang
 			expect(elapsed).toBeLessThan(5000);
 			// No notice on timeout
@@ -1049,58 +1040,42 @@ describe("updateNotifierExtension middleware", () => {
 		});
 	});
 
-	// ── Middleware ordering ────────────────────────────────────────────────
+	// ── Post-run ordering ─────────────────────────────────────────────────
 
-	describe("middleware ordering", () => {
-		it("runs command handler (next) before emitting update notice", async () => {
+	describe("post-run ordering", () => {
+		it("runs after the command handler", async () => {
 			const pkgName = uniquePackageName("ordering");
 			mockRegistryResponse("2.0.0");
-
 			const executionOrder: string[] = [];
+			const app = new Crust(pkgName)
+				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
+				.handle(() => {
+					executionOrder.push("command");
+				});
 
-			const plugin = updateNotifierExtension({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
+			await app.run([], { stderr: () => executionOrder.push("notice") });
 
-			const rootCommand = makeCommandSnapshot(pkgName);
-
-			const context = {
-				argv: [] as readonly string[],
-				rootCommand,
-				command: rootCommand,
-				commandPath: [rootCommand.meta.name] as readonly string[],
-				args: {},
-				flags: {},
-				rawArgs: [] as readonly string[],
-				stdout: () => {},
-				stderr: () => executionOrder.push("notice"),
-			};
-
-			await plugin.intercept?.(context, async () => {
-				executionOrder.push("command");
-			});
-
-			// Command must run before notice
-			expect(executionOrder).toContain("command");
-			expect(executionOrder).toContain("notice");
-			expect(executionOrder.indexOf("command")).toBeLessThan(executionOrder.indexOf("notice"));
+			expect(executionOrder).toEqual(["command", "notice"]);
 		});
 
-		it("calls next() even if notifier work would fail", async () => {
-			const pkgName = uniquePackageName("next-on-fail");
-			// Throw from fetch to simulate a broken state
+		it("does not run after a failed command", async () => {
+			const pkgName = uniquePackageName("failed-command");
+			let fetchCalled = false;
 			mockFetch(() => {
-				throw new Error("Catastrophic failure");
+				fetchCalled = true;
+				return Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), { status: 200 }),
+				);
 			});
+			const app = new Crust(pkgName)
+				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
+				.handle(() => {
+					throw new Error("command failed");
+				});
 
-			const result = await runPluginMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
+			await expect(app.run([])).rejects.toThrow("command failed");
 
-			// Command should still have run via next()
-			expect(result.ran).toBe(true);
+			expect(fetchCalled).toBe(false);
 		});
 	});
 
@@ -1138,11 +1113,7 @@ describe("updateNotifierExtension middleware", () => {
 			let commandExecuted = false;
 
 			// Combine with a custom no-op extension
-			const otherPlugin = defineExtension("test-other", {
-				async intercept(_ctx, next) {
-					await next();
-				},
-			});
+			const otherPlugin = defineExtension("test-other");
 
 			const app = new Crust(pkgName)
 				.meta({ description: "Test" })

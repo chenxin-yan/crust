@@ -239,16 +239,14 @@ export function helpExtension(): Extension {
 				description: "Show help",
 			},
 		},
-		async intercept(context, next) {
-			const shouldShowHelp = context.flags.help === true;
+		hooks: {
+			preRun(context) {
+				if (context.flags.help !== true && context.command.hasHandler) return;
 
-			if (!shouldShowHelp && context.command.hasHandler) {
-				await next();
-				return;
-			}
-
-			// Explicit --help, or a container command without a handler
-			context.stdout(renderHelp(context.command, context.commandPath));
+				// Explicit --help, or a container command without a handler
+				context.stdout(renderHelp(context.command, context.commandPath));
+				return context.finish();
+			},
 		},
 	});
 }
