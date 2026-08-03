@@ -22,7 +22,10 @@ function setEnv(name: string, value: string | undefined): void {
  *   and hyperlinks keep following TTY detection, per
  *   [no-color.org](https://no-color.org/).
  *
- * Previous values are restored after the command finishes.
+ * Previous values are restored after the command finishes. When overlapping
+ * programmatic runs in one process use opposite flags, the later run wins
+ * mid-flight (the env is process-global); the ambient values are restored
+ * once all runs finish.
  */
 // Overlapping execute() calls share process.env, so per-run snapshots would
 // capture each other's temporary overrides and restores would race. Instead,
