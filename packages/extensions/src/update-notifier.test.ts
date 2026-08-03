@@ -6,7 +6,6 @@ import { snapshotCommand } from "@crustjs/core/tooling";
 import {
 	fetchLatestVersion,
 	isNewerVersion,
-	parseSemver,
 	type UpdateNotifierCacheAdapter,
 	type UpdateNotifierState,
 	updateNotifierExtension,
@@ -38,84 +37,6 @@ function mockRegistryResponse(latestVersion: string) {
 function mockRegistryFailure() {
 	mockFetch(() => Promise.reject(new Error("Network failure")));
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// parseSemver
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseSemver", () => {
-	it("parses standard semver", () => {
-		expect(parseSemver("1.2.3")).toEqual({ major: 1, minor: 2, patch: 3 });
-	});
-
-	it("parses version with leading v", () => {
-		expect(parseSemver("v1.2.3")).toEqual({ major: 1, minor: 2, patch: 3 });
-	});
-
-	it("parses version 0.0.0", () => {
-		expect(parseSemver("0.0.0")).toEqual({ major: 0, minor: 0, patch: 0 });
-	});
-
-	it("parses large version numbers", () => {
-		expect(parseSemver("100.200.300")).toEqual({
-			major: 100,
-			minor: 200,
-			patch: 300,
-		});
-	});
-
-	it("strips prerelease suffix", () => {
-		expect(parseSemver("1.2.3-beta.1")).toEqual({
-			major: 1,
-			minor: 2,
-			patch: 3,
-		});
-	});
-
-	it("strips build metadata", () => {
-		expect(parseSemver("1.2.3+build.456")).toEqual({
-			major: 1,
-			minor: 2,
-			patch: 3,
-		});
-	});
-
-	it("strips prerelease and build metadata combined", () => {
-		expect(parseSemver("1.2.3-rc.1+sha.abc")).toEqual({
-			major: 1,
-			minor: 2,
-			patch: 3,
-		});
-	});
-
-	it("returns null for empty string", () => {
-		expect(parseSemver("")).toBeNull();
-	});
-
-	it("returns null for non-version string", () => {
-		expect(parseSemver("not-a-version")).toBeNull();
-	});
-
-	it("returns null for two-part version", () => {
-		expect(parseSemver("1.2")).toBeNull();
-	});
-
-	it("returns null for four-part version", () => {
-		expect(parseSemver("1.2.3.4")).toBeNull();
-	});
-
-	it("returns null for NaN segments", () => {
-		expect(parseSemver("a.b.c")).toBeNull();
-	});
-
-	it("returns null for Infinity", () => {
-		expect(parseSemver("Infinity.0.0")).toBeNull();
-	});
-
-	it("returns null for negative segments", () => {
-		expect(parseSemver("-1.0.0")).toBeNull();
-	});
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // isNewerVersion
@@ -162,13 +83,11 @@ describe("isNewerVersion", () => {
 		expect(isNewerVersion("invalid", "also-invalid")).toBe(false);
 	});
 
-	it("handles prerelease current — compares base only", () => {
-		// 1.2.3-beta.1 base is 1.2.3, latest 1.2.3 is not newer
-		expect(isNewerVersion("1.2.3-beta.1", "1.2.3")).toBe(false);
+	it("notifies prerelease users when the stable release is available", () => {
+		expect(isNewerVersion("1.2.3-beta.1", "1.2.3")).toBe(true);
 	});
 
-	it("handles prerelease latest — compares base only", () => {
-		// 1.2.4-rc.1 base is 1.2.4 which is newer than 1.2.3
+	it("handles prerelease latest versions", () => {
 		expect(isNewerVersion("1.2.3", "1.2.4-rc.1")).toBe(true);
 	});
 

@@ -569,8 +569,8 @@ describe("runPrompt", () => {
 
 		await promise;
 
-		// ERASE_LINE sequence (ESC[2K) should appear for frame clearing
-		expect(stderrOutput).toContain("\x1B[2K");
+		// clearScreenDown sequence should appear for frame clearing
+		expect(stderrOutput).toContain("\x1B[0J");
 		// Should have rendered multiple frames
 		expect(renderCount).toBeGreaterThanOrEqual(2);
 	});

@@ -16,7 +16,6 @@ import type {
 	ChainableStyleFn,
 	ColorDepth,
 	ColorInput,
-	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
 	StyleMethodName,
@@ -43,11 +42,18 @@ function stepPair(step: ChainStep): AnsiPair {
 	return step.kind === "named" ? stylePairFor(step.name) : step.pair;
 }
 
+interface ResolvedStyleCapabilities {
+	readonly modifiersEnabled: boolean;
+	readonly colorDepth: ColorDepth;
+	readonly colorsEnabled: boolean;
+	readonly trueColorEnabled: boolean;
+	readonly hyperlinksEnabled: boolean;
+}
+
 function applyChain(
 	text: string,
 	steps: readonly ChainStep[],
-	modifiersEnabled: boolean,
-	colorsEnabled: boolean,
+	resolveCapabilities: () => ResolvedStyleCapabilities,
 ): string {
 	// Defensive: nullish in → nullish out, never crash. JS callers passing
 	// `undefined` previously hit `text.includes` and threw a TypeError; we
@@ -62,6 +68,7 @@ function applyChain(
 		return text;
 	}
 
+	const { modifiersEnabled, colorsEnabled } = resolveCapabilities();
 	let result = text;
 	for (let i = steps.length - 1; i >= 0; i--) {
 		const step = steps[i];
@@ -78,20 +85,32 @@ function applyChain(
 }
 
 function buildChainableStyleFactory(
-	modifiersEnabled: boolean,
-	colorsEnabled: boolean,
-	colorDepth: ColorDepth,
+	resolveCapabilities: () => ResolvedStyleCapabilities,
+	runtime: boolean,
 ) {
 	const cache = new Map<string, ChainableStyleFn>();
 
-	function makeKey(steps: readonly ChainStep[]): string {
-		// Cache key: registered names use the name; dynamic pairs use the
-		// open code (small enough, unique per pair).
-		return steps.map((s) => (s.kind === "named" ? s.name : `~${s.pair.open}`)).join("|");
+	function makeKey(
+		steps: readonly ChainStep[],
+		dynamic: boolean,
+		capabilities?: ResolvedStyleCapabilities,
+	): string {
+		const mode = dynamic
+			? "runtime"
+			: `${capabilities?.modifiersEnabled}|${capabilities?.colorDepth}`;
+		return `${mode}|${steps
+			.map((step) => (step.kind === "named" ? step.name : `~${step.pair.open}`))
+			.join("|")}`;
 	}
 
-	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
-		const key = makeKey(steps);
+	function createChainableStyle(
+		steps: readonly ChainStep[],
+		dynamic = runtime,
+		capabilities?: ResolvedStyleCapabilities,
+	): ChainableStyleFn {
+		const fixedCapabilities = dynamic ? undefined : (capabilities ?? resolveCapabilities());
+		const capabilitiesForCall = dynamic ? resolveCapabilities : () => fixedCapabilities!;
+		const key = makeKey(steps, dynamic, fixedCapabilities);
 		const cached = cache.get(key);
 		if (cached) {
 			return cached;
@@ -115,9 +134,9 @@ function buildChainableStyleFactory(
 					text += strings[i] ?? "";
 					if (i < rest.length) text += String(rest[i]);
 				}
-				return applyChain(text, steps, modifiersEnabled, colorsEnabled);
+				return applyChain(text, steps, capabilitiesForCall);
 			}
-			return applyChain(first as string, steps, modifiersEnabled, colorsEnabled);
+			return applyChain(first as string, steps, capabilitiesForCall);
 		}) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
@@ -128,38 +147,54 @@ function buildChainableStyleFactory(
 				configurable: false,
 				enumerable: true,
 				get() {
-					return createChainableStyle([...steps, { kind: "named", name }]);
+					return createChainableStyle(
+						[...steps, { kind: "named", name }],
+						false,
+						capabilitiesForCall(),
+					);
 				},
 			});
 		}
 
-		// Dynamic-color chain methods (depth-aware via instance's `colorDepth`)
+		// Dynamic-color chain methods resolve depth when the chain is extended.
 		Object.defineProperty(styleFn, "fg", {
 			configurable: false,
 			enumerable: true,
-			value: (input: ColorInput): ChainableStyleFn =>
-				createChainableStyle([
-					...steps,
-					{
-						kind: "pair",
-						pair: fgPairAtDepth(input, colorDepth),
-						isModifier: false,
-					},
-				]),
+			value: (input: ColorInput): ChainableStyleFn => {
+				const resolved = capabilitiesForCall();
+				return createChainableStyle(
+					[
+						...steps,
+						{
+							kind: "pair",
+							pair: fgPairAtDepth(input, resolved.colorDepth),
+							isModifier: false,
+						},
+					],
+					false,
+					resolved,
+				);
+			},
 			writable: false,
 		});
 		Object.defineProperty(styleFn, "bg", {
 			configurable: false,
 			enumerable: true,
-			value: (input: ColorInput): ChainableStyleFn =>
-				createChainableStyle([
-					...steps,
-					{
-						kind: "pair",
-						pair: bgPairAtDepth(input, colorDepth),
-						isModifier: false,
-					},
-				]),
+			value: (input: ColorInput): ChainableStyleFn => {
+				const resolved = capabilitiesForCall();
+				return createChainableStyle(
+					[
+						...steps,
+						{
+							kind: "pair",
+							pair: bgPairAtDepth(input, resolved.colorDepth),
+							isModifier: false,
+						},
+					],
+					false,
+					resolved,
+				);
+			},
 			writable: false,
 		});
 
@@ -240,66 +275,107 @@ function buildStyleMethods(
  * });
  * ```
  */
-export function createStyle(options?: StyleOptions): StyleInstance {
+function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabilities {
 	const mode = options?.mode ?? "auto";
 	const modifiersEnabled = resolveModifierCapability(mode, options?.overrides);
-	const colorDepth: ColorDepth = resolveColorDepth(mode, options?.overrides);
-	const colorsEnabled = colorDepth !== "none";
-	const trueColorEnabled = colorDepth === "truecolor";
-	const hyperlinksEnabled = resolveHyperlinkCapability(mode, options?.overrides);
-	const enabled = modifiersEnabled || colorsEnabled;
-	const createChainableStyle = buildChainableStyleFactory(
+	const colorDepth = resolveColorDepth(mode, options?.overrides);
+	return {
 		modifiersEnabled,
-		colorsEnabled,
 		colorDepth,
-	);
+		colorsEnabled: colorDepth !== "none",
+		trueColorEnabled: colorDepth === "truecolor",
+		hyperlinksEnabled: resolveHyperlinkCapability(mode, options?.overrides),
+	};
+}
+
+// The cache key includes every environment input used by capability resolution.
+const runtimeCapabilitiesCache = new Map<string, ResolvedStyleCapabilities>();
+
+function resolveRuntimeCapabilities(): ResolvedStyleCapabilities {
+	const key = [
+		process.stdout?.isTTY ?? false,
+		process.env.NO_COLOR ?? "",
+		process.env.FORCE_COLOR ?? "\u0000",
+		process.env.COLORTERM ?? "",
+		process.env.TERM ?? "",
+	].join("|");
+	const cached = runtimeCapabilitiesCache.get(key);
+	if (cached) return cached;
+	const resolved = resolveStyleCapabilities();
+	runtimeCapabilitiesCache.set(key, resolved);
+	return resolved;
+}
+
+function createStyleInstance(options: StyleOptions | undefined, runtime: boolean): StyleInstance {
+	const fixedCapabilities = runtime ? undefined : resolveStyleCapabilities(options);
+	const resolveCapabilities = runtime
+		? resolveRuntimeCapabilities
+		: () => fixedCapabilities as ResolvedStyleCapabilities;
+	const createChainableStyle = buildChainableStyleFactory(resolveCapabilities, runtime);
 	const methods = buildStyleMethods(createChainableStyle);
 
 	const instance: StyleInstance = {
-		enabled,
-		colorsEnabled,
-		trueColorEnabled,
-		colorDepth,
+		get enabled() {
+			const { modifiersEnabled, colorsEnabled } = resolveCapabilities();
+			return modifiersEnabled || colorsEnabled;
+		},
+		get colorsEnabled() {
+			return resolveCapabilities().colorsEnabled;
+		},
+		get trueColorEnabled() {
+			return resolveCapabilities().trueColorEnabled;
+		},
+		get colorDepth() {
+			return resolveCapabilities().colorDepth;
+		},
 
-		link: hyperlinksEnabled
-			? (text: string, url: string, hyperlinkOptions) => linkDirect(text, url, hyperlinkOptions)
-			: (text: string, url: string, hyperlinkOptions) => {
-					// Validate even when emission is disabled so callers can't
-					// silently smuggle malformed URLs/IDs through non-TTY paths.
-					// linkCode throws on bad input; we discard the returned pair.
-					linkCode(url, hyperlinkOptions);
-					return text;
-				},
-
-		// ── Dynamic colors (depth-aware) ──────────────────────────────
+		link(text, url, hyperlinkOptions) {
+			if (resolveCapabilities().hyperlinksEnabled) {
+				return linkDirect(text, url, hyperlinkOptions);
+			}
+			// Validate even when emission is disabled so malformed URLs and IDs
+			// cannot pass silently through non-TTY paths.
+			linkCode(url, hyperlinkOptions);
+			return text;
+		},
 
 		// Two call shapes (see StyleInstance.fg JSDoc):
 		//   fg(input)        → ChainableStyleFn (chain root)
 		//   fg(text, input)  → string (direct)
 		fg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
+			const resolved = resolveCapabilities();
 			if (maybeInput === undefined) {
-				return createChainableStyle([
-					{
-						kind: "pair",
-						pair: fgPairAtDepth(textOrInput, colorDepth),
-						isModifier: false,
-					},
-				]);
+				return createChainableStyle(
+					[
+						{
+							kind: "pair",
+							pair: fgPairAtDepth(textOrInput, resolved.colorDepth),
+							isModifier: false,
+						},
+					],
+					false,
+					resolved,
+				);
 			}
-			return fgDirect(textOrInput as string, maybeInput, colorDepth);
+			return fgDirect(textOrInput as string, maybeInput, resolved.colorDepth);
 		}) as StyleInstance["fg"],
 
 		bg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
+			const resolved = resolveCapabilities();
 			if (maybeInput === undefined) {
-				return createChainableStyle([
-					{
-						kind: "pair",
-						pair: bgPairAtDepth(textOrInput, colorDepth),
-						isModifier: false,
-					},
-				]);
+				return createChainableStyle(
+					[
+						{
+							kind: "pair",
+							pair: bgPairAtDepth(textOrInput, resolved.colorDepth),
+							isModifier: false,
+						},
+					],
+					false,
+					resolved,
+				);
 			}
-			return bgDirect(textOrInput as string, maybeInput, colorDepth);
+			return bgDirect(textOrInput as string, maybeInput, resolved.colorDepth);
 		}) as StyleInstance["bg"],
 
 		...methods,
@@ -308,155 +384,8 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	return Object.freeze(instance);
 }
 
-// The runtime `style` facade and top-level helpers are forwarders into a
-// cached `"auto"`-mode instance. The environment is the single source of
-// truth — the cache key must include every input capability resolution
-// depends on: `stdout.isTTY`, `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`,
-// `TERM`. Env changes (e.g. a `--color` flag handler setting
-// `FORCE_COLOR`) take effect on the next call.
-const runtimeStyleCache = new Map<string, StyleInstance>();
-
-function getRuntimeStyle(): StyleInstance {
-	const key = [
-		process.stdout?.isTTY ?? false,
-		process.env.NO_COLOR ?? "",
-		process.env.FORCE_COLOR ?? "\u0000",
-		process.env.COLORTERM ?? "",
-		process.env.TERM ?? "",
-	].join("|");
-	const cached = runtimeStyleCache.get(key);
-	if (cached) {
-		return cached;
-	}
-	const built = createStyle({ mode: "auto" });
-	runtimeStyleCache.set(key, built);
-	return built;
-}
-
-// Members whose implementation is a function and must be forwarded as a
-// bound method so callers can invoke them like `style.link(...)`.
-const FORWARDED_METHODS = ["link", "fg", "bg"] as const;
-
-// Members that read a value off the current runtime style on every access.
-const FORWARDED_GETTERS = ["enabled", "colorsEnabled", "trueColorEnabled", "colorDepth"] as const;
-
-/**
- * Build a `ChainableStyleFn` whose calls and chain accesses forward to
- * `getRuntimeStyle()[name]` on every invocation. This is the bridge that
- * lets environment changes (`NO_COLOR`, `FORCE_COLOR`, TTY) take effect
- * on captured references:
- *
- * ```ts
- * const myBold = style.bold;    // captured forwarder, not a snapshot
- * process.env.FORCE_COLOR = "0";
- * myBold("x"); // "x" — resolves the current runtime instance
- * ```
- *
- * The forwarder is also the implementation of the top-level re-exports in
- * `runtimeExports.ts` (`bold`, `red`, etc.) so they share the same
- * lifecycle semantics.
- *
- * `open` / `close` are static — the ANSI codes for `name` never change at
- * runtime; only emission gating depends on the active mode.
- *
- * @internal
- */
-export function createForwardingChainable(name: StyleMethodName): ChainableStyleFn {
-	// Forward (...args) so tagged-template calls work (the runtime
-	// instance's chainable dispatcher detects TemplateStringsArray on its
-	// own).
-	const fn = ((...args: unknown[]) =>
-		(getRuntimeStyle()[name] as any)(...args)) as ChainableStyleFn;
-
-	// Child chain methods (bold, red, bgYellow, ...) — each property
-	// access re-resolves the runtime instance so further chaining honors
-	// the current global mode.
-	for (const childName of styleMethodNames) {
-		Object.defineProperty(fn, childName, {
-			configurable: false,
-			enumerable: true,
-			get() {
-				return (getRuntimeStyle()[name] as any)[childName];
-			},
-		});
-	}
-
-	// Dynamic-color chain methods. Resolved at call time — the returned
-	// chainable is locked to the runtime instance active when `.fg(input)` /
-	// `.bg(input)` is called (matching how every chalk/ansis chain composes).
-	Object.defineProperty(fn, "fg", {
-		configurable: false,
-		enumerable: true,
-		value: (input: ColorInput): ChainableStyleFn =>
-			(getRuntimeStyle()[name] as any).fg(input) as ChainableStyleFn,
-		writable: false,
-	});
-	Object.defineProperty(fn, "bg", {
-		configurable: false,
-		enumerable: true,
-		value: (input: ColorInput): ChainableStyleFn =>
-			(getRuntimeStyle()[name] as any).bg(input) as ChainableStyleFn,
-		writable: false,
-	});
-
-	// Static `open` / `close`. These are the ANSI codes for the leaf
-	// `name` only — chained accesses (e.g. `bold.red`) compose their own
-	// open/close on the inner chainable returned from the runtime
-	// instance. See `createChainableStyle` in this file.
-	const pair = stylePairFor(name);
-	Object.defineProperty(fn, "open", {
-		value: pair.open,
-		writable: false,
-		configurable: false,
-		enumerable: true,
-	});
-	Object.defineProperty(fn, "close", {
-		value: pair.close,
-		writable: false,
-		configurable: false,
-		enumerable: true,
-	});
-
-	return Object.freeze(fn);
-}
-
-function createRuntimeStyleFacade(): StyleInstance {
-	const facade = {} as StyleInstance;
-
-	for (const key of FORWARDED_GETTERS) {
-		Object.defineProperty(facade, key, {
-			configurable: false,
-			enumerable: true,
-			get() {
-				return getRuntimeStyle()[key];
-			},
-		});
-	}
-
-	for (const key of FORWARDED_METHODS) {
-		Object.defineProperty(facade, key, {
-			configurable: false,
-			enumerable: true,
-			value: (...args: unknown[]) => {
-				return (getRuntimeStyle()[key] as any)(...args);
-			},
-			writable: false,
-		});
-	}
-
-	// Use forwarding chainables so captured references (`const x = style.bold`)
-	// honor later environment changes. Each chain method is built
-	// once at facade construction time and shared across all accesses.
-	for (const name of styleMethodNames) {
-		Object.defineProperty(facade, name, {
-			configurable: false,
-			enumerable: true,
-			value: createForwardingChainable(name),
-			writable: false,
-		});
-	}
-
-	return Object.freeze(facade);
+export function createStyle(options?: StyleOptions): StyleInstance {
+	return createStyleInstance(options, false);
 }
 
 /**
@@ -475,4 +404,4 @@ function createRuntimeStyleFacade(): StyleInstance {
  * console.log(style.red("error"));
  * ```
  */
-export const style: StyleInstance = createRuntimeStyleFacade();
+export const style: StyleInstance = createStyleInstance(undefined, true);

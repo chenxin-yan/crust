@@ -169,22 +169,13 @@ function longestSubcommandWidth(command: CommandSnapshot): string {
  */
 function resolveDdLine(explicit?: string): string {
 	if (explicit) return explicit;
-	const epoch = process.env.SOURCE_DATE_EPOCH;
-	if (epoch !== undefined) {
-		const sec = Number.parseInt(epoch, 10);
-		if (!Number.isNaN(sec) && sec >= 0) {
-			return new Date(sec * 1000).toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-				timeZone: "UTC",
-			});
-		}
-	}
-	return new Date().toLocaleDateString("en-US", {
+	const sec = Number.parseInt(process.env.SOURCE_DATE_EPOCH ?? "", 10);
+	const fromEpoch = !Number.isNaN(sec) && sec >= 0;
+	return new Date(fromEpoch ? sec * 1000 : Date.now()).toLocaleDateString("en-US", {
 		month: "long",
 		day: "numeric",
 		year: "numeric",
+		timeZone: fromEpoch ? "UTC" : undefined,
 	});
 }
 

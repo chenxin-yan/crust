@@ -29,7 +29,6 @@ import type {
 	CustomSkillConfig,
 	GenerateResult,
 	Scope,
-	SkillInstallMode,
 	SkillMeta,
 	SkillOptions,
 } from "./types.ts";
@@ -49,10 +48,6 @@ interface SkillUpdateFlags {
 
 function isScope(value: unknown): value is Scope {
 	return value === "global" || value === "project";
-}
-
-function isInstallMode(value: unknown): value is SkillInstallMode {
-	return value === "auto" || value === "symlink" || value === "copy";
 }
 
 /**
@@ -110,29 +105,11 @@ function formatAgentLabels(agents: AgentTarget[]): string[] {
 function formatInstallOutput(
 	results: Array<{ agent: AgentTarget; outputDir: string }>,
 ): Array<{ label: string; outputDir: string }> {
-	const universalSet = new Set(getUniversalAgents());
-	const output: Array<{ label: string; outputDir: string }> = [];
-
-	const firstUniversalResult = results.find((result) => universalSet.has(result.agent));
-	if (firstUniversalResult) {
-		output.push({
-			label: "Universal",
-			outputDir: firstUniversalResult.outputDir,
-		});
-	}
-
-	for (const result of results) {
-		if (universalSet.has(result.agent)) {
-			continue;
-		}
-
-		output.push({
-			label: AGENT_LABELS[result.agent],
-			outputDir: result.outputDir,
-		});
-	}
-
-	return output;
+	const labels = formatAgentLabels(results.map((result) => result.agent));
+	const outputDirs = new Map(
+		results.map((result) => [formatAgentLabels([result.agent])[0]!, result.outputDir]),
+	);
+	return labels.map((label) => ({ label, outputDir: outputDirs.get(label)! }));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -157,71 +134,28 @@ function deriveSkillMeta(command: CommandSnapshot, options: SkillOptions): Skill
 	};
 }
 
-/**
- * Validates and normalizes the `customSkills` array passed to `skill()`.
- *
- * Acts as the single boundary check (per AGENTS.md "validate untrusted input
- * once at the boundary; trust types inside"). Runs synchronously at plugin
- * setup before any FS work; resolution-time errors (non-`file:` URL, missing
- * source directory, missing `SKILL.md`, etc.) are deferred to the underlying
- * {@link installSkillBundle} invocation so plugin setup stays fast.
- *
- * Rules:
- * - `customSkills` itself must be an array (or `undefined`).
- * - Each `entry.name` must satisfy {@link isValidSkillName}, must not collide
- *   with the main skill's name, and must be unique within the array.
- * - `entry.version`, when set, must be a non-empty string. When omitted, the
- *   plugin's top-level `version` is used at install time.
- * - `entry.sourceDir` must be `string` or `URL`.
- * - `entry.scope`, when set, must be `"project"` or `"global"`.
- * - `entry.installMode`, when set, must be `"auto"`, `"symlink"`, or `"copy"`.
- */
+/** Validates custom skill config invariants that TypeScript cannot constrain. */
 function validateCustomSkillsConfig(
 	mainName: string,
 	customSkills: readonly CustomSkillConfig[] | undefined,
 ): readonly CustomSkillConfig[] {
-	if (customSkills === undefined) {
-		return [];
-	}
-	if (!Array.isArray(customSkills)) {
-		throw new Error(
-			`skill: customSkills must be an array, got ${
-				customSkills === null ? "null" : typeof customSkills
-			}.`,
-		);
-	}
-	if (customSkills.length === 0) {
-		return [];
-	}
+	if (!customSkills?.length) return [];
 
 	const seen = new Set<string>();
-	for (let i = 0; i < customSkills.length; i++) {
-		const entry = customSkills[i];
-		if (!entry || typeof entry !== "object") {
-			throw new Error(
-				`skill: customSkills[${i}] must be an object, got ${entry === null ? "null" : typeof entry}.`,
-			);
-		}
-
-		if (typeof entry.name !== "string" || entry.name.length === 0) {
-			throw new Error(`skill: customSkills[${i}].name must be a non-empty string.`);
-		}
-
+	for (const [index, entry] of customSkills.entries()) {
 		if (!isValidSkillName(entry.name)) {
 			throw new Error(
-				`skill: customSkills[${i}].name "${entry.name}" is not a valid skill name. ` +
+				`skill: customSkills[${index}].name "${entry.name}" is not a valid skill name. ` +
 					`Must be 1–64 lowercase alphanumeric characters and hyphens, ` +
 					`no leading/trailing/consecutive hyphens.`,
 			);
 		}
-
 		if (entry.name === mainName) {
 			throw new Error(
-				`skill: customSkills[${i}].name "${entry.name}" collides with the main skill name. ` +
+				`skill: customSkills[${index}].name "${entry.name}" collides with the main skill name. ` +
 					`Custom skill bundle names must differ from the root command name.`,
 			);
 		}
-
 		if (seen.has(entry.name)) {
 			throw new Error(
 				`skill: customSkills contains duplicate name "${entry.name}". ` +
@@ -230,34 +164,10 @@ function validateCustomSkillsConfig(
 		}
 		seen.add(entry.name);
 
-		if (
-			entry.version !== undefined &&
-			(typeof entry.version !== "string" || entry.version.length === 0)
-		) {
+		if (entry.version !== undefined && entry.version.length === 0) {
 			throw new Error(
-				`skill: customSkills[${i}].version (for "${entry.name}") ` +
+				`skill: customSkills[${index}].version (for "${entry.name}") ` +
 					`must be a non-empty string when set, or omitted to inherit the plugin's \`version\`.`,
-			);
-		}
-
-		if (typeof entry.sourceDir !== "string" && !(entry.sourceDir instanceof URL)) {
-			throw new Error(
-				`skill: customSkills[${i}].sourceDir (for "${entry.name}") ` +
-					`must be a string or URL, got ${typeof entry.sourceDir}.`,
-			);
-		}
-
-		if (entry.scope !== undefined && !isScope(entry.scope)) {
-			throw new Error(
-				`skill: customSkills[${i}].scope (for "${entry.name}") ` +
-					`must be "project" or "global", got ${JSON.stringify(entry.scope)}.`,
-			);
-		}
-
-		if (entry.installMode !== undefined && !isInstallMode(entry.installMode)) {
-			throw new Error(
-				`skill: customSkills[${i}].installMode (for "${entry.name}") ` +
-					`must be "auto", "symlink", or "copy", got ${JSON.stringify(entry.installMode)}.`,
 			);
 		}
 	}
@@ -370,6 +280,67 @@ function needsSkillReconciliation(
 	return entry.installed && entry.version !== meta.version;
 }
 
+async function updateGeneratedSkill(
+	rootCmd: CommandSnapshot,
+	options: SkillOptions,
+	scope: Scope,
+	hooks: {
+		onNoUpdate?: (scope: Scope) => void;
+		onUpdated?: (labels: string[], scope: Scope) => void;
+		onConflict?: (error: SkillConflictError, scope: Scope) => void;
+	} = {},
+): Promise<void> {
+	const effectiveScope = resolveEffectiveScope(scope);
+	const meta = deriveSkillMeta(rootCmd, options);
+	const status = await skillStatus({ name: meta.name, scope });
+	const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
+
+	if (needsUpdate.length === 0) {
+		hooks.onNoUpdate?.(effectiveScope);
+		return;
+	}
+
+	try {
+		await spinner({
+			message: `Updating ${effectiveScope} skills...`,
+			task: async ({ updateMessage }) => {
+				const result = await generateSkill({
+					command: rootCmd,
+					meta,
+					agents: needsUpdate.map((entry) => entry.agent),
+					scope,
+					installMode: options.installMode,
+				});
+				const labels = formatAgentLabels(
+					result.agents.filter((entry) => entry.status === "updated").map((entry) => entry.agent),
+				);
+				if (labels.length > 0) {
+					if (hooks.onUpdated) hooks.onUpdated(labels, effectiveScope);
+					else {
+						updateMessage(
+							`Updated skill "${meta.name}" to v${meta.version} for ${labels.join(", ")} (${effectiveScope})`,
+						);
+					}
+				}
+				return result;
+			},
+		});
+	} catch (err) {
+		if (!(err instanceof SkillConflictError)) throw err;
+		if (hooks.onConflict) {
+			hooks.onConflict(err, effectiveScope);
+			return;
+		}
+		console.warn(
+			yellow(
+				`Skill conflict: "${err.details.outputDir}" already exists ` +
+					`but was not created by ${meta.name}. Skipping auto-update for ${effectiveScope}. ` +
+					`Delete or rename the conflicting skill to resolve.`,
+			),
+		);
+	}
+}
+
 /**
  * Performs automatic updates for already-installed skills when the version
  * has changed.
@@ -383,60 +354,12 @@ async function autoUpdateSkills(
 	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
 ): Promise<void> {
-	const meta = deriveSkillMeta(rootCmd, options);
-
 	const scopesToCheck: Scope[] = [
 		...new Set((["project", "global"] as Scope[]).map((scope) => resolveEffectiveScope(scope))),
 	];
 
 	for (const scope of scopesToCheck) {
-		const status = await skillStatus({ name: meta.name, scope });
-
-		const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
-
-		if (needsUpdate.length === 0) {
-			continue;
-		}
-
-		try {
-			await spinner({
-				message: `Updating ${scope} skills...`,
-				task: async ({ updateMessage }) => {
-					const res = await generateSkill({
-						command: rootCmd,
-						meta,
-						agents: needsUpdate.map((a) => a.agent),
-						scope,
-						installMode: options.installMode,
-					});
-
-					const updatedAgents = res.agents
-						.filter((a) => a.status === "updated")
-						.map((a) => a.agent);
-					const updatedLabels = formatAgentLabels(updatedAgents);
-
-					if (updatedLabels.length > 0) {
-						updateMessage(
-							`Updated skill "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${scope})`,
-						);
-					}
-
-					return res;
-				},
-			});
-		} catch (err) {
-			if (err instanceof SkillConflictError) {
-				console.warn(
-					yellow(
-						`Skill conflict: "${err.details.outputDir}" already exists ` +
-							`but was not created by ${meta.name}. Skipping auto-update for ${scope}. ` +
-							`Delete or rename the conflicting skill to resolve.`,
-					),
-				);
-			} else {
-				throw err;
-			}
-		}
+		await updateGeneratedSkill(rootCmd, options, scope);
 	}
 
 	await autoUpdateCustomSkillsLoop(customSkills, options);
@@ -521,20 +444,18 @@ async function autoUpdateCustomSkillsLoop(
  */
 export function skillExtension(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+	let customSkills: readonly CustomSkillConfig[] | undefined;
+	const getCustomSkills = (mainName: string) =>
+		(customSkills ??= validateCustomSkillsConfig(mainName, options.customSkills));
 
 	return defineExtension("skills", {
-		commands: [buildSkillCommandGrammar(skillCommandName, options)],
+		commands: [buildSkillCommandGrammar(skillCommandName, options, getCustomSkills)],
 		hooks: {
 			async preRun(context) {
-				// Validate at the boundary on every invocation so misconfiguration
-				// surfaces at setup time even when auto-update is disabled.
-				const customSkills = validateCustomSkillsConfig(
-					context.rootCommand.meta.name,
-					options.customSkills,
-				);
+				const resolvedCustomSkills = getCustomSkills(context.rootCommand.meta.name);
 				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
 
-				await autoUpdateSkills(context.rootCommand, options, customSkills);
+				await autoUpdateSkills(context.rootCommand, options, resolvedCustomSkills);
 			},
 		},
 	});
@@ -726,7 +647,11 @@ async function reconcileSkillInteractively(opts: {
  * are prompted to choose between project and global. In non-interactive mode,
  * scope falls back to global.
  */
-function buildSkillCommandGrammar(commandName: string, options: SkillOptions) {
+function buildSkillCommandGrammar(
+	commandName: string,
+	options: SkillOptions,
+	getCustomSkills: (mainName: string) => readonly CustomSkillConfig[],
+) {
 	return new Crust(commandName)
 		.meta({ description: "Manage agent skill installations" })
 		.flags(
@@ -751,20 +676,22 @@ function buildSkillCommandGrammar(commandName: string, options: SkillOptions) {
 						description: "Update scope (project or global)",
 					})
 					.handle(async (context) => {
-						const customSkills = validateCustomSkillsConfig(
-							context.rootCommand.meta.name,
-							options.customSkills,
+						await runSkillUpdateFlow(
+							context.rootCommand,
+							options,
+							getCustomSkills(context.rootCommand.meta.name),
+							context.flags,
 						);
-						await runSkillUpdateFlow(context.rootCommand, options, customSkills, context.flags);
 					}),
 			),
 		)
 		.handle(async (context) => {
-			const customSkills = validateCustomSkillsConfig(
-				context.rootCommand.meta.name,
-				options.customSkills,
+			await runSkillInstallFlow(
+				context.rootCommand,
+				options,
+				getCustomSkills(context.rootCommand.meta.name),
+				context.flags,
 			);
-			await runSkillInstallFlow(context.rootCommand, options, customSkills, context.flags);
 		});
 }
 
@@ -857,53 +784,24 @@ async function runSkillUpdateFlow(
 	flags: SkillUpdateFlags,
 ): Promise<void> {
 	const scope = await resolveScopeForCommand(flags.scope, options);
-	const effectiveScope = resolveEffectiveScope(scope);
-	// The default status sweep checks all known agents without PATH probing.
 	const meta = deriveSkillMeta(rootCmd, options);
-	const status = await skillStatus({ name: meta.name, scope });
-	const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
-
-	if (needsUpdate.length === 0) {
-		console.log(dim(`No updates needed (${effectiveScope}).`));
-	} else {
-		try {
-			const res = await spinner({
-				message: `Updating ${effectiveScope} skills...`,
-				task: async () =>
-					generateSkill({
-						command: rootCmd,
-						meta,
-						agents: needsUpdate.map((agent) => agent.agent),
-						scope,
-						installMode: options.installMode,
-					}),
-			});
-
-			const updatedAgents = res.agents
-				.filter((agent) => agent.status === "updated")
-				.map((agent) => agent.agent);
-			const updatedLabels = formatAgentLabels(updatedAgents);
-			if (updatedLabels.length > 0) {
-				console.log(
-					`\n${bold(
-						`Updated "${meta.name}" to v${meta.version} for ${updatedLabels.join(", ")} (${effectiveScope})`,
-					)}`,
-				);
-			}
-		} catch (err) {
-			if (err instanceof SkillConflictError) {
-				console.warn(
-					yellow(
-						`Skipped ${AGENT_LABELS[err.details.agent]}: "${err.details.outputDir}" already exists ` +
-							`but was not created by ${meta.name}. ` +
-							`Delete or rename the conflicting directory to resolve.`,
-					),
-				);
-			} else {
-				throw err;
-			}
-		}
-	}
+	await updateGeneratedSkill(rootCmd, options, scope, {
+		onNoUpdate: (updatedScope) => console.log(dim(`No updates needed (${updatedScope}).`)),
+		onUpdated: (labels, updatedScope) =>
+			console.log(
+				`\n${bold(
+					`Updated "${meta.name}" to v${meta.version} for ${labels.join(", ")} (${updatedScope})`,
+				)}`,
+			),
+		onConflict: (err) =>
+			console.warn(
+				yellow(
+					`Skipped ${AGENT_LABELS[err.details.agent]}: "${err.details.outputDir}" already exists ` +
+						`but was not created by ${meta.name}. ` +
+						`Delete or rename the conflicting directory to resolve.`,
+				),
+			),
+	});
 
 	// Custom skill bundles — update each in turn after the main skill.
 	// SkillConflictError is logged and treated as recoverable (matches

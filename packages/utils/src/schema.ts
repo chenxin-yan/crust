@@ -90,20 +90,15 @@ export interface ValidationIssue {
  * ```
  */
 function formatPath(path: readonly PropertyKey[]): string {
-	let result = "";
-	for (const segment of path) {
-		if (typeof segment === "number") {
-			result += `[${String(segment)}]`;
-		} else {
-			const str = String(segment);
-			if (result.length > 0) {
-				result += `.${str}`;
-			} else {
-				result = str;
-			}
-		}
-	}
-	return result;
+	return path
+		.map((segment, index) =>
+			typeof segment === "number"
+				? `[${segment}]`
+				: index > 0
+					? `.${String(segment)}`
+					: String(segment),
+		)
+		.join("");
 }
 
 // ────────────────────────────────────────────────────────────────────────────

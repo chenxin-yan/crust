@@ -180,10 +180,6 @@ Returns a `PackageManager` — `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
 
 Check whether a directory is inside a Git work tree, including one rooted in a parent directory. `cwd` defaults to `process.cwd()`. Returns `false` when Git is unavailable or the directory is not in a repository.
 
-### `isGitInstalled()`
-
-Check whether `git` is available on the system PATH. Returns `boolean`.
-
 ## Exports
 
 ### Functions
@@ -195,7 +191,6 @@ Check whether `git` is available on the system PATH. Returns `boolean`.
 | `interpolate`          | Replace `{{var}}` placeholders in a string            |
 | `detectPackageManager` | Detect bun/npm/pnpm/yarn from lockfiles or user agent |
 | `isInGitRepo`          | Check whether a directory is inside a Git work tree   |
-| `isGitInstalled`       | Check if git is available                             |
 
 ### Types
 

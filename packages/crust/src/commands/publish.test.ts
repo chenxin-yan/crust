@@ -6,7 +6,6 @@ import { Crust } from "@crustjs/core";
 
 import {
 	buildPublishCommand,
-	getPublishPlan,
 	publishCommand,
 	publishStagedPackages,
 	readPublishManifest,
@@ -133,11 +132,6 @@ describe("publish manifest validation", () => {
 		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
 			/Missing staged package directory/,
 		);
-	});
-
-	it("builds a publish plan in manifest order", () => {
-		const plan = getPublishPlan(tmpDir, manifest, ["bun", "publish"]);
-		expect(plan.map((entry) => entry.relativeDir)).toEqual(["linux-x64", "darwin-arm64", "root"]);
 	});
 
 	it("uses the current executable as bun with BUN_BE_BUN support", () => {

@@ -32,7 +32,7 @@ describe("CrustError shape", () => {
 
 	it("keeps command not found details strongly structured", () => {
 		const parentCommand = snapshotCommand(createCommandNode("cli"));
-		const error = CrustError.commandNotFound('Unknown command "buld".', {
+		const error = new CrustError("COMMAND_NOT_FOUND", 'Unknown command "buld".', {
 			input: "buld",
 			available: ["build"],
 			commandPath: ["cli"],

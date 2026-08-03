@@ -79,20 +79,15 @@ function renderFrame(frame: string, message: string, theme: ProgressTheme): stri
 	return `${ERASE_LINE}${CURSOR_TO_START}${theme.spinner(frame)} ${theme.message(message)}`;
 }
 
-function renderSuccess(message: string, theme: ProgressTheme): string {
-	return ERASE_LINE + CURSOR_TO_START + renderStaticSuccess(message, theme);
-}
-
-function renderError(message: string, theme: ProgressTheme): string {
-	return ERASE_LINE + CURSOR_TO_START + renderStaticError(message, theme);
-}
-
-function renderStaticSuccess(message: string, theme: ProgressTheme): string {
-	return `${theme.success(SUCCESS_SYMBOL)} ${theme.message(message)}\n`;
-}
-
-function renderStaticError(message: string, theme: ProgressTheme): string {
-	return `${theme.error(ERROR_SYMBOL)} ${theme.message(message)}\n`;
+function renderFinal(
+	message: string,
+	theme: ProgressTheme,
+	symbol: string,
+	styleSymbol: ProgressTheme["success"],
+	erase: boolean,
+): string {
+	const line = `${styleSymbol(symbol)} ${theme.message(message)}\n`;
+	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
 export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
@@ -109,10 +104,12 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 
 		try {
 			const result = await options.task(controller);
-			process.stderr.write(renderStaticSuccess(currentMessage, theme));
+			process.stderr.write(
+				renderFinal(currentMessage, theme, SUCCESS_SYMBOL, theme.success, false),
+			);
 			return result;
 		} catch (error) {
-			process.stderr.write(renderStaticError(currentMessage, theme));
+			process.stderr.write(renderFinal(currentMessage, theme, ERROR_SYMBOL, theme.error, false));
 			throw error;
 		}
 	}
@@ -162,13 +159,13 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 		const result = await options.task(controller);
 		finished = true;
 		cleanupInteractive();
-		process.stderr.write(renderSuccess(currentMessage, theme));
+		process.stderr.write(renderFinal(currentMessage, theme, SUCCESS_SYMBOL, theme.success, true));
 		process.stderr.write(SHOW_CURSOR);
 		return result;
 	} catch (error) {
 		finished = true;
 		cleanupInteractive();
-		process.stderr.write(renderError(currentMessage, theme));
+		process.stderr.write(renderFinal(currentMessage, theme, ERROR_SYMBOL, theme.error, true));
 		process.stderr.write(SHOW_CURSOR);
 		throw error;
 	}

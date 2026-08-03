@@ -92,26 +92,3 @@ export function isInGitRepo(cwd?: string): boolean {
 		return false;
 	}
 }
-
-/**
- * Check whether `git` is installed and available on the system PATH.
- *
- * Runs `git --version` and returns `true` if it exits successfully.
- *
- * @returns `true` if git is available, `false` otherwise.
- *
- * @example
- * ```ts
- * if (isGitInstalled()) {
- *   console.log("Git is available");
- * }
- * ```
- */
-export function isGitInstalled(): boolean {
-	try {
-		const result = Bun.spawnSync(["git", "--version"]);
-		return result.exitCode === 0;
-	} catch {
-		return false;
-	}
-}

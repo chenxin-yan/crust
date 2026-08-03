@@ -8,13 +8,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
 import { prepareCommandSnapshot } from "@crustjs/core/tooling";
-import { didYouMean, help, updateNotifier, version } from "@crustjs/extensions";
 
+import pkg from "../package.json";
+import { crustBase } from "./app.ts";
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
 
@@ -63,36 +61,11 @@ function _getStderr(): string {
 	return stderrChunks.join("\n");
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Read expected version from package.json
-// ────────────────────────────────────────────────────────────────────────────
-
-const pkgPath = resolve(import.meta.dirname, "../package.json");
-const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
-	name: string;
-	description: string;
-	version: string;
-};
 const expectedVersion = pkg.version;
 
-/**
- * Build a fresh Crust app for each test, with configurable plugins.
- * This mirrors the production `crustApp` in cli.ts but allows test-specific plugins.
- */
+/** Build a fresh app from the production root builder for each test. */
 function makeCrustApp() {
-	return new Crust(pkg.name)
-		.meta({ description: pkg.description })
-		.extend(
-			version(expectedVersion),
-			updateNotifier({
-				currentVersion: expectedVersion,
-				packageName: pkg.name,
-			}),
-			didYouMean({ mode: "help" }),
-			help(),
-		)
-		.mount(buildCommand)
-		.mount(publishCommand);
+	return crustBase.mount(buildCommand, publishCommand);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -104,7 +77,7 @@ describe("crust CLI entry point", () => {
 		it("should have correct meta", async () => {
 			const app = makeCrustApp();
 			const root = await prepareCommandSnapshot(app);
-			expect(root.meta.name).toBe("@crustjs/crust");
+			expect(root.meta.name).toBe("crust");
 			expect(root.meta.description).toBe("CLI tooling for the Crust framework");
 		});
 
@@ -164,14 +137,14 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: ["--version"] });
 			const output = getStdout();
 
-			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
+			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 
 		it("should show version with -v alias", async () => {
 			await makeCrustApp().execute({ argv: ["-v"] });
 			const output = getStdout();
 
-			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
+			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 	});
 
@@ -232,7 +205,7 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: ["--version"] });
 			const output = getStdout();
 
-			expect(output).toContain(`@crustjs/crust v${expectedVersion}`);
+			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 
 		it("should coexist with all other plugins during command execution", async () => {

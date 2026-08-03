@@ -606,16 +606,13 @@ type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & str
  * For flags with colliding aliases, adds a branded error property to the
  * specific flag definition, causing a type error on that flag's value.
  *
- * Generalized to work with any `Record<string, unknown>` shape — core uses
- * it with `FlagsDef`, the validate package uses it with `FlagShape`, etc.
- *
  * ```
  * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; short: "m" }'
  *   but required in type
  *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"m\" collides with another flag name or alias" }'.
  * ```
  */
-export type ValidateFlagAliases<F extends Record<string, unknown>> = {
+type ValidateFlagAliases<F extends Record<string, unknown>> = {
 	[K in keyof F & string]: CollidingAliases<F, K> extends never
 		? F[K]
 		: F[K] & {
@@ -656,7 +653,7 @@ type NoPrefixedAliases<F> =
  *     '{ readonly FIX_NO_PREFIX: "Flag name \"no-cache\" must not start with \"no-\"; define \"cache\" instead and use \"--no-cache\" at runtime" }'.
  * ```
  */
-export type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
+type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
 	[K in keyof F & string]: K extends `no-${infer Base}`
 		? F[K] & {
 				readonly FIX_NO_PREFIX: `Flag name "${K}" must not start with "no-"; define "${Base}" instead and use "--no-${Base}" at runtime`;
@@ -738,7 +735,7 @@ export type InheritableFlags<F extends FlagsDef> = {
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
+type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
 	Omit<Parent, keyof Local> & Local
 >;
 

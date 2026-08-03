@@ -2,4 +2,4 @@
 "@crustjs/core": minor
 ---
 
-Remove unused core error factories and type helpers.
+Remove the unused `CrustError.commandNotFound` factory and make internal flag-validation type helpers private.
