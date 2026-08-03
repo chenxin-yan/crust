@@ -1,4 +1,4 @@
-// v0.1 builder API
+// Contexts and Extensions
 export type {
 	AnyContextFactory,
 	ContextFactory,
@@ -10,7 +10,6 @@ export type {
 export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
-	ExtensionCommand,
 	ExtensionConfig,
 	ExtensionContext,
 	ExtensionFlagDef,

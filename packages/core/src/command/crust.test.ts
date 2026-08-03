@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
@@ -994,35 +995,108 @@ describe("Extension application at prepare time", () => {
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("Extension commands are routable, validated, and receive the root snapshot", async () => {
+	it("Extension command definitions are routable, validated, and inherit recursive flags", async () => {
 		const lines: string[] = [];
 		const completion = defineExtension("completion", {
 			commands: [
-				new Crust("completion")
-					.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] })
-					.handle(({ args, rootCommand }) => {
-						lines.push(`completion:${args.shell}:${rootCommand.meta.name}`);
-					}),
+				defineCommand("completion", (command) =>
+					command
+						.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] })
+						.handle(({ args, flags, rootCommand }) => {
+							lines.push(
+								`completion:${args.shell}:${(flags as Record<string, unknown>).verbose}:${rootCommand.meta.name}`,
+							);
+						}),
+				),
 			],
 		});
+		const verbose = defineExtension("verbose", {
+			flags: { verbose: { type: "boolean" } },
+		});
 
-		const app = new Crust("cli").extend(completion).handle(() => {});
+		const app = new Crust("cli").extend(completion, verbose).handle(() => {});
 
-		await app.run(["completion", "bash"]);
-		expect(lines).toEqual(["completion:bash:cli"]);
+		await app.run(["completion", "bash", "--verbose"]);
+		expect(lines).toEqual(["completion:bash:true:cli"]);
 		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({ code: "PARSE" });
 		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
 	});
 
+	it("Extension command requirements name the Extension and missing Context", async () => {
+		const db = defineContext("db", () => "database");
+		const databaseTools = defineExtension("database-tools", {
+			commands: [defineCommand("users", { ctx: [db] }, (command) => command.handle(() => {}))],
+		});
+
+		try {
+			await new Crust("cli").extend(databaseTools).run(["users"]);
+			expect.unreachable("should have thrown");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			expect((error as CrustError).code).toBe("DEFINITION");
+			expect((error as CrustError).message).toContain('Extension "database-tools"');
+			expect((error as CrustError).message).toContain('Context "db"');
+		}
+	});
+
 	it("Extension command colliding with an application command is a DEFINITION error", async () => {
 		const clash = defineExtension("clash", {
-			commands: [new Crust("sub").handle(() => {})],
+			commands: [defineCommand("sub", (command) => command.handle(() => {}))],
 		});
 		const app = new Crust("cli")
 			.mount(defineCommand("sub", (cmd) => cmd.handle(() => {})))
 			.extend(clash);
 
 		await expect(app.run(["sub"])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("rejects non-definition Extension commands", async () => {
+		const invalid = defineExtension("invalid", { commands: [{} as never] });
+
+		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: 'Extension "invalid" commands must be created by defineCommand()',
+		});
+	});
+
+	it("attributes foreign builders returned by Extension command definitions", async () => {
+		const invalid = defineExtension("invalid", {
+			commands: [defineCommand("foreign", () => new Crust("other") as never)],
+		});
+
+		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message:
+				'Extension "invalid" command "foreign" definition must return the same command builder it received',
+			details: {
+				subject: "extension",
+				name: "invalid",
+				reason: "foreign-command-builder",
+			},
+		});
+	});
+
+	it("attributes nested Extensions inside Extension command definitions", async () => {
+		const invalid = defineExtension("invalid", {
+			commands: [
+				defineCommand(
+					"nested",
+					(command) =>
+						(command as unknown as Crust).extend(defineExtension("nested-extension")) as never,
+				),
+			],
+		});
+
+		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message:
+				'Extension "invalid" command "nested" cannot register Extensions inside command definitions',
+			details: {
+				subject: "extension",
+				name: "invalid",
+				reason: "nested-command-extension",
+			},
+		});
 	});
 
 	it("does not mutate the source builder across executions", async () => {
@@ -1216,9 +1290,11 @@ describe("Extension named hooks", () => {
 		const roots: string[] = [];
 		const extension = defineExtension("extension", {
 			commands: [
-				new Crust("owned").handle(({ rootCommand }) => {
-					roots.push(rootCommand.meta.name);
-				}),
+				defineCommand("owned", (command) =>
+					command.handle(({ rootCommand }) => {
+						roots.push(rootCommand.meta.name);
+					}),
+				),
 			],
 		});
 		const app = new Crust("cli").extend(extension).handle(({ rootCommand }) => {
@@ -1637,11 +1713,13 @@ describe("Crust .execute()", () => {
 		});
 		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
-				new Crust("skill").mount(
-					defineCommand("update", (cmd) =>
-						cmd.handle((runCtx) => {
-							receivedFlags = runCtx.flags as Record<string, unknown>;
-						}),
+				defineCommand("skill", (command) =>
+					command.mount(
+						defineCommand("update", (cmd) =>
+							cmd.handle((runCtx) => {
+								receivedFlags = runCtx.flags as Record<string, unknown>;
+							}),
+						),
 					),
 				),
 			],
@@ -2087,7 +2165,9 @@ describe("Crust .mount() aliases", () => {
 		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
 		const rogue = defineExtension("rogue", {
-			commands: [new Crust("info").meta({ aliases: ["i"] }).handle(() => {})],
+			commands: [
+				defineCommand("info", (command) => command.meta({ aliases: ["i"] }).handle(() => {})),
+			],
 		});
 
 		const app = new Crust("cli")
