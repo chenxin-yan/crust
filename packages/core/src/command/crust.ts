@@ -1062,6 +1062,10 @@ export class Crust<
 			outcome = { status: "failed", error };
 		}
 
+		// Frozen so a mutating post-run hook cannot rewrite the outcome Core
+		// trusts below (e.g. flipping "failed" to "completed" to mask an error).
+		Object.freeze(outcome);
+
 		let postRunFailed = false;
 		let postRunError: unknown;
 		for (const extension of extensions.toReversed()) {

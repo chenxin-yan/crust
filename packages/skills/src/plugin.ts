@@ -526,12 +526,14 @@ export function skillExtension(options: SkillOptions): Extension {
 		commands: [buildSkillCommandGrammar(skillCommandName, options)],
 		hooks: {
 			async preRun(context) {
-				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
-
+				// Validate at the boundary on every invocation so misconfiguration
+				// surfaces at setup time even when auto-update is disabled.
 				const customSkills = validateCustomSkillsConfig(
 					context.rootCommand.meta.name,
 					options.customSkills,
 				);
+				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
+
 				await autoUpdateSkills(context.rootCommand, options, customSkills);
 			},
 		},
