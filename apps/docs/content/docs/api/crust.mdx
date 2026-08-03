@@ -240,17 +240,17 @@ handle(
 ): Crust
 ```
 
-Defines the Command Handler. It runs after routing, parsing, validation, Extension interception, and Context construction.
+Defines the Command Handler. It runs after routing, parsing, `preRun` hooks, validation, and Context construction.
 
 ```ts
 const app = new Crust("greet")
   .args({ name: "name", type: "string", required: true })
-  .handle(({ args, flags, ctx, rawArgs, command, stdout, stderr }) => {
+  .handle(({ args, flags, ctx, rawArgs, command, rootCommand, stdout, stderr }) => {
     stdout(`Hello, ${args.name}!`);
   });
 ```
 
-The context contains typed `args`, typed effective `flags`, typed Context values in `ctx`, `rawArgs` after `--`, the resolved `CommandSnapshot`, and injectable `stdout(text)` and `stderr(text)` callbacks.
+The context contains typed `args`, typed effective `flags`, typed Context values in `ctx`, `rawArgs` after `--`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks.
 
 ## `.mount(...definitions)`
 
@@ -314,7 +314,7 @@ await app.run(["Ada"], {
 });
 ```
 
-`run()` resolves after successful cleanup. It does not render errors, run Extension `handleError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Handler, and cancellation failures are thrown unchanged.
+`run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Handler, and cancellation failures are thrown unchanged.
 
 ## `.execute(options?)`
 
@@ -328,7 +328,7 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 await app.execute();
 ```
 
-`execute()` renders a failure once through the Extension `handleError` chain ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation is silent and sets exit code `130`.
+`execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation is silent and sets exit code `130`.
 
 <Callout type="warn">
   Use `.handle(handler)` to define behavior. `.run(argv, io)` is only programmatic invocation;

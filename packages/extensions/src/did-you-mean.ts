@@ -96,39 +96,39 @@ export function didYouMeanExtension(options: DidYouMeanOptions = {}): Extension 
 	const mode = options.mode ?? "error";
 
 	return defineExtension("did-you-mean", {
-		async handleError(error, context, next) {
-			if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) {
-				await next();
-				return;
-			}
+		hooks: {
+			onError(error, context) {
+				if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
 
-			const details = error.details;
-			const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
+				const details = error.details;
+				const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
 
-			let message = `Unknown command "${details.input}".`;
-			if (suggestions.length > 0) {
-				message += ` Did you mean "${suggestions[0]}"?`;
-			}
+				let message = `Unknown command "${details.input}".`;
+				if (suggestions.length > 0) {
+					message += ` Did you mean "${suggestions[0]}"?`;
+				}
 
-			if (mode === "help") {
-				context.stdout(message);
-				context.stdout("");
-				context.stdout(renderHelp(details.parentCommand, details.commandPath));
-				return;
-			}
+				if (mode === "help") {
+					context.stdout(message);
+					context.stdout("");
+					context.stdout(renderHelp(details.parentCommand, details.commandPath));
+					return true;
+				}
 
-			// `details.available` lists every canonical sibling name including
-			// those marked `meta.hidden: true`. The error message is user-
-			// facing, so filter the same way `findSuggestions` does — internal
-			// commands stay invocable but never surface in this list.
-			const visibleAvailable = details.available.filter(
-				(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
-			);
-			if (visibleAvailable.length > 0) {
-				message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
-			}
-			context.stderr(message);
-			// Core preserves the nonzero exit code — rendering only here.
+				// `details.available` lists every canonical sibling name including
+				// those marked `meta.hidden: true`. The error message is user-
+				// facing, so filter the same way `findSuggestions` does — internal
+				// commands stay invocable but never surface in this list.
+				const visibleAvailable = details.available.filter(
+					(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
+				);
+				if (visibleAvailable.length > 0) {
+					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
+				}
+				context.stderr(message);
+				// Core preserves the nonzero exit code — rendering only here.
+				return true;
+			},
 		},
 	});
 }

@@ -13,10 +13,10 @@ export type {
 	ExtensionCommand,
 	ExtensionConfig,
 	ExtensionContext,
-	ExtensionErrorHandler,
 	ExtensionFlagDef,
-	ExtensionIntercept,
-	ExtensionNext,
+	ExtensionHooks,
+	Finished,
+	InvocationOutcome,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export { defineArg, defineFlag } from "./api/flags.ts";

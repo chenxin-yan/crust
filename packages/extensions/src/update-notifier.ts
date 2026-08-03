@@ -523,78 +523,79 @@ export function updateNotifierExtension(options: UpdateNotifierOptions): Extensi
 	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
 
 	return defineExtension("update-notifier", {
-		async intercept(context, next) {
-			// Always let the command execute first
-			await next();
+		hooks: {
+			async postRun(context, outcome) {
+				if (outcome.status !== "completed") return;
 
-			try {
-				// ── Resolve package name ─────────────────────────────────
-				const state = normalizeNotifierState(await cacheAdapter.read());
-				const resolvedUpdateCommand = resolveUpdateCommand(
-					packageName,
-					packageManager,
-					installScope,
-					updateCommand,
-				);
+				try {
+					// ── Resolve package name ─────────────────────────────────
+					const state = normalizeNotifierState(await cacheAdapter.read());
+					const resolvedUpdateCommand = resolveUpdateCommand(
+						packageName,
+						packageManager,
+						installScope,
+						updateCommand,
+					);
 
-				// ── Cache gate: skip network if within interval ──────────
-				const now = Date.now();
-				const elapsed = now - state.lastCheckedAt;
+					// ── Cache gate: skip network if within interval ──────────
+					const now = Date.now();
+					const elapsed = now - state.lastCheckedAt;
 
-				if (hasCache && elapsed < intervalMs) {
-					// Cache is still fresh — use cached version if available
-					if (
-						state.latestVersion &&
-						isNewerVersion(currentVersion, state.latestVersion) &&
-						state.lastNotifiedVersion !== state.latestVersion
-					) {
-						emitUpdateNotice(
-							currentVersion,
-							state.latestVersion,
-							resolvedUpdateCommand,
-							context.stderr,
-						);
+					if (hasCache && elapsed < intervalMs) {
+						// Cache is still fresh — use cached version if available
+						if (
+							state.latestVersion &&
+							isNewerVersion(currentVersion, state.latestVersion) &&
+							state.lastNotifiedVersion !== state.latestVersion
+						) {
+							emitUpdateNotice(
+								currentVersion,
+								state.latestVersion,
+								resolvedUpdateCommand,
+								context.stderr,
+							);
+							await cacheAdapter.write({
+								...state,
+								lastNotifiedVersion: state.latestVersion,
+							});
+						}
+						return;
+					}
+
+					// ── Network check: fetch latest version ──────────────────
+					const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
+
+					if (latestVersion === null) {
+						// Soft failure — update timestamp to avoid retrying too soon
 						await cacheAdapter.write({
 							...state,
-							lastNotifiedVersion: state.latestVersion,
+							lastCheckedAt: now,
 						});
+						return;
 					}
-					return;
-				}
 
-				// ── Network check: fetch latest version ──────────────────
-				const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
-
-				if (latestVersion === null) {
-					// Soft failure — update timestamp to avoid retrying too soon
-					await cacheAdapter.write({
+					// ── Persist fetched version and timestamp ─────────────────
+					const nextState: UpdateNotifierState = {
 						...state,
 						lastCheckedAt: now,
-					});
-					return;
+						latestVersion,
+					};
+
+					// ── Emit notice if newer and not already notified ─────────
+					if (
+						isNewerVersion(currentVersion, latestVersion) &&
+						state.lastNotifiedVersion !== latestVersion
+					) {
+						emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand, context.stderr);
+						nextState.lastNotifiedVersion = latestVersion;
+					}
+
+					await cacheAdapter.write(nextState);
+				} catch {
+					// All notifier internal errors are silently swallowed.
+					// The extension must never affect command exit codes or output.
 				}
-
-				// ── Persist fetched version and timestamp ─────────────────
-				const nextState: UpdateNotifierState = {
-					...state,
-					lastCheckedAt: now,
-					latestVersion,
-				};
-
-				// ── Emit notice if newer and not already notified ─────────
-				if (
-					isNewerVersion(currentVersion, latestVersion) &&
-					state.lastNotifiedVersion !== latestVersion
-				) {
-					emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand, context.stderr);
-					nextState.lastNotifiedVersion = latestVersion;
-				}
-
-				await cacheAdapter.write(nextState);
-			} catch {
-				// All notifier internal errors are silently swallowed.
-				// The extension must never affect command exit codes or output.
-			}
+			},
 		},
 	});
 }

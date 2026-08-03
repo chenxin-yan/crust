@@ -51,25 +51,25 @@ Use ordinary application error classes when callers need to distinguish domain f
 
 ## Terminal presentation
 
-Extension `handleError` hooks form the presentation chain for `execute()`:
+Extension `onError` hooks present failures for `execute()`:
 
 ```ts
 import { defineExtension } from "@crustjs/core";
 
 const serviceErrors = defineExtension("service-errors", {
-  async handleError(error, ctx, next) {
-    if (error instanceof Error && error.name === "ServiceUnavailableError") {
+  hooks: {
+    onError(error, ctx) {
+      if (!(error instanceof Error) || error.name !== "ServiceUnavailableError") return;
       ctx.stderr(error.message);
-      return;
-    }
-    await next();
+      return true;
+    },
   },
 });
 ```
 
-A hook renders and returns, or delegates with `next()`. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
+A hook returns `true` after rendering, or a falsy value to delegate to the next hook. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
 
-`run()` never invokes this chain. It throws the original error and leaves rendering and exit status to its caller.
+`run()` never invokes these hooks. It throws the original error and leaves rendering and exit status to its caller.
 
 ## Cancellation
 

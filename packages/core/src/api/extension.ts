@@ -8,6 +8,25 @@ import type { Awaitable } from "./context.ts";
 // Extension — the public integration contract (ADR-0001)
 // ────────────────────────────────────────────────────────────────────────────
 
+const finishedBrand: unique symbol = Symbol("crust.finished");
+
+/** Opaque token returned by {@link ExtensionContext.finish} to end an invocation successfully. */
+export interface Finished {
+	readonly [finishedBrand]: true;
+}
+
+const FINISHED: Finished = Object.freeze({ [finishedBrand]: true as const });
+
+/** @internal */
+export function finishInvocation(): Finished {
+	return FINISHED;
+}
+
+export type InvocationOutcome =
+	| { readonly status: "completed" }
+	| { readonly status: "finished"; readonly by: string }
+	| { readonly status: "failed"; readonly error: unknown };
+
 /**
  * Readonly invocation view passed to Extension hooks.
  *
@@ -26,37 +45,32 @@ export interface ExtensionContext {
 	/** Syntax-parsed flag values for the resolved command */
 	readonly flags: Readonly<Record<string, unknown>>;
 	readonly rawArgs: readonly string[];
+	/** End the invocation successfully before validation, Context construction, and the handler. */
+	readonly finish: () => Finished;
 	/** Write a line of standard output (honors io injected via `run()`) */
 	readonly stdout: (text: string) => void;
 	/** Write a line of diagnostic output (honors io injected via `run()`) */
 	readonly stderr: (text: string) => void;
 }
 
-export type ExtensionNext = () => Promise<void>;
-
-/**
- * The one interception primitive. Executes after routing and syntax parsing
- * but before application value validation and Context construction, so an
- * Extension can short-circuit (by not calling `next()`) without exposing
- * nullable parser state. Extension-owned inputs are validated before the
- * hook; routing and syntax failures flow directly to error handling.
- */
-export type ExtensionIntercept = (
-	context: ExtensionContext,
-	next: ExtensionNext,
-) => Awaitable<void>;
-
-/**
- * Presentation-only error hook. Hooks form a chain ending in Core's default
- * renderer: render the failure yourself, or call `next()` to delegate to the
- * next handler. Core always preserves a nonzero failure outcome regardless
- * of what a handler does.
- */
-export type ExtensionErrorHandler = (
-	error: unknown,
-	context: ExtensionContext,
-	next: ExtensionNext,
-) => Awaitable<void>;
+export interface ExtensionHooks {
+	/**
+	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
+	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
+	 * validation, schemas, Contexts, and the Command Handler do not run.
+	 */
+	readonly preRun?: (ctx: ExtensionContext) => Awaitable<void | Finished>;
+	/**
+	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
+	 * `finally` slot for cleanup and post-run side effects.
+	 */
+	readonly postRun?: (ctx: ExtensionContext, outcome: InvocationOutcome) => Awaitable<void>;
+	/**
+	 * Renders a failure in `execute()` only. Return true when rendered to stop the
+	 * chain; falsy values delegate to the next Extension and then Core's renderer.
+	 */
+	readonly onError?: (error: unknown, ctx: ExtensionContext) => Awaitable<boolean | void>;
+}
 
 /**
  * A flag owned by an Extension. `recursive` (default `true`) contributes the
@@ -78,8 +92,7 @@ export interface ExtensionConfig {
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	/** Root commands this Extension owns and contributes to the application */
 	readonly commands?: readonly ExtensionCommand[];
-	readonly intercept?: ExtensionIntercept;
-	readonly handleError?: ExtensionErrorHandler;
+	readonly hooks?: ExtensionHooks;
 }
 
 /**

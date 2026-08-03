@@ -33,7 +33,7 @@ function updateNotifier(options: UpdateNotifierOptions): Extension;
   name="UpdateNotifierOptions"
 />
 
-The `intercept` hook first awaits the Command Handler, then checks for an update. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. The notice is written to process stderr. Version comparison uses stable `major.minor.patch` values and ignores prerelease/build suffixes.
+The `postRun` hook checks for an update only after a Command Handler completes successfully. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written to process stderr. Version comparison uses stable `major.minor.patch` values and ignores prerelease/build suffixes.
 
 Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed.
 

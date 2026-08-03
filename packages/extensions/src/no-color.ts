@@ -1,4 +1,4 @@
-import { type Extension, defineExtension } from "@crustjs/core";
+import { type Extension, type ExtensionContext, defineExtension } from "@crustjs/core";
 
 function setEnv(name: string, value: string | undefined): void {
 	if (value === undefined) {
@@ -34,6 +34,7 @@ function setEnv(name: string, value: string | undefined): void {
 let activeRuns = 0;
 let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
+const colorRuns = new WeakMap<ExtensionContext, true>();
 
 export function noColorExtension(): Extension {
 	return defineExtension("no-color", {
@@ -44,30 +45,29 @@ export function noColorExtension(): Extension {
 				description: "Enable colored output",
 			},
 		},
-		async intercept(context, next) {
-			const flagValue = context.flags.color;
-			if (typeof flagValue !== "boolean") {
-				await next();
-				return;
-			}
+		hooks: {
+			preRun(context) {
+				const flagValue = context.flags.color;
+				if (typeof flagValue !== "boolean") return;
 
-			if (activeRuns === 0) {
-				baseForceColor = process.env.FORCE_COLOR;
-				baseNoColor = process.env.NO_COLOR;
-			}
-			activeRuns++;
+				if (activeRuns === 0) {
+					baseForceColor = process.env.FORCE_COLOR;
+					baseNoColor = process.env.NO_COLOR;
+				}
+				activeRuns++;
+				colorRuns.set(context, true);
 
-			if (flagValue) {
-				delete process.env.NO_COLOR;
-				process.env.FORCE_COLOR = "3";
-			} else {
-				delete process.env.FORCE_COLOR;
-				process.env.NO_COLOR = "1";
-			}
-
-			try {
-				await next();
-			} finally {
+				if (flagValue) {
+					delete process.env.NO_COLOR;
+					process.env.FORCE_COLOR = "3";
+				} else {
+					delete process.env.FORCE_COLOR;
+					process.env.NO_COLOR = "1";
+				}
+			},
+			postRun(context) {
+				if (!colorRuns.has(context)) return;
+				colorRuns.delete(context);
 				activeRuns--;
 				// ponytail: last-writer-wins while runs overlap; only the ambient
 				// env is guaranteed restored once all runs finish.
@@ -75,7 +75,7 @@ export function noColorExtension(): Extension {
 					setEnv("FORCE_COLOR", baseForceColor);
 					setEnv("NO_COLOR", baseNoColor);
 				}
-			}
+			},
 		},
 	});
 }

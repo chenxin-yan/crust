@@ -65,31 +65,26 @@ function filenameForShell(shell: CompletionShell, binName: string): string {
 }
 
 function renderForShell(
-	shell: CompletionShell,
+	shell: string,
 	spec: ReturnType<typeof walkCommandNode>,
 	binName: string,
 	version: string,
 ): string {
-	switch (shell) {
-		case "bash":
-			return renderBash(spec, binName, version);
-		case "zsh":
-			return renderZsh(spec, binName, version);
-		case "fish":
-			return renderFish(spec, binName, version);
-	}
+	if (shell === "bash") return renderBash(spec, binName, version);
+	if (shell === "zsh") return renderZsh(spec, binName, version);
+	return renderFish(spec, binName, version);
 }
 
 /**
  * Build an Extension that contributes a `completion <shell>` command
  * which emits a tab-completion script for bash, zsh, or fish.
  *
- * **Strategy: pure-static.** The walk happens lazily in the intercept hook
- * against the final root snapshot, so registration order is irrelevant —
- * any commands or inherited flags added by other Extensions are visible by
- * the time we generate the script. The walker projects the root snapshot to
- * a small `CompletionSpec`; per-shell renderers turn that into a
- * self-contained shell script with no runtime callbacks.
+ * **Strategy: pure-static.** The handler walks the final root snapshot, so
+ * registration order is irrelevant — any commands or inherited flags added
+ * by other Extensions are visible by the time we generate the script. The
+ * walker projects the root snapshot to a small `CompletionSpec`; per-shell
+ * renderers turn that into a self-contained shell script with no runtime
+ * callbacks.
  *
  * **Print vs `--output-dir`.**
  * - With no `--output-dir`: print the script for the requested `<shell>`
@@ -107,9 +102,6 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";
 
-	// The owned command declares the CLI grammar; the work happens in the
-	// intercept hook, which is the only place with access to the final root
-	// snapshot (needed for the lazy walk).
 	const completionCommand = new Crust(subcommandName)
 		.meta({
 			description: "Generate shell tab-completion scripts",
@@ -127,18 +119,7 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 			description:
 				"Write all configured shells' scripts into this directory instead of printing to stdout",
 		})
-		.handle(() => {
-			// Never reached — the extension intercept short-circuits first.
-		});
-
-	return defineExtension("completion", {
-		commands: [completionCommand],
-		async intercept(context, next) {
-			if (context.commandPath[1] !== subcommandName) {
-				await next();
-				return;
-			}
-
+		.handle(async (context) => {
 			const rootCommand = context.rootCommand;
 			// Validate `binName` before emitting anything so misconfigured
 			// CLIs fail loudly. The walker also re-validates command/flag
@@ -149,9 +130,9 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 			// out of the comment line in the emitted script.
 			const safeVersion = sanitizeFreeText(version);
 
-			const requestedShell = context.args.shell as CompletionShell;
+			const { shell: requestedShell } = context.args;
 			const spec = walkCommandNode(rootCommand);
-			const outputDir = context.flags["output-dir"] as string | undefined;
+			const outputDir = context.flags["output-dir"];
 
 			if (outputDir === undefined) {
 				const script = renderForShell(requestedShell, spec, binName, safeVersion);
@@ -185,6 +166,7 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 				}
 				await writeFile(targetPath, script, "utf8");
 			}
-		},
-	});
+		});
+
+	return defineExtension("completion", { commands: [completionCommand] });
 }

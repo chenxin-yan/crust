@@ -38,6 +38,15 @@ const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const DEFAULT_SKILL_SCOPE = "global";
 const UNIVERSAL_GROUP = "__universal__";
 
+interface SkillInstallFlags {
+	readonly scope?: string;
+	readonly all?: boolean;
+}
+
+interface SkillUpdateFlags {
+	readonly scope?: string;
+}
+
 function isScope(value: unknown): value is Scope {
 	return value === "global" || value === "project";
 }
@@ -514,33 +523,19 @@ export function skillExtension(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 
 	return defineExtension("skills", {
-		commands: [buildSkillCommandGrammar(skillCommandName)],
-		async intercept(context, next) {
-			const rootCmd = context.rootCommand;
+		commands: [buildSkillCommandGrammar(skillCommandName, options)],
+		hooks: {
+			async preRun(context) {
+				// Validate at the boundary on every invocation so misconfiguration
+				// surfaces at setup time even when auto-update is disabled.
+				const customSkills = validateCustomSkillsConfig(
+					context.rootCommand.meta.name,
+					options.customSkills,
+				);
+				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
 
-			// Validate customSkills config at the boundary so misconfiguration
-			// surfaces before any auto-update or interactive run.
-			const customSkills = validateCustomSkillsConfig(rootCmd.meta.name, options.customSkills);
-
-			// The owned skill command's work happens here — the intercept is
-			// the only hook with access to the final root snapshot.
-			if (context.commandPath[1] === skillCommandName) {
-				if (context.commandPath[2] === "update") {
-					await runSkillUpdateFlow(rootCmd, options, customSkills, context.flags);
-				} else {
-					await runSkillInstallFlow(rootCmd, options, customSkills, context.flags);
-				}
-				return;
-			}
-
-			// Auto-update already-installed skills when version changes.
-			// Build-validation mode never reaches intercepts, so it can never
-			// mutate user environments.
-			if (options.autoUpdate !== false) {
-				await autoUpdateSkills(rootCmd, options, customSkills);
-			}
-
-			await next();
+				await autoUpdateSkills(context.rootCommand, options, customSkills);
+			},
 		},
 	});
 }
@@ -731,45 +726,53 @@ async function reconcileSkillInteractively(opts: {
  * are prompted to choose between project and global. In non-interactive mode,
  * scope falls back to global.
  */
-function buildSkillCommandGrammar(commandName: string) {
-	return (
-		new Crust(commandName)
-			.meta({ description: "Manage agent skill installations" })
-			.flags(
-				{
-					name: "scope",
-					type: "string",
-					description: "Install scope (project or global)",
-				},
-				{
-					name: "all",
-					type: "boolean",
-					description: "Install for all detected agents non-interactively (universal + detected)",
-				},
-			)
-			.mount(
-				defineCommand("update", (cmd) =>
-					cmd
-						.meta({ description: "Update installed skills to latest version" })
-						.flags({
-							name: "scope",
-							type: "string",
-							description: "Update scope (project or global)",
-						})
-						// Never reached — the skills extension intercept short-circuits
-						.handle(() => {}),
-				),
-			)
-			// Never reached — the skills extension intercept short-circuits
-			.handle(() => {})
-	);
+function buildSkillCommandGrammar(commandName: string, options: SkillOptions) {
+	return new Crust(commandName)
+		.meta({ description: "Manage agent skill installations" })
+		.flags(
+			{
+				name: "scope",
+				type: "string",
+				description: "Install scope (project or global)",
+			},
+			{
+				name: "all",
+				type: "boolean",
+				description: "Install for all detected agents non-interactively (universal + detected)",
+			},
+		)
+		.mount(
+			defineCommand("update", (cmd) =>
+				cmd
+					.meta({ description: "Update installed skills to latest version" })
+					.flags({
+						name: "scope",
+						type: "string",
+						description: "Update scope (project or global)",
+					})
+					.handle(async (context) => {
+						const customSkills = validateCustomSkillsConfig(
+							context.rootCommand.meta.name,
+							options.customSkills,
+						);
+						await runSkillUpdateFlow(context.rootCommand, options, customSkills, context.flags);
+					}),
+			),
+		)
+		.handle(async (context) => {
+			const customSkills = validateCustomSkillsConfig(
+				context.rootCommand.meta.name,
+				options.customSkills,
+			);
+			await runSkillInstallFlow(context.rootCommand, options, customSkills, context.flags);
+		});
 }
 
 async function runSkillInstallFlow(
 	rootCmd: CommandSnapshot,
 	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
-	flags: Readonly<Record<string, unknown>>,
+	flags: SkillInstallFlags,
 ): Promise<void> {
 	const meta = deriveSkillMeta(rootCmd, options);
 	const installAll = flags.all === true;
@@ -777,10 +780,8 @@ async function runSkillInstallFlow(
 	// `--scope` always wins when set; `--all` skips only the interactive
 	// prompt fallback, falling back to `defaultScope` or `"global"`.
 	const scope = installAll
-		? (parseScopeFlag(flags.scope as string | undefined) ??
-			options.defaultScope ??
-			DEFAULT_SKILL_SCOPE)
-		: await resolveScopeForCommand(flags.scope as string | undefined, options);
+		? (parseScopeFlag(flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+		: await resolveScopeForCommand(flags.scope, options);
 
 	await reconcileSkillInteractively({
 		name: meta.name,
@@ -853,9 +854,9 @@ async function runSkillUpdateFlow(
 	rootCmd: CommandSnapshot,
 	options: SkillOptions,
 	customSkills: readonly CustomSkillConfig[],
-	flags: Readonly<Record<string, unknown>>,
+	flags: SkillUpdateFlags,
 ): Promise<void> {
-	const scope = await resolveScopeForCommand(flags.scope as string | undefined, options);
+	const scope = await resolveScopeForCommand(flags.scope, options);
 	const effectiveScope = resolveEffectiveScope(scope);
 	// The default status sweep checks all known agents without PATH probing.
 	const meta = deriveSkillMeta(rootCmd, options);

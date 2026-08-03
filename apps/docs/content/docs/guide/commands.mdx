@@ -68,7 +68,7 @@ await app.run(["Ada"], {
 });
 ```
 
-`run()` throws the original error. `execute()` presents errors through the Extension `handleError` chain, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
+`run()` throws the original error. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
 
 <Callout type="info">
   A command without a Command Handler is valid when it owns subcommands. Invoking it directly
