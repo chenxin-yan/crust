@@ -53,6 +53,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"@crustjs/utils": "workspace:*",
 		"bunup": "catalog:",
 		"zod": "^4.0.0"
 	},

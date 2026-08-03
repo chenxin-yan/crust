@@ -2,7 +2,7 @@
 // Input — Single-line text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { isStandardSchema, type StandardSchema } from "@crustjs/utils/schema";
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
@@ -10,7 +10,6 @@ import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
-	isStandardSchema,
 	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
@@ -28,7 +27,7 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  *
  * The `validate` slot is polymorphic: it accepts either a classic
  * {@link ValidateFn} (throws an `Error` to reject the input) or a
- * {@link StandardSchemaV1} schema (Zod, Valibot, Effect Schema, …). When a
+ * {@link StandardSchema} schema (Zod, Valibot, Effect Schema, …). When a
  * schema is supplied, the prompt resolves to the schema's transformed
  * `Output` type instead of the raw `string`.
  *
@@ -260,7 +259,7 @@ function renderSubmitted<Output>(
  */
 export function input<Output>(
 	options: InputOptions<Output> & {
-		readonly validate: StandardSchemaV1<unknown, Output>;
+		readonly validate: StandardSchema<unknown, Output>;
 	},
 	io?: PromptIO,
 ): Promise<Output>;
