@@ -73,6 +73,13 @@ function formatFlagName(name: string, def: FlagSnapshot): string {
 
 	labels.push(`--${name}`);
 
+	// Long aliases are callable, so help discloses them. Negation is shown
+	// for the canonical name only — "any long spelling negates" is the rule,
+	// and the man page documents the exhaustive --no-<alias> surface.
+	if (def.aliases) {
+		for (const alias of def.aliases) labels.push(`--${alias}`);
+	}
+
 	if (def.type === "boolean" && !def.noNegate) {
 		labels.push(`--no-${name}`);
 	}

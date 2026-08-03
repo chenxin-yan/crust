@@ -3,6 +3,8 @@ title: Flags
 description: Define typed named inputs, aliases, repeated values, and inherited flags.
 ---
 
+import { Callout } from "fumadocs-ui/components/callout";
+
 `.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
 
 ```ts
@@ -16,7 +18,13 @@ const command = new Crust("serve")
   .handle(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
 ```
 
-See [`FlagDef`](/docs/api/types#flagdef) for the complete definition. Repeated `.flags()` calls replace the local flags; a duplicate name within one call is a `DEFINITION` error.
+See [`FlagDef`](/docs/api/types#flagdef) for the complete definition. A duplicate name within one call is a `DEFINITION` error.
+
+<Callout type="warn">
+  Repeated `.flags()` calls **replace** the local flags — they do not merge. `.flags(a).flags(b)`
+  leaves only `b`. Pass all definitions in a single `.flags()` call. This differs from
+  Commander/yargs `.option()`, which is additive.
+</Callout>
 
 ## Aliases and negation
 
@@ -26,7 +34,7 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition. Repeated `
 .flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
 ```
 
-Boolean flags support canonical `--no-name` negation. They do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved; violations are `DEFINITION` errors.
+Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved; violations are `DEFINITION` errors.
 
 ## Required and defaulted values
 

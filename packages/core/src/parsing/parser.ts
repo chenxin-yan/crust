@@ -440,13 +440,14 @@ function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Recor
 }
 
 /**
- * Enforce canonical-only boolean negation.
+ * Enforce `noNegate` at parse time.
  *
- * `--no-<name>` is accepted only for the canonical boolean flag name.
- * Negating long aliases (for example `--no-loud` where `loud` aliases
- * `verbose`) is rejected with a targeted CrustError.
+ * `--no-<spelling>` works for the canonical name and every long alias
+ * (an alias is a perfect synonym — see ADR 0001), but a boolean that
+ * opted out via `noNegate` rejects every negated spelling. Without this
+ * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
  */
-function validateCanonicalNegationUsage(
+function validateNoNegateUsage(
 	argv: string[],
 	flagsDef: FlagsDef | undefined,
 	aliasToName: Record<string, string>,
@@ -465,16 +466,15 @@ function validateCanonicalNegationUsage(
 
 		if (!rawName) continue;
 
-		const canonical = aliasToName[rawName];
+		const canonical = aliasToName[rawName] ?? (rawName in flagsDef ? rawName : undefined);
 		if (!canonical) continue;
-		if (canonical === rawName) continue;
 
 		const def = flagsDef[canonical];
-		if (def?.type !== "boolean") continue;
+		if (def?.type !== "boolean" || def.noNegate !== true) continue;
 
 		throw new CrustError(
 			"PARSE",
-			`Cannot negate alias "--no-${rawName}"; use "--no-${canonical}" instead`,
+			`Flag "--${canonical}" does not support negation ("--no-${rawName}")`,
 		);
 	}
 }
@@ -512,7 +512,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
 
-	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
+	validateNoNegateUsage(argv, flagsDef, aliasToName);
 
 	let parsed: ReturnType<typeof nodeParseArgs>;
 

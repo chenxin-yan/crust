@@ -127,7 +127,7 @@ describe("built-in plugins", () => {
 		expect(plain).toContain('[default: "."]');
 	});
 
-	it("renderHelp shows canonical boolean negation instead of negated aliases", () => {
+	it("renderHelp shows long aliases with canonical-only negation", () => {
 		const command = new Crust("app").flags({
 			name: "verbose",
 			type: "boolean",
@@ -135,7 +135,7 @@ describe("built-in plugins", () => {
 		})._node;
 
 		const output = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(output).toContain("--verbose, --no-verbose");
+		expect(output).toContain("--verbose, --loud, --no-verbose");
 		expect(output).not.toContain("--no-loud");
 	});
 
