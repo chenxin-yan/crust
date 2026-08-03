@@ -11,17 +11,11 @@ import {
 import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
-import {
-	isModifierName,
-	isModifierPair,
-	styleMethodNames,
-	stylePairFor,
-} from "./styleMethodRegistry.ts";
+import { isModifierName, styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
 	ColorDepth,
 	ColorInput,
-	ColorInputCandidate,
 	ColorMode,
 	StyleInstance,
 	StyleMethodMap,
@@ -218,8 +212,8 @@ function buildStyleMethods(
  * and background color functions. In `"never"` mode, all functions return
  * plain text without ANSI codes. In `"always"` mode, ANSI codes are always
  * emitted. In `"auto"` mode, color methods respect `stdout.isTTY` and
- * `NO_COLOR`, while non-color modifiers (bold, italic, etc.) are always
- * emitted.
+ * `NO_COLOR`, non-color modifiers (bold, italic, etc.) follow TTY only,
+ * and `FORCE_COLOR`, when set, decides unconditionally for both.
  *
  * @param options - Configuration options. Defaults to `{ mode: "auto" }`.
  * @returns A frozen {@link StyleInstance} with all styling functions.
@@ -267,17 +261,6 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		trueColorEnabled,
 		colorDepth,
 
-		// ── Style engine ────────────────────────────────────────────────────
-
-		apply: (text: string, pair: AnsiPair) => {
-			// Registered modifier pairs are gated on `modifiersEnabled` so
-			// they survive `NO_COLOR` (which only disables colors). Color
-			// pairs — and any ad-hoc pair constructed outside the registry
-			// — fall through to `colorsEnabled`.
-			const gate = isModifierPair(pair) ? modifiersEnabled : colorsEnabled;
-			return gate ? applyStyle(text, pair) : text;
-		},
-
 		link: hyperlinksEnabled
 			? (text: string, url: string, hyperlinkOptions) => linkDirect(text, url, hyperlinkOptions)
 			: (text: string, url: string, hyperlinkOptions) => {
@@ -293,7 +276,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 		// Two call shapes (see StyleInstance.fg JSDoc):
 		//   fg(input)        → ChainableStyleFn (chain root)
 		//   fg(text, input)  → string (direct)
-		fg: ((textOrInput: ColorInputCandidate, maybeInput?: ColorInput): string | ChainableStyleFn => {
+		fg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
@@ -306,7 +289,7 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 			return fgDirect(textOrInput as string, maybeInput, colorDepth);
 		}) as StyleInstance["fg"],
 
-		bg: ((textOrInput: ColorInputCandidate, maybeInput?: ColorInput): string | ChainableStyleFn => {
+		bg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
 			if (maybeInput === undefined) {
 				return createChainableStyle([
 					{
@@ -325,106 +308,19 @@ export function createStyle(options?: StyleOptions): StyleInstance {
 	return Object.freeze(instance);
 }
 
-let globalColorMode: ColorMode | undefined;
-
-/**
- * Override the {@link ColorMode} for the runtime {@link style} facade and
- * the top-level color/modifier helpers (`fg`, `bg`, `red`, `bold`, …).
- *
- * Pass `undefined` to clear the override and fall back to `"auto"` (the
- * default), which detects TTY status, `NO_COLOR`, `COLORTERM`, and `TERM`
- * on every call.
- *
- * **Capture semantics:**
- * - Top-level helpers (`bold`, `red`, etc.) and `style.bold` etc. are
- *   forwarders — captured references like `const myBold = style.bold`
- *   re-resolve the active mode on every call/property access, so later
- *   `setGlobalColorMode()` flips affect them.
- * - **Sub-chain captures snapshot.** `const myBoldRed = style.bold.red`
- *   captures the chainable for the mode active at access time and is
- *   locked to it. This matches chalk/ansis. To stay dynamic, capture the
- *   leaf and chain at call site: `const fmt = style.bold; fmt.red("x")`.
- * - Configured `createStyle()` instances are NOT affected by this knob —
- *   they capture their mode at construction time.
- *
- * Use this when callers want a single runtime knob (e.g. CLI
- * `--color`/`--no-color` flags) that affects every standalone import.
- *
- * `"never"` on the runtime facade follows [no-color.org](https://no-color.org/)
- * semantics: colors are suppressed, but non-color modifiers (`bold`,
- * `italic`, etc.) and hyperlinks continue to emit. This intentionally
- * diverges from `createStyle({ mode: "never" })`, which disables all
- * ANSI output — see {@link ColorMode} for the full contract. To
- * suppress every form of ANSI on the runtime facade as well, prefer
- * `createStyle({ mode: "never" })` for the relevant code path.
- *
- * @param mode - `"auto"`, `"always"`, `"never"`, or `undefined` to clear.
- *
- * @example
- * ```ts
- * import { setGlobalColorMode, red, bold } from "@crustjs/style";
- *
- * setGlobalColorMode("never");
- * red("plain text");           // "plain text" (color off)
- * bold("still bold");          // "\x1b[1mstill bold\x1b[22m" (modifier kept)
- *
- * setGlobalColorMode("always");
- * red("forced color");         // includes ANSI even off-TTY
- *
- * setGlobalColorMode(undefined); // back to auto-detect
- * ```
- */
-export function setGlobalColorMode(mode: ColorMode | undefined): void {
-	globalColorMode = mode;
-}
-
-/**
- * Read the current global color mode override, or `undefined` if the
- * runtime is in default `"auto"` mode (no override set).
- *
- * @returns The override set by the most recent call to
- *   {@link setGlobalColorMode}, or `undefined`.
- *
- * @example
- * ```ts
- * import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
- *
- * getGlobalColorMode();         // undefined
- * setGlobalColorMode("never");
- * getGlobalColorMode();         // "never"
- * ```
- */
-export function getGlobalColorMode(): ColorMode | undefined {
-	return globalColorMode;
-}
-
-// Cache key must include every input the resolved instance depends on:
-// `globalColorMode`, `stdout.isTTY`, `NO_COLOR`, `COLORTERM`, `TERM`.
-// `"never"` follows no-color.org semantics for the runtime facade:
-// colors are suppressed but non-color modifiers (bold/italic/...) and
-// hyperlinks survive. This intentionally diverges from
-// `createStyle({ mode: "never" })` (which suppresses all ANSI). See the
-// `ColorMode` and `setGlobalColorMode` JSDocs for the rationale.
+// The runtime `style` facade and top-level helpers are forwarders into a
+// cached `"auto"`-mode instance. The environment is the single source of
+// truth — the cache key must include every input capability resolution
+// depends on: `stdout.isTTY`, `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`,
+// `TERM`. Env changes (e.g. a `--color` flag handler setting
+// `FORCE_COLOR`) take effect on the next call.
 const runtimeStyleCache = new Map<string, StyleInstance>();
-
-function buildRuntimeStyle(): StyleInstance {
-	if (globalColorMode === "always") {
-		return createStyle({ mode: "always" });
-	}
-	if (globalColorMode === "never") {
-		return createStyle({
-			mode: "auto",
-			overrides: { isTTY: true, noColor: "1" },
-		});
-	}
-	return createStyle({ mode: "auto" });
-}
 
 function getRuntimeStyle(): StyleInstance {
 	const key = [
-		globalColorMode ?? "auto",
 		process.stdout?.isTTY ?? false,
 		process.env.NO_COLOR ?? "",
+		process.env.FORCE_COLOR ?? "\u0000",
 		process.env.COLORTERM ?? "",
 		process.env.TERM ?? "",
 	].join("|");
@@ -432,14 +328,14 @@ function getRuntimeStyle(): StyleInstance {
 	if (cached) {
 		return cached;
 	}
-	const built = buildRuntimeStyle();
+	const built = createStyle({ mode: "auto" });
 	runtimeStyleCache.set(key, built);
 	return built;
 }
 
 // Members whose implementation is a function and must be forwarded as a
-// bound method so callers can invoke them like `style.apply(...)`.
-const FORWARDED_METHODS = ["apply", "link", "fg", "bg"] as const;
+// bound method so callers can invoke them like `style.link(...)`.
+const FORWARDED_METHODS = ["link", "fg", "bg"] as const;
 
 // Members that read a value off the current runtime style on every access.
 const FORWARDED_GETTERS = ["enabled", "colorsEnabled", "trueColorEnabled", "colorDepth"] as const;
@@ -447,12 +343,12 @@ const FORWARDED_GETTERS = ["enabled", "colorsEnabled", "trueColorEnabled", "colo
 /**
  * Build a `ChainableStyleFn` whose calls and chain accesses forward to
  * `getRuntimeStyle()[name]` on every invocation. This is the bridge that
- * lets {@link setGlobalColorMode} take effect on captured references:
+ * lets environment changes (`NO_COLOR`, `FORCE_COLOR`, TTY) take effect
+ * on captured references:
  *
  * ```ts
- * setGlobalColorMode("always");
- * const myBold = style.bold; // captured forwarder, not a snapshot
- * setGlobalColorMode("never");
+ * const myBold = style.bold;    // captured forwarder, not a snapshot
+ * process.env.FORCE_COLOR = "0";
  * myBold("x"); // "x" — resolves the current runtime instance
  * ```
  *
@@ -549,7 +445,7 @@ function createRuntimeStyleFacade(): StyleInstance {
 	}
 
 	// Use forwarding chainables so captured references (`const x = style.bold`)
-	// honor later `setGlobalColorMode()` calls. Each chain method is built
+	// honor later environment changes. Each chain method is built
 	// once at facade construction time and shared across all accesses.
 	for (const name of styleMethodNames) {
 		Object.defineProperty(facade, name, {
@@ -567,7 +463,8 @@ function createRuntimeStyleFacade(): StyleInstance {
  * Default style instance using `"auto"` mode.
  *
  * Emits color ANSI codes when stdout is a TTY and `NO_COLOR` is not set.
- * Non-color modifiers (bold, italic, etc.) are always emitted.
+ * Non-color modifiers (bold, italic, etc.) follow TTY only; `FORCE_COLOR`,
+ * when set, decides unconditionally for both.
  * Import this for convenient access without explicit configuration.
  *
  * @example

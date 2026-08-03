@@ -2,28 +2,29 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import * as codes from "./ansiCodes.ts";
 import { resolveColorDepth } from "./capability.ts";
-import { createStyle, getGlobalColorMode, setGlobalColorMode, style } from "./createStyle.ts";
+import { createStyle, style } from "./createStyle.ts";
 import { bold, red } from "./index.ts";
-import { composeStyles } from "./styleEngine.ts";
+import { snapshotEnv } from "./testEnv.ts";
 
-const originalNoColor = process.env.NO_COLOR;
+const restoreEnvVars = snapshotEnv("NO_COLOR", "FORCE_COLOR");
 const originalStdoutIsTTY = process.stdout.isTTY;
 
-/** Restore mutable runtime env (`NO_COLOR`, `isTTY`, global mode). */
+/** Restore mutable runtime env (`NO_COLOR`, `FORCE_COLOR`, `isTTY`). */
 function restoreRuntimeEnv() {
-	setGlobalColorMode(undefined);
-	if (originalNoColor === undefined) {
-		delete process.env.NO_COLOR;
-	} else {
-		process.env.NO_COLOR = originalNoColor;
-	}
+	restoreEnvVars();
 	Object.defineProperty(process.stdout, "isTTY", {
 		configurable: true,
 		value: originalStdoutIsTTY,
 	});
 }
 
-beforeEach(restoreRuntimeEnv);
+beforeEach(() => {
+	restoreRuntimeEnv();
+	// Tests exercise the auto ladder; ambient NO_COLOR/FORCE_COLOR (e.g. CI
+	// runners) must not leak in. afterEach still restores the ambient values.
+	delete process.env.NO_COLOR;
+	delete process.env.FORCE_COLOR;
+});
 afterEach(restoreRuntimeEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -238,6 +239,47 @@ describe("resolveColorDepth", () => {
 			).toBe("truecolor");
 		});
 	});
+
+	describe("auto mode — FORCE_COLOR", () => {
+		it("numeric levels map like chalk: 1→16, 2→256, 3→truecolor", () => {
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "1" })).toBe("16");
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "2" })).toBe("256");
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "3" })).toBe("truecolor");
+		});
+
+		it('"0" and "false" force off — even on a truecolor TTY', () => {
+			const tty = { isTTY: true, colorTerm: "truecolor" };
+			expect(resolveColorDepth("auto", { ...tty, forceColor: "0" })).toBe("none");
+			expect(resolveColorDepth("auto", { ...tty, forceColor: "false" })).toBe("none");
+		});
+
+		it('empty string / "true" force on at the COLORTERM/TERM-detected depth', () => {
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "" })).toBe("16");
+			expect(
+				resolveColorDepth("auto", { isTTY: false, forceColor: "true", colorTerm: "truecolor" }),
+			).toBe("truecolor");
+			expect(
+				resolveColorDepth("auto", { isTTY: false, forceColor: "", term: "xterm-256color" }),
+			).toBe("256");
+		});
+
+		it("force-on beats TERM=dumb — forced depth detection never returns none", () => {
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "1", term: "dumb" })).toBe("16");
+			expect(resolveColorDepth("auto", { isTTY: false, forceColor: "", term: "dumb" })).toBe("16");
+		});
+
+		it("takes precedence over NO_COLOR and non-TTY", () => {
+			expect(resolveColorDepth("auto", { isTTY: false, noColor: "1", forceColor: "3" })).toBe(
+				"truecolor",
+			);
+		});
+
+		it("unset FORCE_COLOR falls through to the normal ladder", () => {
+			expect(
+				resolveColorDepth("auto", { isTTY: true, noColor: undefined, forceColor: undefined }),
+			).toBe("16");
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -269,15 +311,6 @@ describe("createStyle — always mode", () => {
 
 	it("last color in chain takes precedence", () => {
 		expect(s.red.blue("text")).toBe("\x1b[31m\x1b[34mtext\x1b[39m\x1b[31m\x1b[39m");
-	});
-
-	it("apply() applies arbitrary pair", () => {
-		expect(s.apply("text", codes.italic)).toBe("\x1b[3mtext\x1b[23m");
-	});
-
-	it("apply() works with composed styles", () => {
-		const boldRed = composeStyles(codes.bold, codes.red);
-		expect(s.apply("error", boldRed)).toBe("\x1b[1m\x1b[31merror\x1b[39m\x1b[22m");
 	});
 
 	it("handles empty string", () => {
@@ -349,12 +382,6 @@ describe("createStyle — never mode", () => {
 		for (const methodName of methodNames) {
 			expect(s[methodName]("text")).toBe("text");
 		}
-	});
-
-	it("apply() returns plain text for any pair", () => {
-		expect(s.apply("text", codes.bold)).toBe("text");
-		expect(s.apply("text", codes.red)).toBe("text");
-		expect(s.apply("text", codes.bgBlue)).toBe("text");
 	});
 
 	it("supports chainable styles without ANSI output", () => {
@@ -648,29 +675,29 @@ describe("runtime-aware default exports", () => {
 		expect(style.colorsEnabled).toBe(false);
 	});
 
-	it("lets the global color override force colors on", () => {
+	it("FORCE_COLOR forces colors on — overrides NO_COLOR and non-TTY", () => {
 		process.env.NO_COLOR = "1";
+		process.env.FORCE_COLOR = "3";
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: false,
 		});
-		setGlobalColorMode("always");
 
-		expect(getGlobalColorMode()).toBe("always");
 		expect(red("text")).toBe("\x1b[31mtext\x1b[39m");
 		expect(style.colorsEnabled).toBe(true);
 	});
 
-	it("lets the global color override force colors off without disabling modifiers", () => {
+	it("FORCE_COLOR=0 forces all ANSI off — overrides TTY", () => {
+		process.env.FORCE_COLOR = "0";
 		Object.defineProperty(process.stdout, "isTTY", {
 			configurable: true,
 			value: true,
 		});
-		setGlobalColorMode("never");
 
 		expect(red("text")).toBe("text");
-		expect(bold("text")).toBe("\x1b[1mtext\x1b[22m");
+		expect(bold("text")).toBe("text");
 		expect(style.colorsEnabled).toBe(false);
+		expect(style.enabled).toBe(false);
 	});
 });
 

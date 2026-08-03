@@ -3,7 +3,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { center, padEnd, padStart } from "../text/pad.ts";
-import { visibleWidth } from "../text/width.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -69,7 +68,7 @@ function computeColumnWidths(headers: string[], rows: string[][], minWidth: numb
 	for (let col = 0; col < columnCount; col++) {
 		const header = headers[col];
 		if (header !== undefined) {
-			widths[col] = Math.max(widths[col] ?? 0, visibleWidth(header));
+			widths[col] = Math.max(widths[col] ?? 0, Bun.stringWidth(header));
 		}
 	}
 
@@ -77,7 +76,7 @@ function computeColumnWidths(headers: string[], rows: string[][], minWidth: numb
 		for (let col = 0; col < columnCount; col++) {
 			const cell = row[col];
 			if (cell !== undefined) {
-				widths[col] = Math.max(widths[col] ?? 0, visibleWidth(cell));
+				widths[col] = Math.max(widths[col] ?? 0, Bun.stringWidth(cell));
 			}
 		}
 	}

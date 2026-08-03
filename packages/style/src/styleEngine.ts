@@ -56,31 +56,3 @@ export function applyStyle(text: string, style: AnsiPair): string {
 
 	return open + text + close;
 }
-
-/**
- * Compose multiple ANSI style pairs into a single style pair.
- *
- * The composed pair opens all styles in order and closes them in reverse
- * order. Useful for creating reusable compound styles.
- *
- * @param styles - The ANSI pairs to compose.
- * @returns A single composed ANSI pair.
- *
- * @example
- * ```ts
- * import { composeStyles } from "./styleEngine.ts";
- * import { bold, red } from "./ansiCodes.ts";
- *
- * const boldRed = composeStyles(bold, red);
- * applyStyle("error", boldRed);
- * ```
- */
-export function composeStyles(...styles: AnsiPair[]): AnsiPair {
-	return {
-		open: styles.map((s) => s.open).join(""),
-		close: styles
-			.map((s) => s.close)
-			.toReversed()
-			.join(""),
-	};
-}

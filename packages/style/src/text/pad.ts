@@ -1,13 +1,15 @@
 // ────────────────────────────────────────────────────────────────────────────
 // Pad — ANSI-safe padding and alignment utilities
 // ────────────────────────────────────────────────────────────────────────────
-
-import { visibleWidth } from "./width.ts";
+//
+// Unlike `String.prototype.padStart` / `padEnd` (which count UTF-16 code
+// units and include ANSI escapes), these measure with `Bun.stringWidth`,
+// so escapes are free and CJK/emoji count their real column width.
 
 /**
  * Pad a string on the left (right-align) to the given visible width.
  *
- * Uses {@link visibleWidth} to measure the string, so ANSI escape sequences
+ * Uses `Bun.stringWidth` to measure the string, so ANSI escape sequences
  * are excluded from the width calculation. If the string is already at or
  * beyond the target width, it is returned unchanged.
  *
@@ -24,7 +26,7 @@ import { visibleWidth } from "./width.ts";
  * ```
  */
 export function padStart(text: string, width: number, fillChar = " "): string {
-	const currentWidth = visibleWidth(text);
+	const currentWidth = Bun.stringWidth(text);
 	if (currentWidth >= width) {
 		return text;
 	}
@@ -35,7 +37,7 @@ export function padStart(text: string, width: number, fillChar = " "): string {
 /**
  * Pad a string on the right (left-align) to the given visible width.
  *
- * Uses {@link visibleWidth} to measure the string, so ANSI escape sequences
+ * Uses `Bun.stringWidth` to measure the string, so ANSI escape sequences
  * are excluded from the width calculation. If the string is already at or
  * beyond the target width, it is returned unchanged.
  *
@@ -52,7 +54,7 @@ export function padStart(text: string, width: number, fillChar = " "): string {
  * ```
  */
 export function padEnd(text: string, width: number, fillChar = " "): string {
-	const currentWidth = visibleWidth(text);
+	const currentWidth = Bun.stringWidth(text);
 	if (currentWidth >= width) {
 		return text;
 	}
@@ -66,7 +68,7 @@ export function padEnd(text: string, width: number, fillChar = " "): string {
  * Distributes padding evenly on both sides. When the remaining space is
  * odd, the extra character is placed on the right side.
  *
- * Uses {@link visibleWidth} to measure the string, so ANSI escape sequences
+ * Uses `Bun.stringWidth` to measure the string, so ANSI escape sequences
  * are excluded from the width calculation. If the string is already at or
  * beyond the target width, it is returned unchanged.
  *
@@ -83,7 +85,7 @@ export function padEnd(text: string, width: number, fillChar = " "): string {
  * ```
  */
 export function center(text: string, width: number, fillChar = " "): string {
-	const currentWidth = visibleWidth(text);
+	const currentWidth = Bun.stringWidth(text);
 	if (currentWidth >= width) {
 		return text;
 	}

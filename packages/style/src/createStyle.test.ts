@@ -21,31 +21,16 @@ describe("createStyle — apply() under NO_COLOR", () => {
 		expect(s.bold("text")).toBe("\x1b[1mtext\x1b[22m");
 	});
 
-	it("apply() preserves modifier pairs when colors are disabled", () => {
-		// Regression: previously apply() gated on colorsEnabled only, so
-		// modifier pairs were stripped under NO_COLOR.
-		expect(s.apply("text", codes.bold)).toBe("\x1b[1mtext\x1b[22m");
-		expect(s.apply("text", codes.italic)).toBe("\x1b[3mtext\x1b[23m");
-		expect(s.apply("text", codes.underline)).toBe("\x1b[4mtext\x1b[24m");
+	it("preserves modifier steps when colors are disabled", () => {
+		// Regression: modifier chains must survive NO_COLOR (which only
+		// disables colors).
+		expect(s.italic("text")).toBe("\x1b[3mtext\x1b[23m");
+		expect(s.underline("text")).toBe("\x1b[4mtext\x1b[24m");
 	});
 
-	it("apply() strips color pairs when colors are disabled", () => {
-		expect(s.apply("text", codes.red)).toBe("text");
-		expect(s.apply("text", codes.bgBlue)).toBe("text");
-	});
-});
-
-describe("createStyle — apply() in other modes", () => {
-	it("mode=always emits both modifier and color pairs", () => {
-		const s = createStyle({ mode: "always" });
-		expect(s.apply("x", codes.bold)).toBe("\x1b[1mx\x1b[22m");
-		expect(s.apply("x", codes.red)).toBe("\x1b[31mx\x1b[39m");
-	});
-
-	it("mode=never strips both modifier and color pairs", () => {
-		const s = createStyle({ mode: "never" });
-		expect(s.apply("x", codes.bold)).toBe("x");
-		expect(s.apply("x", codes.red)).toBe("x");
+	it("strips color steps when colors are disabled", () => {
+		expect(s.red("text")).toBe("text");
+		expect(s.bgBlue("text")).toBe("text");
 	});
 });
 

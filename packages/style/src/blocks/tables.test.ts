@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import { getGlobalColorMode, setGlobalColorMode } from "../createStyle.ts";
 import { bold, red } from "../runtimeExports.ts";
+import { setEnv, snapshotEnv } from "../testEnv.ts";
 import { table } from "./tables.ts";
 
-const originalColorMode = getGlobalColorMode();
-beforeAll(() => setGlobalColorMode("always"));
-afterAll(() => setGlobalColorMode(originalColorMode));
+const restoreEnv = snapshotEnv("FORCE_COLOR");
+beforeAll(() => setEnv("FORCE_COLOR", "3"));
+afterAll(restoreEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Table

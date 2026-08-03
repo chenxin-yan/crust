@@ -17,6 +17,15 @@ function readNoColor(overrides: CapabilityOverrides | undefined): string | undef
 	return overrides !== undefined ? overrides.noColor : process.env.NO_COLOR;
 }
 
+function readForceColor(overrides: CapabilityOverrides | undefined): string | undefined {
+	return overrides !== undefined ? overrides.forceColor : process.env.FORCE_COLOR;
+}
+
+/** `FORCE_COLOR=0` / `FORCE_COLOR=false` mean "force off"; any other value forces on. */
+function forceColorDisables(forceColor: string): boolean {
+	return forceColor === "0" || forceColor === "false";
+}
+
 function readColorTerm(overrides: CapabilityOverrides | undefined): string | undefined {
 	return overrides !== undefined ? overrides.colorTerm : process.env.COLORTERM;
 }
@@ -42,6 +51,21 @@ function detectsTruecolor(colorTerm: string | undefined, term: string | undefine
 	return term !== undefined && isTrueColorTerm(term);
 }
 
+// Depth ladder shared by the forced and auto paths. Assumes color emission
+// is already decided to be on — never returns "none".
+function detectDepth(
+	colorTerm: string | undefined,
+	term: string | undefined,
+): Exclude<ColorDepth, "none"> {
+	if (detectsTruecolor(colorTerm, term)) {
+		return "truecolor";
+	}
+	if (term !== undefined && term.toLowerCase().includes("256color")) {
+		return "256";
+	}
+	return "16";
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,17 +77,22 @@ function detectsTruecolor(colorTerm: string | undefined, term: string | undefine
  * - `"never"` → `"none"`.
  * - `"always"` → `"truecolor"`.
  * - `"auto"`:
- *   1. Not a TTY OR `NO_COLOR` set non-empty → `"none"`.
- *   2. `COLORTERM` is `"truecolor"` or `"24bit"` (case-insensitive) →
+ *   1. `FORCE_COLOR` set → decides unconditionally (overrides TTY and
+ *      `NO_COLOR`, chalk convention): `0` / `false` → `"none"`; `1` →
+ *      `"16"`; `2` → `"256"`; `3` → `"truecolor"`; any other value
+ *      (including empty) → forced on at the `COLORTERM` / `TERM`
+ *      detected depth.
+ *   2. Not a TTY OR `NO_COLOR` set non-empty → `"none"`.
+ *   3. `COLORTERM` is `"truecolor"` or `"24bit"` (case-insensitive) →
  *      `"truecolor"`.
- *   3. `TERM` ends with `-direct` OR contains `truecolor` / `24bit` →
+ *   4. `TERM` ends with `-direct` OR contains `truecolor` / `24bit` →
  *      `"truecolor"`.
- *   4. `TERM === "dumb"` → `"none"`.
- *   5. `TERM` contains `256color` → `"256"`.
- *   6. Any other TTY value → `"16"`.
+ *   5. `TERM === "dumb"` → `"none"`.
+ *   6. `TERM` contains `256color` → `"256"`.
+ *   7. Any other TTY value → `"16"`.
  *
- * Detection follows the existing `NO_COLOR` / `COLORTERM` / `TERM`
- * conventions; no new environment variables are introduced.
+ * Detection follows the ecosystem `FORCE_COLOR` / `NO_COLOR` / `COLORTERM`
+ * / `TERM` conventions; no bespoke environment variables are introduced.
  *
  * @param mode - The color emission mode.
  * @param overrides - Optional overrides for deterministic testing.
@@ -96,6 +125,20 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 	}
 
 	// auto mode
+	const colorTerm = readColorTerm(overrides);
+	const term = readTerm(overrides);
+
+	const forceColor = readForceColor(overrides);
+	if (forceColor !== undefined) {
+		if (forceColorDisables(forceColor)) {
+			return "none";
+		}
+		if (forceColor === "1") return "16";
+		if (forceColor === "2") return "256";
+		if (forceColor === "3") return "truecolor";
+		return detectDepth(colorTerm, term);
+	}
+
 	const isTTY = readTTY(overrides);
 	if (!isTTY) {
 		return "none";
@@ -106,25 +149,14 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 		return "none";
 	}
 
-	const colorTerm = readColorTerm(overrides);
-	const term = readTerm(overrides);
-	if (detectsTruecolor(colorTerm, term)) {
-		return "truecolor";
+	// Case-insensitive to match `isTrueColorTerm` and the `256color` check
+	// inside `detectDepth`: `TERM=DUMB` / `TERM=Dumb` should also disable
+	// color. Truecolor detection wins over `dumb` (matches prior behavior).
+	if (term !== undefined && term.toLowerCase() === "dumb" && !detectsTruecolor(colorTerm, term)) {
+		return "none";
 	}
 
-	if (term !== undefined) {
-		// Case-insensitive to match `isTrueColorTerm` and the `256color`
-		// check below: `TERM=DUMB` / `TERM=Dumb` should also disable color.
-		const lower = term.toLowerCase();
-		if (lower === "dumb") {
-			return "none";
-		}
-		if (lower.includes("256color")) {
-			return "256";
-		}
-	}
-
-	return "16";
+	return detectDepth(colorTerm, term);
 }
 
 /**
@@ -132,6 +164,8 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
  *
  * In `"auto"` mode, modifiers are enabled when stdout is a TTY, but are
  * **not** affected by `NO_COLOR` (which only controls color output).
+ * `FORCE_COLOR`, when set, decides unconditionally — it is the all-ANSI
+ * switch, while `NO_COLOR` is the colors-only switch.
  *
  * @internal Exported only for use by {@link createStyle}; not part of the
  * public surface of `@crustjs/style`.
@@ -146,6 +180,11 @@ export function resolveModifierCapability(
 
 	if (mode === "never") {
 		return false;
+	}
+
+	const forceColor = readForceColor(overrides);
+	if (forceColor !== undefined) {
+		return !forceColorDisables(forceColor);
 	}
 
 	return readTTY(overrides);

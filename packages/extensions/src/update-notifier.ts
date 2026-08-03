@@ -5,7 +5,7 @@
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import { type Extension, defineExtension } from "@crustjs/core";
-import { bold, cyan, dim, green, padEnd, visibleWidth, yellow } from "@crustjs/style";
+import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export type UpdateNotifierInstallScope = "local" | "global";
@@ -635,7 +635,7 @@ function emitUpdateNotice(
 	const commandLine = `Run ${cyan(updateCommand)}`;
 
 	// Determine content width from the longest visible line
-	const contentWidth = Math.max(visibleWidth(versionLine), visibleWidth(commandLine));
+	const contentWidth = Math.max(Bun.stringWidth(versionLine), Bun.stringWidth(commandLine));
 	const innerWidth = contentWidth + PADDING * 2;
 
 	const border = BOX_HORIZONTAL.repeat(innerWidth);

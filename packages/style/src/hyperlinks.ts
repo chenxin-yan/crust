@@ -35,9 +35,9 @@ function serializeParams(options?: HyperlinkOptions): string {
 }
 
 /**
- * Create an OSC 8 hyperlink escape pair for `url`. The returned
- * {@link AnsiPair} can be applied directly with {@link applyStyle} or
- * composed via {@link composeStyles}; for one-shot use see {@link link}.
+ * Create an OSC 8 hyperlink escape pair for `url`. Backs {@link link} and
+ * the `link` method on style instances; also used to validate URLs when
+ * hyperlink emission is disabled.
  *
  * @param url - Target URL. Must contain only printable ASCII characters
  *   and no spaces (per the OSC 8 spec). URL-encode characters outside
@@ -50,13 +50,7 @@ function serializeParams(options?: HyperlinkOptions): string {
  *   or if `options.id` contains `":"` / `";"` (reserved by OSC 8) or
  *   non-printable characters.
  *
- * @example
- * ```ts
- * import { applyStyle, linkCode } from "@crustjs/style";
- *
- * const pair = linkCode("https://crustjs.dev");
- * console.log(applyStyle("docs", pair));
- * ```
+ * @internal
  */
 export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
 	assertMatches(url, "hyperlink URL", /^[\x21-\x7e]*$/, " without spaces");
@@ -68,15 +62,17 @@ export function linkCode(url: string, options?: HyperlinkOptions): AnsiPair {
 }
 
 /**
- * Wrap `text` in OSC 8 hyperlink escape sequences. Equivalent to
- * `applyStyle(text, linkCode(url, options))` but a single call.
+ * Wrap `text` in OSC 8 hyperlink escape sequences.
  *
  * @param text - The visible label.
- * @param url - Target URL (see {@link linkCode} for the constraints).
+ * @param url - Target URL. Must contain only printable ASCII characters
+ *   and no spaces (per the OSC 8 spec); URL-encode anything outside that
+ *   range before passing.
  * @param options - Optional {@link HyperlinkOptions}.
  * @returns The styled string.
- * @throws {TypeError} If `url` or `options.id` are invalid — see
- *   {@link linkCode}.
+ * @throws {TypeError} If `url` contains spaces or non-printable ASCII,
+ *   or if `options.id` contains `":"` / `";"` (reserved by OSC 8) or
+ *   non-printable characters.
  *
  * @example
  * ```ts
