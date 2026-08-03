@@ -65,9 +65,10 @@ describe("public beta API", () => {
 			flags: {
 				version: { type: "boolean" },
 			},
-			async intercept(_context, next) {
-				wrapperCalled = true;
-				await next();
+			hooks: {
+				preRun() {
+					wrapperCalled = true;
+				},
 			},
 		});
 

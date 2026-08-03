@@ -8,11 +8,11 @@ import {
 	type RequirementCtxOf,
 	type RequirementFlagsOf,
 } from "../api/context.ts";
-import type {
-	Extension,
-	ExtensionContext,
-	ExtensionErrorHandler,
-	ExtensionIntercept,
+import {
+	finishInvocation,
+	type Extension,
+	type ExtensionContext,
+	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
@@ -64,6 +64,8 @@ export interface CrustCommandContext<
 	rawArgs: string[];
 	/** Readonly, serializable snapshot of the resolved command */
 	command: CommandSnapshot;
+	/** Readonly snapshot of the application root, including Extension contributions */
+	rootCommand: CommandSnapshot;
 	/** Write a line of standard output (injectable text callback) */
 	stdout: (text: string) => void;
 	/** Write a line of diagnostic output (injectable text callback) */
@@ -86,8 +88,6 @@ const DEFAULT_IO: InvocationIO = {
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly Extension[];
-	/** Names of Extension-owned root commands (inputs validated pre-hook) */
-	ownedCommands: ReadonlySet<string>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -886,11 +886,11 @@ export class Crust<
 
 	/**
 	 * Invoke this application programmatically: resolve, parse, run the
-	 * Extension intercept chain and the Command Handler for `argv`.
+	 * Extension hooks and the Command Handler for `argv`.
 	 *
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
 	 * parse, Context, or handler failure without rendering it (Extension
-	 * `handleError` hooks are a terminal presentation concern and never run
+	 * `onError` hooks are a terminal presentation concern and never run
 	 * here) and without changing process status. It resolves with no value
 	 * after successful cleanup. Prompt cancellation surfaces as a standard
 	 * `AbortError`.
@@ -916,8 +916,8 @@ export class Crust<
 	 * execute the matched Command Handler.
 	 *
 	 * This is the terminal CLI boundary — call it on the root builder. It
-	 * renders a failure once (through the Extension `handleError` chain,
-	 * ending in Core's default renderer), sets `process.exitCode` (`1`, or
+	 * renders a failure once (through Extension `onError` hooks, ending in
+	 * Core's default renderer), sets `process.exitCode` (`1`, or
 	 * `130` for an `AbortError` cancellation), and resolves.
 	 *
 	 * @param options - Optional overrides (e.g. custom `argv` for testing)
@@ -930,8 +930,8 @@ export class Crust<
 		try {
 			prepared = prepareInvocation(this._node);
 		} catch (error) {
-			// Extension-application failures render directly: the handleError
-			// chain belongs to Extensions that just failed to apply.
+			// Extension-application failures render directly: hooks belong to
+			// Extensions that just failed to apply.
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
@@ -971,18 +971,17 @@ export class Crust<
 				return;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of
-			// what Extension handleError hooks do (ADR-0001).
+			// what Extension onError hooks do (ADR-0001).
 			process.exitCode = 1;
 			await renderFailure(error, argv, prepared, io, extensionContext);
 		}
 	}
 
 	/**
-	 * Resolve, parse, run the Extension intercept chain and the Command
-	 * Handler for one invocation. Throws the original failure (definition,
-	 * parse, Context, or handler error) without rendering it or touching
-	 * `process.exitCode`. Routing and syntax failures throw directly —
-	 * intercept hooks never observe them.
+	 * Resolve and parse one invocation, then run Extension hooks and the
+	 * Command Handler. Throws the original failure without rendering it or
+	 * touching `process.exitCode`. Routing and syntax failures throw directly
+	 * before hooks observe the invocation.
 	 */
 	private async _dispatch(
 		argv: readonly string[],
@@ -990,7 +989,7 @@ export class Crust<
 		io: InvocationIO,
 		onExtensionContext?: (context: ExtensionContext) => void,
 	): Promise<void> {
-		const { rootNode, extensions, ownedCommands } = prepared;
+		const { rootNode, extensions } = prepared;
 
 		// Routing and syntax parsing — failures flow directly to the caller
 		const resolved = resolveCommand(rootNode, [...argv]);
@@ -1007,16 +1006,11 @@ export class Crust<
 			args: parsed.args as Readonly<Record<string, unknown>>,
 			flags: parsed.flags as Readonly<Record<string, unknown>>,
 			rawArgs: parsed.rawArgs,
+			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
 		});
 		onExtensionContext?.(extensionContext);
-
-		// Extension-owned inputs are validated before the hooks run (ADR-0001)
-		const routedRoot = resolved.commandPath[1];
-		if (routedRoot !== undefined && ownedCommands.has(routedRoot)) {
-			validateParsed(resolvedNode, parsed);
-		}
 
 		const terminal = async (): Promise<void> => {
 			validateParsed(resolvedNode, parsed);
@@ -1044,6 +1038,7 @@ export class Crust<
 				),
 				rawArgs: parsed.rawArgs,
 				command: extensionContext.command,
+				rootCommand: rootSnapshot,
 				stdout: io.stdout,
 				stderr: io.stderr,
 			};
@@ -1051,45 +1046,41 @@ export class Crust<
 			await resolvedNode.run(context);
 		};
 
-		await runInterceptChain(
-			extensions
-				.map((ext) => ext.intercept)
-				.filter((hook): hook is ExtensionIntercept => hook !== undefined),
-			extensionContext,
-			terminal,
-		);
+		let outcome: InvocationOutcome = { status: "completed" };
+		try {
+			for (const extension of extensions) {
+				if ((await extension.hooks?.preRun?.(extensionContext)) === finishInvocation()) {
+					outcome = { status: "finished", by: extension.name };
+					break;
+				}
+			}
+			if (outcome.status !== "finished") {
+				await terminal();
+				outcome = { status: "completed" };
+			}
+		} catch (error) {
+			outcome = { status: "failed", error };
+		}
+
+		let postRunFailed = false;
+		let postRunError: unknown;
+		for (const extension of extensions.toReversed()) {
+			try {
+				await extension.hooks?.postRun?.(extensionContext, outcome);
+			} catch (error) {
+				if (outcome.status !== "failed" && !postRunFailed) {
+					postRunFailed = true;
+					postRunError = error;
+				}
+			}
+		}
+
+		if (outcome.status === "failed") throw outcome.error;
+		if (postRunFailed) throw postRunError;
 	}
 }
 
-/** Run the Extension intercept chain, terminating in `terminal`. */
-async function runInterceptChain(
-	hooks: readonly ExtensionIntercept[],
-	context: ExtensionContext,
-	terminal: () => Promise<void>,
-): Promise<void> {
-	let index = -1;
-	const dispatch = async (i: number): Promise<void> => {
-		if (i <= index) {
-			throw new CrustError("DEFINITION", "Extension intercept called next() multiple times", {
-				subject: "extension",
-				reason: "duplicate-next",
-			});
-		}
-		index = i;
-		if (i === hooks.length) {
-			await terminal();
-			return;
-		}
-		await (hooks[i] as ExtensionIntercept)(context, () => dispatch(i + 1));
-	};
-	await dispatch(0);
-}
-
-/**
- * Render one failure through the Extension handleError chain, ending in
- * Core's default renderer. Presentation only — the caller has already set
- * the nonzero exit code.
- */
+/** Render one failure through Extension onError hooks, ending in Core's default renderer. */
 async function renderFailure(
 	error: unknown,
 	argv: readonly string[],
@@ -1102,51 +1093,30 @@ async function renderFailure(
 		io.stderr(`Error: ${message}`);
 	};
 
-	const handlers = prepared.extensions
-		.map((ext) => ext.handleError)
-		.filter((hook): hook is ExtensionErrorHandler => hook !== undefined);
-	if (handlers.length === 0) {
-		renderDefault();
-		return;
-	}
-
 	// Routing or parsing may have failed before an invocation context existed.
-	let context = extensionContext;
-	if (context === undefined) {
-		const rootSnapshot = snapshotCommand(prepared.rootNode);
-		context = Object.freeze({
+	const context =
+		extensionContext ??
+		Object.freeze({
 			argv: [...argv] as readonly string[],
-			rootCommand: rootSnapshot,
-			command: rootSnapshot,
+			rootCommand: snapshotCommand(prepared.rootNode),
+			command: snapshotCommand(prepared.rootNode),
 			commandPath: Object.freeze([prepared.rootNode.meta.name]),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
+			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
 		} satisfies ExtensionContext);
-	}
-
-	let index = -1;
-	const dispatch = async (i: number): Promise<void> => {
-		// Unlike the intercept chain, duplicate next() is ignored rather than
-		// thrown: the presentation chain must never create new failures.
-		if (i <= index) return;
-		index = i;
-		if (i === handlers.length) {
-			renderDefault();
-			return;
-		}
-		await (handlers[i] as ExtensionErrorHandler)(error, context, () => dispatch(i + 1));
-	};
 
 	try {
-		await dispatch(0);
+		for (const extension of prepared.extensions) {
+			if (await extension.hooks?.onError?.(error, context)) return;
+		}
 	} catch {
-		// The presentation chain itself failed — fall back to the default
-		// rendering of the original failure so it is never lost.
-		renderDefault();
+		// Rendering must not hide the original invocation failure.
 	}
+	renderDefault();
 }
 
 /** Shared prepare step: clone, apply Extensions, freeze. */
@@ -1163,16 +1133,9 @@ function prepareInvocation(node: CommandNode): PreparedInvocation {
 		applyExtensionFlags(rootNode, ext);
 	}
 
-	const ownedCommands = new Set<string>();
-	for (const ext of extensions) {
-		for (const builder of ext.commands ?? []) {
-			ownedCommands.add(builder._node.meta.name);
-		}
-	}
-
 	freezeTree(rootNode);
 
-	return { rootNode, extensions, ownedCommands };
+	return { rootNode, extensions };
 }
 
 /**

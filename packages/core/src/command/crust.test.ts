@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { defineContext } from "../api/context.ts";
-import { defineExtension, type ExtensionContext } from "../api/extension.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagsDef } from "../types.ts";
@@ -995,30 +994,22 @@ describe("Extension application at prepare time", () => {
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("Extension commands are routable and their inputs validated before hooks", async () => {
+	it("Extension commands are routable, validated, and receive the root snapshot", async () => {
 		const lines: string[] = [];
 		const completion = defineExtension("completion", {
 			commands: [
 				new Crust("completion")
 					.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] })
-					.handle(() => {}),
+					.handle(({ args, rootCommand }) => {
+						lines.push(`completion:${args.shell}:${rootCommand.meta.name}`);
+					}),
 			],
-			async intercept(context, next) {
-				if (context.commandPath[1] === "completion") {
-					lines.push(`completion:${String(context.args.shell)}`);
-					return; // short-circuit — owned command handled here
-				}
-				await next();
-			},
 		});
 
 		const app = new Crust("cli").extend(completion).handle(() => {});
 
 		await app.run(["completion", "bash"]);
-		expect(lines).toEqual(["completion:bash"]);
-
-		// Owned inputs are checked BEFORE the intercept hook runs: bad choice
-		// values fail at syntax parsing, missing required args at validation
+		expect(lines).toEqual(["completion:bash:cli"]);
 		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({ code: "PARSE" });
 		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
 	});
@@ -1049,122 +1040,194 @@ describe("Extension application at prepare time", () => {
 	});
 });
 
-describe("Extension intercept chain", () => {
-	it("runs intercepts in registration order around the Command Handler", async () => {
+describe("Extension named hooks", () => {
+	it("runs pre-run hooks in extension order and finish skips later hooks and the handler", async () => {
 		const order: string[] = [];
 		const first = defineExtension("first", {
-			async intercept(_context, next) {
-				order.push("first:before");
-				await next();
-				order.push("first:after");
+			hooks: {
+				preRun: () => {
+					order.push("first");
+				},
+			},
+		});
+		const gate = defineExtension("gate", {
+			hooks: {
+				preRun(ctx) {
+					order.push("gate");
+					return ctx.finish();
+				},
+			},
+		});
+		const last = defineExtension("last", {
+			hooks: {
+				preRun: () => {
+					order.push("last");
+				},
+			},
+		});
+		const app = new Crust("cli")
+			.args({ name: "file", type: "string", required: true })
+			.extend(first, gate, last)
+			.handle(() => {
+				order.push("handler");
+			});
+
+		await app.run([]);
+		expect(order).toEqual(["first", "gate"]);
+	});
+
+	it("runs post-run hooks LIFO for completed, failed, and finished invocations", async () => {
+		const outcomes: string[] = [];
+		const first = defineExtension("first", {
+			hooks: {
+				postRun: (_ctx, outcome) => {
+					outcomes.push(`first:${outcome.status}`);
+				},
 			},
 		});
 		const second = defineExtension("second", {
-			async intercept(_context, next) {
-				order.push("second:before");
-				await next();
-				order.push("second:after");
+			hooks: {
+				postRun: (_ctx, outcome) => {
+					outcomes.push(`second:${outcome.status}`);
+				},
 			},
 		});
 
-		const app = new Crust("cli").extend(first, second).handle(() => {
-			order.push("run");
+		await new Crust("cli")
+			.extend(first, second)
+			.handle(() => {})
+			.run([]);
+		expect(outcomes).toEqual(["second:completed", "first:completed"]);
+
+		outcomes.length = 0;
+		await expect(
+			new Crust("cli")
+				.extend(first, second)
+				.handle(() => {
+					throw new Error("boom");
+				})
+				.run([]),
+		).rejects.toThrow("boom");
+		expect(outcomes).toEqual(["second:failed", "first:failed"]);
+
+		outcomes.length = 0;
+		const gate = defineExtension("gate", { hooks: { preRun: (ctx) => ctx.finish() } });
+		await new Crust("cli")
+			.extend(first, gate, second)
+			.handle(() => {})
+			.run([]);
+		expect(outcomes).toEqual(["second:finished", "first:finished"]);
+	});
+
+	it("reports the finishing Extension and exposes parsed snapshots before validation", async () => {
+		let outcomeBy = "";
+		let seenPort: unknown;
+		const gate = defineExtension("gate", {
+			hooks: {
+				preRun(ctx) {
+					seenPort = ctx.flags.port;
+					return ctx.finish();
+				},
+				postRun(_ctx, outcome) {
+					outcomeBy = outcome.status === "finished" ? outcome.by : "";
+				},
+			},
+		});
+		await new Crust("cli")
+			.flags({ name: "port", type: "number", required: true })
+			.extend(gate)
+			.handle(() => {})
+			.run(["--port", "8080"]);
+
+		expect(seenPort).toBe(8080);
+		expect(outcomeBy).toBe("gate");
+	});
+
+	it("does not run hooks for routing failures and exposes frozen snapshots with injected io", async () => {
+		let preRunCalled = false;
+		const lines: string[] = [];
+		const probe = defineExtension("probe", {
+			hooks: {
+				preRun(ctx) {
+					preRunCalled = true;
+					expect(Object.isFrozen(ctx.rootCommand)).toBe(true);
+					expect(Object.isFrozen(ctx.command)).toBe(true);
+					expect(() => structuredClone(ctx.rootCommand)).not.toThrow();
+					ctx.stdout(`probe:${ctx.command.meta.name}`);
+				},
+			},
+		});
+		const app = new Crust("cli")
+			.extend(probe)
+			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
+
+		await app.run(["known"], { stdout: (line) => lines.push(line) });
+		expect(lines).toEqual(["probe:known"]);
+		preRunCalled = false;
+		await expect(app.run(["unknown"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
+		expect(preRunCalled).toBe(false);
+	});
+
+	it("preserves a failed invocation over post-run errors and fails success with the first cleanup error", async () => {
+		const original = new Error("original");
+		const cleanup = defineExtension("cleanup", {
+			hooks: {
+				postRun() {
+					throw new Error("cleanup");
+				},
+			},
+		});
+		await expect(
+			new Crust("cli")
+				.extend(cleanup)
+				.handle(() => {
+					throw original;
+				})
+				.run([]),
+		).rejects.toBe(original);
+
+		const calls: string[] = [];
+		const first = defineExtension("first", {
+			hooks: {
+				postRun() {
+					calls.push("first");
+					throw new Error("first cleanup");
+				},
+			},
+		});
+		const second = defineExtension("second", {
+			hooks: {
+				postRun() {
+					calls.push("second");
+					throw new Error("second cleanup");
+				},
+			},
+		});
+		await expect(
+			new Crust("cli")
+				.extend(first, second)
+				.handle(() => {})
+				.run([]),
+		).rejects.toThrow("second cleanup");
+		expect(calls).toEqual(["second", "first"]);
+	});
+
+	it("passes the application root snapshot to app and Extension command handlers", async () => {
+		const roots: string[] = [];
+		const extension = defineExtension("extension", {
+			commands: [
+				new Crust("owned").handle(({ rootCommand }) => {
+					roots.push(rootCommand.meta.name);
+				}),
+			],
+		});
+		const app = new Crust("cli").extend(extension).handle(({ rootCommand }) => {
+			roots.push(rootCommand.meta.name);
 		});
 
 		await app.run([]);
-
-		expect(order).toEqual(["first:before", "second:before", "run", "second:after", "first:after"]);
-	});
-
-	it("short-circuiting an intercept skips validation and the Command Handler", async () => {
-		let ran = false;
-		const gate = defineExtension("gate", {
-			intercept() {
-				// no next() — short-circuit
-			},
-		});
-
-		// Required arg missing would normally fail validation
-		const app = new Crust("cli")
-			.args({ name: "file", type: "string", required: true })
-			.extend(gate)
-			.handle(() => {
-				ran = true;
-			});
-
-		await expect(app.run([])).resolves.toBeUndefined();
-		expect(ran).toBe(false);
-	});
-
-	it("intercept runs before application value validation but after parsing", async () => {
-		const observed: unknown[] = [];
-		const observer = defineExtension("observer", {
-			async intercept(context, next) {
-				observed.push(context.flags.port);
-				await next();
-			},
-		});
-
-		const app = new Crust("cli")
-			.flags({ name: "port", type: "number", required: true })
-			.extend(observer)
-			.handle(() => {});
-
-		// Parsed (coerced) value visible in the hook even though validation
-		// later fails on the missing required flag when absent
-		await app.run(["--port", "8080"]);
-		expect(observed).toEqual([8080]);
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "VALIDATION" });
-		expect(observed).toEqual([8080, undefined]);
-	});
-
-	it("routing failures flow directly to the caller — intercepts never observe them", async () => {
-		let intercepted = false;
-		const watcher = defineExtension("watcher", {
-			async intercept(_context, next) {
-				intercepted = true;
-				await next();
-			},
-		});
-
-		const app = new Crust("cli")
-			.extend(watcher)
-			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
-
-		await expect(app.run(["unknown"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
-		expect(intercepted).toBe(false);
-	});
-
-	it("intercept receives readonly serializable snapshots and injected io", async () => {
-		const lines: string[] = [];
-		const probe = defineExtension("probe", {
-			async intercept(context, next) {
-				expect(Object.isFrozen(context.rootCommand)).toBe(true);
-				expect(Object.isFrozen(context.command)).toBe(true);
-				expect(() => structuredClone(context.rootCommand)).not.toThrow();
-				context.stdout(`probe:${context.command.meta.name}`);
-				await next();
-			},
-		});
-
-		const app = new Crust("cli").extend(probe).handle(() => {});
-
-		await app.run([], { stdout: (t) => lines.push(t) });
-		expect(lines).toEqual(["probe:cli"]);
-	});
-
-	it("calling next() twice is a DEFINITION error", async () => {
-		const rogue = defineExtension("rogue", {
-			async intercept(_context, next) {
-				await next();
-				await next();
-			},
-		});
-
-		const app = new Crust("cli").extend(rogue).handle(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+		await app.run(["owned"]);
+		expect(roots).toEqual(["cli", "cli"]);
 	});
 });
 
@@ -1172,7 +1235,7 @@ describe("Extension intercept chain", () => {
 // .execute() — Full execution pipeline tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Extension handleError chain", () => {
+describe("Extension onError hooks", () => {
 	let originalLog: typeof console.log;
 	let originalError: typeof console.error;
 	let originalExitCode: number | string | null | undefined;
@@ -1200,175 +1263,53 @@ describe("Extension handleError chain", () => {
 			throw new Error("boom");
 		});
 
-	it("handlers run in registration order and next() reaches Core's default renderer", async () => {
+	it("stops at the first truthy result and retains the nonzero exit status", async () => {
 		const order: string[] = [];
 		const first = defineExtension("first", {
-			async handleError(_error, _ctx, next) {
-				order.push("first");
-				await next();
-			},
+			hooks: { onError: () => (order.push("first"), undefined) },
 		});
-		const second = defineExtension("second", {
-			async handleError(_error, _ctx, next) {
-				order.push("second");
-				await next();
-			},
-		});
-
-		await failing().extend(first, second).execute({ argv: [] });
-
-		expect(order).toEqual(["first", "second"]);
-		// Chain end = Core's default renderer
-		expect(stderrChunks.join("\n")).toContain("boom");
-		expect(process.exitCode).toBe(1);
-	});
-
-	it("a handler that renders and returns replaces the default renderer but keeps a nonzero exit", async () => {
-		const lines: string[] = [];
 		const presenter = defineExtension("presenter", {
-			handleError(error, ctx) {
-				ctx.stderr(`pretty: ${(error as Error).message}`);
-				lines.push("rendered");
+			hooks: {
+				onError(error, ctx) {
+					order.push("presenter");
+					ctx.stderr(`pretty: ${(error as Error).message}`);
+					return true;
+				},
+			},
+		});
+		const never = defineExtension("never", {
+			hooks: {
+				onError: () => {
+					order.push("never");
+				},
 			},
 		});
 
-		await failing().extend(presenter).execute({ argv: [] });
-
-		expect(lines).toEqual(["rendered"]);
+		await failing().extend(first, presenter, never).execute({ argv: [] });
+		expect(order).toEqual(["first", "presenter"]);
 		expect(stderrChunks.join("\n")).toContain("pretty: boom");
-		// Default renderer did not run on top
 		expect(stderrChunks.join("\n")).not.toContain("Error: boom");
-		// Core always preserves the nonzero failure outcome (fixes the old
-		// onError-swallows-errors exit-0 bug)
 		expect(process.exitCode).toBe(1);
 	});
 
-	it("a handler that throws falls back to default rendering of the original error", async () => {
-		const broken = defineExtension("broken", {
-			handleError() {
-				throw new Error("renderer exploded");
+	it("falls through to Core's default renderer and never runs for run()", async () => {
+		let onErrorRan = false;
+		const observer = defineExtension("observer", {
+			hooks: {
+				onError() {
+					onErrorRan = true;
+				},
 			},
 		});
 
-		await failing().extend(broken).execute({ argv: [] });
+		await failing().extend(observer).execute({ argv: [] });
+		expect(stderrChunks.join("\n")).toContain("Error: boom");
+		expect(onErrorRan).toBe(true);
 
-		expect(stderrChunks.join("\n")).toContain("boom");
-		expect(process.exitCode).toBe(1);
-	});
-
-	it("receives routing failures (COMMAND_NOT_FOUND) with the original error object", async () => {
-		let received: unknown;
-		const catcher = defineExtension("catcher", {
-			handleError(error, ctx) {
-				received = error;
-				ctx.stderr("handled");
-			},
-		});
-
-		const app = new Crust("cli")
-			.extend(catcher)
-			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
-
-		await app.execute({ argv: ["unknown"] });
-
-		expect(received).toBeInstanceOf(CrustError);
-		expect((received as CrustError).is("COMMAND_NOT_FOUND")).toBe(true);
-		expect(process.exitCode).toBe(1);
-	});
-
-	it("preserves resolved parsed context for schema, Context, and handler failures", async () => {
-		let received: ExtensionContext | undefined;
-		const catcher = defineExtension("catcher", {
-			handleError(_error, ctx) {
-				received = ctx;
-			},
-		});
-		const expectResolvedContext = () => {
-			expect(received?.command.meta.name).toBe("deploy");
-			expect(received?.commandPath).toEqual(["cli", "deploy"]);
-			expect(received?.args).toEqual({ target: "production" });
-			expect(received?.flags).toEqual({ force: true });
-			expect(received?.rawArgs).toEqual(["manifest.json"]);
-			received = undefined;
-		};
-		const command = (handler: () => void) =>
-			new Crust("cli")
-				.extend(catcher)
-				.mount(
-					defineCommand("deploy", (cmd) =>
-						cmd
-							.args({ name: "target", type: "string", required: true })
-							.flags({ name: "force", type: "boolean" })
-							.handle(handler),
-					),
-				);
-		const argv = ["deploy", "production", "--force", "--", "manifest.json"];
-
-		await command(() => {
-			throw new Error("handler failed");
-		}).execute({ argv });
-		expectResolvedContext();
-
-		const brokenContext = defineContext("broken", () => {
-			throw new Error("Context failed");
-		});
-		await new Crust("cli")
-			.extend(catcher)
-			.mount(
-				defineCommand("deploy", (cmd) =>
-					cmd
-						.args({ name: "target", type: "string", required: true })
-						.flags({ name: "force", type: "boolean" })
-						.provide(brokenContext(undefined))
-						.handle(() => {}),
-				),
-			)
-			.execute({ argv });
-		expectResolvedContext();
-
-		await new Crust("cli")
-			.extend(catcher)
-			.mount(
-				defineCommand("deploy", (cmd) =>
-					cmd
-						.args({ name: "target", type: "string", required: true })
-						.flags(
-							{ name: "force", type: "boolean" },
-							{
-								name: "mode",
-								type: "string",
-								schema: {
-									"~standard": {
-										version: 1,
-										vendor: "test",
-										validate: () => ({ issues: [{ message: "schema failed" }] }),
-									},
-								},
-							},
-						)
-						.handle(() => {}),
-				),
-			)
-			.execute({
-				argv: ["deploy", "production", "--force", "--mode", "fast", "--", "manifest.json"],
-			});
-		expect(received?.command.meta.name).toBe("deploy");
-		expect(received?.commandPath).toEqual(["cli", "deploy"]);
-		expect(received?.flags).toEqual({ force: true, mode: "fast" });
-		expect(received?.args).toEqual({ target: "production" });
-		expect(received?.rawArgs).toEqual(["manifest.json"]);
-	});
-
-	it("never runs for run() — the original error propagates unrendered", async () => {
-		let handlerRan = false;
-		const presenter = defineExtension("presenter", {
-			handleError() {
-				handlerRan = true;
-			},
-		});
-
-		await expect(failing().extend(presenter).run([])).rejects.toThrow("boom");
-		expect(handlerRan).toBe(false);
+		onErrorRan = false;
+		stderrChunks = [];
+		await expect(failing().extend(observer).run([])).rejects.toThrow("boom");
+		expect(onErrorRan).toBe(false);
 		expect(stderrChunks).toEqual([]);
 	});
 });
@@ -1581,54 +1522,24 @@ describe("Crust .execute()", () => {
 		expect(receivedDir).toBe("custom-dir");
 	});
 
-	it("runs the intercept chain around the handler", async () => {
+	it("runs pre-run then post-run hooks around the handler", async () => {
 		const order: string[] = [];
-
 		const wrap = defineExtension("wrap", {
-			async intercept(_ctx, next) {
-				order.push("intercept:before");
-				await next();
-				order.push("intercept:after");
+			hooks: {
+				preRun: () => {
+					order.push("pre");
+				},
+				postRun: () => {
+					order.push("post");
+				},
 			},
 		});
-
 		const app = new Crust("test").extend(wrap).handle(() => {
 			order.push("run");
 		});
 
 		await app.execute({ argv: [] });
-
-		expect(order).toEqual(["intercept:before", "run", "intercept:after"]);
-	});
-
-	it("runs multiple intercepts in registration order", async () => {
-		const order: string[] = [];
-
-		const e1 = defineExtension("e1", {
-			async intercept(_ctx, next) {
-				order.push("e1:before");
-				await next();
-				order.push("e1:after");
-			},
-		});
-		const e2 = defineExtension("e2", {
-			async intercept(_ctx, next) {
-				order.push("e2:before");
-				await next();
-				order.push("e2:after");
-			},
-		});
-
-		const app = new Crust("test")
-			.extend(e1)
-			.extend(e2)
-			.handle(() => {
-				order.push("run");
-			});
-
-		await app.execute({ argv: [] });
-
-		expect(order).toEqual(["e1:before", "e2:before", "run", "e2:after", "e1:after"]);
+		expect(order).toEqual(["pre", "run", "post"]);
 	});
 
 	it("catches errors and sets exitCode", async () => {
@@ -1782,15 +1693,16 @@ describe("Crust .execute()", () => {
 		expect(receivedRawArgs).toEqual(["extra1", "extra2"]);
 	});
 
-	it("intercept receives the resolved command and parsed input", async () => {
-		let interceptedName = "";
-		let interceptedFlags: Record<string, unknown> = {};
+	it("pre-run receives the resolved command and parsed input", async () => {
+		let preRunName = "";
+		let preRunFlags: Record<string, unknown> = {};
 
 		const inspect = defineExtension("inspect", {
-			async intercept(ctx, next) {
-				interceptedName = ctx.command.meta.name;
-				interceptedFlags = { ...ctx.flags };
-				await next();
+			hooks: {
+				preRun(ctx) {
+					preRunName = ctx.command.meta.name;
+					preRunFlags = { ...ctx.flags };
+				},
 			},
 		});
 
@@ -1804,25 +1716,20 @@ describe("Crust .execute()", () => {
 
 		await app.execute({ argv: ["sub", "--output", "file.txt"] });
 
-		expect(interceptedName).toBe("sub");
-		expect(interceptedFlags.output).toBe("file.txt");
+		expect(preRunName).toBe("sub");
+		expect(preRunFlags.output).toBe("file.txt");
 	});
 
-	it("intercept can short-circuit execution", async () => {
+	it("pre-run can finish execution", async () => {
 		let handlerRan = false;
-
 		const gate = defineExtension("short-circuit", {
-			intercept: async (_ctx, _next) => {
-				// Don't call next() — short circuit
-			},
+			hooks: { preRun: (ctx) => ctx.finish() },
 		});
-
 		const app = new Crust("test").extend(gate).handle(() => {
 			handlerRan = true;
 		});
 
 		await app.execute({ argv: [] });
-
 		expect(handlerRan).toBe(false);
 	});
 
@@ -1888,10 +1795,12 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("collides");
 	});
 
-	it("treats intercept-time prompt cancellation as a silent user abort", async () => {
+	it("treats pre-run prompt cancellation as a silent user abort", async () => {
 		const cancel = defineExtension("cancel", {
-			intercept: () => {
-				throw new DOMException("Prompt was cancelled.", "AbortError");
+			hooks: {
+				preRun: () => {
+					throw new DOMException("Prompt was cancelled.", "AbortError");
+				},
 			},
 		});
 

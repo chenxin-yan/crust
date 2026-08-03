@@ -458,17 +458,18 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("Extension intercept wraps subcommand execution", async () => {
+	it("Extension hooks run around subcommand execution", async () => {
 		const order: string[] = [];
-
 		const logging = defineExtension("logging", {
-			async intercept(ctx, next) {
-				order.push(`intercept:before:${ctx.command.meta.name}`);
-				await next();
-				order.push(`intercept:after:${ctx.command.meta.name}`);
+			hooks: {
+				preRun: (ctx) => {
+					order.push(`pre:${ctx.command.meta.name}`);
+				},
+				postRun: (ctx) => {
+					order.push(`post:${ctx.command.meta.name}`);
+				},
 			},
 		});
-
 		const app = new Crust("cli").extend(logging).mount(
 			defineCommand("sub", (cmd) =>
 				cmd.handle(() => {
@@ -478,7 +479,7 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 		);
 
 		await executeCrust(app, ["sub"]);
-		expect(order).toEqual(["intercept:before:sub", "sub:run", "intercept:after:sub"]);
+		expect(order).toEqual(["pre:sub", "sub:run", "post:sub"]);
 	});
 });
 
@@ -723,9 +724,10 @@ describe("integration: complex real-world CLI scenario", () => {
 		const order: string[] = [];
 
 		const auditExtension = defineExtension("audit", {
-			async intercept(ctx, next) {
-				order.push(`audit:${ctx.command.meta.name}`);
-				await next();
+			hooks: {
+				preRun: (ctx) => {
+					order.push(`audit:${ctx.command.meta.name}`);
+				},
 			},
 		});
 

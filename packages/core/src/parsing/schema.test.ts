@@ -166,15 +166,16 @@ describe("Standard Schema on flag definitions", () => {
 });
 
 describe("schema interaction with Extensions", () => {
-	it("intercepts observe raw values while the handler sees schema outputs", async () => {
+	it("pre-run hooks observe raw values while the handler sees schema outputs", async () => {
 		const { defineExtension } = await import("../api/extension.ts");
-		let interceptSaw: unknown;
+		let preRunSaw: unknown;
 		let handlerSaw: unknown;
 
 		const probe = defineExtension("probe", {
-			async intercept(ctx, next) {
-				interceptSaw = ctx.flags.port;
-				await next();
+			hooks: {
+				preRun(ctx) {
+					preRunSaw = ctx.flags.port;
+				},
 			},
 		});
 
@@ -187,18 +188,18 @@ describe("schema interaction with Extensions", () => {
 
 		await app.run(["--port", "8080"]);
 
-		expect(interceptSaw).toBe("8080"); // raw, pre-validation
+		expect(preRunSaw).toBe("8080"); // raw, pre-validation
 		expect(handlerSaw).toBe(8080); // schema output
 	});
 
-	it("an intercept short-circuit skips schema validation entirely", async () => {
+	it("a pre-run finish skips schema validation entirely", async () => {
 		let validated = false;
 		const spy = schema<string | undefined, string>((raw) => {
 			validated = true;
 			return { value: String(raw) };
 		});
 		const { defineExtension } = await import("../api/extension.ts");
-		const gate = defineExtension("gate", { intercept() {} });
+		const gate = defineExtension("gate", { hooks: { preRun: (ctx) => ctx.finish() } });
 
 		const app = new Crust("cli")
 			.flags({ name: "x", type: "string", schema: spy })
