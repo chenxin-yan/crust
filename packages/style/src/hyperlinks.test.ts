@@ -1,6 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 
-import { createStyle, link, linkCode, setGlobalColorMode } from "./index.ts";
+import { linkCode } from "./hyperlinks.ts";
+import { createStyle, link } from "./index.ts";
+import { setEnv, snapshotEnv } from "./testEnv.ts";
 
 describe("hyperlinks", () => {
 	it("creates OSC 8 link pairs", () => {
@@ -86,27 +88,28 @@ describe("createStyle().link", () => {
 });
 
 describe("runtime link export", () => {
+	const restoreEnv = snapshotEnv("FORCE_COLOR", "NO_COLOR");
+	afterEach(restoreEnv);
+
 	it("delegates through the runtime style facade", () => {
-		setGlobalColorMode("always");
-		try {
-			expect(link("Crust", "https://crustjs.com")).toBe(
-				"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
-			);
-		} finally {
-			setGlobalColorMode(undefined);
-		}
+		setEnv("FORCE_COLOR", "3");
+		expect(link("Crust", "https://crustjs.com")).toBe(
+			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
+		);
 	});
 
-	it('still emits hyperlinks when global color mode is "never"', () => {
-		// Runtime facade `"never"` follows no-color.org: colors off,
-		// modifiers + hyperlinks survive.
-		setGlobalColorMode("never");
-		try {
-			expect(link("Crust", "https://crustjs.com")).toBe(
-				"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
-			);
-		} finally {
-			setGlobalColorMode(undefined);
-		}
+	it("still emits hyperlinks under NO_COLOR (colors-only switch)", () => {
+		// no-color.org: NO_COLOR suppresses colors; modifiers + hyperlinks
+		// survive. FORCE_COLOR=3 keeps emission on for this non-TTY test.
+		setEnv("FORCE_COLOR", "3");
+		setEnv("NO_COLOR", "1");
+		expect(link("Crust", "https://crustjs.com")).toBe(
+			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
+		);
+	});
+
+	it("suppresses hyperlinks under FORCE_COLOR=0 (all-ANSI switch)", () => {
+		setEnv("FORCE_COLOR", "0");
+		expect(link("Crust", "https://crustjs.com")).toBe("Crust");
 	});
 });

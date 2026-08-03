@@ -1,105 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import * as codes from "./ansiCodes.ts";
-import { bg, bgCode, fg, fgCode } from "./color.ts";
-import { applyStyle, composeStyles } from "./styleEngine.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// fgCode / bgCode — AnsiPair factories
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("fgCode", () => {
-	it("produces a foreground pair from 6-digit hex", () => {
-		const pair = fgCode("#ff0000");
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-		expect(pair.close).toBe("\x1b[39m");
-	});
-
-	it("produces a foreground pair from 3-digit hex", () => {
-		const pair = fgCode("#f00");
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-		expect(pair.close).toBe("\x1b[39m");
-	});
-
-	it("accepts named CSS colors", () => {
-		const pair = fgCode("rebeccapurple");
-		expect(pair.open).toBe("\x1b[38;2;102;51;153m");
-		expect(pair.close).toBe("\x1b[39m");
-	});
-
-	it("accepts `rgb()` strings", () => {
-		const pair = fgCode("rgb(0, 128, 255)");
-		expect(pair.open).toBe("\x1b[38;2;0;128;255m");
-	});
-
-	it("accepts `hsl()` strings", () => {
-		// hsl(0, 100%, 50%) === pure red
-		const pair = fgCode("hsl(0, 100%, 50%)");
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-	});
-
-	it("accepts numeric (0xRRGGBB) input", () => {
-		const pair = fgCode(0xff0000);
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-	});
-
-	it("accepts `{ r, g, b }` objects", () => {
-		const pair = fgCode({ r: 255, g: 0, b: 0 });
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-	});
-
-	it("accepts `[r, g, b]` arrays", () => {
-		const pair = fgCode([0, 128, 255]);
-		expect(pair.open).toBe("\x1b[38;2;0;128;255m");
-	});
-
-	it("close matches static foreground close (`\\x1b[39m`)", () => {
-		expect(fgCode("#abcdef").close).toBe(codes.red.close);
-	});
-
-	it("throws TypeError for unrecognized strings", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
-		expect(() => fgCode("not-a-color")).toThrow(TypeError);
-	});
-
-	it("throws TypeError with quoted input embedded in message", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
-		expect(() => fgCode("bogus")).toThrow('Invalid color input: "bogus"');
-	});
-
-	it("throws TypeError for `null`", () => {
-		// @ts-expect-error — runtime contract test for unsupported inputs
-		expect(() => fgCode(null)).toThrow(TypeError);
-	});
-});
-
-describe("bgCode", () => {
-	it("produces a background pair from 6-digit hex", () => {
-		const pair = bgCode("#ff0000");
-		expect(pair.open).toBe("\x1b[48;2;255;0;0m");
-		expect(pair.close).toBe("\x1b[49m");
-	});
-
-	it("produces a background pair from named CSS color", () => {
-		const pair = bgCode("rebeccapurple");
-		expect(pair.open).toBe("\x1b[48;2;102;51;153m");
-		expect(pair.close).toBe("\x1b[49m");
-	});
-
-	it("produces a background pair from `[r, g, b]`", () => {
-		const pair = bgCode([0, 255, 136]);
-		expect(pair.open).toBe("\x1b[48;2;0;255;136m");
-	});
-
-	it("close matches static background close (`\\x1b[49m`)", () => {
-		expect(bgCode("#123456").close).toBe(codes.bgRed.close);
-	});
-
-	it("throws TypeError for unrecognized strings", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
-		expect(() => bgCode("nope")).toThrow(TypeError);
-	});
-});
+import { bg, fg } from "./color.ts";
+import { applyStyle } from "./styleEngine.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // fg / bg — direct styling functions
@@ -108,6 +11,32 @@ describe("bgCode", () => {
 describe("fg", () => {
 	it("applies truecolor foreground to text from hex", () => {
 		expect(fg("hello", "#ff0000")).toBe("\x1b[38;2;255;0;0mhello\x1b[39m");
+	});
+
+	it("accepts 3-digit hex shorthand", () => {
+		expect(fg("hello", "#f00")).toBe("\x1b[38;2;255;0;0mhello\x1b[39m");
+	});
+
+	it("accepts named CSS colors", () => {
+		expect(fg("hi", "rebeccapurple")).toBe("\x1b[38;2;102;51;153mhi\x1b[39m");
+	});
+
+	it("accepts `hsl()` strings", () => {
+		// hsl(0, 100%, 50%) === pure red
+		expect(fg("x", "hsl(0, 100%, 50%)")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+	});
+
+	it("accepts `{ r, g, b }` objects", () => {
+		expect(fg("x", { r: 255, g: 0, b: 0 })).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+	});
+
+	it("throws TypeError with quoted input embedded in message", () => {
+		expect(() => fg("x", "bogus")).toThrow('Invalid color input: "bogus"');
+	});
+
+	it("throws TypeError for `null`", () => {
+		// @ts-expect-error — runtime contract test for unsupported inputs
+		expect(() => fg("x", null)).toThrow(TypeError);
 	});
 
 	it("applies truecolor foreground from `rgb()`", () => {
@@ -132,9 +61,7 @@ describe("fg", () => {
 		// Empty text used to silently short-circuit before the color was
 		// validated. Now both empty- and non-empty-text callers get the
 		// same TypeError.
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("hello", "definitely-not-a-color")).toThrow(TypeError);
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 });
@@ -156,9 +83,7 @@ describe("bg", () => {
 		// Empty text used to silently short-circuit before color
 		// validation, so `bg("", "definitely-not-a-color")` returned "".
 		// Now both empty- and non-empty-text callers get TypeError.
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("hi", "definitely-not-a-color")).toThrow(TypeError);
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 });
@@ -177,7 +102,10 @@ describe("nesting with static styles", () => {
 
 	it("static fg nested in dynamic fg — same close (39m) triggers reopen", () => {
 		const inner = applyStyle("static", codes.red);
-		const outer = applyStyle(`before ${inner} after`, fgCode([0, 128, 255]));
+		const outer = applyStyle(`before ${inner} after`, {
+			open: "\x1b[38;2;0;128;255m",
+			close: "\x1b[39m",
+		});
 
 		// red close (39m) matches dynamic fg close (39m), so dynamic fg reopens
 		expect(outer).toBe(
@@ -195,44 +123,24 @@ describe("nesting with static styles", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// composeStyles round-trip
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("composeStyles round-trip", () => {
-	it("dynamic fg + dynamic bg compose into a single styled run", () => {
-		const fgBg = composeStyles(fgCode("#ff0000"), bgCode([0, 0, 255]));
-		expect(applyStyle("styled", fgBg)).toBe(
-			"\x1b[38;2;255;0;0m\x1b[48;2;0;0;255mstyled\x1b[49m\x1b[39m",
-		);
-	});
-
-	it("dynamic fg composed with a static modifier", () => {
-		const boldDynamic = composeStyles(codes.bold, fgCode([128, 64, 32]));
-		expect(applyStyle("text", boldDynamic)).toBe("\x1b[1m\x1b[38;2;128;64;32mtext\x1b[39m\x1b[22m");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Edge cases
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("edge cases", () => {
 	it("hex shorthand is case-insensitive", () => {
-		expect(fgCode("#FFF").open).toBe("\x1b[38;2;255;255;255m");
-		expect(fgCode("#aBc").open).toBe("\x1b[38;2;170;187;204m");
+		expect(fg("x", "#FFF")).toBe("\x1b[38;2;255;255;255mx\x1b[39m");
+		expect(fg("x", "#aBc")).toBe("\x1b[38;2;170;187;204mx\x1b[39m");
 	});
 
 	it("8-digit hex (with alpha) is accepted; alpha is not encoded into ansi-16m", () => {
 		// Bun.color drops alpha when emitting ansi-16m. The fg open should still
 		// be a valid 24-bit foreground sequence.
-		const pair = fgCode("#ff000080");
-		expect(pair.open).toBe("\x1b[38;2;255;0;0m");
-		expect(pair.close).toBe("\x1b[39m");
+		expect(fg("x", "#ff000080")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 	});
 
 	it("boundary RGB values (0 and 255) round-trip", () => {
-		expect(fgCode([0, 0, 0]).open).toBe("\x1b[38;2;0;0;0m");
-		expect(fgCode([255, 255, 255]).open).toBe("\x1b[38;2;255;255;255m");
+		expect(fg("x", [0, 0, 0])).toBe("\x1b[38;2;0;0;0mx\x1b[39m");
+		expect(fg("x", [255, 255, 255])).toBe("\x1b[38;2;255;255;255mx\x1b[39m");
 	});
 });
 
@@ -306,10 +214,7 @@ describe("fg — depth fallback", () => {
 	});
 
 	it('depth="none" still validates input and throws on invalid colors', () => {
-		expect(() =>
-			// @ts-expect-error — runtime contract test: invalid inline literal
-			fg("hello", "definitely-not-a-color", "none"),
-		).toThrow(TypeError);
+		expect(() => fg("hello", "definitely-not-a-color", "none")).toThrow(TypeError);
 	});
 
 	it("empty text returns '' at every depth (after validation)", () => {
@@ -321,7 +226,6 @@ describe("fg — depth fallback", () => {
 
 	it("empty text + invalid color still throws at every depth", () => {
 		for (const depth of ["truecolor", "256", "16", "none"] as const) {
-			// @ts-expect-error — runtime contract test: invalid inline literal
 			expect(() => fg("", "definitely-not-a-color", depth)).toThrow();
 		}
 	});
@@ -370,9 +274,6 @@ describe("bg — depth fallback", () => {
 
 	it('depth="none" returns text unchanged but validates input', () => {
 		expect(bg("hello", "#ff0000", "none")).toBe("hello");
-		expect(() =>
-			// @ts-expect-error — runtime contract test: invalid inline literal
-			bg("hello", "definitely-not-a-color", "none"),
-		).toThrow(TypeError);
+		expect(() => bg("hello", "definitely-not-a-color", "none")).toThrow(TypeError);
 	});
 });

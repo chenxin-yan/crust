@@ -1,6 +1,9 @@
 import type { AnsiPair } from "./ansiCodes.ts";
 import * as codes from "./ansiCodes.ts";
 
+// Alias exists to appease oxlint's import/namespace rule: computed access on
+// an imported namespace (`codes[name]`) can't be statically validated, but
+// the same access through a local const can.
 const styleMethodPairs: typeof codes = codes;
 
 export type StyleMethodName = keyof typeof styleMethodPairs;
@@ -54,20 +57,4 @@ const modifierNameSet: ReadonlySet<StyleMethodName> = new Set(modifierNames);
  */
 export function isModifierName(name: StyleMethodName): boolean {
 	return modifierNameSet.has(name);
-}
-
-const modifierPairSet: ReadonlySet<AnsiPair> = new Set(
-	modifierNames.map((name) => styleMethodPairs[name]),
-);
-
-/**
- * Returns `true` if `pair` is the canonical {@link AnsiPair} for a registered
- * modifier method. Used by `apply()` to distinguish modifier pairs (gated on
- * `modifiersEnabled`) from color pairs (gated on `colorsEnabled`).
- *
- * Pair identity is checked by reference — ad-hoc pairs constructed outside
- * the registry return `false` and fall through to color gating.
- */
-export function isModifierPair(pair: AnsiPair): boolean {
-	return modifierPairSet.has(pair);
 }

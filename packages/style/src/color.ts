@@ -7,7 +7,7 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { applyStyle } from "./styleEngine.ts";
-import type { CheckedColorInput, ColorDepth, ColorInput, ColorInputCandidate } from "./types.ts";
+import type { ColorDepth, ColorInput } from "./types.ts";
 
 export type { ColorInput } from "./types.ts";
 
@@ -121,37 +121,13 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// AnsiPair factories
+// AnsiPair factories (internal — back the chainable `.fg()` / `.bg()`)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * `AnsiPair` for a truecolor foreground from any {@link ColorInput}. Always
- * emits `ansi-16m`; use {@link fg} for depth-aware output. Close is
- * `\x1b[39m` so nesting and {@link composeStyles} match the 16-color
- * helpers.
- *
- * @param input - Any {@link ColorInput} (named CSS color, hex, `rgb()`,
- *   `hsl()`, tuple, object, or packed number).
- * @returns A truecolor foreground {@link AnsiPair}.
- * @throws {TypeError} If `input` is not a recognized color.
- *
- * @example
- * ```ts
- * fgCode("#ff0000");        // { open: "\x1b[38;2;255;0;0m", close: "\x1b[39m" }
- * fgCode([0, 128, 255]);
- * fgCode({ r: 255, g: 0, b: 0 });
- * ```
- */
-export function fgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
-	return { open: fgOpen(input, "truecolor"), close: FG_CLOSE };
-}
-
-/**
- * Internal helper: depth-aware foreground `AnsiPair` for chain composition.
- * `depth: "none"` returns an empty pair (still validates input). Used by
- * `createStyle()` to back `chainable.fg(input)`. Not part of the public
- * API — prefer {@link fgCode} (truecolor) or {@link fg} (depth-aware
- * direct application) at call sites.
+ * Depth-aware foreground `AnsiPair` for chain composition. `depth: "none"`
+ * returns an empty pair (still validates input). Used by `createStyle()`
+ * to back `chainable.fg(input)`.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  * @internal
@@ -165,28 +141,8 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
 }
 
 /**
- * `AnsiPair` for a truecolor background from any {@link ColorInput}. Always
- * emits `ansi-16m`; use {@link bg} for depth-aware output. Close is
- * `\x1b[49m`.
- *
- * @param input - Any {@link ColorInput} (named CSS color, hex, `rgb()`,
- *   `hsl()`, tuple, object, or packed number).
- * @returns A truecolor background {@link AnsiPair}.
- * @throws {TypeError} If `input` is not a recognized color.
- *
- * @example
- * ```ts
- * bgCode("#ff8800");
- * bgCode("hsl(120, 100%, 50%)");
- * ```
- */
-export function bgCode<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): AnsiPair {
-	return { open: bgOpen(input, "truecolor"), close: BG_CLOSE };
-}
-
-/**
- * Internal helper: depth-aware background `AnsiPair` for chain composition.
- * Mirrors {@link fgPairAtDepth}.
+ * Depth-aware background `AnsiPair` for chain composition. Mirrors
+ * {@link fgPairAtDepth}.
  *
  * @throws {TypeError} If `input` is not a recognized color.
  * @internal
@@ -219,22 +175,17 @@ export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * fg("256-only", "#ff0000", "256"); // \x1b[38;5;196m...
  * ```
  */
-export function fg<const T extends ColorInputCandidate>(
-	text: string,
-	input: CheckedColorInput<T>,
-	depth: ColorDepth = "truecolor",
-): string {
-	const broadInput = input;
+export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
 	// Validate the color BEFORE the empty-string short-circuit so callers
 	// get TypeError on bad input regardless of `text`. Otherwise
 	// `fg("", "definitely-not-a-color")` would silently return "" and mask
 	// the bug. The validation walk is cheap (Bun.color call) and the
 	// non-empty path needs the parsed open sequence anyway.
 	if (depth === "none") {
-		fgOpen(broadInput, "truecolor"); // validate, do not emit
+		fgOpen(input, "truecolor"); // validate, do not emit
 		return text === "" ? "" : text;
 	}
-	const open = fgOpen(broadInput, depth);
+	const open = fgOpen(input, depth);
 	if (text === "") return "";
 	return applyStyle(text, { open, close: FG_CLOSE });
 }
@@ -250,18 +201,13 @@ export function fg<const T extends ColorInputCandidate>(
  * bg("info", "hsl(210, 100%, 50%)");
  * ```
  */
-export function bg<const T extends ColorInputCandidate>(
-	text: string,
-	input: CheckedColorInput<T>,
-	depth: ColorDepth = "truecolor",
-): string {
-	const broadInput = input;
+export function bg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
 	// See `fg` above — validate before short-circuiting on empty `text`.
 	if (depth === "none") {
-		fgOpen(broadInput, "truecolor");
+		fgOpen(input, "truecolor");
 		return text === "" ? "" : text;
 	}
-	const open = bgOpen(broadInput, depth);
+	const open = bgOpen(input, depth);
 	if (text === "") return "";
 	return applyStyle(text, { open, close: BG_CLOSE });
 }

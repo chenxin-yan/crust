@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
-import { getGlobalColorMode, setGlobalColorMode } from "@crustjs/style";
 
 import { helpExtension, renderHelp } from "./help.ts";
 import { noColorExtension } from "./no-color.ts";
@@ -14,6 +13,10 @@ let originalLog: typeof console.log;
 let originalError: typeof console.error;
 
 beforeEach(() => {
+	// Ambient NO_COLOR/FORCE_COLOR (e.g. CI runners) must not leak into the
+	// color-flag tests; afterEach restores the ambient values.
+	delete process.env.NO_COLOR;
+	delete process.env.FORCE_COLOR;
 	stdoutChunks = [];
 	stderrChunks = [];
 	originalLog = console.log;
@@ -27,11 +30,28 @@ beforeEach(() => {
 	};
 });
 
+const originalForceColor = process.env.FORCE_COLOR;
+const originalNoColor = process.env.NO_COLOR;
+const originalStdoutIsTTY = process.stdout.isTTY;
+
+function restoreEnv(name: string, value: string | undefined) {
+	if (value === undefined) {
+		delete process.env[name];
+	} else {
+		process.env[name] = value;
+	}
+}
+
 afterEach(() => {
 	console.log = originalLog;
 	console.error = originalError;
 	process.exitCode = 0;
-	setGlobalColorMode(undefined);
+	restoreEnv("FORCE_COLOR", originalForceColor);
+	restoreEnv("NO_COLOR", originalNoColor);
+	Object.defineProperty(process.stdout, "isTTY", {
+		configurable: true,
+		value: originalStdoutIsTTY,
+	});
 });
 
 function getStdout() {
@@ -65,7 +85,7 @@ describe("built-in plugins", () => {
 	it("renderHelp styles sections and preserves plain-text structure", () => {
 		// Force colors on so the ANSI assertion is deterministic in non-TTY
 		// test environments (e.g. CI). Reset via afterEach.
-		setGlobalColorMode("always");
+		process.env.FORCE_COLOR = "3";
 
 		const command = new Crust("app")
 			.meta({ description: "Test app" })
@@ -207,7 +227,11 @@ describe("built-in plugins", () => {
 		expect(output).toContain("--color, --no-color");
 	});
 
-	it("noColorExtension disables color but preserves modifiers", async () => {
+	it("noColorExtension disables color but preserves modifiers on a TTY", async () => {
+		// `--no-color` → NO_COLOR=1: colors off, modifiers keep following
+		// TTY detection (no-color.org). Mock a TTY so the modifier half of
+		// the contract is observable regardless of the test runner's stdout.
+		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
 		const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 		await app.execute({ argv: ["--help", "--no-color"] });
@@ -239,6 +263,48 @@ describe("built-in plugins", () => {
 		}
 	});
 
+	it("noColorExtension --color clears NO_COLOR during the run and restores it after", async () => {
+		process.env.NO_COLOR = "1";
+		let seenNoColor: string | undefined = "unset";
+
+		const app = new Crust("app").extend(noColorExtension()).handle(() => {
+			seenNoColor = process.env.NO_COLOR;
+		});
+
+		await app.execute({ argv: ["--color"] });
+
+		expect(seenNoColor).toBeUndefined();
+		expect(process.env.NO_COLOR).toBe("1");
+	});
+
+	it("noColorExtension restores ambient env after overlapping runs with opposite flags", async () => {
+		const ambientForceColor = process.env.FORCE_COLOR;
+		const ambientNoColor = process.env.NO_COLOR;
+		delete process.env.FORCE_COLOR;
+		delete process.env.NO_COLOR;
+
+		let releaseA: () => void = () => {};
+		const blockA = new Promise<void>((resolve) => {
+			releaseA = resolve;
+		});
+
+		const appA = new Crust("a").extend(noColorExtension()).handle(() => blockA);
+		const appB = new Crust("b").extend(noColorExtension()).handle(() => {});
+
+		// A (--color) starts and stays pending; B (--no-color) starts and
+		// finishes while A is mid-run, then A completes.
+		const runA = appA.execute({ argv: ["--color"] });
+		await appB.execute({ argv: ["--no-color"] });
+		releaseA();
+		await runA;
+
+		expect(process.env.FORCE_COLOR).toBeUndefined();
+		expect(process.env.NO_COLOR).toBeUndefined();
+
+		if (ambientForceColor !== undefined) process.env.FORCE_COLOR = ambientForceColor;
+		if (ambientNoColor !== undefined) process.env.NO_COLOR = ambientNoColor;
+	});
+
 	it("noColorExtension respects NO_COLOR without explicit --color flag", async () => {
 		const previousNoColor = process.env.NO_COLOR;
 		process.env.NO_COLOR = "1";
@@ -260,14 +326,28 @@ describe("built-in plugins", () => {
 		}
 	});
 
-	it("noColorExtension restores the prior global color override", async () => {
-		setGlobalColorMode("always");
+	it("noColorExtension restores the prior env after the command", async () => {
+		process.env.FORCE_COLOR = "3";
+		delete process.env.NO_COLOR;
 
 		const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
 
 		await app.execute({ argv: ["--help", "--no-color"] });
 
-		expect(getGlobalColorMode()).toBe("always");
+		expect(process.env.FORCE_COLOR).toBe("3");
+		expect(process.env.NO_COLOR).toBeUndefined();
+	});
+
+	it("noColorExtension --no-color wins over ambient FORCE_COLOR", async () => {
+		process.env.FORCE_COLOR = "3";
+
+		const app = new Crust("app").extend(noColorExtension()).extend(helpExtension());
+
+		await app.execute({ argv: ["--help", "--no-color"] });
+
+		const output = getStdout();
+		expect(output).not.toContain("\x1b[36m");
+		expect(output).not.toContain("\x1b[33m");
 	});
 
 	it("noColorExtension flag is inherited by subcommands", async () => {

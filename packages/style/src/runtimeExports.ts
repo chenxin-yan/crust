@@ -3,20 +3,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 //
 // Each helper delegates to the shared `style` facade in createStyle.ts so that
-// `NO_COLOR`, `--color` / `--no-color` flags, and in-process color overrides
-// (`setGlobalColorMode`) take effect on every call instead of binding once at
-// import time.
+// the standard environment variables (`NO_COLOR`, `FORCE_COLOR`) and TTY
+// detection take effect on every call instead of binding once at import time.
 
 import { bg as directBg, fg as directFg } from "./color.ts";
 import { createForwardingChainable, style } from "./createStyle.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type {
-	ChainableStyleFn,
-	CheckedColorInput,
-	ColorDepth,
-	ColorInput,
-	ColorInputCandidate,
-} from "./types.ts";
+import type { ChainableStyleFn, ColorDepth, ColorInput } from "./types.ts";
 
 // Top-level chainables share the `createForwardingChainable` helper used
 // by the runtime `style` facade in `createStyle.ts`. Every call and
@@ -26,11 +19,10 @@ import type {
 //   bold`tagged ${value}`   — tagged template
 //   bold.red.bgYellow("hi") — chainable
 //   bold.fg("#ff8800")("hi") — dynamic-color extension
-//   composeStyles(bold, red) — ANSI pair (open/close attached)
-//   applyStyle("hi", bold)  — ANSI pair
+//   const { open, close } = bold — ANSI pair for manual hot-path composition
 //
-// `setGlobalColorMode` flips and `NO_COLOR` are honored on every call,
-// even on captured references like `const myBold = bold`.
+// `NO_COLOR` / `FORCE_COLOR` changes are honored on every call, even on
+// captured references like `const myBold = bold`.
 
 export const black: ChainableStyleFn = createForwardingChainable("black");
 export const red: ChainableStyleFn = createForwardingChainable("red");
@@ -80,7 +72,7 @@ export function link(text: string, url: string, options?: HyperlinkOptions): str
  * Apply a foreground color to `text`.
  *
  * Resolves the active color depth from the runtime style facade (respecting
- * `setGlobalColorMode`, `NO_COLOR`, and TTY detection) and emits the matching
+ * `NO_COLOR`, `FORCE_COLOR`, and TTY detection) and emits the matching
  * `Bun.color()` format — truecolor, 256, 16, or none.
  *
  * @param text - The string to style. Empty input returns `""` after
@@ -100,13 +92,8 @@ export function link(text: string, url: string, options?: HyperlinkOptions): str
  * fg("deterministic", "#ff8800", "256"); // force 256-color
  * ```
  */
-export function fg<const T extends ColorInputCandidate>(
-	text: string,
-	input: CheckedColorInput<T>,
-	depth?: ColorDepth,
-): string {
-	const broadInput = input as ColorInput;
-	return depth === undefined ? style.fg(text, broadInput) : directFg(text, broadInput, depth);
+export function fg(text: string, input: ColorInput, depth?: ColorDepth): string {
+	return depth === undefined ? style.fg(text, input) : directFg(text, input, depth);
 }
 
 /**
@@ -119,11 +106,6 @@ export function fg<const T extends ColorInputCandidate>(
  * bg("info", "hsl(210, 100%, 50%)", "16"); // force 16-color fallback
  * ```
  */
-export function bg<const T extends ColorInputCandidate>(
-	text: string,
-	input: CheckedColorInput<T>,
-	depth?: ColorDepth,
-): string {
-	const broadInput = input as ColorInput;
-	return depth === undefined ? style.bg(text, broadInput) : directBg(text, broadInput, depth);
+export function bg(text: string, input: ColorInput, depth?: ColorDepth): string {
+	return depth === undefined ? style.bg(text, input) : directBg(text, input, depth);
 }

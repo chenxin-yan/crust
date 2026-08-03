@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 //
 // These tests guard the developer-experience guarantees of the package:
-//   1. Chainables ARE AnsiPairs (open/close attached, composeStyles works)
+//   1. Chainables ARE AnsiPairs (open/close attached for manual composition)
 //   2. Tagged templates are interleaved correctly (no comma-join bug)
 //   3. fg/bg work as chain extensions and as chain roots
 //   4. Nullish/non-string inputs never crash and never emit "undefined"
@@ -12,20 +12,10 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-import {
-	applyStyle,
-	bg,
-	bold,
-	composeStyles,
-	createStyle,
-	fg,
-	fgCode,
-	getGlobalColorMode,
-	linkCode,
-	red,
-	setGlobalColorMode,
-	style,
-} from "./index.ts";
+import { linkCode } from "./hyperlinks.ts";
+import { bg, bold, createStyle, fg, red, style } from "./index.ts";
+import { applyStyle } from "./styleEngine.ts";
+import { setEnv, snapshotEnv } from "./testEnv.ts";
 
 const always = createStyle({ mode: "always" });
 
@@ -53,19 +43,10 @@ describe("ChainableStyleFn extends AnsiPair", () => {
 		expect(direct).toBe(indirect);
 	});
 
-	it("composeStyles accepts chainables as AnsiPair", () => {
-		const composed = composeStyles(always.bold, always.red, always.bgYellow);
-		expect(applyStyle("hi", composed)).toBe("\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m");
-	});
-
 	it("top-level imports (bold, red) carry open/close", () => {
 		expect(bold.open).toBe("\x1b[1m");
 		expect(bold.close).toBe("\x1b[22m");
 		expect(red.open).toBe("\x1b[31m");
-		// composeStyles works with top-level imports + AnsiPair factories
-		const composed = composeStyles(bold, red, fgCode("#0080ff"));
-		expect(typeof composed.open).toBe("string");
-		expect(typeof composed.close).toBe("string");
 	});
 });
 
@@ -122,15 +103,14 @@ describe("fg/bg as chain methods", () => {
 		expect(always.fg("text", "#00aaff")).toBe("\x1b[38;2;0;170;255mtext\x1b[39m");
 	});
 
-	it("composes via composeStyles with chain-root dynamic colors", () => {
-		const composed = composeStyles(always.bold, always.fg("#00aaff"));
-		expect(applyStyle("hi", composed)).toBe("\x1b[1m\x1b[38;2;0;170;255mhi\x1b[39m\x1b[22m");
+	it("chain-root dynamic colors carry open/close", () => {
+		const root = always.fg("#00aaff");
+		expect(root.open).toBe("\x1b[38;2;0;170;255m");
+		expect(root.close).toBe("\x1b[39m");
 	});
 
 	it("invalid input still throws via the chain root", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => always.fg("definitely-not-a-color")).toThrow(TypeError);
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => always.bold.fg("nope")).toThrow(TypeError);
 	});
 });
@@ -172,25 +152,17 @@ describe("Defensive nullish handling", () => {
 
 describe("Error messages — locked via snapshots", () => {
 	it("fg invalid input echoes the bad value", () => {
-		expect(() =>
-			// @ts-expect-error — runtime contract test: invalid inline literal
-			fg("hello", "definitely-not-a-color"),
-		).toThrow('Invalid color input: "definitely-not-a-color"');
+		expect(() => fg("hello", "definitely-not-a-color")).toThrow(
+			'Invalid color input: "definitely-not-a-color"',
+		);
 	});
 
 	it("fg with empty text + invalid input still throws (no silent mask)", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => fg("", "garbage")).toThrow('Invalid color input: "garbage"');
 	});
 
 	it("bg invalid input echoes the bad value", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
 		expect(() => bg("hi", "nope")).toThrow('Invalid color input: "nope"');
-	});
-
-	it("fgCode invalid input echoes the bad value", () => {
-		// @ts-expect-error — runtime contract test: invalid inline literal
-		expect(() => fgCode("bogus")).toThrow('Invalid color input: "bogus"');
 	});
 
 	it("linkCode rejects URLs with spaces and echoes the URL", () => {
@@ -245,9 +217,8 @@ describe("global style facade", () => {
 // chain methods, fg/bg, AnsiPair shape).
 
 describe("top-level chainables — full surface", () => {
-	afterEach(() => {
-		setGlobalColorMode(undefined);
-	});
+	const restoreEnv = snapshotEnv("FORCE_COLOR");
+	afterEach(restoreEnv);
 
 	it("top-level `bold` exposes `.fg`, `.bg`, `.open`, `.close`", () => {
 		expect(typeof bold.fg).toBe("function");
@@ -257,66 +228,57 @@ describe("top-level chainables — full surface", () => {
 	});
 
 	it("top-level tagged-template interleaves interpolations", () => {
-		setGlobalColorMode("always");
+		setEnv("FORCE_COLOR", "3");
 		expect(bold`hello ${42}!`).toBe("\x1b[1mhello 42!\x1b[22m");
 	});
 
 	it("top-level `bold.fg('#f00')('x')` chain root works", () => {
-		setGlobalColorMode("always");
+		setEnv("FORCE_COLOR", "3");
 		expect(bold.fg("#ff0000")("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
 	});
 
 	it("top-level chain `bold.red.bgYellow('hi')` composes", () => {
-		setGlobalColorMode("always");
+		setEnv("FORCE_COLOR", "3");
 		expect(bold.red.bgYellow("hi")).toBe("\x1b[1m\x1b[31m\x1b[43mhi\x1b[49m\x1b[39m\x1b[22m");
 	});
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// 8. setGlobalColorMode — capture semantics
+// 8. Environment changes — capture semantics
 // ───────────────────────────────────────────────────────────────────────────
 //
-// Locks in H1 from the adversarial review: forwarders re-resolve;
-// sub-chain captures snapshot (documented limitation).
+// Locks in H1 from the adversarial review: forwarders re-resolve the
+// environment; sub-chain captures snapshot (documented limitation).
 
-describe("setGlobalColorMode — capture semantics", () => {
-	afterEach(() => {
-		setGlobalColorMode(undefined);
-	});
+describe("environment changes — capture semantics", () => {
+	const restoreEnv = snapshotEnv("FORCE_COLOR");
+	afterEach(restoreEnv);
 
-	it("top-level `bold` re-resolves on every call after mode flip", () => {
-		setGlobalColorMode("always");
+	it("top-level `bold` re-resolves on every call after an env flip", () => {
+		setEnv("FORCE_COLOR", "3");
 		const captured = bold;
-		setGlobalColorMode("never");
-		// Runtime facade `"never"` follows no-color.org: bold survives.
 		expect(captured("x")).toBe("\x1b[1mx\x1b[22m");
+		setEnv("FORCE_COLOR", "0");
+		// FORCE_COLOR=0 is the all-ANSI-off switch — captured ref follows.
+		expect(captured("x")).toBe("x");
 	});
 
-	it("`style.bold` (forwarder) re-resolves after mode flip", () => {
-		setGlobalColorMode("always");
+	it("`style.bold` (forwarder) re-resolves after an env flip", () => {
+		setEnv("FORCE_COLOR", "3");
 		const captured = style.bold;
-		setGlobalColorMode("never");
-		// `captured.red("x")`: bold (modifier) stays, red (color) is dropped.
-		expect(captured.red("x")).toBe("\x1b[1mx\x1b[22m");
+		setEnv("FORCE_COLOR", "0");
+		expect(captured.red("x")).toBe("x");
 	});
 
 	it("sub-chain capture (`style.bold.red`) snapshots at access time", () => {
 		// This is documented behavior: capturing a deeper chain locks the
 		// resolved chainable to the runtime instance active at capture time.
 		// Matches chalk/ansis. To stay dynamic, capture the leaf only.
-		setGlobalColorMode("always");
+		setEnv("FORCE_COLOR", "3");
 		const snapshot = style.bold.red;
-		setGlobalColorMode("never");
-		// snapshot is locked to the always-instance: full color emitted.
+		setEnv("FORCE_COLOR", "0");
+		// snapshot is locked to the pre-flip instance: full color emitted.
 		expect(snapshot("x")).toBe("\x1b[1m\x1b[31mx\x1b[39m\x1b[22m");
-	});
-
-	it("getGlobalColorMode reflects the current override", () => {
-		expect(getGlobalColorMode()).toBeUndefined();
-		setGlobalColorMode("always");
-		expect(getGlobalColorMode()).toBe("always");
-		setGlobalColorMode(undefined);
-		expect(getGlobalColorMode()).toBeUndefined();
 	});
 });
 

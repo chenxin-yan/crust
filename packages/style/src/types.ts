@@ -8,7 +8,7 @@ import type { LiteralUnion, NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
- * String forms accepted by `fg` / `bg` / `fgCode` / `bgCode`.
+ * String forms accepted by `fg` / `bg`.
  *
  * Editors autocomplete the 148 CSS {@link NamedColor | named colors} and
  * the `#` hex prefix while still accepting any other string Bun's CSS
@@ -21,7 +21,7 @@ import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethod
 export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
 
 /**
- * Input accepted by `fg`, `bg`, `fgCode`, and `bgCode`.
+ * Input accepted by `fg` and `bg`.
  *
  * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
  * surface, with a richer `string` branch so editors autocomplete CSS
@@ -37,13 +37,9 @@ export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
  * - `[r, g, b]` / `[r, g, b, a]` — channel tuples (0–255).
  * - `{ r, g, b, a? }` — channel objects (0–255; `a` defaults to 255).
  *
- * `ColorInput` is the broad runtime/dynamic type used for variable
- * annotations (e.g. `const c: ColorInput = loadFromJson()`). Inline
- * string literals passed directly to `fg` / `bg` / `fgCode` / `bgCode`
- * are checked against the stricter {@link CheckedColorInput} — typos
- * such as `fg("x", "rebbecapurple")` fail at compile time, while
- * dynamic `string` / {@link ColorString} / `ColorInput` values continue
- * to flow through unchanged.
+ * Invalid inputs throw a `TypeError` at call time (from `Bun.color()`
+ * parsing), so typos surface immediately with the offending value in
+ * the message.
  */
 export type ColorInput =
 	| ColorString
@@ -53,98 +49,27 @@ export type ColorInput =
 	| { r: number; g: number; b: number; a?: number };
 
 /**
- * CSS color-function string forms recognized at the type level.
+ * Color emission mode for a style instance.
  *
- * Used by {@link StrictColorString} to validate inline color literals
- * passed to `fg` / `bg` / `fgCode` / `bgCode`. Template-literal types
- * can only check the broad `function(...)` shape; the actual argument
- * grammar (numeric ranges, separators, etc.) is validated at runtime by
- * `Bun.color()`.
- */
-export type CssColorFunctionString =
-	| `rgb(${string})`
-	| `rgba(${string})`
-	| `hsl(${string})`
-	| `hsla(${string})`
-	| `hwb(${string})`
-	| `lab(${string})`
-	| `lch(${string})`
-	| `oklab(${string})`
-	| `oklch(${string})`
-	| `color(${string})`
-	| `color-mix(${string})`;
-
-/**
- * Strict subset of {@link ColorString} used to validate inline string
- * literals at compile time. Accepts named CSS colors, `#rrggbb` /
- * `#rgb` / `#rrggbbaa` hex literals, and {@link CssColorFunctionString}
- * function-notation strings. Anything else (typos, theme tokens, raw
- * variable references) must reach `fg` / `bg` through a widened
- * `string` / {@link ColorString} / {@link ColorInput} value.
- */
-export type StrictColorString = NamedColor | `#${string}` | CssColorFunctionString;
-
-/**
- * Non-string branches of {@link ColorInput} (numbers, channel tuples,
- * channel objects). Derived from `ColorInput` so the two stay aligned
- * automatically.
- */
-export type NonStringColorInput = Exclude<ColorInput, string>;
-
-/**
- * Generic constraint accepted by the strict `fg` / `bg` / `fgCode` /
- * `bgCode` signatures. Any string or non-string `ColorInput` shape is
- * eligible — narrow inline string literals are validated by
- * {@link CheckedColorInput}.
- */
-export type ColorInputCandidate = string | NonStringColorInput;
-
-/**
- * Conditional helper that rejects invalid inline string literals while
- * preserving:
- *
- * - widened `string` values (e.g. `let c: string = load()`),
- * - inline literals matching {@link StrictColorString},
- * - all non-string {@link ColorInput} branches.
- *
- * Resolves to `never` for inline string literals that don't match
- * `StrictColorString`, which produces a TypeScript error at the call
- * site instead of silently passing through to `Bun.color()` and
- * throwing at runtime.
- */
-export type CheckedColorInput<T> = T extends string
-	? string extends T
-		? T
-		: T extends StrictColorString
-			? T
-			: never
-	: T extends NonStringColorInput
-		? T
-		: never;
-
-/**
- * Color emission mode for the style engine.
- *
- * - `"auto"` — Emit color ANSI codes when stdout is a TTY and `NO_COLOR`
- *   is not set (or is empty). Non-color modifiers (bold, italic, etc.) are
- *   always emitted in `"auto"` mode regardless of TTY or `NO_COLOR`.
+ * - `"auto"` — Read the environment on resolution: colors are emitted
+ *   when stdout is a TTY and `NO_COLOR` is not set (or is empty);
+ *   non-color modifiers (bold, italic, etc.) follow TTY only and are
+ *   **not** affected by `NO_COLOR`. `FORCE_COLOR`, when set, decides
+ *   unconditionally for both (the all-ANSI switch).
  * - `"always"` — Always emit ANSI codes regardless of terminal detection.
- * - `"never"` — Disable ANSI emission. Behavior depends on the surface:
- *     - On `createStyle({ mode: "never" })`: every form of ANSI is
- *       suppressed (colors, modifiers, hyperlinks). The instance returns
- *       plain text.
- *     - On the runtime facade and top-level helpers via
- *       {@link setGlobalColorMode}: follows [no-color.org](https://no-color.org/)
- *       semantics — colors are suppressed, but non-color modifiers and
- *       hyperlinks continue to emit. This matches the conventional
- *       meaning of a `--no-color` flag while keeping `bold` / `italic`
- *       / `link` usable.
+ * - `"never"` — Suppress every form of ANSI (colors, modifiers,
+ *   hyperlinks); functions return plain text.
+ *
+ * The default `style` facade and top-level helpers always run in
+ * `"auto"` mode — to influence them globally, set the standard
+ * environment variables (`NO_COLOR`, `FORCE_COLOR`); they re-resolve on
+ * every call.
  *
  * @example
  * ```ts
  * createStyle({ mode: "never" }).bold("text");  // "text" (no ANSI)
  *
- * setGlobalColorMode("never");
+ * process.env.NO_COLOR = "1";
  * style.red("text");                            // "text" (color off)
  * style.bold("text");                           // "\x1b[1mtext\x1b[22m"
  * ```
@@ -164,8 +89,7 @@ export type ColorMode = "auto" | "always" | "never";
  * - `"none"` — Color emission is disabled. {@link fg} / {@link bg} return the
  *   input text unchanged.
  *
- * Used by {@link resolveColorDepth} and exposed on {@link StyleInstance} as
- * `colorDepth` for introspection.
+ * Exposed on {@link StyleInstance} as `colorDepth` for introspection.
  */
 export type ColorDepth = "truecolor" | "256" | "16" | "none";
 
@@ -181,6 +105,13 @@ export interface CapabilityOverrides {
 	readonly isTTY?: boolean;
 	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
+	/**
+	 * Override `process.env.FORCE_COLOR`. When set, decides unconditionally
+	 * (overrides TTY and `NO_COLOR`): `"0"` / `"false"` force all ANSI off;
+	 * `"1"` / `"2"` / `"3"` force color on at 16 / 256 / truecolor depth;
+	 * any other value forces on at the detected depth.
+	 */
+	readonly forceColor?: string | undefined;
 	/** Override `process.env.COLORTERM`. */
 	readonly colorTerm?: string | undefined;
 	/** Override `process.env.TERM`. */
@@ -222,30 +153,28 @@ export type StyleMethodMap = {
 /**
  * A callable style function that also exposes all style methods for
  * chaining and the underlying {@link AnsiPair} (`open` / `close`) for
- * direct composition with {@link composeStyles} and {@link applyStyle}.
+ * manual hot-path composition (chalk/ansis parity).
  *
  * Every chainable is simultaneously a function, a chain root, and an
  * ANSI pair. Chains compose `open` left-to-right and `close` right-to-left.
  *
- * **Byte-equivalence caveat.** `chain.open + text + chain.close` matches
- * `chain(text)` byte-for-byte only when adjacent steps have *distinct*
- * close codes. When two adjacent steps share a close code (e.g. `bold` and
- * `dim` both close with `\x1b[22m`), `applyStyle` emits an extra re-open
- * after the inner close to keep the outer style active on text the inner
- * step closed early; that re-open is part of `chain(text)` but not part
- * of the cached `chain.close`. Use `chain(text)` for emission and treat
- * `open` / `close` as composable building blocks for {@link composeStyles}.
+ * To pass a style around as a value, pass the chainable itself — it is
+ * already a `(text: string) => string` function (see {@link StyleFn}).
  *
  * @example
  * ```ts
- * import { applyStyle, composeStyles, style } from "@crustjs/style";
+ * import { style } from "@crustjs/style";
  *
  * // Direct call
  * style.bold.red("error");
  *
- * // Same function reused as an AnsiPair
- * applyStyle("error", style.bold.red);
- * composeStyles(style.bold, style.red, style.bgYellow);
+ * // Style as a value — chainables are plain functions
+ * const paint: StyleFn = style.bold.red;
+ * paint("error");
+ *
+ * // Manual composition in a hot loop (mode-unaware — static codes)
+ * const { open, close } = style.bold;
+ * out.write(open + chunk + close);
  * ```
  */
 export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
@@ -258,8 +187,8 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 * Apply the chain to a tagged template literal. Interpolated values
 	 * are coerced via `String(...)`; nested chain calls inside `${...}`
 	 * work because each inner chainable emits its own ANSI sequences,
-	 * and `applyStyle` re-opens the outer style after any inner close
-	 * code that matches the outer close.
+	 * and the outer style is re-opened after any inner close code that
+	 * matches the outer close.
 	 *
 	 * @example
 	 * ```ts
@@ -271,22 +200,18 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 * Append a depth-aware foreground color to the chain. The resulting
 	 * chainable can be called or chained further like any other.
 	 *
-	 * Inline string literals are checked against {@link StrictColorString};
-	 * widened `string` / {@link ColorString} / {@link ColorInput} values
-	 * still flow through unchanged.
-	 *
 	 * @example
 	 * ```ts
 	 * style.bold.fg("#ff8800")("warning");
 	 * style.fg("rebeccapurple").italic`accent ${value}`;
 	 * ```
 	 */
-	fg<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
+	fg(input: ColorInput): ChainableStyleFn;
 	/**
 	 * Append a depth-aware background color to the chain. Mirrors
 	 * {@link ChainableStyleFn.fg}.
 	 */
-	bg<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
+	bg(input: ColorInput): ChainableStyleFn;
 }
 
 /**
@@ -318,11 +243,6 @@ export interface StyleInstance extends StyleMethodMap {
 	 */
 	readonly colorDepth: ColorDepth;
 
-	// ── Style engine ──────────────────────────────────────────────────────
-
-	/** Apply an arbitrary ANSI pair to text, respecting the color mode. */
-	readonly apply: (text: string, pair: AnsiPair) => string;
-
 	/** Wrap text in an OSC 8 hyperlink when link styling is enabled. */
 	readonly link: (text: string, url: string, options?: HyperlinkOptions) => string;
 
@@ -339,10 +259,6 @@ export interface StyleInstance extends StyleMethodMap {
 	 * - `fg(input)` — returns a {@link ChainableStyleFn} pre-bound with the
 	 *   color, ready to be called or chained further.
 	 *
-	 * Inline string literals are validated against {@link StrictColorString};
-	 * widened dynamic strings (`string` / {@link ColorString} /
-	 * {@link ColorInput}) continue to type-check.
-	 *
 	 * @example
 	 * ```ts
 	 * style.fg("warning", "#ff8800");           // direct
@@ -350,8 +266,8 @@ export interface StyleInstance extends StyleMethodMap {
 	 * ```
 	 */
 	readonly fg: {
-		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
-		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
+		(input: ColorInput): ChainableStyleFn;
+		(text: string, input: ColorInput): string;
 	};
 
 	/**
@@ -360,7 +276,7 @@ export interface StyleInstance extends StyleMethodMap {
 	 * chain-root forms.
 	 */
 	readonly bg: {
-		<const T extends ColorInputCandidate>(input: CheckedColorInput<T>): ChainableStyleFn;
-		<const T extends ColorInputCandidate>(text: string, input: CheckedColorInput<T>): string;
+		(input: ColorInput): ChainableStyleFn;
+		(text: string, input: ColorInput): string;
 	};
 }

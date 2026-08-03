@@ -6,8 +6,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as readline from "node:readline";
 import type { Readable, Writable } from "node:stream";
 
-import { visibleWidth } from "@crustjs/style";
-
 import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -161,7 +159,7 @@ function physicalLineCount(content: string, columns: number): number {
 	const lines = content.split("\n");
 	let count = 0;
 	for (const line of lines) {
-		const width = visibleWidth(line);
+		const width = Bun.stringWidth(line);
 		// An empty line still occupies one physical row
 		count += width === 0 ? 1 : Math.ceil(width / columns);
 	}

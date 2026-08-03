@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import * as codes from "./ansiCodes.ts";
-import { getGlobalColorMode, setGlobalColorMode } from "./createStyle.ts";
 import {
 	bgRed,
 	black,
@@ -21,11 +20,12 @@ import {
 	white,
 	yellow,
 } from "./runtimeExports.ts";
-import { applyStyle, composeStyles } from "./styleEngine.ts";
+import { applyStyle } from "./styleEngine.ts";
+import { setEnv, snapshotEnv } from "./testEnv.ts";
 
-const originalColorMode = getGlobalColorMode();
-beforeAll(() => setGlobalColorMode("always"));
-afterAll(() => setGlobalColorMode(originalColorMode));
+const restoreEnv = snapshotEnv("FORCE_COLOR");
+beforeAll(() => setEnv("FORCE_COLOR", "3"));
+afterAll(restoreEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
 // applyStyle — basic application
@@ -161,36 +161,6 @@ describe("applyStyle — edge cases", () => {
 		expect(outer.endsWith("\x1b[22m")).toBe(true);
 		expect(outer).toContain("\x1b[31ma\x1b[39m");
 		expect(outer).toContain("\x1b[31mb\x1b[39m");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// composeStyles
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("composeStyles", () => {
-	it("composes two styles into a single pair", () => {
-		const boldRed = composeStyles(codes.bold, codes.red);
-		expect(boldRed.open).toBe("\x1b[1m\x1b[31m");
-		expect(boldRed.close).toBe("\x1b[39m\x1b[22m");
-	});
-
-	it("composed pair works with applyStyle", () => {
-		const boldRed = composeStyles(codes.bold, codes.red);
-		const result = applyStyle("error", boldRed);
-		expect(result).toBe("\x1b[1m\x1b[31merror\x1b[39m\x1b[22m");
-	});
-
-	it("composes three styles", () => {
-		const style = composeStyles(codes.bold, codes.italic, codes.red);
-		expect(style.open).toBe("\x1b[1m\x1b[3m\x1b[31m");
-		expect(style.close).toBe("\x1b[39m\x1b[23m\x1b[22m");
-	});
-
-	it("returns identity pair for empty input", () => {
-		const style = composeStyles();
-		expect(style.open).toBe("");
-		expect(style.close).toBe("");
 	});
 });
 
