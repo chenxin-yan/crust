@@ -18,6 +18,7 @@
       "@/*": ["./src/*"],
       "fumadocs-mdx:collections/*": ["./.source/*"]
     },
+    "allowImportingTsExtensions": true,
     "noEmit": true
   }
 }

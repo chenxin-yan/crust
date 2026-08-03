@@ -1,0 +1,31 @@
+import { type ExtensionContext, defineCommand, defineExtension } from "@crustjs/core";
+
+const timers = new WeakMap<ExtensionContext, number>();
+
+export const diagnostics = defineExtension("diagnostics", {
+  flags: {
+    trace: {
+      type: "boolean",
+      description: "Print diagnostic timing",
+      inherit: true,
+    },
+  },
+  commands: [
+    defineCommand("doctor", (command) =>
+      command
+        .meta({ description: "Check the installation" })
+        .handle(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
+    ),
+  ],
+  hooks: {
+    preRun(ctx) {
+      if (ctx.flags.trace === true) timers.set(ctx, performance.now());
+    },
+    postRun(ctx, outcome) {
+      const started = timers.get(ctx);
+      if (started === undefined) return;
+      timers.delete(ctx);
+      ctx.stderr(`${outcome.status} in ${performance.now() - started}ms`);
+    },
+  },
+});

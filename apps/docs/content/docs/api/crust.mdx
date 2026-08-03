@@ -169,7 +169,7 @@ const app = new Crust("serve").flags(
 
 Repeated `.flags()` calls replace the local flags. A duplicate name within one call throws `DEFINITION`.
 
-`inherit: true` exposes a flag to descendant commands and allows it to satisfy mounted definition and Context requirements. Boolean flags support generated `--no-name` negation unless `noNegate: true` is set. Names and aliases beginning with `no-` are reserved.
+`inherit: true` exposes a flag to descendant commands and allows it to satisfy mounted definition and Context requirements. Boolean flags support generated `--no-name` negation; `noNegate: true` hides the generated label from help, completion, and man output (the parser still accepts `--no-name`). Names and aliases beginning with `no-` are reserved.
 
 Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
 
@@ -226,7 +226,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 ```
 
-Mounted definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-owned command builders remain unchanged.
+Mounted definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
 Extension-owned command or flag name and alias collisions throw `DEFINITION` when the application is prepared.
 

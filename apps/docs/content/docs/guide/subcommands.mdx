@@ -44,7 +44,7 @@ const clone = defineCommand("clone", { flags: [verbose], ctx: [repository] }, (c
 const app = new Crust("git").flags(verbose).provide(repository()).mount(clone);
 ```
 
-`.mount()` checks the requirements at each call — compile-time and runtime — and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
+`.mount()` checks the requirements at each call and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
 
 ```ts
 const git = new Crust("git").flags(verbose).provide(repository()).mount(clone, clone.as("copy"));

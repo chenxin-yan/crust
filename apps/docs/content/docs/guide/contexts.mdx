@@ -146,7 +146,7 @@ const status = defineCommand("status", { ctx: [database] }, (command) =>
 const app = new Crust("app").flags(verbose).provide(config(), database()).mount(status);
 ```
 
-Call `.provide()` before `.mount()`: a Context provided on a later builder does not backfill an earlier mount, and a missing requirement name is a `DEFINITION` error at the mount.
+Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).
 
 ## One name per command path
 

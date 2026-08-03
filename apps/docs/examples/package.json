@@ -1,0 +1,6 @@
+{
+  "name": "my-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Anchor for doc examples that mirror the create-crust template's `import pkg from \"../package.json\"` line."
+}

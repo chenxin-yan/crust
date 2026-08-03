@@ -7,26 +7,9 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 An Extension is an app-wide capability that owns any flags and commands it contributes. Attach Extensions once, on the root builder:
 
-```ts
-import { Crust } from "@crustjs/core";
-import {
-  completion,
-  didYouMean,
-  help,
-  noColor,
-  updateNotifier,
-  version,
-} from "@crustjs/extensions";
-
-const app = new Crust("my-cli").extend(
-  help(),
-  version("0.2.0"),
-  completion(),
-  didYouMean(),
-  noColor(),
-  updateNotifier({ packageName: "my-cli", currentVersion: "0.2.0" }),
-);
-```
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/extensions/install.ts
+</include>
 
 See the [Extensions module](/docs/modules/extensions) for each capability's options.
 
@@ -35,111 +18,60 @@ See the [Extensions module](/docs/modules/extensions) for each capability's opti
   registered inside `defineCommand()` callbacks.
 </Callout>
 
-Mounted definitions are materialized into ordinary command nodes before root Extensions prepare the application. Root Extensions therefore apply to mounted and inline commands alike. Extension-owned flags are not represented in the root builder's TypeScript generics, so they cannot satisfy a reusable definition's compile-time flag requirements; declare required inheritable flags on the root itself.
+Two consequences of the root-only model:
+
+- Mounted definitions are materialized into ordinary command nodes before root Extensions prepare the application, so Extensions apply to mounted and inline commands alike.
+- Extension-owned flags are not represented in the root builder's TypeScript generics, so they cannot satisfy a reusable definition's compile-time flag requirements; declare required inheritable flags on the root itself.
 
 ## Author an Extension
 
 `defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, and `hooks`:
 
-```ts
-import { Crust, type ExtensionContext, defineExtension } from "@crustjs/core";
-
-const timers = new WeakMap<ExtensionContext, number>();
-
-export const diagnostics = defineExtension("diagnostics", {
-  flags: {
-    trace: {
-      type: "boolean",
-      description: "Print diagnostic timing",
-      inherit: true,
-    },
-  },
-  commands: [
-    new Crust("doctor")
-      .meta({ description: "Check the installation" })
-      .handle(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
-  ],
-  hooks: {
-    preRun(ctx) {
-      if (ctx.flags.trace === true) timers.set(ctx, performance.now());
-    },
-    postRun(ctx, outcome) {
-      const started = timers.get(ctx);
-      if (started === undefined) return;
-      timers.delete(ctx);
-      ctx.stderr(`${outcome.status} in ${performance.now() - started}ms`);
-    },
-  },
-});
-```
+<include lang="ts" meta='title="diagnostics.ts"'>
+  ../../../examples/extensions/diagnostics.ts
+</include>
 
 ## Owned flags and commands
 
 Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `inherit` controls ordinary command inheritance and remains available on the flag definition.
 
-Extension commands are configured `Crust` builders attached at the root. Their `.handle()` callbacks are real Command Handlers: validation, schemas, and Context construction complete before they run, and they receive the same typed handler context as application commands, including `rootCommand`.
+Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare Context requirements; a missing requirement is a `DEFINITION` error when the application prepares. Their `.handle()` callbacks receive the same typed handler context as application commands, including `rootCommand`.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide either. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 
 ## Hooks
 
-Hooks run after routing and syntax parsing. Routing and syntax failures skip `preRun` and `postRun`.
+Hooks run after routing and syntax parsing. Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).
 
 ### `preRun`
 
-`preRun(ctx)` runs before value validation, schemas, Context construction, and the Command Handler, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully: later `preRun` hooks and the remaining invocation work do not run.
+`preRun(ctx)` runs before validation, Contexts, and the Command Handler, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
 
-```ts
-const cached = defineExtension("cached", {
-  hooks: {
-    preRun(ctx) {
-      if (ctx.flags.cached !== true) return;
-      ctx.stdout("cached result");
-      return ctx.finish();
-    },
-  },
-});
-```
+<include lang="ts">../../../examples/extensions/hooks.ts#cached</include>
 
 ### `postRun`
 
-`postRun(ctx, outcome)` runs after every invocation that reached the hooks, including a failure or `ctx.finish()` short-circuit. Hooks run in reverse `.extend()` order (LIFO), making this the cleanup and post-run side-effect slot.
+`postRun(ctx, outcome)` runs after every invocation that reached the hooks — including failures and `ctx.finish()` short-circuits — in reverse `.extend()` order. It is the cleanup and post-run side-effect slot. `outcome` is frozen:
 
-`outcome` is one of:
+```ts
+type InvocationOutcome =
+  | { status: "completed" }
+  | { status: "finished"; by: string }
+  | { status: "failed"; error: unknown };
+```
 
-- `{ status: "completed" }` after the Command Handler completes
-- `{ status: "finished", by: string }` after an Extension returns `ctx.finish()`
-- `{ status: "failed", error: unknown }` after a `preRun` hook or the command pipeline throws
-
-A failing `postRun` cannot mask an existing invocation failure. After a completed or finished invocation, the first `postRun` failure is thrown after the remaining cleanup hooks run.
-
-Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook pair. The same context identity reaches all hooks for one invocation, and entries can be removed in `postRun`; the diagnostics timer above follows this pattern.
+Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook pair: the same context identity reaches all hooks for one invocation, and entries can be removed in `postRun`. The diagnostics timer above follows this pattern.
 
 ### `onError`
 
 `onError(error, ctx)` presents failures for `execute()` only, in `.extend()` order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer.
 
-```ts
-const serviceErrors = defineExtension("service-errors", {
-  hooks: {
-    onError(error, ctx) {
-      if (!(error instanceof Error) || error.name !== "ServiceUnavailableError") return;
-      ctx.stderr(error.message);
-      return true;
-    },
-  },
-});
-```
+<include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
-Core sets a nonzero exit status before `onError` hooks run, so rendering cannot turn a failure into success. Programmatic `run()` never invokes `onError`; it throws the original error. `AbortError` cancellation renders nothing and also skips `onError`.
+Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow).
 
 ## Extension context
 
-Hooks receive an `ExtensionContext` containing:
+Hooks receive a readonly `ExtensionContext`. The values are invocation data, not mutable command definitions:
 
-- `argv`, syntax-parsed `args` and `flags`, and `rawArgs`
-- `rootCommand` and `command` as readonly serializable Command Snapshots
-- `commandPath` and `finish()`
-- injectable `stdout(text)` and `stderr(text)` writers
-
-The values are invocation data, not mutable command definitions.
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="ExtensionContext" />

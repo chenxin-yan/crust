@@ -5,13 +5,13 @@
     "core",
     "extensions",
     "crust",
+    "man",
+    "skills",
     "create",
     "progress",
     "prompts",
-    "testing",
-    "style",
     "store",
-    "skills",
-    "man"
+    "style",
+    "testing"
   ]
 }

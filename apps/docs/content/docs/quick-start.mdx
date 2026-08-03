@@ -9,39 +9,13 @@ icon: Rocket
 ```sh
 bun create crust my-cli
 cd my-cli
-bun install
 ```
 
-The generated project uses the single supported starter pattern:
+The scaffolder offers to install dependencies and initialize git. The generated project uses the single supported starter pattern:
 
-```ts title="src/cli.ts"
-import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/extensions";
-
-import pkg from "../package.json";
-
-const app = new Crust("my-cli")
-  .meta({ description: "A CLI built with Crust" })
-  .extend(version(pkg.version), help())
-  .args({
-    name: "name",
-    type: "string",
-    description: "Your name",
-    default: "world",
-  })
-  .flags({
-    name: "greet",
-    type: "string",
-    description: "Greeting to use",
-    default: "Hello",
-    short: "g",
-  })
-  .handle(({ args, flags, stdout }) => {
-    stdout(`${flags.greet}, ${args.name}!`);
-  });
-
-await app.execute();
-```
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../examples/quick-start/starter.ts
+</include>
 
 Run it directly:
 
@@ -52,32 +26,13 @@ bun run src/cli.ts Ada --greet Welcome
 
 ## Add a subcommand
 
-```ts
-import { Crust, defineCommand } from "@crustjs/core";
-
-const app = new Crust("my-cli")
-  .extend(help())
-  .mount(
-    defineCommand("build", (command) =>
-      command
-        .flags({ name: "minify", type: "boolean" })
-        .handle(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
-    ),
-  );
-```
+<include lang="ts">../../examples/quick-start/subcommand.ts</include>
 
 Use [the split-file pattern](/docs/guide/split-files) when the command tree grows.
 
 ## Invoke from code
 
-```ts
-const output: string[] = [];
-
-await app.run(["Ada", "--greet", "Hi"], {
-  stdout: (line) => output.push(line),
-  stderr: (line) => output.push(line),
-});
-```
+<include lang="ts">../../examples/quick-start/invoke.ts#run</include>
 
 `run()` throws the original error and does not set `process.exitCode`. Use `execute()` only at the terminal entrypoint.
 

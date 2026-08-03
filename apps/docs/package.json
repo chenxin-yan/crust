@@ -29,6 +29,8 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.47.0",
+    "@crustjs/core": "workspace:*",
+    "@crustjs/extensions": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/mdx": "^2.0.14",
     "@types/node": "^24",
