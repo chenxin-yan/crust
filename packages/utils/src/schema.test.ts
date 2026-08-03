@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-import { isStandardSchema, normalizeStandardIssues } from "./index.ts";
+import { isStandardSchema, normalizeStandardIssues } from "./schema.ts";
 
 describe("schema detection", () => {
 	it("accepts Standard Schema v1 objects", () => {
