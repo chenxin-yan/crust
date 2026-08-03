@@ -24,6 +24,14 @@ function setEnv(name: string, value: string | undefined): void {
  *
  * Previous values are restored after the command finishes.
  */
+// Overlapping execute() calls share process.env, so per-run snapshots would
+// capture each other's temporary overrides and restores would race. Instead,
+// the first active run captures the ambient values and the last one out
+// restores them.
+let activeRuns = 0;
+let baseForceColor: string | undefined;
+let baseNoColor: string | undefined;
+
 export function noColorExtension(): Extension {
 	return defineExtension("no-color", {
 		flags: {
@@ -40,8 +48,11 @@ export function noColorExtension(): Extension {
 				return;
 			}
 
-			const previousForceColor = process.env.FORCE_COLOR;
-			const previousNoColor = process.env.NO_COLOR;
+			if (activeRuns === 0) {
+				baseForceColor = process.env.FORCE_COLOR;
+				baseNoColor = process.env.NO_COLOR;
+			}
+			activeRuns++;
 
 			if (flagValue) {
 				delete process.env.NO_COLOR;
@@ -54,8 +65,13 @@ export function noColorExtension(): Extension {
 			try {
 				await next();
 			} finally {
-				setEnv("FORCE_COLOR", previousForceColor);
-				setEnv("NO_COLOR", previousNoColor);
+				activeRuns--;
+				// ponytail: last-writer-wins while runs overlap; only the ambient
+				// env is guaranteed restored once all runs finish.
+				if (activeRuns === 0) {
+					setEnv("FORCE_COLOR", baseForceColor);
+					setEnv("NO_COLOR", baseNoColor);
+				}
 			}
 		},
 	});

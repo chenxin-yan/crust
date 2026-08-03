@@ -277,6 +277,34 @@ describe("built-in plugins", () => {
 		expect(process.env.NO_COLOR).toBe("1");
 	});
 
+	it("noColorExtension restores ambient env after overlapping runs with opposite flags", async () => {
+		const ambientForceColor = process.env.FORCE_COLOR;
+		const ambientNoColor = process.env.NO_COLOR;
+		delete process.env.FORCE_COLOR;
+		delete process.env.NO_COLOR;
+
+		let releaseA: () => void = () => {};
+		const blockA = new Promise<void>((resolve) => {
+			releaseA = resolve;
+		});
+
+		const appA = new Crust("a").extend(noColorExtension()).handle(() => blockA);
+		const appB = new Crust("b").extend(noColorExtension()).handle(() => {});
+
+		// A (--color) starts and stays pending; B (--no-color) starts and
+		// finishes while A is mid-run, then A completes.
+		const runA = appA.execute({ argv: ["--color"] });
+		await appB.execute({ argv: ["--no-color"] });
+		releaseA();
+		await runA;
+
+		expect(process.env.FORCE_COLOR).toBeUndefined();
+		expect(process.env.NO_COLOR).toBeUndefined();
+
+		if (ambientForceColor !== undefined) process.env.FORCE_COLOR = ambientForceColor;
+		if (ambientNoColor !== undefined) process.env.NO_COLOR = ambientNoColor;
+	});
+
 	it("noColorExtension respects NO_COLOR without explicit --color flag", async () => {
 		const previousNoColor = process.env.NO_COLOR;
 		process.env.NO_COLOR = "1";
