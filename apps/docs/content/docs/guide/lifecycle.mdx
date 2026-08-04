@@ -45,7 +45,7 @@ With `run()`, the original value is thrown to the caller. Handler and Context fa
 
 With `execute()`, Crust first establishes a nonzero status, then invokes Extension `onError` hooks in `.extend()` order. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer. `onError` is presentation only and never runs for `run()`.
 
-A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets status `130` and renders nothing. `run()` still throws it.
+A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets status `130`, offers the error to `onError` hooks (so an application can render "Operation cancelled" centrally), and renders nothing by default when no hook claims it. `run()` still throws it.
 
 ## Setup and cleanup
 

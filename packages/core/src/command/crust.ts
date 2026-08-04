@@ -1018,7 +1018,11 @@ export class Crust<
 			});
 		} catch (error) {
 			if (isAbortError(error)) {
+				// Cancellation keeps its dedicated exit code, but Extension
+				// onError hooks may observe it to render a message (e.g.
+				// "Operation cancelled"). Core's default stays silent.
 				process.exitCode = EXIT_CODE_CANCELLED;
+				await renderFailure(error, argv, prepared, io, extensionContext, { silentDefault: true });
 				return;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of
@@ -1142,8 +1146,12 @@ async function renderFailure(
 	prepared: PreparedInvocation,
 	io: InvocationIO,
 	extensionContext: ExtensionContext | undefined,
+	options?: { silentDefault?: boolean },
 ): Promise<void> {
 	const renderDefault = (): void => {
+		// Cancellation (AbortError) has no default rendering — a user abort
+		// is not an error to report unless an onError hook claims it.
+		if (options?.silentDefault) return;
 		const message = error instanceof Error ? error.message : String(error);
 		io.stderr(`Error: ${message}`);
 	};
