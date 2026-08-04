@@ -3,11 +3,11 @@ title: Flags
 description: Define typed named inputs, aliases, repeated values, and inherited flags.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
 
 ```ts
+import { Crust } from "@crustjs/core";
+
 const command = new Crust("serve")
   .flags(
     { name: "port", type: "number", default: 3000, short: "p" },
@@ -94,7 +94,4 @@ new Crust("serve")
   });
 ```
 
-<Callout type="warn">
-  Do not combine `schema` with core value options such as `default`, `required`, `choices`, or
-  `parse`.
-</Callout>
+A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.

@@ -3,11 +3,11 @@ title: Arguments
 description: Define typed positional inputs for a command.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `.args(...defs)` maps positional tokens to names in the order the definitions are passed. Pass values from `defineArg(name, def)` or inline literals:
 
 ```ts
+import { Crust } from "@crustjs/core";
+
 const command = new Crust("serve")
   .args(
     { name: "port", type: "number", default: 3000 },
@@ -69,12 +69,7 @@ new Crust("serve")
   });
 ```
 
-<Callout type="warn">
-  Schema-backed arguments cannot also use core value options such as `type`, `default`, `required`,
-  `choices`, or `parse`. The schema owns coercion, defaults, requiredness, choices, and validation.
-</Callout>
-
-See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions).
+A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
 
 ## Forwarding raw tokens
 

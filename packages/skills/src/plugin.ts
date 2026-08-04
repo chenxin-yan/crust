@@ -4,7 +4,6 @@
 
 import {
 	type CommandSnapshot,
-	Crust,
 	type Extension,
 	defineCommand,
 	defineExtension,
@@ -652,47 +651,49 @@ function buildSkillCommandGrammar(
 	options: SkillOptions,
 	getCustomSkills: (mainName: string) => readonly CustomSkillConfig[],
 ) {
-	return new Crust(commandName)
-		.meta({ description: "Manage agent skill installations" })
-		.flags(
-			{
-				name: "scope",
-				type: "string",
-				description: "Install scope (project or global)",
-			},
-			{
-				name: "all",
-				type: "boolean",
-				description: "Install for all detected agents non-interactively (universal + detected)",
-			},
-		)
-		.mount(
-			defineCommand("update", (cmd) =>
-				cmd
-					.meta({ description: "Update installed skills to latest version" })
-					.flags({
-						name: "scope",
-						type: "string",
-						description: "Update scope (project or global)",
-					})
-					.handle(async (context) => {
-						await runSkillUpdateFlow(
-							context.rootCommand,
-							options,
-							getCustomSkills(context.rootCommand.meta.name),
-							context.flags,
-						);
-					}),
-			),
-		)
-		.handle(async (context) => {
-			await runSkillInstallFlow(
-				context.rootCommand,
-				options,
-				getCustomSkills(context.rootCommand.meta.name),
-				context.flags,
-			);
-		});
+	return defineCommand(commandName, (command) =>
+		command
+			.meta({ description: "Manage agent skill installations" })
+			.flags(
+				{
+					name: "scope",
+					type: "string",
+					description: "Install scope (project or global)",
+				},
+				{
+					name: "all",
+					type: "boolean",
+					description: "Install for all detected agents non-interactively (universal + detected)",
+				},
+			)
+			.mount(
+				defineCommand("update", (cmd) =>
+					cmd
+						.meta({ description: "Update installed skills to latest version" })
+						.flags({
+							name: "scope",
+							type: "string",
+							description: "Update scope (project or global)",
+						})
+						.handle(async (context) => {
+							await runSkillUpdateFlow(
+								context.rootCommand,
+								options,
+								getCustomSkills(context.rootCommand.meta.name),
+								context.flags,
+							);
+						}),
+				),
+			)
+			.handle(async (context) => {
+				await runSkillInstallFlow(
+					context.rootCommand,
+					options,
+					getCustomSkills(context.rootCommand.meta.name),
+					context.flags,
+				);
+			}),
+	);
 }
 
 async function runSkillInstallFlow(

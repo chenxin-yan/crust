@@ -68,14 +68,16 @@ const stripAnsi = stripVTControlCharacters;
 function lateSkillExtension() {
 	return defineExtension("late-skill", {
 		commands: [
-			new Crust("skill")
-				.meta({ description: "Manage agent skills" })
-				.mount(
-					defineCommand("update", (cmd) =>
-						cmd.meta({ description: "Update installed skills" }).handle(() => {}),
-					),
-				)
-				.handle(() => {}),
+			defineCommand("skill", (command) =>
+				command
+					.meta({ description: "Manage agent skills" })
+					.mount(
+						defineCommand("update", (cmd) =>
+							cmd.meta({ description: "Update installed skills" }).handle(() => {}),
+						),
+					)
+					.handle(() => {}),
+			),
 		],
 	});
 }

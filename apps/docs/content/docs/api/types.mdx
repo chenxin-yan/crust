@@ -198,6 +198,8 @@ The map shape used for inferred `ctx` values.
   name="ExtensionConfig"
 />
 
+`commands` entries are `defineCommand()` definitions contributed at the application root — see [Extensions](/docs/guide/extensions).
+
 ### `Extension`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
@@ -211,10 +213,6 @@ type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 ```
 
 An Extension owns contributed flags. `recursive` defaults to `true`; `false` contributes the flag only to the root.
-
-### `ExtensionCommand`
-
-A structural type satisfied by a configured `Crust` builder. Extension commands are contributed at the application root.
 
 ### `ExtensionContext`
 

@@ -35,13 +35,12 @@ This permits safe composition and preserves input inference through the chain.
 
 ## Command Handler context
 
-`.handle()` receives:
+`.handle()` receives a typed `CrustCommandContext`:
 
-- `args` and `flags`: validated, transformed inputs
-- `ctx`: constructed [Contexts](/docs/guide/contexts)
-- `rawArgs`: tokens after `--`
-- `command`: the resolved readonly `CommandSnapshot`
-- `stdout(text)` and `stderr(text)`: injectable line writers
+<auto-type-table
+  path="../../../../../packages/core/src/command/crust.ts"
+  name="CrustCommandContext"
+/>
 
 ```ts
 const command = new Crust("inspect").handle(({ command, stdout }) => {

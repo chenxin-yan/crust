@@ -211,24 +211,10 @@ function injectExtensionFlag(
 
 /** Attach one Extension's owned root commands to a cloned tree. */
 function applyExtensionCommands(root: CommandNode, ext: Extension): void {
-	for (const builder of ext.commands ?? []) {
-		const name = builder._node.meta.name;
-		if (root.subCommands[name]) {
-			throw new CrustError(
-				"DEFINITION",
-				`Extension "${ext.name}" command "${name}" collides with an existing root command`,
-				{ subject: "command", name, reason: "extension-command-collision" },
-			);
-		}
-		// Alias collisions with existing root commands are definition errors too
-		validateIncomingAliases(
-			{ canonicalName: name, aliases: builder._node.meta.aliases },
-			root.subCommands,
-			name,
-		);
-		const node = deepCloneCommandNode(builder._node);
+	for (const definition of ext.commands ?? []) {
+		const node = materializeCommandDefinition(definition, root, root.effectiveFlags, ext.name);
 		applyInheritedFlagsToSubtree(node, root.effectiveFlags);
-		root.subCommands[name] = node;
+		root.subCommands[definition.name] = node;
 	}
 }
 
@@ -309,7 +295,8 @@ function freezeTree(node: CommandNode): void {
  * verified at runtime when the definition is mounted.
  *
  * Structurally identical to {@link ContextRequirements} — the shared
- * shape is defined once in `api/context.ts`.
+ * shape is defined once in `api/context.ts`. Both requirement kinds are
+ * verified at runtime as a backstop for untyped mount sites.
  */
 export type CommandRequirements = ContextRequirements;
 
@@ -329,11 +316,12 @@ type CommandRecipe<R extends CommandRequirements> = (
 	>,
 ) => AnyCommandDefinitionBuilder;
 
-const commandDefinitionInternal: unique symbol = Symbol("crust.commandDefinition");
+const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
-	/** Context requirement names, runtime-checked at each mount site */
+	/** Requirement names, runtime-checked at each mount site */
+	readonly requiredFlagNames: readonly string[];
 	readonly requiredCtxNames: readonly string[];
 }
 
@@ -346,6 +334,124 @@ export interface CommandDefinition<R extends CommandRequirements = {}> {
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
 	/** @internal — phantom carrying the requirements for mount-site checks */
 	readonly _requirements?: R;
+}
+
+function materializeCommandDefinition(
+	definition: CommandDefinition,
+	parent: CommandNode,
+	parentEffective: FlagsDef,
+	extensionName?: string,
+): CommandNode {
+	const internal = (definition as Partial<CommandDefinition> | null)?.[commandDefinitionInternal];
+	if (internal === undefined) {
+		if (extensionName) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${extensionName}" commands must be created by defineCommand()`,
+				{
+					subject: "extension",
+					name: extensionName,
+					reason: "invalid-command-definition",
+				},
+			);
+		}
+		throw new CrustError(
+			"DEFINITION",
+			"mount() requires a command definition created by defineCommand()",
+		);
+	}
+
+	const name = definition.name;
+	if (parent.subCommands[name]) {
+		if (extensionName) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${extensionName}" command "${name}" collides with an existing root command`,
+				{ subject: "command", name, reason: "extension-command-collision" },
+			);
+		}
+		throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
+	}
+
+	for (const flagName of internal.requiredFlagNames) {
+		if (parentEffective[flagName]?.inherit !== true) {
+			const message = extensionName
+				? `Extension "${extensionName}" command "${name}" requires flag "--${flagName}", which is not declared with inherit: true on application root "${parent.meta.name}"`
+				: `Command "${name}" requires flag "--${flagName}", which is not declared with inherit: true on "${parent.meta.name}" — declare flags before .mount()`;
+			throw new CrustError("DEFINITION", message, {
+				subject: "flag",
+				name: flagName,
+				reason: "missing-required-flag",
+			});
+		}
+	}
+
+	const providedNames = new Set(parent.contexts.map((context) => context.name));
+	for (const ctxName of internal.requiredCtxNames) {
+		if (!providedNames.has(ctxName)) {
+			const message = extensionName
+				? `Extension "${extensionName}" command "${name}" requires Context "${ctxName}", which is not provided on application root "${parent.meta.name}"`
+				: `Command "${name}" requires Context "${ctxName}", which is not provided on "${parent.meta.name}" — call .provide() before .mount()`;
+			throw new CrustError("DEFINITION", message, {
+				subject: "context",
+				name: ctxName,
+				reason: "missing-context",
+			});
+		}
+	}
+
+	const child = new Crust(name);
+	(child as { _inheritedFlags: FlagsDef })._inheritedFlags = parentEffective;
+	child._node.effectiveFlags = computeEffectiveFlags(parentEffective, {});
+	(child._node as { contexts: ContextInstance[] }).contexts = [...parent.contexts];
+
+	const configured = internal.recipe(
+		child as unknown as AnyCommandDefinitionBuilder,
+	) as unknown as Crust;
+	if (configured?._inheritedFlags !== parentEffective) {
+		if (extensionName) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${extensionName}" command "${name}" definition must return the same command builder it received`,
+				{
+					subject: "extension",
+					name: extensionName,
+					reason: "foreign-command-builder",
+				},
+			);
+		}
+		throw new CrustError(
+			"DEFINITION",
+			"Command definition must return the same command builder it received",
+		);
+	}
+	if (configured._node.extensions.length > 0) {
+		if (extensionName) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${extensionName}" command "${name}" cannot register Extensions inside command definitions`,
+				{
+					subject: "extension",
+					name: extensionName,
+					reason: "nested-command-extension",
+				},
+			);
+		}
+		throw new CrustError(
+			"DEFINITION",
+			"Extensions cannot be registered inside command definitions",
+		);
+	}
+
+	validateIncomingAliases(
+		{ canonicalName: name, aliases: configured._node.meta.aliases },
+		parent.subCommands,
+		name,
+	);
+
+	const childNode = deepCloneCommandNode(configured._node);
+	childNode.meta.name = name;
+	return childNode;
 }
 
 type FlagValue<D extends FlagDef> = InferFlags<{ value: D }>["value"];
@@ -487,6 +593,7 @@ export function defineCommand(
 	}
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
+		requiredFlagNames: (requirements.flags ?? []).map((flag) => flag.name),
 		requiredCtxNames: (requirements.ctx ?? []).map((dep) => dep.contextName),
 	};
 	const named = (defName: string): CommandDefinition<CommandRequirements> => {
@@ -820,67 +927,11 @@ export class Crust<
 	}
 
 	private _mountDefinition(definition: CommandDefinition): Crust<Inherited, Local, A, Eff, Ctx> {
-		const internal = (definition as Partial<CommandDefinition> | null)?.[commandDefinitionInternal];
-		if (internal === undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				"mount() requires a command definition created by defineCommand()",
-			);
-		}
-		const name = definition.name;
-		if (this._node.subCommands[name]) {
-			throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
-		}
-
-		// Runtime counterpart of the compile-time Mountable check: a mounted
-		// definition's Context requirements must already be provided on this
-		// path, so a missing dependency fails here instead of surfacing as a
-		// silently-undefined ctx value at dispatch.
-		const providedNames = new Set(this._node.contexts.map((context) => context.name));
-		for (const ctxName of internal.requiredCtxNames) {
-			if (!providedNames.has(ctxName)) {
-				throw new CrustError(
-					"DEFINITION",
-					`Command "${name}" requires Context "${ctxName}", which is not provided on "${this._node.meta.name}" — call .provide() before .mount()`,
-					{ subject: "context", name: ctxName, reason: "missing-context" },
-				);
-			}
-		}
-
-		const recipe = internal.recipe;
 		const parentEffective = computeEffectiveFlags(this._inheritedFlags, this._node.localFlags);
-		const child = new Crust(name);
-		(child as { _inheritedFlags: FlagsDef })._inheritedFlags = parentEffective;
-		child._node.effectiveFlags = computeEffectiveFlags(parentEffective, {});
-		(child._node as { contexts: ContextInstance[] }).contexts = [...this._node.contexts];
-
-		const configured = recipe(child as unknown as AnyCommandDefinitionBuilder) as unknown as
-			| Crust
-			| undefined;
-		if (configured?._inheritedFlags !== parentEffective) {
-			throw new CrustError(
-				"DEFINITION",
-				"Command definition must return the same command builder it received",
-			);
-		}
-		if (configured._node.extensions.length > 0) {
-			throw new CrustError(
-				"DEFINITION",
-				"Extensions cannot be registered inside command definitions",
-			);
-		}
-
-		validateIncomingAliases(
-			{ canonicalName: name, aliases: configured._node.meta.aliases },
-			this._node.subCommands,
-			name,
-		);
-
-		const childNode = deepCloneCommandNode(configured._node);
-		childNode.meta.name = name;
+		const childNode = materializeCommandDefinition(definition, this._node, parentEffective);
 
 		return this._clone({
-			subCommands: { ...this._node.subCommands, [name]: childNode },
+			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
 		}) as Crust<Inherited, Local, A, Eff, Ctx>;
 	}
 

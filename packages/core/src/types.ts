@@ -457,7 +457,7 @@ interface SchemaBooleanFlagDef extends SchemaFlagBase {
 	type: "boolean";
 	/** When `true`, the flag is repeatable and the schema receives `boolean[]` */
 	multiple?: true;
-	/** When `true`, disables the auto-generated `--no-<name>` negation */
+	/** When `true`, hide the generated `--no-{name}` help label */
 	noNegate?: true;
 }
 

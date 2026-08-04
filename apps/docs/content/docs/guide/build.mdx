@@ -155,17 +155,10 @@ crust build --no-minify
 
 ## Environment Variables
 
-`crust build` keeps **runtime env** and **build-time constants** separate.
-
-- compiled executables continue to use Bun's runtime env behavior
-- Bun's auto-loaded cwd env can provide build-time constants by default
-- `--env-file` lets you override that with explicit env files
-- only `PUBLIC_*` values are eligible to be embedded as build-time constants
+Only `PUBLIC_*` values are embedded as build-time constants; `--env-file` (repeatable, also with `--package`) selects explicit env files.
 
 ```sh
 crust build --env-file .env.production
-crust build --env-file .env --env-file .env.local
-crust build --package --env-file .env.production
 ```
 
 <Callout type="warn">
@@ -334,20 +327,15 @@ The `bin` field points to the resolver script, which handles platform detection 
 ```json title="package.json"
 {
   "name": "my-cli",
-  "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli"
-  },
+  "private": true,
   "scripts": {
-    "build": "crust build",
     "package": "crust build --package",
-    "publish": "crust publish --stage-dir dist/npm",
-    "prepack": "bun run build"
+    "publish": "crust publish --stage-dir dist/npm"
   }
 }
 ```
 
-After building and staging, publish all platform packages:
+In this mode the package users install is the **staged root package** (`dist/npm/root/package.json`), which `crust build --package` generates with its own `bin` entry and platform `optionalDependencies` — your local `package.json` needs no `bin`, `files`, or `prepack` wiring. After building and staging, publish all platform packages:
 
 ```sh
 # Stage npm packages

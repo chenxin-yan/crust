@@ -1,4 +1,4 @@
-import type { CommandNode } from "../command/node.ts";
+import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagDef } from "../types.ts";
@@ -78,20 +78,11 @@ export interface ExtensionHooks {
  */
 export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
-/**
- * A configured command builder contributed by an Extension. Structural on
- * purpose (any `Crust` builder satisfies it) so Extension values stay
- * assignable across separately-bundled type declarations.
- */
-export interface ExtensionCommand {
-	readonly _node: CommandNode;
-}
-
 export interface ExtensionConfig {
 	/** Flags this Extension owns and contributes to the application */
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
-	/** Root commands this Extension owns and contributes to the application */
-	readonly commands?: readonly ExtensionCommand[];
+	/** Root command definitions this Extension owns and contributes to the application */
+	readonly commands?: readonly CommandDefinition<any>[];
 	readonly hooks?: ExtensionHooks;
 }
 

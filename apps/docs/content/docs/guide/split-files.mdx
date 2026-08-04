@@ -9,17 +9,9 @@ For a small application, mount definitions inline at the root. When a command be
 
 Keep the flag definitions and Context factories that commands require in a dependency-free shared module:
 
-```ts title="src/shared.ts"
-import { defineContext, defineFlag } from "@crustjs/core";
-
-export const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
-
-export const logger = defineContext("logger", () => ({
-  write(message: string) {
-    console.error(message);
-  },
-}));
-```
+<include lang="ts" meta='title="src/shared.ts"'>
+  ../../../examples/split-files/shared.ts
+</include>
 
 Requirements are arrays of these values, so the required shape and the root definition are the same object — they cannot drift.
 
@@ -27,20 +19,9 @@ Requirements are arrays of these values, so the required shape and the root defi
 
 A command file imports `defineCommand` and the shared values, never the application builder:
 
-```ts title="src/commands/greet.ts"
-import { defineCommand } from "@crustjs/core";
-import { logger, verbose } from "../shared.ts";
-
-export const greetCommand = defineCommand("greet", { flags: [verbose], ctx: [logger] }, (command) =>
-  command
-    .args({ name: "name", type: "string", default: "world" })
-    .flags({ name: "greeting", type: "string", default: "Hello", short: "g" })
-    .handle(({ args, flags, ctx, stdout }) => {
-      if (flags.verbose) ctx.logger.write("Preparing greeting");
-      stdout(`${flags.greeting}, ${args.name}!`);
-    }),
-);
-```
+<include lang="ts" meta='title="src/commands/greet.ts"'>
+  ../../../examples/split-files/commands/greet.ts
+</include>
 
 The recipe builder is typed from the declared requirements. The exported definition is inert and carries its own name: importing it does not build or run a command.
 
@@ -48,40 +29,19 @@ The recipe builder is typed from the declared requirements. The exported definit
 
 Define the root and its application-wide Extensions independently:
 
-```ts title="src/app.ts"
-import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/extensions";
-import { logger, verbose } from "./shared.ts";
-
-export const app = new Crust("my-cli")
-  .meta({ description: "A split-file CLI" })
-  .extend(version("0.2.0"), help())
-  .flags(verbose)
-  .provide(logger());
-```
+<include lang="ts" meta='title="src/app.ts"'>
+  ../../../examples/split-files/app.ts
+</include>
 
 ## Mount and execute
 
 The composition root imports both sides:
 
-```ts title="src/cli.ts"
-import { app } from "./app.ts";
-import { greetCommand } from "./commands/greet.ts";
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/split-files/cli.ts
+</include>
 
-await app.mount(greetCommand).execute();
-```
-
-`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context. Missing or incompatible requirements are reported at this line — compile-time, and at runtime for Context names. Use `greetCommand.as("hello")` to mount the same definition under another name.
-
-## Finalize before mounting
-
-Fluent builders are immutable, and a mount captures the parent scope used at that call. Add required `inherit: true` flags and Contexts before `.mount()`:
-
-```ts
-const complete = new Crust("app").flags(verbose).provide(logger()).mount(greetCommand);
-```
-
-A later `.flags()` or `.provide()` call creates a new parent builder; it does not backfill a definition that was already mounted.
+`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context, and reports missing or incompatible requirements at this line. [How mount checking and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-mounting rule — is covered in Subcommands.
 
 ## Inline or split?
 

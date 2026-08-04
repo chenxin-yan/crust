@@ -88,7 +88,7 @@ test("accepts a name", async () => {
 });
 ```
 
-Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks.
+Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks. The subpath also exports `stripAnsi`, `encodeKey`, and the types `PromptTestIO` and `RenderedPrompt`.
 
 ## Prompts
 
@@ -413,6 +413,7 @@ Only one prompt can be active per input or output stream. Prompts on fully disti
 | `runPrompt`           | Low-level prompt runner; accepts optional `PromptIO` |
 | `submit`              | Create a submit result to resolve a prompt           |
 | `assertTTY`           | Throw `NonInteractiveError` if stdin is not a TTY    |
+| `isTTY`               | Check whether an input stream is an interactive TTY  |
 | `withPromptIO`        | Scope prompt IO for nested async prompt calls        |
 | `PromptIO`            | Optional input/output streams for prompts            |
 | `NonInteractiveError` | Error thrown when a TTY is required but absent       |
@@ -443,6 +444,8 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 | `MultiselectOptions<T>`   | Options for `multiselect()`                                                         |
 | `FilterOptions<T>`        | Options for `filter()`                                                              |
 | `MultifilterOptions<T>`   | Options for `multifilter()`                                                         |
+| `PromptInput`             | Input stream contract composing `PromptIO`                                          |
+| `PromptOutput`            | Output stream contract composing `PromptIO`                                         |
 | `PromptTheme`             | Complete theme with all style slots                                                 |
 | `PartialPromptTheme`      | Partial theme for overrides                                                         |
 | `Choice<T>`               | Choice item: string or `{ label, value, hint? }`                                    |
