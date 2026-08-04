@@ -138,6 +138,46 @@ describe("captureExecute", () => {
 		expect(result.stderr).toBe("custom: boom");
 	});
 
+	it("isolates exit codes across overlapping captures", async () => {
+		const { Crust } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const originalExitCode = process.exitCode;
+		try {
+			// Non-zero ambient value: if capture B reads state restored by capture
+			// A's finally block, B reports 7 instead of its own 0.
+			process.exitCode = 7;
+
+			let releaseA!: () => void;
+			const gateA = new Promise<void>((resolve) => {
+				releaseA = resolve;
+			});
+			let releaseB!: () => void;
+			const gateB = new Promise<void>((resolve) => {
+				releaseB = resolve;
+			});
+
+			const appA = new Crust("test-cli").handle(async () => {
+				await gateA;
+			});
+			const appB = new Crust("test-cli").handle(async () => {
+				await gateB;
+			});
+
+			const pendingA = captureExecute(appA, []);
+			await Bun.sleep(0);
+			const pendingB = captureExecute(appB, []);
+			await Bun.sleep(0);
+
+			releaseA();
+			expect((await pendingA).exitCode).toBe(0);
+			releaseB();
+			expect((await pendingB).exitCode).toBe(0);
+			expect(process.exitCode).toBe(7);
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+	});
+
 	it("restores process.exitCode", async () => {
 		const { Crust } = await import("@crustjs/core");
 		const { captureExecute } = await import("./index.ts");

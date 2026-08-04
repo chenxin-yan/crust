@@ -64,12 +64,30 @@ export interface CapturedExecute {
 	readonly exitCode: number;
 }
 
+// `execute()` reports status only through the process-global
+// `process.exitCode`, so overlapping captures would read or restore each
+// other's state. Chain every capture behind the previous one so the whole
+// save/reset/execute/read/restore sequence runs exclusively.
+let captureExecuteChain: Promise<unknown> = Promise.resolve();
+
 /**
  * Drive the terminal `execute()` path in-process: exit-code protocol,
  * Extension `onError` rendering, and cancellation (130) are all observable
  * without spawning a subprocess. `process.exitCode` is restored afterwards.
+ * Concurrent calls are serialized because the exit-code protocol is
+ * process-global.
  */
-export async function captureExecute(
+export function captureExecute(
+	app: ExecutableApp,
+	argv: readonly string[],
+): Promise<CapturedExecute> {
+	const run = captureExecuteChain.then(() => captureExecuteExclusive(app, argv));
+	// A rejected capture (e.g. `throwOnError`) must not poison later captures.
+	captureExecuteChain = run.catch(() => {});
+	return run;
+}
+
+async function captureExecuteExclusive(
 	app: ExecutableApp,
 	argv: readonly string[],
 ): Promise<CapturedExecute> {
