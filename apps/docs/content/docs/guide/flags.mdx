@@ -103,3 +103,58 @@ new Crust("serve")
 ```
 
 A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
+
+## Commander migration compatibility
+
+Crust's parser is built on `node:util.parseArgs`, and three Commander grammars are intentionally **not supported**. They conflict with `parseArgs` token rules or make flag/positional boundaries ambiguous; CLIs migrating from Commander should normalize argv app-side before `execute()`.
+
+### Greedy multi-value flags (won't fix)
+
+Commander's variadic options consume every following token until the next flag: `--locales en fr de`. Crust `multiple` flags require one option token per value — `--locales en --locales fr --locales de`. An unrepeated trailing value becomes an unmatched positional.
+
+### Optional-valued flags (won't fix)
+
+Commander supports `--tag` (boolean) and `--tag v1.2` (string) on the same option. A Crust flag is either `boolean` or value-taking — there is no optional-value variant, because whether the next token is the flag's value or a positional would depend on runtime lookahead.
+
+### Separated dash-leading values (won't fix)
+
+`--timeout -5` is rejected by `parseArgs` as ambiguous (`-5` looks like a flag). Use the `=` form: `--timeout=-5`.
+
+### Recommended normalization pattern
+
+Rewrite argv once at the entry point, before `execute()`:
+
+```ts
+const GREEDY_FLAGS = new Set(["--locales", "--new"]);
+
+function normalizeArgv(argv: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]!;
+    if (token === "--") return [...out, ...argv.slice(i)];
+
+    // Greedy multi-value: `--locales en fr` -> `--locales en --locales fr`
+    if (GREEDY_FLAGS.has(token)) {
+      while (i + 1 < argv.length && !argv[i + 1]!.startsWith("-")) {
+        out.push(token, argv[++i]!);
+      }
+      continue;
+    }
+
+    // Separated dash-leading value: `--timeout -5` -> `--timeout=-5`
+    if (token === "--timeout" && /^-\d/.test(argv[i + 1] ?? "")) {
+      out.push(`${token}=${argv[++i]}`);
+      continue;
+    }
+
+    out.push(token);
+  }
+  return out;
+}
+
+await app.execute({ argv: normalizeArgv(process.argv.slice(2)) });
+```
+
+For optional-valued flags, split them into a boolean flag plus a value-taking flag (e.g. `--tag` and `--tag-name v1.2`), or normalize `--tag <value>` to `--tag-name=<value>` in the same pass.
+
+What migrators no longer need to normalize: inherited flags before a subcommand (`app --quiet translate`) route correctly, and `-V` / bare version output are covered by [`versionExtension` options](/docs/modules/extensions/version#options).
