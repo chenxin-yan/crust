@@ -934,6 +934,22 @@ describe("parseArgs — boolean negation", () => {
 	it("last-token-wins across mixed spellings", () => {
 		const result = parseArgs(cmd, ["--verbose", "--no-loud"]);
 		expect(result.flags.verbose).toBe(false);
+
+		// Regression: parseArgs values group by key, so a repeated earlier
+		// spelling must not shadow the final token.
+		const result2 = parseArgs(cmd, ["--verbose", "--no-loud", "--verbose"]);
+		expect(result2.flags.verbose).toBe(true);
+	});
+
+	it("multiple flags preserve argv order across mixed aliases", () => {
+		const multiCmd = makeNode({
+			meta: { name: "test" },
+			flags: {
+				tag: { type: "string", multiple: true, short: "t", aliases: ["label"] },
+			},
+		});
+		const result = parseArgs(multiCmd, ["-t", "a", "--label", "b", "--tag", "c"]);
+		expect(result.flags.tag).toEqual(["a", "b", "c"]);
 	});
 
 	it("rejects negation of a noNegate boolean via any spelling", () => {
