@@ -530,9 +530,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin supports a custom short alias", async () => {
-		const app = new Crust("app")
-			.extend(versionExtension("1.2.3", { short: "V" }))
-			.handle(() => {});
+		const app = new Crust("app").extend(versionExtension("1.2.3", { short: "V" })).handle(() => {});
 
 		await app.execute({ argv: ["-V"] });
 
@@ -540,9 +538,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin rejects -v when short is remapped", async () => {
-		const app = new Crust("app")
-			.extend(versionExtension("1.2.3", { short: "V" }))
-			.handle(() => {});
+		const app = new Crust("app").extend(versionExtension("1.2.3", { short: "V" })).handle(() => {});
 
 		await app.execute({ argv: ["-v"] });
 

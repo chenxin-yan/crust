@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Spinner — Display a spinner while running an async task for @crustjs/progress
+// Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
 import { resolveTheme } from "./theme.ts";
@@ -45,16 +45,27 @@ export type SpinnerType =
 	| "bounce"
 	| { readonly frames: readonly string[]; readonly interval: number };
 
+/** Final outcome of a spinner or progress indicator. */
+export type SpinnerOutcome = "success" | "error";
+
+/**
+ * SIGINT policy for interactive spinners.
+ *
+ * - `"exit"` (default): install a `SIGINT` handler that restores the cursor
+ *   and exits with code 130.
+ * - `false`: install no handler — the application owns SIGINT and should
+ *   `stop()` the spinner (restoring the cursor) in its own cleanup.
+ */
+export type SpinnerSigintPolicy = "exit" | false;
+
 export interface SpinnerController {
 	/** Update the message displayed alongside the spinner. */
 	updateMessage: (message: string) => void;
 }
 
-export interface SpinnerOptions<T> {
+export interface CreateSpinnerOptions {
 	/** The message displayed alongside the spinner. */
 	readonly message: string;
-	/** The async task to run while the spinner is displayed. */
-	readonly task: (controller: SpinnerController) => Promise<T>;
 	/**
 	 * Spinner animation style.
 	 *
@@ -63,6 +74,32 @@ export interface SpinnerOptions<T> {
 	readonly spinner?: SpinnerType;
 	/** Per-spinner theme overrides. */
 	readonly theme?: PartialProgressTheme;
+	/**
+	 * SIGINT policy.
+	 *
+	 * @default "exit"
+	 */
+	readonly sigint?: SpinnerSigintPolicy;
+}
+
+export interface SpinnerHandle {
+	/** Begin rendering. No-op if already started. */
+	start: () => void;
+	/** Update the message displayed alongside the spinner. */
+	updateMessage: (message: string) => void;
+	/**
+	 * Finish the spinner: render the final `✓`/`✗` line and restore the
+	 * cursor. Idempotent — later calls are no-ops.
+	 *
+	 * @param outcome - Final symbol to render. @default "success"
+	 * @param message - Final message. Defaults to the last message shown.
+	 */
+	stop: (outcome?: SpinnerOutcome, message?: string) => void;
+}
+
+export interface SpinnerOptions<T> extends CreateSpinnerOptions {
+	/** The async task to run while the spinner is displayed. */
+	readonly task: (controller: SpinnerController) => Promise<T>;
 }
 
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
@@ -82,46 +119,36 @@ function renderFrame(frame: string, message: string, theme: ProgressTheme): stri
 function renderFinal(
 	message: string,
 	theme: ProgressTheme,
-	symbol: string,
-	styleSymbol: ProgressTheme["success"],
+	outcome: SpinnerOutcome,
 	erase: boolean,
 ): string {
+	const symbol = outcome === "success" ? SUCCESS_SYMBOL : ERROR_SYMBOL;
+	const styleSymbol = outcome === "success" ? theme.success : theme.error;
 	const line = `${styleSymbol(symbol)} ${theme.message(message)}\n`;
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
-export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
+/**
+ * Create an imperative spinner whose `start` and `stop` can live in
+ * different call frames (workflow engines, logger adapters).
+ *
+ * Non-interactive stderr renders no animation frames — only the final
+ * `✓`/`✗` line on `stop()`.
+ */
+export function createSpinner(options: CreateSpinnerOptions): SpinnerHandle {
 	const theme = resolveTheme(options.theme);
 	const isInteractive = process.stderr.isTTY;
-
-	if (!isInteractive) {
-		let currentMessage = options.message;
-		const controller: SpinnerController = {
-			updateMessage(message: string) {
-				currentMessage = message;
-			},
-		};
-
-		try {
-			const result = await options.task(controller);
-			process.stderr.write(
-				renderFinal(currentMessage, theme, SUCCESS_SYMBOL, theme.success, false),
-			);
-			return result;
-		} catch (error) {
-			process.stderr.write(renderFinal(currentMessage, theme, ERROR_SYMBOL, theme.error, false));
-			throw error;
-		}
-	}
-
 	const { frames, interval } = resolveSpinner(options.spinner);
-	let frameIndex = 0;
+	const sigint = options.sigint ?? "exit";
+
 	let currentMessage = options.message;
+	let frameIndex = 0;
+	let started = false;
 	let finished = false;
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let sigintHandler: (() => void) | undefined;
 
-	function cleanupInteractive(): void {
+	function cleanup(): void {
 		if (timerId !== undefined) {
 			clearInterval(timerId);
 			timerId = undefined;
@@ -132,41 +159,69 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 		}
 	}
 
-	const controller: SpinnerController = {
+	return {
+		start() {
+			if (started || finished) return;
+			started = true;
+			if (!isInteractive) return;
+
+			process.stderr.write(HIDE_CURSOR);
+			process.stderr.write(renderFrame(frames[0] as string, currentMessage, theme));
+
+			timerId = setInterval(() => {
+				frameIndex = (frameIndex + 1) % frames.length;
+				process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+			}, interval);
+
+			if (sigint === "exit") {
+				sigintHandler = () => {
+					cleanup();
+					process.stderr.write(SHOW_CURSOR);
+					process.exit(130);
+				};
+				process.once("SIGINT", sigintHandler);
+			}
+		},
+
 		updateMessage(message: string) {
 			if (finished) return;
 			currentMessage = message;
-			process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+			if (started && isInteractive) {
+				process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+			}
+		},
+
+		stop(outcome: SpinnerOutcome = "success", message?: string) {
+			if (!started || finished) return;
+			finished = true;
+			if (message !== undefined) currentMessage = message;
+			cleanup();
+			process.stderr.write(renderFinal(currentMessage, theme, outcome, isInteractive));
+			if (isInteractive) {
+				process.stderr.write(SHOW_CURSOR);
+			}
 		},
 	};
+}
 
-	process.stderr.write(HIDE_CURSOR);
-	process.stderr.write(renderFrame(frames[0] as string, currentMessage, theme));
+/**
+ * Display a spinner while running an async task. The final line renders `✓`
+ * when the task resolves and `✗` when it throws (the error is re-thrown).
+ */
+export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
+	const handle = createSpinner(options);
+	handle.start();
 
-	timerId = setInterval(() => {
-		frameIndex = (frameIndex + 1) % frames.length;
-		process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
-	}, interval);
-
-	sigintHandler = () => {
-		cleanupInteractive();
-		process.stderr.write(SHOW_CURSOR);
-		process.exit(130);
+	const controller: SpinnerController = {
+		updateMessage: handle.updateMessage,
 	};
-	process.once("SIGINT", sigintHandler);
 
 	try {
 		const result = await options.task(controller);
-		finished = true;
-		cleanupInteractive();
-		process.stderr.write(renderFinal(currentMessage, theme, SUCCESS_SYMBOL, theme.success, true));
-		process.stderr.write(SHOW_CURSOR);
+		handle.stop("success");
 		return result;
 	} catch (error) {
-		finished = true;
-		cleanupInteractive();
-		process.stderr.write(renderFinal(currentMessage, theme, ERROR_SYMBOL, theme.error, true));
-		process.stderr.write(SHOW_CURSOR);
+		handle.stop("error");
 		throw error;
 	}
 }

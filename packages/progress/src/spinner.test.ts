@@ -624,3 +624,95 @@ describe("spinner — non-interactive", () => {
 		expect(stderrOutput).not.toContain("Late update...");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// createSpinner — imperative controller
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("createSpinner — imperative", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("start and stop live in different call frames", async () => {
+		const { createSpinner } = await import("./spinner.ts");
+		const handle = createSpinner({ message: "Working..." });
+
+		handle.start();
+		await tick(20);
+		handle.stop();
+
+		expect(stderrOutput).toContain("Working...");
+		expect(stderrOutput).toContain("✓");
+		expect(stderrOutput).toContain("\x1B[?25h");
+	});
+
+	it("stop('error') renders the failure symbol without throwing", async () => {
+		const { createSpinner } = await import("./spinner.ts");
+		const handle = createSpinner({ message: "Deploying..." });
+
+		handle.start();
+		handle.stop("error", "Deploy failed");
+
+		expect(stderrOutput).toContain("✗");
+		expect(stderrOutput).toContain("Deploy failed");
+		expect(stderrOutput).not.toContain("✓");
+	});
+
+	it("updateMessage repaints while running", async () => {
+		const { createSpinner } = await import("./spinner.ts");
+		const handle = createSpinner({ message: "Step 1" });
+
+		handle.start();
+		handle.updateMessage("Step 2");
+		handle.stop();
+
+		expect(stderrOutput).toContain("Step 2");
+	});
+
+	it("stop is idempotent", async () => {
+		const { createSpinner } = await import("./spinner.ts");
+		const handle = createSpinner({ message: "Once" });
+
+		handle.start();
+		handle.stop("success", "done");
+		handle.stop("error", "again");
+
+		expect(stderrOutput).not.toContain("✗");
+	});
+
+	it("sigint: false installs no SIGINT handler", async () => {
+		let registered = false;
+		process.once = ((event: string | symbol, _listener: unknown) => {
+			if (event === "SIGINT") registered = true;
+			return process;
+		}) as typeof process.once;
+
+		const { createSpinner } = await import("./spinner.ts");
+		const handle = createSpinner({ message: "No sigint", sigint: false });
+		handle.start();
+		handle.stop();
+
+		expect(registered).toBe(false);
+	});
+});
+
+describe("spinner — sigint option", () => {
+	beforeEach(setupMocks);
+	afterEach(restoreMocks);
+
+	it("sigint: false leaves SIGINT to the application", async () => {
+		let registered = false;
+		process.once = ((event: string | symbol, _listener: unknown) => {
+			if (event === "SIGINT") registered = true;
+			return process;
+		}) as typeof process.once;
+
+		await spinner({
+			message: "App-owned SIGINT",
+			sigint: false,
+			task: async () => "ok",
+		});
+
+		expect(registered).toBe(false);
+	});
+});

@@ -71,10 +71,7 @@ function lookupFlag(flags: FlagsDef, spelling: string): FlagDef | undefined {
  * short booleans (`-ab`). Tokens with `=` after a short prefix are left
  * to the parser.
  */
-function matchKnownFlagToken(
-	flags: FlagsDef,
-	token: string,
-): { consumesValue: boolean } | null {
+function matchKnownFlagToken(flags: FlagsDef, token: string): { consumesValue: boolean } | null {
 	if (token === "--") return null;
 
 	if (token.startsWith("--")) {

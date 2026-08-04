@@ -1,9 +1,9 @@
 ---
 title: "Progress"
-description: Non-interactive progress indicators for CLI applications — currently spinner support for async tasks.
+description: Progress indicators for CLI applications — task-scoped and imperative spinners, plus determinate progress.
 ---
 
-`@crustjs/progress` provides non-interactive progress indicators for building polished CLI experiences. It currently includes `spinner()`, a stderr-based async task wrapper with message updates, theming, and non-TTY fallbacks.
+`@crustjs/progress` provides stderr-based progress indicators for building polished CLI experiences: `spinner()` (task-scoped), `createSpinner()` (imperative start/stop), and `createProgress()` (determinate `current/total`), all with message updates, theming, SIGINT policy, and non-TTY fallbacks.
 
 ## Install
 
@@ -48,6 +48,65 @@ await spinner({
 ```
 
 <auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerOptions" />
+
+### `createSpinner(options)`
+
+An imperative spinner whose `start` and `stop` can live in different call frames — workflow engines, logger adapters, anywhere a task callback does not fit. `stop()` takes the final outcome, so a failure can render `✗` without throwing:
+
+```ts
+import { createSpinner } from "@crustjs/progress";
+
+const handle = createSpinner({ message: "Deploying..." });
+handle.start();
+
+// ...later, in another call frame:
+if (failed) {
+  handle.stop("error", "Deploy failed");
+} else {
+  handle.stop("success", "Deployed");
+}
+```
+
+`stop()` is idempotent; the default outcome is `"success"`.
+
+<auto-type-table
+  path="../../../../../packages/progress/src/spinner.ts"
+  name="CreateSpinnerOptions"
+/>
+
+### `createProgress(options)`
+
+Determinate progress rendered as `⠋ <message> (<current>/<total>)`:
+
+```ts
+import { createProgress } from "@crustjs/progress";
+
+const progress = createProgress({ total: files.length, message: "Translating" });
+progress.start();
+for (const file of files) {
+  await translate(file);
+  progress.advance(1, file.name);
+}
+progress.stop("success", "All files translated");
+```
+
+<auto-type-table
+  path="../../../../../packages/progress/src/progress.ts"
+  name="CreateProgressOptions"
+/>
+
+### SIGINT policy
+
+By default an interactive spinner installs a `SIGINT` handler that restores the cursor and exits with code 130. Applications that own SIGINT (cleanup, log flushing) can opt out with `sigint: false` — the spinner then installs no handler, and the application's cleanup should call `stop()` to restore the cursor:
+
+```ts
+const handle = createSpinner({ message: "Working...", sigint: false });
+process.once("SIGINT", () => {
+  handle.stop("error", "Cancelled");
+  flushLogs();
+  process.exit(130);
+});
+```
 
 ### `SpinnerController`
 

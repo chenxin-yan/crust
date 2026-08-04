@@ -1,0 +1,68 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
+import { createProgress } from "./progress.ts";
+
+const originalStderrWrite = process.stderr.write;
+const originalStderrIsTTY = process.stderr.isTTY;
+
+let stderrOutput: string;
+
+beforeEach(() => {
+	stderrOutput = "";
+	process.stderr.write = (chunk: string | Uint8Array) => {
+		if (typeof chunk === "string") stderrOutput += chunk;
+		return true;
+	};
+	Object.defineProperty(process.stderr, "isTTY", {
+		value: true,
+		writable: true,
+		configurable: true,
+	});
+});
+
+afterEach(() => {
+	process.stderr.write = originalStderrWrite;
+	Object.defineProperty(process.stderr, "isTTY", {
+		value: originalStderrIsTTY,
+		writable: true,
+		configurable: true,
+	});
+});
+
+describe("createProgress — determinate", () => {
+	it("renders current/total alongside the message", () => {
+		const progress = createProgress({ total: 10, message: "Translating" });
+
+		progress.start();
+		progress.advance(3);
+		progress.stop();
+
+		expect(stderrOutput).toContain("(3/10)");
+		expect(stderrOutput).toContain("Translating");
+		expect(stderrOutput).toContain("✓");
+	});
+
+	it("advance accepts a message and defaults to +1", () => {
+		const progress = createProgress({ total: 2, message: "Files" });
+
+		progress.start();
+		progress.advance(1, "a.json");
+		progress.advance(1, "b.json");
+		progress.stop("success", "All files done");
+
+		expect(stderrOutput).toContain("a.json (1/2)");
+		expect(stderrOutput).toContain("b.json (2/2)");
+		expect(stderrOutput).toContain("All files done (2/2)");
+	});
+
+	it("stop('error') renders the failure symbol", () => {
+		const progress = createProgress({ total: 5, message: "Uploading" });
+
+		progress.start();
+		progress.advance(2);
+		progress.stop("error", "Upload failed");
+
+		expect(stderrOutput).toContain("✗");
+		expect(stderrOutput).toContain("Upload failed (2/5)");
+	});
+});
