@@ -1,4 +1,5 @@
 import { CrustError } from "../errors.ts";
+import type { FlagDef, FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -48,6 +49,62 @@ function findAliasMatch(
 	return null;
 }
 
+/** Find a flag def by any spelling: canonical name, short, or long alias. */
+function lookupFlag(flags: FlagsDef, spelling: string): FlagDef | undefined {
+	for (const [name, def] of Object.entries(flags)) {
+		if (name === spelling || def.short === spelling || def.aliases?.includes(spelling)) {
+			return def;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Match a dash token against a command's effective flags.
+ *
+ * Returns `null` when the token is not a known flag of this command (routing
+ * then stops, preserving the pre-existing fallback behavior), otherwise
+ * whether the flag consumes the following argv token as its value.
+ *
+ * Mirrors the parser's accepted spellings: `--name`, `--name=value`,
+ * `--no-name` (boolean negation unless `noNegate`), `-s`, and bundled
+ * short booleans (`-ab`). Tokens with `=` after a short prefix are left
+ * to the parser.
+ */
+function matchKnownFlagToken(
+	flags: FlagsDef,
+	token: string,
+): { consumesValue: boolean } | null {
+	if (token === "--") return null;
+
+	if (token.startsWith("--")) {
+		const eq = token.indexOf("=");
+		const spelling = eq === -1 ? token.slice(2) : token.slice(2, eq);
+		const def = lookupFlag(flags, spelling);
+		if (def) return { consumesValue: def.type !== "boolean" && eq === -1 };
+		if (spelling.startsWith("no-")) {
+			const base = lookupFlag(flags, spelling.slice(3));
+			if (base && base.type === "boolean" && !base.noNegate) {
+				return { consumesValue: false };
+			}
+		}
+		return null;
+	}
+
+	// Short form: `-q` or bundled `-qf`. Every char must be a known
+	// single-char spelling; only the last may take a value.
+	const chars = token.slice(1);
+	if (chars.length === 0 || chars.includes("=")) return null;
+	let last: FlagDef | undefined;
+	for (const char of chars) {
+		const def = lookupFlag(flags, char);
+		if (!def) return null;
+		if (last && last.type !== "boolean") return null; // value-taking short mid-bundle
+		last = def;
+	}
+	return { consumesValue: last !== undefined && last.type !== "boolean" };
+}
+
 /**
  * Resolve a command from an argv array by walking the subcommand tree.
  *
@@ -81,6 +138,10 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 	let current: CommandNode = command;
 	let routedArgv = argv;
+	// Known flags (and their values) encountered before a subcommand name are
+	// set aside during routing and re-prepended for the resolved command's
+	// parser, preserving token order.
+	const skippedFlagTokens: string[] = [];
 
 	while (routedArgv.length > 0) {
 		const subCommands = current.subCommands;
@@ -91,9 +152,23 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 		const candidate = routedArgv[0];
 
-		// Skip if the candidate looks like a flag (starts with -) or doesn't exist
-		if (!candidate || candidate.startsWith("-")) {
-			break;
+		if (!candidate) break;
+
+		// Flag-shaped token: skip it (and its value) when it is a known flag of
+		// the current command so routing can continue to a subcommand name —
+		// `app --quiet translate` must run `translate`, not silently resolve the
+		// root. Unknown flags and `--` stop routing (parser reports them).
+		if (candidate.startsWith("-")) {
+			const match = matchKnownFlagToken(current.effectiveFlags, candidate);
+			if (!match) break;
+			skippedFlagTokens.push(candidate);
+			routedArgv = routedArgv.slice(1);
+			const value = routedArgv[0];
+			if (match.consumesValue && value !== undefined) {
+				skippedFlagTokens.push(value);
+				routedArgv = routedArgv.slice(1);
+			}
+			continue;
 		}
 
 		// Check if it matches a known subcommand by canonical name
@@ -135,7 +210,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 	return {
 		command: current,
-		argv: routedArgv,
+		argv: skippedFlagTokens.length > 0 ? [...skippedFlagTokens, ...routedArgv] : routedArgv,
 		commandPath: path,
 	};
 }

@@ -561,3 +561,121 @@ describe("resolveCommand — aliases", () => {
 		expect(result.argv).toEqual(["--help"]);
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Known-flag skipping — inherited/root flags before a subcommand
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolveCommand — known-flag skipping", () => {
+	function makeRoot(): CommandNode {
+		const translate = makeNode({
+			meta: "translate",
+			run() {
+				/* noop */
+			},
+		});
+		return makeNode({
+			meta: "app",
+			flags: {
+				quiet: { type: "boolean", short: "q", description: "quiet" },
+				verbose: { type: "boolean", noNegate: true, description: "verbose" },
+				config: { type: "string", aliases: ["conf"], description: "config file" },
+			},
+			subCommands: { translate },
+		});
+	}
+
+	it("routes past a known boolean flag into the subcommand", () => {
+		const result = resolveCommand(makeRoot(), ["--quiet", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["--quiet"]);
+	});
+
+	it("routes past a known short flag", () => {
+		const result = resolveCommand(makeRoot(), ["-q", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["-q"]);
+	});
+
+	it("routes past a negated boolean flag", () => {
+		const result = resolveCommand(makeRoot(), ["--no-quiet", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["--no-quiet"]);
+	});
+
+	it("does not treat --no-<flag> as known when the flag is noNegate", () => {
+		const result = resolveCommand(makeRoot(), ["--no-verbose", "translate"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["--no-verbose", "translate"]);
+	});
+
+	it("consumes the value token of a known value-taking flag", () => {
+		const result = resolveCommand(makeRoot(), ["--config", "a.json", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["--config", "a.json"]);
+	});
+
+	it("consumes a value that shadows a subcommand name", () => {
+		// "--config translate" means config=translate, not the subcommand
+		const result = resolveCommand(makeRoot(), ["--config", "translate"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["--config", "translate"]);
+	});
+
+	it("does not consume a value for --flag=value form", () => {
+		const result = resolveCommand(makeRoot(), ["--config=a.json", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["--config=a.json"]);
+	});
+
+	it("routes past a known long alias", () => {
+		const result = resolveCommand(makeRoot(), ["--conf=a.json", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+	});
+
+	it("routes past bundled known short booleans", () => {
+		const root = makeRoot();
+		// add a second short boolean for bundling
+		root.effectiveFlags = {
+			...root.effectiveFlags,
+			force: { type: "boolean", short: "f", description: "force" },
+		};
+		const result = resolveCommand(root, ["-qf", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["-qf"]);
+	});
+
+	it("still breaks on unknown flags", () => {
+		const result = resolveCommand(makeRoot(), ["--bogus", "translate"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["--bogus", "translate"]);
+	});
+
+	it("still breaks on the -- terminator", () => {
+		const result = resolveCommand(makeRoot(), ["--", "translate"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["--", "translate"]);
+	});
+
+	it("skips flags at multiple routing levels and preserves token order", () => {
+		const leaf = makeNode({
+			meta: "leaf",
+			run() {
+				/* noop */
+			},
+		});
+		const mid = makeNode({
+			meta: "mid",
+			flags: { deep: { type: "boolean", description: "deep" } },
+			subCommands: { leaf },
+		});
+		const root = makeNode({
+			meta: "app",
+			flags: { quiet: { type: "boolean", description: "quiet" } },
+			subCommands: { mid },
+		});
+		const result = resolveCommand(root, ["--quiet", "mid", "--deep", "leaf", "rest"]);
+		expect(result.commandPath).toEqual(["app", "mid", "leaf"]);
+		expect(result.argv).toEqual(["--quiet", "--deep", "rest"]);
+	});
+});
