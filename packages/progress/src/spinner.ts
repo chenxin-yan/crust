@@ -63,7 +63,7 @@ export interface SpinnerController {
 	updateMessage: (message: string) => void;
 }
 
-export interface CreateSpinnerOptions {
+export interface SpinnerHandleOptions {
 	/** The message displayed alongside the spinner. */
 	readonly message: string;
 	/**
@@ -97,7 +97,7 @@ export interface SpinnerHandle {
 	stop: (outcome?: SpinnerOutcome, message?: string) => void;
 }
 
-export interface SpinnerOptions<T> extends CreateSpinnerOptions {
+export interface SpinnerOptions<T> extends SpinnerHandleOptions {
 	/** The async task to run while the spinner is displayed. */
 	readonly task: (controller: SpinnerController) => Promise<T>;
 }
@@ -128,14 +128,8 @@ function renderFinal(
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
-/**
- * Create an imperative spinner whose `start` and `stop` can live in
- * different call frames (workflow engines, logger adapters).
- *
- * Non-interactive stderr renders no animation frames — only the final
- * `✓`/`✗` line on `stop()`.
- */
-export function createSpinner(options: CreateSpinnerOptions): SpinnerHandle {
+/** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
+export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
 	const theme = resolveTheme(options.theme);
 	const isInteractive = process.stderr.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
@@ -208,16 +202,31 @@ export function createSpinner(options: CreateSpinnerOptions): SpinnerHandle {
  * Display a spinner while running an async task. The final line renders `✓`
  * when the task resolves and `✗` when it throws (the error is re-thrown).
  */
-export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
-	const handle = createSpinner(options);
-	handle.start();
+export function spinner<T>(options: SpinnerOptions<T>): Promise<T>;
+/**
+ * Create an imperative spinner whose `start` and `stop` can live in
+ * different call frames (workflow engines, logger adapters).
+ *
+ * Non-interactive stderr renders no animation frames — only the final
+ * `✓`/`✗` line on `stop()`.
+ */
+export function spinner(options: SpinnerHandleOptions): SpinnerHandle;
+export function spinner<T>(
+	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] },
+): Promise<T> | SpinnerHandle {
+	const handle = createSpinnerHandle(options);
+	const { task } = options;
+	if (!task) return handle;
 
-	try {
-		const result = await options.task(handle);
-		handle.stop("success");
-		return result;
-	} catch (error) {
-		handle.stop("error");
-		throw error;
-	}
+	handle.start();
+	return task(handle).then(
+		(result) => {
+			handle.stop("success");
+			return result;
+		},
+		(error) => {
+			handle.stop("error");
+			throw error;
+		},
+	);
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createProgress } from "./progress.ts";
+import { progress as createProgressBar } from "./progress.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -29,9 +29,9 @@ afterEach(() => {
 	});
 });
 
-describe("createProgress — determinate", () => {
+describe("progress — determinate", () => {
 	it("renders current/total alongside the message", () => {
-		const progress = createProgress({ total: 10, message: "Translating" });
+		const progress = createProgressBar({ total: 10, message: "Translating" });
 
 		progress.start();
 		progress.advance(3);
@@ -43,7 +43,7 @@ describe("createProgress — determinate", () => {
 	});
 
 	it("advance accepts a message and defaults to +1", () => {
-		const progress = createProgress({ total: 2, message: "Files" });
+		const progress = createProgressBar({ total: 2, message: "Files" });
 
 		progress.start();
 		progress.advance(1, "a.json");
@@ -56,7 +56,7 @@ describe("createProgress — determinate", () => {
 	});
 
 	it("stop('error') renders the failure symbol", () => {
-		const progress = createProgress({ total: 5, message: "Uploading" });
+		const progress = createProgressBar({ total: 5, message: "Uploading" });
 
 		progress.start();
 		progress.advance(2);

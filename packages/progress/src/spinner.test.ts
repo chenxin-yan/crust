@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type SpinnerController, createSpinner, spinner } from "./spinner.ts";
+import { type SpinnerController, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -626,15 +626,15 @@ describe("spinner — non-interactive", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// createSpinner — imperative controller
+// spinner — imperative handle controller
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("createSpinner — imperative", () => {
+describe("spinner — imperative handle", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
 	it("start and stop live in different call frames", async () => {
-		const handle = createSpinner({ message: "Working..." });
+		const handle = spinner({ message: "Working..." });
 
 		handle.start();
 		await tick(20);
@@ -646,7 +646,7 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("stop('error') renders the failure symbol without throwing", async () => {
-		const handle = createSpinner({ message: "Deploying..." });
+		const handle = spinner({ message: "Deploying..." });
 
 		handle.start();
 		handle.stop("error", "Deploy failed");
@@ -657,7 +657,7 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("updateMessage repaints while running", async () => {
-		const handle = createSpinner({ message: "Step 1" });
+		const handle = spinner({ message: "Step 1" });
 
 		handle.start();
 		handle.updateMessage("Step 2");
@@ -667,7 +667,7 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("stop is idempotent", async () => {
-		const handle = createSpinner({ message: "Once" });
+		const handle = spinner({ message: "Once" });
 
 		handle.start();
 		handle.stop("success", "done");
@@ -683,7 +683,7 @@ describe("createSpinner — imperative", () => {
 			return process;
 		}) as typeof process.once;
 
-		const handle = createSpinner({ message: "No sigint", sigint: false });
+		const handle = spinner({ message: "No sigint", sigint: false });
 		handle.start();
 		handle.stop();
 

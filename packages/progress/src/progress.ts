@@ -3,13 +3,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import {
-	type CreateSpinnerOptions,
 	type SpinnerHandle,
+	type SpinnerHandleOptions,
 	type SpinnerOutcome,
-	createSpinner,
+	createSpinnerHandle,
 } from "./spinner.ts";
 
-export interface CreateProgressOptions extends CreateSpinnerOptions {
+export interface ProgressOptions extends SpinnerHandleOptions {
 	/** Total number of units of work. */
 	readonly total: number;
 }
@@ -32,14 +32,14 @@ export interface ProgressHandle {
  * Create a determinate progress indicator rendered as
  * `⠋ <message> (<current>/<total>)` on the spinner line.
  */
-export function createProgress(options: CreateProgressOptions): ProgressHandle {
+export function progress(options: ProgressOptions): ProgressHandle {
 	const { total } = options;
 	let current = 0;
 	let message = options.message;
 
 	const format = (msg: string): string => `${msg} (${current}/${total})`;
 
-	const handle: SpinnerHandle = createSpinner({
+	const handle: SpinnerHandle = createSpinnerHandle({
 		...options,
 		message: format(message),
 	});
