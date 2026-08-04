@@ -1,15 +1,15 @@
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 
+/** Structural io shape shared by `run()` and `execute()` captures. */
+export interface CaptureIO {
+	readonly stdout?: (text: string) => void;
+	readonly stderr?: (text: string) => void;
+}
+
 /** Minimal structural surface invoked by the testing helpers. */
 export interface RunnableApp {
-	run(
-		argv: readonly string[],
-		io?: {
-			stdout?: (text: string) => void;
-			stderr?: (text: string) => void;
-		},
-	): Promise<void>;
+	run(argv: readonly string[], io?: CaptureIO): Promise<void>;
 }
 
 export interface CapturedRun {
@@ -44,6 +44,72 @@ export async function captureRun(app: RunnableApp, argv: readonly string[]): Pro
 	const stdout = stdoutLines.join("\n");
 	const stderr = stderrLines.join("\n");
 	return failed ? { stdout, stderr, error } : { stdout, stderr };
+}
+
+/** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
+export interface ExecutableApp {
+	execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<void>;
+}
+
+export interface CapturedExecute {
+	readonly stdout: string;
+	readonly stderr: string;
+	/** The exit code `execute()` established (`0`, `1`, or `130` for cancellation). */
+	readonly exitCode: number;
+}
+
+// `execute()` reports status only through the process-global
+// `process.exitCode`, so overlapping captures would read or restore each
+// other's state. Chain every capture behind the previous one so the whole
+// save/reset/execute/read/restore sequence runs exclusively.
+let captureExecuteChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Drive the terminal `execute()` path in-process: exit-code protocol,
+ * Extension `onError` rendering, and cancellation (130) are all observable
+ * without spawning a subprocess. `process.exitCode` is restored afterwards.
+ * Concurrent calls are serialized because the exit-code protocol is
+ * process-global.
+ */
+export function captureExecute(
+	app: ExecutableApp,
+	argv: readonly string[],
+): Promise<CapturedExecute> {
+	const run = captureExecuteChain.then(() => captureExecuteExclusive(app, argv));
+	// A rejected capture (e.g. `throwOnError`) must not poison later captures.
+	captureExecuteChain = run.catch(() => {});
+	return run;
+}
+
+async function captureExecuteExclusive(
+	app: ExecutableApp,
+	argv: readonly string[],
+): Promise<CapturedExecute> {
+	const stdoutLines: string[] = [];
+	const stderrLines: string[] = [];
+	const savedExitCode = process.exitCode;
+	process.exitCode = 0;
+
+	try {
+		await app.execute({
+			argv: [...argv],
+			io: {
+				stdout: (text) => {
+					stdoutLines.push(text);
+				},
+				stderr: (text) => {
+					stderrLines.push(text);
+				},
+			},
+		});
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			exitCode: Number(process.exitCode ?? 0),
+		};
+	} finally {
+		process.exitCode = savedExitCode;
+	}
 }
 
 export interface InteractiveRun {

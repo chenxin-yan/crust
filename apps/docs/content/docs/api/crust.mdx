@@ -319,16 +319,22 @@ await app.run(["Ada"], {
 ## `.execute(options?)`
 
 ```ts
-execute(options?: { argv?: string[] }): Promise<void>
+execute(options?: {
+  argv?: string[];
+  io?: {
+    stdout?: (text: string) => void;
+    stderr?: (text: string) => void;
+  };
+}): Promise<void>
 ```
 
-Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` is useful in tests.
+Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` overrides it, while `options.io` captures rendered output in tests.
 
 ```ts
 await app.execute();
 ```
 
-`execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation is silent and sets exit code `130`.
+`execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation sets exit code `130` and is offered to `onError` hooks; it renders nothing when no hook claims it.
 
 <Callout type="warn">
   Use `.handle(handler)` to define behavior. `.run(argv, io)` is only programmatic invocation;

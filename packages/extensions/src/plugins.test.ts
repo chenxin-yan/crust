@@ -529,6 +529,56 @@ describe("built-in plugins", () => {
 		expect(getStdout()).toContain("app v3.5.0");
 	});
 
+	it("version plugin supports a custom short alias", async () => {
+		const app = new Crust("app").extend(versionExtension("1.2.3", { short: "V" })).handle(() => {});
+
+		await app.execute({ argv: ["-V"] });
+
+		expect(getStdout()).toContain("app v1.2.3");
+	});
+
+	it("version plugin rejects -v when short is remapped", async () => {
+		const app = new Crust("app").extend(versionExtension("1.2.3", { short: "V" })).handle(() => {});
+
+		await app.execute({ argv: ["-v"] });
+
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("version plugin supports disabling the short alias", async () => {
+		const app = new Crust("app")
+			.extend(versionExtension("1.2.3", { short: false }))
+			.handle(() => {});
+
+		await app.execute({ argv: ["-v"] });
+
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("version plugin supports plain format", async () => {
+		const app = new Crust("app")
+			.extend(versionExtension("1.2.3", { format: "plain" }))
+			.handle(() => {});
+
+		await app.execute({ argv: ["--version"] });
+
+		expect(getStdout()).toBe("1.2.3");
+	});
+
+	it("version plugin supports a custom format function", async () => {
+		const app = new Crust("app")
+			.extend(
+				versionExtension("1.2.3", {
+					format: (version, context) => `${context.rootCommand.meta.name}/${version}`,
+				}),
+			)
+			.handle(() => {});
+
+		await app.execute({ argv: ["--version"] });
+
+		expect(getStdout()).toBe("app/1.2.3");
+	});
+
 	// ──────────────────────────────────────────────────────────────────────────────
 	// helpExtension alias rendering
 	// ──────────────────────────────────────────────────────────────────────────────

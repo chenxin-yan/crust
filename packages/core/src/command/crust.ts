@@ -971,11 +971,16 @@ export class Crust<
 	 * Core's default renderer), sets `process.exitCode` (`1`, or
 	 * `130` for an `AbortError` cancellation), and resolves.
 	 *
-	 * @param options - Optional overrides (e.g. custom `argv` for testing)
+	 * @param options - Optional overrides (e.g. custom `argv` and captured
+	 *                   `io` for in-process testing of exit codes and
+	 *                   rendered failures)
 	 */
-	async execute(options?: { argv?: string[] }): Promise<void> {
+	async execute(options?: {
+		argv?: string[];
+		io?: { stdout?: (text: string) => void; stderr?: (text: string) => void };
+	}): Promise<void> {
 		const argv = options?.argv ?? process.argv.slice(2);
-		const io = DEFAULT_IO;
+		const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
 
 		let prepared: PreparedInvocation;
 		try {
@@ -1018,6 +1023,11 @@ export class Crust<
 			});
 		} catch (error) {
 			if (isAbortError(error)) {
+				// Cancellation keeps its dedicated exit code, but Extension
+				// onError hooks may observe it to render a message (e.g.
+				// "Operation cancelled"). Core's default stays silent.
+				process.exitCode = EXIT_CODE_CANCELLED;
+				await renderFailure(error, argv, prepared, io, extensionContext, true);
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
@@ -1142,8 +1152,12 @@ async function renderFailure(
 	prepared: PreparedInvocation,
 	io: InvocationIO,
 	extensionContext: ExtensionContext | undefined,
+	silentDefault = false,
 ): Promise<void> {
 	const renderDefault = (): void => {
+		// Cancellation (AbortError) has no default rendering — a user abort
+		// is not an error to report unless an onError hook claims it.
+		if (silentDefault) return;
 		const message = error instanceof Error ? error.message : String(error);
 		io.stderr(`Error: ${message}`);
 	};

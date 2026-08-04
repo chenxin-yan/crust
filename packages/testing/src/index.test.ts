@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
+import { Crust, defineExtension } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 
-import { captureRun, interactiveRun, type RunnableApp } from "./index.ts";
+import { captureExecute, captureRun, interactiveRun, type RunnableApp } from "./index.ts";
 
 describe("captureRun", () => {
 	it("captures output from a structural runnable as lines", async () => {
@@ -79,5 +80,102 @@ describe("interactiveRun", () => {
 		const run = interactiveRun(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toThrow("already completed");
 		await run.done;
+	});
+});
+
+describe("captureExecute", () => {
+	it("captures exit code 0 and stdout on success", async () => {
+		const app = new Crust("test-cli").handle(({ stdout }) => {
+			stdout("hello");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
+	});
+
+	it("captures exit code 1 and the rendered failure", async () => {
+		const app = new Crust("test-cli").handle(() => {
+			throw new Error("boom");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("boom");
+	});
+
+	it("captures exit code 130 for AbortError cancellation", async () => {
+		const app = new Crust("test-cli").handle(() => {
+			throw new DOMException("Prompt was cancelled.", "AbortError");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(130);
+		expect(result.stderr).toBe("");
+	});
+
+	it("captures onError extension rendering", async () => {
+		const renderer = defineExtension("renderer", {
+			hooks: {
+				onError(error, ctx) {
+					ctx.stderr(`custom: ${(error as Error).message}`);
+					return true;
+				},
+			},
+		});
+		const app = new Crust("test-cli").extend(renderer).handle(() => {
+			throw new Error("boom");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe("custom: boom");
+	});
+
+	it("isolates exit codes across overlapping captures", async () => {
+		const originalExitCode = process.exitCode;
+		try {
+			// Non-zero ambient value: if capture B reads state restored by capture
+			// A's finally block, B reports 7 instead of its own 0.
+			process.exitCode = 7;
+
+			let releaseA!: () => void;
+			const gateA = new Promise<void>((resolve) => {
+				releaseA = resolve;
+			});
+			let releaseB!: () => void;
+			const gateB = new Promise<void>((resolve) => {
+				releaseB = resolve;
+			});
+
+			const appA = new Crust("test-cli").handle(async () => {
+				await gateA;
+			});
+			const appB = new Crust("test-cli").handle(async () => {
+				await gateB;
+			});
+
+			const pendingA = captureExecute(appA, []);
+			await Bun.sleep(0);
+			const pendingB = captureExecute(appB, []);
+			await Bun.sleep(0);
+
+			releaseA();
+			expect((await pendingA).exitCode).toBe(0);
+			releaseB();
+			expect((await pendingB).exitCode).toBe(0);
+			expect(process.exitCode).toBe(7);
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+	});
+
+	it("restores process.exitCode", async () => {
+		const before = process.exitCode;
+		const app = new Crust("test-cli").handle(() => {
+			throw new Error("boom");
+		});
+
+		await captureExecute(app, []);
+		expect(process.exitCode).toBe(before);
 	});
 });

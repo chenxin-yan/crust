@@ -74,4 +74,19 @@ try {
 }
 ```
 
-`execute()` treats this as silent cancellation and sets `process.exitCode` to `130`. `run()` throws the same exception.
+`execute()` sets `process.exitCode` to `130` and offers the `AbortError` to Extension `onError` hooks, so an application can render a cancellation message in one place:
+
+```ts
+const cancelMessage = defineExtension("cancel-message", {
+  hooks: {
+    onError(error, ctx) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        ctx.stderr("Operation cancelled");
+        return true;
+      }
+    },
+  },
+});
+```
+
+When no hook claims it, cancellation stays silent — there is no default rendering. `run()` throws the same exception.
