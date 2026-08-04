@@ -4,14 +4,6 @@ export type VersionValue = string | (() => string);
 
 export interface VersionExtensionOptions {
 	/**
-	 * Short alias for `--version`. Pass `false` to disable the short alias
-	 * (e.g. to free `-v` for a verbose flag), or another character such as
-	 * `"V"` for Commander-style CLIs.
-	 *
-	 * @default "v"
-	 */
-	readonly short?: string | false;
-	/**
 	 * Output format. `"plain"` prints the bare version (script-friendly:
 	 * `$(cli --version)`); a function receives the resolved version and the
 	 * extension context and returns the line to print.
@@ -25,13 +17,13 @@ export function versionExtension(
 	versionValue: VersionValue = "0.0.0",
 	options: VersionExtensionOptions = {},
 ): Extension {
-	const { short = "v", format } = options;
+	const { format } = options;
 
 	return defineExtension("version", {
 		flags: {
 			version: {
 				type: "boolean",
-				...(short === false ? {} : { short }),
+				short: "v",
 				noNegate: true,
 				description: "Show version number",
 				recursive: false,

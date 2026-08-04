@@ -2,4 +2,4 @@
 "@crustjs/extensions": minor
 ---
 
-`versionExtension(value, options?)` accepts new options: `short` remaps or disables the short alias (`{ short: "V" }`, `{ short: false }`), and `format` controls output (`"plain"` for the bare version, or a `(version, context) => string` function). Defaults are unchanged (`-v`, `<name> v<version>`).
+`versionExtension(value, options?)` accepts a new `format` option controlling output: `"plain"` prints the bare version, or a `(version, context) => string` function customizes the line. Default output is unchanged (`<name> v<version>`).
