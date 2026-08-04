@@ -47,19 +47,20 @@ await app.execute();
 
 ## Definition types
 
-| Type                                          | Description                                                        |
-| --------------------------------------------- | ------------------------------------------------------------------ |
-| `ArgDef`                                      | Core-value, raw, or Standard Schema positional argument definition |
-| `ArgsDef`                                     | Readonly ordered argument definitions                              |
-| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                        |
-| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                 |
-| `CommandMeta`                                 | Name, description, usage, aliases, and visibility                  |
-| [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time      |
-| `FlagDef`                                     | Core-value or Standard Schema flag definition                      |
-| `FlagsDef`                                    | Flag-name-to-definition record                                     |
-| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)   |
-| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)     |
-| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal          |
+| Type                                          | Description                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `ArgDef`                                      | Core-value, raw, or Standard Schema positional argument definition               |
+| `ArgsDef`                                     | Readonly ordered argument definitions                                            |
+| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
+| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
+| `CommandMeta`                                 | Name, description, usage, aliases, and visibility                                |
+| [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time                    |
+| `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
+| `FlagsDef`                                    | Flag-name-to-definition record                                                   |
+| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |
+| `Simplify<T>`                                 | Object-type simplification helper used by inferred public builder and flag types |
+| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)                   |
+| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal                        |
 
 See [Types](/docs/api/types) for field-level definitions.
 
