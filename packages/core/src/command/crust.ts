@@ -1028,6 +1028,7 @@ export class Crust<
 				// "Operation cancelled"). Core's default stays silent.
 				process.exitCode = EXIT_CODE_CANCELLED;
 				await renderFailure(error, argv, prepared, io, extensionContext, true);
+				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of

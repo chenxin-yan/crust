@@ -135,6 +135,7 @@ function normalizeArgv(argv: string[]): string[] {
 
     // Greedy multi-value: `--locales en fr` -> `--locales en --locales fr`
     if (GREEDY_FLAGS.has(token)) {
+      if (i + 1 >= argv.length || argv[i + 1]!.startsWith("-")) out.push(token);
       while (i + 1 < argv.length && !argv[i + 1]!.startsWith("-")) {
         out.push(token, argv[++i]!);
       }

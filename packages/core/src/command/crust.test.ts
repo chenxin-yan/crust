@@ -1696,6 +1696,24 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("Operation cancelled");
 	});
 
+	it("preserves the cancellation exit code after onError hooks", async () => {
+		const exitCodeOverride = defineExtension("exit-code-override", {
+			hooks: {
+				onError() {
+					process.exitCode = 1;
+				},
+			},
+		});
+
+		const app = new Crust("test").extend(exitCodeOverride).handle(() => {
+			throw new DOMException("Prompt was cancelled.", "AbortError");
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(process.exitCode).toBe(130);
+	});
+
 	it("keeps cancellation silent when onError hooks decline it", async () => {
 		let observed = false;
 		const observer = defineExtension("observer", {

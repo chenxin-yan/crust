@@ -67,9 +67,8 @@ function lookupFlag(flags: FlagsDef, spelling: string): FlagDef | undefined {
  * whether the flag consumes the following argv token as its value.
  *
  * Mirrors the parser's accepted spellings: `--name`, `--name=value`,
- * `--no-name` (boolean negation unless `noNegate`), `-s`, and bundled
- * short booleans (`-ab`). Tokens with `=` after a short prefix are left
- * to the parser.
+ * `--no-name` (boolean negation unless `noNegate`), `-s`, inline short
+ * values (`-svalue`), and bundled short flags (`-absvalue`).
  */
 function matchKnownFlagToken(flags: FlagsDef, token: string): { consumesValue: boolean } | null {
 	if (token === "--") return null;
@@ -88,18 +87,17 @@ function matchKnownFlagToken(flags: FlagsDef, token: string): { consumesValue: b
 		return null;
 	}
 
-	// Short form: `-q` or bundled `-qf`. Every char must be a known
-	// single-char spelling; only the last may take a value.
+	// Short form: `-q`, bundled `-qf`, or inline value `-ca.json`.
 	const chars = token.slice(1);
-	if (chars.length === 0 || chars.includes("=")) return null;
-	let last: FlagDef | undefined;
-	for (const char of chars) {
-		const def = lookupFlag(flags, char);
+	if (chars.length === 0) return null;
+	for (let index = 0; index < chars.length; index++) {
+		const def = lookupFlag(flags, chars[index]!);
 		if (!def) return null;
-		if (last && last.type !== "boolean") return null; // value-taking short mid-bundle
-		last = def;
+		if (def.type !== "boolean") {
+			return { consumesValue: index === chars.length - 1 };
+		}
 	}
-	return { consumesValue: last !== undefined && last.type !== "boolean" };
+	return { consumesValue: false };
 }
 
 /**

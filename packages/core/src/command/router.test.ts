@@ -579,7 +579,7 @@ describe("resolveCommand — known-flag skipping", () => {
 			flags: {
 				quiet: { type: "boolean", short: "q", description: "quiet" },
 				verbose: { type: "boolean", noNegate: true, description: "verbose" },
-				config: { type: "string", aliases: ["conf"], description: "config file" },
+				config: { type: "string", short: "c", aliases: ["conf"], description: "config file" },
 			},
 			subCommands: { translate },
 		});
@@ -595,6 +595,12 @@ describe("resolveCommand — known-flag skipping", () => {
 		const result = resolveCommand(makeRoot(), ["-q", "translate"]);
 		expect(result.commandPath).toEqual(["app", "translate"]);
 		expect(result.argv).toEqual(["-q"]);
+	});
+
+	it("routes past a short flag with an inline value", () => {
+		const result = resolveCommand(makeRoot(), ["-ca.json", "translate"]);
+		expect(result.commandPath).toEqual(["app", "translate"]);
+		expect(result.argv).toEqual(["-ca.json"]);
 	});
 
 	it("routes past a negated boolean flag", () => {
