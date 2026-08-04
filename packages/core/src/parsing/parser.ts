@@ -18,6 +18,9 @@ import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
  */
 type ParsedFlagValue = string | boolean | (string | boolean)[] | undefined;
 
+/** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
+type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
+
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -327,26 +330,42 @@ function coerceFlagValue(
 }
 
 /**
- * Resolve aliases in raw parsed values to their canonical flag names,
- * merging arrays for `multiple` flags that are provided via mixed aliases.
+ * Resolve parsed option tokens to canonical flag names, in argv order.
+ *
+ * Works from `parsed.tokens` rather than `parsed.values` because
+ * `util.parseArgs` groups values by option key: with aliases, the last *key*
+ * would win instead of the last *token* (`--verbose --no-loud --verbose`
+ * must be `true`), and `multiple` flags spread across aliases would lose
+ * their interleaved argv order.
  */
 function resolveAliases(
-	parsedValues: Record<string, unknown>,
+	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
 	flagsDef: FlagsDef,
 ): Record<string, ParsedFlagValue> {
 	const canonical: Record<string, ParsedFlagValue> = {};
 
-	for (const key in parsedValues) {
-		const canonicalName = aliasToName[key] ?? key;
-		if (!(canonicalName in flagsDef)) continue;
+	for (const token of tokens) {
+		if (token.kind !== "option") continue;
 
-		const value = parsedValues[key];
-		const existing = canonical[canonicalName];
-		if (existing !== undefined && Array.isArray(existing) && Array.isArray(value)) {
-			existing.push(...value);
+		const canonicalName = aliasToName[token.name] ?? token.name;
+		const def = flagsDef[canonicalName];
+		if (!def) continue;
+
+		// Booleans carry no token value; a `--no-` spelling means false
+		// (allowNegative). Non-booleans always have a string value in strict mode.
+		const value: string | boolean =
+			def.type === "boolean" ? !token.rawName.startsWith("--no-") : (token.value as string);
+
+		if (def.multiple) {
+			const existing = canonical[canonicalName];
+			if (Array.isArray(existing)) {
+				existing.push(value);
+			} else {
+				canonical[canonicalName] = [value];
+			}
 		} else {
-			canonical[canonicalName] = value as ParsedFlagValue;
+			canonical[canonicalName] = value;
 		}
 	}
 
@@ -359,12 +378,12 @@ function resolveAliases(
  */
 function resolveFlags(
 	flagsDef: FlagsDef | undefined,
-	parsedValues: Record<string, unknown>,
+	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
 ) {
 	if (!flagsDef) return {};
 
-	const canonical = resolveAliases(parsedValues, aliasToName, flagsDef);
+	const canonical = resolveAliases(tokens, aliasToName, flagsDef);
 	const resolved: Record<string, unknown> = {};
 
 	for (const [name, def] of Object.entries(flagsDef)) {
@@ -440,13 +459,14 @@ function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Recor
 }
 
 /**
- * Enforce canonical-only boolean negation.
+ * Enforce `noNegate` at parse time.
  *
- * `--no-<name>` is accepted only for the canonical boolean flag name.
- * Negating long aliases (for example `--no-loud` where `loud` aliases
- * `verbose`) is rejected with a targeted CrustError.
+ * `--no-<spelling>` works for the canonical name and every long alias
+ * (an alias is a perfect synonym — see ADR 0001), but a boolean that
+ * opted out via `noNegate` rejects every negated spelling. Without this
+ * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
  */
-function validateCanonicalNegationUsage(
+function validateNoNegateUsage(
 	argv: string[],
 	flagsDef: FlagsDef | undefined,
 	aliasToName: Record<string, string>,
@@ -465,16 +485,15 @@ function validateCanonicalNegationUsage(
 
 		if (!rawName) continue;
 
-		const canonical = aliasToName[rawName];
+		const canonical = aliasToName[rawName] ?? (rawName in flagsDef ? rawName : undefined);
 		if (!canonical) continue;
-		if (canonical === rawName) continue;
 
 		const def = flagsDef[canonical];
-		if (def?.type !== "boolean") continue;
+		if (def?.type !== "boolean" || def.noNegate !== true) continue;
 
 		throw new CrustError(
 			"PARSE",
-			`Cannot negate alias "--no-${rawName}"; use "--no-${canonical}" instead`,
+			`Flag "--${canonical}" does not support negation ("--no-${rawName}")`,
 		);
 	}
 }
@@ -512,7 +531,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
 
-	validateCanonicalNegationUsage(argv, flagsDef, aliasToName);
+	validateNoNegateUsage(argv, flagsDef, aliasToName);
 
 	let parsed: ReturnType<typeof nodeParseArgs>;
 
@@ -553,7 +572,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 		preSeparatorPositionals.push(...parsed.positionals);
 	}
 
-	const resolvedFlags = resolveFlags(flagsDef, parsed.values, aliasToName);
+	const resolvedFlags = resolveFlags(flagsDef, parsed.tokens ?? [], aliasToName);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	// The runtime logic correctly builds args/flags matching InferArgs<A> and

@@ -895,10 +895,10 @@ describe("parseArgs — negated boolean flag with value assignment", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Canonical-only negation (reject --no-<alias>)
+// Alias-symmetric negation (--no-<alias> works; noNegate enforced)
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("parseArgs — canonical-only negation", () => {
+describe("parseArgs — boolean negation", () => {
 	const cmd = makeNode({
 		meta: { name: "test" },
 		flags: {
@@ -926,16 +926,51 @@ describe("parseArgs — canonical-only negation", () => {
 		expect(result.flags.verbose).toBe(true);
 	});
 
-	it("throws CrustError with PARSE code on --no-<long-alias>", () => {
-		try {
-			parseArgs(cmd, ["--no-loud"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe(
-				'Cannot negate alias "--no-loud"; use "--no-verbose" instead',
-			);
+	it("allows --no-<long-alias> (--no-loud sets canonical false)", () => {
+		const result = parseArgs(cmd, ["--no-loud"]);
+		expect(result.flags.verbose).toBe(false);
+	});
+
+	it("last-token-wins across mixed spellings", () => {
+		const result = parseArgs(cmd, ["--verbose", "--no-loud"]);
+		expect(result.flags.verbose).toBe(false);
+
+		// Regression: parseArgs values group by key, so a repeated earlier
+		// spelling must not shadow the final token.
+		const result2 = parseArgs(cmd, ["--verbose", "--no-loud", "--verbose"]);
+		expect(result2.flags.verbose).toBe(true);
+	});
+
+	it("multiple flags preserve argv order across mixed aliases", () => {
+		const multiCmd = makeNode({
+			meta: { name: "test" },
+			flags: {
+				tag: { type: "string", multiple: true, short: "t", aliases: ["label"] },
+			},
+		});
+		const result = parseArgs(multiCmd, ["-t", "a", "--label", "b", "--tag", "c"]);
+		expect(result.flags.tag).toEqual(["a", "b", "c"]);
+	});
+
+	it("rejects negation of a noNegate boolean via any spelling", () => {
+		const noNegateCmd = makeNode({
+			meta: { name: "test" },
+			flags: {
+				version: { type: "boolean", noNegate: true, aliases: ["ver"] },
+			},
+		});
+
+		for (const spelling of ["--no-version", "--no-ver"]) {
+			try {
+				parseArgs(noNegateCmd, [spelling]);
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(CrustError);
+				expect((err as CrustError).code).toBe("PARSE");
+				expect((err as CrustError).message).toBe(
+					`Flag "--version" does not support negation ("${spelling}")`,
+				);
+			}
 		}
 	});
 

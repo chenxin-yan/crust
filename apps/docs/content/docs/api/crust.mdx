@@ -167,9 +167,9 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls replace the local flags. A duplicate name within one call throws `DEFINITION`.
+Repeated `.flags()` calls **replace** the local flags — they do not merge; pass all definitions in one call. A duplicate name within one call throws `DEFINITION`.
 
-`inherit: true` exposes a flag to descendant commands and allows it to satisfy mounted definition and Context requirements. Boolean flags support generated `--no-name` negation; `noNegate: true` hides the generated label from help, completion, and man output (the parser still accepts `--no-name`). Names and aliases beginning with `no-` are reserved.
+`inherit: true` exposes a flag to descendant commands and allows it to satisfy mounted definition and Context requirements. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
 Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
 

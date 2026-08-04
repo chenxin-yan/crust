@@ -303,7 +303,7 @@ interface BooleanFlagDef extends SingleFlagBase {
 	type: "boolean";
 	/** Default boolean value */
 	default?: boolean;
-	/** When `true`, hide the generated `--no-{name}` help label */
+	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
 	noNegate?: true;
 	/** Not supported on boolean flags — use `type: "string"` with `parse`. */
 	parse?: never;
@@ -385,7 +385,7 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
 	type: "boolean";
 	/** Default boolean array value */
 	default?: boolean[];
-	/** When `true`, hide the generated `--no-{name}` help label */
+	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
 	noNegate?: true;
 	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
 	parse?: never;
@@ -457,7 +457,7 @@ interface SchemaBooleanFlagDef extends SchemaFlagBase {
 	type: "boolean";
 	/** When `true`, the flag is repeatable and the schema receives `boolean[]` */
 	multiple?: true;
-	/** When `true`, hide the generated `--no-{name}` help label */
+	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
 	noNegate?: true;
 }
 
