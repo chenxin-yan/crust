@@ -25,7 +25,12 @@ my-cli v1.2.3
 ```ts
 type VersionValue = string | (() => string);
 
-function version(value?: VersionValue): Extension;
+interface VersionExtensionOptions {
+  short?: string | false; // default "v"
+  format?: "plain" | ((version: string, context: ExtensionContext) => string);
+}
+
+function version(value?: VersionValue, options?: VersionExtensionOptions): Extension;
 ```
 
 The default value is `"0.0.0"`. Pass a function to resolve the version only when the flag is handled:
@@ -35,3 +40,28 @@ const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? 
 ```
 
 `version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Handler only for a root invocation with `--version` or `-v`; subcommands do not receive the flag.
+
+## Options
+
+### `short`
+
+Remap or disable the short alias. Commander-migrated CLIs conventionally use `-V`:
+
+```ts
+version(pkg.version, { short: "V" }); // -V and --version
+version(pkg.version, { short: false }); // --version only, -v is free
+```
+
+### `format`
+
+Control the printed line. `"plain"` prints the bare version, which scripts can capture via `$(my-cli --version)`:
+
+```ts
+version("1.2.3", { format: "plain" });
+// $ my-cli --version
+// 1.2.3
+
+version("1.2.3", { format: (v, ctx) => `${ctx.rootCommand.meta.name}/${v}` });
+// $ my-cli --version
+// my-cli/1.2.3
+```
