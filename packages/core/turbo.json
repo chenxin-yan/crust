@@ -1,0 +1,11 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"test": {
+			// declaration-emission.test.ts rebuilds dist via bunup; without this
+			// own-build dependency it races turbo's core:build writing the same dist.
+			"dependsOn": ["^build", "build"]
+		}
+	}
+}

@@ -41,7 +41,7 @@ beforeAll(() => {
 	// checked against dist, where types live in a private chunk.
 	const build = Bun.spawnSync(["bun", "run", "build"], { cwd: corePkg });
 	if (build.exitCode !== 0) {
-		throw new Error(`core build failed:\n${build.stderr.toString()}`);
+		throw new Error(`core build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`);
 	}
 
 	fixtureDir = mkdtempSync(join(tmpdir(), "crust-dts-consumer-"));
