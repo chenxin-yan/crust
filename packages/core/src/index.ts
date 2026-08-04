@@ -6,6 +6,7 @@ export type {
 	ContextMap,
 	ContextRequirements,
 	ContextSetup,
+	Simplify,
 } from "./api/context.ts";
 export { defineContext } from "./api/context.ts";
 export type {
