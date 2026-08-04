@@ -207,7 +207,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 	return {
 		command: current,
-		argv: skippedFlagTokens.length > 0 ? [...skippedFlagTokens, ...routedArgv] : routedArgv,
+		argv: [...skippedFlagTokens, ...routedArgv],
 		commandPath: path,
 	};
 }

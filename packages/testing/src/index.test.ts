@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
+import { Crust, defineExtension } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 
-import { captureRun, interactiveRun, type RunnableApp } from "./index.ts";
+import { captureExecute, captureRun, interactiveRun, type RunnableApp } from "./index.ts";
 
 describe("captureRun", () => {
 	it("captures output from a structural runnable as lines", async () => {
@@ -84,8 +85,6 @@ describe("interactiveRun", () => {
 
 describe("captureExecute", () => {
 	it("captures exit code 0 and stdout on success", async () => {
-		const { Crust } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const app = new Crust("test-cli").handle(({ stdout }) => {
 			stdout("hello");
 		});
@@ -95,8 +94,6 @@ describe("captureExecute", () => {
 	});
 
 	it("captures exit code 1 and the rendered failure", async () => {
-		const { Crust } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const app = new Crust("test-cli").handle(() => {
 			throw new Error("boom");
 		});
@@ -107,8 +104,6 @@ describe("captureExecute", () => {
 	});
 
 	it("captures exit code 130 for AbortError cancellation", async () => {
-		const { Crust } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const app = new Crust("test-cli").handle(() => {
 			throw new DOMException("Prompt was cancelled.", "AbortError");
 		});
@@ -119,8 +114,6 @@ describe("captureExecute", () => {
 	});
 
 	it("captures onError extension rendering", async () => {
-		const { Crust, defineExtension } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const renderer = defineExtension("renderer", {
 			hooks: {
 				onError(error, ctx) {
@@ -139,8 +132,6 @@ describe("captureExecute", () => {
 	});
 
 	it("isolates exit codes across overlapping captures", async () => {
-		const { Crust } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const originalExitCode = process.exitCode;
 		try {
 			// Non-zero ambient value: if capture B reads state restored by capture
@@ -179,8 +170,6 @@ describe("captureExecute", () => {
 	});
 
 	it("restores process.exitCode", async () => {
-		const { Crust } = await import("@crustjs/core");
-		const { captureExecute } = await import("./index.ts");
 		const before = process.exitCode;
 		const app = new Crust("test-cli").handle(() => {
 			throw new Error("boom");

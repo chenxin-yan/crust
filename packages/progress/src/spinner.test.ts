@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type SpinnerController, spinner } from "./spinner.ts";
+import { type SpinnerController, createSpinner, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -634,7 +634,6 @@ describe("createSpinner — imperative", () => {
 	afterEach(restoreMocks);
 
 	it("start and stop live in different call frames", async () => {
-		const { createSpinner } = await import("./spinner.ts");
 		const handle = createSpinner({ message: "Working..." });
 
 		handle.start();
@@ -647,7 +646,6 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("stop('error') renders the failure symbol without throwing", async () => {
-		const { createSpinner } = await import("./spinner.ts");
 		const handle = createSpinner({ message: "Deploying..." });
 
 		handle.start();
@@ -659,7 +657,6 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("updateMessage repaints while running", async () => {
-		const { createSpinner } = await import("./spinner.ts");
 		const handle = createSpinner({ message: "Step 1" });
 
 		handle.start();
@@ -670,7 +667,6 @@ describe("createSpinner — imperative", () => {
 	});
 
 	it("stop is idempotent", async () => {
-		const { createSpinner } = await import("./spinner.ts");
 		const handle = createSpinner({ message: "Once" });
 
 		handle.start();
@@ -687,7 +683,6 @@ describe("createSpinner — imperative", () => {
 			return process;
 		}) as typeof process.once;
 
-		const { createSpinner } = await import("./spinner.ts");
 		const handle = createSpinner({ message: "No sigint", sigint: false });
 		handle.start();
 		handle.stop();

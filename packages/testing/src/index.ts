@@ -1,15 +1,15 @@
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 
+/** Structural io shape shared by `run()` and `execute()` captures. */
+export interface CaptureIO {
+	readonly stdout?: (text: string) => void;
+	readonly stderr?: (text: string) => void;
+}
+
 /** Minimal structural surface invoked by the testing helpers. */
 export interface RunnableApp {
-	run(
-		argv: readonly string[],
-		io?: {
-			stdout?: (text: string) => void;
-			stderr?: (text: string) => void;
-		},
-	): Promise<void>;
+	run(argv: readonly string[], io?: CaptureIO): Promise<void>;
 }
 
 export interface CapturedRun {
@@ -48,13 +48,7 @@ export async function captureRun(app: RunnableApp, argv: readonly string[]): Pro
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
 export interface ExecutableApp {
-	execute(options?: {
-		argv?: string[];
-		io?: {
-			stdout?: (text: string) => void;
-			stderr?: (text: string) => void;
-		};
-	}): Promise<void>;
+	execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<void>;
 }
 
 export interface CapturedExecute {

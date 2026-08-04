@@ -212,12 +212,8 @@ export async function spinner<T>(options: SpinnerOptions<T>): Promise<T> {
 	const handle = createSpinner(options);
 	handle.start();
 
-	const controller: SpinnerController = {
-		updateMessage: handle.updateMessage,
-	};
-
 	try {
-		const result = await options.task(controller);
+		const result = await options.task(handle);
 		handle.stop("success");
 		return result;
 	} catch (error) {
