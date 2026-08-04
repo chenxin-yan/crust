@@ -81,3 +81,72 @@ describe("interactiveRun", () => {
 		await run.done;
 	});
 });
+
+describe("captureExecute", () => {
+	it("captures exit code 0 and stdout on success", async () => {
+		const { Crust } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const app = new Crust("test-cli").handle(({ stdout }) => {
+			stdout("hello");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
+	});
+
+	it("captures exit code 1 and the rendered failure", async () => {
+		const { Crust } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const app = new Crust("test-cli").handle(() => {
+			throw new Error("boom");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("boom");
+	});
+
+	it("captures exit code 130 for AbortError cancellation", async () => {
+		const { Crust } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const app = new Crust("test-cli").handle(() => {
+			throw new DOMException("Prompt was cancelled.", "AbortError");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(130);
+		expect(result.stderr).toBe("");
+	});
+
+	it("captures onError extension rendering", async () => {
+		const { Crust, defineExtension } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const renderer = defineExtension("renderer", {
+			hooks: {
+				onError(error, ctx) {
+					ctx.stderr(`custom: ${(error as Error).message}`);
+					return true;
+				},
+			},
+		});
+		const app = new Crust("test-cli").extend(renderer).handle(() => {
+			throw new Error("boom");
+		});
+
+		const result = await captureExecute(app, []);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toBe("custom: boom");
+	});
+
+	it("restores process.exitCode", async () => {
+		const { Crust } = await import("@crustjs/core");
+		const { captureExecute } = await import("./index.ts");
+		const before = process.exitCode;
+		const app = new Crust("test-cli").handle(() => {
+			throw new Error("boom");
+		});
+
+		await captureExecute(app, []);
+		expect(process.exitCode).toBe(before);
+	});
+});

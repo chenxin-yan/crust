@@ -42,6 +42,19 @@ if (result.error) throw result.error;
 console.log(result.stdout);
 ```
 
+## `captureExecute(app, argv)`
+
+Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. `process.exitCode` is restored afterwards.
+
+```ts
+import { captureExecute } from "@crustjs/testing";
+
+const result = await captureExecute(app, ["deploy", "--bad-flag"]);
+
+expect(result.exitCode).toBe(1);
+expect(result.stderr).toContain("Unknown flag");
+```
+
 ## `interactiveRun(app, argv)`
 
 Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`.

@@ -46,6 +46,60 @@ export async function captureRun(app: RunnableApp, argv: readonly string[]): Pro
 	return failed ? { stdout, stderr, error } : { stdout, stderr };
 }
 
+/** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
+export interface ExecutableApp {
+	execute(options?: {
+		argv?: string[];
+		io?: {
+			stdout?: (text: string) => void;
+			stderr?: (text: string) => void;
+		};
+	}): Promise<void>;
+}
+
+export interface CapturedExecute {
+	readonly stdout: string;
+	readonly stderr: string;
+	/** The exit code `execute()` established (`0`, `1`, or `130` for cancellation). */
+	readonly exitCode: number;
+}
+
+/**
+ * Drive the terminal `execute()` path in-process: exit-code protocol,
+ * Extension `onError` rendering, and cancellation (130) are all observable
+ * without spawning a subprocess. `process.exitCode` is restored afterwards.
+ */
+export async function captureExecute(
+	app: ExecutableApp,
+	argv: readonly string[],
+): Promise<CapturedExecute> {
+	const stdoutLines: string[] = [];
+	const stderrLines: string[] = [];
+	const savedExitCode = process.exitCode;
+	process.exitCode = 0;
+
+	try {
+		await app.execute({
+			argv: [...argv],
+			io: {
+				stdout: (text) => {
+					stdoutLines.push(text);
+				},
+				stderr: (text) => {
+					stderrLines.push(text);
+				},
+			},
+		});
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			exitCode: Number(process.exitCode ?? 0),
+		};
+	} finally {
+		process.exitCode = savedExitCode;
+	}
+}
+
 export interface InteractiveRun {
 	waitFor(pattern: RegExp, timeoutMs?: number): Promise<void>;
 	type(text: string): void;
