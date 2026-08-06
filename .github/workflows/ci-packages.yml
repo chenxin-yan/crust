@@ -18,15 +18,21 @@ on:
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: ci-packages-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -35,7 +41,7 @@ jobs:
         run: bun ci
 
       - name: Cache Turbo
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .turbo
           key: turbo-packages-${{ runner.os }}-${{ github.sha }}
@@ -56,3 +62,73 @@ jobs:
           for package_manager in bun npm pnpm; do
             CRUST_SMOKE_PM="$package_manager" bun test ./packages/crust/tests/package-manager.smoke.test.ts
           done
+
+  package-size:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: package-size-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Turbo
+        uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-packages-${{ runner.os }}-
+
+      - name: Build and measure head
+        run: |
+          bun ci
+          bun turbo run build --filter='./packages/*'
+          bun scripts/package-size-report.mjs sizes > "$RUNNER_TEMP/head.json"
+
+      - name: Checkout base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Build and measure base
+        run: |
+          cd base
+          bun ci
+          bun turbo run build --filter='./packages/*'
+          cd ..
+          # Head's script measures both trees so old base refs need no copy of it.
+          bun scripts/package-size-report.mjs sizes base > "$RUNNER_TEMP/base.json"
+
+      - name: Comment package sizes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- package-size-report -->'
+          {
+            echo "$marker"
+            echo '## 📦 Package size'
+            echo
+            bun scripts/package-size-report.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
+          } > "$RUNNER_TEMP/comment.md"
+          comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- package-size-report -->")))][0].id // empty')
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/comment.md"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F "body=@$RUNNER_TEMP/comment.md"
+          fi
