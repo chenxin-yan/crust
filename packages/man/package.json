@@ -4,7 +4,6 @@
 	"description": "Generate mdoc(7) manual pages from Crust CLI definitions",
 	"type": "module",
 	"license": "MIT",
-	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",

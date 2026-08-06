@@ -4,7 +4,6 @@
 	"description": "DX-first, typed persistence for CLI apps with config/data/state/cache separation",
 	"type": "module",
 	"license": "MIT",
-	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
