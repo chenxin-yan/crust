@@ -4,6 +4,7 @@
 	"description": "Progress indicators for the Crust CLI ecosystem",
 	"type": "module",
 	"license": "MIT",
+	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",

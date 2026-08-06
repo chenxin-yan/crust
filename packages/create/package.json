@@ -4,6 +4,7 @@
 	"description": "Headless scaffolding engine for building create-xxx tools",
 	"type": "module",
 	"license": "MIT",
+	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",

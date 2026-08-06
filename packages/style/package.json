@@ -4,6 +4,7 @@
 	"description": "Terminal styling foundation for the Crust CLI framework",
 	"type": "module",
 	"license": "MIT",
+	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",

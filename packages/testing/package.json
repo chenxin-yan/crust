@@ -4,6 +4,7 @@
 	"description": "Testing helpers for Crust CLI applications",
 	"type": "module",
 	"license": "MIT",
+	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",

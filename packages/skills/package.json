@@ -4,6 +4,7 @@
 	"description": "Agent skill generation from Crust command definitions",
 	"type": "module",
 	"license": "MIT",
+	"sideEffects": false,
 	"author": "chenxin-yan",
 	"repository": {
 		"type": "git",
