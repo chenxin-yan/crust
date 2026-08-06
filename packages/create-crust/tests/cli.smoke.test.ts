@@ -170,10 +170,11 @@ async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 		const tarballs = readdirSync(localPackageDir).filter(
 			(entry) => entry.endsWith(".tgz") && !before.has(entry),
 		);
-		if (tarballs.length !== 1) {
+		const [tarball] = tarballs;
+		if (tarballs.length !== 1 || tarball === undefined) {
 			throw new Error(`Expected one tarball for ${pkg.name}, found ${tarballs.length}.`);
 		}
-		specs[pkg.name] = pathToFileURL(join(localPackageDir, tarballs[0])).href;
+		specs[pkg.name] = pathToFileURL(join(localPackageDir, tarball)).href;
 	}
 
 	return specs;
