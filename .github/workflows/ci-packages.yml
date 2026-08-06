@@ -8,6 +8,7 @@ on:
     paths:
       - ".changeset/**"
       - "packages/**"
+      - "scripts/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"

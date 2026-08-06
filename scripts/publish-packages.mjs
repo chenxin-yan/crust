@@ -178,10 +178,6 @@ async function runCommand(args, cwd) {
 		cwd,
 		stdout: "inherit",
 		stderr: "inherit",
-		env: {
-			...process.env,
-			BUN_BE_BUN: "1",
-		},
 	});
 
 	const exitCode = await proc.exited;
@@ -214,12 +210,11 @@ async function main() {
 
 	if (packagesToPublish.length === 0) {
 		console.log("No unpublished package versions found.");
-		return;
-	}
-
-	console.log("Packages to publish:");
-	for (const pkg of packagesToPublish) {
-		console.log(`- ${pkg.name}@${pkg.version} (${pkg.relativeDir})`);
+	} else {
+		console.log("Packages to publish:");
+		for (const pkg of packagesToPublish) {
+			console.log(`- ${pkg.name}@${pkg.version} (${pkg.relativeDir})`);
+		}
 	}
 
 	if (dryRun) {
@@ -232,7 +227,9 @@ async function main() {
 		await runCommand([process.execPath, "run", "publish"], pkg.dir);
 	}
 
-	for (const pkg of packagesToPublish) {
+	// Tag the whole cohort, not just this run's publishes: after a partial
+	// failure, a retry must still tag packages that the failed run published.
+	for (const pkg of packages) {
 		const tag = `${pkg.name}@${pkg.version}`;
 		if (await tagExists(tag)) {
 			console.log(`Tag already exists: ${tag}`);
