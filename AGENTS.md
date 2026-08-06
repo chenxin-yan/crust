@@ -1,21 +1,3 @@
-# AGENTS.md — Crust CLI Framework
-
-Bun-native, TypeScript-first CLI framework. Turborepo monorepo, Bun runtime, Oxlint/Oxfmt lint/format, bunup builds. All packages ESM.
-
-## Commands
-
-```sh
-bun install              # install deps
-bun run build            # build all packages
-bun run lint             # Oxlint
-bun run format           # Oxfmt check
-bun run check            # lint + format
-bun run check:types      # type-check
-bun run test             # run all tests
-```
-
-Run `bun run check` and `bun run check:types` before submitting.
-
 ## Tests
 
 - `bun:test`: `import { describe, expect, it, beforeEach, afterEach } from "bun:test"`
@@ -24,7 +6,7 @@ Run `bun run check` and `bun run check:types` before submitting.
 
 ## Documentation
 
-Update docs in the same change as the code. Stale docs = bug.
+Update relevant docs/code comments in the same change as the code. Stale docs = bug.
 
 Doc surfaces:
 
@@ -42,3 +24,17 @@ Before submitting:
 ## Changesets
 
 Do not edit `CHANGELOG.md` manually. Run `bunx changeset` to record user-visible changes; release tooling consumes them.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (`chenxin-yan/crust`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
