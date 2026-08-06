@@ -4,6 +4,6 @@
 		"declaration": true,
 		"isolatedDeclarations": true
 	},
-	"include": ["src"],
+	"include": ["src", "tests"],
 	"exclude": ["templates"]
 }
