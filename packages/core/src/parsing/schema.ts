@@ -25,7 +25,7 @@ async function runSchema(
 }
 
 /**
- * Apply Standard Schemas declared on arg/flag definitions (ADR-0005).
+ * Apply Standard Schemas declared on arg/flag definitions.
  *
  * Runs after syntax parsing and structural validation: each schema receives
  * the raw parsed value (`string | undefined` for args, the raw token value

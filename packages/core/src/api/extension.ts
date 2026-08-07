@@ -5,7 +5,7 @@ import type { FlagDef, InvocationIO } from "../types.ts";
 import type { Awaitable } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Extension — the public integration contract (ADR-0001)
+// Extension — the public integration contract
 // ────────────────────────────────────────────────────────────────────────────
 
 const finishedBrand: unique symbol = Symbol("crust.finished");

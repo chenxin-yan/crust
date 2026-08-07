@@ -462,7 +462,7 @@ function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Recor
  * Enforce `noNegate` at parse time.
  *
  * `--no-<spelling>` works for the canonical name and every long alias
- * (an alias is a perfect synonym — see ADR 0001), but a boolean that
+ * (an alias is a perfect synonym), but a boolean that
  * opted out via `noNegate` rejects every negated spelling. Without this
  * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
  */

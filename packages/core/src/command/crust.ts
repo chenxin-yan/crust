@@ -88,7 +88,7 @@ interface PreparedInvocation {
 
 /**
  * Runtime guard for untyped callers: schema mode is exclusive — the schema
- * owns coercion, defaults, requiredness, choices, and validation (ADR-0005).
+ * owns coercion, defaults, requiredness, choices, and validation.
  * The type system already rejects mixing; this catches plain-JS misuse.
  */
 function validateSchemaExclusivity(
@@ -153,7 +153,7 @@ function isAbortError(error: unknown): boolean {
 /**
  * Inject an Extension-owned flag into a node's effective flags (and, when
  * `recursive`, into every descendant). Name collisions with application or
- * other Extension definitions are definition errors (ADR-0001).
+ * other Extension definitions are definition errors.
  */
 function injectExtensionFlag(
 	node: CommandNode,
@@ -944,7 +944,7 @@ export class Crust<
 				return;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of
-			// what Extension onError hooks do (ADR-0001).
+			// what Extension onError hooks do.
 			process.exitCode = 1;
 			await renderFailure(error, argv, prepared, io, extensionContext);
 		}
@@ -991,7 +991,7 @@ export class Crust<
 			if (!resolvedNode.run) return;
 
 			// Standard Schemas on arg/flag definitions own value validation and
-			// transformation (ADR-0005); the handler receives schema outputs.
+			// transformation; the handler receives schema outputs.
 			const validated = await applySchemas(resolvedNode, parsed);
 
 			// Native resource protocol: Context values implementing
@@ -1124,7 +1124,7 @@ function prepareInvocation(node: CommandNode): PreparedInvocation {
  * Prepare a frozen, validated Command Snapshot of an application with all
  * Extension contributions applied. Does not call Command Handlers.
  *
- * Explicitly unsupported tooling bridge (ADR-0006), exposed only via
+ * Explicitly unsupported tooling bridge, exposed only via
  * `@crustjs/core/tooling` for man-page/skill generators and build tooling.
  * The parameter is structural so any `Crust` builder satisfies it.
  */
