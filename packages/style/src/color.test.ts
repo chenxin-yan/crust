@@ -3,6 +3,17 @@ import { describe, expect, it } from "bun:test";
 import * as codes from "./ansiCodes.ts";
 import { bg, fg } from "./color.ts";
 import { applyStyle } from "./styleEngine.ts";
+import type { ColorString } from "./types.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// ColorString — compile-time assignability checks (no runtime assertions)
+// ────────────────────────────────────────────────────────────────────────────
+
+// Functional notation is assignable via the ColorFnString prefixes.
+"rgb(0, 128, 255)" satisfies ColorString;
+"oklch(70% 0.1 200)" satisfies ColorString;
+// Dynamic strings still type-check via the LiteralUnion fallback.
+"dynamic" as string satisfies ColorString;
 
 // ────────────────────────────────────────────────────────────────────────────
 // fg / bg — direct styling functions
@@ -24,6 +35,10 @@ describe("fg", () => {
 	it("accepts `hsl()` strings", () => {
 		// hsl(0, 100%, 50%) === pure red
 		expect(fg("x", "hsl(0, 100%, 50%)")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+	});
+
+	it("accepts `rgb()` strings", () => {
+		expect(fg("x", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
 	});
 
 	it("accepts `{ r, g, b }` objects", () => {

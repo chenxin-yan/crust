@@ -8,25 +8,44 @@ import type { LiteralUnion, NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
+ * CSS functional-notation prefixes surfaced for editor autocomplete.
+ *
+ * Exactly the functions `Bun.color()` parses. Contents are NOT validated
+ * by the type system — `Bun.color()` validates at runtime and throws
+ * `TypeError` on garbage. Type-level grammar would reject valid CSS
+ * (space syntax, `deg`, `%`, `/` alpha).
+ */
+type ColorFnString =
+	| `rgb(${string})`
+	| `rgba(${string})`
+	| `hsl(${string})`
+	| `hsla(${string})`
+	| `hwb(${string})`
+	| `lab(${string})`
+	| `lch(${string})`
+	| `oklab(${string})`
+	| `oklch(${string})`;
+
+/**
  * String forms accepted by `fg` / `bg`.
  *
- * Editors autocomplete the 148 CSS {@link NamedColor | named colors} and
- * the `#` hex prefix while still accepting any other string Bun's CSS
- * parser understands (`rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`,
- * `oklch()`, `#RGBA`, etc.).
+ * Editors autocomplete the 148 CSS {@link NamedColor | named colors},
+ * the `#` hex prefix, and the functional-notation prefixes (`rgb(`,
+ * `hsl(`, `lab(`, `oklch(`, …) while still accepting any other string
+ * Bun's CSS parser understands.
  *
  * The `string` fallback is preserved via {@link LiteralUnion} so dynamic
  * values — e.g. theme tokens loaded from JSON — still type-check.
  */
-export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+export type ColorString = LiteralUnion<NamedColor | `#${string}` | ColorFnString, string>;
 
 /**
  * Input accepted by `fg` and `bg`.
  *
  * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
  * surface, with a richer `string` branch so editors autocomplete CSS
- * named colors and hint at hex literals. All members are assignable to
- * `Bun.color()` at runtime.
+ * named colors and hint at hex and functional-notation prefixes. All
+ * members are assignable to `Bun.color()` at runtime.
  *
  * Accepted shapes:
  * - {@link ColorString} — hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`),

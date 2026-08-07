@@ -179,7 +179,7 @@ Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth
 
 ```ts
 type ColorInput =
-  | ColorString // NamedColor | `#${string}` | (string & {}) — autocompletes 148 CSS names
+  | ColorString // NamedColor | `#${string}` | `rgb(${string})` | … | (string & {}) — autocompletes 148 CSS names, hex, and functional prefixes
   | number // packed 0xRRGGBB
   | readonly [r: number, g: number, b: number]
   | readonly [r: number, g: number, b: number, a: number]
