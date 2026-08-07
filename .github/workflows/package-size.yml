@@ -72,7 +72,7 @@ jobs:
           marker='<!-- package-size-report -->'
           {
             echo "$marker"
-            echo '## 📦 Package size (runtime JS, gzip)'
+            echo '## 📦 Package size'
             echo
             bun scripts/package-size-report.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
           } > "$RUNNER_TEMP/comment.md"
