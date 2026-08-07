@@ -75,6 +75,7 @@ async function loadWorkspacePackages() {
 			relativeDir,
 			dependencies: packageJson.dependencies ?? {},
 			optionalDependencies: packageJson.optionalDependencies ?? {},
+			peerDependencies: packageJson.peerDependencies ?? {},
 		});
 	}
 
@@ -85,6 +86,7 @@ function getInternalDependencyNames(pkg, workspaceNames) {
 	const allDeps = {
 		...pkg.dependencies,
 		...pkg.optionalDependencies,
+		...pkg.peerDependencies,
 	};
 
 	return new Set(Object.keys(allDeps).filter((dependency) => workspaceNames.has(dependency)));

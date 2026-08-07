@@ -22,11 +22,6 @@
 		"bun",
 		"typescript"
 	],
-	"files": [
-		"dist/cli",
-		"dist/cli.cmd",
-		"dist/*-bun-*"
-	],
 	"publishConfig": {
 		"access": "public"
 	},
