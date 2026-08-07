@@ -18,11 +18,18 @@ describe("buildCommandDocumentation", () => {
 		);
 		expect(model.usage).toBe("app <file> [rest...] [options]");
 		expect(model.args.map((arg) => arg.token)).toEqual(["<file>", "[rest...]"]);
+		expect(model.usageSegments).toEqual([
+			{ kind: "path", text: "app" },
+			{ kind: "arg", text: "<file>", required: true },
+			{ kind: "arg", text: "[rest...]", required: false },
+			{ kind: "options", text: "[options]" },
+		]);
 	});
 
 	it("uses explicit usage unchanged", async () => {
 		const model = await docs(new Crust("app").meta({ usage: "app FILE" }).handle(() => {}));
 		expect(model.usage).toBe("app FILE");
+		expect(model.usageSegments).toEqual([{ kind: "custom", text: "app FILE" }]);
 	});
 
 	it("omits hidden commands while traversing the full visible tree", async () => {

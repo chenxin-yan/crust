@@ -16,5 +16,6 @@ export type {
 	CommandDocumentation,
 	DocumentationArg,
 	DocumentationFlag,
+	UsageSegment,
 } from "./command/documentation.ts";
 export { snapshotCommand } from "./command/snapshot.ts";

@@ -27,12 +27,27 @@ export interface DocumentationFlag {
 	readonly default?: unknown;
 }
 
+/**
+ * One renderer-colorable piece of a usage line. `custom` is the sole segment
+ * when the author supplied `meta.usage`; generated usage lines are composed
+ * of the other kinds so renderers can style parts without re-deriving the
+ * assembly policy (when `<command>`/`[options]` appear, argument ordering).
+ */
+export type UsageSegment =
+	| { readonly kind: "path"; readonly text: string }
+	| { readonly kind: "command"; readonly text: "<command>" }
+	| { readonly kind: "arg"; readonly text: string; readonly required: boolean }
+	| { readonly kind: "options"; readonly text: "[options]" }
+	| { readonly kind: "custom"; readonly text: string };
+
 export interface CommandDocumentation {
 	readonly name: string;
 	readonly path: readonly string[];
 	readonly description?: string;
 	readonly aliases: readonly string[];
+	/** Plain usage line: `usageSegments` texts joined with spaces. */
 	readonly usage: string;
+	readonly usageSegments: readonly UsageSegment[];
 	readonly hasHandler: boolean;
 	readonly args: readonly DocumentationArg[];
 	readonly flags: readonly DocumentationFlag[];
@@ -84,16 +99,17 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		.filter(([, child]) => child.meta.hidden !== true)
 		.map(([name, child]) => buildNode(child, [...path, name]));
 	const flags = documentationFlags(command.flags);
-	const usage =
-		command.meta.usage ??
-		[
-			path.join(" "),
-			children.length > 0 && !command.hasHandler ? "<command>" : undefined,
-			...args.map((arg) => arg.token),
-			flags.length > 0 ? "[options]" : undefined,
-		]
-			.filter(Boolean)
-			.join(" ");
+	const usageSegments: UsageSegment[] = command.meta.usage
+		? [{ kind: "custom", text: command.meta.usage }]
+		: [
+				{ kind: "path", text: path.join(" ") },
+				...(children.length > 0 && !command.hasHandler
+					? [{ kind: "command", text: "<command>" } as const]
+					: []),
+				...args.map((arg) => ({ kind: "arg", text: arg.token, required: arg.required }) as const),
+				...(flags.length > 0 ? [{ kind: "options", text: "[options]" } as const] : []),
+			];
+	const usage = usageSegments.map((segment) => segment.text).join(" ");
 
 	return Object.freeze({
 		name: command.meta.name,
@@ -101,6 +117,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		description: command.meta.description,
 		aliases: Object.freeze([...(command.meta.aliases ?? [])]),
 		usage,
+		usageSegments: Object.freeze(usageSegments.map((segment) => Object.freeze(segment))),
 		hasHandler: command.hasHandler,
 		args: Object.freeze(args),
 		flags: Object.freeze(flags),

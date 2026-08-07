@@ -125,6 +125,14 @@ describe("built-in plugins", () => {
 		expect(plain).toContain("[default: true]");
 		expect(plain).toContain("[default: 3000]");
 		expect(plain).toContain('[default: "."]');
+
+		// Convention audit H3 keeps per-part usage coloring: path green,
+		// placeholders cyan, args yellow (dim when optional) — not one span.
+		const usageLine = output.split("\n").find((line) => stripAnsi(line).startsWith("  app"));
+		expect(usageLine).toContain("\x1b[32mapp\x1b["); // green path
+		expect(usageLine).toContain("\x1b[36m<command>\x1b["); // cyan placeholder
+		expect(usageLine).toContain("\x1b[36m[options]\x1b["); // cyan placeholder
+		expect(usageLine).toContain("[dir]"); // arg token present, yellow+dim
 	});
 
 	it("renderHelp shows every callable alias and negation", () => {

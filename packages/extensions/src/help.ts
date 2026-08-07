@@ -4,6 +4,7 @@ import {
 	type CommandDocumentation,
 	type DocumentationArg,
 	type DocumentationFlag,
+	type UsageSegment,
 } from "@crustjs/core/tooling";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 
@@ -13,6 +14,19 @@ const COMMAND_COLUMN_WIDTH = 10;
 
 function formatArgToken(arg: DocumentationArg): string {
 	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));
+}
+
+function formatUsageSegment(segment: UsageSegment): string {
+	switch (segment.kind) {
+		case "path":
+		case "custom":
+			return green(segment.text);
+		case "command":
+		case "options":
+			return cyan(segment.text);
+		case "arg":
+			return segment.required ? yellow(segment.text) : dim(yellow(segment.text));
+	}
 }
 
 function formatDescription(
@@ -80,7 +94,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 		model.description ? `${bold(heading)} - ${dim(model.description)}` : bold(heading),
 		"",
 		bold(cyan("Usage:")),
-		`  ${green(model.usage)}`,
+		`  ${model.usageSegments.map(formatUsageSegment).join(" ")}`,
 	];
 	for (const section of [
 		formatCommandsSection(model),
