@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 
-import { Crust, defineCommand, defineExtension } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { helpExtension, renderHelp } from "./help.ts";
@@ -417,6 +417,28 @@ describe("built-in plugins", () => {
 
 		expect(getStdout()).toBe("");
 		expect(capturedRawArgs).toEqual(["--help"]);
+	});
+
+	it("help renders Context-owned flags on providers and descendants", async () => {
+		const apiKey = defineFlag("api-key", {
+			type: "string",
+			description: "API credential",
+		});
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const app = new Crust("app")
+			.provide(auth())
+			.extend(helpExtension())
+			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+
+		await app.run(["--help"]);
+		const rootHelp = stripAnsi(getStdout());
+		expect(rootHelp).toContain("--api-key");
+
+		stdoutChunks = [];
+		await app.run(["deploy", "--help"]);
+		const childHelp = stripAnsi(getStdout());
+		expect(childHelp).toContain("--api-key");
+		expect(childHelp).toContain("API credential");
 	});
 
 	it("help plugin supports subcommands injected after its setup", async () => {

@@ -1,6 +1,7 @@
 // Contexts and Extensions
 export type {
 	AnyContextFactory,
+	ContextConfig,
 	ContextFactory,
 	ContextInstance,
 	ContextMap,

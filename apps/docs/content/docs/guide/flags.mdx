@@ -88,6 +88,25 @@ The flag is parsed and shown in help at each descendant. `defineFlag(name, def)`
 
 A command mounted without a flag requirement still inherits `inherit: true` flags at runtime, but its handler's `flags` type does not include them — declare requirements to see them.
 
+Inherited flags can appear before or after the subcommand: both `app --verbose deploy` and `app deploy --verbose` route to `deploy`.
+
+## Context-owned flags
+
+When a flag exists to construct a dependency—such as `--api-key` configuring an HTTP client—let the Context own it instead of separately registering it on the root:
+
+```ts
+import { Crust, defineContext, defineFlag } from "@crustjs/core";
+
+const apiKey = defineFlag("api-key", { type: "string" });
+const api = defineContext("api", { ownFlags: [apiKey] }, ({ flags }) => ({
+  apiKey: flags["api-key"],
+}));
+
+const app = new Crust("app").provide(api());
+```
+
+`.provide(api())` installs an inheritable copy of `apiKey`, while handlers can depend on the derived `ctx.api`. Raw shared controls such as `--verbose` should continue to use `inherit: true` and explicit command `requirements.flags`. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
+
 ## Standard Schemas
 
 For a schema-backed flag, `type` controls token grammar only: `"string"` consumes a token and `"boolean"` does not. The schema owns the resulting value.

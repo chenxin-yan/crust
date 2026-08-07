@@ -15,7 +15,7 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const corePkg = resolve(import.meta.dir, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const CONSUMER_SOURCE = `import { Crust, defineCommand, defineFlag } from "@crustjs/core";
+const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 // Inferred defineFlag element type references Simplify
 export const configFlag = defineFlag("config", {
@@ -28,9 +28,15 @@ export const flags = [
 	defineFlag("quiet", { type: "boolean", short: "q", description: "Quiet mode" }),
 ];
 
-// Inferred builder type references EffectiveFlags / flag def shapes
+export const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+export const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+	apiKey: flags["api-key"],
+}));
+
+// Inferred builder type references EffectiveFlags / Context-owned flag shapes
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
+	.provide(auth())
 	.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
 `;
 

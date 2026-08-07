@@ -86,7 +86,7 @@ The schema receives the raw `string | undefined` or `boolean | undefined`; with 
 type NamedFlagDef = FlagDef & { readonly name: string };
 ```
 
-The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requirements.flags` arrays, and `defineFlag()` all use it.
+The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requirements.flags`, Context `ownFlags`, and `defineFlag()` all use it.
 
 ### `defineFlag` and `defineArg`
 
@@ -118,7 +118,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective inherited and local flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective inherited, local, and Context-owned flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -146,16 +146,16 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value, RF, RC> {
-  (options: Options): ContextInstance<Name, Value, RF, RC>;
+interface ContextFactory<Name extends string, Options, Value, RF, RC, OF> {
+  (options: Options): ContextInstance<Name, Value, RF, RC, OF>;
   readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value>;
+  of(value: Value): ContextInstance<Name, Value, {}, {}, OF>;
 }
 ```
 
-`defineContext(name, setup)` and `defineContext(name, requirements, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets requirement arrays reference the factory directly; `.of(value)` produces an instance returning the precomputed value with requirements considered satisfied — for test doubles. `AnyContextFactory` is the requirement-array element type.
+`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets requirement arrays reference the factory directly; `.of(value)` produces an instance returning the precomputed value with requirements considered satisfied while retaining its owned flags. `AnyContextFactory` is the requirement-array element type.
 
-### `ContextRequirements` and `ContextSetup`
+### `ContextRequirements`, `ContextConfig`, and `ContextSetup`
 
 ```ts
 interface ContextRequirements {
@@ -163,14 +163,18 @@ interface ContextRequirements {
   readonly ctx?: readonly AnyContextFactory[];
 }
 
-interface ContextSetup<Options, RF, RC> {
+interface ContextConfig extends ContextRequirements {
+  readonly ownFlags?: readonly NamedFlagDef[];
+}
+
+interface ContextSetup<Options, RF, RC, OF> {
   readonly options: Options;
-  readonly flags: InferFlags<RF>;
+  readonly flags: InferFlags<MergeFlags<RF, OF>>;
   readonly ctx: Readonly<RC>;
 }
 ```
 
-`ContextRequirements` declares the flags a Context reads and the Contexts it depends on. `ContextSetup` is the typed input every setup receives: the factory argument, the validated parsed flags narrowed to the declared requirements, and the values of the declared ctx dependencies.
+`ContextRequirements.flags` declares inheritable flags a Context reads from its command path, while `ContextConfig.ownFlags` declares flags installed when an instance is provided. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
 
 ### `ContextInstance`
 

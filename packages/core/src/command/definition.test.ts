@@ -54,6 +54,30 @@ describe("command definitions", () => {
 		await expect(app.run(["outer", "nested", "--late"])).rejects.toThrow(/Unknown flag/);
 	});
 
+	it("propagates Context-owned flags only to definitions mounted after provide()", async () => {
+		const calls: string[] = [];
+		const apiKey = defineFlag("api-key", { type: "string" });
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+			apiKey: flags["api-key"],
+		}));
+		const before = defineCommand("before", (command) => command.handle(() => {}));
+		const after = defineCommand("after", { flags: [apiKey], ctx: [auth] }, (command) =>
+			command.handle(({ flags, ctx }) => {
+				calls.push(`${flags["api-key"]}:${ctx.auth.apiKey}`);
+			}),
+		);
+		const outer = defineCommand("outer", (command) =>
+			command.mount(before).provide(auth()).mount(after),
+		);
+		const app = new Crust("cli").mount(outer);
+
+		await expect(app.run(["outer", "before", "--api-key", "secret"])).rejects.toThrow(
+			/Unknown flag/,
+		);
+		await app.run(["outer", "after", "--api-key", "secret"]);
+		expect(calls).toEqual(["secret:secret"]);
+	});
+
 	it("inherits flags and Contexts through nested definitions", async () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });

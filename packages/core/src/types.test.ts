@@ -834,6 +834,26 @@ describe("EffectiveFlags type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("merges owned flags and forces inherit: true", () => {
+		type Result = EffectiveFlags<
+			{ verbose: { type: "boolean"; inherit: true } },
+			{ output: { type: "string" } },
+			{ apiKey: { type: "string"; short: "k" } }
+		>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					verbose: { type: "boolean"; inherit: true };
+					output: { type: "string" };
+					apiKey: { type: "string"; short: "k"; inherit: true };
+				}
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
 	it("short-circuits to local when inherited is wide FlagsDef", () => {
 		type Local = {
 			output: { type: "string" };

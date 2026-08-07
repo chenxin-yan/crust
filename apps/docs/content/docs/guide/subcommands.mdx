@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition declares the inheritable flags and Contexts it expects from any parent as arrays of defined values. The recipe builder — and the handler's `flags` and `ctx` — are typed from them:
+A definition declares the inheritable flags and Contexts it expects from any parent as arrays of defined values. `requirements.flags` describes raw flags already available on the path; it does not create or hoist them. The recipe builder — and the handler's `flags` and `ctx` — are typed from these requirements:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -74,7 +74,9 @@ const app = new Crust("app").flags(verbose).mount(deploy);
 
 ## Context inheritance
 
-Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; declare `requirements.ctx` to see them in the handler's types. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
+Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; declare `requirements.ctx` to see them in the handler's types.
+
+Finalize inheritable flags and `.provide()` calls on the parent builder before `.mount()`. This includes [flags owned by a provided Context](/docs/guide/contexts#owned-flags). Later fluent calls return a new builder and do not backfill an earlier mount.
 
 ## Unknown commands
 

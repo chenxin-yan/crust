@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
+import type { NamedFlagDef } from "../types.ts";
 import { defineContext } from "./context.ts";
+import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
 type Assert<T extends true> = T;
@@ -179,6 +181,174 @@ describe("Crust .provide()", () => {
 		await app.run(["status"]);
 
 		expect(lateProvided).toBe(false);
+	});
+});
+
+describe("Context-owned flags", () => {
+	const apiKey = defineFlag("api-key", {
+		type: "string",
+		short: "k",
+		aliases: ["token"],
+	});
+
+	it("installs an inheritable cloned flag and exposes its validated value to setup", async () => {
+		const seen: unknown[] = [];
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => {
+			type _ApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+			seen.push(flags["api-key"]);
+			return { apiKey: flags["api-key"] };
+		});
+		const instance = auth();
+		expect(instance.ownedFlags["api-key"]).toEqual({
+			type: "string",
+			short: "k",
+			aliases: ["token"],
+			inherit: true,
+		});
+		expect("inherit" in apiKey).toBe(false);
+
+		const app = new Crust("cli").provide(instance).handle(({ flags, ctx }) => {
+			type _HandlerApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+			seen.push(ctx.auth.apiKey);
+		});
+		await app.run(["--api-key", "secret"]);
+
+		expect(seen).toEqual(["secret", "secret"]);
+	});
+
+	it("satisfies later mounted flag and Context requirements", async () => {
+		const seen: string[] = [];
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+			apiKey: flags["api-key"],
+		}));
+		const deploy = defineCommand("deploy", { flags: [apiKey], ctx: [auth] }, (command) =>
+			command.handle(({ flags, ctx }) => {
+				type _Raw = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+				seen.push(`${flags["api-key"]}:${ctx.auth.apiKey}`);
+			}),
+		);
+
+		await new Crust("cli").provide(auth()).mount(deploy).run(["--api-key", "secret", "deploy"]);
+		expect(seen).toEqual(["secret:secret"]);
+	});
+
+	it("merges owned flag types from multiple Contexts in one provide call", () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const format = defineFlag("format", { type: "string", choices: ["json", "text"] });
+		const output = defineContext("output", { ownFlags: [format] }, () => ({}));
+		const app = new Crust("cli").provide(auth(), output());
+
+		type _OwnedKeys = Assert<IsEqual<keyof (typeof app)["_types"]["owned"], "api-key" | "format">>;
+		type _EffectiveApiKey = Assert<
+			IsEqual<(typeof app)["_types"]["effective"]["api-key"]["inherit"], true>
+		>;
+		type _EffectiveFormat = Assert<
+			IsEqual<(typeof app)["_types"]["effective"]["format"]["inherit"], true>
+		>;
+	});
+
+	it("keeps owned flags when later .flags() calls replace local flags", async () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const app = new Crust("cli")
+			.provide(auth())
+			.flags({ name: "verbose", type: "boolean" })
+			.handle(({ flags }) => {
+				expect(flags["api-key"]).toBe("secret");
+				expect(flags.verbose).toBe(true);
+			});
+
+		await app.run(["--api-key", "secret", "--verbose"]);
+		expect(app._node.ownedFlags["api-key"]).toBeDefined();
+	});
+
+	it("allows one owning factory on sibling command branches", async () => {
+		const seen: string[] = [];
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+			apiKey: flags["api-key"],
+		}));
+		const branch = (name: string) =>
+			defineCommand(name, (command) =>
+				command.provide(auth()).handle(({ ctx }) => {
+					seen.push(`${name}:${ctx.auth.apiKey}`);
+				}),
+			);
+		const app = new Crust("cli").mount(branch("first"), branch("second"));
+
+		await app.run(["first", "--api-key", "one"]);
+		await app.run(["second", "--api-key", "two"]);
+
+		expect(seen).toEqual(["first:one", "second:two"]);
+	});
+
+	it("retains owned flags on .of() test doubles", async () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({ real: true }));
+		const fake = auth.of({ real: false });
+		expect(fake.requiredFlags).toEqual({});
+		expect(fake.ownedFlags["api-key"]?.inherit).toBe(true);
+
+		await new Crust("cli")
+			.provide(fake)
+			.handle(({ flags, ctx }) => {
+				expect(flags["api-key"]).toBe("fake-key");
+				expect(ctx.auth.real).toBe(false);
+			})
+			.run(["--api-key", "fake-key"]);
+	});
+
+	it("rejects owning and requiring the same flag", () => {
+		expect(() =>
+			defineContext("auth", { flags: [apiKey], ownFlags: [apiKey] }, () => ({})),
+		).toThrow(/cannot both require and own flag "--api-key"/);
+	});
+
+	it("rejects duplicate owned flag names at definition time", () => {
+		const duplicates: readonly NamedFlagDef[] = [apiKey, apiKey];
+
+		expect(() => defineContext("auth", { ownFlags: duplicates }, () => ({}))).toThrow(
+			/owns flag "--api-key" more than once/,
+		);
+	});
+
+	it("rejects collisions between owned flag spellings at definition time", () => {
+		const colliding: readonly NamedFlagDef[] = [
+			{ name: "api-key", type: "string", short: "k" },
+			{ name: "key-file", type: "string", aliases: ["k"] },
+		];
+
+		expect(() => defineContext("auth", { ownFlags: colliding }, () => ({}))).toThrow(
+			/Context "auth" flag "--key-file" spelling "k" collides with flag "--api-key"/,
+		);
+	});
+
+	it("rejects application and Context-owned collisions in both fluent orders", () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		expect(() => new Crust("cli").flags(apiKey).provide(auth())).toThrow(/collides/);
+		expect(() => new Crust("cli").provide(auth()).flags(apiKey)).toThrow(/collides/);
+	});
+
+	it("rejects collisions between different Contexts in one or separate provide calls", () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const session = defineContext(
+			"session",
+			{ ownFlags: [{ name: "session-key", type: "string", short: "k" }] },
+			() => ({}),
+		);
+		expect(() => new Crust("cli").provide(auth(), session())).toThrow(/collides/);
+		expect(() => new Crust("cli").provide(auth()).provide(session())).toThrow(/collides/);
+	});
+
+	it("rejects Extension collisions regardless of fluent registration order", async () => {
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const extension = defineExtension("auth-extension", {
+			flags: { other: { type: "string", aliases: ["api-key"] } },
+		});
+
+		await expect(new Crust("cli").extend(extension).provide(auth()).run([])).rejects.toThrow(
+			/collides/,
+		);
+		await expect(new Crust("cli").provide(auth()).extend(extension).run([])).rejects.toThrow(
+			/collides/,
+		);
 	});
 });
 

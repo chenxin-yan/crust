@@ -93,6 +93,18 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 			},
 		],
 		[
+			".provide()",
+			(a) =>
+				a.provide(
+					defineContext("auth", { ownFlags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
+				) as Crust,
+			(a) => {
+				expect(a._node.contexts).toEqual([]);
+				expect(a._node.ownedFlags).toEqual({});
+				expect(a._node.effectiveFlags).toEqual({});
+			},
+		],
+		[
 			".meta()",
 			(a) => a.meta({ description: "desc" }) as Crust,
 			(a) => {

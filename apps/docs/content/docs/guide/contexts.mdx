@@ -28,6 +28,33 @@ const clock = defineContext("clock", () => ({ now: () => Date.now() }));
 const app = new Crust("app").provide(clock());
 ```
 
+## Owned flags
+
+A Context can own the flags used to construct its value. Declare each flag once in `ownFlags`; attaching the Context installs those flags on the provider command and its later-mounted descendants:
+
+```ts
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+
+const apiKey = defineFlag("api-key", { type: "string" });
+
+const api = defineContext("api", { ownFlags: [apiKey] }, ({ flags }) => ({
+  apiKey: flags["api-key"],
+  get(path: string) {
+    return `${flags["api-key"] ?? "anonymous"}:${path}`;
+  },
+}));
+
+const deploy = defineCommand("deploy", { ctx: [api] }, (command) =>
+  command.handle(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
+);
+
+const app = new Crust("app").provide(api()).mount(deploy);
+```
+
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores an inheritable clone of the definition; the original `apiKey` value is not mutated.
+
+The child requires only `ctx.api` when the derived client is its dependency. If a handler also needs the raw value, add `apiKey` to that command definition's `requirements.flags`; ownership and raw flag access remain separate contracts.
+
 ## Lazy construction and inheritance
 
 Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only for the resolved command path. An Extension that returns `ctx.finish()` does not construct them.
@@ -48,7 +75,13 @@ Setups may be synchronous or asynchronous.
 
 ## Requirements
 
-`defineContext(name, requirements, setup)` declares what a Context needs: flags it reads and other Contexts it depends on. Requirements are arrays of defined values:
+`defineContext(name, config, setup)` accepts two different flag relationships:
+
+- `flags` declares inheritable flags that must already exist on the command path.
+- `ownFlags` defines flags installed when this Context is provided.
+- `ctx` declares other Context values needed by setup.
+
+All three are arrays of defined values:
 
 ```ts
 import { defineContext, defineFlag } from "@crustjs/core";
@@ -65,7 +98,7 @@ const database = defineContext("db", { flags: [verbose], ctx: [config] }, ({ fla
 The setup input carries three fields:
 
 - `options` — the factory argument
-- `flags` — the validated parsed flags of the resolved invocation, narrowed to the declared flag definitions. These are the same values the Command Handler receives, after schema application.
+- `flags` — validated values for both `flags` requirements and `ownFlags`. These are the same schema-processed values the Command Handler receives.
 - `ctx` — the constructed values of the declared ctx dependencies
 
 ### Flag requirements
@@ -81,6 +114,18 @@ const app = new Crust("app")
 
 A missing or non-inheritable required flag is a `DEFINITION` error at `.provide()`.
 
+A Context may require a flag owned by another Context, but the owner must be attached in an earlier call so the next builder carries the flag type:
+
+```ts
+const audit = defineContext("audit", { flags: [apiKey] }, ({ flags }) => ({
+  credentialPresent: flags["api-key"] !== undefined,
+}));
+
+const app = new Crust("app").provide(api()).provide(audit());
+```
+
+`.provide(api(), audit())` intentionally fails: every requirement in one variadic call is checked against the builder as it existed before that call. Context `ctx` dependencies do not have this restriction because they are ordered topologically at invocation time.
+
 ### Ctx requirements and construction order
 
 Provide order is free: dependencies may be provided after their dependents. At invocation time, the Contexts on the resolved command path are constructed **topologically** by their declared `ctx` requirements; independent Contexts keep registration order.
@@ -95,7 +140,7 @@ A ctx dependency that is not provided on the path, or a dependency cycle, is a `
 
 ## Test doubles with `.of()`
 
-Every factory carries `.of(value)`: it produces an instance whose setup returns the precomputed value under the same name and value type, with requirements considered satisfied. Use it to swap a real Context for a fake in tests:
+Every factory carries `.of(value)`: it produces an instance whose setup returns the precomputed value under the same name and value type, with requirements considered satisfied. Owned flags remain installed so production and test command grammars match. Use it to swap a real Context for a fake in tests:
 
 ```ts
 const fake = database.of({ query: (sql) => `fake: ${sql}` });
@@ -105,7 +150,7 @@ const app = new Crust("app").provide(fake).handle(({ ctx, stdout }) => {
 });
 ```
 
-Because the fake declares no requirements, no flags or dependency Contexts are needed.
+The fake needs none of the real setup's required flags or dependency Contexts. If the factory has `ownFlags`, callers may still pass them and the command's help and completion remain unchanged.
 
 ## Scope a guard to a subtree
 
@@ -146,13 +191,15 @@ const status = defineCommand("status", { ctx: [database] }, (command) =>
 const app = new Crust("app").flags(verbose).provide(config(), database()).mount(status);
 ```
 
-Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).
+Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. Contexts and their owned flags do not backfill children mounted on an earlier builder. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).
 
-## One name per command path
+## Name and flag collisions
 
 Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited.
 
 Mounted definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.mount()`.
+
+A Context cannot both require and own the same flag. Owned flag names, short forms, and aliases must also be unique across application flags, other Contexts, and Extensions. Application and Context collisions fail while building; Extension collisions fail when `run()`, `execute()`, or `crust build` prepares the complete graph. Every case uses `CrustError` code `DEFINITION` rather than shadowing a definition.
 
 ## Native disposal
 

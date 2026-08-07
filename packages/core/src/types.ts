@@ -735,9 +735,20 @@ export type InheritableFlags<F extends FlagsDef> = {
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
+export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
 	Omit<Parent, keyof Local> & Local
 >;
+
+type WithInherit<D extends FlagDef> = D extends FlagDef
+	? Simplify<Omit<D, "inherit"> & { inherit: true }>
+	: never;
+
+/** Mark every flag in a record as inheritable without changing its value shape. */
+export type ForceInherit<F extends FlagsDef> = {
+	[K in keyof F]: WithInherit<F[K]>;
+} extends infer R extends FlagsDef
+	? R
+	: never;
 
 /**
  * Computes the effective flags for a command by filtering the inherited flags
@@ -759,7 +770,14 @@ type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
 export type EffectiveFlags<
 	Inherited extends FlagsDef,
 	Local extends FlagsDef,
-> = string extends keyof Inherited ? Local : MergeFlags<InheritableFlags<Inherited>, Local>;
+	Owned extends FlagsDef = {},
+> =
+	MergeFlags<
+		string extends keyof Inherited ? Local : MergeFlags<InheritableFlags<Inherited>, Local>,
+		ForceInherit<Owned>
+	> extends infer R extends FlagsDef
+		? R
+		: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import { resolveCommand, type CommandRoute } from "../src/command/router";
 import type {
 	ArgDef,
@@ -10,7 +12,14 @@ import type {
 	FlagsDef,
 	NamedFlagDef,
 } from "../src/index";
-import { Crust, defineArg, defineCommand, defineExtension, defineFlag } from "../src/index";
+import {
+	Crust,
+	defineArg,
+	defineCommand,
+	defineContext,
+	defineExtension,
+	defineFlag,
+} from "../src/index";
 import { parseArgs } from "../src/parsing/parser";
 import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
@@ -429,6 +438,41 @@ describe("integration: .execute() full pipeline with argv override", () => {
 
 		const result = await executeCrust(app, ["service", "api", "--env", "production", "--dryRun"]);
 		expect(result.stdout).toContain("deploy service=api env=production dryRun=true");
+		expect(result.exitCode).toBe(0);
+	});
+});
+
+describe("integration: Context-owned flag → derived Context and descendant", () => {
+	beforeEach(() => {
+		process.exitCode = 0;
+	});
+
+	it("routes before the subcommand and passes schema output to setup and handler", async () => {
+		const schema: StandardSchema<string | undefined, number> = {
+			"~standard": {
+				version: 1,
+				vendor: "test",
+				validate: (value) => ({ value: Number(value) }),
+			},
+		};
+		const apiKey = defineFlag("api-key", {
+			type: "string",
+			short: "k",
+			aliases: ["token"],
+			schema,
+		});
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+			credential: flags["api-key"],
+		}));
+		const deploy = defineCommand("deploy", { flags: [apiKey], ctx: [auth] }, (command) =>
+			command.handle(({ flags, ctx }) => {
+				console.log(`${typeof flags["api-key"]}:${ctx.auth.credential}`);
+			}),
+		);
+		const app = new Crust("cli").provide(auth()).mount(deploy);
+
+		const result = await executeCrust(app, ["--token=42", "deploy"]);
+		expect(result.stdout).toContain("number:42");
 		expect(result.exitCode).toBe(0);
 	});
 });

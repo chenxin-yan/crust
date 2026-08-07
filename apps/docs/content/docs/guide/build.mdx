@@ -179,14 +179,14 @@ If you pass `--env-file`, the validation subprocess receives the same explicit e
 
 | Issue                          | Error Code   | Example                                                    |
 | ------------------------------ | ------------ | ---------------------------------------------------------- |
-| Flag alias collision           | `DEFINITION` | Two flags share `-v` as alias                              |
+| Flag alias collision           | `DEFINITION` | App, Context, or Extension flags share `-v` as an alias    |
 | `no-` prefixed flag name       | `DEFINITION` | Flag named `no-cache` instead of `cache`                   |
 | `no-` prefixed alias           | `DEFINITION` | Alias `no-store` on a flag                                 |
 | Long alias shadowing flag name | `DEFINITION` | Alias `out` when another flag is named `out`               |
 | Missing Context dependency     | `DEFINITION` | A provided Context requires a Context absent from its path |
 | Context dependency cycle       | `DEFINITION` | Two provided Contexts require each other                   |
 
-Extension-owned command names, aliases, flag names, short forms, and long aliases are checked against application definitions and other Extensions. Collisions are `DEFINITION` errors; Crust never warns and skips a contribution.
+Extension-owned command names, aliases, flag names, short forms, and long aliases are checked against application and Context-owned definitions and other Extensions. Collisions are `DEFINITION` errors; Crust never warns and skips a contribution.
 
 ### Skipping validation
 

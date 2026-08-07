@@ -19,7 +19,9 @@ export interface CommandNode {
 	meta: CommandMeta;
 	/** Flags defined directly on this command via `.flags()` */
 	localFlags: FlagsDef;
-	/** Inherited flags merged with local flags (used by the parser) */
+	/** Inheritable flags installed by Contexts provided on this command */
+	ownedFlags: FlagsDef;
+	/** Inherited, local, and Context-owned flags merged for parsing */
 	effectiveFlags: FlagsDef;
 	/** Positional argument definitions */
 	args: ArgsDef | undefined;
@@ -48,6 +50,7 @@ export function createCommandNode(name: string): CommandNode {
 	return {
 		meta: { name },
 		localFlags: {},
+		ownedFlags: {},
 		effectiveFlags: {},
 		args: undefined,
 		subCommands: {},
@@ -62,10 +65,9 @@ export function createCommandNode(name: string): CommandNode {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Merges inherited flags (only those with `inherit: true`) with local flags.
- *
- * Local flags override inherited flags with the same key. Non-inheritable
- * flags from the parent are excluded entirely.
+ * Merges inherited flags (only those with `inherit: true`) with local and
+ * Context-owned flags. Owned flags are stored with `inherit: true` and take
+ * precedence after collision validation.
  *
  * This is the runtime counterpart of the `EffectiveFlags` utility type.
  *
@@ -73,7 +75,11 @@ export function createCommandNode(name: string): CommandNode {
  * @param local - The current command's locally-defined flags.
  * @returns A new `FlagsDef` containing inherited+local merged flags.
  */
-export function computeEffectiveFlags(inherited: FlagsDef, local: FlagsDef): FlagsDef {
+export function computeEffectiveFlags(
+	inherited: FlagsDef,
+	local: FlagsDef,
+	owned: FlagsDef = {},
+): FlagsDef {
 	const result: Record<string, FlagDef> = {};
 
 	// Copy only inheritable flags from parent
@@ -85,6 +91,10 @@ export function computeEffectiveFlags(inherited: FlagsDef, local: FlagsDef): Fla
 
 	// Local flags override inherited flags with the same key
 	for (const [key, def] of Object.entries(local)) {
+		result[key] = def;
+	}
+
+	for (const [key, def] of Object.entries(owned)) {
 		result[key] = def;
 	}
 

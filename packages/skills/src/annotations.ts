@@ -16,7 +16,7 @@ export interface SkillCommandAnnotations {
 	instructions?: string[];
 }
 
-type SkillCommandTarget = CommandNode | Crust<any, any, any>;
+type SkillCommandTarget = CommandNode | Crust<any, any, any, any, any, any>;
 
 const SKILL_COMMAND_ANNOTATIONS = Symbol("crust.skill.commandAnnotations");
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { defineContext } from "../api/context.ts";
+import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
+import { Crust, defineCommand } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -567,6 +570,44 @@ describe("resolveCommand — aliases", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveCommand — known-flag skipping", () => {
+	function makeContextOwnedRoot(): CommandNode {
+		const apiKey = defineFlag("api-key", {
+			type: "string",
+			short: "k",
+			aliases: ["token"],
+		});
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		return new Crust("app")
+			.provide(auth())
+			.mount(
+				defineCommand("deploy", (command) =>
+					command.mount(defineCommand("service", (child) => child.handle(() => {}))),
+				),
+			)._node;
+	}
+
+	it.each([
+		["separate value", ["--api-key", "secret", "deploy"]],
+		["equals form", ["--api-key=secret", "deploy"]],
+		["short form", ["-ksecret", "deploy"]],
+		["alias form", ["--token=secret", "deploy"]],
+	] as const)("routes past a Context-owned flag in %s", (_label, argv) => {
+		const result = resolveCommand(makeContextOwnedRoot(), [...argv]);
+		expect(result.commandPath).toEqual(["app", "deploy"]);
+		expect(result.argv).toEqual(argv.slice(0, -1));
+	});
+
+	it("routes a Context-owned flag through nested descendants", () => {
+		const result = resolveCommand(makeContextOwnedRoot(), [
+			"--api-key",
+			"secret",
+			"deploy",
+			"service",
+		]);
+		expect(result.commandPath).toEqual(["app", "deploy", "service"]);
+		expect(result.argv).toEqual(["--api-key", "secret"]);
+	});
+
 	function makeRoot(): CommandNode {
 		const translate = makeNode({
 			meta: "translate",

@@ -2,7 +2,56 @@ import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
 import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
-import { validateCommandTree } from "./validation.ts";
+import { validateCommandTree, validateIncomingFlag } from "./validation.ts";
+
+describe("validateIncomingFlag", () => {
+	it("rejects canonical names that collide with an existing short or alias", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "v", def: { type: "boolean" } },
+				{ verbose: { type: "boolean", short: "v" } },
+				'Context "logger"',
+			),
+		).toThrow(/collides with flag "--verbose"/);
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "out", def: { type: "string" } },
+				{ output: { type: "string", aliases: ["out"] } },
+				'Context "writer"',
+			),
+		).toThrow(/collides with flag "--output"/);
+	});
+
+	it("rejects incoming short and aliases that collide with existing spellings", () => {
+		const existing = {
+			verbose: { type: "boolean", short: "v", aliases: ["loud"] },
+		} satisfies import("../types.ts").FlagsDef;
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "version", def: { type: "boolean", short: "v" } },
+				existing,
+				'Context "release"',
+			),
+		).toThrow(/spelling "v"/);
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "log", def: { type: "string", aliases: ["loud"] } },
+				existing,
+				'Context "logger"',
+			),
+		).toThrow(/spelling "loud"/);
+	});
+
+	it("rejects duplicate spellings within the incoming definition", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "output", def: { type: "string", short: "o", aliases: ["o"] } },
+				{},
+				'Context "writer"',
+			),
+		).toThrow(/repeats spelling "o"/);
+	});
+});
 
 describe("validateCommandTree", () => {
 	it("passes commands with required args and flags", () => {
@@ -141,6 +190,16 @@ describe("validateCommandTree — CommandNode tree", () => {
 		];
 
 		expect(() => validateCommandTree(node)).not.toThrow();
+	});
+
+	it("detects collisions involving Context-owned flags as a build-validation backstop", () => {
+		const node = createCommandNode("sub");
+		node.localFlags = { verbose: { type: "boolean", short: "v" } };
+		node.ownedFlags = { version: { type: "boolean", short: "v", inherit: true } };
+		node.effectiveFlags = computeEffectiveFlags({}, node.localFlags, node.ownedFlags);
+
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
 	it("detects alias collision in effective flags (inherited alias collides with local)", () => {

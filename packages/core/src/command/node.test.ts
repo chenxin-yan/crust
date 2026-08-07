@@ -13,6 +13,7 @@ describe("createCommandNode", () => {
 
 		expect(node.meta).toEqual({ name: "serve" });
 		expect(node.localFlags).toEqual({});
+		expect(node.ownedFlags).toEqual({});
 		expect(node.effectiveFlags).toEqual({});
 		expect(node.args).toBeUndefined();
 		expect(node.subCommands).toEqual({});
@@ -93,6 +94,20 @@ describe("computeEffectiveFlags", () => {
 
 		expect(result).toEqual({
 			output: { type: "string", description: "Output path" },
+		});
+	});
+
+	it("merges Context-owned flags after local flags", () => {
+		const result = computeEffectiveFlags(
+			{ verbose: { type: "boolean", inherit: true } },
+			{ output: { type: "string" } },
+			{ apiKey: { type: "string", inherit: true } },
+		);
+
+		expect(result).toEqual({
+			verbose: { type: "boolean", inherit: true },
+			output: { type: "string" },
+			apiKey: { type: "string", inherit: true },
 		});
 	});
 

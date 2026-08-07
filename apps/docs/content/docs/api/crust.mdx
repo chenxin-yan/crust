@@ -14,6 +14,7 @@ import {
   type CommandDefinition,
   type CommandDefinitionBuilder,
   type CommandRequirements,
+  type ContextConfig,
 } from "@crustjs/core";
 ```
 
@@ -35,12 +36,14 @@ Requirements are arrays of defined values describing what a mount site must supp
 - `flags` lists named flag definitions (from `defineFlag()`) the parent must provide as inheritable flags. Every required flag must have `inherit: true`.
 - `ctx` lists Context factories (from `defineContext()`) whose instances must be provided on the mount path.
 
-The same shape types `defineContext()` requirements. Requirements do not create flags or Contexts — they type the recipe builder and are checked at every `.mount()`: compile-time for flags and Contexts, plus runtime checks that required inheritable flags and Context names are provided on the parent path.
+Requirements do not create flags or Contexts — they type the recipe builder and are checked at every `.mount()`: compile-time for flags and Contexts, plus runtime checks that required inheritable flags and Context names are provided on the parent path.
+
+`defineContext()` instead accepts `ContextConfig`, which extends this requirement shape with `ownFlags`. Ownership belongs to Context definitions and is activated by `.provide()`; command requirements remain dependency declarations and never hoist flags into a parent.
 
 ### `CommandDefinitionBuilder`
 
 ```ts
-interface CommandDefinitionBuilder<Inherited, Local, A, Eff, Ctx> {
+interface CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx> {
   meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder;
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
@@ -186,10 +189,17 @@ const app = new Crust("serve").flags({
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
   ...instances: ProvideChecks<Eff, Cs>,
-): Crust
+): Crust<
+  Inherited,
+  Local,
+  MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
+  A,
+  EffectiveFlags<Inherited, Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
+  MergeContext<Ctx, ContextsOutput<Cs>>
+>
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only for the resolved command path, and available through `ctx` in the Command Handler.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only for the resolved command path, and available through `ctx` in the Command Handler. The return type merges every instance's `ownFlags` into the builder's owned and effective flag types.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -208,9 +218,9 @@ const app = new Crust("my-cli")
 
 Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared ctx requirements, with registration order preserved among independent Contexts. A missing ctx dependency or a dependency cycle throws `DEFINITION` at dispatch (and during `crust build` validation).
 
-A Context's declared flag requirements are checked at this call, compile-time and at runtime: each required flag must already be declared with `inherit: true` on this builder — declare flags before `.provide()`.
+A Context's declared flag requirements are checked at this call, compile-time and at runtime: each required flag must already be declared with `inherit: true` on this builder — declare flags before `.provide()`. Its `ownFlags` are installed as inheritable flags on this builder and later-mounted descendants, without mutating the original definitions.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name on one command path, a missing required flag, or passing a factory instead of an instance throws `DEFINITION`.
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name, a missing required flag, passing a factory instead of an instance, or a Context-owned flag spelling collision throws `DEFINITION`.
 
 ## `.extend(...extensions)`
 

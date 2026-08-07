@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { FlagsDef } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineFlag, type FlagsDef } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
@@ -21,6 +21,7 @@ function makeNode(partial: Partial<CommandNode> & { name: string }): CommandNode
 	return {
 		meta: { name: partial.name, ...(partial.meta ?? {}) },
 		localFlags: flags,
+		ownedFlags: partial.ownedFlags ?? {},
 		effectiveFlags: partial.effectiveFlags ?? flags,
 		args: partial.args,
 		subCommands: partial.subCommands ?? {},
@@ -87,6 +88,18 @@ describe("walkCommandNode", () => {
 			takesValue: true,
 			multiple: true,
 		});
+	});
+
+	it("captures Context-owned flags from a Core-built provider tree", () => {
+		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const app = new Crust("mycli")
+			.provide(auth())
+			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+
+		const spec = walkCommandNode(snapshotCommand(app._node));
+		expect(spec.root.flags.map((flag) => flag.name)).toContain("api-key");
+		expect(spec.root.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
 	});
 
 	it("captures positional args with required, variadic, type, and description", () => {
