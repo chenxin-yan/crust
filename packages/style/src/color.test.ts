@@ -13,6 +13,7 @@ import type { ColorString } from "./types.ts";
 "rgb()" satisfies ColorString;
 "rgb(0, 128, 255)" satisfies ColorString;
 "oklch(70% 0.1 200)" satisfies ColorString;
+"color-mix(in srgb, red, blue)" satisfies ColorString;
 "#ff0000" satisfies ColorString;
 // Dynamic strings still type-check via the LiteralUnion fallback.
 "dynamic" as string satisfies ColorString;
@@ -41,6 +42,11 @@ describe("fg", () => {
 
 	it("accepts `rgb()` strings", () => {
 		expect(fg("x", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
+	});
+
+	it("accepts `color-mix()` strings", () => {
+		// color-mix(in srgb, red, blue) === purple #800080
+		expect(fg("x", "color-mix(in srgb, red, blue)")).toBe("\x1b[38;2;128;0;128mx\x1b[39m");
 	});
 
 	it("accepts `{ r, g, b }` objects", () => {

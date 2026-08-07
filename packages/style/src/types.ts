@@ -28,7 +28,8 @@ type ColorSyntaxHint =
 	| "lab()"
 	| "lch()"
 	| "oklab()"
-	| "oklch()";
+	| "oklch()"
+	| "color-mix()";
 
 /**
  * String forms accepted by `fg` / `bg`.
