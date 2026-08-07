@@ -4,29 +4,50 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { LiteralUnion, NamedColor } from "./namedColors.ts";
+import type { NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
+
+/**
+ * Completion-bait literals for the non-named color syntaxes: the `#` hex
+ * prefix and the CSS functional notations `Bun.color()` parses.
+ *
+ * These are concrete literals — not template-literal types — because
+ * TypeScript only expands template literals with *finite* holes into
+ * completion entries; `` `rgb(${string})` `` produces nothing, not even
+ * the prefix. A picked entry like `"rgb()"` is filled in by the user;
+ * `Bun.color()` validates the result at runtime and throws `TypeError`
+ * on garbage. Contents are deliberately NOT validated at the type level.
+ */
+type ColorSyntaxHint =
+	| "#"
+	| "rgb()"
+	| "rgba()"
+	| "hsl()"
+	| "hsla()"
+	| "hwb()"
+	| "lab()"
+	| "lch()"
+	| "oklab()"
+	| "oklch()"
+	| "color-mix()";
 
 /**
  * String forms accepted by `fg` / `bg`.
  *
- * Editors autocomplete the 148 CSS {@link NamedColor | named colors} and
- * the `#` hex prefix while still accepting any other string Bun's CSS
- * parser understands (`rgb()` / `rgba()`, `hsl()` / `hsla()`, `lab()`,
- * `oklch()`, `#RGBA`, etc.).
- *
- * The `string` fallback is preserved via {@link LiteralUnion} so dynamic
- * values — e.g. theme tokens loaded from JSON — still type-check.
+ * Editors autocomplete the 148 CSS {@link NamedColor | named colors}
+ * plus {@link ColorSyntaxHint | syntax hints} for hex (`#`) and
+ * functional notation (`rgb()`, `hsl()`, `oklch()`, …), while still
+ * accepting any other string Bun's CSS parser understands.
  */
-export type ColorString = LiteralUnion<NamedColor | `#${string}`, string>;
+export type ColorString = NamedColor | ColorSyntaxHint | (string & {});
 
 /**
  * Input accepted by `fg` and `bg`.
  *
  * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
  * surface, with a richer `string` branch so editors autocomplete CSS
- * named colors and hint at hex literals. All members are assignable to
- * `Bun.color()` at runtime.
+ * named colors plus hex and functional-notation syntax hints. All
+ * members are assignable to `Bun.color()` at runtime.
  *
  * Accepted shapes:
  * - {@link ColorString} — hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`),
