@@ -284,11 +284,12 @@ function freezeTree(node: CommandNode): void {
  * compile-time checks at `.mount()`; ctx requirement names are also
  * verified at runtime when the definition is mounted.
  *
- * Structurally identical to {@link ContextRequirements} — the shared
- * shape is defined once in `api/context.ts`. Both requirement kinds are
- * verified at runtime as a backstop for untyped mount sites.
+ * Both requirement kinds are grouped under `requires` and verified at runtime
+ * as a backstop for untyped mount sites.
  */
-export type CommandRequirements = ContextRequirements;
+export interface CommandRequirements {
+	readonly requires?: ContextRequirements;
+}
 
 type RequirementFlags<R extends CommandRequirements> = RequirementFlagsOf<R>;
 
@@ -567,26 +568,26 @@ export interface CommandDefinitionBuilder<
  * Define a reusable, inert command under a required name.
  *
  * The recipe runs once per `.mount()`, receiving a fresh builder typed by
- * the declared requirements: `requirements.flags` (named flag definitions
- * the mount site must provide as inheritable flags) and `requirements.ctx`
- * (Context factories whose instances must be provided on the mount path).
+ * the declared dependencies: `requires.flags` (named flag definitions the
+ * mount site must provide as inheritable flags) and `requires.ctx` (Context
+ * factories whose instances must be provided on the mount path).
  *
  * Use `.as(name)` to mount one definition under a different name.
  */
 export function defineCommand(name: string, recipe: CommandRecipe<{}>): CommandDefinition;
 export function defineCommand<const R extends CommandRequirements>(
 	name: string,
-	requirements: R,
+	config: R,
 	recipe: CommandRecipe<R>,
 ): CommandDefinition<R>;
 export function defineCommand(
 	name: string,
-	requirementsOrRecipe: CommandRequirements | CommandRecipe<CommandRequirements>,
+	configOrRecipe: CommandRequirements | CommandRecipe<CommandRequirements>,
 	maybeRecipe?: CommandRecipe<CommandRequirements>,
 ): CommandDefinition<CommandRequirements> {
-	const hasRequirements = typeof requirementsOrRecipe !== "function";
-	const requirements = hasRequirements ? requirementsOrRecipe : {};
-	const recipe = hasRequirements ? maybeRecipe : requirementsOrRecipe;
+	const hasConfig = typeof configOrRecipe !== "function";
+	const config = hasConfig ? configOrRecipe : {};
+	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	if (typeof recipe !== "function") {
 		throw new CrustError("DEFINITION", `Command definition "${name}" requires a recipe function`, {
 			subject: "command",
@@ -596,8 +597,8 @@ export function defineCommand(
 	}
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
-		requiredFlagNames: (requirements.flags ?? []).map((flag) => flag.name),
-		requiredCtxNames: (requirements.ctx ?? []).map((dep) => dep.contextName),
+		requiredFlagNames: (config.requires?.flags ?? []).map((flag) => flag.name),
+		requiredCtxNames: (config.requires?.ctx ?? []).map((dep) => dep.contextName),
 	};
 	const named = (defName: string): CommandDefinition<CommandRequirements> => {
 		if (!defName.trim()) {

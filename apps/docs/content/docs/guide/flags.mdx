@@ -72,7 +72,7 @@ import { Crust, defineCommand, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 
-const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
+const deploy = defineCommand("deploy", { requires: { flags: [verbose] } }, (command) =>
   command.flags({ name: "env", type: "string", required: true }).handle(({ flags }) => {
     flags.verbose; // boolean | undefined
     flags.env; // string
@@ -98,14 +98,14 @@ When a flag exists to construct a dependency—such as `--api-key` configuring a
 import { Crust, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string" });
-const api = defineContext("api", { ownFlags: [apiKey] }, ({ flags }) => ({
+const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
   apiKey: flags["api-key"],
 }));
 
 const app = new Crust("app").provide(api());
 ```
 
-`.provide(api())` installs an inheritable copy of `apiKey`, while handlers can depend on the derived `ctx.api`. Raw shared controls such as `--verbose` should continue to use `inherit: true` and explicit command `requirements.flags`. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
+`.provide(api())` installs an inheritable copy of `apiKey`, while handlers can depend on the derived `ctx.api`. Raw shared controls such as `--verbose` should continue to use `inherit: true` and explicit command `requires.flags`. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 
 ## Standard Schemas
 

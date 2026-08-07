@@ -57,14 +57,17 @@ describe("command definitions", () => {
 	it("propagates Context-owned flags only to definitions mounted after provide()", async () => {
 		const calls: string[] = [];
 		const apiKey = defineFlag("api-key", { type: "string" });
-		const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
 		}));
 		const before = defineCommand("before", (command) => command.handle(() => {}));
-		const after = defineCommand("after", { flags: [apiKey], ctx: [auth] }, (command) =>
-			command.handle(({ flags, ctx }) => {
-				calls.push(`${flags["api-key"]}:${ctx.auth.apiKey}`);
-			}),
+		const after = defineCommand(
+			"after",
+			{ requires: { flags: [apiKey], ctx: [auth] } },
+			(command) =>
+				command.handle(({ flags, ctx }) => {
+					calls.push(`${flags["api-key"]}:${ctx.auth.apiKey}`);
+				}),
 		);
 		const outer = defineCommand("outer", (command) =>
 			command.mount(before).provide(auth()).mount(after),
@@ -82,13 +85,18 @@ describe("command definitions", () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 		const db = defineContext("db", () => "database");
-		const status = defineCommand("status", { flags: [verbose], ctx: [db] }, (command) =>
-			command.handle(({ flags, ctx }) => {
-				calls.push(`${ctx.db}:${String(flags.verbose)}`);
-			}),
+		const status = defineCommand(
+			"status",
+			{ requires: { flags: [verbose], ctx: [db] } },
+			(command) =>
+				command.handle(({ flags, ctx }) => {
+					calls.push(`${ctx.db}:${String(flags.verbose)}`);
+				}),
 		);
-		const deploy = defineCommand("deploy", { flags: [verbose], ctx: [db] }, (command) =>
-			command.mount(status),
+		const deploy = defineCommand(
+			"deploy",
+			{ requires: { flags: [verbose], ctx: [db] } },
+			(command) => command.mount(status),
 		);
 		const app = new Crust("cli").flags(verbose).provide(db()).mount(deploy);
 
@@ -217,7 +225,9 @@ describe("command definitions", () => {
 
 	it("checks Context requirement names at the mount call at runtime", () => {
 		const db = defineContext("db", () => "database");
-		const definition = defineCommand("users", { ctx: [db] }, (command) => command.handle(() => {}));
+		const definition = defineCommand("users", { requires: { ctx: [db] } }, (command) =>
+			command.handle(() => {}),
+		);
 
 		expect(() => new Crust("cli").provide(db()).mount(definition)).not.toThrow();
 		expect(() => new Crust("cli").mount(definition as never)).toThrow(
@@ -228,18 +238,21 @@ describe("command definitions", () => {
 	it("checks requirements while preserving fluent handler types", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 		const auth = defineContext("auth", () => ({ user: "yan" }));
-		const definition = defineCommand("deploy", { flags: [verbose], ctx: [auth] }, (command) =>
-			command
-				.args({ name: "target", type: "string", required: true })
-				.flags({ name: "force", type: "boolean", required: true })
-				.provide(defineContext("region", () => "us-east-1")())
-				.handle(({ args, flags, ctx }) => {
-					type _Target = Assert<IsEqual<typeof args.target, string>>;
-					type _Verbose = Assert<IsEqual<typeof flags.verbose, boolean | undefined>>;
-					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
-					type _Auth = Assert<IsEqual<typeof ctx.auth, { user: string }>>;
-					type _Region = Assert<IsEqual<typeof ctx.region, string>>;
-				}),
+		const definition = defineCommand(
+			"deploy",
+			{ requires: { flags: [verbose], ctx: [auth] } },
+			(command) =>
+				command
+					.args({ name: "target", type: "string", required: true })
+					.flags({ name: "force", type: "boolean", required: true })
+					.provide(defineContext("region", () => "us-east-1")())
+					.handle(({ args, flags, ctx }) => {
+						type _Target = Assert<IsEqual<typeof args.target, string>>;
+						type _Verbose = Assert<IsEqual<typeof flags.verbose, boolean | undefined>>;
+						type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
+						type _Auth = Assert<IsEqual<typeof ctx.auth, { user: string }>>;
+						type _Region = Assert<IsEqual<typeof ctx.region, string>>;
+					}),
 		);
 
 		new Crust("cli").flags(verbose).provide(auth()).mount(definition);
@@ -256,7 +269,7 @@ describe("command definitions", () => {
 		});
 		const strictDefinition = defineCommand(
 			"strict",
-			{ flags: [requiredToken] },
+			{ requires: { flags: [requiredToken] } },
 			(command) => command,
 		);
 		new Crust("cli")
@@ -327,9 +340,13 @@ describe("command definitions", () => {
 
 	it("checks nested requirements at the enclosing mount point", () => {
 		const required = defineFlag("verbose", { type: "boolean", inherit: true });
-		const nested = defineCommand("nested", { flags: [required] }, (command) => command);
+		const nested = defineCommand(
+			"nested",
+			{ requires: { flags: [required] } },
+			(command) => command,
+		);
 
-		defineCommand("outer", { flags: [required] }, (command) => command.mount(nested));
+		defineCommand("outer", { requires: { flags: [required] } }, (command) => command.mount(nested));
 		defineCommand("outer", (command) => {
 			// @ts-expect-error -- missing inherited flags: verbose
 			return command.mount(nested);

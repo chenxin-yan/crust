@@ -29,7 +29,7 @@ export const flags = [
 ];
 
 export const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-export const auth = defineContext("auth", { ownFlags: [apiKey] }, ({ flags }) => ({
+export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 

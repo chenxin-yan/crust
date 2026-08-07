@@ -35,20 +35,20 @@ await app.execute();
 
 ## Context-owned flags
 
-Use `ContextConfig.ownFlags` when a flag exists to construct a dependency. The Context defines and consumes the flag once; `.provide()` installs it on the current command and later-mounted descendants:
+Use top-level `ContextConfig.flags` when a flag exists to construct a dependency. The Context defines and consumes the flag once; `.provide()` installs it on the current command and later-mounted descendants:
 
 ```ts
 import { Crust, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string" });
-const api = defineContext("api", { ownFlags: [apiKey] }, ({ flags }) => ({
+const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
   apiKey: flags["api-key"],
 }));
 
 const app = new Crust("my-cli").provide(api());
 ```
 
-Use `ContextRequirements.flags` instead when the Context reads an inheritable flag already supplied by its command path. See [Contexts](/docs/guide/contexts).
+Use `ContextConfig.requires.flags` instead when the Context reads an inheritable flag already supplied by its command path. See [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 
@@ -95,10 +95,10 @@ See [Types](/docs/api/types) for field-level definitions.
 | Type                  | Description                                                           |
 | --------------------- | --------------------------------------------------------------------- |
 | `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()` |
-| `AnyContextFactory`   | Requirement-array element type for `requirements.ctx`                 |
+| `AnyContextFactory`   | Requirement-array element type for `requires.ctx`                     |
 | `ContextInstance`     | Named lazy dependency attached with `.provide()`                      |
 | `ContextRequirements` | Inherited flag and Context dependencies required from a command path  |
-| `ContextConfig`       | Context requirements plus flags owned and installed by the Context    |
+| `ContextConfig`       | Owned flags plus dependencies grouped under `requires`                |
 | `ContextSetup`        | Typed setup input: `options`, validated `flags`, dependency `ctx`     |
 | `ContextMap`          | Record shape used for inferred Command Handler `ctx` values           |
 

@@ -86,7 +86,7 @@ The schema receives the raw `string | undefined` or `boolean | undefined`; with 
 type NamedFlagDef = FlagDef & { readonly name: string };
 ```
 
-The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requirements.flags`, Context `ownFlags`, and `defineFlag()` all use it.
+The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requires.flags`, Context-owned `flags`, and `defineFlag()` all use it.
 
 ### `defineFlag` and `defineArg`
 
@@ -163,8 +163,9 @@ interface ContextRequirements {
   readonly ctx?: readonly AnyContextFactory[];
 }
 
-interface ContextConfig extends ContextRequirements {
-  readonly ownFlags?: readonly NamedFlagDef[];
+interface ContextConfig {
+  readonly flags?: readonly NamedFlagDef[];
+  readonly requires?: ContextRequirements;
 }
 
 interface ContextSetup<Options, RF, RC, OF> {
@@ -174,7 +175,7 @@ interface ContextSetup<Options, RF, RC, OF> {
 }
 ```
 
-`ContextRequirements.flags` declares inheritable flags a Context reads from its command path, while `ContextConfig.ownFlags` declares flags installed when an instance is provided. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
+`ContextConfig.flags` declares flags installed when an instance is provided, while `ContextConfig.requires.flags` declares inheritable flags a Context reads from its command path and `requires.ctx` declares Context dependencies. This is the same `requires: { flags, ctx }` dependency shape accepted by `defineCommand()`: `flags` always means flags the thing owns or parses, and `requires` always means typed dependencies from the environment. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
 
 ### `ContextInstance`
 

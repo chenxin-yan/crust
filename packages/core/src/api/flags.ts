@@ -11,7 +11,7 @@ export type UnnamedArgDef = OmitName<ArgDef>;
  * Define one named flag while preserving its literal definition type.
  *
  * The returned value carries its `name` and is attached with the variadic
- * `.flags(...defs)` or referenced in `requirements.flags` arrays.
+ * `.flags(...defs)` or referenced in `requires.flags` arrays.
  */
 export function defineFlag<const N extends string, const D extends FlagDef>(
 	name: N,

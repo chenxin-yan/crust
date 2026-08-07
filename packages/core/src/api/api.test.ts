@@ -17,7 +17,7 @@ describe("public beta API", () => {
 			},
 		}));
 
-		const deploy = defineCommand("deploy", { flags: [verbose], ctx: [db] }, (cmd) =>
+		const deploy = defineCommand("deploy", { requires: { flags: [verbose], ctx: [db] } }, (cmd) =>
 			cmd
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "env", type: "string", default: "prod" })
@@ -44,7 +44,7 @@ describe("public beta API", () => {
 	it("mounts one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
-		const deploy = defineCommand("deploy", { ctx: [auth] }, (command) =>
+		const deploy = defineCommand("deploy", { requires: { ctx: [auth] } }, (command) =>
 			command.args({ name: "target", type: "string", required: true }).handle(({ args, ctx }) => {
 				type _target = Expect<Equal<typeof args.target, string>>;
 				type _user = Expect<Equal<typeof ctx.auth.user, string>>;

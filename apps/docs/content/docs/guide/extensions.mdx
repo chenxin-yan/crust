@@ -35,7 +35,7 @@ Two consequences of the root-only model:
 
 Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `inherit` controls ordinary command inheritance and remains available on the flag definition.
 
-Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare flag and Context requirements; a missing requirement is a `DEFINITION` error when the application prepares. Their `.handle()` callbacks receive the same typed handler context as application commands, including `rootCommand`.
+Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare flag and Context dependencies under `requires`; a missing requirement is a `DEFINITION` error when the application prepares. Their `.handle()` callbacks receive the same typed handler context as application commands, including `rootCommand`.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide with application flags, [Context-owned flags](/docs/guide/contexts#owned-flags), or other Extensions. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 

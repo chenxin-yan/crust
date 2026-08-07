@@ -30,21 +30,21 @@ const app = new Crust("app").provide(clock());
 
 ## Owned flags
 
-A Context can own the flags used to construct its value. Declare each flag once in `ownFlags`; attaching the Context installs those flags on the provider command and its later-mounted descendants:
+A Context can own the flags used to construct its value. Declare each flag once in its top-level `flags`; attaching the Context installs those flags on the provider command and its later-mounted descendants:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string" });
 
-const api = defineContext("api", { ownFlags: [apiKey] }, ({ flags }) => ({
+const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
   apiKey: flags["api-key"],
   get(path: string) {
     return `${flags["api-key"] ?? "anonymous"}:${path}`;
   },
 }));
 
-const deploy = defineCommand("deploy", { ctx: [api] }, (command) =>
+const deploy = defineCommand("deploy", { requires: { ctx: [api] } }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
 );
 
@@ -53,18 +53,18 @@ const app = new Crust("app").provide(api()).mount(deploy);
 
 Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores an inheritable clone of the definition; the original `apiKey` value is not mutated.
 
-The child requires only `ctx.api` when the derived client is its dependency. If a handler also needs the raw value, add `apiKey` to that command definition's `requirements.flags`; ownership and raw flag access remain separate contracts.
+The child requires only `ctx.api` when the derived client is its dependency. If a handler also needs the raw value, add `apiKey` to that command definition's `requires.flags`; ownership and raw flag access remain separate contracts.
 
 ## Lazy construction and inheritance
 
 Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only for the resolved command path. An Extension that returns `ctx.finish()` does not construct them.
 
-Contexts are inherited by descendant commands. A mounted command declares the factories it depends on in `requirements.ctx`, which types `ctx` in its handler:
+Contexts are inherited by descendant commands. A mounted command declares the factories it depends on in `requires.ctx`, which types `ctx` in its handler:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
 
-const status = defineCommand("status", { ctx: [database] }, (command) =>
+const status = defineCommand("status", { requires: { ctx: [database] } }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
@@ -75,13 +75,13 @@ Setups may be synchronous or asynchronous.
 
 ## Requirements
 
-`defineContext(name, config, setup)` accepts two different flag relationships:
+`defineContext(name, config, setup)` groups declarations by relationship direction:
 
-- `flags` declares inheritable flags that must already exist on the command path.
-- `ownFlags` defines flags installed when this Context is provided.
-- `ctx` declares other Context values needed by setup.
+- Top-level `flags` are owned by the Context and installed when it is provided. This matches builder `.flags()`: `flags` always means flags the thing owns or parses.
+- `requires.flags` declares inheritable flags that must already exist on the command path.
+- `requires.ctx` declares other Context values needed by setup. The same `requires: { flags, ctx }` dependency shape is used by `defineCommand()`.
 
-All three are arrays of defined values:
+All three arrays contain defined values:
 
 ```ts
 import { defineContext, defineFlag } from "@crustjs/core";
@@ -89,17 +89,21 @@ import { defineContext, defineFlag } from "@crustjs/core";
 const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
 
-const database = defineContext("db", { flags: [verbose], ctx: [config] }, ({ flags, ctx }) => {
-  if (flags.verbose) console.error(`connecting to ${ctx.config.url}`);
-  return { query: (sql: string) => `${sql} on ${ctx.config.url}` };
-});
+const database = defineContext(
+  "db",
+  { requires: { flags: [verbose], ctx: [config] } },
+  ({ flags, ctx }) => {
+    if (flags.verbose) console.error(`connecting to ${ctx.config.url}`);
+    return { query: (sql: string) => `${sql} on ${ctx.config.url}` };
+  },
+);
 ```
 
 The setup input carries three fields:
 
 - `options` — the factory argument
-- `flags` — validated values for both `flags` requirements and `ownFlags`. These are the same schema-processed values the Command Handler receives.
-- `ctx` — the constructed values of the declared ctx dependencies
+- `flags` — validated values for both owned `flags` and `requires.flags`. These are the same schema-processed values the Command Handler receives.
+- `ctx` — the constructed values from `requires.ctx`
 
 ### Flag requirements
 
@@ -117,7 +121,7 @@ A missing or non-inheritable required flag is a `DEFINITION` error at `.provide(
 A Context may require a flag owned by another Context, but the owner must be attached in an earlier call so the next builder carries the flag type:
 
 ```ts
-const audit = defineContext("audit", { flags: [apiKey] }, ({ flags }) => ({
+const audit = defineContext("audit", { requires: { flags: [apiKey] } }, ({ flags }) => ({
   credentialPresent: flags["api-key"] !== undefined,
 }));
 
@@ -128,7 +132,7 @@ const app = new Crust("app").provide(api()).provide(audit());
 
 ### Ctx requirements and construction order
 
-Provide order is free: dependencies may be provided after their dependents. At invocation time, the Contexts on the resolved command path are constructed **topologically** by their declared `ctx` requirements; independent Contexts keep registration order.
+Provide order is free: dependencies may be provided after their dependents. At invocation time, the Contexts on the resolved command path are constructed **topologically** by their declared `requires.ctx` dependencies; independent Contexts keep registration order.
 
 ```ts
 // Equivalent — construction order is config, then database, either way:
@@ -150,7 +154,7 @@ const app = new Crust("app").provide(fake).handle(({ ctx, stdout }) => {
 });
 ```
 
-The fake needs none of the real setup's required flags or dependency Contexts. If the factory has `ownFlags`, callers may still pass them and the command's help and completion remain unchanged.
+The fake needs none of the real setup's required flags or dependency Contexts. If the factory has owned `flags`, callers may still pass them and the command's help and completion remain unchanged.
 
 ## Scope a guard to a subtree
 
@@ -161,16 +165,16 @@ const session = defineContext("session", () => ({
   user: undefined as { id: string } | undefined,
 }));
 
-const user = defineContext("user", { ctx: [session] }, ({ ctx }) => {
+const user = defineContext("user", { requires: { ctx: [session] } }, ({ ctx }) => {
   if (!ctx.session.user) throw new Error("Unauthenticated");
   return ctx.session.user;
 });
 
-const invoices = defineCommand("invoices", { ctx: [user] }, (child) =>
+const invoices = defineCommand("invoices", { requires: { ctx: [user] } }, (child) =>
   child.handle(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
 );
 
-const billing = defineCommand("billing", { ctx: [session] }, (command) =>
+const billing = defineCommand("billing", { requires: { ctx: [session] } }, (command) =>
   command.provide(user()).mount(invoices),
 );
 
@@ -184,7 +188,7 @@ A throwing setup aborts the invocation before the Command Handler and disposes t
 A reusable command declares the Context factories it needs, and every `.mount()` checks them — compile-time against the parent's provided value types, and at runtime by name:
 
 ```ts
-const status = defineCommand("status", { ctx: [database] }, (command) =>
+const status = defineCommand("status", { requires: { ctx: [database] } }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 

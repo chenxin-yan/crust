@@ -96,7 +96,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 			".provide()",
 			(a) =>
 				a.provide(
-					defineContext("auth", { ownFlags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
+					defineContext("auth", { flags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
 				) as Crust,
 			(a) => {
 				expect(a._node.contexts).toEqual([]);
@@ -684,9 +684,9 @@ describe("Crust .mount() type-level tests", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 		const output = defineFlag("output", { type: "string", inherit: true });
 		new Crust("cli").flags(verbose, { name: "rootOnly", type: "string" }).mount(
-			defineCommand("level1", { flags: [verbose] }, (command) =>
+			defineCommand("level1", { requires: { flags: [verbose] } }, (command) =>
 				command.flags(output).mount(
-					defineCommand("level2", { flags: [verbose, output] }, (child) =>
+					defineCommand("level2", { requires: { flags: [verbose, output] } }, (child) =>
 						child
 							.args({ name: "target", type: "string", required: true })
 							.handle(({ args, flags }) => {
@@ -783,7 +783,7 @@ describe("Crust .handle() type-level tests", () => {
 	it("run handler receives EffectiveFlags (inherited + local merged) for flags", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 		new Crust("cli").flags(verbose, { name: "port", type: "number", default: 3000 }).mount(
-			defineCommand("sub", { flags: [verbose] }, (cmd) =>
+			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
 				cmd.flags({ name: "output", type: "string", required: true }).handle((_ctx) => {
 					type CtxFlags = typeof _ctx.flags;
 					// inherited verbose (inherit: true) should be present
@@ -798,7 +798,7 @@ describe("Crust .handle() type-level tests", () => {
 	it("declared flag requirements are visible in mounted handlers", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true, default: false });
 		new Crust("cli").flags(verbose).mount(
-			defineCommand("sub", { flags: [verbose] }, (cmd) =>
+			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
 				cmd.handle((_ctx) => {
 					// The handler sees the required flag even though the
 					// subcommand has no local flags
@@ -1039,7 +1039,7 @@ describe("Extension application at prepare time", () => {
 		let recipeRan = false;
 		const tools = defineExtension("tools", {
 			commands: [
-				defineCommand("status", { flags: [verbose] }, (command) => {
+				defineCommand("status", { requires: { flags: [verbose] } }, (command) => {
 					recipeRan = true;
 					return command.handle(() => {});
 				}),
@@ -1058,7 +1058,9 @@ describe("Extension application at prepare time", () => {
 	it("Extension command requirements name the Extension and missing Context", async () => {
 		const db = defineContext("db", () => "database");
 		const databaseTools = defineExtension("database-tools", {
-			commands: [defineCommand("users", { ctx: [db] }, (command) => command.handle(() => {}))],
+			commands: [
+				defineCommand("users", { requires: { ctx: [db] } }, (command) => command.handle(() => {})),
+			],
 		});
 
 		try {
@@ -1911,7 +1913,7 @@ describe("Crust .execute()", () => {
 	it("inherited flags work across file-boundary pattern", async () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
-		const sub = defineCommand("sub", { flags: [verbose] }, (command) =>
+		const sub = defineCommand("sub", { requires: { flags: [verbose] } }, (command) =>
 			command.handle(({ flags }) => {
 				receivedVerbose = flags.verbose;
 			}),
@@ -1928,7 +1930,7 @@ describe("Crust .execute()", () => {
 		const port = defineFlag("port", { type: "number", default: 3000, inherit: true });
 
 		const app = new Crust("cli").flags(port).mount(
-			defineCommand("sub", { flags: [port] }, (cmd) =>
+			defineCommand("sub", { requires: { flags: [port] } }, (cmd) =>
 				cmd.handle((ctx) => {
 					receivedPort = ctx.flags.port;
 				}),
@@ -1945,7 +1947,7 @@ describe("Crust .execute()", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v", inherit: true });
 
 		const app = new Crust("cli").flags(verbose).mount(
-			defineCommand("sub", { flags: [verbose] }, (cmd) =>
+			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
 				cmd.handle((ctx) => {
 					receivedVerbose = ctx.flags.verbose;
 				}),

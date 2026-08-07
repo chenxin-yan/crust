@@ -2,7 +2,7 @@ import { defineCommand } from "@crustjs/core";
 
 import { logger } from "../shared.ts";
 
-export const greetCommand = defineCommand("greet", { ctx: [logger] }, (command) =>
+export const greetCommand = defineCommand("greet", { requires: { ctx: [logger] } }, (command) =>
   command
     .args({ name: "name", type: "string", default: "world" })
     .flags({ name: "greeting", type: "string", default: "Hello", short: "g" })

@@ -92,7 +92,7 @@ describe("walkCommandNode", () => {
 
 	it("captures Context-owned flags from a Core-built provider tree", () => {
 		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("mycli")
 			.provide(auth())
 			.mount(defineCommand("deploy", (command) => command.handle(() => {})));

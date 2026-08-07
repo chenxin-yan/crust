@@ -27,14 +27,15 @@ export interface ContextRequirements {
 	readonly ctx?: readonly AnyContextFactory[];
 }
 
-/** Context definition config: path requirements plus flags owned by this Context. */
-export interface ContextConfig extends ContextRequirements {
-	readonly ownFlags?: readonly NamedFlagDef[];
+/** Context definition config: owned flags plus dependencies required from the command path. */
+export interface ContextConfig {
+	readonly flags?: readonly NamedFlagDef[];
+	readonly requires?: ContextRequirements;
 }
 
 type ValidateContextConfig<R extends ContextConfig> = {
-	readonly ownFlags?: R["ownFlags"] extends readonly NamedFlagDef[]
-		? ValidateNamedFlagDefs<R["ownFlags"]>
+	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
+		? ValidateNamedFlagDefs<R["flags"]>
 		: never;
 };
 
@@ -70,7 +71,7 @@ export interface ContextInstance<
 	/** @internal */
 	setup(input: ContextSetupInput): Awaitable<Value>;
 	/** @internal — phantom carrying requirement and ownership types */
-	readonly _requires?: { flags: RF; ctx: RC; ownFlags: OF };
+	readonly _requires?: { flags: RF; ctx: RC; ownedFlags: OF };
 }
 
 /** The typed setup input for one Context factory. */
@@ -97,7 +98,7 @@ export interface ContextFactory<
 	OF extends FlagsDef = {},
 > {
 	(options: Options): ContextInstance<Name, Value, RF, RC, OF>;
-	/** The Context name this factory produces (used in `requirements.ctx` arrays). */
+	/** The Context name this factory produces (used in `requires.ctx` arrays). */
 	readonly contextName: Name;
 	/**
 	 * Produce an instance whose setup returns the precomputed `value`
@@ -126,7 +127,7 @@ type FactoryOutput<F> =
 		? { [K in Name]: Awaited<Value> }
 		: never;
 
-/** Merged outputs of a tuple of Context factories (as declared in `requirements.ctx`). */
+/** Merged outputs of a tuple of Context factories (as declared in `requires.ctx`). */
 export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
 	infer H,
 	...infer T extends readonly AnyContextFactory[],
@@ -144,23 +145,23 @@ export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs exten
 
 type ContextOwnedFlags<C> = C extends ContextInstance<any, any, any, any, infer OF> ? OF : {};
 
-/** @internal — flag requirements of a `{ flags, ctx }` requirements object, as a record. */
-export type RequirementFlagsOf<R extends ContextRequirements> = R extends {
-	flags: infer F extends readonly NamedFlagDef[];
+/** @internal — flag dependencies from a config's `requires` object, as a record. */
+export type RequirementFlagsOf<R extends { readonly requires?: ContextRequirements }> = R extends {
+	requires: { flags: infer F extends readonly NamedFlagDef[] };
 }
 	? NamedFlagsRecord<F>
 	: {};
 
 /** @internal — flags owned by a Context config, as a record. */
 export type OwnedFlagsOf<R extends ContextConfig> = R extends {
-	ownFlags: infer F extends readonly NamedFlagDef[];
+	flags: infer F extends readonly NamedFlagDef[];
 }
 	? NamedFlagsRecord<F>
 	: {};
 
-/** @internal — merged ctx outputs of a `{ flags, ctx }` requirements object. */
-export type RequirementCtxOf<R extends ContextRequirements> = R extends {
-	ctx: infer C extends readonly AnyContextFactory[];
+/** @internal — merged ctx outputs from a config's `requires` object. */
+export type RequirementCtxOf<R extends { readonly requires?: ContextRequirements }> = R extends {
+	requires: { ctx: infer C extends readonly AnyContextFactory[] };
 }
 	? FactoriesOutput<C>
 	: {};
@@ -172,9 +173,10 @@ export type RequirementCtxOf<R extends ContextRequirements> = R extends {
  * setups, so the API reads uniformly as
  * `defineContext("db", factory)` → `.provide(db(options))` → `ctx.db`.
  *
- * With a config argument, `flags` declares path requirements while
- * `ownFlags` installs inheritable flags at `.provide()`. Setup receives the
- * validated values of both sets plus declared Context dependencies (`ctx`).
+ * With a config argument, `flags` installs flags owned by the Context at
+ * `.provide()`, while `requires` declares typed dependencies from the command
+ * path. Setup receives the validated flags from both relationships plus declared
+ * Context dependencies (`ctx`).
  * Dependencies drive construction order: Contexts on
  * the resolved command path are constructed topologically, regardless of
  * `.provide()` order.
@@ -208,12 +210,12 @@ export function defineContext<
 >;
 export function defineContext(
 	name: string,
-	requirementsOrSetup: ContextConfig | ((input: never) => unknown),
+	configOrSetup: ContextConfig | ((input: never) => unknown),
 	maybeSetup?: (input: never) => unknown,
 ): AnyContextFactory {
-	const hasRequirements = typeof requirementsOrSetup !== "function";
-	const requirements = hasRequirements ? requirementsOrSetup : {};
-	const setup = hasRequirements ? maybeSetup : requirementsOrSetup;
+	const hasConfig = typeof configOrSetup !== "function";
+	const config = hasConfig ? configOrSetup : {};
+	const setup = hasConfig ? maybeSetup : configOrSetup;
 	if (typeof setup !== "function") {
 		throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`, {
 			subject: "context",
@@ -223,12 +225,12 @@ export function defineContext(
 	}
 
 	const requiredFlags: FlagsDef = {};
-	for (const def of requirements.flags ?? []) {
+	for (const def of config.requires?.flags ?? []) {
 		const { name: flagName, ...rest } = def;
 		requiredFlags[flagName] = rest;
 	}
 	const ownedFlags: FlagsDef = {};
-	for (const def of requirements.ownFlags ?? []) {
+	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
 		if (flagName in requiredFlags) {
 			throw new CrustError(
@@ -252,7 +254,7 @@ export function defineContext(
 		validateIncomingFlag({ name: flagName, def: owned }, ownedFlags, `Context "${name}"`);
 		ownedFlags[flagName] = owned;
 	}
-	const requiredCtx = (requirements.ctx ?? []).map((dep) => dep.contextName);
+	const requiredCtx = (config.requires?.ctx ?? []).map((dep) => dep.contextName);
 
 	const factory = (options: unknown): ContextInstance => ({
 		kind: "context",

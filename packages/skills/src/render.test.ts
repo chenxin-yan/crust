@@ -702,7 +702,7 @@ describe("renderSkill", () => {
 				type: "string",
 				description: "API credential",
 			});
-			const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+			const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 			const app = new Crust("test-cli")
 				.provide(auth())
 				.mount(defineCommand("deploy", (command) => command.handle(() => {})));

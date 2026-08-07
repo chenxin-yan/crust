@@ -576,7 +576,7 @@ describe("resolveCommand — known-flag skipping", () => {
 			short: "k",
 			aliases: ["token"],
 		});
-		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		return new Crust("app")
 			.provide(auth())
 			.mount(

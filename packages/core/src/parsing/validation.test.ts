@@ -102,7 +102,7 @@ describe("validateCommandTree", () => {
 
 	it("throws when a Context dependency is missing from a node's path", () => {
 		const config = defineContext("config", () => ({}));
-		const client = defineContext("client", { ctx: [config] }, () => ({}));
+		const client = defineContext("client", { requires: { ctx: [config] } }, () => ({}));
 
 		const node = createCommandNode("root");
 		node.contexts = [client()];

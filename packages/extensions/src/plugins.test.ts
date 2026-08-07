@@ -424,7 +424,7 @@ describe("built-in plugins", () => {
 			type: "string",
 			description: "API credential",
 		});
-		const auth = defineContext("auth", { ownFlags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("app")
 			.provide(auth())
 			.extend(helpExtension())

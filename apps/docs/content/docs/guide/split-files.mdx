@@ -45,4 +45,4 @@ The composition root imports both sides:
 
 ## Inline or split?
 
-Mount `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a requirements array, when a separate file improves readability or when the same command should be mounted more than once.
+Mount `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a `requires` config when needed, when a separate file improves readability or when the same command should be mounted more than once.
