@@ -35,6 +35,9 @@ async function measure(root) {
 				entrypoints: [resolve(pkgDir, file)],
 				target: "bun",
 				minify: true,
+				// Peers are provided by the consumer and measured in their own row;
+				// inlining them would double-count and make this row churn on their PRs.
+				external: Object.keys(pkg.peerDependencies ?? {}),
 			});
 			if (!result.success) {
 				throw new AggregateError(result.logs, `Bun.build failed for ${pkg.name}${entry.slice(1)}`);
@@ -68,7 +71,10 @@ const delta = (b, h) => {
 	if (h == null) return "removed";
 	if (h === b) return "±0";
 	const d = h - b;
-	return `${d > 0 ? "+" : "-"}${kb(Math.abs(d))} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
+	// sub-0.01 KB deltas render in bytes instead of a misleading "+0.00 KB"
+	const abs = Math.abs(d);
+	const size = abs < 5.12 ? `${abs} B` : kb(abs);
+	return `${d > 0 ? "+" : "-"}${size} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
 };
 
 if (mode === "sizes") {
