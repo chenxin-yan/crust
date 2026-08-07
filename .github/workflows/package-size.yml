@@ -22,6 +22,9 @@ permissions:
 
 jobs:
   package-size:
+    # Release PRs get their own report (vs npm) from release.yml; runs here
+    # would stall at action_required anyway (bot-created PR, GITHUB_TOKEN).
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

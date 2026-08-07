@@ -48,8 +48,10 @@ jobs:
           restore-keys: |
             turbo-packages-${{ runner.os }}-
 
-      - name: Build, type check, and test (packages)
-        run: bun turbo run build check:types test --filter='./packages/*'
+      - name: Build, type check, and test
+        run: |
+          bun turbo run build check:types test --filter='./packages/*'
+          bun test scripts
 
       - name: Lint and format check (packages)
         run: |
