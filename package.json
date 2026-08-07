@@ -4,7 +4,7 @@
 	"scripts": {
 		"build": "turbo run build",
 		"build:docs": "turbo run build --filter='./apps/docs'",
-		"build:packages": "turbo run build --filter='./packages/*'",
+		"build:pkgs": "turbo run build --filter='./packages/*'",
 		"dev:docs": "turbo run dev --filter='./apps/docs'",
 		"lint": "oxlint",
 		"lint:fix": "oxlint --fix",

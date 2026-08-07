@@ -53,7 +53,7 @@ jobs:
             turbo-release-${{ runner.os }}-
 
       - name: Build packages
-        run: bun run build:packages
+        run: bun run build:pkgs
 
       - name: Create release PR or publish
         id: changesets
