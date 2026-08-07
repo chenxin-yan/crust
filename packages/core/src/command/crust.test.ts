@@ -1946,7 +1946,7 @@ describe("Invocation pipeline internal seam — validation mode", () => {
 });
 
 describe("prepareCommandSnapshot (tooling)", () => {
-	it("returns a frozen snapshot with Extension flags applied, without mutating the builder", async () => {
+	it("returns a frozen snapshot with Extension flags applied", async () => {
 		const docs = defineExtension("doc-test", {
 			flags: {
 				extra: { type: "boolean", description: "Injected for docs" },
