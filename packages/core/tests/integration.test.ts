@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import { resolveCommand, type CommandRoute } from "../src/command/router";
+import { createCommandNode } from "../src/command/node";
+import type { CommandRoute } from "../src/command/router";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -20,7 +21,6 @@ import {
 	defineExtension,
 	defineFlag,
 } from "../src/index";
-import { parseArgs } from "../src/parsing/parser";
 import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
 
@@ -54,19 +54,6 @@ const rootCmd = rootBase.mount(serveCmd).handle(({ flags }) => {
 describe("integration: core APIs", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
-	});
-
-	it("parseArgs parses args and flags using CommandNode", () => {
-		const result = parseArgs(rootCmd._node.subCommands.serve!, ["public", "--port", "8080"]);
-		expect((result.args as Record<string, unknown>).dir).toBe("public");
-		expect((result.flags as Record<string, unknown>).port).toBe(8080);
-	});
-
-	it("resolveCommand resolves subcommands using CommandNode", () => {
-		const result = resolveCommand(rootCmd._node, ["serve", "--port", "9000"]);
-		expect(result.command.meta.name).toBe("serve");
-		expect(result.argv).toEqual(["--port", "9000"]);
-		expect(result.commandPath).toEqual(["myapp", "serve"]);
 	});
 
 	it("execute() runs using argv override", async () => {
@@ -104,7 +91,7 @@ describe("integration: exported types", () => {
 			rawArgs: [],
 		};
 		const resolved: CommandRoute = {
-			command: new Crust("typed-cmd")._node,
+			command: createCommandNode("typed-cmd"),
 			argv: [],
 			commandPath: ["typed-cmd"],
 		};

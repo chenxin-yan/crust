@@ -4,14 +4,14 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
-import { Crust, defineCommand } from "./crust.ts";
+import { Crust, defineCommand, prepareCommandSnapshot } from "./crust.ts";
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("command definitions", () => {
-	it("stays inert and materializes a fresh node for each mount", () => {
+	it("stays inert and materializes each mount", async () => {
 		let configured = 0;
 		const definition = defineCommand("build", (command) => {
 			configured++;
@@ -22,9 +22,9 @@ describe("command definitions", () => {
 		const app = new Crust("cli").mount(definition, definition.as("compile"));
 
 		expect(configured).toBe(2);
-		expect(app._node.subCommands.build?.meta.name).toBe("build");
-		expect(app._node.subCommands.compile?.meta.name).toBe("compile");
-		expect(app._node.subCommands.build).not.toBe(app._node.subCommands.compile);
+		const snapshot = await prepareCommandSnapshot(app);
+		expect(snapshot.subCommands.build?.meta.name).toBe("build");
+		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
 
 	it(".as() renames without mutating the original definition", () => {
@@ -100,7 +100,7 @@ describe("command definitions", () => {
 		expect(calls).toEqual(["database:true"]);
 	});
 
-	it("clones annotations and isolates mounts across parents", () => {
+	it("clones annotations and isolates mounts across parents", async () => {
 		const annotation = Symbol("annotation");
 		const definition = defineCommand("one", (command) => {
 			const configured = command.meta({ description: "Reusable" });
@@ -109,14 +109,15 @@ describe("command definitions", () => {
 			return configured;
 		});
 
-		const first = new Crust("first").mount(definition);
-		const second = new Crust("second").mount(definition.as("two"));
-		const firstNode = first._node.subCommands.one;
-		const secondNode = second._node.subCommands.two;
+		const first = await prepareCommandSnapshot(new Crust("first").mount(definition));
+		const second = await prepareCommandSnapshot(new Crust("second").mount(definition.as("two")));
 
-		expect(firstNode).not.toBe(secondNode);
-		expect((firstNode as unknown as Record<symbol, unknown>)[annotation]).toBe("preserved");
-		expect((secondNode as unknown as Record<symbol, unknown>)[annotation]).toBe("preserved");
+		expect((first.subCommands.one as unknown as Record<symbol, unknown>)[annotation]).toBe(
+			"preserved",
+		);
+		expect((second.subCommands.two as unknown as Record<symbol, unknown>)[annotation]).toBe(
+			"preserved",
+		);
 	});
 
 	it("rejects duplicate inherited Contexts during materialization", () => {

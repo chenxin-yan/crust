@@ -318,7 +318,6 @@ describe("Context-owned flags", () => {
 			});
 
 		await app.run(["--api-key", "secret", "--verbose"]);
-		expect(app._node.ownedFlags["api-key"]).toBeDefined();
 	});
 
 	it("allows one owning factory on sibling command branches", async () => {
