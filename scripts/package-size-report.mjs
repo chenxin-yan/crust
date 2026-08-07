@@ -7,6 +7,8 @@
 // Usage:
 //   bun scripts/package-size-report.mjs sizes [rootDir] > sizes.json
 //   bun scripts/package-size-report.mjs compare base.json head.json > tables.md
+// Local runs: rm -rf packages/*/dist first — turbo cache restore doesn't prune
+// stray dist files from other branches, which inflates install sizes.
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -35,6 +37,9 @@ async function measure(root) {
 				entrypoints: [resolve(pkgDir, file)],
 				target: "bun",
 				minify: true,
+				// Peers are provided by the consumer and measured in their own row;
+				// inlining them would double-count and make this row churn on their PRs.
+				external: Object.keys(pkg.peerDependencies ?? {}),
 			});
 			if (!result.success) {
 				throw new AggregateError(result.logs, `Bun.build failed for ${pkg.name}${entry.slice(1)}`);
@@ -46,6 +51,10 @@ async function measure(root) {
 			entries[entry] = size;
 		}
 
+		// TODO: switch to `bun pm pack` (the tool we publish with) once it has
+		// machine-readable output — https://github.com/oven-sh/bun/issues/14155.
+		// npm is safe meanwhile: file selection and unpacked bytes match bun's
+		// exactly; only tarball gzip bytes differ slightly.
 		const [packed] = JSON.parse(
 			execFileSync("npm", ["pack", "--dry-run", "--json"], {
 				cwd: pkgDir,
@@ -68,7 +77,10 @@ const delta = (b, h) => {
 	if (h == null) return "removed";
 	if (h === b) return "±0";
 	const d = h - b;
-	return `${d > 0 ? "+" : "-"}${kb(Math.abs(d))} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
+	// sub-0.01 KB deltas render in bytes instead of a misleading "+0.00 KB"
+	const abs = Math.abs(d);
+	const size = abs < 5.12 ? `${abs} B` : kb(abs);
+	return `${d > 0 ? "+" : "-"}${size} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
 };
 
 if (mode === "sizes") {
