@@ -1,0 +1,13 @@
+demo - Manage demo deployments.
+
+USAGE:
+  demo <command> [workspace] [options]
+
+COMMANDS:
+  deploy (ship) Deploy an application
+
+ARGS:
+  [workspace]        Workspace directory [default: "."]
+
+OPTIONS:
+  -c, --color, --colour, --no-color Use colour
