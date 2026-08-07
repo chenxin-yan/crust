@@ -1,64 +1,114 @@
-// Report gzipped runtime JS sizes (dist/**/*.js) for publishable library
-// packages — CLI packages (with a bin field) are excluded since their size
-// is install cost, not runtime code shipped to consumers.
+// Measure what consumers actually pay for publishable library packages:
+//   - bundle: each public `exports` entrypoint bundled with Bun.build
+//     (tree-shaken, minified) and gzipped — the cost of importing that entry.
+//   - install: tarball and unpacked size from `npm pack --dry-run`.
+// CLI packages (with a bin field) are excluded since their size is install
+// cost, not runtime code shipped to consumers.
 // Usage:
 //   bun scripts/package-size-report.mjs sizes [rootDir] > sizes.json
-//   bun scripts/package-size-report.mjs compare base.json head.json > table.md
+//   bun scripts/package-size-report.mjs compare base.json head.json > tables.md
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const [mode, ...args] = process.argv.slice(2);
 
-if (mode === "sizes") {
-	const root = args[0] ?? ".";
+async function measure(root) {
 	const out = {};
 	for (const dir of readdirSync(join(root, "packages"))) {
+		const pkgDir = join(root, "packages", dir);
 		let pkg;
 		try {
-			pkg = JSON.parse(
-				readFileSync(join(root, "packages", dir, "package.json"), "utf8"),
-			);
+			pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
 		} catch {
 			// not a package dir (no package.json)
 			continue;
 		}
 		if (pkg.private || pkg.bin) continue;
-		const dist = join(root, "packages", dir, "dist");
-		let size = 0;
-		for (const file of readdirSync(dist, { recursive: true })) {
-			if (!/\.(js|mjs|cjs)$/.test(file)) continue;
-			size += gzipSync(readFileSync(join(dist, file))).length;
+
+		const entries = {};
+		for (const [entry, target] of Object.entries(pkg.exports ?? {})) {
+			const file = typeof target === "string" ? target : target.import;
+			if (!file || !/\.(js|mjs|cjs)$/.test(file)) continue;
+			const result = await Bun.build({
+				entrypoints: [resolve(pkgDir, file)],
+				target: "bun",
+				minify: true,
+			});
+			if (!result.success) {
+				throw new AggregateError(result.logs, `Bun.build failed for ${pkg.name}${entry.slice(1)}`);
+			}
+			let size = 0;
+			for (const artifact of result.outputs) {
+				size += gzipSync(Buffer.from(await artifact.arrayBuffer())).length;
+			}
+			entries[entry] = size;
 		}
-		out[pkg.name] = { size };
+
+		const [packed] = JSON.parse(
+			execFileSync("npm", ["pack", "--dry-run", "--json"], {
+				cwd: pkgDir,
+				stdio: ["ignore", "pipe", "ignore"],
+			}),
+		);
+		out[pkg.name] = {
+			entries,
+			tarball: packed.size,
+			unpacked: packed.unpackedSize,
+		};
 	}
-	console.log(JSON.stringify(out, null, 2));
+	return out;
+}
+
+const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
+const fmt = (bytes) => (bytes == null ? "—" : kb(bytes));
+const delta = (b, h) => {
+	if (b == null) return "new";
+	if (h == null) return "removed";
+	if (h === b) return "±0";
+	const d = h - b;
+	return `${d > 0 ? "+" : "-"}${kb(Math.abs(d))} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
+};
+
+if (mode === "sizes") {
+	console.log(JSON.stringify(await measure(args[0] ?? "."), null, 2));
 } else if (mode === "compare") {
 	const [base, head] = args.map((f) => JSON.parse(readFileSync(f, "utf8")));
-	const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
-	const names = [
-		...new Set([...Object.keys(base), ...Object.keys(head)]),
-	].sort();
-	const lines = [
-		"| Package | Base | Head | Δ (JS, gzip) |",
+	const names = [...new Set([...Object.keys(base), ...Object.keys(head)])].sort();
+
+	const bundle = [
+		"### Bundle cost (per entrypoint, minified + gzip)",
+		"",
+		"| Entry | Base | Head | Δ |",
+		"|---|---:|---:|---:|",
+	];
+	const install = [
+		"",
+		"### Install size (`npm pack`)",
+		"",
+		"| Package | Tarball | Unpacked | Δ unpacked |",
 		"|---|---:|---:|---:|",
 	];
 	for (const name of names) {
-		const b = base[name]?.size;
-		const h = head[name]?.size;
-		let delta;
-		if (b == null) delta = "new";
-		else if (h == null) delta = "removed";
-		else if (h === b) delta = "±0";
-		else {
-			const d = h - b;
-			delta = `${d > 0 ? "+" : "-"}${kb(Math.abs(d))} (${d > 0 ? "+" : ""}${((d / b) * 100).toFixed(1)}%)`;
+		const entryNames = [
+			...new Set([
+				...Object.keys(base[name]?.entries ?? {}),
+				...Object.keys(head[name]?.entries ?? {}),
+			]),
+		].sort();
+		for (const entry of entryNames) {
+			const b = base[name]?.entries?.[entry];
+			const h = head[name]?.entries?.[entry];
+			bundle.push(`| \`${name}${entry.slice(1)}\` | ${fmt(b)} | ${fmt(h)} | ${delta(b, h)} |`);
 		}
-		lines.push(
-			`| \`${name}\` | ${b == null ? "—" : kb(b)} | ${h == null ? "—" : kb(h)} | ${delta} |`,
+		const b = base[name];
+		const h = head[name];
+		install.push(
+			`| \`${name}\` | ${fmt(h?.tarball)} | ${fmt(h?.unpacked)} | ${delta(b?.unpacked, h?.unpacked)} |`,
 		);
 	}
-	console.log(lines.join("\n"));
+	console.log([...bundle, ...install].join("\n"));
 } else {
 	console.error("usage: package-size-report.mjs sizes [rootDir] | compare <base.json> <head.json>");
 	process.exit(1);
