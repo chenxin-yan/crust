@@ -234,8 +234,8 @@ export interface ManifestNode {
 	path: string[];
 	/** Human-readable description */
 	description?: string;
-	/** Custom usage string (overrides auto-generated usage) */
-	usage?: string;
+	/** Resolved command usage from the core documentation model. */
+	usage: string;
 	/** Agent-facing instructions rendered into the command's markdown file */
 	instructions?: string[];
 	/** Whether this command has a `run` handler (leaf vs group) */

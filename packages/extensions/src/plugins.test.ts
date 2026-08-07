@@ -117,17 +117,25 @@ describe("built-in plugins", () => {
 		const plain = stripAnsi(output);
 
 		expect(output).toContain("\x1b[");
-		expect(plain).toContain("USAGE:");
-		expect(plain).toContain("COMMANDS:");
-		expect(plain).toContain("ARGS:");
-		expect(plain).toContain("OPTIONS:");
+		expect(plain).toContain("Usage:");
+		expect(plain).toContain("Commands:");
+		expect(plain).toContain("Arguments:");
+		expect(plain).toContain("Options:");
 		expect(plain).toContain("-v, --verbose, --no-verbose");
 		expect(plain).toContain("[default: true]");
 		expect(plain).toContain("[default: 3000]");
 		expect(plain).toContain('[default: "."]');
+
+		// Convention audit H3 keeps per-part usage coloring: path green,
+		// placeholders cyan, args yellow (dim when optional) — not one span.
+		const usageLine = output.split("\n").find((line) => stripAnsi(line).startsWith("  app"));
+		expect(usageLine).toContain("\x1b[32mapp\x1b["); // green path
+		expect(usageLine).toContain("\x1b[36m<command>\x1b["); // cyan placeholder
+		expect(usageLine).toContain("\x1b[36m[options]\x1b["); // cyan placeholder
+		expect(usageLine).toContain("[dir]"); // arg token present, yellow+dim
 	});
 
-	it("renderHelp shows long aliases with canonical-only negation", () => {
+	it("renderHelp shows every callable alias and negation", () => {
 		const command = new Crust("app").flags({
 			name: "verbose",
 			type: "boolean",
@@ -135,8 +143,8 @@ describe("built-in plugins", () => {
 		})._node;
 
 		const output = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(output).toContain("--verbose, --loud, --no-verbose");
-		expect(output).not.toContain("--no-loud");
+		// Convention audit H2: disclose every callable long-form negation.
+		expect(output).toContain("--verbose, --loud, --no-verbose, --no-loud");
 	});
 
 	it("renderHelp hides negation labels when noNegate is set", () => {
@@ -209,8 +217,8 @@ describe("built-in plugins", () => {
 
 		const output = stripAnsi(getStdout());
 		expect(output).toContain("app");
-		expect(output).toContain("USAGE:");
-		expect(output).toContain("COMMANDS:");
+		expect(output).toContain("Usage:");
+		expect(output).toContain("Commands:");
 		expect(output).toContain("build");
 		expect(output).toContain("-h, --help");
 		expect(output).not.toContain("--no-help");
@@ -277,7 +285,7 @@ describe("built-in plugins", () => {
 		const output = getStdout();
 		expect(output).not.toContain("\x1b[36m");
 		expect(output).not.toContain("\x1b[33m");
-		expect(output).toContain("\x1b[1mUSAGE:\x1b[22m");
+		expect(output).toContain("\x1b[1mUsage:\x1b[22m");
 	});
 
 	it("noColorExtension overrides NO_COLOR with --color", async () => {
@@ -413,7 +421,7 @@ describe("built-in plugins", () => {
 
 		const output = stripAnsi(getStdout());
 		expect(output).toContain("create");
-		expect(output).toContain("USAGE:");
+		expect(output).toContain("Usage:");
 		expect(getStderr()).toBe("");
 		expect(process.exitCode).toBeFalsy();
 	});
@@ -431,7 +439,7 @@ describe("built-in plugins", () => {
 
 		const output = stripAnsi(getStdout());
 		expect(output).toContain("deploy");
-		expect(output).toContain("USAGE:");
+		expect(output).toContain("Usage:");
 		expect(getStderr()).toBe("");
 		expect(process.exitCode).toBeFalsy();
 	});
@@ -629,7 +637,7 @@ describe("built-in plugins", () => {
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("Commands:");
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
 	});
@@ -642,7 +650,7 @@ describe("built-in plugins", () => {
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("Commands:");
 		expect(plain).toContain("build");
 		// No parens means no aliases were rendered.
 		expect(plain).not.toMatch(/build\s*\(/);
@@ -699,7 +707,7 @@ describe("built-in plugins", () => {
 			)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).toContain("COMMANDS:");
+		expect(plain).toContain("Commands:");
 		expect(plain).toContain("build");
 		expect(plain).not.toContain("__complete");
 		expect(plain).not.toContain("Internal completion entrypoint");
@@ -715,14 +723,14 @@ describe("built-in plugins", () => {
 			.handle(() => {})._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).not.toContain("COMMANDS:");
+		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
 	});
 
 	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no run handler", () => {
 		// Regression: formatUsage previously counted hidden subcommands when
 		// deciding whether to emit `<command>`, producing the incoherent
-		// `USAGE: app <command>` with no COMMANDS section below it.
+		// `Usage: app <command>` with no COMMANDS section below it.
 		const command = new Crust("app").mount(
 			defineCommand("__complete", (cmd) =>
 				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
@@ -730,9 +738,9 @@ describe("built-in plugins", () => {
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).toContain("USAGE:");
-		expect(plain).not.toMatch(/USAGE:\s+app\s+<command>/);
-		expect(plain).not.toContain("COMMANDS:");
+		expect(plain).toContain("Usage:");
+		expect(plain).not.toMatch(/Usage:\s+app\s+<command>/);
+		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
 	});
 
@@ -820,7 +828,7 @@ describe("built-in plugins", () => {
 		// The ARGS section heading is the marker the rest of the
 		// assertions hang off; without it the test would silently miss
 		// rendering bugs that drop the section entirely.
-		expect(plain).toContain("ARGS:");
+		expect(plain).toContain("Arguments:");
 		expect(plain).toContain("<env>");
 		expect(plain).toContain("[choices: dev, staging, prod]");
 	});

@@ -1,0 +1,27 @@
+.Dd August 7, 2026
+.Dt DEMO 1
+.Os
+.Sh NAME
+.Nm demo
+.Nd Manage demo deployments.
+.Sh SYNOPSIS
+.Bd -literal
+demo <command> [workspace] [options]
+.Ed
+.Sh DESCRIPTION
+Manage demo deployments.
+.Sh SUBCOMMANDS
+.Bl -tag -width 13n
+.It Nm deploy (ship)
+Deploy an application
+.El
+.Sh OPTIONS
+.Bl -tag -width 46n
+.It Sy -c, --color, --colour, --no-color, --no-colour
+Use colour
+.El
+.Sh ARGUMENTS
+.Bl -tag -width 12n
+.It Ql [workspace]
+Workspace directory [default: "."]
+.El

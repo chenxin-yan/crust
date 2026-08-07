@@ -105,8 +105,8 @@ describe("crust CLI entry point", () => {
 
 			expect(output).toContain("crust");
 			expect(output).toContain("CLI tooling for the Crust framework");
-			expect(output).toContain("USAGE:");
-			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("Usage:");
+			expect(output).toContain("Commands:");
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 			expect(output).toContain("Compile your CLI to a standalone executable");
@@ -127,8 +127,8 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: ["-h"] });
 			const output = getStdout();
 
-			expect(output).toContain("USAGE:");
-			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("Usage:");
+			expect(output).toContain("Commands:");
 		});
 	});
 
@@ -153,8 +153,8 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: [] });
 			const output = getStdout();
 
-			expect(output).toContain("USAGE:");
-			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("Usage:");
+			expect(output).toContain("Commands:");
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 		});
@@ -164,7 +164,7 @@ describe("crust CLI entry point", () => {
 		it("shows root help for unknown input", async () => {
 			await makeCrustApp().execute({ argv: ["unknown"] });
 			const output = getStdout();
-			expect(output).toContain("USAGE:");
+			expect(output).toContain("Usage:");
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 		});
@@ -172,7 +172,7 @@ describe("crust CLI entry point", () => {
 		it("shows root help for partial command input", async () => {
 			await makeCrustApp().execute({ argv: ["buil"] });
 			const output = getStdout();
-			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("Commands:");
 		});
 	});
 
@@ -196,8 +196,8 @@ describe("crust CLI entry point", () => {
 			const output = getStdout();
 
 			// Help output should still render correctly with updateNotifier present
-			expect(output).toContain("USAGE:");
-			expect(output).toContain("COMMANDS:");
+			expect(output).toContain("Usage:");
+			expect(output).toContain("Commands:");
 			expect(output).toContain("build");
 		});
 
@@ -213,7 +213,7 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: [] });
 			const output = getStdout();
 
-			expect(output).toContain("USAGE:");
+			expect(output).toContain("Usage:");
 		});
 	});
 });

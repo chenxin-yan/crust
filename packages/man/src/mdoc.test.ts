@@ -154,7 +154,8 @@ describe("renderManPageMdoc", () => {
 		const root = await prepareCommandSnapshot(app);
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
-		expect(mdoc).toContain(".It Sy --target");
+		// Convention audit M1: use semantic mdoc flag macros.
+		expect(mdoc).toContain(".It Fl Fl target");
 		expect(mdoc).toContain("Build target [choices: browser, bun, node]");
 	});
 
@@ -174,7 +175,7 @@ describe("renderManPageMdoc", () => {
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		expect(mdoc).toContain(".Sh ARGUMENTS");
-		expect(mdoc).toContain(".It Ql <env>");
+		expect(mdoc).toContain(".It Ar env");
 		expect(mdoc).toContain("Target environment [choices: dev, staging, prod]");
 	});
 
@@ -195,7 +196,7 @@ describe("renderManPageMdoc", () => {
 
 		// Both the canonical `--output` and the alias `--out` appear in the
 		// label, comma-separated, after the short flag.
-		expect(mdoc).toContain(".It Sy -o, --output, --out");
+		expect(mdoc).toContain(".It Fl o , Fl Fl output , Fl Fl out");
 	});
 
 	it("includes `--no-` negation for every long-form spelling of a boolean flag", async () => {
@@ -212,6 +213,6 @@ describe("renderManPageMdoc", () => {
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
 		// Canonical + alias + both negations, in declaration order.
-		expect(mdoc).toContain(".It Sy --color, --colour, --no-color, --no-colour");
+		expect(mdoc).toContain(".It Fl Fl color , Fl Fl colour , Fl Fl no-color , Fl Fl no-colour");
 	});
 });

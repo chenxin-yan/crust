@@ -13,7 +13,7 @@ import { buildManifest } from "./manifest.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 function makeCommand(opts: {
-	meta: { name: string; description?: string; usage?: string };
+	meta: { name: string; description?: string; usage?: string; hidden?: boolean };
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
@@ -93,7 +93,7 @@ describe("buildManifest", () => {
 			expect(node.usage).toBe("build [options] <entry>");
 		});
 
-		it("omits description and usage when not provided", () => {
+		it("resolves generated usage when custom usage is not provided", () => {
 			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
@@ -101,7 +101,7 @@ describe("buildManifest", () => {
 			const node = buildManifest(snapshotCommand(cmd));
 
 			expect(node.description).toBeUndefined();
-			expect(node.usage).toBeUndefined();
+			expect(node.usage).toBe("app");
 		});
 
 		it("returns empty args and flags arrays when none defined", () => {
@@ -467,6 +467,19 @@ describe("buildManifest", () => {
 			// Children sorted alphabetically
 			expect(first?.name).toBe("build");
 			expect(second?.name).toBe("serve");
+		});
+
+		it("omits hidden commands from generated agent documentation", () => {
+			const root = makeCommand({
+				meta: { name: "app" },
+				subCommands: {
+					visible: makeCommand({ meta: { name: "visible" }, run() {} }),
+					hidden: makeCommand({ meta: { name: "hidden", hidden: true }, run() {} }),
+				},
+			});
+			expect(buildManifest(snapshotCommand(root)).children.map((child) => child.name)).toEqual([
+				"visible",
+			]);
 		});
 
 		it("constructs correct paths for nested subcommands", () => {

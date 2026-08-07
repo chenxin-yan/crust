@@ -327,29 +327,6 @@ function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
 // Shared rendering helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Builds an auto-generated usage line from the command's path, args, and flags.
- *
- * Example: `my-cli deploy <env> [--force] [--target <value>]`
- */
-function buildUsageLine(node: ManifestNode): string {
-	const parts = [...node.path];
-
-	for (const arg of node.args) {
-		if (arg.variadic) {
-			parts.push(arg.required ? `<${arg.name}...>` : `[${arg.name}...]`);
-		} else {
-			parts.push(arg.required ? `<${arg.name}>` : `[${arg.name}]`);
-		}
-	}
-
-	if (node.flags.length > 0) {
-		parts.push("[options]");
-	}
-
-	return parts.join(" ");
-}
-
 function renderCommandHeading(node: ManifestNode): string[] {
 	const lines = [`# \`${commandInvocation(node)}\``, ""];
 
@@ -371,7 +348,7 @@ function renderAgentInstructions(node: ManifestNode): string[] {
 }
 
 function renderRunnableCommandSections(node: ManifestNode): string[] {
-	const lines = ["## Usage", "", "```", node.usage ?? buildUsageLine(node), "```", ""];
+	const lines = ["## Usage", "", "```", node.usage, "```", ""];
 
 	if (node.args.length > 0) {
 		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
