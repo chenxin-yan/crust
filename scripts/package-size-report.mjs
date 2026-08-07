@@ -1,10 +1,12 @@
-// Report npm-pack tarball sizes for publishable packages, and diff two reports.
+// Report gzipped runtime JS sizes (dist/**/*.js) for publishable library
+// packages — CLI packages (with a bin field) are excluded since their size
+// is install cost, not runtime code shipped to consumers.
 // Usage:
 //   bun scripts/package-size-report.mjs sizes [rootDir] > sizes.json
 //   bun scripts/package-size-report.mjs compare base.json head.json > table.md
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 
 const [mode, ...args] = process.argv.slice(2);
 
@@ -21,14 +23,14 @@ if (mode === "sizes") {
 			// not a package dir (no package.json)
 			continue;
 		}
-		if (pkg.private) continue;
-		const [info] = JSON.parse(
-			execFileSync("npm", ["pack", "--dry-run", "--json"], {
-				cwd: join(root, "packages", dir),
-				encoding: "utf8",
-			}),
-		);
-		out[pkg.name] = { size: info.size, unpackedSize: info.unpackedSize };
+		if (pkg.private || pkg.bin) continue;
+		const dist = join(root, "packages", dir, "dist");
+		let size = 0;
+		for (const file of readdirSync(dist, { recursive: true })) {
+			if (!/\.(js|mjs|cjs)$/.test(file)) continue;
+			size += gzipSync(readFileSync(join(dist, file))).length;
+		}
+		out[pkg.name] = { size };
 	}
 	console.log(JSON.stringify(out, null, 2));
 } else if (mode === "compare") {
@@ -38,7 +40,7 @@ if (mode === "sizes") {
 		...new Set([...Object.keys(base), ...Object.keys(head)]),
 	].sort();
 	const lines = [
-		"| Package | Base | Head | Δ (tarball) |",
+		"| Package | Base | Head | Δ (JS, gzip) |",
 		"|---|---:|---:|---:|",
 	];
 	for (const name of names) {
