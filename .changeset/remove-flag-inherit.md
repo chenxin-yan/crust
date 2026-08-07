@@ -5,7 +5,7 @@
 
 **BREAKING:** Remove `FlagDef.inherit`. Command flags declared with `.flags()` are now always local; Context-owned flags are the only application-level flag propagation mechanism. Recursive Extension flags continue to use `ExtensionFlagDef.recursive`.
 
-The public `FlagSnapshot.inherit` field and the `InheritableFlags` and `ForceInherit` utility types are also removed. A local child flag can no longer override a same-named inherited flag because ordinary flags no longer inherit; Context-owned name collisions remain `DEFINITION` errors.
+The public `FlagSnapshot.inherit` field and the internal `InheritableFlags` and `ForceInherit` utility types are also removed. A local child flag can no longer override a same-named inherited flag because ordinary flags no longer inherit; Context-owned name collisions remain `DEFINITION` errors.
 
 | Previous usage | Migration |
 | --- | --- |

@@ -702,18 +702,18 @@ export type ValidateVariadicArgs<A extends readonly object[]> = A extends readon
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Merges parent flags with local flags, where local keys override parent keys.
+ * Merges two flag sets, where `Override` keys win over `Base` keys.
  *
  * @example
  * ```ts
- * type Parent = { verbose: { type: "boolean" }; port: { type: "number" } };
- * type Local = { port: { type: "string" } };
- * type Result = MergeFlags<Parent, Local>;
+ * type Base = { verbose: { type: "boolean" }; port: { type: "number" } };
+ * type Override = { port: { type: "string" } };
+ * type Result = MergeFlags<Base, Override>;
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
-	Omit<Parent, keyof Local> & Local
+export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Simplify<
+	Omit<Base, keyof Override> & Override
 >;
 
 /** Computes a command's handler-visible flags from local and Context-owned definitions. */

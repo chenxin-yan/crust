@@ -159,14 +159,6 @@ function isAbortError(error: unknown): boolean {
 	return error.name === "AbortError";
 }
 
-function applyOwnedFlagsToSubtree(node: CommandNode): void {
-	node.effectiveFlags = computeEffectiveFlags(node.ownedFlags, node.localFlags);
-
-	for (const sub of Object.values(node.subCommands)) {
-		applyOwnedFlagsToSubtree(sub);
-	}
-}
-
 /**
  * Inject an Extension-owned flag into a node's effective flags (and, when
  * `recursive`, into every descendant). Name collisions with application or
@@ -195,7 +187,6 @@ function injectExtensionFlag(
 function applyExtensionCommands(root: CommandNode, ext: Extension): void {
 	for (const definition of ext.commands ?? []) {
 		const node = materializeCommandDefinition(definition, root, ext.name);
-		applyOwnedFlagsToSubtree(node);
 		root.subCommands[definition.name] = node;
 	}
 }

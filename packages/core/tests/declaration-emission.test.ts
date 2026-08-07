@@ -33,11 +33,19 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
+// Inferred CommandDefinition<R> embeds the required ContextFactory shape
+export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
+	cmd.handle(({ ctx }) => {
+		void ctx.auth;
+	}),
+);
+
 // Inferred builder type references EffectiveFlags / Context-owned flag shapes
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
 	.provide(auth())
-	.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
+	.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
+	.mount(deploy);
 `;
 
 let fixtureDir: string;
