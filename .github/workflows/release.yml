@@ -32,7 +32,8 @@ jobs:
     timeout-minutes: 15
     outputs:
       published: ${{ steps.changesets.outputs.published }}
-      prNumber: ${{ steps.changesets.outputs.pr-number }}
+      # camelCase in changesets/action v1 (renamed to pr-number in v2)
+      prNumber: ${{ steps.changesets.outputs.pullRequestNumber }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
