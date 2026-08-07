@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import * as codes from "./ansiCodes.ts";
 import { resolveColorDepth } from "./capability.ts";
 import { createStyle, style } from "./createStyle.ts";
 import { bold, red } from "./index.ts";

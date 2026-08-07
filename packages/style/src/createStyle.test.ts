@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import * as codes from "./ansiCodes.ts";
 import { createStyle } from "./createStyle.ts";
 import { isModifierName, modifierNames, styleMethodNames } from "./styleMethodRegistry.ts";
 

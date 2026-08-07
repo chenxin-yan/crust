@@ -109,7 +109,7 @@ type RequirementContext<R extends CommandRequirements> = RequirementCtxOf<R>;
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any>;
 
 type CommandRecipe<R extends CommandRequirements> = (
-	command: CommandDefinitionBuilder<{}, {}, [], EffectiveFlags<{}, {}>, RequirementContext<R>>,
+	command: CommandDefinitionBuilder<{}, {}, [], EffectiveFlags<{}>, RequirementContext<R>>,
 ) => AnyCommandDefinitionBuilder;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");

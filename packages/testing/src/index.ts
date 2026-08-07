@@ -105,6 +105,7 @@ async function captureExecuteExclusive(
 		return {
 			stdout: stdoutLines.join("\n"),
 			stderr: stderrLines.join("\n"),
+			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- execute() may set a numeric string; CapturedExecute guarantees a number
 			exitCode: Number(process.exitCode ?? 0),
 		};
 	} finally {

@@ -705,7 +705,7 @@ describe("EffectiveFlags type inference", () => {
 	});
 
 	it("returns empty when all inputs are empty", () => {
-		type Result = EffectiveFlags<{}, {}>;
+		type Result = EffectiveFlags<{}>;
 		type _check = Expect<Equal<Result, {}>>;
 		expect(true).toBe(true);
 	});

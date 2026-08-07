@@ -52,6 +52,7 @@ class FakeTerminal {
 	write(text: string): void {
 		let index = 0;
 		while (index < text.length) {
+			// oxlint-disable-next-line no-control-regex -- parsing ANSI CSI sequences
 			const escape = /^\x1B\[([0-?]*)([ -/]*)([@-~])/.exec(text.slice(index));
 			if (escape) {
 				this.handleEscape(escape[1] ?? "", escape[3] ?? "");
@@ -147,8 +148,8 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 	return {
 		io: { input, output },
 		type: (text) => input.write(text),
-		keys: (...namedKeys) => {
-			for (const key of namedKeys) input.write(encodeKey(key));
+		keys: (...keys) => {
+			for (const key of keys) input.write(encodeKey(key));
 		},
 		screen: () => stripAnsi(terminal.screen()),
 		output: () => transcript,
@@ -169,9 +170,9 @@ export function renderPrompt<Options, Answer>(
 ): RenderedPrompt<Answer> {
 	const harness = createPromptIO();
 	return {
-		type: harness.type,
-		keys: harness.keys,
-		screen: harness.screen,
+		type: (text) => harness.type(text),
+		keys: (...keys) => harness.keys(...keys),
+		screen: () => harness.screen(),
 		answer: prompt(options, harness.io),
 	};
 }

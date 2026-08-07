@@ -6,7 +6,8 @@
 	},
 	"plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
 	"categories": {
-		"suspicious": "warn"
+		"correctness": "error",
+		"suspicious": "error"
 	},
 	"rules": {
 		"unicorn/no-new-array": "off",
