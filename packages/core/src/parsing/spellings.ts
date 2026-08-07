@@ -1,9 +1,18 @@
 import { CrustError } from "../errors.ts";
-import type { FlagDef, FlagsDef, ValueType } from "../types.ts";
+import type { FlagDef, ValueType } from "../types.ts";
 
-export interface FlagSpelling {
+interface FlagDefinition {
+	readonly type: ValueType;
+	readonly short?: string;
+	readonly aliases?: readonly string[];
+	readonly noNegate?: boolean;
+	readonly multiple?: boolean;
+}
+
+export interface FlagSpelling<T extends FlagDefinition = FlagDef> {
 	canonicalName: string;
-	def: FlagDef;
+	spelling: string;
+	def: T;
 	kind: "canonical" | "short" | "alias";
 	negatable: boolean;
 }
@@ -17,13 +26,15 @@ const ALLOWED_FLAG_TYPES: ReadonlySet<ValueType> = new Set([
 	"json",
 ]);
 
-export function flagDefinitionSpellings(name: string, def: FlagDef): string[] {
+export function flagDefinitionSpellings(name: string, def: FlagDefinition): string[] {
 	return [name, ...(def.short ? [def.short] : []), ...(def.aliases ?? [])];
 }
 
 /** Build the canonical flag-spelling table shared by parsing and routing. */
-export function flagSpellings(flagsDef: FlagsDef | undefined): Map<string, FlagSpelling> {
-	const spellings = new Map<string, FlagSpelling>();
+export function flagSpellings<T extends FlagDefinition = FlagDef>(
+	flagsDef: Readonly<Record<string, T>> | undefined,
+): Map<string, FlagSpelling<T>> {
+	const spellings = new Map<string, FlagSpelling<T>>();
 	if (!flagsDef) return spellings;
 
 	// Collision checks mirror the compile-time `ValidateFlagAliases<F>` type —
@@ -54,7 +65,7 @@ export function flagSpellings(flagsDef: FlagsDef | undefined): Map<string, FlagS
 			def,
 			negatable: def.type === "boolean" && def.noNegate !== true,
 		} as const;
-		spellings.set(canonicalName, { ...entry, kind: "canonical" });
+		spellings.set(canonicalName, { ...entry, spelling: canonicalName, kind: "canonical" });
 
 		if (def.short) {
 			if (def.short.startsWith("no-")) {
@@ -71,7 +82,7 @@ export function flagSpellings(flagsDef: FlagsDef | undefined): Map<string, FlagS
 				);
 			}
 			owners.set(def.short, canonicalName);
-			spellings.set(def.short, { ...entry, kind: "short" });
+			spellings.set(def.short, { ...entry, spelling: def.short, kind: "short" });
 		}
 
 		for (const alias of def.aliases ?? []) {
@@ -89,7 +100,7 @@ export function flagSpellings(flagsDef: FlagsDef | undefined): Map<string, FlagS
 				);
 			}
 			owners.set(alias, canonicalName);
-			spellings.set(alias, { ...entry, kind: "alias" });
+			spellings.set(alias, { ...entry, spelling: alias, kind: "alias" });
 		}
 	}
 

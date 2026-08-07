@@ -129,6 +129,6 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Tooling subpath
 
-`@crustjs/core/tooling` exposes `prepareCommandSnapshot`, `snapshotCommand`, `VALIDATION_MODE_ENV`, and `VALIDATION_FORCE_EXIT_ENV` for lockstep first-party man, skill, and build tooling. This subpath is explicitly unsupported and has no compatibility guarantee. Application code should use the root exports above.
+`@crustjs/core/tooling` exposes `prepareCommandSnapshot`, `snapshotCommand`, `buildCommandDocumentation`, its documentation model types, and the validation environment constants for lockstep first-party tooling. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage, visible children, argument tokens, and every accepted flag spelling. This subpath is explicitly unsupported and has no compatibility guarantee. Application code should use the root exports above.
 
 Use [`@crustjs/extensions`](/docs/modules/extensions) for the official Extensions and [`@crustjs/crust`](/docs/modules/crust) as a development dependency for build tooling.

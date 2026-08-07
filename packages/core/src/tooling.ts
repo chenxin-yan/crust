@@ -11,4 +11,10 @@ export {
 	VALIDATION_FORCE_EXIT_ENV,
 	VALIDATION_MODE_ENV,
 } from "./command/crust.ts";
+export { buildCommandDocumentation } from "./command/documentation.ts";
+export type {
+	CommandDocumentation,
+	DocumentationArg,
+	DocumentationFlag,
+} from "./command/documentation.ts";
 export { snapshotCommand } from "./command/snapshot.ts";
