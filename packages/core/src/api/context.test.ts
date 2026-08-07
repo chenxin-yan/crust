@@ -221,7 +221,10 @@ describe("Context-owned flags", () => {
 			return {};
 		});
 
-		await new Crust("cli").provide(server()).handle(() => {}).run(["--port", "8080"]);
+		await new Crust("cli")
+			.provide(server())
+			.handle(() => {})
+			.run(["--port", "8080"]);
 
 		expect(seen).toEqual([8080]);
 	});
