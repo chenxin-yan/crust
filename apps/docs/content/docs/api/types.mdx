@@ -130,6 +130,14 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
 
 Snapshots omit schemas and parse functions. `URL` defaults become strings, and array defaults are copied and frozen.
 
+## Invocation I/O
+
+### `InvocationIO`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
+
+The same injectable callbacks are passed to the Command Handler and every Context setup constructed for that invocation.
+
 ## Command Handler context
 
 ### `CrustCommandContext<A, F, Ctx>`
@@ -165,14 +173,14 @@ interface ContextConfig {
   readonly requires?: ContextRequirements;
 }
 
-interface ContextSetup<Options, RC, OF> {
+interface ContextSetup<Options, RC, OF> extends InvocationIO {
   readonly options: Options;
   readonly flags: InferFlags<OF>;
   readonly ctx: Readonly<RC>;
 }
 ```
 
-`ContextConfig.flags` declares propagating flags installed when an instance is provided; `requires` lists Context capabilities needed from the command path. This is the same plain capability array accepted by `defineCommand()`: `flags` always means definitions the unit owns or parses, and `requires` always means capabilities supplied by the environment. `ContextSetup` receives the factory argument, validated values for its owned flags only, and the declared Context values. See [Contexts](/docs/guide/contexts) for construction order and collision rules.
+`ContextConfig.flags` declares propagating flags installed when an instance is provided; `requires` lists Context capabilities needed from the command path. This is the same plain capability array accepted by `defineCommand()`: `flags` always means definitions the unit owns or parses, and `requires` always means capabilities supplied by the environment. `ContextSetup` receives the factory argument, validated values for its owned flags only, the declared Context values, and the invocation's `stdout` and `stderr` callbacks. See [Contexts](/docs/guide/contexts) for construction order and collision rules.
 
 ### `ContextInstance`
 

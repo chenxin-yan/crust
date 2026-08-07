@@ -28,6 +28,7 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
+	InvocationIO,
 	MergeFlags,
 	NamedFlagDef,
 	NamedFlagsRecord,
@@ -54,7 +55,7 @@ export interface CrustCommandContext<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 	Ctx extends ContextMap = {},
-> {
+> extends InvocationIO {
 	/** Resolved positional arguments, keyed by arg name */
 	args: InferArgs<A>;
 	/** Resolved flags, keyed by flag name */
@@ -67,16 +68,6 @@ export interface CrustCommandContext<
 	command: CommandSnapshot;
 	/** Readonly snapshot of the application root, including Extension contributions */
 	rootCommand: CommandSnapshot;
-	/** Write a line of standard output (injectable text callback) */
-	stdout: (text: string) => void;
-	/** Write a line of diagnostic output (injectable text callback) */
-	stderr: (text: string) => void;
-}
-
-/** Injectable output callbacks threaded through one invocation. */
-interface InvocationIO {
-	stdout: (text: string) => void;
-	stderr: (text: string) => void;
 }
 
 /** Terminal defaults: line-oriented writes to the process streams. */
@@ -1015,6 +1006,7 @@ export class Crust<
 				ctx: await buildContexts(
 					resolvedNode.contexts,
 					validated.flags as Record<string, unknown>,
+					io,
 					disposal,
 					`"${resolved.commandPath.join(" ")}"`,
 				),

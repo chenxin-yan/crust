@@ -22,9 +22,9 @@ describe("defineContext()", () => {
 		const instance = auth();
 		expect(instance.kind).toBe("context");
 		expect(instance.name).toBe("auth");
-		await expect(Promise.resolve(instance.setup({ flags: {}, ctx: {} }))).resolves.toEqual({
-			user: "chenxin",
-		});
+		await expect(
+			Promise.resolve(instance.setup({ flags: {}, ctx: {}, stdout: () => {}, stderr: () => {} })),
+		).resolves.toEqual({ user: "chenxin" });
 	});
 
 	it("passes the factory argument as options", async () => {
@@ -33,9 +33,9 @@ describe("defineContext()", () => {
 		}));
 
 		const instance = db({ url: "memory://test" });
-		await expect(Promise.resolve(instance.setup({ flags: {}, ctx: {} }))).resolves.toEqual({
-			url: "memory://test",
-		});
+		await expect(
+			Promise.resolve(instance.setup({ flags: {}, ctx: {}, stdout: () => {}, stderr: () => {} })),
+		).resolves.toEqual({ url: "memory://test" });
 	});
 
 	it(".of() produces an instance returning the precomputed value with requirements absent", async () => {
@@ -249,17 +249,31 @@ describe("Context-owned flags", () => {
 		expect(seen).toEqual([["api-key"], ["region"]]);
 	});
 
-	it("derives a logging capability while handlers keep injected stderr", async () => {
+	it("builds behavior capabilities with the handler's injected io", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
+		let setupStdout: ((text: string) => void) | undefined;
+		let setupStderr: ((text: string) => void) | undefined;
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stdout, stderr }) => {
+			type _Stdout = Assert<IsEqual<typeof stdout, (text: string) => void>>;
+			type _Stderr = Assert<IsEqual<typeof stderr, (text: string) => void>>;
+			setupStdout = stdout;
+			setupStderr = stderr;
+			return {
+				debug(message: string) {
+					if (flags.verbose) stderr(message);
+				},
+			};
+		});
 		const messages: string[] = [];
-		const app = new Crust("cli").provide(logging()).handle(({ ctx, stderr }) => {
-			if (ctx.logging.verbose) stderr("debug");
+		const stdout = (_message: string) => {};
+		const stderr = (message: string) => messages.push(message);
+		const app = new Crust("cli").provide(logging()).handle(({ ctx, stdout, stderr }) => {
+			expect(setupStdout).toBe(stdout);
+			expect(setupStderr).toBe(stderr);
+			ctx.logging.debug("debug");
 		});
 
-		await app.run(["--verbose"], { stderr: (message) => messages.push(message) });
+		await app.run(["--verbose"], { stdout, stderr });
 		expect(messages).toEqual(["debug"]);
 	});
 

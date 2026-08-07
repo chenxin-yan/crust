@@ -56,7 +56,7 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.mount()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                              |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; attach an instance with `.provide()`                |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                       |
 | `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                              |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                       |
 | `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                        |
@@ -83,24 +83,25 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Command boundary types
 
-| Type                  | Description                                                        |
-| --------------------- | ------------------------------------------------------------------ |
-| `CrustCommandContext` | Typed context passed to a Command Handler, including `rootCommand` |
-| `CommandSnapshot`     | Readonly, serializable command description                         |
-| `ArgSnapshot`         | Serializable argument projection                                   |
-| `FlagSnapshot`        | Serializable flag projection                                       |
+| Type                  | Description                                                          |
+| --------------------- | -------------------------------------------------------------------- |
+| `CrustCommandContext` | Typed context passed to a Command Handler, including `rootCommand`   |
+| `InvocationIO`        | Injectable `stdout` and `stderr` callbacks shared with Context setup |
+| `CommandSnapshot`     | Readonly, serializable command description                           |
+| `ArgSnapshot`         | Serializable argument projection                                     |
+| `FlagSnapshot`        | Serializable flag projection                                         |
 
 ## Context types
 
-| Type                  | Description                                                           |
-| --------------------- | --------------------------------------------------------------------- |
-| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()` |
-| `AnyContextFactory`   | Requirement-array element type for `requires`                         |
-| `ContextInstance`     | Named lazy dependency attached with `.provide()`                      |
-| `ContextRequirements` | Context capabilities required from a command path                     |
-| `ContextConfig`       | Owned flags plus capability dependencies under `requires`             |
-| `ContextSetup`        | Typed setup input: `options`, validated `flags`, dependency `ctx`     |
-| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values           |
+| Type                  | Description                                                                 |
+| --------------------- | --------------------------------------------------------------------------- |
+| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()`       |
+| `AnyContextFactory`   | Requirement-array element type for `requires`                               |
+| `ContextInstance`     | Named lazy dependency attached with `.provide()`                            |
+| `ContextRequirements` | Context capabilities required from a command path                           |
+| `ContextConfig`       | Owned flags plus capability dependencies under `requires`                   |
+| `ContextSetup`        | Typed setup input: `options`, `flags`, dependency `ctx`, and invocation I/O |
+| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values                 |
 
 ## Extension types
 

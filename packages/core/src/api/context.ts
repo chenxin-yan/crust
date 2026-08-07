@@ -4,6 +4,7 @@ import type {
 	FlagDef,
 	FlagsDef,
 	InferFlags,
+	InvocationIO,
 	MergeFlags,
 	NamedFlagDef,
 	NamedFlagsRecord,
@@ -31,7 +32,7 @@ type ValidateContextConfig<R extends ContextConfig> = {
 };
 
 /** The runtime input every Context setup receives (typed per-factory by `defineContext`). */
-interface ContextSetupInput {
+interface ContextSetupInput extends InvocationIO {
 	readonly flags: Record<string, unknown>;
 	readonly ctx: Readonly<ContextMap>;
 }
@@ -63,7 +64,11 @@ export interface ContextInstance<
 }
 
 /** The typed setup input for one Context factory. */
-export interface ContextSetup<Options, RC extends ContextMap, OF extends FlagsDef = {}> {
+export interface ContextSetup<
+	Options,
+	RC extends ContextMap,
+	OF extends FlagsDef = {},
+> extends InvocationIO {
 	/** The factory argument */
 	readonly options: Options;
 	/** Validated parsed flags owned by this Context. */
@@ -150,9 +155,9 @@ export type RequirementCtxOf<R extends { readonly requires?: ContextRequirements
  *
  * With a config argument, `flags` installs flags owned by the Context at
  * `.provide()`, while `requires` declares Context capabilities from the command
- * path. Setup receives the validated owned flags plus declared Context values (`ctx`).
- * Dependencies drive construction order: Contexts on
- * the resolved command path are constructed topologically, regardless of
+ * path. Setup receives the validated owned flags, declared Context values (`ctx`),
+ * and the invocation's injectable output callbacks. Dependencies drive construction
+ * order: Contexts on the resolved command path are constructed topologically, regardless of
  * `.provide()` order.
  *
  * Cleanup belongs to the value itself: implement `Symbol.dispose` or
@@ -202,7 +207,7 @@ export function defineContext(
 		name,
 		requiredCtx,
 		ownedFlags,
-		setup: (input) => setup({ options, flags: input.flags, ctx: input.ctx } as never),
+		setup: (input) => setup({ options, ...input } as never),
 	});
 	factory.contextName = name;
 	factory.of = (value: unknown): ContextInstance => ({
@@ -287,10 +292,12 @@ export function sortContexts(
  * values on `disposal` so they are torn down in reverse construction order.
  *
  * @param flags - The validated parsed flags of the resolved invocation
+ * @param io - The invocation output callbacks also passed to the handler
  */
 export async function buildContexts(
 	contexts: readonly ContextInstance[],
 	flags: Record<string, unknown>,
+	io: InvocationIO,
 	disposal: AsyncDisposableStack,
 	where: string,
 ): Promise<ContextMap> {
@@ -299,7 +306,7 @@ export async function buildContexts(
 		const ownedFlags = Object.fromEntries(
 			Object.keys(item.ownedFlags).map((name) => [name, flags[name]]),
 		);
-		const value = await item.setup({ flags: ownedFlags, ctx: values });
+		const value = await item.setup({ flags: ownedFlags, ctx: values, ...io });
 		values[item.name] = value;
 		registerDisposable(value, disposal);
 	}

@@ -51,6 +51,7 @@ export type {
 	CommandMeta,
 	FlagDef,
 	FlagsDef,
+	InvocationIO,
 	NamedFlagDef,
 	ValueType,
 } from "./types.ts";

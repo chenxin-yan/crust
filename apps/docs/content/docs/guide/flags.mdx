@@ -87,20 +87,20 @@ When one flag configures shared behavior for a command subtree, let a Context ow
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-  verbose: flags.verbose === true,
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
 }));
 
 const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.handle(({ ctx, stderr }) => {
-    if (ctx.logging.verbose) stderr("deploying");
-  }),
+  command.handle(({ ctx }) => ctx.logging.debug("deploying")),
 );
 
 const app = new Crust("app").provide(logging()).mount(deploy);
 ```
 
-The Context declares, parses, and consumes `--verbose`; the handler writes diagnostics through its injected `stderr`. Renaming the flag or deriving log levels later changes the Context rather than every handler.
+The Context declares, parses, and consumes `--verbose`, then wraps the invocation's injected `stderr` as behavior. Handlers call the logging capability without re-checking the flag. Renaming the flag or deriving log levels later changes the Context rather than every handler.
 
 Context-owned flags are parsed and shown in help at the provider and later-mounted descendants. They can appear before, between, or after subcommand names. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 

@@ -21,7 +21,7 @@ const app = new Crust("app")
   .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
-The setup receives one input object: `options` is the factory argument. A zero-option factory is still a factory — invoke it with no argument:
+The setup receives one input object. `options` is the factory argument; `stdout` and `stderr` are the same injectable callbacks passed to the Command Handler. A zero-option factory is still a factory — invoke it with no argument:
 
 ```ts
 const clock = defineContext("clock", () => ({ now: () => Date.now() }));
@@ -83,12 +83,17 @@ Setups may be synchronous or asynchronous.
 Both arrays contain defined values:
 
 ```ts
-import { defineContext, defineFlag } from "@crustjs/core";
+import { defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-  verbose: flags.verbose === true,
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
 }));
+const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
+  command.handle(({ ctx }) => ctx.logging.debug("deploying")),
+);
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
 
 const database = defineContext("db", { requires: [config] }, ({ ctx }) => ({
@@ -96,11 +101,14 @@ const database = defineContext("db", { requires: [config] }, ({ ctx }) => ({
 }));
 ```
 
-The setup input carries three fields:
+The setup input carries five fields:
 
 - `options` — the factory argument
 - `flags` — validated values for this Context's owned `flags` only
 - `ctx` — the constructed values from `requires`
+- `stdout` and `stderr` — the invocation's injectable output callbacks
+
+Contexts receive the exact callbacks passed to the Command Handler, so capabilities can encapsulate output behavior such as verbose logging. Tests that inject capturing callbacks through `run()` or `execute()` observe Context output through those same callbacks.
 
 ### Requirements and construction order
 
@@ -126,7 +134,7 @@ const app = new Crust("app").provide(fake).handle(({ ctx, stdout }) => {
 });
 ```
 
-The fake needs none of the real setup's dependency Contexts. If the factory has owned `flags`, callers may still pass them and the command's help and completion remain unchanged.
+The fake needs none of the real setup's dependency Contexts and skips setup entirely, including its I/O use. If the factory has owned `flags`, callers may still pass them and the command's help and completion remain unchanged.
 
 ## Scope a guard to a subtree
 

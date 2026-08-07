@@ -3,6 +3,14 @@ import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { Simplify } from "./api/context.ts";
 
+/** Injectable output callbacks threaded through one invocation. */
+export interface InvocationIO {
+	/** Write a line of standard output (injectable text callback) */
+	stdout: (text: string) => void;
+	/** Write a line of diagnostic output (injectable text callback) */
+	stderr: (text: string) => void;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────

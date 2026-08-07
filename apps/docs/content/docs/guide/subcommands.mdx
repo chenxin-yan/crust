@@ -29,8 +29,10 @@ A definition lists the Context capabilities it expects from its parent in the `r
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-  verbose: flags.verbose === true,
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
 }));
 const repository = defineContext("repository", () => ({
   defaultBranch: "main",
@@ -38,7 +40,8 @@ const repository = defineContext("repository", () => ({
 
 const clone = defineCommand("clone", { requires: [logging, repository] }, (command) =>
   command.args({ name: "url", type: "url", required: true }).handle(({ args, ctx, stdout }) => {
-    stdout(`${args.url} ${ctx.repository.defaultBranch} ${ctx.logging.verbose}`);
+    ctx.logging.debug(`cloning ${args.url}`);
+    stdout(ctx.repository.defaultBranch);
   }),
 );
 
@@ -65,8 +68,8 @@ const environment = defineFlag("environment", { type: "string" });
 const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
 const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
-  command.handle(({ ctx, stdout }) => {
-    stdout(`${ctx.deployment.environment} ${ctx.logging.verbose}`);
+  command.handle(({ ctx }) => {
+    ctx.logging.debug(`environment: ${ctx.deployment.environment}`);
   }),
 );
 
