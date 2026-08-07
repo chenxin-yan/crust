@@ -55,7 +55,7 @@ function validateAliasString(alias: unknown, canonicalName: string, subjectLabel
  * Validate that adding `incoming` (its canonical name and aliases) to a
  * sibling map containing `existing` introduces no name/alias collisions.
  *
- * Checks performed (mirroring `parser.ts` flag-alias collision detection):
+ * Checks performed (mirroring `spellings.ts` flag-alias collision detection):
  *  1. Each alias in `incoming.aliases` is shape-valid.
  *  2. No duplicate aliases within `incoming.aliases` itself.
  *  3. `incoming.canonicalName` is not already a sibling's alias

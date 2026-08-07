@@ -26,8 +26,10 @@ export function flagSpellings(flagsDef: FlagsDef | undefined): Map<string, FlagS
 	const spellings = new Map<string, FlagSpelling>();
 	if (!flagsDef) return spellings;
 
-	// Reserve canonical names before aliases so collisions report the canonical
-	// owner regardless of definition order.
+	// Collision checks mirror the compile-time `ValidateFlagAliases<F>` type —
+	// defense-in-depth against type erasure (dynamic construction, `as any`
+	// casts, widened generics). Reserve canonical names before aliases so
+	// collisions report the canonical owner regardless of definition order.
 	const owners = new Map<string, string>();
 	for (const name of Object.keys(flagsDef)) owners.set(name, name);
 
