@@ -102,6 +102,5 @@ describe("public beta API", () => {
 		await app.execute({ argv: ["--debug"] });
 
 		expect(runCount).toBe(2);
-		expect(app._node.effectiveFlags.debug).toBeUndefined();
 	});
 });

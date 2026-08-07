@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { defineContext } from "../api/context.ts";
-import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
-import { Crust, defineCommand } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -571,19 +568,15 @@ describe("resolveCommand — aliases", () => {
 
 describe("resolveCommand — known-flag skipping", () => {
 	function makeContextOwnedRoot(): CommandNode {
-		const apiKey = defineFlag("api-key", {
-			type: "string",
-			short: "k",
-			aliases: ["token"],
+		const service = makeNode({ meta: "service", run: () => {} });
+		const deploy = makeNode({ meta: "deploy", subCommands: { service } });
+		return makeNode({
+			meta: "app",
+			flags: {
+				"api-key": { type: "string", short: "k", aliases: ["token"] },
+			},
+			subCommands: { deploy },
 		});
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		return new Crust("app")
-			.provide(auth())
-			.mount(
-				defineCommand("deploy", (command) =>
-					command.mount(defineCommand("service", (child) => child.handle(() => {}))),
-				),
-			)._node;
 	}
 
 	it.each([

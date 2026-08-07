@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust } from "../command/crust.ts";
+import { Crust, prepareCommandSnapshot } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 type Assert<T extends true> = T;
@@ -29,7 +29,7 @@ describe("defineFlag", () => {
 		defineFlag("bad", { type: "not-a-flag" });
 	});
 
-	it("feeds .flags() with the same record typing as an inline literal", () => {
+	it("feeds .flags() with the same record typing as an inline literal", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
 
@@ -38,7 +38,7 @@ describe("defineFlag", () => {
 		type _Output = Assert<
 			IsEqual<Local["output"], { readonly type: "string"; readonly short: "o" }>
 		>;
-		expect(app._node.localFlags).toEqual({
+		expect((await prepareCommandSnapshot(app)).flags).toEqual({
 			verbose: { type: "boolean" },
 			output: { type: "string", short: "o" },
 		});
@@ -75,7 +75,7 @@ describe("defineArg", () => {
 		defineArg("bad", { type: "not-an-arg" });
 	});
 
-	it("feeds .args() with the same tuple typing as an inline literal", () => {
+	it("feeds .args() with the same tuple typing as an inline literal", async () => {
 		const target = defineArg("target", { type: "string", required: true });
 		const app = new Crust("cli").args(target, { name: "count", type: "number", default: 1 });
 
@@ -89,6 +89,9 @@ describe("defineArg", () => {
 				]
 			>
 		>;
-		expect(app._node.args?.map((def) => def.name)).toEqual(["target", "count"]);
+		expect((await prepareCommandSnapshot(app)).args.map((def) => def.name)).toEqual([
+			"target",
+			"count",
+		]);
 	});
 });
