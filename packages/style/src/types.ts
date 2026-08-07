@@ -4,7 +4,7 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { LiteralUnion, NamedColor } from "./namedColors.ts";
+import type { NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
@@ -38,11 +38,8 @@ type ColorSyntaxHint =
  * plus {@link ColorSyntaxHint | syntax hints} for hex (`#`) and
  * functional notation (`rgb()`, `hsl()`, `oklch()`, …), while still
  * accepting any other string Bun's CSS parser understands.
- *
- * The `string` fallback is preserved via {@link LiteralUnion} so dynamic
- * values — e.g. theme tokens loaded from JSON — still type-check.
  */
-export type ColorString = LiteralUnion<NamedColor | ColorSyntaxHint, string>;
+export type ColorString = NamedColor | ColorSyntaxHint | (string & {});
 
 /**
  * Input accepted by `fg` and `bg`.

@@ -15,7 +15,7 @@ import type { ColorString } from "./types.ts";
 "oklch(70% 0.1 200)" satisfies ColorString;
 "color-mix(in srgb, red, blue)" satisfies ColorString;
 "#ff0000" satisfies ColorString;
-// Dynamic strings still type-check via the LiteralUnion fallback.
+// Dynamic strings still type-check via the open string fallback.
 "dynamic" as string satisfies ColorString;
 
 // ────────────────────────────────────────────────────────────────────────────
