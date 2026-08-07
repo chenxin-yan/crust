@@ -43,11 +43,11 @@ await app.execute();
 
 | Factory                                                               | Contribution                                      |
 | --------------------------------------------------------------------- | ------------------------------------------------- |
-| [`help()`](/docs/modules/extensions/help)                             | Inherited `--help` / `-h` flag and help rendering |
+| [`help()`](/docs/modules/extensions/help)                             | Recursive `--help` / `-h` flag and help rendering |
 | [`version(value?)`](/docs/modules/extensions/version)                 | Root-only `--version` / `-v` flag                 |
 | [`completion(options?)`](/docs/modules/extensions/completion)         | Static bash, zsh, and fish completion command     |
 | [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)       | `COMMAND_NOT_FOUND` presentation                  |
-| [`noColor()`](/docs/modules/extensions/no-color)                      | Inherited `--color` / `--no-color` flag           |
+| [`noColor()`](/docs/modules/extensions/no-color)                      | Recursive `--color` / `--no-color` flag           |
 | [`updateNotifier(options)`](/docs/modules/extensions/update-notifier) | Post-handler npm update notice                    |
 
 These factories return plain `Extension` values. Contributions are application-wide. Extension-owned command, flag, short-name, or alias collisions with the application or another Extension are `DEFINITION` errors.

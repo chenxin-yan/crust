@@ -566,7 +566,7 @@ describe("resolveCommand — aliases", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Known-flag skipping — inherited/root flags before a subcommand
+// Known-flag skipping — Context-owned flags before a subcommand
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveCommand — known-flag skipping", () => {

@@ -752,18 +752,6 @@ describe("Crust .handle() type-level tests", () => {
 		);
 	});
 
-	it("override flag shows overridden type in handler", () => {
-		new Crust("cli").flags({ name: "output", type: "string" }).mount(
-			defineCommand("sub", (cmd) =>
-				cmd.flags({ name: "output", type: "number", default: 42 }).handle((_ctx) => {
-					type CtxFlags = typeof _ctx.flags;
-					// output was overridden from string to number
-					type _checkOutput = Expect<Equal<CtxFlags["output"], number>>;
-				}),
-			),
-		);
-	});
-
 	it("handler with no flags/args gets empty types", () => {
 		new Crust("test").handle((_ctx) => {
 			// With broad FlagsDef default, flags resolve to Record<string, ...>
@@ -950,7 +938,7 @@ describe("Extension application at prepare time", () => {
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("Extension command definitions are routable, validated, and inherit recursive flags", async () => {
+	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
 		const lines: string[] = [];
 		const completion = defineExtension("completion", {
 			commands: [
@@ -1853,7 +1841,7 @@ describe("Crust .execute()", () => {
 		expect(handlerRan).toBe(false);
 	});
 
-	it("inherited flags work across file-boundary pattern", async () => {
+	it("Context-owned flags work across file-boundary pattern", async () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const sub = defineCommand("sub", { requires: { flags: [verbose] } }, (command) =>
@@ -1887,7 +1875,7 @@ describe("Crust .execute()", () => {
 		expect(receivedPort).toBe(3000);
 	});
 
-	it("inherited flag short alias works on subcommand", async () => {
+	it("Context-owned flag short alias works on subcommand", async () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 

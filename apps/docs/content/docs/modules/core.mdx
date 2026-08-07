@@ -71,7 +71,7 @@ Use `ContextConfig.requires.flags` instead when the Context reads a propagating 
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
 | `CommandMeta`                                 | Name, description, usage, aliases, and visibility                                |
-| [`CommandRequirements`](/docs/api/crust)      | Inherited flag and Context requirements checked at mount time                    |
+| [`CommandRequirements`](/docs/api/crust)      | Propagating Context-owned flag and Context requirements checked at mount time    |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |
 | `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |
@@ -92,15 +92,15 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Context types
 
-| Type                  | Description                                                           |
-| --------------------- | --------------------------------------------------------------------- |
-| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()` |
-| `AnyContextFactory`   | Requirement-array element type for `requires.ctx`                     |
-| `ContextInstance`     | Named lazy dependency attached with `.provide()`                      |
-| `ContextRequirements` | Inherited flag and Context dependencies required from a command path  |
-| `ContextConfig`       | Owned flags plus dependencies grouped under `requires`                |
-| `ContextSetup`        | Typed setup input: `options`, validated `flags`, dependency `ctx`     |
-| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values           |
+| Type                  | Description                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()`                |
+| `AnyContextFactory`   | Requirement-array element type for `requires.ctx`                                    |
+| `ContextInstance`     | Named lazy dependency attached with `.provide()`                                     |
+| `ContextRequirements` | Propagating Context-owned flag and Context dependencies required from a command path |
+| `ContextConfig`       | Owned flags plus dependencies grouped under `requires`                               |
+| `ContextSetup`        | Typed setup input: `options`, validated `flags`, dependency `ctx`                    |
+| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values                          |
 
 ## Extension types
 

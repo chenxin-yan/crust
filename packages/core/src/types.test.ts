@@ -711,12 +711,6 @@ describe("EffectiveFlags type inference", () => {
 		type _check = Expect<Equal<Result, {}>>;
 		expect(true).toBe(true);
 	});
-
-	it("rejects the removed inherit field", () => {
-		// @ts-expect-error — flag propagation belongs to Context-owned flags
-		const _bad: FlagDef = { type: "boolean", inherit: true };
-		expect(true).toBe(true);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

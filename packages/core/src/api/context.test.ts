@@ -398,7 +398,6 @@ describe("Context flag requirements", () => {
 		const seen: unknown[] = [];
 		const port = defineFlag("port", {
 			type: "string",
-
 			parse: (raw: string) => Number(raw),
 		});
 		const server = defineContext("server", { requires: { flags: [port] } }, ({ flags }) => {

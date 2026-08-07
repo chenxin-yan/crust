@@ -270,7 +270,6 @@ describe("command definitions", () => {
 
 		const requiredToken = defineFlag("token", {
 			type: "string",
-
 			required: true,
 			parse: (raw: string) => Number(raw),
 		});

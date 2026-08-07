@@ -148,8 +148,8 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("passes a valid CommandNode with effective flags (inherited + local)", () => {
-		const parentFlags = {
+	it("passes a valid CommandNode with effective flags (ancestor-owned + local)", () => {
+		const ancestorOwnedFlags = {
 			verbose: { type: "boolean" as const, short: "v" },
 			debug: { type: "boolean" as const },
 		};
@@ -158,13 +158,13 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
 	it("passes a valid CommandNode with required effective flags", () => {
-		const parentFlags = {
+		const ancestorOwnedFlags = {
 			token: {
 				type: "string" as const,
 				required: true as const,
@@ -175,7 +175,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// Should pass because createValidationArgv generates --token sample
 		expect(() => validateCommandTree(node)).not.toThrow();
@@ -201,8 +201,8 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
-	it("detects alias collision in effective flags (inherited alias collides with local)", () => {
-		const parentFlags = {
+	it("detects alias collision in effective flags (ancestor-owned alias collides with local)", () => {
+		const ancestorOwnedFlags = {
 			verbose: { type: "boolean" as const, short: "v" },
 		};
 		const localFlags = {
@@ -210,14 +210,14 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
-	it("detects alias collision between inherited flag name and local alias", () => {
-		const parentFlags = {
+	it("detects alias collision between ancestor-owned flag name and local alias", () => {
+		const ancestorOwnedFlags = {
 			out: { type: "string" as const },
 		};
 		const localFlags = {
@@ -225,14 +225,14 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
-	it("detects no-prefix violation in effective flags from inherited flag", () => {
-		// Construct a node with an inherited flag that has no- prefix
+	it("detects no-prefix violation in effective flags from an ancestor-owned flag", () => {
+		// Construct a node with an ancestor-owned flag that has no- prefix
 		// (this wouldn't pass compile-time checks but tests runtime validation)
 		const node = createCommandNode("sub");
 		node.effectiveFlags = {
@@ -283,27 +283,9 @@ describe("validateCommandTree — CommandNode tree", () => {
 		);
 	});
 
-	it("overridden flag validated with local definition (no collision)", () => {
-		// Effective flags include Context-owned "verbose" with short "v"
-		// Child overrides "verbose" with a different short — no collision
-		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v" },
-		};
-		const localFlags = {
-			verbose: { type: "string" as const, short: "V" },
-		};
-		const node = createCommandNode("sub");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
-
-		// The local definition completely replaces the inherited one
-		// "verbose" is now type string with alias "V" — no collision
-		expect(() => validateCommandTree(node)).not.toThrow();
-	});
-
-	it("inherited required flag included in validation argv", () => {
-		// Parent has a required inherited string flag
-		const parentFlags = {
+	it("required ancestor-owned flag included in validation argv", () => {
+		// The ancestor-owned flags include a required string flag
+		const ancestorOwnedFlags = {
 			token: {
 				type: "string" as const,
 				required: true as const,
@@ -314,14 +296,14 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// Should NOT throw — createValidationArgv includes --token sample
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("inherited alias works during validation", () => {
-		const parentFlags = {
+	it("ancestor-owned alias works during validation", () => {
+		const ancestorOwnedFlags = {
 			verbose: {
 				type: "boolean" as const,
 				short: "v",
@@ -332,9 +314,9 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		// Both inherited alias "v" and local alias "o" should be accepted
+		// Both ancestor-owned alias "v" and local alias "o" should be accepted
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 

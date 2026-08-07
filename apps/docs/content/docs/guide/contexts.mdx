@@ -137,8 +137,8 @@ Provide order is free: dependencies may be provided after their dependents. At i
 
 ```ts
 // Equivalent — construction order is config, then database, either way:
-new Crust("app").flags(verbose).provide(config(), database());
-new Crust("app").flags(verbose).provide(database(), config());
+new Crust("app").provide(loggingFlags()).provide(config(), database());
+new Crust("app").provide(loggingFlags()).provide(database(), config());
 ```
 
 A ctx dependency that is not provided on the path, or a dependency cycle, is a `CrustError` with code `DEFINITION`, raised at dispatch and also caught by [`crust build`](/docs/guide/build)'s command-tree validation.
@@ -193,7 +193,7 @@ const status = defineCommand("status", { requires: { ctx: [database] } }, (comma
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
-const app = new Crust("app").flags(verbose).provide(config(), database()).mount(status);
+const app = new Crust("app").provide(loggingFlags()).provide(config(), database()).mount(status);
 ```
 
 Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. Contexts and their owned flags do not backfill children mounted on an earlier builder. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).

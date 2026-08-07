@@ -58,16 +58,6 @@ describe("computeEffectiveFlags", () => {
 		});
 	});
 
-	it("does not receive or propagate a parent local flag", () => {
-		const parentLocal: FlagsDef = { verbose: { type: "boolean" } };
-		const childLocal: FlagsDef = { output: { type: "string" } };
-
-		const child = computeEffectiveFlags({}, childLocal);
-		expect(child).toEqual({ output: { type: "string" } });
-		expect(child).not.toHaveProperty("verbose");
-		expect(parentLocal).toHaveProperty("verbose");
-	});
-
 	it("returns fresh output for empty inputs", () => {
 		expect(computeEffectiveFlags({}, {})).toEqual({});
 	});

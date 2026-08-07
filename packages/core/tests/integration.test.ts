@@ -128,7 +128,7 @@ describe("integration: exported types", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Inherited flag behavior — full pipeline integration tests
+// Context-owned flag behavior — full pipeline integration tests
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: .execute() full pipeline with argv override", () => {
@@ -215,6 +215,34 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const localResult = await executeCrust(app, ["group", "deploy", "--root-only"]);
 		expect(localResult.exitCode).toBe(1);
 		expect(localResult.stderr).toContain("Unknown flag");
+	});
+
+	it("enforces a required Context-owned flag on a descendant", async () => {
+		const token = defineFlag("token", { type: "string", required: true });
+		const auth = defineContext("auth", { flags: [token] }, () => ({}));
+		const app = new Crust("cli")
+			.provide(auth())
+			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+
+		const result = await executeCrust(app, ["deploy"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain('Missing required flag "--token"');
+	});
+
+	it("parses a Context-owned long alias on a descendant", async () => {
+		const output = defineFlag("output", { type: "string", aliases: ["out"] });
+		const outputFlags = defineContext("output-flags", { flags: [output] }, () => ({}));
+		const app = new Crust("cli")
+			.provide(outputFlags())
+			.mount(
+				defineCommand("render", { requires: { flags: [output] } }, (command) =>
+					command.handle(({ flags }) => console.log(`output=${flags.output}`)),
+				),
+			);
+
+		const result = await executeCrust(app, ["render", "--out", "json"]);
+		expect(result.stdout).toContain("output=json");
+		expect(result.exitCode).toBe(0);
 	});
 });
 
@@ -404,7 +432,7 @@ describe("integration: mounted definitions", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("excludes non-inheritable flags from mounted commands", async () => {
+	it("excludes parent-local flags from mounted commands", async () => {
 		const sub = defineCommand("sub", (command) => command.handle(() => console.log("sub ran")));
 		const app = new Crust("cli").flags({ name: "rootOnly", type: "string" }).mount(sub);
 
@@ -432,12 +460,12 @@ describe("integration: mounted definitions", () => {
 	});
 });
 
-describe("integration: inherited boolean flag negation", () => {
+describe("integration: Context-owned boolean flag negation", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("--no-verbose negates inherited boolean flag on subcommand", async () => {
+	it("--no-verbose negates a Context-owned boolean flag on a subcommand", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", default: true });
 		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
 		const app = new Crust("cli").provide(globalFlags()).mount(
@@ -455,15 +483,15 @@ describe("integration: inherited boolean flag negation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Multiple value flags with inheritance
+// Multiple-value Context-owned flags
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("integration: inherited multiple-value flag", () => {
+describe("integration: Context-owned multiple-value flag", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("inherited multiple-value flag collects values on subcommand", async () => {
+	it("Context-owned multiple-value flag collects values on a subcommand", async () => {
 		const tag = defineFlag("tag", { type: "string", multiple: true });
 		const globalFlags = defineContext("global-flags", { flags: [tag] }, () => ({}));
 		const app = new Crust("cli").provide(globalFlags()).mount(
@@ -482,15 +510,15 @@ describe("integration: inherited multiple-value flag", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Separator (--) with inherited flags
+// Separator (--) with Context-owned flags
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("integration: separator (--) with subcommand and inherited flags", () => {
+describe("integration: separator (--) with subcommand and Context-owned flags", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("rawArgs captured correctly on subcommand with inherited flags", async () => {
+	it("rawArgs captured correctly on a subcommand with Context-owned flags", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
 		const app = new Crust("cli").provide(globalFlags()).mount(

@@ -388,7 +388,7 @@ describe("built-in plugins", () => {
 		expect(output).not.toContain("\x1b[33m");
 	});
 
-	it("noColorExtension flag is inherited by subcommands", async () => {
+	it("noColorExtension flag is recursive on subcommands", async () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())

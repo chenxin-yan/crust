@@ -12,7 +12,7 @@ import { walkCommandNode } from "./walker.ts";
  * `createCommandNode`/`computeEffectiveFlags` are not exported from
  * `@crustjs/core`. Constructing literal nodes is the cleanest way to keep
  * walker tests focused on the walker — we don't want to be coupled to the
- * `Crust` builder's internal flag-inheritance plumbing here. For each node
+ * `Crust` builder's internal Context-owned flag propagation here. For each node
  * we set `effectiveFlags` explicitly so the walker observes exactly the set
  * of flags we intend.
  */
@@ -157,12 +157,12 @@ describe("walkCommandNode", () => {
 		expect(spec.root.args[0]?.choices).toEqual(["bash", "zsh", "fish"]);
 	});
 
-	it("walks nested subcommands recursively, surfacing inherited flags via effectiveFlags", () => {
+	it("walks nested subcommands recursively, surfacing Context-owned flags via effectiveFlags", () => {
 		const child = makeNode({
 			name: "child",
 			meta: { name: "child", description: "Child command" },
-			// Local flag plus an *inherited* parent flag pre-merged into effectiveFlags
-			// (mimics what `computeEffectiveFlags` does at build time).
+			// Local flag plus a Context-owned ancestor flag pre-merged into effectiveFlags
+			// (mimics what Core does at build time).
 			localFlags: { local: { type: "boolean" } },
 			effectiveFlags: {
 				verbose: { type: "boolean", short: "v" },
@@ -186,7 +186,7 @@ describe("walkCommandNode", () => {
 		if (!childSpec) throw new Error("missing child");
 		expect(childSpec.name).toBe("child");
 		expect(childSpec.description).toBe("Child command");
-		// Inherited "verbose" must surface on the child too.
+		// Context-owned "verbose" must surface on the child too.
 		const flagNames = childSpec.flags.map((f) => f.name).sort();
 		expect(flagNames).toEqual(["local", "verbose"]);
 	});
