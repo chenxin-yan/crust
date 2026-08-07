@@ -97,9 +97,9 @@ async function measurePublished(root) {
 		let packed;
 		try {
 			[packed] = npmPack([`${pkg.name}@latest`], root);
-		} catch {
-			// E404: not yet published — omit so compare renders it as "new"
-			continue;
+		} catch (error) {
+			if (error.stdout && JSON.parse(error.stdout).error?.code === "E404") continue;
+			throw error;
 		}
 		out[pkg.name] = { tarball: packed.size, unpacked: packed.unpackedSize };
 		published.push(pkg.name);
@@ -117,7 +117,7 @@ async function measurePublished(root) {
 				dependencies: Object.fromEntries(published.map((n) => [n, "latest"])),
 			}),
 		);
-		execFileSync("npm", ["install", "--no-audit", "--no-fund"], {
+		execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
 			cwd: tmp,
 			stdio: ["ignore", "ignore", "inherit"],
 		});
