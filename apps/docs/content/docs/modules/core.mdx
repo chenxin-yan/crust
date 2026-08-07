@@ -48,7 +48,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
 const app = new Crust("my-cli").provide(api());
 ```
 
-Use `ContextConfig.requires.flags` instead when the Context reads an inheritable flag already supplied by its command path. See [Contexts](/docs/guide/contexts).
+Use `ContextConfig.requires.flags` instead when the Context reads a propagating flag already owned by another Context on its command path. See [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 

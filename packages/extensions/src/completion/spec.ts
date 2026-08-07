@@ -130,7 +130,7 @@ export interface CompletionCommand {
 	description?: string;
 	/**
 	 * Flags visible on this command. Walker captures `effectiveFlags` (not
-	 * `localFlags`), so inherited flags appear at every depth — matching
+	 * `localFlags`), so propagating flags appear at every depth — matching
 	 * what the parser actually accepts at this level.
 	 */
 	flags: readonly CompletionFlag[];

@@ -2,7 +2,7 @@
 "@crustjs/core": minor
 ---
 
-Add Context-owned flags with `defineContext(name, { flags }, setup)`. Calling `.provide()` installs each owned flag as an inheritable effective flag on that command and descendants mounted afterward, refines the builder's flag types, and passes the validated values to Context setup:
+Add Context-owned flags with `defineContext(name, { flags }, setup)`. Calling `.provide()` installs each owned flag as a propagating effective flag on that command and descendants mounted afterward, refines the builder's flag types, and passes the validated values to Context setup:
 
 ```ts
 const apiKey = defineFlag("api-key", { type: "string" });
@@ -17,6 +17,6 @@ Reshape dependencies on both definition APIs under a shared `requires` field. `d
 
 Owned flag names, short forms, and aliases cannot collide with application, other Context, or Extension flags; collisions throw `CrustError("DEFINITION", ...)` in either fluent registration order. Extension flag collisions now use `details.reason: "flag-collision"` instead of `"extension-flag-collision"`, with updated message wording.
 
-`.of(value)` test doubles retain owned flags so test and production command grammars match. Existing `inherit: true` flag behavior is unchanged, and `.provide()` does not backfill descendants mounted on an earlier builder.
+`.of(value)` test doubles retain owned flags so test and production command grammars match. `.provide()` does not backfill descendants mounted on an earlier builder.
 
 `ContextInstance` and `ContextFactory` gain an owned-flags generic, while `Crust` and `CommandDefinitionBuilder` gain an `Owned` generic. Pre-1.0 consumers that specify these generic parameters positionally must update their type arguments.

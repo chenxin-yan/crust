@@ -249,7 +249,6 @@ export function defineContext(
 		const owned = {
 			...rest,
 			aliases: rest.aliases ? [...rest.aliases] : undefined,
-			inherit: true,
 		} as FlagDef;
 		validateIncomingFlag({ name: flagName, def: owned }, ownedFlags, `Context "${name}"`);
 		ownedFlags[flagName] = owned;

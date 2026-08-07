@@ -9,7 +9,7 @@ type Equal<A, B> =
 describe("public beta API", () => {
 	it("passes typed command context into mounted definitions with requirements", async () => {
 		const calls: string[] = [];
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const verbose = defineFlag("verbose", { type: "boolean" });
 		const db = defineContext("db", ({ options }: { options: { url: string } }) => ({
 			url: options.url,
 			query(sql: string) {
@@ -31,8 +31,9 @@ describe("public beta API", () => {
 				}),
 		);
 
+		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
 		const app = new Crust("my-cli")
-			.flags(verbose)
+			.provide(globalFlags())
 			.provide(db({ url: "memory://test" }))
 			.mount(deploy);
 

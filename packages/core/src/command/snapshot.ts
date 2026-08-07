@@ -28,7 +28,6 @@ export interface FlagSnapshot {
 	readonly short?: string;
 	readonly aliases?: readonly string[];
 	readonly required?: boolean;
-	readonly inherit?: boolean;
 	readonly multiple?: boolean;
 	readonly noNegate?: boolean;
 	readonly choices?: readonly string[];
@@ -40,7 +39,7 @@ export interface FlagSnapshot {
  * API boundaries (Command Handler context, Extension hooks, and
  * `COMMAND_NOT_FOUND` error details) instead of internal command nodes.
  *
- * `flags` contains the effective (inherited + local merged) flags — the same
+ * `flags` contains the effective (Context-owned + local merged) flags — the same
  * set the parser accepts for the command.
  */
 export interface CommandSnapshot {
@@ -99,7 +98,6 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		short?: string;
 		aliases?: readonly string[];
 		required?: boolean;
-		inherit?: boolean;
 		multiple?: boolean;
 		noNegate?: boolean;
 		choices?: readonly string[];
@@ -111,7 +109,6 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		short: d.short,
 		aliases: d.aliases ? Object.freeze([...d.aliases]) : undefined,
 		required: d.required,
-		inherit: d.inherit,
 		multiple: d.multiple,
 		noNegate: d.noNegate,
 		choices: d.choices ? Object.freeze([...d.choices]) : undefined,

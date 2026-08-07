@@ -165,16 +165,16 @@ describe("walkCommandNode", () => {
 			// (mimics what `computeEffectiveFlags` does at build time).
 			localFlags: { local: { type: "boolean" } },
 			effectiveFlags: {
-				verbose: { type: "boolean", short: "v", inherit: true },
+				verbose: { type: "boolean", short: "v" },
 				local: { type: "boolean" },
 			},
 		});
 
 		const root = makeNode({
 			name: "mycli",
-			localFlags: { verbose: { type: "boolean", short: "v", inherit: true } },
+			localFlags: { verbose: { type: "boolean", short: "v" } },
 			effectiveFlags: {
-				verbose: { type: "boolean", short: "v", inherit: true },
+				verbose: { type: "boolean", short: "v" },
 			},
 			subCommands: { child },
 		});

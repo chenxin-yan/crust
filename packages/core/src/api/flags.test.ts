@@ -9,16 +9,15 @@ type IsEqual<A, B> =
 
 describe("defineFlag", () => {
 	it("returns the named definition with literal types preserved", () => {
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true, short: "v" });
+		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
-		expect(verbose).toEqual({ name: "verbose", type: "boolean", inherit: true, short: "v" });
+		expect(verbose).toEqual({ name: "verbose", type: "boolean", short: "v" });
 		type _Flag = Assert<
 			IsEqual<
 				typeof verbose,
 				{
 					readonly name: "verbose";
 					readonly type: "boolean";
-					readonly inherit: true;
 					readonly short: "v";
 				}
 			>
@@ -31,18 +30,16 @@ describe("defineFlag", () => {
 	});
 
 	it("feeds .flags() with the same record typing as an inline literal", () => {
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const verbose = defineFlag("verbose", { type: "boolean" });
 		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
 
 		type Local = (typeof app)["_types"]["local"];
-		type _Verbose = Assert<
-			IsEqual<Local["verbose"], { readonly type: "boolean"; readonly inherit: true }>
-		>;
+		type _Verbose = Assert<IsEqual<Local["verbose"], { readonly type: "boolean" }>>;
 		type _Output = Assert<
 			IsEqual<Local["output"], { readonly type: "string"; readonly short: "o" }>
 		>;
 		expect(app._node.localFlags).toEqual({
-			verbose: { type: "boolean", inherit: true },
+			verbose: { type: "boolean" },
 			output: { type: "string", short: "o" },
 		});
 	});

@@ -7,7 +7,6 @@ export const diagnostics = defineExtension("diagnostics", {
     trace: {
       type: "boolean",
       description: "Print diagnostic timing",
-      inherit: true,
     },
   },
   commands: [

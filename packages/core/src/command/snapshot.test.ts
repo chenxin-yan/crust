@@ -71,7 +71,6 @@ describe("snapshotCommand", () => {
 		expect(snapshot.flags["api-key"]).toEqual({
 			type: "string",
 			short: "k",
-			inherit: true,
 		});
 		expect(snapshot.subCommands.deploy?.flags["api-key"]).toEqual(snapshot.flags["api-key"]);
 		expect(Object.isFrozen(snapshot.subCommands.deploy?.flags["api-key"])).toBe(true);

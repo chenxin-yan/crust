@@ -1028,7 +1028,7 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 describe("parseArgs — CommandNode with effective flags", () => {
 	it("parses inherited flag from effectiveFlags", () => {
 		const parentFlags = {
-			verbose: { type: "boolean" as const, inherit: true as const },
+			verbose: { type: "boolean" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const },
@@ -1043,34 +1043,11 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		expect(result.flags.output).toBe("./dist");
 	});
 
-	it("overridden flag uses local type, not inherited type", () => {
-		const parentFlags = {
-			level: {
-				type: "boolean" as const,
-				inherit: true as const,
-			},
-		};
-		const localFlags = {
-			level: {
-				type: "number" as const,
-			},
-		};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
-
-		// level is now a number flag (local override), not boolean
-		const result = parseArgs(node, ["--level", "5"]);
-		expect(result.flags.level).toBe(5);
-	});
-
 	it("inherited required flag is enforced by validateParsed", () => {
 		const parentFlags = {
 			config: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
@@ -1099,7 +1076,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			verbose: {
 				type: "boolean" as const,
 				short: "v" as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
@@ -1112,30 +1088,11 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		expect(result.flags.verbose).toBe(true);
 	});
 
-	it("non-inherit parent flags are excluded from effectiveFlags", () => {
-		const parentFlags = {
-			verbose: { type: "boolean" as const, inherit: true as const },
-			debug: { type: "boolean" as const }, // no inherit
-		};
-		const localFlags = {};
-
+	it("rejects parent-local flags omitted from a child's effective flags", () => {
 		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags({}, {});
 
-		// verbose is inherited, debug is not
-		const result = parseArgs(node, ["--verbose"]);
-		expect(result.flags.verbose).toBe(true);
-
-		// --debug should be unknown since it's not inherited
-		try {
-			parseArgs(node, ["--debug"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("Unknown flag");
-		}
+		expect(() => parseArgs(node, ["--debug"])).toThrow(/Unknown flag/);
 	});
 
 	it("inherited flag with default value works on subcommand", () => {
@@ -1143,7 +1100,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			port: {
 				type: "number" as const,
 				default: 3000,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
@@ -1171,10 +1127,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 	it("CommandNode with args parses positionals correctly", () => {
 		const node = createCommandNode("child");
 		node.args = [{ name: "file", type: "string", required: true }];
-		node.effectiveFlags = computeEffectiveFlags(
-			{ verbose: { type: "boolean" as const, inherit: true as const } },
-			{},
-		);
+		node.effectiveFlags = computeEffectiveFlags({ verbose: { type: "boolean" as const } }, {});
 
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
 		expect(result.flags.verbose).toBe(true);
@@ -1186,7 +1139,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			minify: {
 				type: "boolean" as const,
 				default: true,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
@@ -1204,7 +1156,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			include: {
 				type: "string" as const,
 				multiple: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};

@@ -39,7 +39,7 @@ describe("defineContext()", () => {
 	});
 
 	it(".of() produces an instance returning the precomputed value with requirements absent", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+		const verbose = defineFlag("verbose", { type: "boolean" });
 		const db = defineContext("db", { requires: { flags: [verbose] } }, ({ flags }) => ({
 			url: `real:${String(flags.verbose)}`,
 		}));
@@ -191,7 +191,7 @@ describe("Context-owned flags", () => {
 		aliases: ["token"],
 	});
 
-	it("installs an inheritable cloned flag and exposes its validated value to setup", async () => {
+	it("installs a propagating cloned flag and exposes its validated value to setup", async () => {
 		const seen: unknown[] = [];
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => {
 			type _ApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
@@ -203,7 +203,6 @@ describe("Context-owned flags", () => {
 			type: "string",
 			short: "k",
 			aliases: ["token"],
-			inherit: true,
 		});
 		expect("inherit" in apiKey).toBe(false);
 
@@ -214,6 +213,20 @@ describe("Context-owned flags", () => {
 		await app.run(["--api-key", "secret"]);
 
 		expect(seen).toEqual(["secret", "secret"]);
+	});
+
+	it("derives a logging capability while handlers keep injected stderr", async () => {
+		const verbose = defineFlag("verbose", { type: "boolean" });
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
+		const messages: string[] = [];
+		const app = new Crust("cli").provide(logging()).handle(({ ctx, stderr }) => {
+			if (ctx.logging.verbose) stderr("debug");
+		});
+
+		await app.run(["--verbose"], { stderr: (message) => messages.push(message) });
+		expect(messages).toEqual(["debug"]);
 	});
 
 	it("satisfies later mounted flag and Context requirements", async () => {
@@ -243,10 +256,10 @@ describe("Context-owned flags", () => {
 
 		type _OwnedKeys = Assert<IsEqual<keyof (typeof app)["_types"]["owned"], "api-key" | "format">>;
 		type _EffectiveApiKey = Assert<
-			IsEqual<(typeof app)["_types"]["effective"]["api-key"]["inherit"], true>
+			IsEqual<(typeof app)["_types"]["effective"]["api-key"]["type"], "string">
 		>;
 		type _EffectiveFormat = Assert<
-			IsEqual<(typeof app)["_types"]["effective"]["format"]["inherit"], true>
+			IsEqual<(typeof app)["_types"]["effective"]["format"]["type"], "string">
 		>;
 	});
 
@@ -287,7 +300,7 @@ describe("Context-owned flags", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({ real: true }));
 		const fake = auth.of({ real: false });
 		expect(fake.requiredFlags).toEqual({});
-		expect(fake.ownedFlags["api-key"]?.inherit).toBe(true);
+		expect(fake.ownedFlags["api-key"]).toBeDefined();
 
 		await new Crust("cli")
 			.provide(fake)
@@ -356,7 +369,7 @@ describe("Context-owned flags", () => {
 });
 
 describe("Context flag requirements", () => {
-	const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+	const verbose = defineFlag("verbose", { type: "boolean" });
 
 	it("passes the validated parsed flags of the resolved invocation to setup", async () => {
 		const seen: unknown[] = [];
@@ -366,8 +379,9 @@ describe("Context flag requirements", () => {
 			return { level: flags.verbose ? "debug" : "info" };
 		});
 
+		const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
 		const app = new Crust("cli")
-			.flags(verbose)
+			.provide(loggingFlags())
 			.provide(logger())
 			.handle(({ ctx }) => {
 				seen.push(ctx.logger.level);
@@ -384,7 +398,7 @@ describe("Context flag requirements", () => {
 		const seen: unknown[] = [];
 		const port = defineFlag("port", {
 			type: "string",
-			inherit: true,
+
 			parse: (raw: string) => Number(raw),
 		});
 		const server = defineContext("server", { requires: { flags: [port] } }, ({ flags }) => {
@@ -392,8 +406,9 @@ describe("Context flag requirements", () => {
 			return {};
 		});
 
+		const serverFlags = defineContext("server-flags", { flags: [port] }, () => ({}));
 		await new Crust("cli")
-			.flags(port)
+			.provide(serverFlags())
 			.provide(server())
 			.handle(() => {})
 			.run(["--port", "8080"]);
@@ -407,26 +422,27 @@ describe("Context flag requirements", () => {
 		expect(() => new Crust("cli").provide(logger() as never)).toThrow(/requires flag "--verbose"/);
 	});
 
-	it("throws DEFINITION at .provide() when the flag is declared without inherit: true", () => {
+	it("does not let a local flag satisfy a Context flag requirement at runtime", () => {
 		const logger = defineContext("logger", { requires: { flags: [verbose] } }, () => ({}));
 
 		expect(() =>
 			new Crust("cli").flags({ name: "verbose", type: "boolean" }).provide(logger() as never),
-		).toThrow(/inherit: true/);
+		).toThrow(/propagating Context-owned flag/);
 	});
 
 	it("checks flag requirements at compile time at the .provide() call site", () => {
 		const logger = defineContext("logger", { requires: { flags: [verbose] } }, () => ({}));
 
-		new Crust("cli").flags(verbose).provide(logger());
-		// @ts-expect-error -- missing inherited flags: verbose
+		const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
+		new Crust("cli").provide(loggingFlags()).provide(logger());
+		// @ts-expect-error -- missing propagating flags: verbose
 		expect(() => new Crust("cli").provide(logger())).toThrow(CrustError);
 		expect(() =>
 			new Crust("cli")
-				.flags({ name: "verbose", type: "string", inherit: true })
-				// @ts-expect-error -- incompatible inherited flags: verbose
+				.flags(verbose)
+				// @ts-expect-error -- local flags do not satisfy propagating requirements
 				.provide(logger()),
-		).not.toThrow();
+		).toThrow(/propagating Context-owned flag/);
 	});
 });
 

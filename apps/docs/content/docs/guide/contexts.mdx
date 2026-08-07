@@ -51,7 +51,7 @@ const deploy = defineCommand("deploy", { requires: { ctx: [api] } }, (command) =
 const app = new Crust("app").provide(api()).mount(deploy);
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores an inheritable clone of the definition; the original `apiKey` value is not mutated.
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores a cloned definition in the Context-owned propagation channel; the original `apiKey` value is not mutated.
 
 The child requires only `ctx.api` when the derived client is its dependency. If a handler also needs the raw value, add `apiKey` to that command definition's `requires.flags`; ownership and raw flag access remain separate contracts.
 
@@ -78,7 +78,7 @@ Setups may be synchronous or asynchronous.
 `defineContext(name, config, setup)` groups declarations by relationship direction:
 
 - Top-level `flags` are owned by the Context and installed when it is provided. This matches builder `.flags()`: `flags` always means flags the thing owns or parses.
-- `requires.flags` declares inheritable flags that must already exist on the command path.
+- `requires.flags` declares propagating Context-owned flags that must already exist on the command path.
 - `requires.ctx` declares other Context values needed by setup. The same `requires: { flags, ctx }` dependency shape is used by `defineCommand()`.
 
 All three arrays contain defined values:
@@ -86,7 +86,8 @@ All three arrays contain defined values:
 ```ts
 import { defineContext, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const verbose = defineFlag("verbose", { type: "boolean" });
+const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
 
 const database = defineContext(
@@ -107,16 +108,16 @@ The setup input carries three fields:
 
 ### Flag requirements
 
-Flag requirements are checked at the `.provide()` call site — compile-time and runtime. Each required flag must already be declared with `inherit: true` on the builder, so declare flags before `.provide()`:
+Flag requirements are checked at the `.provide()` call site — compile-time and runtime. Each required flag must already be owned by a Context on the builder, so provide the owner first:
 
 ```ts
 const app = new Crust("app")
-  .flags(verbose)
+  .provide(loggingFlags())
   .provide(config(), database())
   .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
-A missing or non-inheritable required flag is a `DEFINITION` error at `.provide()`.
+A missing required flag, or a same-named local `.flags()` definition, is a `DEFINITION` error at `.provide()`.
 
 A Context may require a flag owned by another Context, but the owner must be attached in an earlier call so the next builder carries the flag type:
 

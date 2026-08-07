@@ -1,6 +1,6 @@
 ---
 title: Flags
-description: Define typed named inputs, aliases, repeated values, and inherited flags.
+description: Define typed named inputs, aliases, repeated values, and shared flag capabilities.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -63,49 +63,48 @@ Both values are non-optional in the Command Handler. Other flags include `undefi
 
 Choices are supported on string flags and invalid values produce `PARSE` errors.
 
-## Inherited flags
+## Reusing flag definitions
 
-Set `inherit: true` to expose a parent flag to descendant Command Handlers:
+Flags declared with `.flags()` belong only to that command. Define a descriptor once and attach it to each command that parses the value directly:
 
 ```ts
 import { Crust, defineCommand, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const format = defineFlag("format", { type: "string", default: "json" });
+const print = defineCommand("print", (command) => command.flags(format));
+const inspect = defineCommand("inspect", (command) => command.flags(format));
 
-const deploy = defineCommand("deploy", { requires: { flags: [verbose] } }, (command) =>
-  command.flags({ name: "env", type: "string", required: true }).handle(({ flags }) => {
-    flags.verbose; // boolean | undefined
-    flags.env; // string
+const app = new Crust("app").mount(print, inspect);
+```
+
+This keeps one source of truth without adding the flag to commands that do not use it.
+
+## Propagating flags with Contexts
+
+When one flag configures shared behavior for a command subtree, let a Context own and consume it. Handlers depend on the derived capability rather than the raw flag:
+
+```ts
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean" });
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+  verbose: flags.verbose === true,
+}));
+
+const deploy = defineCommand("deploy", { requires: { ctx: [logging] } }, (command) =>
+  command.handle(({ ctx, stderr }) => {
+    if (ctx.logging.verbose) stderr("deploying");
   }),
 );
 
-const app = new Crust("app").flags(verbose).mount(deploy);
+const app = new Crust("app").provide(logging()).mount(deploy);
 ```
 
-The flag is parsed and shown in help at each descendant. `defineFlag(name, def)` preserves the literal definition, so the requirement array and the parent's `.flags()` call reference the same value.
+The Context declares, parses, and consumes `--verbose`; the handler writes diagnostics through its injected `stderr`. Renaming the flag or deriving log levels later changes the Context rather than every handler.
 
-`.mount()` checks the parent's current builder. Define required flags with `inherit: true` before mounting. A same-named non-inheritable flag is treated as missing, and incompatible inferred value types are rejected. Flags added on a later builder do not backfill an earlier mount.
+Context-owned flags are parsed and shown in help at the provider and later-mounted descendants. They can appear before, between, or after subcommand names. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 
-A command mounted without a flag requirement still inherits `inherit: true` flags at runtime, but its handler's `flags` type does not include them — declare requirements to see them.
-
-Inherited flags can appear before or after the subcommand: both `app --verbose deploy` and `app deploy --verbose` route to `deploy`.
-
-## Context-owned flags
-
-When a flag exists to construct a dependency—such as `--api-key` configuring an HTTP client—let the Context own it instead of separately registering it on the root:
-
-```ts
-import { Crust, defineContext, defineFlag } from "@crustjs/core";
-
-const apiKey = defineFlag("api-key", { type: "string" });
-const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
-  apiKey: flags["api-key"],
-}));
-
-const app = new Crust("app").provide(api());
-```
-
-`.provide(api())` installs an inheritable copy of `apiKey`, while handlers can depend on the derived `ctx.api`. Raw shared controls such as `--verbose` should continue to use `inherit: true` and explicit command `requires.flags`. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
+If a handler genuinely needs a Context-owned raw value, declare it under the command's `requires.flags`. `.mount()` accepts only propagating Context-owned flags for this requirement; a same-named local `.flags()` definition does not satisfy it.
 
 ## Standard Schemas
 
@@ -177,4 +176,4 @@ await app.execute({ argv: normalizeArgv(process.argv.slice(2)) });
 
 For optional-valued flags, split them into a boolean flag plus a value-taking flag (e.g. `--tag` and `--tag-name v1.2`), or normalize `--tag <value>` to `--tag-name=<value>` in the same pass.
 
-What migrators no longer need to normalize: inherited flags before a subcommand (`app --quiet translate`) route correctly, and bare version output is covered by [`versionExtension`'s `format` option](/docs/modules/extensions/version#options).
+What migrators no longer need to normalize: propagating flags before a subcommand (`app --quiet translate`) route correctly, and bare version output is covered by [`versionExtension`'s `format` option](/docs/modules/extensions/version#options).

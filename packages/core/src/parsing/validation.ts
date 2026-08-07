@@ -157,7 +157,7 @@ function sampleToken(def: ArgDef | FlagDef): string {
 /**
  * Build a synthetic argv that satisfies `parseArgs` for the given command.
  *
- * Uses `effectiveFlags` so inherited required flags are included in the
+ * Uses `effectiveFlags` so propagated required flags are included in the
  * synthetic argv.
  */
 function createValidationArgv(command: CommandNode): string[] {
@@ -199,13 +199,13 @@ function createValidationArgv(command: CommandNode): string[] {
  * with a synthetic argv derived from the node's flag/arg definitions.
  *
  * This catches:
- * - Alias collisions (including between inherited and local flags)
+ * - Alias collisions (including between Context-owned and local flags)
  * - `no-` prefix violations
  * - Required flag/arg validation
  * - Variadic arg position violations
  *
- * Uses `effectiveFlags` (inherited + local merged) so alias collisions
- * between an inherited flag and a local flag are caught.
+ * Uses `effectiveFlags` (Context-owned + local merged) so alias collisions
+ * between a Context-owned flag and a local flag are caught.
  *
  * @param root - The root command node to validate
  * @throws {CrustError} `DEFINITION` with the full command path on failure

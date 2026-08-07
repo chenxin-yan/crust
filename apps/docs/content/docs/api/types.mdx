@@ -63,13 +63,13 @@ Core-value flag definitions support:
 
 ```ts
 const flags = {
-  verbose: { type: "boolean", short: "v", inherit: true },
+  verbose: { type: "boolean", short: "v" },
   include: { type: "string", multiple: true },
   port: { type: "number", default: 3000 },
 } satisfies FlagsDef;
 ```
 
-Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, `inherit`, and `multiple`. Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
+Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, and `multiple`. Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
 
 ```ts
 const flags = {
@@ -95,7 +95,7 @@ Use these const-generic helpers when a definition is declared separately from `.
 ```ts
 import { defineArg, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true, short: "v" });
+const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
@@ -118,7 +118,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective inherited, local, and Context-owned flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -175,7 +175,7 @@ interface ContextSetup<Options, RF, RC, OF> {
 }
 ```
 
-`ContextConfig.flags` declares flags installed when an instance is provided, while `ContextConfig.requires.flags` declares inheritable flags a Context reads from its command path and `requires.ctx` declares Context dependencies. This is the same `requires: { flags, ctx }` dependency shape accepted by `defineCommand()`: `flags` always means flags the thing owns or parses, and `requires` always means typed dependencies from the environment. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
+`ContextConfig.flags` declares propagating flags installed when an instance is provided, while `ContextConfig.requires.flags` declares Context-owned flags a Context reads from its command path and `requires.ctx` declares Context dependencies. This is the same `requires: { flags, ctx }` dependency shape accepted by `defineCommand()`: `flags` always means flags the thing owns or parses, and `requires` always means typed dependencies from the environment. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
 
 ### `ContextInstance`
 

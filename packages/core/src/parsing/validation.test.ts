@@ -150,8 +150,8 @@ describe("validateCommandTree — CommandNode tree", () => {
 
 	it("passes a valid CommandNode with effective flags (inherited + local)", () => {
 		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
-			debug: { type: "boolean" as const, inherit: true as const },
+			verbose: { type: "boolean" as const, short: "v" },
+			debug: { type: "boolean" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const, short: "o" },
@@ -168,7 +168,6 @@ describe("validateCommandTree — CommandNode tree", () => {
 			token: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {
@@ -195,8 +194,8 @@ describe("validateCommandTree — CommandNode tree", () => {
 	it("detects collisions involving Context-owned flags as a build-validation backstop", () => {
 		const node = createCommandNode("sub");
 		node.localFlags = { verbose: { type: "boolean", short: "v" } };
-		node.ownedFlags = { version: { type: "boolean", short: "v", inherit: true } };
-		node.effectiveFlags = computeEffectiveFlags({}, node.localFlags, node.ownedFlags);
+		node.ownedFlags = { version: { type: "boolean", short: "v" } };
+		node.effectiveFlags = computeEffectiveFlags(node.ownedFlags, node.localFlags);
 
 		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
@@ -204,7 +203,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 
 	it("detects alias collision in effective flags (inherited alias collides with local)", () => {
 		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
+			verbose: { type: "boolean" as const, short: "v" },
 		};
 		const localFlags = {
 			version: { type: "boolean" as const, short: "v" },
@@ -219,7 +218,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 
 	it("detects alias collision between inherited flag name and local alias", () => {
 		const parentFlags = {
-			out: { type: "string" as const, inherit: true as const },
+			out: { type: "string" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const, aliases: ["out"] },
@@ -285,10 +284,10 @@ describe("validateCommandTree — CommandNode tree", () => {
 	});
 
 	it("overridden flag validated with local definition (no collision)", () => {
-		// Parent has inherit:true flag "verbose" with short "v"
+		// Effective flags include Context-owned "verbose" with short "v"
 		// Child overrides "verbose" with a different short — no collision
 		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
+			verbose: { type: "boolean" as const, short: "v" },
 		};
 		const localFlags = {
 			verbose: { type: "string" as const, short: "V" },
@@ -308,7 +307,6 @@ describe("validateCommandTree — CommandNode tree", () => {
 			token: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {
@@ -327,7 +325,6 @@ describe("validateCommandTree — CommandNode tree", () => {
 			verbose: {
 				type: "boolean" as const,
 				short: "v",
-				inherit: true as const,
 			},
 		};
 		const localFlags = {

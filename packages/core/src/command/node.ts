@@ -1,6 +1,6 @@
 import type { ContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
-import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandNode — Internal command tree node
@@ -11,7 +11,7 @@ import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
  *
  * Built by the `Crust` builder class; not part of the public API.
  * Each node carries its own local flags, the pre-computed effective
- * (inherited + local merged) flags, positional args, subcommands,
+ * (Context-owned + local merged) flags, positional args, subcommands,
  * plugins, and the Command Handler.
  */
 export interface CommandNode {
@@ -19,9 +19,9 @@ export interface CommandNode {
 	meta: CommandMeta;
 	/** Flags defined directly on this command via `.flags()` */
 	localFlags: FlagsDef;
-	/** Inheritable flags installed by Contexts provided on this command */
+	/** Accumulated flags owned by Contexts provided on this command path */
 	ownedFlags: FlagsDef;
-	/** Inherited, local, and Context-owned flags merged for parsing */
+	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
 	/** Positional argument definitions */
 	args: ArgsDef | undefined;
@@ -61,42 +61,15 @@ export function createCommandNode(name: string): CommandNode {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// computeEffectiveFlags — Runtime flag inheritance merge
+// computeEffectiveFlags — Runtime effective flag merge
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Merges inherited flags (only those with `inherit: true`) with local and
- * Context-owned flags. Owned flags are stored with `inherit: true` and take
- * precedence after collision validation.
+ * Merges the accumulated Context-owned flag carrier with a command's local
+ * flags. Collisions are rejected before this merge.
  *
  * This is the runtime counterpart of the `EffectiveFlags` utility type.
- *
- * @param inherited - The parent's effective flags (or any FlagsDef).
- * @param local - The current command's locally-defined flags.
- * @returns A new `FlagsDef` containing inherited+local merged flags.
  */
-export function computeEffectiveFlags(
-	inherited: FlagsDef,
-	local: FlagsDef,
-	owned: FlagsDef = {},
-): FlagsDef {
-	const result: Record<string, FlagDef> = {};
-
-	// Copy only inheritable flags from parent
-	for (const [key, def] of Object.entries(inherited)) {
-		if (def.inherit === true) {
-			result[key] = def;
-		}
-	}
-
-	// Local flags override inherited flags with the same key
-	for (const [key, def] of Object.entries(local)) {
-		result[key] = def;
-	}
-
-	for (const [key, def] of Object.entries(owned)) {
-		result[key] = def;
-	}
-
-	return result;
+export function computeEffectiveFlags(ownedFlags: FlagsDef, localFlags: FlagsDef): FlagsDef {
+	return { ...localFlags, ...ownedFlags };
 }

@@ -216,6 +216,43 @@ describe("built-in plugins", () => {
 		expect(output).not.toContain("--no-help");
 	});
 
+	it("help reaches nested subcommands", async () => {
+		const app = new Crust("app")
+			.extend(helpExtension())
+			.mount(
+				defineCommand("group", (group) =>
+					group.mount(defineCommand("build", (build) => build.handle(() => {}))),
+				),
+			);
+
+		await app.execute({ argv: ["group", "build", "--help"] });
+
+		const output = stripAnsi(getStdout());
+		expect(output).toContain("app group build");
+		expect(output).toContain("-h, --help");
+	});
+
+	it("help reaches Extension-contributed commands regardless of registration order", async () => {
+		const app = new Crust("app").extend(helpExtension()).extend(lateSkillExtension());
+
+		await app.execute({ argv: ["skill", "update", "--help"] });
+
+		const output = stripAnsi(getStdout());
+		expect(output).toContain("app skill update");
+		expect(output).toContain("-h, --help");
+	});
+
+	it("recursive false Extension flags stay root-only", async () => {
+		const rootOnly = defineExtension("root-only", {
+			flags: { root: { type: "boolean", recursive: false } },
+		});
+		const app = new Crust("app")
+			.extend(rootOnly)
+			.mount(defineCommand("build", (build) => build.handle(() => {})));
+
+		await expect(app.run(["build", "--root"])).rejects.toMatchObject({ code: "PARSE" });
+	});
+
 	it("noColorExtension injects --color and --no-color into help output", async () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())

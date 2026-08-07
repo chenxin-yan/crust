@@ -233,8 +233,6 @@ interface FlagDefBase {
 	aliases?: string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
-	/** When `true`, the flag is inherited by subcommands */
-	inherit?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 }
@@ -426,8 +424,6 @@ interface SchemaFlagBase {
 	short?: string;
 	/** Additional long aliases (e.g. `["out"]` → `--out`) */
 	aliases?: string[];
-	/** When `true`, the flag is inherited by subcommands */
-	inherit?: true;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	required?: never;
@@ -702,27 +698,8 @@ export type ValidateVariadicArgs<A extends readonly object[]> = A extends readon
 	: A;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Flag inheritance utility types
+// Effective flag utility types
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Picks only the flags from `F` that have `inherit: true`.
- *
- * Flags without `inherit` (or with `inherit` omitted) are excluded.
- *
- * @example
- * ```ts
- * type Flags = {
- *   verbose: { type: "boolean"; inherit: true };
- *   port: { type: "number" };
- * };
- * type Result = InheritableFlags<Flags>;
- * // Result = { verbose: { type: "boolean"; inherit: true } }
- * ```
- */
-export type InheritableFlags<F extends FlagsDef> = {
-	[K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
-};
 
 /**
  * Merges parent flags with local flags, where local keys override parent keys.
@@ -739,45 +716,16 @@ export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simpli
 	Omit<Parent, keyof Local> & Local
 >;
 
-type WithInherit<D extends FlagDef> = D extends FlagDef
-	? Simplify<Omit<D, "inherit"> & { inherit: true }>
-	: never;
-
-/** Mark every flag in a record as inheritable without changing its value shape. */
-export type ForceInherit<F extends FlagsDef> = {
-	[K in keyof F]: WithInherit<F[K]>;
-} extends infer R extends FlagsDef
-	? R
-	: never;
-
 /**
- * Computes the effective flags for a command by filtering the inherited flags
- * (only those with `inherit: true`) and merging them with local flags.
- *
- * Local flags override inherited flags with the same key.
- *
- * @example
- * ```ts
- * type Inherited = {
- *   verbose: { type: "boolean"; inherit: true };
- *   port: { type: "number" };
- * };
- * type Local = { output: { type: "string" } };
- * type Result = EffectiveFlags<Inherited, Local>;
- * // Result = { verbose: { type: "boolean"; inherit: true }; output: { type: "string" } }
- * ```
+ * Computes a command's effective flags from ancestor-owned, local, and
+ * Context-owned definitions. `Inherited` contains only flags owned by
+ * Contexts provided on ancestor commands.
  */
 export type EffectiveFlags<
 	Inherited extends FlagsDef,
 	Local extends FlagsDef,
 	Owned extends FlagsDef = {},
-> =
-	MergeFlags<
-		string extends keyof Inherited ? Local : MergeFlags<InheritableFlags<Inherited>, Local>,
-		ForceInherit<Owned>
-	> extends infer R extends FlagsDef
-		? R
-		: never;
+> = MergeFlags<MergeFlags<Inherited, Local>, Owned> extends infer R extends FlagsDef ? R : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
