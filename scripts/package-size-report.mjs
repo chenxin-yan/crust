@@ -7,6 +7,8 @@
 // Usage:
 //   bun scripts/package-size-report.mjs sizes [rootDir] > sizes.json
 //   bun scripts/package-size-report.mjs compare base.json head.json > tables.md
+// Local runs: rm -rf packages/*/dist first — turbo cache restore doesn't prune
+// stray dist files from other branches, which inflates install sizes.
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -49,6 +51,10 @@ async function measure(root) {
 			entries[entry] = size;
 		}
 
+		// TODO: switch to `bun pm pack` (the tool we publish with) once it has
+		// machine-readable output — https://github.com/oven-sh/bun/issues/14155.
+		// npm is safe meanwhile: file selection and unpacked bytes match bun's
+		// exactly; only tarball gzip bytes differ slightly.
 		const [packed] = JSON.parse(
 			execFileSync("npm", ["pack", "--dry-run", "--json"], {
 				cwd: pkgDir,
