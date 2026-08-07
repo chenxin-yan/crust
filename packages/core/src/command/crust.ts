@@ -1017,7 +1017,7 @@ export class Crust<
 			const context: CrustCommandContext = {
 				args: validated.args as CrustCommandContext["args"],
 				flags: validated.flags as CrustCommandContext["flags"],
-				// Context setups receive the same validated flags the handler gets
+				// Each Context setup receives its owned slice of the validated flags.
 				ctx: await buildContexts(
 					resolvedNode.contexts,
 					validated.flags as Record<string, unknown>,

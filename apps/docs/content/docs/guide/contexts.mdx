@@ -164,7 +164,7 @@ const status = defineCommand("status", { requires: [database] }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
-const app = new Crust("app").provide(loggingFlags()).provide(config(), database()).mount(status);
+const app = new Crust("app").provide(logging(), config(), database()).mount(status);
 ```
 
 Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. Contexts and their owned flags do not backfill children mounted on an earlier builder. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).

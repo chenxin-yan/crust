@@ -212,6 +212,20 @@ describe("Context-owned flags", () => {
 		expect(seen).toEqual(["secret", "secret"]);
 	});
 
+	it("passes parsed owned flag values to setup", async () => {
+		const port = defineFlag("port", { type: "string", parse: Number });
+		const seen: number[] = [];
+		const server = defineContext("server", { flags: [port] }, ({ flags }) => {
+			type _Port = Assert<IsEqual<typeof flags.port, number | undefined>>;
+			if (flags.port !== undefined) seen.push(flags.port);
+			return {};
+		});
+
+		await new Crust("cli").provide(server()).handle(() => {}).run(["--port", "8080"]);
+
+		expect(seen).toEqual([8080]);
+	});
+
 	it("passes only each Context's owned flags to its setup", async () => {
 		const region = defineFlag("region", { type: "string" });
 		const seen: string[][] = [];

@@ -13,7 +13,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) =>
 const app = new Crust("cli").provide(api()).mount(deploy);
 ```
 
-Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. The previous flat fields and the intermediate `requires: { flags, ctx }` shape are removed. Required raw flags are not injected into downstream handler types; expose any needed value from its owning Context.
+Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. Required raw flags are not injected into downstream handler types; expose any needed value from its owning Context.
 
 Owned flag names, short forms, and aliases cannot collide with application, other Context, or Extension flags; collisions throw `CrustError("DEFINITION", ...)` in either fluent registration order. Extension flag collisions now use `details.reason: "flag-collision"` instead of `"extension-flag-collision"`, with updated message wording.
 
