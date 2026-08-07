@@ -204,7 +204,6 @@ describe("Context-owned flags", () => {
 			short: "k",
 			aliases: ["token"],
 		});
-		expect("inherit" in apiKey).toBe(false);
 
 		const app = new Crust("cli").provide(instance).handle(({ flags, ctx }) => {
 			type _HandlerApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;

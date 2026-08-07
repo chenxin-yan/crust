@@ -134,7 +134,7 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("excludes non-inheritable parent flags from mounted commands", async () => {
+	it("excludes parent local flags from mounted commands", async () => {
 		const definition = defineCommand("users", (command) => command.handle(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).mount(definition);
 

@@ -17,15 +17,16 @@ const deploy = parent.sub("deploy").handle(({ flags, ctx }) => {});
 const app = parent.command(deploy);
 
 // After
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const verbose = defineFlag("verbose", { type: "boolean" });
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 const auth = defineContext("auth", () => createAuthClient());
 
-const deploy = defineCommand("deploy", { flags: [verbose], ctx: [auth] }, (command) =>
+const deploy = defineCommand("deploy", { requires: { flags: [verbose], ctx: [auth] } }, (command) =>
 	command.handle(({ flags, ctx }) => {}),
 );
 
-const app = parent.mount(deploy);
+const app = parent.provide(logging(), auth()).mount(deploy);
 const shipToo = parent.mount(deploy.as("ship"));
 ```
 
-Declare inheritable flags with `.flags()` and provide Contexts with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
+Provide Contexts (including any whose owned flags a definition requires) with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
