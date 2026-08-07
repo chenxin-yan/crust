@@ -6,18 +6,24 @@
 // cost, not runtime code shipped to consumers.
 // Usage:
 //   bun scripts/package-size-report.mjs sizes [rootDir] > sizes.json
+//   bun scripts/package-size-report.mjs sizes-published [rootDir] > base.json
 //   bun scripts/package-size-report.mjs compare base.json head.json > tables.md
+// `sizes-published` measures the latest npm-published version of each
+// workspace package (used on changeset release PRs, where the code diff
+// against main is empty and the meaningful base is the last release).
 // Local runs: rm -rf packages/*/dist first — turbo cache restore doesn't prune
 // stray dist files from other branches, which inflates install sizes.
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const [mode, ...args] = process.argv.slice(2);
 
-async function measure(root) {
-	const out = {};
+// Publishable workspace packages: [pkgDir, parsed package.json] pairs.
+function workspacePackages(root) {
+	const out = [];
 	for (const dir of readdirSync(join(root, "packages"))) {
 		const pkgDir = join(root, "packages", dir);
 		let pkg;
@@ -28,44 +34,100 @@ async function measure(root) {
 			continue;
 		}
 		if (pkg.private || pkg.bin) continue;
+		out.push([pkgDir, pkg]);
+	}
+	return out;
+}
 
-		const entries = {};
-		for (const [entry, target] of Object.entries(pkg.exports ?? {})) {
-			const file = typeof target === "string" ? target : target.import;
-			if (!file || !/\.(js|mjs|cjs)$/.test(file)) continue;
-			const result = await Bun.build({
-				entrypoints: [resolve(pkgDir, file)],
-				target: "bun",
-				minify: true,
-				// Peers are provided by the consumer and measured in their own row;
-				// inlining them would double-count and make this row churn on their PRs.
-				external: Object.keys(pkg.peerDependencies ?? {}),
-			});
-			if (!result.success) {
-				throw new AggregateError(result.logs, `Bun.build failed for ${pkg.name}${entry.slice(1)}`);
-			}
-			let size = 0;
-			for (const artifact of result.outputs) {
-				size += gzipSync(Buffer.from(await artifact.arrayBuffer())).length;
-			}
-			entries[entry] = size;
+// Gzipped size of each public `exports` entrypoint, bundled from pkgDir.
+async function bundleEntries(pkgDir, pkg) {
+	const entries = {};
+	for (const [entry, target] of Object.entries(pkg.exports ?? {})) {
+		const file = typeof target === "string" ? target : target.import;
+		if (!file || !/\.(js|mjs|cjs)$/.test(file)) continue;
+		const result = await Bun.build({
+			entrypoints: [resolve(pkgDir, file)],
+			target: "bun",
+			minify: true,
+			// Peers are provided by the consumer and measured in their own row;
+			// inlining them would double-count and make this row churn on their PRs.
+			external: Object.keys(pkg.peerDependencies ?? {}),
+		});
+		if (!result.success) {
+			throw new AggregateError(result.logs, `Bun.build failed for ${pkg.name}${entry.slice(1)}`);
 		}
+		let size = 0;
+		for (const artifact of result.outputs) {
+			size += gzipSync(Buffer.from(await artifact.arrayBuffer())).length;
+		}
+		entries[entry] = size;
+	}
+	return entries;
+}
 
-		// TODO: switch to `bun pm pack` (the tool we publish with) once it has
-		// machine-readable output — https://github.com/oven-sh/bun/issues/14155.
-		// npm is safe meanwhile: file selection and unpacked bytes match bun's
-		// exactly; only tarball gzip bytes differ slightly.
-		const [packed] = JSON.parse(
-			execFileSync("npm", ["pack", "--dry-run", "--json"], {
-				cwd: pkgDir,
-				stdio: ["ignore", "pipe", "ignore"],
-			}),
-		);
+// TODO: switch to `bun pm pack` (the tool we publish with) once it has
+// machine-readable output — https://github.com/oven-sh/bun/issues/14155.
+// npm is safe meanwhile: file selection and unpacked bytes match bun's
+// exactly; only tarball gzip bytes differ slightly.
+const npmPack = (extraArgs, cwd) =>
+	JSON.parse(
+		execFileSync("npm", ["pack", "--dry-run", "--json", ...extraArgs], {
+			cwd,
+			stdio: ["ignore", "pipe", "ignore"],
+		}),
+	);
+
+async function measure(root) {
+	const out = {};
+	for (const [pkgDir, pkg] of workspacePackages(root)) {
+		const [packed] = npmPack([], pkgDir);
 		out[pkg.name] = {
-			entries,
+			entries: await bundleEntries(pkgDir, pkg),
 			tarball: packed.size,
 			unpacked: packed.unpackedSize,
 		};
+	}
+	return out;
+}
+
+async function measurePublished(root) {
+	const out = {};
+	const published = [];
+	for (const [, pkg] of workspacePackages(root)) {
+		let packed;
+		try {
+			[packed] = npmPack([`${pkg.name}@latest`], root);
+		} catch {
+			// E404: not yet published — omit so compare renders it as "new"
+			continue;
+		}
+		out[pkg.name] = { tarball: packed.size, unpacked: packed.unpackedSize };
+		published.push(pkg.name);
+	}
+	if (published.length === 0) return out;
+
+	// Install the published versions in a throwaway project so bundling
+	// resolves real released code and dependency versions, not the workspace.
+	const tmp = mkdtempSync(join(tmpdir(), "pkg-size-published-"));
+	try {
+		writeFileSync(
+			join(tmp, "package.json"),
+			JSON.stringify({
+				name: "published-size-probe",
+				dependencies: Object.fromEntries(published.map((n) => [n, "latest"])),
+			}),
+		);
+		execFileSync("npm", ["install", "--no-audit", "--no-fund"], {
+			cwd: tmp,
+			stdio: ["ignore", "ignore", "inherit"],
+		});
+		for (const name of published) {
+			const pkgDir = join(tmp, "node_modules", name);
+			const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
+			out[name].entries = await bundleEntries(pkgDir, pkg);
+		}
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
 	}
 	return out;
 }
@@ -85,6 +147,8 @@ const delta = (b, h) => {
 
 if (mode === "sizes") {
 	console.log(JSON.stringify(await measure(args[0] ?? "."), null, 2));
+} else if (mode === "sizes-published") {
+	console.log(JSON.stringify(await measurePublished(args[0] ?? "."), null, 2));
 } else if (mode === "compare") {
 	const [base, head] = args.map((f) => JSON.parse(readFileSync(f, "utf8")));
 	const names = [...new Set([...Object.keys(base), ...Object.keys(head)])].sort();
@@ -122,6 +186,8 @@ if (mode === "sizes") {
 	}
 	console.log([...bundle, ...install].join("\n"));
 } else {
-	console.error("usage: package-size-report.mjs sizes [rootDir] | compare <base.json> <head.json>");
+	console.error(
+		"usage: package-size-report.mjs sizes|sizes-published [rootDir] | compare <base.json> <head.json>",
+	);
 	process.exit(1);
 }

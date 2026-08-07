@@ -32,6 +32,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       published: ${{ steps.changesets.outputs.published }}
+      prNumber: ${{ steps.changesets.outputs.pr-number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -66,6 +67,65 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release-pr-size:
+    needs: release
+    # Runs when changesets created/updated the release PR (not on publish).
+    # This job posts the size comment because pull_request workflows on
+    # GITHUB_TOKEN-created PRs never auto-run (recursive-trigger prevention).
+    if: needs.release.outputs.prNumber != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v7
+        with:
+          ref: changeset-release/main
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Turbo
+        uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-packages-${{ runner.os }}-
+
+      - name: Build and measure
+        run: |
+          bun ci
+          bun turbo run build --filter='./packages/*'
+          bun scripts/package-size-report.mjs sizes > "$RUNNER_TEMP/head.json"
+          bun scripts/package-size-report.mjs sizes-published > "$RUNNER_TEMP/base.json"
+
+      - name: Comment release size report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.release.outputs.prNumber }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- package-size-release-report -->'
+          {
+            echo "$marker"
+            echo '## 📦 Package size since last release'
+            echo
+            echo 'Base = latest published versions on npm; head = this release.'
+            echo
+            bun scripts/package-size-report.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
+          } > "$RUNNER_TEMP/comment.md"
+          comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- package-size-release-report -->")))][0].id // empty')
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/comment.md"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F "body=@$RUNNER_TEMP/comment.md"
+          fi
 
   deploy-docs:
     needs: release
