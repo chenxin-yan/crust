@@ -47,26 +47,53 @@ describe("command definitions", () => {
 	it("does not backfill nested definitions with later inheritable flags", async () => {
 		const nested = defineCommand("nested", (command) => command.handle(() => {}));
 		const outer = defineCommand("outer", (command) =>
-			command.mount(nested).flags({ name: "late", type: "boolean", inherit: true }),
+			command.mount(nested).flags({ name: "late", type: "boolean" }),
 		);
 		const app = new Crust("cli").mount(outer);
 
 		await expect(app.run(["outer", "nested", "--late"])).rejects.toThrow(/Unknown flag/);
 	});
 
-	it("inherits flags and Contexts through nested definitions", async () => {
+	it("propagates Context-owned flags only to definitions mounted after provide()", async () => {
 		const calls: string[] = [];
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
-		const db = defineContext("db", () => "database");
-		const status = defineCommand("status", { flags: [verbose], ctx: [db] }, (command) =>
-			command.handle(({ flags, ctx }) => {
-				calls.push(`${ctx.db}:${String(flags.verbose)}`);
+		const apiKey = defineFlag("api-key", { type: "string" });
+		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
+			apiKey: flags["api-key"],
+		}));
+		const before = defineCommand("before", (command) => command.handle(() => {}));
+		const after = defineCommand("after", { requires: [auth] }, (command) =>
+			command.handle(({ ctx }) => {
+				calls.push(String(ctx.auth.apiKey));
 			}),
 		);
-		const deploy = defineCommand("deploy", { flags: [verbose], ctx: [db] }, (command) =>
+		const outer = defineCommand("outer", (command) =>
+			command.mount(before).provide(auth()).mount(after),
+		);
+		const app = new Crust("cli").mount(outer);
+
+		await expect(app.run(["outer", "before", "--api-key", "secret"])).rejects.toThrow(
+			/Unknown flag/,
+		);
+		await app.run(["outer", "after", "--api-key", "secret"]);
+		expect(calls).toEqual(["secret"]);
+	});
+
+	it("inherits capabilities through nested definitions", async () => {
+		const calls: string[] = [];
+		const verbose = defineFlag("verbose", { type: "boolean" });
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
+		const db = defineContext("db", () => "database");
+		const status = defineCommand("status", { requires: [logging, db] }, (command) =>
+			command.handle(({ ctx }) => {
+				calls.push(`${ctx.db}:${String(ctx.logging.verbose)}`);
+			}),
+		);
+		const deploy = defineCommand("deploy", { requires: [logging, db] }, (command) =>
 			command.mount(status),
 		);
-		const app = new Crust("cli").flags(verbose).provide(db()).mount(deploy);
+		const app = new Crust("cli").provide(logging(), db()).mount(deploy);
 
 		await app.run(["deploy", "status", "--verbose"]);
 
@@ -101,7 +128,7 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("excludes non-inheritable parent flags from mounted commands", async () => {
+	it("excludes parent local flags from mounted commands", async () => {
 		const definition = defineCommand("users", (command) => command.handle(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).mount(definition);
 
@@ -193,7 +220,9 @@ describe("command definitions", () => {
 
 	it("checks Context requirement names at the mount call at runtime", () => {
 		const db = defineContext("db", () => "database");
-		const definition = defineCommand("users", { ctx: [db] }, (command) => command.handle(() => {}));
+		const definition = defineCommand("users", { requires: [db] }, (command) =>
+			command.handle(() => {}),
+		);
 
 		expect(() => new Crust("cli").provide(db()).mount(definition)).not.toThrow();
 		expect(() => new Crust("cli").mount(definition as never)).toThrow(
@@ -202,75 +231,27 @@ describe("command definitions", () => {
 	});
 
 	it("checks requirements while preserving fluent handler types", () => {
-		const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
 		const auth = defineContext("auth", () => ({ user: "yan" }));
-		const definition = defineCommand("deploy", { flags: [verbose], ctx: [auth] }, (command) =>
+		const region = defineContext("region", () => "us-east-1");
+		const definition = defineCommand("deploy", { requires: [auth] }, (command) =>
 			command
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "force", type: "boolean", required: true })
-				.provide(defineContext("region", () => "us-east-1")())
+				.provide(region())
 				.handle(({ args, flags, ctx }) => {
 					type _Target = Assert<IsEqual<typeof args.target, string>>;
-					type _Verbose = Assert<IsEqual<typeof flags.verbose, boolean | undefined>>;
 					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
 					type _Auth = Assert<IsEqual<typeof ctx.auth, { user: string }>>;
 					type _Region = Assert<IsEqual<typeof ctx.region, string>>;
 				}),
 		);
 
-		new Crust("cli").flags(verbose).provide(auth()).mount(definition);
-		new Crust("other")
-			.flags({ ...verbose, required: true })
-			.provide(defineContext("auth", () => ({ user: "other", admin: true }))())
-			.mount(definition);
-
-		const requiredToken = defineFlag("token", {
-			type: "string",
-			inherit: true,
-			required: true,
-			parse: (raw: string) => Number(raw),
-		});
-		const strictDefinition = defineCommand(
-			"strict",
-			{ flags: [requiredToken] },
-			(command) => command,
-		);
-		new Crust("cli")
-			.flags({
-				name: "token",
-				type: "string",
-				inherit: true,
-				required: true,
-				parse: () => 1 as const,
-			})
-			.mount(strictDefinition);
-		new Crust("cli")
-			.flags({ name: "token", type: "string", inherit: true, parse: Number })
-			// @ts-expect-error -- an optional parent flag cannot satisfy a required requirement
-			.mount(strictDefinition);
-
-		expect(() =>
-			// @ts-expect-error -- missing inherited flags: verbose
-			new Crust("cli").provide(auth()).mount(definition),
-		).toThrow(/requires flag "--verbose"/);
-		expect(() =>
-			new Crust("cli")
-				.flags({ name: "verbose", type: "boolean" })
-				.provide(auth())
-				// @ts-expect-error -- missing inherited flags: verbose
-				.mount(definition),
-		).toThrow(/requires flag "--verbose"/);
-		new Crust("cli")
-			.flags({ name: "verbose", type: "string", inherit: true })
-			.provide(auth())
-			// @ts-expect-error -- incompatible inherited flags: verbose
-			.mount(definition);
+		new Crust("cli").provide(auth()).mount(definition);
 		expect(() =>
 			// @ts-expect-error -- missing Contexts: auth
-			new Crust("cli").flags(verbose).mount(definition),
+			new Crust("cli").mount(definition),
 		).toThrow(/requires Context "auth"/);
 		new Crust("cli")
-			.flags(verbose)
 			.provide(defineContext("auth", () => "wrong")())
 			// @ts-expect-error -- incompatible Contexts: auth
 			.mount(definition);
@@ -302,12 +283,12 @@ describe("command definitions", () => {
 	});
 
 	it("checks nested requirements at the enclosing mount point", () => {
-		const required = defineFlag("verbose", { type: "boolean", inherit: true });
-		const nested = defineCommand("nested", { flags: [required] }, (command) => command);
+		const auth = defineContext("auth", () => ({ user: "yan" }));
+		const nested = defineCommand("nested", { requires: [auth] }, (command) => command);
 
-		defineCommand("outer", { flags: [required] }, (command) => command.mount(nested));
+		defineCommand("outer", { requires: [auth] }, (command) => command.mount(nested));
 		defineCommand("outer", (command) => {
-			// @ts-expect-error -- missing inherited flags: verbose
+			// @ts-expect-error -- missing Contexts: auth
 			return command.mount(nested);
 		});
 	});

@@ -1,7 +1,7 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
-import type { FlagDef } from "../types.ts";
+import type { FlagDef, InvocationIO } from "../types.ts";
 import type { Awaitable } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ export type InvocationOutcome =
  * Commands cross this boundary as readonly, serializable
  * {@link CommandSnapshot}s — never as internal command nodes.
  */
-export interface ExtensionContext {
+export interface ExtensionContext extends Readonly<InvocationIO> {
 	readonly argv: readonly string[];
 	/** Snapshot of the application root, including Extension-contributed flags/commands */
 	readonly rootCommand: CommandSnapshot;
@@ -47,10 +47,6 @@ export interface ExtensionContext {
 	readonly rawArgs: readonly string[];
 	/** End the invocation successfully before validation, Context construction, and the handler. */
 	readonly finish: () => Finished;
-	/** Write a line of standard output (honors io injected via `run()`) */
-	readonly stdout: (text: string) => void;
-	/** Write a line of diagnostic output (honors io injected via `run()`) */
-	readonly stderr: (text: string) => void;
 }
 
 export interface ExtensionHooks {

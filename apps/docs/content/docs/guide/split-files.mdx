@@ -7,13 +7,13 @@ For a small application, mount definitions inline at the root. When a command be
 
 ## Shared definitions
 
-Keep the flag definitions and Context factories that commands require in a dependency-free shared module:
+Keep shared Context factories and their owned flag definitions in a dependency-free module:
 
 <include lang="ts" meta='title="src/shared.ts"'>
   ../../../examples/split-files/shared.ts
 </include>
 
-Requirements are arrays of these values, so the required shape and the root definition are the same object — they cannot drift.
+Here `logger` owns `--verbose`, so its setup consumes the raw flag and commands depend only on the derived logger value. The flag definition and its consumer stay together.
 
 ## Standalone command definition
 
@@ -41,8 +41,8 @@ The composition root imports both sides:
   ../../../examples/split-files/cli.ts
 </include>
 
-`.mount()` checks that `app` provides a compatible inheritable `verbose` flag and `logger` Context, and reports missing or incompatible requirements at this line. [How mount checking and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-mounting rule — is covered in Subcommands.
+`.mount()` checks that `app` provides a compatible `logger` Context and reports a missing or incompatible requirement at this line. Because `.provide(logger())` precedes the mount, its owned `--verbose` flag is also available to the command. [How mount checking and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-mounting rule — is covered in Subcommands.
 
 ## Inline or split?
 
-Mount `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a requirements array, when a separate file improves readability or when the same command should be mounted more than once.
+Mount `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a `requires` config when needed, when a separate file improves readability or when the same command should be mounted more than once.

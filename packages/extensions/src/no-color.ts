@@ -9,7 +9,7 @@ function setEnv(name: string, value: string | undefined): void {
 }
 
 /**
- * Adds an inheritable `--color` / `--no-color` flag pair that scopes the
+ * Adds a recursive `--color` / `--no-color` flag pair that scopes the
  * standard color environment variables around command execution:
  *
  * - `--color` sets `FORCE_COLOR=3` (and clears `NO_COLOR`, so strict
@@ -41,7 +41,6 @@ export function noColorExtension(): Extension {
 		flags: {
 			color: {
 				type: "boolean",
-				inherit: true,
 				description: "Enable colored output",
 			},
 		},

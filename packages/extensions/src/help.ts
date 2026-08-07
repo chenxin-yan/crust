@@ -199,7 +199,6 @@ export function helpExtension(): Extension {
 				type: "boolean",
 				short: "h",
 				noNegate: true,
-				inherit: true,
 				description: "Show help",
 			},
 		},

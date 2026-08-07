@@ -63,13 +63,13 @@ Core-value flag definitions support:
 
 ```ts
 const flags = {
-  verbose: { type: "boolean", short: "v", inherit: true },
+  verbose: { type: "boolean", short: "v" },
   include: { type: "string", multiple: true },
   port: { type: "number", default: 3000 },
 } satisfies FlagsDef;
 ```
 
-Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, `inherit`, and `multiple`. Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
+Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, and `multiple`. Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
 
 ```ts
 const flags = {
@@ -86,7 +86,7 @@ The schema receives the raw `string | undefined` or `boolean | undefined`; with 
 type NamedFlagDef = FlagDef & { readonly name: string };
 ```
 
-The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requirements.flags` arrays, and `defineFlag()` all use it.
+The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, Context-owned `flags`, and `defineFlag()` all use it.
 
 ### `defineFlag` and `defineArg`
 
@@ -95,7 +95,7 @@ Use these const-generic helpers when a definition is declared separately from `.
 ```ts
 import { defineArg, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true, short: "v" });
+const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
@@ -118,7 +118,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective inherited and local flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -129,6 +129,14 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
 Snapshots omit schemas and parse functions. `URL` defaults become strings, and array defaults are copied and frozen.
+
+## Invocation I/O
+
+### `InvocationIO`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
+
+The same injectable callbacks are passed to the Command Handler and every Context setup constructed for that invocation.
 
 ## Command Handler context
 
@@ -146,31 +154,33 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value, RF, RC> {
-  (options: Options): ContextInstance<Name, Value, RF, RC>;
+interface ContextFactory<Name extends string, Options, Value, RC, OF> {
+  (options: Options): ContextInstance<Name, Value, RC, OF>;
   readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value>;
+  of(value: Value): ContextInstance<Name, Value, {}, OF>;
 }
 ```
 
-`defineContext(name, setup)` and `defineContext(name, requirements, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets requirement arrays reference the factory directly; `.of(value)` produces an instance returning the precomputed value with requirements considered satisfied — for test doubles. `AnyContextFactory` is the requirement-array element type.
+`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets requirement arrays reference the factory directly; `.of(value)` produces an instance returning the precomputed value with requirements considered satisfied while retaining its owned flags. `AnyContextFactory` is the requirement-array element type.
 
-### `ContextRequirements` and `ContextSetup`
+### `ContextRequirements`, `ContextConfig`, and `ContextSetup`
 
 ```ts
-interface ContextRequirements {
+type ContextRequirements = readonly AnyContextFactory[];
+
+interface ContextConfig {
   readonly flags?: readonly NamedFlagDef[];
-  readonly ctx?: readonly AnyContextFactory[];
+  readonly requires?: ContextRequirements;
 }
 
-interface ContextSetup<Options, RF, RC> {
+interface ContextSetup<Options, RC, OF> extends InvocationIO {
   readonly options: Options;
-  readonly flags: InferFlags<RF>;
+  readonly flags: InferFlags<OF>;
   readonly ctx: Readonly<RC>;
 }
 ```
 
-`ContextRequirements` declares the flags a Context reads and the Contexts it depends on. `ContextSetup` is the typed input every setup receives: the factory argument, the validated parsed flags narrowed to the declared requirements, and the values of the declared ctx dependencies.
+`ContextConfig.flags` declares propagating flags installed when an instance is provided; `requires` lists Context capabilities needed from the command path. This is the same plain capability array accepted by `defineCommand()`: `flags` always means definitions the unit owns or parses, and `requires` always means capabilities supplied by the environment. `ContextSetup` receives the factory argument, validated values for its owned flags only, the declared Context values, and the invocation's `stdout` and `stderr` callbacks. See [Contexts](/docs/guide/contexts) for construction order and collision rules.
 
 ### `ContextInstance`
 
@@ -179,7 +189,7 @@ interface ContextSetup<Options, RF, RC> {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared ctx requirements.
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared capability requirements.
 
 ### `ContextMap`
 

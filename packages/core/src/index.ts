@@ -1,6 +1,7 @@
 // Contexts and Extensions
 export type {
 	AnyContextFactory,
+	ContextConfig,
 	ContextFactory,
 	ContextInstance,
 	ContextMap,
@@ -50,6 +51,7 @@ export type {
 	CommandMeta,
 	FlagDef,
 	FlagsDef,
+	InvocationIO,
 	NamedFlagDef,
 	ValueType,
 } from "./types.ts";

@@ -47,7 +47,7 @@ $ greet --help
 - **Composable, not monolithic** — Every capability ships as its own module with zero runtime dependencies in core. Install only what you need — `@crustjs/core` for the framework, `@crustjs/extensions` for official extensions, `@crustjs/crust` for build tooling.
 - **Extensions** — App-wide capabilities like help, version, completion, and update notices, attached once at the root
 - **Contexts** — Named command dependencies created lazily for the resolved command path
-- **Subcommands** — Nested command trees with automatic resolution and flag inheritance via `inherit: true`
+- **Subcommands** — Nested command trees with automatic resolution and Context-owned flag propagation
 - **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
 
 ## Roadmap

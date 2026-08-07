@@ -1,9 +1,9 @@
 import { defineContext, defineFlag } from "@crustjs/core";
 
-export const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
-export const logger = defineContext("logger", () => ({
+export const logger = defineContext("logger", { flags: [verbose] }, ({ flags, stderr }) => ({
   write(message: string) {
-    console.error(message);
+    if (flags.verbose) stderr(message);
   },
 }));

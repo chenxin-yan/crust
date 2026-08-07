@@ -9,7 +9,6 @@ import type {
 	FlagsDef,
 	InferArgs,
 	InferFlags,
-	InheritableFlags,
 	ValidateVariadicArgs,
 } from "./types.ts";
 
@@ -684,207 +683,30 @@ describe("ValidateVariadicArgs type inference", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// InheritableFlags type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("InheritableFlags type inference", () => {
-	it("picks only flags with inherit: true", () => {
-		type Flags = {
-			verbose: { type: "boolean"; inherit: true };
-			port: { type: "number" };
-			output: { type: "string"; inherit: true };
-		};
-		type Result = InheritableFlags<Flags>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					verbose: { type: "boolean"; inherit: true };
-					output: { type: "string"; inherit: true };
-				}
-			>
-		>;
-
-		expect(true).toBe(true);
-	});
-
-	it("returns empty object when no flags have inherit: true", () => {
-		type Flags = {
-			verbose: { type: "boolean" };
-			port: { type: "number" };
-		};
-		type Result = InheritableFlags<Flags>;
-		type _check = Expect<Equal<Result, {}>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("returns empty object for empty flags", () => {
-		type Result = InheritableFlags<{}>;
-		type _check = Expect<Equal<Result, {}>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("picks all flags when all have inherit: true", () => {
-		type Flags = {
-			verbose: { type: "boolean"; inherit: true };
-			port: { type: "number"; inherit: true };
-		};
-		type Result = InheritableFlags<Flags>;
-		type _check = Expect<Equal<Result, Flags>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("preserves full flag definition including short, required, etc.", () => {
-		type Flags = {
-			verbose: {
-				type: "boolean";
-				inherit: true;
-				short: "v";
-				description: "Enable verbose";
-			};
-		};
-		type Result = InheritableFlags<Flags>;
-		type _check = Expect<Equal<Result, Flags>>;
-
-		expect(true).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // EffectiveFlags type-level tests
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("EffectiveFlags type inference", () => {
-	it("filters inherited to inherit:true and merges with local", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true };
-			port: { type: "number" };
-		};
-		type Local = {
-			output: { type: "string" };
-		};
-		type Result = EffectiveFlags<Inherited, Local>;
+	it("merges local and current Context-owned flags", () => {
+		type Result = EffectiveFlags<
+			{ output: { type: "string" } },
+			{ apiKey: { type: "string"; short: "k" } }
+		>;
 		type _check = Expect<
 			Equal<
 				Result,
 				{
-					verbose: { type: "boolean"; inherit: true };
 					output: { type: "string" };
+					apiKey: { type: "string"; short: "k" };
 				}
 			>
 		>;
-
 		expect(true).toBe(true);
 	});
 
-	it("local overrides inherited flag with same key", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true };
-			port: { type: "number"; inherit: true };
-		};
-		type Local = {
-			port: { type: "string" };
-		};
-		type Result = EffectiveFlags<Inherited, Local>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					verbose: { type: "boolean"; inherit: true };
-					port: { type: "string" };
-				}
-			>
-		>;
-
-		expect(true).toBe(true);
-	});
-
-	it("returns only local when no inherited flags have inherit: true", () => {
-		type Inherited = {
-			verbose: { type: "boolean" };
-			port: { type: "number" };
-		};
-		type Local = {
-			output: { type: "string" };
-		};
-		type Result = EffectiveFlags<Inherited, Local>;
-		type _check = Expect<Equal<Result, { output: { type: "string" } }>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("returns only inheritable flags when local is empty", () => {
-		type Inherited = {
-			verbose: { type: "boolean"; inherit: true };
-			port: { type: "number" };
-		};
-		type Result = EffectiveFlags<Inherited, {}>;
-		type _check = Expect<Equal<Result, { verbose: { type: "boolean"; inherit: true } }>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("returns empty when both inherited and local are empty", () => {
+	it("returns empty when all inputs are empty", () => {
 		type Result = EffectiveFlags<{}, {}>;
 		type _check = Expect<Equal<Result, {}>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("short-circuits to local when inherited is wide FlagsDef", () => {
-		type Local = {
-			output: { type: "string" };
-		};
-		type Result = EffectiveFlags<FlagsDef, Local>;
-		type _check = Expect<Equal<Result, Local>>;
-
-		expect(true).toBe(true);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// FlagDef inherit toggle field tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("FlagDef inherit toggle field", () => {
-	it("accepts inherit: true on flag definitions", () => {
-		const flag: FlagDef = { type: "boolean", inherit: true };
-		expect(flag.inherit).toBe(true);
-	});
-
-	it("accepts inherit: true alongside other fields", () => {
-		const flag: FlagDef = {
-			type: "string",
-			inherit: true,
-			short: "v",
-			required: true,
-		};
-		expect(flag.inherit).toBe(true);
-		expect(flag.required).toBe(true);
-	});
-
-	it("accepts inherit: true on multi-value flags", () => {
-		const flag: FlagDef = {
-			type: "string",
-			multiple: true,
-			inherit: true,
-		};
-		expect(flag.inherit).toBe(true);
-		expect(flag.multiple).toBe(true);
-	});
-
-	it("rejects inherit: false at type level", () => {
-		// @ts-expect-error — toggle fields only accept `true`, not `false`
-		const _bad: FlagDef = { type: "boolean", inherit: false };
-		expect(true).toBe(true);
-	});
-
-	it("rejects non-boolean values for inherit", () => {
-		// @ts-expect-error — toggle fields only accept `true`, not string
-		const _bad: FlagDef = { type: "boolean", inherit: "yes" };
 		expect(true).toBe(true);
 	});
 });

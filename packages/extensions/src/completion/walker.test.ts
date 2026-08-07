@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { FlagsDef } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineFlag, type FlagsDef } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
@@ -12,7 +12,7 @@ import { walkCommandNode } from "./walker.ts";
  * `createCommandNode`/`computeEffectiveFlags` are not exported from
  * `@crustjs/core`. Constructing literal nodes is the cleanest way to keep
  * walker tests focused on the walker — we don't want to be coupled to the
- * `Crust` builder's internal flag-inheritance plumbing here. For each node
+ * `Crust` builder's internal Context-owned flag propagation here. For each node
  * we set `effectiveFlags` explicitly so the walker observes exactly the set
  * of flags we intend.
  */
@@ -21,6 +21,7 @@ function makeNode(partial: Partial<CommandNode> & { name: string }): CommandNode
 	return {
 		meta: { name: partial.name, ...(partial.meta ?? {}) },
 		localFlags: flags,
+		ownedFlags: partial.ownedFlags ?? {},
 		effectiveFlags: partial.effectiveFlags ?? flags,
 		args: partial.args,
 		subCommands: partial.subCommands ?? {},
@@ -89,6 +90,18 @@ describe("walkCommandNode", () => {
 		});
 	});
 
+	it("captures Context-owned flags from a Core-built provider tree", () => {
+		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+		const app = new Crust("mycli")
+			.provide(auth())
+			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+
+		const spec = walkCommandNode(snapshotCommand(app._node));
+		expect(spec.root.flags.map((flag) => flag.name)).toContain("api-key");
+		expect(spec.root.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
+	});
+
 	it("captures positional args with required, variadic, type, and description", () => {
 		const root = makeNode({
 			name: "mycli",
@@ -144,24 +157,24 @@ describe("walkCommandNode", () => {
 		expect(spec.root.args[0]?.choices).toEqual(["bash", "zsh", "fish"]);
 	});
 
-	it("walks nested subcommands recursively, surfacing inherited flags via effectiveFlags", () => {
+	it("walks nested subcommands recursively, surfacing Context-owned flags via effectiveFlags", () => {
 		const child = makeNode({
 			name: "child",
 			meta: { name: "child", description: "Child command" },
-			// Local flag plus an *inherited* parent flag pre-merged into effectiveFlags
-			// (mimics what `computeEffectiveFlags` does at build time).
+			// Local flag plus a Context-owned ancestor flag pre-merged into effectiveFlags
+			// (mimics what Core does at build time).
 			localFlags: { local: { type: "boolean" } },
 			effectiveFlags: {
-				verbose: { type: "boolean", short: "v", inherit: true },
+				verbose: { type: "boolean", short: "v" },
 				local: { type: "boolean" },
 			},
 		});
 
 		const root = makeNode({
 			name: "mycli",
-			localFlags: { verbose: { type: "boolean", short: "v", inherit: true } },
+			localFlags: { verbose: { type: "boolean", short: "v" } },
 			effectiveFlags: {
-				verbose: { type: "boolean", short: "v", inherit: true },
+				verbose: { type: "boolean", short: "v" },
 			},
 			subCommands: { child },
 		});
@@ -173,7 +186,7 @@ describe("walkCommandNode", () => {
 		if (!childSpec) throw new Error("missing child");
 		expect(childSpec.name).toBe("child");
 		expect(childSpec.description).toBe("Child command");
-		// Inherited "verbose" must surface on the child too.
+		// Context-owned "verbose" must surface on the child too.
 		const flagNames = childSpec.flags.map((f) => f.name).sort();
 		expect(flagNames).toEqual(["local", "verbose"]);
 	});

@@ -1,6 +1,6 @@
 ---
 title: Help
-description: Add inherited help output to every command.
+description: Add help output to every command.
 ---
 
 ## Usage
@@ -27,7 +27,7 @@ my-cli deploy --help
 function help(): Extension;
 ```
 
-`help()` owns an inherited boolean `help` flag with short name `h`. Its `preRun` hook writes help through `ctx.stdout` and returns `ctx.finish()` when `--help` is present. A container command with no Command Handler also displays help.
+`help()` owns a recursive boolean `help` flag with short name `h`. Its `preRun` hook writes help through `ctx.stdout` and returns `ctx.finish()` when `--help` is present. A container command with no Command Handler also displays help.
 
 The renderer includes usage, visible subcommands, positional arguments, effective flags, aliases, defaults, and choices. Commands with `meta.hidden: true` stay routable but are omitted from listings.
 

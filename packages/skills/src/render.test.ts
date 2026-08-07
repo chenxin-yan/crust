@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
@@ -695,6 +695,22 @@ describe("renderSkill", () => {
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).toContain("Default: `3000`");
+		});
+
+		it("renders Context-owned flags from a Core-built command tree", () => {
+			const apiKey = defineFlag("api-key", {
+				type: "string",
+				description: "API credential",
+			});
+			const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+			const app = new Crust("test-cli")
+				.provide(auth())
+				.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+			const files = renderSkill(buildManifest(snapshotCommand(app._node)), baseMeta);
+			const deploy = findFile(files, "commands/deploy.md");
+
+			expect(deploy?.content).toContain("--api-key");
+			expect(deploy?.content).toContain("API credential");
 		});
 
 		it("renders a flags table with aliases and defaults", () => {

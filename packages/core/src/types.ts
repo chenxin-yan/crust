@@ -3,6 +3,14 @@ import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { Simplify } from "./api/context.ts";
 
+/** Injectable output callbacks threaded through one invocation. */
+export interface InvocationIO {
+	/** Write a line of standard output (injectable text callback) */
+	stdout: (text: string) => void;
+	/** Write a line of diagnostic output (injectable text callback) */
+	stderr: (text: string) => void;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────
@@ -233,8 +241,6 @@ interface FlagDefBase {
 	aliases?: string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
-	/** When `true`, the flag is inherited by subcommands */
-	inherit?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 }
@@ -426,8 +432,6 @@ interface SchemaFlagBase {
 	short?: string;
 	/** Additional long aliases (e.g. `["out"]` → `--out`) */
 	aliases?: string[];
-	/** When `true`, the flag is inherited by subcommands */
-	inherit?: true;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	required?: never;
@@ -702,64 +706,27 @@ export type ValidateVariadicArgs<A extends readonly object[]> = A extends readon
 	: A;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Flag inheritance utility types
+// Effective flag utility types
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Picks only the flags from `F` that have `inherit: true`.
- *
- * Flags without `inherit` (or with `inherit` omitted) are excluded.
+ * Merges two flag sets, where `Override` keys win over `Base` keys.
  *
  * @example
  * ```ts
- * type Flags = {
- *   verbose: { type: "boolean"; inherit: true };
- *   port: { type: "number" };
- * };
- * type Result = InheritableFlags<Flags>;
- * // Result = { verbose: { type: "boolean"; inherit: true } }
- * ```
- */
-export type InheritableFlags<F extends FlagsDef> = {
-	[K in keyof F as F[K] extends { inherit: true } ? K : never]: F[K];
-};
-
-/**
- * Merges parent flags with local flags, where local keys override parent keys.
- *
- * @example
- * ```ts
- * type Parent = { verbose: { type: "boolean" }; port: { type: "number" } };
- * type Local = { port: { type: "string" } };
- * type Result = MergeFlags<Parent, Local>;
+ * type Base = { verbose: { type: "boolean" }; port: { type: "number" } };
+ * type Override = { port: { type: "string" } };
+ * type Result = MergeFlags<Base, Override>;
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simplify<
-	Omit<Parent, keyof Local> & Local
+export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Simplify<
+	Omit<Base, keyof Override> & Override
 >;
 
-/**
- * Computes the effective flags for a command by filtering the inherited flags
- * (only those with `inherit: true`) and merging them with local flags.
- *
- * Local flags override inherited flags with the same key.
- *
- * @example
- * ```ts
- * type Inherited = {
- *   verbose: { type: "boolean"; inherit: true };
- *   port: { type: "number" };
- * };
- * type Local = { output: { type: "string" } };
- * type Result = EffectiveFlags<Inherited, Local>;
- * // Result = { verbose: { type: "boolean"; inherit: true }; output: { type: "string" } }
- * ```
- */
-export type EffectiveFlags<
-	Inherited extends FlagsDef,
-	Local extends FlagsDef,
-> = string extends keyof Inherited ? Local : MergeFlags<InheritableFlags<Inherited>, Local>;
+/** Computes a command's handler-visible flags from local and Context-owned definitions. */
+export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
+	MergeFlags<Local, Owned> extends infer R extends FlagsDef ? R : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

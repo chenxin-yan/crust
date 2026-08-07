@@ -17,7 +17,7 @@ function normaliseDescription(value: string | undefined): string | undefined {
 /**
  * Project a single `FlagDef` (keyed by `name` in the snapshot `flags`) onto a
  * `CompletionFlag`. The walker calls this for every entry of every visible
- * command's `flags` map so inherited flags surface at the right
+ * command's `flags` map so propagating flags surface at the right
  * depth.
  */
 function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {

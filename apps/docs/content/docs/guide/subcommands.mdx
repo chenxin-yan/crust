@@ -23,58 +23,68 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition declares the inheritable flags and Contexts it expects from any parent as arrays of defined values. The recipe builder — and the handler's `flags` and `ctx` — are typed from them:
+A definition lists the Context capabilities it expects from its parent in the `requires` array. The recipe builder and handler's `ctx` are typed from those factories:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
-const verbose = defineFlag("verbose", { type: "boolean", inherit: true });
+const verbose = defineFlag("verbose", { type: "boolean" });
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
+}));
 const repository = defineContext("repository", () => ({
   defaultBranch: "main",
 }));
 
-const clone = defineCommand("clone", { flags: [verbose], ctx: [repository] }, (command) =>
-  command
-    .args({ name: "url", type: "url", required: true })
-    .handle(({ args, flags, ctx, stdout }) => {
-      stdout(`${args.url} ${ctx.repository.defaultBranch} ${flags.verbose}`);
-    }),
+const clone = defineCommand("clone", { requires: [logging, repository] }, (command) =>
+  command.args({ name: "url", type: "url", required: true }).handle(({ args, ctx, stdout }) => {
+    ctx.logging.debug(`cloning ${args.url}`);
+    stdout(ctx.repository.defaultBranch);
+  }),
 );
 
-const app = new Crust("git").flags(verbose).provide(repository()).mount(clone);
+const app = new Crust("git").provide(logging(), repository()).mount(clone);
 ```
 
 `.mount()` checks the requirements at each call and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
 
 ```ts
-const git = new Crust("git").flags(verbose).provide(repository()).mount(clone, clone.as("copy"));
+const git = new Crust("git")
+  .provide(logging())
+  .provide(repository())
+  .mount(clone, clone.as("copy"));
 ```
 
-Missing or incompatible inherited flags and Contexts are TypeScript errors on `.mount()`; a ctx requirement name not provided on the parent path is a runtime `DEFINITION` error. A same-named parent flag only counts when it has `inherit: true`.
+Missing or incompatible Context capabilities are TypeScript errors on `.mount()`; missing capabilities are also runtime `DEFINITION` errors.
 
 ## Nested definitions
 
 Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
 
 ```ts
-const environment = defineFlag("environment", { type: "string", inherit: true });
+const environment = defineFlag("environment", { type: "string" });
+const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
-const status = defineCommand("status", { flags: [verbose, environment] }, (command) =>
-  command.handle(({ flags, stdout }) => {
-    stdout(`${flags.environment} ${flags.verbose}`);
+const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
+  command.handle(({ ctx }) => {
+    ctx.logging.debug(`environment: ${ctx.deployment.environment}`);
   }),
 );
 
-const deploy = defineCommand("deploy", { flags: [verbose] }, (command) =>
-  command.flags(environment).mount(status),
+const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
+  command.provide(deployment()).mount(status),
 );
 
-const app = new Crust("app").flags(verbose).mount(deploy);
+const app = new Crust("app").provide(logging()).mount(deploy);
 ```
 
 ## Context inheritance
 
-Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; declare `requirements.ctx` to see them in the handler's types. Finalize required Contexts and inheritable flags on the parent builder before the `.mount()` call; later fluent calls do not backfill an earlier mount.
+Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the handler's types.
+
+Finalize `.provide()` calls on the parent builder before `.mount()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into later-mounted descendants. Later fluent calls return a new builder and do not backfill an earlier mount.
 
 ## Unknown commands
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { defineContext } from "../api/context.ts";
+import { defineFlag } from "../api/flags.ts";
+import { Crust, defineCommand, prepareCommandSnapshot } from "./crust.ts";
 import { createCommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -55,6 +58,23 @@ describe("snapshotCommand", () => {
 		const clone = structuredClone(snapshot);
 		expect(clone.args[0]?.name).toBe("file");
 		expect("parse" in (clone.args[0] as object)).toBe(false);
+	});
+
+	it("projects Context-owned flags at the provider and later descendants", async () => {
+		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
+		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+		const app = new Crust("cli")
+			.provide(auth())
+			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+
+		const snapshot = await prepareCommandSnapshot(app);
+		expect(snapshot.flags["api-key"]).toEqual({
+			type: "string",
+			short: "k",
+		});
+		expect(snapshot.subCommands.deploy?.flags["api-key"]).toEqual(snapshot.flags["api-key"]);
+		expect(Object.isFrozen(snapshot.subCommands.deploy?.flags["api-key"])).toBe(true);
+		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
 	it("is deeply frozen", () => {

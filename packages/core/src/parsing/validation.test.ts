@@ -2,7 +2,57 @@ import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
 import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
+import { validateIncomingFlag } from "./flag-validation.ts";
 import { validateCommandTree } from "./validation.ts";
+
+describe("validateIncomingFlag", () => {
+	it("rejects canonical names that collide with an existing short or alias", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "v", def: { type: "boolean" } },
+				{ verbose: { type: "boolean", short: "v" } },
+				'Context "logger"',
+			),
+		).toThrow(/collides with flag "--verbose"/);
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "out", def: { type: "string" } },
+				{ output: { type: "string", aliases: ["out"] } },
+				'Context "writer"',
+			),
+		).toThrow(/collides with flag "--output"/);
+	});
+
+	it("rejects incoming short and aliases that collide with existing spellings", () => {
+		const existing = {
+			verbose: { type: "boolean", short: "v", aliases: ["loud"] },
+		} satisfies import("../types.ts").FlagsDef;
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "version", def: { type: "boolean", short: "v" } },
+				existing,
+				'Context "release"',
+			),
+		).toThrow(/spelling "v"/);
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "log", def: { type: "string", aliases: ["loud"] } },
+				existing,
+				'Context "logger"',
+			),
+		).toThrow(/spelling "loud"/);
+	});
+
+	it("rejects duplicate spellings within the incoming definition", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "output", def: { type: "string", short: "o", aliases: ["o"] } },
+				{},
+				'Context "writer"',
+			),
+		).toThrow(/repeats spelling "o"/);
+	});
+});
 
 describe("validateCommandTree", () => {
 	it("passes commands with required args and flags", () => {
@@ -53,7 +103,7 @@ describe("validateCommandTree", () => {
 
 	it("throws when a Context dependency is missing from a node's path", () => {
 		const config = defineContext("config", () => ({}));
-		const client = defineContext("client", { ctx: [config] }, () => ({}));
+		const client = defineContext("client", { requires: [config] }, () => ({}));
 
 		const node = createCommandNode("root");
 		node.contexts = [client()];
@@ -99,27 +149,26 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("passes a valid CommandNode with effective flags (inherited + local)", () => {
-		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
-			debug: { type: "boolean" as const, inherit: true as const },
+	it("passes a valid CommandNode with effective flags (ancestor-owned + local)", () => {
+		const ancestorOwnedFlags = {
+			verbose: { type: "boolean" as const, short: "v" },
+			debug: { type: "boolean" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const, short: "o" },
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
 	it("passes a valid CommandNode with required effective flags", () => {
-		const parentFlags = {
+		const ancestorOwnedFlags = {
 			token: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {
@@ -127,7 +176,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// Should pass because createValidationArgv generates --token sample
 		expect(() => validateCommandTree(node)).not.toThrow();
@@ -143,38 +192,48 @@ describe("validateCommandTree — CommandNode tree", () => {
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("detects alias collision in effective flags (inherited alias collides with local)", () => {
-		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
+	it("detects collisions involving Context-owned flags as a build-validation backstop", () => {
+		const node = createCommandNode("sub");
+		node.localFlags = { verbose: { type: "boolean", short: "v" } };
+		node.ownedFlags = { version: { type: "boolean", short: "v" } };
+		node.effectiveFlags = computeEffectiveFlags(node.ownedFlags, node.localFlags);
+
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow("Alias collision");
+	});
+
+	it("detects alias collision in effective flags (ancestor-owned alias collides with local)", () => {
+		const ancestorOwnedFlags = {
+			verbose: { type: "boolean" as const, short: "v" },
 		};
 		const localFlags = {
 			version: { type: "boolean" as const, short: "v" },
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
-	it("detects alias collision between inherited flag name and local alias", () => {
-		const parentFlags = {
-			out: { type: "string" as const, inherit: true as const },
+	it("detects alias collision between ancestor-owned flag name and local alias", () => {
+		const ancestorOwnedFlags = {
+			out: { type: "string" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const, aliases: ["out"] },
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
-	it("detects no-prefix violation in effective flags from inherited flag", () => {
-		// Construct a node with an inherited flag that has no- prefix
+	it("detects no-prefix violation in effective flags from an ancestor-owned flag", () => {
+		// Construct a node with an ancestor-owned flag that has no- prefix
 		// (this wouldn't pass compile-time checks but tests runtime validation)
 		const node = createCommandNode("sub");
 		node.effectiveFlags = {
@@ -225,31 +284,12 @@ describe("validateCommandTree — CommandNode tree", () => {
 		);
 	});
 
-	it("overridden flag validated with local definition (no collision)", () => {
-		// Parent has inherit:true flag "verbose" with short "v"
-		// Child overrides "verbose" with a different short — no collision
-		const parentFlags = {
-			verbose: { type: "boolean" as const, short: "v", inherit: true as const },
-		};
-		const localFlags = {
-			verbose: { type: "string" as const, short: "V" },
-		};
-		const node = createCommandNode("sub");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
-
-		// The local definition completely replaces the inherited one
-		// "verbose" is now type string with alias "V" — no collision
-		expect(() => validateCommandTree(node)).not.toThrow();
-	});
-
-	it("inherited required flag included in validation argv", () => {
-		// Parent has a required inherited string flag
-		const parentFlags = {
+	it("required ancestor-owned flag included in validation argv", () => {
+		// The ancestor-owned flags include a required string flag
+		const ancestorOwnedFlags = {
 			token: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {
@@ -257,18 +297,17 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// Should NOT throw — createValidationArgv includes --token sample
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
-	it("inherited alias works during validation", () => {
-		const parentFlags = {
+	it("ancestor-owned alias works during validation", () => {
+		const ancestorOwnedFlags = {
 			verbose: {
 				type: "boolean" as const,
 				short: "v",
-				inherit: true as const,
 			},
 		};
 		const localFlags = {
@@ -276,9 +315,9 @@ describe("validateCommandTree — CommandNode tree", () => {
 		};
 		const node = createCommandNode("sub");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		// Both inherited alias "v" and local alias "o" should be accepted
+		// Both ancestor-owned alias "v" and local alias "o" should be accepted
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 

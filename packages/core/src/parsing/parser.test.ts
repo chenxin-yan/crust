@@ -1026,9 +1026,9 @@ describe("parseArgs — no- prefix defense-in-depth", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — CommandNode with effective flags", () => {
-	it("parses inherited flag from effectiveFlags", () => {
-		const parentFlags = {
-			verbose: { type: "boolean" as const, inherit: true as const },
+	it("parses an ancestor-owned flag from effectiveFlags", () => {
+		const ancestorOwnedFlags = {
+			verbose: { type: "boolean" as const },
 		};
 		const localFlags = {
 			output: { type: "string" as const },
@@ -1036,48 +1036,25 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		const result = parseArgs(node, ["--verbose", "--output", "./dist"]);
 		expect(result.flags.verbose).toBe(true);
 		expect(result.flags.output).toBe("./dist");
 	});
 
-	it("overridden flag uses local type, not inherited type", () => {
-		const parentFlags = {
-			level: {
-				type: "boolean" as const,
-				inherit: true as const,
-			},
-		};
-		const localFlags = {
-			level: {
-				type: "number" as const,
-			},
-		};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
-
-		// level is now a number flag (local override), not boolean
-		const result = parseArgs(node, ["--level", "5"]);
-		expect(result.flags.level).toBe(5);
-	});
-
-	it("inherited required flag is enforced by validateParsed", () => {
-		const parentFlags = {
+	it("required ancestor-owned flag is enforced by validateParsed", () => {
+		const ancestorOwnedFlags = {
 			config: {
 				type: "string" as const,
 				required: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// parseArgs does not throw — validation is separate
 		const parsed = parseArgs(node, []);
@@ -1094,63 +1071,42 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		}
 	});
 
-	it("inherited alias works on subcommand", () => {
-		const parentFlags = {
+	it("ancestor-owned alias works on subcommand", () => {
+		const ancestorOwnedFlags = {
 			verbose: {
 				type: "boolean" as const,
 				short: "v" as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		const result = parseArgs(node, ["-v"]);
 		expect(result.flags.verbose).toBe(true);
 	});
 
-	it("non-inherit parent flags are excluded from effectiveFlags", () => {
-		const parentFlags = {
-			verbose: { type: "boolean" as const, inherit: true as const },
-			debug: { type: "boolean" as const }, // no inherit
-		};
-		const localFlags = {};
-
+	it("rejects parent-local flags omitted from a child's effective flags", () => {
 		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags({}, {});
 
-		// verbose is inherited, debug is not
-		const result = parseArgs(node, ["--verbose"]);
-		expect(result.flags.verbose).toBe(true);
-
-		// --debug should be unknown since it's not inherited
-		try {
-			parseArgs(node, ["--debug"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toContain("Unknown flag");
-		}
+		expect(() => parseArgs(node, ["--debug"])).toThrow(/Unknown flag/);
 	});
 
-	it("inherited flag with default value works on subcommand", () => {
-		const parentFlags = {
+	it("ancestor-owned flag with default value works on subcommand", () => {
+		const ancestorOwnedFlags = {
 			port: {
 				type: "number" as const,
 				default: 3000,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		// Default should apply when not provided
 		const result1 = parseArgs(node, []);
@@ -1171,47 +1127,42 @@ describe("parseArgs — CommandNode with effective flags", () => {
 	it("CommandNode with args parses positionals correctly", () => {
 		const node = createCommandNode("child");
 		node.args = [{ name: "file", type: "string", required: true }];
-		node.effectiveFlags = computeEffectiveFlags(
-			{ verbose: { type: "boolean" as const, inherit: true as const } },
-			{},
-		);
+		node.effectiveFlags = computeEffectiveFlags({ verbose: { type: "boolean" as const } }, {});
 
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
 		expect(result.flags.verbose).toBe(true);
 		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
 	});
 
-	it("inherited boolean negation works on subcommand", () => {
-		const parentFlags = {
+	it("ancestor-owned boolean negation works on subcommand", () => {
+		const ancestorOwnedFlags = {
 			minify: {
 				type: "boolean" as const,
 				default: true,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		const result = parseArgs(node, ["--no-minify"]);
 		expect(result.flags.minify).toBe(false);
 	});
 
-	it("inherited multiple flag works on subcommand", () => {
-		const parentFlags = {
+	it("ancestor-owned multiple flag works on subcommand", () => {
+		const ancestorOwnedFlags = {
 			include: {
 				type: "string" as const,
 				multiple: true as const,
-				inherit: true as const,
 			},
 		};
 		const localFlags = {};
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(parentFlags, localFlags);
+		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
 		const result = parseArgs(node, ["--include", "src", "--include", "lib"]);
 		expect(result.flags.include).toEqual(["src", "lib"]);
