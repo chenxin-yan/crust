@@ -321,7 +321,7 @@ describe("Context-owned flags", () => {
 		const duplicates: readonly NamedFlagDef[] = [apiKey, apiKey];
 
 		expect(() => defineContext("auth", { flags: duplicates }, () => ({}))).toThrow(
-			/owns flag "--api-key" more than once/,
+			/flag "--api-key" spelling "api-key" collides with flag "--api-key"/,
 		);
 	});
 

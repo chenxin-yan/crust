@@ -4,8 +4,6 @@ import { CrustError } from "../errors.ts";
 import type { ArgDef, FlagDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
 
-export { validateIncomingFlag } from "./flag-validation.ts";
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Alias collision policy: aliases share a namespace with canonical names,
 // so a value collides with any sibling's canonical name or alias.

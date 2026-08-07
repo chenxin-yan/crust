@@ -239,19 +239,8 @@ export function defineContext(
 				{ subject: "context", name, reason: "required-owned-flag-collision" },
 			);
 		}
-		if (flagName in ownedFlags) {
-			throw new CrustError(
-				"DEFINITION",
-				`Context "${name}" owns flag "--${flagName}" more than once`,
-				{ subject: "flag", name: flagName, reason: "duplicate-flag" },
-			);
-		}
-		const owned = {
-			...rest,
-			aliases: rest.aliases ? [...rest.aliases] : undefined,
-		} as FlagDef;
-		validateIncomingFlag({ name: flagName, def: owned }, ownedFlags, `Context "${name}"`);
-		ownedFlags[flagName] = owned;
+		validateIncomingFlag({ name: flagName, def: rest as FlagDef }, ownedFlags, `Context "${name}"`);
+		ownedFlags[flagName] = rest as FlagDef;
 	}
 	const requiredCtx = (config.requires?.ctx ?? []).map((dep) => dep.contextName);
 

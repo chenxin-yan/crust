@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
 import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
-import { validateCommandTree, validateIncomingFlag } from "./validation.ts";
+import { validateIncomingFlag } from "./flag-validation.ts";
+import { validateCommandTree } from "./validation.ts";
 
 describe("validateIncomingFlag", () => {
 	it("rejects canonical names that collide with an existing short or alias", () => {

@@ -17,12 +17,9 @@ import {
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
+import { validateIncomingFlag } from "../parsing/flag-validation.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import {
-	validateCommandTree,
-	validateIncomingAliases,
-	validateIncomingFlag,
-} from "../parsing/validation.ts";
+import { validateCommandTree, validateIncomingAliases } from "../parsing/validation.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -848,7 +845,7 @@ export class Crust<
 	> {
 		const contexts = [...this._node.contexts];
 		const ownedFlags = { ...this._node.ownedFlags };
-		let effectiveFlags = { ...this._node.effectiveFlags };
+		const effectiveFlags = { ...this._node.effectiveFlags };
 		for (const instance of instances) {
 			this._assertContextProvidable(instance as ContextInstance, contexts);
 			for (const [name, def] of Object.entries(instance.ownedFlags)) {
