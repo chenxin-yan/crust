@@ -1,9 +1,6 @@
 import { CrustError } from "../errors.ts";
 import type { FlagDef, FlagsDef } from "../types.ts";
-
-function flagSpellings(name: string, def: FlagDef): string[] {
-	return [name, ...(def.short ? [def.short] : []), ...(def.aliases ?? [])];
-}
+import { flagDefinitionSpellings } from "./spellings.ts";
 
 /** Validate one flag against the complete canonical/short/alias namespace. */
 export function validateIncomingFlag(
@@ -11,7 +8,7 @@ export function validateIncomingFlag(
 	existing: FlagsDef,
 	ownerLabel: string,
 ): void {
-	const incomingSpellings = flagSpellings(incoming.name, incoming.def);
+	const incomingSpellings = flagDefinitionSpellings(incoming.name, incoming.def);
 	const duplicate = incomingSpellings.find(
 		(spelling, index) => incomingSpellings.indexOf(spelling) !== index,
 	);
@@ -24,7 +21,7 @@ export function validateIncomingFlag(
 	}
 
 	for (const [existingName, existingDef] of Object.entries(existing)) {
-		const existingSpellings = new Set(flagSpellings(existingName, existingDef));
+		const existingSpellings = new Set(flagDefinitionSpellings(existingName, existingDef));
 		const collision = incomingSpellings.find((spelling) => existingSpellings.has(spelling));
 		if (collision !== undefined) {
 			throw new CrustError(

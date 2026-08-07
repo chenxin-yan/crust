@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import type { FlagDef, FlagsDef } from "../types.ts";
+import { flagSpellings, type FlagSpelling } from "../parsing/spellings.ts";
 import type { CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -49,40 +49,26 @@ function findAliasMatch(
 	return null;
 }
 
-/** Find a flag def by any spelling: canonical name, short, or long alias. */
-function lookupFlag(flags: FlagsDef, spelling: string): FlagDef | undefined {
-	for (const [name, def] of Object.entries(flags)) {
-		if (name === spelling || def.short === spelling || def.aliases?.includes(spelling)) {
-			return def;
-		}
-	}
-	return undefined;
-}
-
 /**
- * Match a dash token against a command's effective flags.
+ * Match a dash token against the parser's shared spelling table.
  *
- * Returns `null` when the token is not a known flag of this command (routing
- * then stops, preserving the pre-existing fallback behavior), otherwise
- * whether the flag consumes the following argv token as its value.
- *
- * Mirrors the parser's accepted spellings: `--name`, `--name=value`,
- * `--no-name` (boolean negation unless `noNegate`), `-s`, inline short
- * values (`-svalue`), and bundled short flags (`-absvalue`).
+ * The token walk stays here because routing stops at unknown flags while
+ * parsing reports them as errors; only spelling and negation policy is shared.
  */
-function matchKnownFlagToken(flags: FlagsDef, token: string): { consumesValue: boolean } | null {
+function matchKnownFlagToken(
+	spellings: ReadonlyMap<string, FlagSpelling>,
+	token: string,
+): { consumesValue: boolean } | null {
 	if (token === "--") return null;
 
 	if (token.startsWith("--")) {
 		const eq = token.indexOf("=");
 		const spelling = eq === -1 ? token.slice(2) : token.slice(2, eq);
-		const def = lookupFlag(flags, spelling);
-		if (def) return { consumesValue: def.type !== "boolean" && eq === -1 };
+		const entry = spellings.get(spelling);
+		if (entry) return { consumesValue: entry.def.type !== "boolean" && eq === -1 };
 		if (spelling.startsWith("no-")) {
-			const base = lookupFlag(flags, spelling.slice(3));
-			if (base && base.type === "boolean" && !base.noNegate) {
-				return { consumesValue: false };
-			}
+			const base = spellings.get(spelling.slice(3));
+			if (base?.negatable) return { consumesValue: false };
 		}
 		return null;
 	}
@@ -91,9 +77,9 @@ function matchKnownFlagToken(flags: FlagsDef, token: string): { consumesValue: b
 	const chars = token.slice(1);
 	if (chars.length === 0) return null;
 	for (let index = 0; index < chars.length; index++) {
-		const def = lookupFlag(flags, chars[index]!);
-		if (!def) return null;
-		if (def.type !== "boolean") {
+		const entry = spellings.get(chars[index]!);
+		if (!entry) return null;
+		if (entry.def.type !== "boolean") {
 			return { consumesValue: index === chars.length - 1 };
 		}
 	}
@@ -154,7 +140,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		// `app --quiet translate` must run `translate`, not silently resolve the
 		// root. Unknown flags and `--` stop routing (parser reports them).
 		if (candidate.startsWith("-")) {
-			const match = matchKnownFlagToken(current.effectiveFlags, candidate);
+			const match = matchKnownFlagToken(flagSpellings(current.effectiveFlags), candidate);
 			if (!match) break;
 			skippedFlagTokens.push(candidate);
 			routedArgv = routedArgv.slice(1);

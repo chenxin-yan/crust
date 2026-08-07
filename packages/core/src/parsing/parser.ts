@@ -6,6 +6,7 @@ import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef, ParseResult, ValueType } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
+import { flagSpellings, type FlagSpelling } from "./spellings.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -26,115 +27,31 @@ type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[nu
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build the options config for `util.parseArgs` from Crust's flag definitions.
+ * Build the options config for `util.parseArgs` from the shared spelling table.
  * Also returns a reverse alias→name mapping for resolving parsed results.
  */
-function buildParseArgsOptionDescriptor(flagsDef: FlagsDef | undefined) {
+function buildParseArgsOptionDescriptor(spellings: ReadonlyMap<string, FlagSpelling>) {
 	const options: Record<string, ParseArgsOptionDescriptor> = {};
 	const aliasToName: Record<string, string> = {};
 
-	if (!flagsDef) return { options, aliasToName };
+	for (const [spelling, entry] of spellings) {
+		const descriptor: ParseArgsOptionDescriptor = {
+			type: entry.def.type === "boolean" ? "boolean" : "string",
+		};
+		if (entry.def.multiple) descriptor.multiple = true;
 
-	// Runtime alias collision check — mirrors the compile-time
-	// ValidateFlagAliases<F> type (which catches both alias→flag-name
-	// and alias→alias collisions). Kept as defense-in-depth against type
-	// erasure (dynamic construction, `as any` casts, widened generics).
-	const aliasRegistry = new Map<string, string>();
-	for (const name of Object.keys(flagsDef)) {
-		aliasRegistry.set(name, name);
-	}
-
-	for (const [name, def] of Object.entries(flagsDef)) {
-		// Defense-in-depth: reject "no-" prefixed names even when bypassing the builder
-		if (name.startsWith("no-")) {
-			const base = name.slice(3);
-			throw new CrustError(
-				"DEFINITION",
-				`Flag "--${name}" must not use "no-" prefix; define "${base}" and negate with "--no-${base}"`,
-			);
+		if (entry.kind === "canonical") {
+			if (entry.def.short) descriptor.short = entry.def.short;
+			options[spelling] = descriptor;
+			continue;
 		}
 
-		if (!ALLOWED_FLAG_TYPES.has(def.type)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Flag "--${name}" must declare a parser type ("string", "number", "boolean", "url", "path", or "json")`,
-			);
-		}
-
-		// All non-boolean types consume the next token as a raw string; the
-		// Crust-level coercion (url/path/json/number) runs in coerceValue.
-		const parseType = def.type === "boolean" ? "boolean" : "string";
-		const opt: ParseArgsOptionDescriptor = { type: parseType };
-
-		if (def.multiple) {
-			opt.multiple = true;
-		}
-
-		// Handle short alias
-		if (def.short) {
-			// Defense-in-depth: reject "no-" prefixed short alias
-			if (def.short.startsWith("no-")) {
-				throw new CrustError(
-					"DEFINITION",
-					`Short alias "-${def.short}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
-				);
-			}
-
-			const existing = aliasRegistry.get(def.short);
-			if (existing) {
-				throw new CrustError(
-					"DEFINITION",
-					`Alias collision: "-${def.short}" is used by both "--${existing}" and "--${name}"`,
-				);
-			}
-			aliasRegistry.set(def.short, name);
-			aliasToName[def.short] = name;
-			opt.short = def.short;
-		}
-
-		// Handle long aliases
-		if (def.aliases) {
-			for (const alias of def.aliases) {
-				// Defense-in-depth: reject "no-" prefixed aliases
-				if (alias.startsWith("no-")) {
-					throw new CrustError(
-						"DEFINITION",
-						`Alias "--${alias}" on "--${name}" must not use "no-" prefix (reserved for negation)`,
-					);
-				}
-
-				const existing = aliasRegistry.get(alias);
-				if (existing) {
-					throw new CrustError(
-						"DEFINITION",
-						`Alias collision: "${alias.length === 1 ? "-" : "--"}${alias}" is used by both "--${existing}" and "--${name}"`,
-					);
-				}
-				aliasRegistry.set(alias, name);
-				aliasToName[alias] = name;
-
-				const aliasOpt: ParseArgsOptionDescriptor = { type: parseType };
-				if (def.multiple) {
-					aliasOpt.multiple = true;
-				}
-				options[alias] = aliasOpt;
-			}
-		}
-
-		options[name] = opt;
+		aliasToName[spelling] = entry.canonicalName;
+		if (entry.kind === "alias") options[spelling] = descriptor;
 	}
 
 	return { options, aliasToName };
 }
-
-const ALLOWED_FLAG_TYPES: ReadonlySet<ValueType> = new Set([
-	"string",
-	"number",
-	"boolean",
-	"url",
-	"path",
-	"json",
-]);
 
 /**
  * Coerce a string value to the expected type based on the type literal.
@@ -466,13 +383,7 @@ function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Recor
  * opted out via `noNegate` rejects every negated spelling. Without this
  * pre-scan, `util.parseArgs` (`allowNegative`) would silently accept it.
  */
-function validateNoNegateUsage(
-	argv: string[],
-	flagsDef: FlagsDef | undefined,
-	aliasToName: Record<string, string>,
-): void {
-	if (!flagsDef) return;
-
+function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, FlagSpelling>): void {
 	for (const arg of argv) {
 		if (arg === "--") return;
 		if (!arg.startsWith("--no-")) continue;
@@ -482,18 +393,12 @@ function validateNoNegateUsage(
 			assignmentIndex === -1
 				? arg.slice("--no-".length)
 				: arg.slice("--no-".length, assignmentIndex);
-
-		if (!rawName) continue;
-
-		const canonical = aliasToName[rawName] ?? (rawName in flagsDef ? rawName : undefined);
-		if (!canonical) continue;
-
-		const def = flagsDef[canonical];
-		if (def?.type !== "boolean" || def.noNegate !== true) continue;
+		const spelling = spellings.get(rawName);
+		if (!spelling || spelling.def.type !== "boolean" || spelling.negatable) continue;
 
 		throw new CrustError(
 			"PARSE",
-			`Flag "--${canonical}" does not support negation ("--no-${rawName}")`,
+			`Flag "--${spelling.canonicalName}" does not support negation ("--no-${rawName}")`,
 		);
 	}
 }
@@ -529,9 +434,10 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	// never sees a Promise where a value was expected.
 	validateAsyncParse(flagsDef, argsDef);
 
-	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(flagsDef);
+	const spellings = flagSpellings(flagsDef);
+	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);
 
-	validateNoNegateUsage(argv, flagsDef, aliasToName);
+	validateNoNegateUsage(argv, spellings);
 
 	let parsed: ReturnType<typeof nodeParseArgs>;
 
