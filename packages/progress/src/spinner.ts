@@ -128,10 +128,32 @@ function renderFinal(
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
+/** Terminal operations used by the internal spinner lifecycle. */
+export interface SpinnerSink {
+	readonly isTTY: boolean;
+	write: (text: string) => void;
+	exit: (code: number) => never;
+}
+
+const processSpinnerSink: SpinnerSink = {
+	get isTTY() {
+		return process.stderr.isTTY ?? false;
+	},
+	write(text) {
+		process.stderr.write(text);
+	},
+	exit(code): never {
+		process.exit(code);
+	},
+};
+
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
-export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
+export function createSpinnerHandle(
+	options: SpinnerHandleOptions,
+	sink: SpinnerSink = processSpinnerSink,
+): SpinnerHandle {
 	const theme = resolveTheme(options.theme);
-	const isInteractive = process.stderr.isTTY;
+	const isInteractive = sink.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
 	const sigint = options.sigint ?? "exit";
 
@@ -159,19 +181,19 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			started = true;
 			if (!isInteractive) return;
 
-			process.stderr.write(HIDE_CURSOR);
-			process.stderr.write(renderFrame(frames[0] as string, currentMessage, theme));
+			sink.write(HIDE_CURSOR);
+			sink.write(renderFrame(frames[0] as string, currentMessage, theme));
 
 			timerId = setInterval(() => {
 				frameIndex = (frameIndex + 1) % frames.length;
-				process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+				sink.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
 			}, interval);
 
 			if (sigint === "exit") {
 				sigintHandler = () => {
 					cleanup();
-					process.stderr.write(SHOW_CURSOR);
-					process.exit(130);
+					sink.write(SHOW_CURSOR);
+					sink.exit(130);
 				};
 				process.once("SIGINT", sigintHandler);
 			}
@@ -181,7 +203,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (finished) return;
 			currentMessage = message;
 			if (started && isInteractive) {
-				process.stderr.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+				sink.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
 			}
 		},
 
@@ -190,9 +212,9 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			finished = true;
 			if (message !== undefined) currentMessage = message;
 			cleanup();
-			process.stderr.write(renderFinal(currentMessage, theme, outcome, isInteractive));
+			sink.write(renderFinal(currentMessage, theme, outcome, isInteractive));
 			if (isInteractive) {
-				process.stderr.write(SHOW_CURSOR);
+				sink.write(SHOW_CURSOR);
 			}
 		},
 	};

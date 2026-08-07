@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type SpinnerController, spinner } from "./spinner.ts";
+import {
+	type SpinnerController,
+	type SpinnerSink,
+	createSpinnerHandle,
+	spinner,
+} from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
-const originalProcessOnce = process.once.bind(process);
-const originalProcessRemoveListener = process.removeListener.bind(process);
-const originalProcessExit = process.exit;
 
 let stderrOutput: string;
 
@@ -34,14 +36,88 @@ function restoreMocks(): void {
 		writable: true,
 		configurable: true,
 	});
-	process.once = originalProcessOnce;
-	process.removeListener = originalProcessRemoveListener;
-	process.exit = originalProcessExit;
 }
 
 function tick(ms = 10): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
+
+function createFakeSink(isTTY: boolean) {
+	const writes: string[] = [];
+	const exits: number[] = [];
+	const sink: SpinnerSink = {
+		isTTY,
+		write(text) {
+			writes.push(text);
+		},
+		exit(code): never {
+			exits.push(code);
+			throw new Error(`exit:${code}`);
+		},
+	};
+	return { sink, writes, exits };
+}
+
+describe("createSpinnerHandle — terminal sink", () => {
+	it("hides and restores the cursor in TTY mode", () => {
+		const { sink, writes } = createFakeSink(true);
+		const handle = createSpinnerHandle({ message: "Working" }, sink);
+
+		handle.start();
+		handle.stop();
+
+		expect(writes[0]).toBe("\x1B[?25l");
+		expect(writes).toContain("\x1B[?25h");
+	});
+
+	it("restores the cursor and exits with 130 on SIGINT", () => {
+		const { sink, writes, exits } = createFakeSink(true);
+		const previousHandlers = new Set(process.listeners("SIGINT"));
+		const handle = createSpinnerHandle({ message: "Working" }, sink);
+		handle.start();
+		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+
+		expect(handler).toBeDefined();
+		expect(() => handler?.("SIGINT")).toThrow("exit:130");
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(exits).toEqual([130]);
+		expect(process.listeners("SIGINT")).not.toContain(handler);
+	});
+
+	it("writes only the final line in non-TTY mode", () => {
+		const { sink, writes } = createFakeSink(false);
+		const handle = createSpinnerHandle({ message: "Working" }, sink);
+
+		handle.start();
+		handle.stop();
+
+		expect(writes).toHaveLength(1);
+		expect(writes[0]).toContain("✓ Working\n");
+		expect(writes[0]).not.toContain("\x1B[");
+	});
+
+	it("finalizes once", () => {
+		const { sink, writes } = createFakeSink(false);
+		const handle = createSpinnerHandle({ message: "Working" }, sink);
+
+		handle.start();
+		handle.stop("success");
+		const finalOutput = [...writes];
+		handle.stop("error");
+
+		expect(writes).toEqual(finalOutput);
+	});
+
+	it("leaves SIGINT to the application when disabled", () => {
+		const { sink } = createFakeSink(true);
+		const previousHandlers = process.listeners("SIGINT");
+		const handle = createSpinnerHandle({ message: "Working", sigint: false }, sink);
+
+		handle.start();
+		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
+		handle.stop();
+	});
+});
 
 describe("spinner — task result", () => {
 	beforeEach(setupMocks);
@@ -426,50 +502,6 @@ describe("spinner — cleanup", () => {
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
 		expect(beforeCursor.endsWith("\n")).toBe(true);
 	});
-
-	it("restores cursor on SIGINT", async () => {
-		let registeredSigint: (() => void) | undefined;
-		let removedSigint: (() => void) | undefined;
-
-		process.once = ((event: string | symbol, listener: (...args: [] | [unknown]) => void) => {
-			if (event === "SIGINT") {
-				registeredSigint = listener;
-			}
-			return process;
-		}) as typeof process.once;
-
-		process.removeListener = ((
-			event: string | symbol,
-			listener: (...args: [] | [unknown]) => void,
-		) => {
-			if (event === "SIGINT") {
-				removedSigint = listener;
-			}
-			return process;
-		}) as typeof process.removeListener;
-
-		process.exit = (code?: number) => {
-			throw new Error(`exit:${code}`);
-		};
-
-		try {
-			await spinner({
-				message: "Interrupting...",
-				task: async () => {
-					registeredSigint?.();
-					await tick(50);
-					return "ok";
-				},
-			});
-			expect.unreachable();
-		} catch (error) {
-			expect((error as Error).message).toBe("exit:130");
-		}
-
-		expect(registeredSigint).toBeDefined();
-		expect(removedSigint).toBe(registeredSigint);
-		expect(stderrOutput).toContain("\x1B[?25h");
-	});
 });
 
 describe("spinner — non-interactive", () => {
@@ -674,40 +706,5 @@ describe("spinner — imperative handle", () => {
 		handle.stop("error", "again");
 
 		expect(stderrOutput).not.toContain("✗");
-	});
-
-	it("sigint: false installs no SIGINT handler", async () => {
-		let registered = false;
-		process.once = ((event: string | symbol, _listener: unknown) => {
-			if (event === "SIGINT") registered = true;
-			return process;
-		}) as typeof process.once;
-
-		const handle = spinner({ message: "No sigint", sigint: false });
-		handle.start();
-		handle.stop();
-
-		expect(registered).toBe(false);
-	});
-});
-
-describe("spinner — sigint option", () => {
-	beforeEach(setupMocks);
-	afterEach(restoreMocks);
-
-	it("sigint: false leaves SIGINT to the application", async () => {
-		let registered = false;
-		process.once = ((event: string | symbol, _listener: unknown) => {
-			if (event === "SIGINT") registered = true;
-			return process;
-		}) as typeof process.once;
-
-		await spinner({
-			message: "App-owned SIGINT",
-			sigint: false,
-			task: async () => "ok",
-		});
-
-		expect(registered).toBe(false);
 	});
 });
