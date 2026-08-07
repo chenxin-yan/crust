@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { progress as createProgressBar } from "./progress.ts";
+import { createProgressHandle, progress as createProgressBar } from "./progress.ts";
+import type { SpinnerSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -30,6 +31,25 @@ afterEach(() => {
 });
 
 describe("progress — determinate", () => {
+	it("threads the internal terminal sink through the spinner handle", () => {
+		const writes: string[] = [];
+		const sink: SpinnerSink = {
+			isTTY: false,
+			write: (text) => writes.push(text),
+			exit: (code): never => {
+				throw new Error(`exit:${code}`);
+			},
+		};
+		const progress = createProgressHandle({ total: 2, message: "Files" }, sink);
+
+		progress.start();
+		progress.advance();
+		progress.stop();
+
+		expect(writes).toHaveLength(1);
+		expect(writes[0]).toContain("Files (1/2)");
+	});
+
 	it("renders current/total alongside the message", () => {
 		const progress = createProgressBar({ total: 10, message: "Translating" });
 
