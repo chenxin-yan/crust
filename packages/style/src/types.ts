@@ -8,43 +8,47 @@ import type { LiteralUnion, NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /**
- * CSS functional-notation prefixes surfaced for editor autocomplete.
+ * Completion-bait literals for the non-named color syntaxes: the `#` hex
+ * prefix and the CSS functional notations `Bun.color()` parses.
  *
- * Exactly the functions `Bun.color()` parses. Contents are NOT validated
- * by the type system — `Bun.color()` validates at runtime and throws
- * `TypeError` on garbage. Type-level grammar would reject valid CSS
- * (space syntax, `deg`, `%`, `/` alpha).
+ * These are concrete literals — not template-literal types — because
+ * TypeScript only expands template literals with *finite* holes into
+ * completion entries; `` `rgb(${string})` `` produces nothing, not even
+ * the prefix. A picked entry like `"rgb()"` is filled in by the user;
+ * `Bun.color()` validates the result at runtime and throws `TypeError`
+ * on garbage. Contents are deliberately NOT validated at the type level.
  */
-type ColorFnString =
-	| `rgb(${string})`
-	| `rgba(${string})`
-	| `hsl(${string})`
-	| `hsla(${string})`
-	| `hwb(${string})`
-	| `lab(${string})`
-	| `lch(${string})`
-	| `oklab(${string})`
-	| `oklch(${string})`;
+type ColorSyntaxHint =
+	| "#"
+	| "rgb()"
+	| "rgba()"
+	| "hsl()"
+	| "hsla()"
+	| "hwb()"
+	| "lab()"
+	| "lch()"
+	| "oklab()"
+	| "oklch()";
 
 /**
  * String forms accepted by `fg` / `bg`.
  *
- * Editors autocomplete the 148 CSS {@link NamedColor | named colors},
- * the `#` hex prefix, and the functional-notation prefixes (`rgb(`,
- * `hsl(`, `lab(`, `oklch(`, …) while still accepting any other string
- * Bun's CSS parser understands.
+ * Editors autocomplete the 148 CSS {@link NamedColor | named colors}
+ * plus {@link ColorSyntaxHint | syntax hints} for hex (`#`) and
+ * functional notation (`rgb()`, `hsl()`, `oklch()`, …), while still
+ * accepting any other string Bun's CSS parser understands.
  *
  * The `string` fallback is preserved via {@link LiteralUnion} so dynamic
  * values — e.g. theme tokens loaded from JSON — still type-check.
  */
-export type ColorString = LiteralUnion<NamedColor | `#${string}` | ColorFnString, string>;
+export type ColorString = LiteralUnion<NamedColor | ColorSyntaxHint, string>;
 
 /**
  * Input accepted by `fg` and `bg`.
  *
  * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
  * surface, with a richer `string` branch so editors autocomplete CSS
- * named colors and hint at hex and functional-notation prefixes. All
+ * named colors plus hex and functional-notation syntax hints. All
  * members are assignable to `Bun.color()` at runtime.
  *
  * Accepted shapes:
