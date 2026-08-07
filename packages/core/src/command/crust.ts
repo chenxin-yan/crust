@@ -673,9 +673,12 @@ export class Crust<
 				);
 			}
 			validateSchemaExclusivity("flag", name, rest as Record<string, unknown>);
+			// Include same-call siblings so short/alias collisions between two
+			// definitions in one .flags() call fail here (DEFINITION errors throw
+			// at the definition site), not at first run() via validateCommandTree.
 			validateIncomingFlag(
 				{ name, def: rest as FlagDef },
-				this._node.ownedFlags,
+				{ ...this._node.ownedFlags, ...copiedFlags },
 				`Command "${this._node.meta.name}"`,
 			);
 			copiedFlags[name] = rest as FlagDef;

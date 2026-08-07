@@ -238,6 +238,27 @@ describe("Crust .flags()", () => {
 			),
 		).toThrow(/defined more than once/);
 	});
+
+	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
+		// Typed callers are caught by ValidateFlagAliases at compile time; the
+		// expect-error markers simulate dynamic/untyped construction, which must
+		// fail at registration rather than at first run() via validateCommandTree.
+		expect(() =>
+			new Crust("test").flags(
+				// @ts-expect-error -- short "v" claimed twice in one call
+				{ name: "verbose", type: "boolean", short: "v" },
+				{ name: "version", type: "boolean", short: "v" },
+			),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
+
+		expect(() =>
+			new Crust("test").flags(
+				{ name: "output", type: "string" },
+				// @ts-expect-error -- alias duplicates a sibling's canonical name
+				{ name: "outfile", type: "string", aliases: ["output"] },
+			),
+		).toThrow(/spelling "output" collides with flag "--output"/);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
