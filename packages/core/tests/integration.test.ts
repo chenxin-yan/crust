@@ -139,12 +139,12 @@ describe("integration: .execute() full pipeline with argv override", () => {
 	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
 		const env = defineFlag("env", { type: "string", default: "staging" });
 		const dryRun = defineFlag("dryRun", { type: "boolean" });
-		const globalFlags = defineContext("global-flags", { flags: [env, dryRun] }, () => ({}));
-		const app = new Crust("deploy").provide(globalFlags()).mount(
-			defineCommand("service", { requires: { flags: [env, dryRun] } }, (cmd) =>
-				cmd.args(defineArg("name", { type: "string", required: true })).handle((ctx) => {
+		const deployment = defineContext("deployment", { flags: [env, dryRun] }, ({ flags }) => flags);
+		const app = new Crust("deploy").provide(deployment()).mount(
+			defineCommand("service", { requires: [deployment] }, (cmd) =>
+				cmd.args(defineArg("name", { type: "string", required: true })).handle(({ args, ctx }) => {
 					console.log(
-						`deploy service=${ctx.args.name} env=${ctx.flags.env} dryRun=${ctx.flags.dryRun}`,
+						`deploy service=${args.name} env=${ctx.deployment.env} dryRun=${ctx.deployment.dryRun}`,
 					);
 				}),
 			),
@@ -178,13 +178,10 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			credential: flags["api-key"],
 		}));
-		const deploy = defineCommand(
-			"deploy",
-			{ requires: { flags: [apiKey], ctx: [auth] } },
-			(command) =>
-				command.handle(({ flags, ctx }) => {
-					console.log(`${typeof flags["api-key"]}:${ctx.auth.credential}`);
-				}),
+		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
+			command.handle(({ ctx }) => {
+				console.log(`${typeof ctx.auth.credential}:${ctx.auth.credential}`);
+			}),
 		);
 		const app = new Crust("cli").provide(auth()).mount(deploy);
 
@@ -195,15 +192,17 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("routes Context-owned flags at a mid-path position without propagating parent locals", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
 		const app = new Crust("cli")
 			.flags({ name: "root-only", type: "boolean" })
 			.provide(logging())
 			.mount(
-				defineCommand("group", { requires: { flags: [verbose] } }, (group) =>
+				defineCommand("group", { requires: [logging] }, (group) =>
 					group.mount(
-						defineCommand("deploy", { requires: { flags: [verbose] } }, (deploy) =>
-							deploy.handle(({ flags }) => console.log(`verbose=${flags.verbose}`)),
+						defineCommand("deploy", { requires: [logging] }, (deploy) =>
+							deploy.handle(({ ctx }) => console.log(`verbose=${ctx.logging.verbose}`)),
 						),
 					),
 				),
@@ -231,12 +230,12 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("parses a Context-owned long alias on a descendant", async () => {
 		const output = defineFlag("output", { type: "string", aliases: ["out"] });
-		const outputFlags = defineContext("output-flags", { flags: [output] }, () => ({}));
+		const outputConfig = defineContext("output-config", { flags: [output] }, ({ flags }) => flags);
 		const app = new Crust("cli")
-			.provide(outputFlags())
+			.provide(outputConfig())
 			.mount(
-				defineCommand("render", { requires: { flags: [output] } }, (command) =>
-					command.handle(({ flags }) => console.log(`output=${flags.output}`)),
+				defineCommand("render", { requires: [outputConfig] }, (command) =>
+					command.handle(({ ctx }) => console.log(`output=${ctx["output-config"].output}`)),
 				),
 			);
 
@@ -304,15 +303,15 @@ describe("integration: nested mounted definitions end-to-end", () => {
 	it("3-level nested definitions execute correctly", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 		const timeout = defineFlag("timeout", { type: "number", default: 30 });
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const remoteFlags = defineContext("remote-flags", { flags: [timeout] }, () => ({}));
-		const app = new Crust("git").provide(globalFlags()).mount(
-			defineCommand("remote", { requires: { flags: [verbose] } }, (cmd) =>
-				cmd.provide(remoteFlags()).mount(
-					defineCommand("add", { requires: { flags: [verbose, timeout] } }, (cmd2) =>
-						cmd2.args({ name: "name", type: "string", required: true }).handle((ctx) => {
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const remoteConfig = defineContext("remote-config", { flags: [timeout] }, ({ flags }) => flags);
+		const app = new Crust("git").provide(logging()).mount(
+			defineCommand("remote", { requires: [logging] }, (cmd) =>
+				cmd.provide(remoteConfig()).mount(
+					defineCommand("add", { requires: [logging, remoteConfig] }, (cmd2) =>
+						cmd2.args({ name: "name", type: "string", required: true }).handle(({ args, ctx }) => {
 							console.log(
-								`add remote=${ctx.args.name} verbose=${ctx.flags.verbose} timeout=${ctx.flags.timeout}`,
+								`add remote=${args.name} verbose=${ctx.logging.verbose} timeout=${ctx["remote-config"].timeout}`,
 							);
 						}),
 					),
@@ -359,28 +358,28 @@ describe("integration: split-file definitions end-to-end", () => {
 	});
 
 	const verbose = defineFlag("verbose", { type: "boolean" });
-	const listCommand = defineCommand("list", { requires: { flags: [verbose] } }, (command) =>
+	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+	const listCommand = defineCommand("list", { requires: [logging] }, (command) =>
 		command
 			.flags({ name: "format", type: "string", default: "table" })
 			.args({ name: "resource", type: "string", required: true })
-			.handle(({ args, flags }) => {
-				console.log(`list ${args.resource} format=${flags.format} verbose=${flags.verbose}`);
+			.handle(({ args, flags, ctx }) => {
+				console.log(`list ${args.resource} format=${flags.format} verbose=${ctx.logging.verbose}`);
 			}),
 	);
-	const getCommand = defineCommand("get", { requires: { flags: [verbose] } }, (command) =>
+	const getCommand = defineCommand("get", { requires: [logging] }, (command) =>
 		command
 			.args(
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
 			)
-			.handle(({ args, flags }) => {
-				console.log(`get ${args.resource}/${args.id} verbose=${flags.verbose}`);
+			.handle(({ args, ctx }) => {
+				console.log(`get ${args.resource}/${args.id} verbose=${ctx.logging.verbose}`);
 			}),
 	);
 
 	it("runs standalone definitions through the full pipeline", async () => {
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("kubectl").provide(globalFlags()).mount(listCommand, getCommand);
+		const app = new Crust("kubectl").provide(logging()).mount(listCommand, getCommand);
 
 		const listResult = await executeCrust(app, ["list", "pods", "--verbose", "--format", "json"]);
 		expect(listResult.stdout).toContain("list pods format=json verbose=true");
@@ -392,14 +391,13 @@ describe("integration: split-file definitions end-to-end", () => {
 	});
 
 	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
-		const firstFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const secondFlags = defineContext(
-			"global-flags",
+		const first = new Crust("first").provide(logging()).mount(listCommand);
+		const defaultLogging = defineContext(
+			"logging",
 			{ flags: [{ ...verbose, default: true }] },
-			() => ({}),
+			({ flags }) => flags,
 		);
-		const first = new Crust("first").provide(firstFlags()).mount(listCommand);
-		const second = new Crust("second").provide(secondFlags()).mount(listCommand.as("show"));
+		const second = new Crust("second").provide(defaultLogging()).mount(listCommand.as("show"));
 
 		expect((await executeCrust(first, ["list", "pods"])).stdout).toContain("verbose=undefined");
 		expect((await executeCrust(second, ["show", "pods"])).stdout).toContain("verbose=true");
@@ -415,17 +413,17 @@ describe("integration: mounted definitions", () => {
 
 	it("mounts nested definitions end-to-end", async () => {
 		const env = defineFlag("env", { type: "string" });
-		const status = defineCommand("status", { requires: { flags: [verbose, env] } }, (command) =>
-			command.handle(({ flags }) => {
-				console.log(`verbose=${flags.verbose} env=${flags.env}`);
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const deployment = defineContext("deployment", { flags: [env] }, ({ flags }) => flags);
+		const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
+			command.handle(({ ctx }) => {
+				console.log(`verbose=${ctx.logging.verbose} env=${ctx.deployment.env}`);
 			}),
 		);
-		const deployFlags = defineContext("deploy-flags", { flags: [env] }, () => ({}));
-		const deploy = defineCommand("deploy", { requires: { flags: [verbose] } }, (command) =>
-			command.provide(deployFlags()).mount(status),
+		const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
+			command.provide(deployment()).mount(status),
 		);
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("cli").provide(globalFlags()).mount(deploy);
+		const app = new Crust("cli").provide(logging()).mount(deploy);
 
 		const result = await executeCrust(app, ["deploy", "status", "--verbose", "--env", "staging"]);
 		expect(result.stdout).toContain("verbose=true env=staging");
@@ -442,14 +440,14 @@ describe("integration: mounted definitions", () => {
 	});
 
 	it("mounts multiple definitions in one call", async () => {
-		const deploy = defineCommand("deploy", { requires: { flags: [verbose] } }, (command) =>
-			command.handle(({ flags }) => console.log(`deploy verbose=${flags.verbose}`)),
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
+			command.handle(({ ctx }) => console.log(`deploy verbose=${ctx.logging.verbose}`)),
 		);
-		const status = defineCommand("status", { requires: { flags: [verbose] } }, (command) =>
-			command.handle(({ flags }) => console.log(`status verbose=${flags.verbose}`)),
+		const status = defineCommand("status", { requires: [logging] }, (command) =>
+			command.handle(({ ctx }) => console.log(`status verbose=${ctx.logging.verbose}`)),
 		);
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("cli").provide(globalFlags()).mount(status, deploy);
+		const app = new Crust("cli").provide(logging()).mount(status, deploy);
 
 		expect((await executeCrust(app, ["deploy", "--verbose"])).stdout).toContain(
 			"deploy verbose=true",
@@ -467,11 +465,11 @@ describe("integration: Context-owned boolean flag negation", () => {
 
 	it("--no-verbose negates a Context-owned boolean flag on a subcommand", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", default: true });
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("cli").provide(globalFlags()).mount(
-			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`verbose=${ctx.flags.verbose}`);
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const app = new Crust("cli").provide(logging()).mount(
+			defineCommand("sub", { requires: [logging] }, (cmd) =>
+				cmd.handle(({ ctx }) => {
+					console.log(`verbose=${ctx.logging.verbose}`);
 				}),
 			),
 		);
@@ -493,12 +491,11 @@ describe("integration: Context-owned multiple-value flag", () => {
 
 	it("Context-owned multiple-value flag collects values on a subcommand", async () => {
 		const tag = defineFlag("tag", { type: "string", multiple: true });
-		const globalFlags = defineContext("global-flags", { flags: [tag] }, () => ({}));
-		const app = new Crust("cli").provide(globalFlags()).mount(
-			defineCommand("sub", { requires: { flags: [tag] } }, (cmd) =>
-				cmd.handle((ctx) => {
-					const tags = ctx.flags.tag;
-					console.log(`tags=${JSON.stringify(tags)}`);
+		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
+		const app = new Crust("cli").provide(tags()).mount(
+			defineCommand("sub", { requires: [tags] }, (cmd) =>
+				cmd.handle(({ ctx }) => {
+					console.log(`tags=${JSON.stringify(ctx.tags.tag)}`);
 				}),
 			),
 		);
@@ -520,12 +517,12 @@ describe("integration: separator (--) with subcommand and Context-owned flags", 
 
 	it("rawArgs captured correctly on a subcommand with Context-owned flags", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("cli").provide(globalFlags()).mount(
-			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
-				cmd.handle((ctx) => {
-					console.log(`verbose=${ctx.flags.verbose}`);
-					console.log(`rawArgs=${JSON.stringify(ctx.rawArgs)}`);
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const app = new Crust("cli").provide(logging()).mount(
+			defineCommand("sub", { requires: [logging] }, (cmd) =>
+				cmd.handle(({ ctx, rawArgs }) => {
+					console.log(`verbose=${ctx.logging.verbose}`);
+					console.log(`rawArgs=${JSON.stringify(rawArgs)}`);
 				}),
 			),
 		);
@@ -560,23 +557,23 @@ describe("integration: complex real-world CLI scenario", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 		const config = defineFlag("config", { type: "string", default: "~/.myctl" });
 
-		const globalFlags = defineContext("global-flags", { flags: [verbose, config] }, () => ({}));
+		const settings = defineContext("settings", { flags: [verbose, config] }, ({ flags }) => flags);
 		const app = new Crust("myctl")
-			.provide(globalFlags())
+			.provide(settings())
 			.extend(auditExtension)
 			.mount(
-				defineCommand("deploy", { requires: { flags: [verbose, config] } }, (cmd) =>
-					cmd.flags({ name: "env", type: "string", required: true }).handle((ctx) => {
+				defineCommand("deploy", { requires: [settings] }, (cmd) =>
+					cmd.flags({ name: "env", type: "string", required: true }).handle(({ flags, ctx }) => {
 						order.push("deploy:run");
 						console.log(
-							`deploy env=${ctx.flags.env} verbose=${ctx.flags.verbose} config=${ctx.flags.config}`,
+							`deploy env=${flags.env} verbose=${ctx.settings.verbose} config=${ctx.settings.config}`,
 						);
 					}),
 				),
-				defineCommand("status", { requires: { flags: [verbose, config] } }, (cmd) =>
-					cmd.handle((ctx) => {
+				defineCommand("status", { requires: [settings] }, (cmd) =>
+					cmd.handle(({ ctx }) => {
 						order.push("status:run");
-						console.log(`status verbose=${ctx.flags.verbose} config=${ctx.flags.config}`);
+						console.log(`status verbose=${ctx.settings.verbose} config=${ctx.settings.config}`);
 					}),
 				),
 			);

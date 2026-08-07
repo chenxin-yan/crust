@@ -687,9 +687,8 @@ describe("ValidateVariadicArgs type inference", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("EffectiveFlags type inference", () => {
-	it("merges ancestor-owned, local, and current Context-owned flags", () => {
+	it("merges local and current Context-owned flags", () => {
 		type Result = EffectiveFlags<
-			{ verbose: { type: "boolean" } },
 			{ output: { type: "string" } },
 			{ apiKey: { type: "string"; short: "k" } }
 		>;
@@ -697,7 +696,6 @@ describe("EffectiveFlags type inference", () => {
 			Equal<
 				Result,
 				{
-					verbose: { type: "boolean" };
 					output: { type: "string" };
 					apiKey: { type: "string"; short: "k" };
 				}

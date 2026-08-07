@@ -716,16 +716,9 @@ export type MergeFlags<Parent extends FlagsDef, Local extends FlagsDef> = Simpli
 	Omit<Parent, keyof Local> & Local
 >;
 
-/**
- * Computes a command's effective flags from ancestor-owned, local, and
- * Context-owned definitions. `Inherited` contains only flags owned by
- * Contexts provided on ancestor commands.
- */
-export type EffectiveFlags<
-	Inherited extends FlagsDef,
-	Local extends FlagsDef,
-	Owned extends FlagsDef = {},
-> = MergeFlags<MergeFlags<Inherited, Local>, Owned> extends infer R extends FlagsDef ? R : never;
+/** Computes a command's handler-visible flags from local and Context-owned definitions. */
+export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
+	MergeFlags<Local, Owned> extends infer R extends FlagsDef ? R : never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

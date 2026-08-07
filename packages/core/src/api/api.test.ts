@@ -17,23 +17,25 @@ describe("public beta API", () => {
 			},
 		}));
 
-		const deploy = defineCommand("deploy", { requires: { flags: [verbose], ctx: [db] } }, (cmd) =>
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
+		const deploy = defineCommand("deploy", { requires: [logging, db] }, (cmd) =>
 			cmd
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "env", type: "string", default: "prod" })
 				.handle(({ args, flags, ctx }) => {
 					type _target = Expect<Equal<typeof args.target, string>>;
 					type _env = Expect<Equal<typeof flags.env, string>>;
-					type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
+					type _verbose = Expect<Equal<typeof ctx.logging.verbose, boolean>>;
 					type _dbUrl = Expect<Equal<typeof ctx.db.url, string>>;
 
-					ctx.db.query(`${args.target}:${flags.env}:${flags.verbose}`);
+					ctx.db.query(`${args.target}:${flags.env}:${ctx.logging.verbose}`);
 				}),
 		);
 
-		const globalFlags = defineContext("global-flags", { flags: [verbose] }, () => ({}));
 		const app = new Crust("my-cli")
-			.provide(globalFlags())
+			.provide(logging())
 			.provide(db({ url: "memory://test" }))
 			.mount(deploy);
 
@@ -45,7 +47,7 @@ describe("public beta API", () => {
 	it("mounts one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
-		const deploy = defineCommand("deploy", { requires: { ctx: [auth] } }, (command) =>
+		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
 			command.args({ name: "target", type: "string", required: true }).handle(({ args, ctx }) => {
 				type _target = Expect<Equal<typeof args.target, string>>;
 				type _user = Expect<Equal<typeof ctx.auth.user, string>>;

@@ -40,20 +40,18 @@ describe("defineContext()", () => {
 
 	it(".of() produces an instance returning the precomputed value with requirements absent", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const db = defineContext("db", { requires: { flags: [verbose] } }, ({ flags }) => ({
+		const db = defineContext("db", { flags: [verbose] }, ({ flags }) => ({
 			url: `real:${String(flags.verbose)}`,
 		}));
 
 		const fake = db.of({ url: "fake://db" });
 		expect(fake.name).toBe("db");
-		expect(fake.requiredFlags).toEqual({});
 		expect(fake.requiredCtx).toEqual([]);
 		type _Name = Assert<IsEqual<(typeof fake)["name"], "db">>;
 		// @ts-expect-error -- .of() takes the Context's value type
 		db.of({ wrong: true });
 
 		const seen: string[] = [];
-		// No verbose flag declared — .of() bypasses the flag requirement
 		const app = new Crust("cli").provide(fake).handle(({ ctx }) => {
 			seen.push(ctx.db.url);
 		});
@@ -125,7 +123,7 @@ describe("Crust .provide()", () => {
 	it("throws DEFINITION when a mounted subtree re-provides a path name", () => {
 		const parentDb = defineContext("db", () => "parent");
 		const nestedDb = defineContext("db", () => "nested");
-		const sub = defineCommand("sub", { requires: { ctx: [parentDb] } }, (command) =>
+		const sub = defineCommand("sub", { requires: [parentDb] }, (command) =>
 			command.mount(defineCommand("g", (child) => child.provide(nestedDb()).handle(() => {}))),
 		);
 
@@ -135,9 +133,9 @@ describe("Crust .provide()", () => {
 	it("seeds mounted descendants with the parent Context path", async () => {
 		const seen: string[] = [];
 		const db = defineContext("db", () => "root-db");
-		const sub = defineCommand("sub", { requires: { ctx: [db] } }, (command) =>
+		const sub = defineCommand("sub", { requires: [db] }, (command) =>
 			command.mount(
-				defineCommand("g", { requires: { ctx: [db] } }, (child) =>
+				defineCommand("g", { requires: [db] }, (child) =>
 					child.handle(({ ctx }) => {
 						seen.push(ctx.db);
 					}),
@@ -214,6 +212,26 @@ describe("Context-owned flags", () => {
 		expect(seen).toEqual(["secret", "secret"]);
 	});
 
+	it("passes only each Context's owned flags to its setup", async () => {
+		const region = defineFlag("region", { type: "string" });
+		const seen: string[][] = [];
+		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => {
+			seen.push(Object.keys(flags));
+			return {};
+		});
+		const location = defineContext("location", { flags: [region] }, ({ flags }) => {
+			seen.push(Object.keys(flags));
+			return {};
+		});
+
+		await new Crust("cli")
+			.provide(auth(), location())
+			.handle(() => {})
+			.run(["--api-key", "secret", "--region", "us"]);
+
+		expect(seen).toEqual([["api-key"], ["region"]]);
+	});
+
 	it("derives a logging capability while handlers keep injected stderr", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
@@ -228,23 +246,19 @@ describe("Context-owned flags", () => {
 		expect(messages).toEqual(["debug"]);
 	});
 
-	it("satisfies later mounted flag and Context requirements", async () => {
+	it("exposes a provided capability to later mounted commands", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
 		}));
-		const deploy = defineCommand(
-			"deploy",
-			{ requires: { flags: [apiKey], ctx: [auth] } },
-			(command) =>
-				command.handle(({ flags, ctx }) => {
-					type _Raw = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
-					seen.push(`${flags["api-key"]}:${ctx.auth.apiKey}`);
-				}),
+		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
+			command.handle(({ ctx }) => {
+				seen.push(String(ctx.auth.apiKey));
+			}),
 		);
 
 		await new Crust("cli").provide(auth()).mount(deploy).run(["--api-key", "secret", "deploy"]);
-		expect(seen).toEqual(["secret:secret"]);
+		expect(seen).toEqual(["secret"]);
 	});
 
 	it("merges owned flag types from multiple Contexts in one provide call", () => {
@@ -298,7 +312,6 @@ describe("Context-owned flags", () => {
 	it("retains owned flags on .of() test doubles", async () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({ real: true }));
 		const fake = auth.of({ real: false });
-		expect(fake.requiredFlags).toEqual({});
 		expect(fake.ownedFlags["api-key"]).toBeDefined();
 
 		await new Crust("cli")
@@ -308,12 +321,6 @@ describe("Context-owned flags", () => {
 				expect(ctx.auth.real).toBe(false);
 			})
 			.run(["--api-key", "fake-key"]);
-	});
-
-	it("rejects owning and requiring the same flag", () => {
-		expect(() =>
-			defineContext("auth", { flags: [apiKey], requires: { flags: [apiKey] } }, () => ({})),
-		).toThrow(/cannot both require and own flag "--api-key"/);
 	});
 
 	it("rejects duplicate owned flag names at definition time", () => {
@@ -367,95 +374,18 @@ describe("Context-owned flags", () => {
 	});
 });
 
-describe("Context flag requirements", () => {
-	const verbose = defineFlag("verbose", { type: "boolean" });
-
-	it("passes the validated parsed flags of the resolved invocation to setup", async () => {
-		const seen: unknown[] = [];
-		const logger = defineContext("logger", { requires: { flags: [verbose] } }, ({ flags }) => {
-			type _Verbose = Assert<IsEqual<typeof flags.verbose, boolean | undefined>>;
-			seen.push(flags.verbose);
-			return { level: flags.verbose ? "debug" : "info" };
-		});
-
-		const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
-		const app = new Crust("cli")
-			.provide(loggingFlags())
-			.provide(logger())
-			.handle(({ ctx }) => {
-				seen.push(ctx.logger.level);
-			});
-
-		await app.run(["--verbose"]);
-		expect(seen).toEqual([true, "debug"]);
-
-		await app.run([]);
-		expect(seen).toEqual([true, "debug", undefined, "info"]);
-	});
-
-	it("setups see schema-validated flag values, not raw tokens", async () => {
-		const seen: unknown[] = [];
-		const port = defineFlag("port", {
-			type: "string",
-			parse: (raw: string) => Number(raw),
-		});
-		const server = defineContext("server", { requires: { flags: [port] } }, ({ flags }) => {
-			seen.push(flags.port);
-			return {};
-		});
-
-		const serverFlags = defineContext("server-flags", { flags: [port] }, () => ({}));
-		await new Crust("cli")
-			.provide(serverFlags())
-			.provide(server())
-			.handle(() => {})
-			.run(["--port", "8080"]);
-
-		expect(seen).toEqual([8080]);
-	});
-
-	it("throws DEFINITION at .provide() when a required flag is missing", () => {
-		const logger = defineContext("logger", { requires: { flags: [verbose] } }, () => ({}));
-
-		expect(() => new Crust("cli").provide(logger() as never)).toThrow(/requires flag "--verbose"/);
-	});
-
-	it("does not let a local flag satisfy a Context flag requirement at runtime", () => {
-		const logger = defineContext("logger", { requires: { flags: [verbose] } }, () => ({}));
-
-		expect(() =>
-			new Crust("cli").flags({ name: "verbose", type: "boolean" }).provide(logger() as never),
-		).toThrow(/propagating Context-owned flag/);
-	});
-
-	it("checks flag requirements at compile time at the .provide() call site", () => {
-		const logger = defineContext("logger", { requires: { flags: [verbose] } }, () => ({}));
-
-		const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
-		new Crust("cli").provide(loggingFlags()).provide(logger());
-		// @ts-expect-error -- missing propagating flags: verbose
-		expect(() => new Crust("cli").provide(logger())).toThrow(CrustError);
-		expect(() =>
-			new Crust("cli")
-				.flags(verbose)
-				// @ts-expect-error -- local flags do not satisfy propagating requirements
-				.provide(logger()),
-		).toThrow(/propagating Context-owned flag/);
-	});
-});
-
-describe("Context ctx requirements (topological construction)", () => {
+describe("Context capability requirements (topological construction)", () => {
 	it("constructs dependencies before dependents in registration order among independents", async () => {
 		const order: string[] = [];
 		const config = defineContext("config", () => {
 			order.push("config");
 			return { endpoint: "https://api.example.com" };
 		});
-		const client = defineContext("client", { requires: { ctx: [config] } }, ({ ctx }) => {
+		const client = defineContext("client", { requires: [config] }, ({ ctx }) => {
 			order.push(`client:${ctx.config.endpoint}`);
 			return { endpoint: ctx.config.endpoint };
 		});
-		const workspace = defineContext("workspace", { requires: { ctx: [client] } }, ({ ctx }) => {
+		const workspace = defineContext("workspace", { requires: [client] }, ({ ctx }) => {
 			order.push(`workspace:${ctx.client.endpoint}`);
 			return "crust";
 		});
@@ -481,7 +411,7 @@ describe("Context ctx requirements (topological construction)", () => {
 			order.push("config");
 			return { url: "u" };
 		});
-		const client = defineContext("client", { requires: { ctx: [config] } }, ({ ctx }) => {
+		const client = defineContext("client", { requires: [config] }, ({ ctx }) => {
 			order.push("client");
 			return { url: ctx.config.url };
 		});
@@ -499,7 +429,7 @@ describe("Context ctx requirements (topological construction)", () => {
 
 	it("types ctx in setup from the declared dependency factories", () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
-		defineContext("user", { requires: { ctx: [session] } }, ({ ctx }) => {
+		defineContext("user", { requires: [session] }, ({ ctx }) => {
 			type _Session = Assert<IsEqual<typeof ctx.session, { userId: string }>>;
 			// @ts-expect-error -- only declared dependencies are visible
 			void ctx.other;
@@ -509,7 +439,7 @@ describe("Context ctx requirements (topological construction)", () => {
 
 	it("throws DEFINITION at dispatch when a dependency is missing from the path", async () => {
 		const config = defineContext("config", () => ({}));
-		const client = defineContext("client", { requires: { ctx: [config] } }, () => ({}));
+		const client = defineContext("client", { requires: [config] }, () => ({}));
 
 		const app = new Crust("cli").provide(client()).handle(() => {});
 
@@ -538,10 +468,10 @@ describe("Context ctx requirements (topological construction)", () => {
 
 	it("satisfies a mounted definition's Context requirement before its dependents construct", async () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
-		const user = defineContext("user", { requires: { ctx: [session] } }, ({ ctx }) => ({
+		const user = defineContext("user", { requires: [session] }, ({ ctx }) => ({
 			id: ctx.session.userId,
 		}));
-		const account = defineCommand("account", { requires: { ctx: [session] } }, (command) =>
+		const account = defineCommand("account", { requires: [session] }, (command) =>
 			command.provide(user()).handle(({ ctx }) => {
 				type _User = Assert<IsEqual<typeof ctx.user, { id: string }>>;
 				expect(ctx.user).toEqual({ id: "yan" });
@@ -586,7 +516,7 @@ describe("Context disposal", () => {
 				log.push("dispose:base");
 			},
 		}));
-		const derived = defineContext("derived", { requires: { ctx: [base] } }, () => ({
+		const derived = defineContext("derived", { requires: [base] }, () => ({
 			[Symbol.dispose]() {
 				log.push("dispose:derived");
 			},
@@ -657,7 +587,7 @@ describe("Context disposal", () => {
 				events.push("disposed");
 			},
 		}));
-		const guard = defineContext("guard", { requires: { ctx: [resource] } }, () => {
+		const guard = defineContext("guard", { requires: [resource] }, () => {
 			throw new Error("Unauthenticated");
 		});
 		const app = new Crust("cli").provide(resource(), guard()).handle(() => {

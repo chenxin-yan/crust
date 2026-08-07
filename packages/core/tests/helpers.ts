@@ -24,7 +24,7 @@ export interface RunResult {
  *   expect(result.exitCode).toBe(0);
  */
 export async function executeCrust(
-	builder: Crust<any, any, any, any, any, any>,
+	builder: Crust<any, any, any, any, any>,
 	argv?: string[],
 ): Promise<RunResult> {
 	const stdoutChunks: string[] = [];

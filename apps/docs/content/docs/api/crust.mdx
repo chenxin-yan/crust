@@ -26,28 +26,20 @@ import {
 
 ```ts
 interface CommandRequirements {
-  readonly requires?: ContextRequirements;
+  readonly requires?: readonly AnyContextFactory[];
 }
 
-interface ContextRequirements {
-  readonly flags?: readonly NamedFlagDef[];
-  readonly ctx?: readonly AnyContextFactory[];
-}
+type ContextRequirements = readonly AnyContextFactory[];
 ```
 
-The nested `requires` fields are arrays of defined values describing what a mount site must supply:
+`requires` lists Context factories whose capabilities the mount path must provide. It types the recipe builder's `ctx` and is checked at every `.mount()`: compile-time for missing or incompatible values, plus a runtime check for missing Context names.
 
-- `requires.flags` lists named flag definitions (from `defineFlag()`) the parent must provide as propagating Context-owned flags.
-- `requires.ctx` lists Context factories (from `defineContext()`) whose instances must be provided on the mount path.
-
-Requirements do not create flags or Contexts — they type the recipe builder and are checked at every `.mount()`: compile-time for flags and Contexts, plus runtime checks that required propagating flags and Context names are provided on the parent path.
-
-`defineContext()` accepts `ContextConfig`, where top-level `flags` are owned and activated by `.provide()`, while nested `requires` uses the same dependency shape. Thus `flags` always means flags the thing owns or parses, and `requires` always means typed dependencies from the environment. Command requirements never hoist flags into a parent.
+`defineContext()` accepts `ContextConfig`, where top-level `flags` are owned and activated by `.provide()`, while `requires` is the same plain capability array. The grammar is: `flags` means definitions this unit owns or parses; `requires` means capabilities supplied by the command path.
 
 ### `CommandDefinitionBuilder`
 
 ```ts
-interface CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx> {
+interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
   meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder;
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
@@ -59,7 +51,7 @@ interface CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx> {
 }
 ```
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, flag, and Context types, seeded from the declared requirements. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -91,14 +83,16 @@ Creates an inert reusable definition under a required name. The recipe builder i
 
 ```ts
 const verbose = defineFlag("verbose", { type: "boolean" });
-const loggingFlags = defineContext("logging-flags", { flags: [verbose] }, () => ({}));
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+  verbose: flags.verbose === true,
+}));
 const auth = defineContext("auth", () => ({ user: "Ada" }));
 
-const deploy = defineCommand("deploy", { requires: { flags: [verbose], ctx: [auth] } }, (command) =>
+const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) =>
   command
     .args({ name: "target", type: "string", required: true })
-    .handle(({ args, flags, ctx, stdout }) => {
-      stdout(`${ctx.auth.user}:${args.target}:${flags.verbose}`);
+    .handle(({ args, ctx, stdout }) => {
+      stdout(`${ctx.auth.user}:${args.target}:${ctx.logging.verbose}`);
     }),
 );
 ```
@@ -177,7 +171,7 @@ const app = new Crust("serve").flags(
 
 Repeated `.flags()` calls **replace** the local flags — they do not merge; pass all definitions in one call. A duplicate name within one call throws `DEFINITION`.
 
-Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant commands and mounted definition or Context requirements. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
+Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
 Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
 
@@ -193,13 +187,12 @@ const app = new Crust("serve").flags({
 
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
-  ...instances: ProvideChecks<MergeFlags<Inherited, Owned>, Cs>,
+  ...instances: Cs,
 ): Crust<
-  Inherited,
   Local,
   MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
   A,
-  EffectiveFlags<Inherited, Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
+  EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
   MergeContext<Ctx, ContextsOutput<Cs>>
 >
 ```
@@ -221,11 +214,11 @@ const app = new Crust("my-cli")
   });
 ```
 
-Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared ctx requirements, with registration order preserved among independent Contexts. A missing ctx dependency or a dependency cycle throws `DEFINITION` at dispatch (and during `crust build` validation).
+Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared capability requirements, with registration order preserved among independent Contexts. A missing capability dependency or a dependency cycle throws `DEFINITION` at dispatch (and during `crust build` validation).
 
-A Context's declared flag requirements are checked at this call, compile-time and at runtime: each required flag must already be owned by a Context on this builder. Its top-level `flags` are installed as propagating flags on this builder and later-mounted descendants, without mutating the original definitions.
+A Context's top-level `flags` are installed as propagating flags on this builder and later-mounted descendants, without mutating the original definitions. Its `requires` capabilities are resolved topologically at invocation.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name, a missing required flag, passing a factory instead of an instance, or a Context-owned flag spelling collision throws `DEFINITION`.
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name, passing a factory instead of an instance, or a Context-owned flag spelling collision throws `DEFINITION`.
 
 ## `.extend(...extensions)`
 
@@ -271,17 +264,14 @@ The context contains typed `args`, typed effective `flags`, typed Context values
 
 ```ts
 mount<const Ds extends readonly CommandDefinition<any>[]>(
-  ...definitions: MountChecks<MergeFlags<Inherited, Owned>, Ctx, Ds>,
+  ...definitions: MountChecks<Ctx, Ds>,
 ): Crust
 ```
 
 Materializes inert definitions as fresh child commands, each under its carried name. `.as(name)` renames a definition, so the same definition can route under different names:
 
 ```ts
-const app = new Crust("git")
-  .provide(loggingFlags())
-  .provide(auth())
-  .mount(deploy, deploy.as("ship"));
+const app = new Crust("git").provide(logging()).provide(auth()).mount(deploy, deploy.as("ship"));
 ```
 
 Inline one-off commands are mounted the same way:
@@ -294,20 +284,18 @@ const app = new Crust("my-cli").mount(
 
 `MountChecks` is internal declaration machinery that checks each definition's requirements against the parent builder. On failure, TypeScript reports one or more readable structural properties at the `.mount()` call:
 
-- `"missing propagating flags"`
-- `"incompatible propagating flags"`
 - `"missing Contexts"`
 - `"incompatible Contexts"`
 
-Only Context-owned flags on the parent path are considered; local `.flags()` definitions do not satisfy requirements. Compatibility compares inferred handler value types, including schema and custom-parser outputs: a provided value must be assignable to the required value. A stricter required parent flag can satisfy an optional requirement, but an optional parent flag cannot satisfy a required requirement. Context values use the same provided-to-required assignability direction.
+Compatibility compares provided and required Context value types in the provided-to-required assignability direction.
 
-At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided Context names, ctx requirement names not provided on the parent path, unrelated recipe returns, values that are not `defineCommand()` definitions, and Extensions registered inside definitions throw `CrustError` code `DEFINITION`.
+At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided Context names, required Context names not provided on the parent path, unrelated recipe returns, values that are not `defineCommand()` definitions, and Extensions registered inside definitions throw `CrustError` code `DEFINITION`.
 
 A definition can mount other definitions. Nested requirements are checked against the enclosing definition builder at that exact point.
 
 <Callout type="info">
-  Finalize Context-owned flags and Contexts on the builder used for `.mount()`. Later fluent calls
-  create a new builder and do not backfill an existing mount.
+  Finalize Contexts on the builder used for `.mount()`. Later fluent calls create a new builder and
+  do not backfill an existing mount.
 </Callout>
 
 ## `.run(argv, io?)`

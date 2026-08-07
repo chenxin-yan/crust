@@ -91,7 +91,7 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
   verbose: flags.verbose === true,
 }));
 
-const deploy = defineCommand("deploy", { requires: { ctx: [logging] } }, (command) =>
+const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
   command.handle(({ ctx, stderr }) => {
     if (ctx.logging.verbose) stderr("deploying");
   }),
@@ -104,7 +104,7 @@ The Context declares, parses, and consumes `--verbose`; the handler writes diagn
 
 Context-owned flags are parsed and shown in help at the provider and later-mounted descendants. They can appear before, between, or after subcommand names. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 
-If a handler genuinely needs a Context-owned raw value, declare it under the command's `requires.flags`. `.mount()` accepts only propagating Context-owned flags for this requirement; a same-named local `.flags()` definition does not satisfy it.
+If a handler needs the raw value, expose it from the owning Context as part of that capability. Cross-command dependencies are always Context capabilities; raw flags are never injected into a mounted handler's types.
 
 ## Standard Schemas
 

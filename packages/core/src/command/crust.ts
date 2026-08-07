@@ -1,13 +1,12 @@
 import {
 	buildContexts,
+	type AnyContextFactory,
 	type ContextInstance,
 	type ContextMap,
-	type ContextRequirements,
 	type ContextsOutput,
 	type ContextsOwnedFlags,
 	type MergeContext,
 	type RequirementCtxOf,
-	type RequirementFlagsOf,
 } from "../api/context.ts";
 import {
 	finishInvocation,
@@ -16,8 +15,8 @@ import {
 	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { validateIncomingFlag } from "../parsing/flag-validation.ts";
+import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { validateCommandTree, validateIncomingAliases } from "../parsing/validation.ts";
 import type {
@@ -272,35 +271,17 @@ function freezeTree(node: CommandNode): void {
 // Reusable command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Requirements a command definition declares about its mount site: propagating
- * Context-owned flags (as named definitions) and Contexts it
- * expects on its path (as their factories). Flag requirements are
- * compile-time checks at `.mount()`; ctx requirement names are also
- * verified at runtime when the definition is mounted.
- *
- * Both requirement kinds are grouped under `requires` and verified at runtime
- * as a backstop for untyped mount sites.
- */
+/** Context capabilities a command definition requires from its mount path. */
 export interface CommandRequirements {
-	readonly requires?: ContextRequirements;
+	readonly requires?: readonly AnyContextFactory[];
 }
-
-type RequirementFlags<R extends CommandRequirements> = RequirementFlagsOf<R>;
 
 type RequirementContext<R extends CommandRequirements> = RequirementCtxOf<R>;
 
-type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any>;
+type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any>;
 
 type CommandRecipe<R extends CommandRequirements> = (
-	command: CommandDefinitionBuilder<
-		RequirementFlags<R>,
-		{},
-		{},
-		[],
-		EffectiveFlags<RequirementFlags<R>, {}>,
-		RequirementContext<R>
-	>,
+	command: CommandDefinitionBuilder<{}, {}, [], EffectiveFlags<{}, {}>, RequirementContext<R>>,
 ) => AnyCommandDefinitionBuilder;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
@@ -308,7 +289,6 @@ const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefini
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
 	/** Requirement names, runtime-checked at each mount site */
-	readonly requiredFlagNames: readonly string[];
 	readonly requiredCtxNames: readonly string[];
 }
 
@@ -357,19 +337,6 @@ function materializeCommandDefinition(
 			);
 		}
 		throw new CrustError("DEFINITION", `Subcommand "${name}" is already registered`);
-	}
-
-	for (const flagName of internal.requiredFlagNames) {
-		if (!(flagName in parent.ownedFlags)) {
-			const message = extensionName
-				? `Extension "${extensionName}" command "${name}" requires flag "--${flagName}", which is not provided as a propagating Context-owned flag on application root "${parent.meta.name}"`
-				: `Command "${name}" requires flag "--${flagName}", which is not provided as a propagating Context-owned flag on "${parent.meta.name}" — call .provide() before .mount()`;
-			throw new CrustError("DEFINITION", message, {
-				subject: "flag",
-				name: flagName,
-				reason: "missing-required-flag",
-			});
-		}
 	}
 
 	const providedNames = new Set(parent.contexts.map((context) => context.name));
@@ -441,31 +408,6 @@ function materializeCommandDefinition(
 	return childNode;
 }
 
-type FlagValue<D extends FlagDef> = InferFlags<{ value: D }>["value"];
-
-type MissingFlagNames<Provided extends FlagsDef, Required extends FlagsDef> = Exclude<
-	keyof Required,
-	keyof Provided
-> &
-	string;
-
-type IncompatibleFlagNames<Provided extends FlagsDef, Required extends FlagsDef> = {
-	[K in keyof Required & keyof Provided]: FlagValue<Provided[K]> extends FlagValue<Required[K]>
-		? never
-		: K;
-}[keyof Required & keyof Provided] &
-	string;
-
-/** Flag-requirement errors vs. the attach site's propagating Context-owned flags. */
-type FlagRequirementErrors<Provided extends FlagsDef, Required extends FlagsDef> = ([
-	MissingFlagNames<Provided, Required>,
-] extends [never]
-	? {}
-	: { readonly "missing propagating flags": MissingFlagNames<Provided, Required> }) &
-	([IncompatibleFlagNames<Provided, Required>] extends [never]
-		? {}
-		: { readonly "incompatible propagating flags": IncompatibleFlagNames<Provided, Required> });
-
 type MissingContextNames<Ctx extends ContextMap, Required extends ContextMap> = Exclude<
 	keyof Required,
 	keyof Ctx
@@ -484,85 +426,65 @@ type ContextRequirementErrors<Ctx extends ContextMap, Required extends ContextMa
 	: { readonly "missing Contexts": MissingContextNames<Ctx, Required> }) &
 	([IncompatibleContextNames<Ctx, Required>] extends [never]
 		? {}
-		: { readonly "incompatible Contexts": IncompatibleContextNames<Ctx, Required> });
-
-type Mountable<
-	Propagating extends FlagsDef,
-	Ctx extends ContextMap,
-	R extends CommandRequirements,
-> = FlagRequirementErrors<Propagating, RequirementFlags<R>> &
-	ContextRequirementErrors<Ctx, RequirementContext<R>>;
+		: {
+				readonly "incompatible Contexts": IncompatibleContextNames<Ctx, Required>;
+			});
 
 type DefinitionRequirements<D> = D extends CommandDefinition<infer R> ? R : never;
 
 /** Per-definition mount checks (compile-time counterpart of the runtime attach checks). */
-type MountChecks<
-	Propagating extends FlagsDef,
-	Ctx extends ContextMap,
-	Ds extends readonly CommandDefinition<any>[],
-> = { [I in keyof Ds]: Ds[I] & Mountable<Propagating, Ctx, DefinitionRequirements<Ds[I]>> };
-
-type ContextRequiredFlags<C> = C extends ContextInstance<any, any, infer RF, any, any> ? RF : {};
-
-/** Per-instance provide checks: declared flag requirements vs. propagating flags. */
-type ProvideChecks<Propagating extends FlagsDef, Cs extends readonly ContextInstance[]> = {
-	[I in keyof Cs]: Cs[I] & FlagRequirementErrors<Propagating, ContextRequiredFlags<Cs[I]>>;
+type MountChecks<Ctx extends ContextMap, Ds extends readonly CommandDefinition<any>[]> = {
+	[I in keyof Ds]: Ds[I] &
+		ContextRequirementErrors<Ctx, RequirementContext<DefinitionRequirements<Ds[I]>>>;
 };
 
 export interface CommandDefinitionBuilder<
-	Inherited extends FlagsDef = {},
 	Local extends FlagsDef = {},
 	Owned extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Eff extends FlagsDef = EffectiveFlags<Inherited, Local, Owned>,
+	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
 > {
-	meta(
-		meta: Omit<CommandMeta, "name">,
-	): CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx>;
+	meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs>
 	): CommandDefinitionBuilder<
-		Inherited,
 		NamedFlagsRecord<Defs>,
 		Owned,
 		A,
-		EffectiveFlags<Inherited, NamedFlagsRecord<Defs>, Owned>,
+		EffectiveFlags<NamedFlagsRecord<Defs>, Owned>,
 		Ctx
 	>;
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & ValidateVariadicArgs<NewA>
-	): CommandDefinitionBuilder<Inherited, Local, Owned, NewA, Eff, Ctx>;
+	): CommandDefinitionBuilder<Local, Owned, NewA, Eff, Ctx>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<MergeFlags<Inherited, Owned>, Cs>
+		...instances: Cs
 	): CommandDefinitionBuilder<
-		Inherited,
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
 		A,
-		EffectiveFlags<Inherited, Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
+		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>
 	>;
 
 	mount<const Ds extends readonly CommandDefinition<any>[]>(
-		...definitions: MountChecks<MergeFlags<Inherited, Owned>, Ctx, Ds>
-	): CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx>;
+		...definitions: MountChecks<Ctx, Ds>
+	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): CommandDefinitionBuilder<Inherited, Local, Owned, A, Eff, Ctx>;
+	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 }
 
 /**
  * Define a reusable, inert command under a required name.
  *
  * The recipe runs once per `.mount()`, receiving a fresh builder typed by
- * the declared dependencies: `requires.flags` (named flag definitions the
- * mount site must provide as propagating Context-owned flags) and `requires.ctx` (Context
- * factories whose instances must be provided on the mount path).
+ * the declared Context capabilities, which must be provided on the mount path.
  *
  * Use `.as(name)` to mount one definition under a different name.
  */
@@ -589,8 +511,7 @@ export function defineCommand(
 	}
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
-		requiredFlagNames: (config.requires?.flags ?? []).map((flag) => flag.name),
-		requiredCtxNames: (config.requires?.ctx ?? []).map((dep) => dep.contextName),
+		requiredCtxNames: (config.requires ?? []).map((dep) => dep.contextName),
 	};
 	const named = (defName: string): CommandDefinition<CommandRequirements> => {
 		if (!defName.trim()) {
@@ -616,11 +537,10 @@ export function defineCommand(
  * Chainable builder for defining CLI commands with full type inference.
  *
  * Generic parameters:
- * - `Inherited` — Context-owned flags propagated from ancestor commands
  * - `Local` — flags defined on this command via `.flags()`
  * - `Owned` — flags installed by Contexts provided on this command path
  * - `A` — positional argument definitions
- * - `Eff` — effective flags (merged ancestor-owned + local + owned flags)
+ * - `Eff` — effective flags (merged local + owned flags)
  *
  * @example
  * ```ts
@@ -633,16 +553,14 @@ export function defineCommand(
  * ```
  */
 export class Crust<
-	Inherited extends FlagsDef = {},
 	Local extends FlagsDef = {},
 	Owned extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Eff extends FlagsDef = EffectiveFlags<Inherited, Local, Owned>,
+	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
-		ancestorOwned: Inherited;
 		local: Local;
 		owned: Owned;
 		args: A;
@@ -653,7 +571,7 @@ export class Crust<
 	/** @internal */
 	readonly _node: CommandNode;
 
-	/** @internal — Ancestor-owned flags (runtime counterpart of Inherited generic) */
+	/** @internal — Runtime identity anchor for the ancestor-owned flag carrier */
 	readonly _ancestorOwnedFlags: FlagsDef;
 
 	/**
@@ -711,10 +629,10 @@ export class Crust<
 	 * )
 	 * ```
 	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Inherited, Local, Owned, A, Eff, Ctx> {
+	meta(meta: Omit<CommandMeta, "name">): Crust<Local, Owned, A, Eff, Ctx> {
 		return this._clone({
 			meta: { ...this._node.meta, ...meta },
-		}) as Crust<Inherited, Local, Owned, A, Eff, Ctx>;
+		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
 	/**
@@ -736,14 +654,7 @@ export class Crust<
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs>
-	): Crust<
-		Inherited,
-		NamedFlagsRecord<Defs>,
-		Owned,
-		A,
-		EffectiveFlags<Inherited, NamedFlagsRecord<Defs>, Owned>,
-		Ctx
-	> {
+	): Crust<NamedFlagsRecord<Defs>, Owned, A, EffectiveFlags<NamedFlagsRecord<Defs>, Owned>, Ctx> {
 		const copiedFlags: FlagsDef = {};
 		for (const def of defs) {
 			// Destructuring also decouples the stored def from the caller's object
@@ -774,11 +685,10 @@ export class Crust<
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._node.ownedFlags, copiedFlags),
 		}) as unknown as Crust<
-			Inherited,
 			NamedFlagsRecord<Defs>,
 			Owned,
 			A,
-			EffectiveFlags<Inherited, NamedFlagsRecord<Defs>, Owned>,
+			EffectiveFlags<NamedFlagsRecord<Defs>, Owned>,
 			Ctx
 		>;
 	}
@@ -796,7 +706,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & ValidateVariadicArgs<NewA>
-	): Crust<Inherited, Local, Owned, NewA, Eff, Ctx> {
+	): Crust<Local, Owned, NewA, Eff, Ctx> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
 			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
@@ -805,7 +715,11 @@ export class Crust<
 				throw new CrustError(
 					"DEFINITION",
 					`arg "${(def as ArgDef).name}" mixes core option "type" with a schema — schema args receive the raw string token`,
-					{ subject: "arg", name: (def as ArgDef).name, reason: "schema-exclusive" },
+					{
+						subject: "arg",
+						name: (def as ArgDef).name,
+						reason: "schema-exclusive",
+					},
 				);
 			}
 		}
@@ -814,33 +728,29 @@ export class Crust<
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Inherited, Local, Owned, NewA, Eff, Ctx>;
+		}) as unknown as Crust<Local, Owned, NewA, Eff, Ctx>;
 	}
 
 	/**
 	 * Attach Contexts — named command dependencies — to this command.
 	 *
 	 * Contexts are inherited by descendant commands, constructed
-	 * topologically (by declared ctx requirements) only for the resolved
+	 * topologically (by declared capability requirements) only for the resolved
 	 * command path, and exposed to the Command Handler as `ctx`. Provide
 	 * order is free: dependencies may be provided after their dependents.
 	 * Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are
 	 * disposed in reverse construction order after success or failure.
 	 *
-	 * A Context's declared flag requirements are checked here: each
-	 * required flag must already be supplied by a Context on this command path.
-	 *
 	 * @throws {CrustError} `DEFINITION` when a name is already provided on
-	 *                      this command path or a required flag is missing
+	 *                      this command path
 	 */
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<MergeFlags<Inherited, Owned>, Cs>
+		...instances: Cs
 	): Crust<
-		Inherited,
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
 		A,
-		EffectiveFlags<Inherited, Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
+		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>
 	> {
 		const contexts = [...this._node.contexts];
@@ -855,12 +765,15 @@ export class Crust<
 			}
 			contexts.push(instance as ContextInstance);
 		}
-		return this._clone({ contexts, ownedFlags, effectiveFlags }) as unknown as Crust<
-			Inherited,
+		return this._clone({
+			contexts,
+			ownedFlags,
+			effectiveFlags,
+		}) as unknown as Crust<
 			Local,
 			MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
 			A,
-			EffectiveFlags<Inherited, Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
+			EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 			MergeContext<Ctx, ContextsOutput<Cs>>
 		>;
 	}
@@ -882,17 +795,12 @@ export class Crust<
 			throw new CrustError(
 				"DEFINITION",
 				`Context "${instance.name}" is already provided on this command path`,
-				{ subject: "context", name: instance.name, reason: "duplicate-context" },
+				{
+					subject: "context",
+					name: instance.name,
+					reason: "duplicate-context",
+				},
 			);
-		}
-		for (const flagName of Object.keys(instance.requiredFlags)) {
-			if (!(flagName in this._node.ownedFlags)) {
-				throw new CrustError(
-					"DEFINITION",
-					`Context "${instance.name}" requires flag "--${flagName}", which is not provided as a propagating Context-owned flag on "${this._node.meta.name}"`,
-					{ subject: "context", name: instance.name, reason: "missing-required-flag" },
-				);
-			}
 		}
 	}
 
@@ -901,7 +809,7 @@ export class Crust<
 	 * command's behavior after its inputs and Contexts are ready.
 	 *
 	 * The handler receives a {@link CrustCommandContext} with `args` typed from
-	 * `.args()` and `flags` typed as `EffectiveFlags<Inherited, Local, Owned>`.
+	 * `.args()` and `flags` typed as `EffectiveFlags<Local, Owned>`.
 	 *
 	 * Returns a new builder with the handler stored. The original builder is
 	 * not mutated.
@@ -911,10 +819,10 @@ export class Crust<
 	 */
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Inherited, Local, Owned, A, Eff, Ctx> {
+	): Crust<Local, Owned, A, Eff, Ctx> {
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Inherited, Local, Owned, A, Eff, Ctx>;
+		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
 	/**
@@ -923,10 +831,10 @@ export class Crust<
 	 * Extensions are application-wide: they own the flags and commands they
 	 * contribute. Command definition builders do not expose this method.
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Inherited, Local, Owned, A, Eff, Ctx> {
+	extend(...extensions: readonly Extension[]): Crust<Local, Owned, A, Eff, Ctx> {
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as Crust<Inherited, Local, Owned, A, Eff, Ctx>;
+		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
 	/**
@@ -937,23 +845,21 @@ export class Crust<
 	 * on this builder's path — call `.provide()` before `.mount()`.
 	 */
 	mount<const Ds extends readonly CommandDefinition<any>[]>(
-		...definitions: MountChecks<MergeFlags<Inherited, Owned>, Ctx, Ds>
-	): Crust<Inherited, Local, Owned, A, Eff, Ctx> {
-		let result = this as Crust<Inherited, Local, Owned, A, Eff, Ctx>;
+		...definitions: MountChecks<Ctx, Ds>
+	): Crust<Local, Owned, A, Eff, Ctx> {
+		let result = this as Crust<Local, Owned, A, Eff, Ctx>;
 		for (const definition of definitions) {
 			result = result._mountDefinition(definition as CommandDefinition);
 		}
 		return result;
 	}
 
-	private _mountDefinition(
-		definition: CommandDefinition,
-	): Crust<Inherited, Local, Owned, A, Eff, Ctx> {
+	private _mountDefinition(definition: CommandDefinition): Crust<Local, Owned, A, Eff, Ctx> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Inherited, Local, Owned, A, Eff, Ctx>;
+		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
 	/**

@@ -13,10 +13,10 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) =>
 const app = new Crust("cli").provide(api()).mount(deploy);
 ```
 
-Reshape dependencies on both definition APIs under a shared `requires` field. `defineCommand(name, { requires: { flags, ctx } }, recipe)` and `defineContext(name, { flags, requires: { flags, ctx } }, setup)` group declarations by relationship direction: top-level `flags` means flags the definition owns or parses, while `requires` means typed dependencies supplied by the command path. The previous flat `defineCommand` `{ flags, ctx }` fields and `defineContext` `{ ownFlags, flags, ctx }` fields are removed.
+Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. The previous flat fields and the intermediate `requires: { flags, ctx }` shape are removed. Required raw flags are not injected into downstream handler types; expose any needed value from its owning Context.
 
 Owned flag names, short forms, and aliases cannot collide with application, other Context, or Extension flags; collisions throw `CrustError("DEFINITION", ...)` in either fluent registration order. Extension flag collisions now use `details.reason: "flag-collision"` instead of `"extension-flag-collision"`, with updated message wording.
 
 `.of(value)` test doubles retain owned flags so test and production command grammars match. `.provide()` does not backfill descendants mounted on an earlier builder.
 
-`ContextInstance` and `ContextFactory` gain an owned-flags generic, while `Crust` and `CommandDefinitionBuilder` gain an `Owned` generic. Pre-1.0 consumers that specify these generic parameters positionally must update their type arguments.
+The generic slots on `ContextInstance`, `ContextFactory`, `ContextSetup`, `Crust`, and `CommandDefinitionBuilder` now carry Context-owned flags instead of required or inherited flags. Pre-1.0 consumers that specify these generic parameters positionally must update their type arguments.

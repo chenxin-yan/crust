@@ -32,7 +32,7 @@ It requires explicit argv, honors injected writers, throws the original error, d
 4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, Contexts, and the Command Handler.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
-7. **Construct Contexts** — create the Context values provided on the resolved path in topological order of their declared ctx requirements (registration order among independent Contexts), passing each setup the validated flags it requires or owns.
+7. **Construct Contexts** — create the Context values provided on the resolved path in topological order of their declared capability requirements (registration order among independent Contexts), passing each setup only its validated owned flags.
 8. **Run the Command Handler**.
 9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
 10. **Run `postRun` hooks** — invoke every Extension hook in reverse `.extend()` order with the completed, finished, or failed outcome. This is the invocation-level `finally` slot.

@@ -86,7 +86,7 @@ The schema receives the raw `string | undefined` or `boolean | undefined`; with 
 type NamedFlagDef = FlagDef & { readonly name: string };
 ```
 
-The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, `requires.flags`, Context-owned `flags`, and `defineFlag()` all use it.
+The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, Context-owned `flags`, and `defineFlag()` all use it.
 
 ### `defineFlag` and `defineArg`
 
@@ -146,10 +146,10 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value, RF, RC, OF> {
-  (options: Options): ContextInstance<Name, Value, RF, RC, OF>;
+interface ContextFactory<Name extends string, Options, Value, RC, OF> {
+  (options: Options): ContextInstance<Name, Value, RC, OF>;
   readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value, {}, {}, OF>;
+  of(value: Value): ContextInstance<Name, Value, {}, OF>;
 }
 ```
 
@@ -158,24 +158,21 @@ interface ContextFactory<Name extends string, Options, Value, RF, RC, OF> {
 ### `ContextRequirements`, `ContextConfig`, and `ContextSetup`
 
 ```ts
-interface ContextRequirements {
-  readonly flags?: readonly NamedFlagDef[];
-  readonly ctx?: readonly AnyContextFactory[];
-}
+type ContextRequirements = readonly AnyContextFactory[];
 
 interface ContextConfig {
   readonly flags?: readonly NamedFlagDef[];
   readonly requires?: ContextRequirements;
 }
 
-interface ContextSetup<Options, RF, RC, OF> {
+interface ContextSetup<Options, RC, OF> {
   readonly options: Options;
-  readonly flags: InferFlags<MergeFlags<RF, OF>>;
+  readonly flags: InferFlags<OF>;
   readonly ctx: Readonly<RC>;
 }
 ```
 
-`ContextConfig.flags` declares propagating flags installed when an instance is provided, while `ContextConfig.requires.flags` declares Context-owned flags a Context reads from its command path and `requires.ctx` declares Context dependencies. This is the same `requires: { flags, ctx }` dependency shape accepted by `defineCommand()`: `flags` always means flags the thing owns or parses, and `requires` always means typed dependencies from the environment. `ContextSetup` receives the factory argument, validated values for required and owned flags, and the declared Context dependencies. See [Contexts](/docs/guide/contexts) for attachment ordering and collision rules.
+`ContextConfig.flags` declares propagating flags installed when an instance is provided; `requires` lists Context capabilities needed from the command path. This is the same plain capability array accepted by `defineCommand()`: `flags` always means definitions the unit owns or parses, and `requires` always means capabilities supplied by the environment. `ContextSetup` receives the factory argument, validated values for its owned flags only, and the declared Context values. See [Contexts](/docs/guide/contexts) for construction order and collision rules.
 
 ### `ContextInstance`
 
@@ -184,7 +181,7 @@ interface ContextSetup<Options, RF, RC, OF> {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared ctx requirements.
+Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared capability requirements.
 
 ### `ContextMap`
 

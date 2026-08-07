@@ -467,12 +467,6 @@ describe("Crust type-level tests", () => {
 			>
 		>;
 	});
-
-	it("ancestor-owned generic starts as {} for a root builder", () => {
-		const app = new Crust("test");
-		type AppAncestorOwned = (typeof app)["_types"]["ancestorOwned"];
-		type _check = Expect<Equal<AppAncestorOwned, {}>>;
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -613,24 +607,25 @@ describe("Crust .mount() with inline definitions", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Crust .mount() type-level tests", () => {
-	it("types ancestor-owned and local values in handlers", () => {
+	it("types required capabilities and local values in handlers", () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const output = defineFlag("output", { type: "string" });
-		const rootFlags = defineContext("root-flags", { flags: [verbose] }, () => ({}));
-		const levelFlags = defineContext("level-flags", { flags: [output] }, () => ({}));
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
 		new Crust("cli")
 			.flags({ name: "rootOnly", type: "string" })
-			.provide(rootFlags())
+			.provide(logging())
 			.mount(
-				defineCommand("level1", { requires: { flags: [verbose] } }, (command) =>
-					command.provide(levelFlags()).mount(
-						defineCommand("level2", { requires: { flags: [verbose, output] } }, (child) =>
+				defineCommand("level1", { requires: [logging] }, (command) =>
+					command.mount(
+						defineCommand("level2", { requires: [logging] }, (child) =>
 							child
 								.args({ name: "target", type: "string", required: true })
-								.handle(({ args, flags }) => {
+								.handle(({ args, flags, ctx }) => {
 									type _target = Expect<Equal<typeof args.target, string>>;
-									type _verbose = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
-									type _output = Expect<Equal<typeof flags.output, string | undefined>>;
+									type _verbose = Expect<Equal<typeof ctx.logging.verbose, boolean>>;
+									// @ts-expect-error -- ancestor-owned flags are parsed but not handler-visible
+									void flags.verbose;
 									// @ts-expect-error -- root-local flags do not propagate
 									void flags.rootOnly;
 								}),
@@ -718,35 +713,18 @@ describe("Crust .handle() type-level tests", () => {
 			});
 	});
 
-	it("run handler receives Context-owned and local EffectiveFlags", () => {
+	it("run handler receives local flags and required capabilities", () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
-		new Crust("cli")
-			.flags({ name: "port", type: "number", default: 3000 })
-			.provide(logging())
-			.mount(
-				defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
-					cmd.flags({ name: "output", type: "string", required: true }).handle((_ctx) => {
-						type CtxFlags = typeof _ctx.flags;
-						// Context-owned verbose should be present
-						type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean | undefined>>;
-						// local output (required) should be present
-						type _checkOutput = Expect<Equal<CtxFlags["output"], string>>;
-					}),
-				),
-			);
-	});
-
-	it("declared flag requirements are visible in mounted handlers", () => {
-		const verbose = defineFlag("verbose", { type: "boolean", default: false });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
 		new Crust("cli").provide(logging()).mount(
-			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
-				cmd.handle((_ctx) => {
-					// The handler sees the required flag even though the
-					// subcommand has no local flags
-					type CtxFlags = typeof _ctx.flags;
-					type _checkVerbose = Expect<Equal<CtxFlags["verbose"], boolean>>;
+			defineCommand("sub", { requires: [logging] }, (cmd) =>
+				cmd.flags({ name: "output", type: "string", required: true }).handle((_ctx) => {
+					type _checkOutput = Expect<Equal<typeof _ctx.flags.output, string>>;
+					type _checkVerbose = Expect<Equal<typeof _ctx.ctx.logging.verbose, boolean>>;
+					// @ts-expect-error -- cross-command values are capabilities, not raw flags
+					void _ctx.flags.verbose;
 				}),
 			),
 		);
@@ -965,33 +943,10 @@ describe("Extension application at prepare time", () => {
 		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
 	});
 
-	it("Extension command requirements reject missing propagating flags", async () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
-		let recipeRan = false;
-		const tools = defineExtension("tools", {
-			commands: [
-				defineCommand("status", { requires: { flags: [verbose] } }, (command) => {
-					recipeRan = true;
-					return command.handle(() => {});
-				}),
-			],
-		});
-
-		await expect(new Crust("cli").extend(tools).run(["status"])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message:
-				'Extension "tools" command "status" requires flag "--verbose", which is not provided as a propagating Context-owned flag on application root "cli"',
-			details: { subject: "flag", name: "verbose", reason: "missing-required-flag" },
-		});
-		expect(recipeRan).toBe(false);
-	});
-
 	it("Extension command requirements name the Extension and missing Context", async () => {
 		const db = defineContext("db", () => "database");
 		const databaseTools = defineExtension("database-tools", {
-			commands: [
-				defineCommand("users", { requires: { ctx: [db] } }, (command) => command.handle(() => {})),
-			],
+			commands: [defineCommand("users", { requires: [db] }, (command) => command.handle(() => {}))],
 		});
 
 		try {
@@ -1841,15 +1796,17 @@ describe("Crust .execute()", () => {
 		expect(handlerRan).toBe(false);
 	});
 
-	it("Context-owned flags work across file-boundary pattern", async () => {
-		let receivedVerbose: boolean | undefined;
+	it("Context capabilities work across file-boundary pattern", async () => {
+		let receivedVerbose = false;
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const sub = defineCommand("sub", { requires: { flags: [verbose] } }, (command) =>
-			command.handle(({ flags }) => {
-				receivedVerbose = flags.verbose;
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
+		const sub = defineCommand("sub", { requires: [logging] }, (command) =>
+			command.handle(({ ctx }) => {
+				receivedVerbose = ctx.logging.verbose;
 			}),
 		);
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
 		const app = new Crust("cli").provide(logging()).mount(sub);
 
 		await app.execute({ argv: ["sub", "--verbose"] });
@@ -1861,11 +1818,13 @@ describe("Crust .execute()", () => {
 		let receivedPort: number | undefined;
 		const port = defineFlag("port", { type: "number", default: 3000 });
 
-		const ports = defineContext("ports", { flags: [port] }, () => ({}));
+		const ports = defineContext("ports", { flags: [port] }, ({ flags }) => ({
+			port: flags.port,
+		}));
 		const app = new Crust("cli").provide(ports()).mount(
-			defineCommand("sub", { requires: { flags: [port] } }, (cmd) =>
-				cmd.handle((ctx) => {
-					receivedPort = ctx.flags.port;
+			defineCommand("sub", { requires: [ports] }, (cmd) =>
+				cmd.handle(({ ctx }) => {
+					receivedPort = ctx.ports.port;
 				}),
 			),
 		);
@@ -1879,11 +1838,13 @@ describe("Crust .execute()", () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+			verbose: flags.verbose,
+		}));
 		const app = new Crust("cli").provide(logging()).mount(
-			defineCommand("sub", { requires: { flags: [verbose] } }, (cmd) =>
-				cmd.handle((ctx) => {
-					receivedVerbose = ctx.flags.verbose;
+			defineCommand("sub", { requires: [logging] }, (cmd) =>
+				cmd.handle(({ ctx }) => {
+					receivedVerbose = ctx.logging.verbose;
 				}),
 			),
 		);
