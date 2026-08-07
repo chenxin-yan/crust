@@ -105,7 +105,7 @@ if (mode === "sizes") {
 		const b = base[name];
 		const h = head[name];
 		install.push(
-			`| \`${name}\` | ${fmt(h?.tarball ?? b?.tarball)} | ${fmt(h?.unpacked ?? b?.unpacked)} | ${delta(b?.unpacked, h?.unpacked)} |`,
+			`| \`${name}\` | ${fmt(h?.tarball)} | ${fmt(h?.unpacked)} | ${delta(b?.unpacked, h?.unpacked)} |`,
 		);
 	}
 	console.log([...bundle, ...install].join("\n"));
