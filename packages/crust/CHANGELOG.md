@@ -1,5 +1,63 @@
 # @crustjs/crust
 
+## 0.2.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009`):
+
+  - Extensions replace plugins: `@crustjs/extensions` package, `defineExtension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
+  - Contexts are command dependencies: `defineContext(name, config?, setup)` always returns a factory, attached with the variadic `.provide(...)`, constructed topologically by declared `requires` dependencies (values arrive via `ctx`), and disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse construction order.
+  - `.handle(handler)` defines the Command Handler; `.run(argv, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. `preRun`/`postRun` removed.
+  - `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` removed; handler and Context errors pass through unwrapped.
+  - Standard Schema supported directly on arg/flag definitions; `@crustjs/validate` removed.
+  - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
+  - `create-crust` ships a single minimal template.
+
+  This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed above.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+### Patch Changes
+
+- [#144](https://github.com/chenxin-yan/crust/pull/144) [`4e4af76`](https://github.com/chenxin-yan/crust/commit/4e4af76a7236f64ee843504126d09efb799d54ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked mounting with the variadic `.mount(...definitions)`.
+
+  A definition carries its own name and lists the Context capabilities it needs from its mount site in a plain `requires` array. Every requirement is checked at the `.mount()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every mount materializes a fresh command under the definition's carried name; use `.as(newName)` to mount one definition under multiple names or parents, and definitions can `.mount()` other definitions.
+
+  Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.mount(defineCommand("up", (command) => ...))`.
+
+  Migration:
+
+  ```ts
+  // Before
+  const deploy = parent.sub("deploy").handle(({ flags, ctx }) => {});
+  const app = parent.command(deploy);
+
+  // After
+  const verbose = defineFlag("verbose", { type: "boolean" });
+  const logging = defineContext(
+    "logging",
+    { flags: [verbose] },
+    ({ flags }) => flags
+  );
+  const auth = defineContext("auth", () => createAuthClient());
+
+  const deploy = defineCommand(
+    "deploy",
+    { requires: [logging, auth] },
+    (command) => command.handle(({ ctx }) => {})
+  );
+
+  const app = parent.provide(logging(), auth()).mount(deploy);
+  const shipToo = parent.mount(deploy.as("ship"));
+  ```
+
+  Provide required Context capabilities with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the unused `isGitInstalled` API and simplify scaffolding, build, path, and persistence internals.
+
 ## 0.0.24
 
 ### Patch Changes

@@ -1,5 +1,173 @@
 # @crustjs/core
 
+## 0.2.0
+
+### Minor Changes
+
+- [#150](https://github.com/chenxin-yan/crust/pull/150) [`ac028c8`](https://github.com/chenxin-yan/crust/commit/ac028c8a8694fc4d685ed7140353a881bc92aeb6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Boolean negation is now alias-symmetric: `--no-<alias>` works for every long alias, matching what man pages and completion scripts already advertised. `noNegate: true` is now enforced by the parser — negating a `noNegate` boolean via any spelling is a `PARSE` error instead of being silently accepted.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009`):
+
+  - Extensions replace plugins: `@crustjs/extensions` package, `defineExtension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
+  - Contexts are command dependencies: `defineContext(name, config?, setup)` always returns a factory, attached with the variadic `.provide(...)`, constructed topologically by declared `requires` dependencies (values arrive via `ctx`), and disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse construction order.
+  - `.handle(handler)` defines the Command Handler; `.run(argv, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. `preRun`/`postRun` removed.
+  - `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` removed; handler and Context errors pass through unwrapped.
+  - Standard Schema supported directly on arg/flag definitions; `@crustjs/validate` removed.
+  - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
+  - `create-crust` ships a single minimal template.
+
+  This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed above.
+
+- [#152](https://github.com/chenxin-yan/crust/pull/152) [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - New `captureExecute(app, argv)` in `@crustjs/testing` drives the terminal `execute()` path in-process: exit-code protocol (`0`/`1`/`130`), Extension `onError` rendering, and cancellation are assertable without subprocess probes; `process.exitCode` is restored afterwards. To support it, `Crust.execute()` now accepts an optional `io` override alongside `argv`.
+
+- [#144](https://github.com/chenxin-yan/crust/pull/144) [`4e4af76`](https://github.com/chenxin-yan/crust/commit/4e4af76a7236f64ee843504126d09efb799d54ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked mounting with the variadic `.mount(...definitions)`.
+
+  A definition carries its own name and lists the Context capabilities it needs from its mount site in a plain `requires` array. Every requirement is checked at the `.mount()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every mount materializes a fresh command under the definition's carried name; use `.as(newName)` to mount one definition under multiple names or parents, and definitions can `.mount()` other definitions.
+
+  Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.mount(defineCommand("up", (command) => ...))`.
+
+  Migration:
+
+  ```ts
+  // Before
+  const deploy = parent.sub("deploy").handle(({ flags, ctx }) => {});
+  const app = parent.command(deploy);
+
+  // After
+  const verbose = defineFlag("verbose", { type: "boolean" });
+  const logging = defineContext(
+    "logging",
+    { flags: [verbose] },
+    ({ flags }) => flags
+  );
+  const auth = defineContext("auth", () => createAuthClient());
+
+  const deploy = defineCommand(
+    "deploy",
+    { requires: [logging, auth] },
+    (command) => command.handle(({ ctx }) => {})
+  );
+
+  const app = parent.provide(logging(), auth()).mount(deploy);
+  const shipToo = parent.mount(deploy.as("ship"));
+  ```
+
+  Provide required Context capabilities with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
+
+- [#153](https://github.com/chenxin-yan/crust/pull/153) [`98cf6d1`](https://github.com/chenxin-yan/crust/commit/98cf6d193ddabdb9f1f9421935698e79bfc8cc6d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add Context-owned flags with `defineContext(name, { flags }, setup)`. Calling `.provide()` installs each owned flag as a propagating effective flag on that command and descendants mounted afterward, refines the builder's flag types, and passes the validated values to Context setup:
+
+  ```ts
+  const apiKey = defineFlag("api-key", { type: "string" });
+  const api = defineContext("api", { flags: [apiKey] }, ({ flags }) =>
+    createClient({ apiKey: flags["api-key"] })
+  );
+
+  const app = new Crust("cli").provide(api()).mount(deploy);
+  ```
+
+  Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. Required raw flags are not injected into downstream handler types; expose any needed value from its owning Context.
+
+  Context setup now receives the invocation's injected `stdout` and `stderr` callbacks, shared with the Command Handler. Contexts can encapsulate output behavior instead of exposing flag state for every handler to interpret:
+
+  ```ts
+  const logging = defineContext(
+    "logging",
+    { flags: [verbose] },
+    ({ flags, stderr }) => ({
+      debug: (message: string) => flags.verbose && stderr(message),
+    })
+  );
+  ```
+
+  Owned flag names, short forms, and aliases cannot collide with application, other Context, or Extension flags; collisions throw `CrustError("DEFINITION", ...)` in either fluent registration order. Extension flag collisions now use `details.reason: "flag-collision"` instead of `"extension-flag-collision"`, with updated message wording.
+
+  `.of(value)` test doubles retain owned flags so test and production command grammars match. `.provide()` does not backfill descendants mounted on an earlier builder.
+
+  The generic slots on `ContextInstance`, `ContextFactory`, `ContextSetup`, `Crust`, and `CommandDefinitionBuilder` now carry Context-owned flags instead of required or inherited flags. Pre-1.0 consumers that specify these generic parameters positionally must update their type arguments.
+
+- [#144](https://github.com/chenxin-yan/crust/pull/144) [`4e4af76`](https://github.com/chenxin-yan/crust/commit/4e4af76a7236f64ee843504126d09efb799d54ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Contexts declare capability requirements: `defineContext(name, config, setup)` accepts `{ flags?: [...owned flag defs], requires?: [...Context factories] }`, and setup receives `{ options, flags, ctx }` — validated values for that Context's owned flags only, plus the values of its declared Context dependencies.
+
+  `.provide(...instances)` is variadic and provide order is free: Contexts on the resolved command path are constructed topologically by their declared `requires` dependencies. A missing dependency or a dependency cycle throws `CrustError("DEFINITION", ...)`, also caught by command-tree validation.
+
+  Every factory also exposes `.of(value)`, returning an instance whose setup yields the precomputed value with its requirements considered satisfied — for test doubles:
+
+  ```ts
+  const env = defineFlag("env", { type: "string" });
+
+  const config = defineContext("config", { flags: [env] }, ({ flags }) =>
+    loadConfig(flags.env)
+  );
+  const db = defineContext("db", { requires: [config] }, ({ ctx }) =>
+    connect(ctx.config)
+  );
+
+  app.provide(db(), config()); // constructed as config → db
+
+  // In tests:
+  app.provide(db.of(fakeDb), config.of(fakeConfig));
+  ```
+
+  Disposal follows construction: values implementing `Symbol.dispose`/`Symbol.asyncDispose` are disposed in reverse construction order, on success or failure.
+
+- [#144](https://github.com/chenxin-yan/crust/pull/144) [`4e4af76`](https://github.com/chenxin-yan/crust/commit/4e4af76a7236f64ee843504126d09efb799d54ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Name every definition helper with a `define*` prefix: `defineContext(name, ...)`, `defineExtension(name, config)`, `defineCommand(name, ...)`, and the new `defineFlag(name, def)` and `defineArg(name, def)`.
+
+  `defineFlag` and `defineArg` are const-generic helpers that return the definition with its `name` attached, preserving literal types without `as const`. Named definitions attach through the now-variadic builder methods — `.flags(...defs)` replaces `.flags(record)` and `.args(...defs)` replaces `.args(tuple)` — and Contexts may own flag definitions through their top-level `flags` array. Inline object literals carrying a `name` work everywhere a named definition does:
+
+  ```ts
+  const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
+  const target = defineArg("target", { type: "string", required: true });
+
+  const app = new Crust("my-cli")
+    .flags(verbose, { name: "dry-run", type: "boolean" })
+    .args(target)
+    .handle(({ flags, args }) => {});
+  ```
+
+- [#164](https://github.com/chenxin-yan/crust/pull/164) [`2a3250e`](https://github.com/chenxin-yan/crust/commit/2a3250e3e78fc780b873ae9a1b4069997b1f0235) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add a shared presentation-neutral command documentation model to `@crustjs/core/tooling` and use it for help, mdoc, and Agent Skill rendering.
+
+  Help headings now follow conventional title case and list negation for every long alias. Man pages use semantic mdoc flag and argument macros. Generated skills omit hidden commands.
+
+- [#149](https://github.com/chenxin-yan/crust/pull/149) [`db943af`](https://github.com/chenxin-yan/crust/commit/db943af22e3d7e8766b396edd845487368040435) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `ExtensionConfig.commands` now accepts only `defineCommand()` definitions. Migrate extension-owned `new Crust("name")` builders to `defineCommand("name", (command) => ...)`; `ExtensionCommand` is removed. Definition Context requirements are checked when the application prepares and report `DEFINITION` errors.
+
+- [#146](https://github.com/chenxin-yan/crust/pull/146) [`eb0add9`](https://github.com/chenxin-yan/crust/commit/eb0add9272d93f734ecf321e0b481a0aaf6da57e) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace Extension `intercept(ctx, next)` and `handleError(error, ctx, next)` with named `hooks`: `preRun(ctx)`, `postRun(ctx, outcome)`, and `onError(error, ctx)`. `preRun` returns `ctx.finish()` to short-circuit successfully; `postRun` runs in reverse extension order after every settled invocation; `onError` returns `true` after rendering an `execute()` failure.
+
+  Command Handlers now receive `rootCommand`, including handlers for Extension-owned commands. Migrate Extension-owned routing work into real `.handle()` callbacks.
+
+- [#152](https://github.com/chenxin-yan/crust/pull/152) [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `execute()` now offers `AbortError` cancellation to Extension `onError` hooks before finishing, so applications can render a cancellation message (e.g. "Operation cancelled") centrally. Exit code stays `130` and cancellation remains silent when no hook claims it — default behavior is unchanged.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the unused `CrustError.commandNotFound` factory and make internal flag-validation type helpers private.
+
+- [#153](https://github.com/chenxin-yan/crust/pull/153) [`98cf6d1`](https://github.com/chenxin-yan/crust/commit/98cf6d193ddabdb9f1f9421935698e79bfc8cc6d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - **BREAKING:** Remove `FlagDef.inherit`. Command flags declared with `.flags()` are now always local; Context-owned flags are the only application-level flag propagation mechanism. Recursive Extension flags continue to use `ExtensionFlagDef.recursive`.
+
+  The public `FlagSnapshot.inherit` field and the internal `InheritableFlags` and `ForceInherit` utility types are also removed. A local child flag can no longer override a same-named inherited flag because ordinary flags no longer inherit; Context-owned name collisions remain `DEFINITION` errors.
+
+  | Previous usage                                     | Migration                                                                                                                                                                                        |
+  | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `inherit: true` feeds behavior shared by a subtree | Move the flag into `defineContext(name, { flags: [...] }, setup)` and attach the instance with `.provide()` before mounting descendants. Handlers should require the derived Context capability. |
+  | Each command reads the raw flag directly           | Define the descriptor once with `defineFlag()` and attach it with `.flags()` to each command that parses it.                                                                                     |
+
+  Cross-command dependencies are capability-only: list Context factories in `requires` and consume their derived values through `ctx`. Raw flag requirements are removed.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+- [#152](https://github.com/chenxin-yan/crust/pull/152) [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Routing now skips known flags (and their values) that appear before a subcommand name, so `app --quiet translate` runs `translate` instead of silently resolving the handler-less root and exiting 0. All parser-accepted spellings are recognized during routing: long names, `--flag=value`, `--no-<name>` negation (respecting `noNegate`), short flags and inline values, long aliases, and bundled short booleans. Unknown flags and the `--` terminator still stop routing as before.
+
+  Behavior change: recursive flags placed before a subcommand now bind to the subcommand's invocation — e.g. `app --help sub` shows `sub`'s help (previously the root's), and a root-only flag before a subcommand name is now an "unknown flag" error in the subcommand (previously a silent no-op).
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [#152](https://github.com/chenxin-yan/crust/pull/152) [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Export the `Simplify` helper type from the package root. Consumers with `declaration: true` exporting inferred `defineFlag`/`defineArg`/builder values no longer hit TS2742/TS2883 ("cannot be named without a reference to a private chunk").
+
+- [`c962196`](https://github.com/chenxin-yan/crust/commit/c962196c777401f9627ab70bc4453ac5a62a8233) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Bundle the shared internal utilities into each consumer so `@crustjs/utils` is no longer installed as a runtime dependency.
+
+- [#158](https://github.com/chenxin-yan/crust/pull/158) [`4959ae7`](https://github.com/chenxin-yan/crust/commit/4959ae784da8c8097608fc6c1c6cf525662c16e6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Refactor flag parsing and command routing to share one canonical flag-spelling table.
+
+- [#159](https://github.com/chenxin-yan/crust/pull/159) [`9963b85`](https://github.com/chenxin-yan/crust/commit/9963b8590cf641f10a76a6ee2b2a5ef80542428b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Refactor command invocation orchestration into a private pipeline module without changing behavior.
+
+- [#168](https://github.com/chenxin-yan/crust/pull/168) [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Vendor the Standard Schema protocol types, as recommended by the specification, and remove `@standard-schema/spec` from runtime dependencies. This does not change the public API or runtime behavior, and published declarations no longer reference the spec package.
+
 ## 0.0.19
 
 ### Patch Changes

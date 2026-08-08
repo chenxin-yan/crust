@@ -1,5 +1,69 @@
 # @crustjs/plugins
 
+## 0.2.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009`):
+
+  - Extensions replace plugins: `@crustjs/extensions` package, `defineExtension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
+  - Contexts are command dependencies: `defineContext(name, config?, setup)` always returns a factory, attached with the variadic `.provide(...)`, constructed topologically by declared `requires` dependencies (values arrive via `ctx`), and disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse construction order.
+  - `.handle(handler)` defines the Command Handler; `.run(argv, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. `preRun`/`postRun` removed.
+  - `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` removed; handler and Context errors pass through unwrapped.
+  - Standard Schema supported directly on arg/flag definitions; `@crustjs/validate` removed.
+  - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
+  - `create-crust` ships a single minimal template.
+
+  This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed above.
+
+- [#164](https://github.com/chenxin-yan/crust/pull/164) [`2a3250e`](https://github.com/chenxin-yan/crust/commit/2a3250e3e78fc780b873ae9a1b4069997b1f0235) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add a shared presentation-neutral command documentation model to `@crustjs/core/tooling` and use it for help, mdoc, and Agent Skill rendering.
+
+  Help headings now follow conventional title case and list negation for every long alias. Man pages use semantic mdoc flag and argument macros. Generated skills omit hidden commands.
+
+- [#149](https://github.com/chenxin-yan/crust/pull/149) [`db943af`](https://github.com/chenxin-yan/crust/commit/db943af22e3d7e8766b396edd845487368040435) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `ExtensionConfig.commands` now accepts only `defineCommand()` definitions. Migrate extension-owned `new Crust("name")` builders to `defineCommand("name", (command) => ...)`; `ExtensionCommand` is removed. Definition Context requirements are checked when the application prepares and report `DEFINITION` errors.
+
+- [#146](https://github.com/chenxin-yan/crust/pull/146) [`eb0add9`](https://github.com/chenxin-yan/crust/commit/eb0add9272d93f734ecf321e0b481a0aaf6da57e) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace Extension `intercept(ctx, next)` and `handleError(error, ctx, next)` with named `hooks`: `preRun(ctx)`, `postRun(ctx, outcome)`, and `onError(error, ctx)`. `preRun` returns `ctx.finish()` to short-circuit successfully; `postRun` runs in reverse extension order after every settled invocation; `onError` returns `true` after rendering an `execute()` failure.
+
+  Command Handlers now receive `rootCommand`, including handlers for Extension-owned commands. Migrate Extension-owned routing work into real `.handle()` callbacks.
+
+- [#150](https://github.com/chenxin-yan/crust/pull/150) [`ac028c8`](https://github.com/chenxin-yan/crust/commit/ac028c8a8694fc4d685ed7140353a881bc92aeb6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `help()` now renders long flag aliases (e.g. `-o, --output, --out`). Negation is shown for the canonical name only; man pages remain the exhaustive reference.
+
+- [#169](https://github.com/chenxin-yan/crust/pull/169) [`048edf2`](https://github.com/chenxin-yan/crust/commit/048edf27d71b05e89426010064bf7c5be37fc0c6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Consolidate public naming conventions:
+
+  - `@crustjs/extensions`: Name the version extension options `VersionOptions` (matching `CompletionOptions`, `DidYouMeanOptions`, and `UpdateNotifierOptions`).
+  - `@crustjs/skills`: Rename `skillStatus()` to `getSkillStatus()`; rename `GenerateOptions`/`GenerateResult` to `GenerateSkillOptions`/`GenerateSkillResult`, `UninstallOptions`/`UninstallResult` to `UninstallSkillOptions`/`UninstallSkillResult`, and `StatusOptions`/`StatusResult` to `SkillStatusOptions`/`SkillStatusResult` (domain-qualified, collision-safe names).
+  - `@crustjs/testing`: Name the interactive runner `runInteractive()` (verb-first, consistent with `captureRun` and `captureExecute`).
+
+- [#153](https://github.com/chenxin-yan/crust/pull/153) [`98cf6d1`](https://github.com/chenxin-yan/crust/commit/98cf6d193ddabdb9f1f9421935698e79bfc8cc6d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - **BREAKING:** Remove `FlagDef.inherit`. Command flags declared with `.flags()` are now always local; Context-owned flags are the only application-level flag propagation mechanism. Recursive Extension flags continue to use `ExtensionFlagDef.recursive`.
+
+  The public `FlagSnapshot.inherit` field and the internal `InheritableFlags` and `ForceInherit` utility types are also removed. A local child flag can no longer override a same-named inherited flag because ordinary flags no longer inherit; Context-owned name collisions remain `DEFINITION` errors.
+
+  | Previous usage                                     | Migration                                                                                                                                                                                        |
+  | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `inherit: true` feeds behavior shared by a subtree | Move the flag into `defineContext(name, { flags: [...] }, setup)` and attach the instance with `.provide()` before mounting descendants. Handlers should require the derived Context capability. |
+  | Each command reads the raw flag directly           | Define the descriptor once with `defineFlag()` and attach it with `.flags()` to each command that parses it.                                                                                     |
+
+  Cross-command dependencies are capability-only: list Context factories in `requires` and consume their derived values through `ctx`. Raw flag requirements are removed.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+- [#145](https://github.com/chenxin-yan/crust/pull/145) [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace the bespoke global color knob with the standard environment variables:
+
+  - `@crustjs/style`: `setGlobalColorMode` / `getGlobalColorMode` removed. The default `style` facade and top-level helpers re-resolve `NO_COLOR` / `FORCE_COLOR` / TTY on every call — set those variables instead. This also removes the word-collision where facade-`"never"` and `createStyle({ mode: "never" })` meant different things: `ColorMode` is now purely an instance concept (`"never"` = all ANSI off), while the environment is the global channel (`NO_COLOR` = colors off per no-color.org, `FORCE_COLOR` = the all-ANSI switch).
+  - `@crustjs/style`: capability detection now honors `FORCE_COLOR` (chalk convention): `0`/`false` force all ANSI off; `1`/`2`/`3` force color at 16/256/truecolor depth; other values force on at the detected depth. `FORCE_COLOR` takes precedence over `NO_COLOR` and TTY. `CapabilityOverrides` gains `forceColor`.
+  - `@crustjs/extensions`: `noColor()` now scopes `FORCE_COLOR`/`NO_COLOR` around command execution instead of calling the removed knob — `--color` sets `FORCE_COLOR=3` (clearing `NO_COLOR` so strict no-color.org-only child processes also comply), `--no-color` sets `NO_COLOR=1` (clearing `FORCE_COLOR`), restoring prior values after the run. The flag now also affects child processes and other `FORCE_COLOR`-aware libraries. Note: `--no-color` with piped output is now fully plain — previously modifiers/hyperlinks could still be emitted off-TTY.
+
+- [#152](https://github.com/chenxin-yan/crust/pull/152) [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `versionExtension(value, options?)` accepts a new `format` option controlling output: `"plain"` prints the bare version, or a `(version, context) => string` function customizes the line. Default output is unchanged (`<name> v<version>`).
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Use Bun's SemVer precedence for update notifications, including notifying prerelease users when the matching stable release becomes available, and simplify extension internals.
+
+- Updated dependencies [[`30a75dd`](https://github.com/chenxin-yan/crust/commit/30a75dddf9256c102a1ead7165cc81ef1c4ec0f5), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2)]:
+  - @crustjs/style@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes

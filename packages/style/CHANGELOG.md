@@ -1,5 +1,39 @@
 # @crustjs/style
 
+## 0.3.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the redundant static color and modifier `*Code` aliases; use the matching chainable exports directly as `AnsiPair` values. Keep the dynamic `fgCode`, `bgCode`, and `linkCode` factories.
+
+  Remove `TrueColorOverrides` and move its optional `colorTerm` and `term` fields onto `CapabilityOverrides`.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the deprecated `rgb`, `bgRgb`, `hex`, and `bgHex` style methods and exports, along with the deprecated dynamic RGB and hex color helpers. Use the depth-aware `fg` and `bg` APIs instead.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+- [#145](https://github.com/chenxin-yan/crust/pull/145) [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace the bespoke global color knob with the standard environment variables:
+
+  - `@crustjs/style`: `setGlobalColorMode` / `getGlobalColorMode` removed. The default `style` facade and top-level helpers re-resolve `NO_COLOR` / `FORCE_COLOR` / TTY on every call — set those variables instead. This also removes the word-collision where facade-`"never"` and `createStyle({ mode: "never" })` meant different things: `ColorMode` is now purely an instance concept (`"never"` = all ANSI off), while the environment is the global channel (`NO_COLOR` = colors off per no-color.org, `FORCE_COLOR` = the all-ANSI switch).
+  - `@crustjs/style`: capability detection now honors `FORCE_COLOR` (chalk convention): `0`/`false` force all ANSI off; `1`/`2`/`3` force color at 16/256/truecolor depth; other values force on at the detected depth. `FORCE_COLOR` takes precedence over `NO_COLOR` and TTY. `CapabilityOverrides` gains `forceColor`.
+  - `@crustjs/extensions`: `noColor()` now scopes `FORCE_COLOR`/`NO_COLOR` around command execution instead of calling the removed knob — `--color` sets `FORCE_COLOR=3` (clearing `NO_COLOR` so strict no-color.org-only child processes also comply), `--no-color` sets `NO_COLOR=1` (clearing `FORCE_COLOR`), restoring prior values after the run. The flag now also affects child processes and other `FORCE_COLOR`-aware libraries. Note: `--no-color` with piped output is now fully plain — previously modifiers/hyperlinks could still be emitted off-TTY.
+
+- [#145](https://github.com/chenxin-yan/crust/pull/145) [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Trim the public API surface ahead of 1.0 — one mode-aware door per capability, no speculative contracts:
+
+  - Markdown theme system removed: `MarkdownTheme`, `PartialMarkdownTheme`, `ThemeSlotFn`, `createMarkdownTheme`, `defaultTheme`, `CreateMarkdownThemeOptions`. It was a contract for a renderer that doesn't exist yet; it will ship with that renderer.
+  - List block helpers removed: `unorderedList`, `orderedList`, `taskList` and their option types. `table` stays.
+  - Mode-unaware pair-level escape hatches removed: `applyStyle`, `composeStyles`, `fgCode`, `bgCode`, `linkCode`, `resolveColorDepth`. Use the mode-aware equivalents: call the chainable directly (`bold(text)`) or use its `open`/`close` for manual hot-path composition, plus `fg`/`bg`, `link`, and `style.colorDepth`.
+  - Strict inline color-literal type machinery removed: `CheckedColorInput`, `StrictColorString`, `CssColorFunctionString`, `ColorInputCandidate`, `NonStringColorInput`. `fg`/`bg` accept plain `ColorInput`; `ColorString` autocomplete is unchanged and invalid colors still throw `TypeError` at call time.
+  - `StyleInstance.apply` removed. To pass a style as a value, pass the chainable itself (it is already a `StyleFn`) — this also keeps per-step `NO_COLOR` degradation, which `apply` could not provide for compound pairs. Chainables keep `open`/`close` for manual hot-path composition.
+  - `visibleWidth` removed — use Bun's built-in `Bun.stringWidth(text)`, which is ANSI-aware and CJK-aware by default. `padStart`/`padEnd`/`center` are unchanged.
+  - `wrapText` and `WrapOptions` removed — no consumer materialized; will return with the first real one (e.g. a help formatter).
+
+### Patch Changes
+
+- [#154](https://github.com/chenxin-yan/crust/pull/154) [`30a75dd`](https://github.com/chenxin-yan/crust/commit/30a75dddf9256c102a1ead7165cc81ef1c4ec0f5) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Surface hex (`#`) and CSS functional-notation syntax hints (`rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color-mix()`) in `ColorString` editor autocomplete. Type-level only; runtime behavior unchanged.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
 ## 0.2.0
 
 ### Minor Changes
@@ -13,6 +47,7 @@
   removed in v1.0.0.
 
   ### Added
+
   - `fg(text, input)` / `bg(text, input)` — apply a foreground or
     background color from anything `Bun.color()` accepts. Output adapts to
     the resolved `ColorDepth` (see _Fallback_ below).
@@ -55,6 +90,7 @@
 
   `fg`, `bg`, `fgCode`, and `bgCode` accept any input `Bun.color()`
   understands:
+
   - Hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`)
   - Named CSS colors (`"red"`, `"rebeccapurple"`)
   - `rgb()` / `rgba()` strings (`"rgb(0, 128, 255)"`)
@@ -74,6 +110,7 @@
   | `"256"`        | `TERM` contains `256color`                                                               |
   | `"16"`         | Any other TTY value                                                                      |
   | `"none"`       | Not a TTY, `NO_COLOR=1`, `TERM=dumb`, or `mode === "never"`                              |
+
   - Standalone `fg` / `bg` resolve depth on every call through the runtime
     `style` facade, so `setGlobalColorMode("never")`, `NO_COLOR=1`, and
     changes to `TERM` / `COLORTERM` continue to gate emission as expected.
@@ -85,6 +122,7 @@
     exactly as before; they don't participate in depth fallback.
 
   ### Compatibility
+
   - All deprecated exports keep their original behavior, signatures, and
     error contracts.
   - Truecolor escape bytes from `fg` / `fgCode` for the same input are
@@ -94,6 +132,7 @@
     `colorDepth === "truecolor"`.
 
   ### Public API removed
+
   - `resolveColorCapability(mode, overrides?)` and
     `resolveTrueColorCapability(mode, overrides?)` have been removed in
     favor of `resolveColorDepth(mode, overrides?)`. They were thin
@@ -115,6 +154,7 @@
   simultaneously a function, a chain root, and an `AnsiPair`.
 
   ### Added
+
   - **Chainable getters carry `open` / `close`**: every `ChainableStyleFn`
     (e.g. `style.bold`, `style.bold.red`, top-level `bold`) now extends
     `AnsiPair`. `composeStyles(bold, red, bgYellow)` and
@@ -139,6 +179,7 @@
     honor later `setGlobalColorMode()` flips.
 
   ### Behavior changes
+
   - **`fg("", "garbage")` now throws** `TypeError: Invalid color input: "garbage"`.
     The color is validated before any empty-text short-circuit, so callers
     can no longer accidentally mask invalid color bugs by passing empty
@@ -156,6 +197,7 @@
     to `"16"` instead of `"none"`).
 
   ### Improved
+
   - **Hyperlink error messages echo the bad value**: `Invalid hyperlink URL: "https://example.com/with space" must contain only printable ASCII characters without spaces.`
   - **JSDoc filled in** for `setGlobalColorMode`, `getGlobalColorMode`,
     `link`, `linkCode`, `fgCode`, `bgCode`. The `setGlobalColorMode` doc
@@ -164,6 +206,7 @@
     time (matching chalk / ansis).
 
   ### Caveats
+
   - Captured sub-chains snapshot at access time. To stay dynamic, capture
     the leaf and chain at the call site (`const fmt = style.bold; fmt.red("x")`).
   - `chain.open + text + chain.close` matches `chain(text)` only when
@@ -177,6 +220,7 @@
   Inline string literals passed to `fg` / `bg` / `fgCode` / `bgCode` (and
   the corresponding `style.fg` / `style.bg` / chain `.fg` / `.bg` methods)
   are now validated at compile time against a `StrictColorString` subset:
+
   - 148 CSS named colors (e.g. `"rebeccapurple"`)
   - `#rrggbb` / `#rgb` / `#rrggbbaa` hex
   - CSS color-function notation: `rgb()`, `rgba()`, `hsl()`, `hsla()`,
@@ -204,6 +248,7 @@
   signature — no function overloads and no runtime change. New helper
   types are exported for users who want to build their own strict
   wrappers:
+
   - `StrictColorString` — the literal subset
   - `CssColorFunctionString` — color-function template branch
   - `NonStringColorInput` — non-string `ColorInput` branches
@@ -235,6 +280,7 @@
   `@crustjs/plugins` now includes `noColorPlugin()`, which adds `--color` and `--no-color` to a Crust CLI and applies the override for the current run.
 
   **Breaking:** The capability resolver exports have been renamed for symmetry with the new `resolveModifierCapability`:
+
   - `resolveCapability` → `resolveColorCapability`
   - `resolveTrueColor` → `resolveTrueColorCapability`
 

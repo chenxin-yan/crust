@@ -1,5 +1,29 @@
 # @crustjs/store
 
+## 0.3.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove explicit migration errors for legacy validator result shapes. Field validators now accept only the documented `void` or exact `{ value }` result contracts.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+- [#168](https://github.com/chenxin-yan/crust/pull/168) [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Standardize schema-backed fields on the plain definition shape `{ schema }` and remove the `field()` factory.
+
+  This is a breaking API change. Migrate `field(Port, { default: 3000 })` to `{ schema: Port.default(3000) }`. Standard Schemas now exclusively own validation, transformation, defaults, and optionality; `default` and `validate` cannot be mixed with `schema`. Schema-backed field types now follow the schema's `InferOutput` exactly.
+
+  `type` metadata on a schema-backed field no longer coerces persisted strings before validation — the schema owns coercion. If you relied on `field(schema, { type: "number" })` coercing `"3000"` to `3000`, move the coercion into the schema (e.g. `z.coerce.number()`).
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [`c962196`](https://github.com/chenxin-yan/crust/commit/c962196c777401f9627ab70bc4453ac5a62a8233) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Bundle the shared internal utilities into each consumer so `@crustjs/utils` is no longer installed as a runtime dependency.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the unused `isGitInstalled` API and simplify scaffolding, build, path, and persistence internals.
+
+- [#168](https://github.com/chenxin-yan/crust/pull/168) [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Vendor the Standard Schema protocol types, as recommended by the specification, and remove `@standard-schema/spec` from runtime dependencies. This does not change the public API or runtime behavior, and published declarations no longer reference the spec package.
+
 ## 0.2.0
 
 ### Minor Changes
