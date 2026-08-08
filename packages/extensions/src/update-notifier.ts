@@ -428,7 +428,7 @@ function resolveUpdateCommand(
  * - Without `cache`, checks run once per process execution.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
- * - The update notice is emitted *after* the command handler completes.
+ * - The update notice is emitted *after* the command action completes.
  * - Duplicate notifications for the same version are suppressed.
  *
  * @param options - Plugin configuration. `currentVersion` and `packageName` are required.
@@ -442,7 +442,7 @@ function resolveUpdateCommand(
  *
  * const app = new Crust("my-cli").meta({ description: "My awesome CLI" })
  *   .extend(updateNotifier({ packageName: "my-cli", currentVersion: pkg.version }))
- *   .handle(() => {
+ *   .action(() => {
  *     console.log("Hello!");
  *   });
  *

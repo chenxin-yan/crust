@@ -18,7 +18,7 @@ const app = new Crust("my-cli")
     defineCommand("build", (command) =>
       command
         .flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
-        .handle(() => {}),
+        .action(() => {}),
     ),
   );
 

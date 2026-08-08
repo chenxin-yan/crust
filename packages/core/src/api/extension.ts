@@ -45,7 +45,7 @@ export interface ExtensionContext extends Readonly<InvocationIO> {
 	/** Syntax-parsed flag values for the resolved command */
 	readonly flags: Readonly<Record<string, unknown>>;
 	readonly rawArgs: readonly string[];
-	/** End the invocation successfully before validation, Context construction, and the handler. */
+	/** End the invocation successfully before validation, Context construction, and the action. */
 	readonly finish: () => Finished;
 }
 
@@ -53,7 +53,7 @@ export interface ExtensionHooks {
 	/**
 	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
-	 * validation, schemas, Contexts, and the Command Handler do not run.
+	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
 	readonly preRun?: (ctx: ExtensionContext) => Awaitable<void | Finished>;
 	/**

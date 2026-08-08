@@ -35,7 +35,7 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 
 // Inferred CommandDefinition<R> embeds the required ContextFactory shape
 export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
-	cmd.handle(({ ctx }) => {
+	cmd.action(({ ctx }) => {
 		void ctx.auth;
 	}),
 );
@@ -44,7 +44,7 @@ export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
 	.provide(auth())
-	.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
 `;
 

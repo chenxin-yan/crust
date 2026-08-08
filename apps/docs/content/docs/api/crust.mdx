@@ -45,8 +45,8 @@ interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
-  handle(
-    handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+  action(
+    action: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
 }
 ```
@@ -91,7 +91,7 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
 const auth = defineContext("auth", () => ({ user: "Ada" }));
 
 const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) =>
-  command.args({ name: "target", type: "string", required: true }).handle(({ args, ctx }) => {
+  command.args({ name: "target", type: "string", required: true }).action(({ args, ctx }) => {
     ctx.logging.debug(`${ctx.auth.user}:${args.target}`);
   }),
 );
@@ -130,7 +130,7 @@ Aliases must be non-empty, contain no whitespace, not start with `-`, and not co
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.meta()` shallow-merges fields. `.handle()` is set once and throws `DEFINITION` if called again.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.meta()` shallow-merges fields. `.action()` is set once and throws `DEFINITION` if called again.
 
 ## `.args(...defs)`
 
@@ -201,7 +201,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only for the resolved command path, and available through `ctx` in the Command Handler. The return type merges every instance's owned `flags` into the builder's owned and effective flag types.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only for the resolved command path, and available through `ctx` in the Command Action. The return type merges every instance's owned `flags` into the builder's owned and effective flag types.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -213,7 +213,7 @@ const database = defineContext("database", ({ options }: { options: { url: strin
 
 const app = new Crust("my-cli")
   .provide(database({ url: "postgres://localhost/app" }))
-  .handle(({ ctx }) => {
+  .action(({ ctx }) => {
     ctx.database.url;
   });
 ```
@@ -244,20 +244,20 @@ Extension-owned command or flag name and alias collisions throw `DEFINITION` whe
 
 See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
-## `.handle(handler)`
+## `.action(action)`
 
 ```ts
-handle(
-  handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+action(
+  action: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
 ): Crust
 ```
 
-Defines the Command Handler once. A second `.handle()` call throws `DEFINITION` instead of replacing existing behavior. The handler runs after routing, parsing, `preRun` hooks, validation, and Context construction.
+Defines the Command Action once. A second `.action()` call throws `DEFINITION` instead of replacing existing behavior. The action runs after routing, parsing, `preRun` hooks, validation, and Context construction.
 
 ```ts
 const app = new Crust("greet")
   .args({ name: "name", type: "string", required: true })
-  .handle(({ args, flags, ctx, rawArgs, command, rootCommand, stdout, stderr }) => {
+  .action(({ args, flags, ctx, rawArgs, command, rootCommand, stdout, stderr }) => {
     stdout(`Hello, ${args.name}!`);
   });
 ```
@@ -282,7 +282,7 @@ Inline one-off commands are added the same way:
 
 ```ts
 const app = new Crust("my-cli").add(
-  defineCommand("up", (command) => command.handle(({ stdout }) => stdout("up"))),
+  defineCommand("up", (command) => command.action(({ stdout }) => stdout("up"))),
 );
 ```
 
@@ -308,7 +308,7 @@ A definition can add other definitions. Nested requirements are checked against 
 snapshot(): Promise<CommandSnapshot>
 ```
 
-Prepares a frozen, validated Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions, then validates the resulting command tree. It does not call Command Handlers. Rejects with a [`CrustError`](/docs/api/errors) of code `DEFINITION` when materialization or validation fails.
+Prepares a frozen, validated Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions, then validates the resulting command tree. It does not call Command Actions. Rejects with a [`CrustError`](/docs/api/errors) of code `DEFINITION` when materialization or validation fails.
 
 ```ts
 import type { CommandSnapshot } from "@crustjs/core/tooling";
@@ -340,7 +340,7 @@ await app.run(["Ada"], {
 });
 ```
 
-`run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Handler, and cancellation failures are thrown unchanged.
+`run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
 
 ## `.execute(options?)`
 
@@ -363,6 +363,6 @@ await app.execute();
 `execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation sets exit code `130` and is offered to `onError` hooks; it renders nothing when no hook claims it.
 
 <Callout type="warn">
-  Use `.handle(handler)` to define behavior. `.run(argv, io)` is only programmatic invocation;
+  Use `.action(action)` to define behavior. `.run(argv, io)` is only programmatic invocation;
   `.execute()` is the terminal entry point. Command definitions are inert and expose neither.
 </Callout>

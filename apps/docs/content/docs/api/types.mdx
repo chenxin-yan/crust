@@ -1,6 +1,6 @@
 ---
 title: "Types"
-description: Public command definitions, snapshots, Command Handler contexts, Contexts, and Extensions.
+description: Public command definitions, snapshots, Command Action contexts, Contexts, and Extensions.
 ---
 
 All types on this page are exported from `@crustjs/core`.
@@ -47,7 +47,7 @@ A schema-backed argument has `name`, optional `description` and `variadic`, and 
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
 ```
 
-The schema receives `string | undefined`, or `string[]` for a variadic argument. It exclusively owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are not available in this variant. The schema's output type reaches the Command Handler.
+The schema receives `string | undefined`, or `string[]` for a variadic argument. It exclusively owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are not available in this variant. The schema's output type reaches the Command Action.
 
 An argument with neither `type` nor `schema` is a raw definition and returns the raw token value.
 
@@ -109,7 +109,7 @@ const target = defineArg("target", { type: "string", required: true });
 
 ## Command Snapshots
 
-Command Snapshots are readonly, serializable descriptions. They contain no Command Handler, parser, schema, or Context functions and are deeply frozen at public boundaries.
+Command Snapshots are readonly, serializable descriptions. They contain no Command Action, parser, schema, or Context functions and are deeply frozen at public boundaries.
 
 ### `CommandSnapshot`
 
@@ -118,7 +118,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. Command Handlers, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -136,9 +136,9 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
 
-The same injectable callbacks are passed to the Command Handler and every Context setup constructed for that invocation.
+The same injectable callbacks are passed to the Command Action and every Context setup constructed for that invocation.
 
-## Command Handler context
+## Command Action context
 
 ### `CrustCommandContext<A, F, Ctx>`
 
@@ -231,7 +231,7 @@ An Extension owns contributed flags. `recursive` defaults to `true`; `false` con
   name="ExtensionContext"
 />
 
-`args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Handler types.
+`args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Action types.
 
 ### `ExtensionHooks`
 
@@ -255,7 +255,7 @@ An Extension owns contributed flags. `recursive` defaults to `true`; `false` con
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed` after a Command Handler completes, `finished` when an Extension short-circuits with `ctx.finish()`, or `failed` with the thrown value.
+`postRun` receives `completed` after a Command Action completes, `finished` when an Extension short-circuits with `ctx.finish()`, or `failed` with the thrown value.
 
 ## Error types
 

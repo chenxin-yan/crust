@@ -238,7 +238,7 @@ export interface ManifestNode {
 	usage: string;
 	/** Agent-facing instructions rendered into the command's markdown file */
 	instructions?: string[];
-	/** Whether this command has a `run` handler (leaf vs group) */
+	/** Whether this command has a `run` action (leaf vs group) */
 	runnable: boolean;
 	/** Positional argument definitions */
 	args: ManifestArg[];

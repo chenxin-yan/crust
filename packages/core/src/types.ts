@@ -173,7 +173,7 @@ interface RawArgDef extends ArgDefBase {
  * The schema receives the raw string token (`string | undefined` when the
  * argument is absent; `string[]` for variadic args) and exclusively owns
  * coercion, defaults, requiredness, choices, and validation. Its inferred
- * output type reaches the Command Handler. Core value options (`type`,
+ * output type reaches the Command Action. Core value options (`type`,
  * `default`, `required`, `choices`, `parse`) cannot be mixed in.
  */
 interface SchemaArgDef {
@@ -270,7 +270,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 *
 	 * Receives the raw token as it appeared on the command line (after
 	 * `choices` validation, when present) and returns the resolved value
-	 * that flows to the `run` handler. The return type is inferred and
+	 * that flows to the `run` action. The return type is inferred and
 	 * becomes the flag's runtime type.
 	 *
 	 * Constraints:
@@ -531,7 +531,7 @@ export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Simpl
 	Omit<Base, keyof Override> & Override
 >;
 
-/** Computes a command's handler-visible flags from local and Context-owned definitions. */
+/** Computes a command's action-visible flags from local and Context-owned definitions. */
 export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
 	MergeFlags<Local, Owned> extends infer R extends FlagsDef ? R : never;
 

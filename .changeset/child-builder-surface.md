@@ -13,7 +13,7 @@ Migration:
 
 ```ts
 // Before
-const deploy = parent.sub("deploy").handle(({ flags, ctx }) => {});
+const deploy = parent.sub("deploy").action(({ flags, ctx }) => {});
 const app = parent.command(deploy);
 
 // After
@@ -22,7 +22,7 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => fl
 const auth = defineContext("auth", () => createAuthClient());
 
 const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) =>
-	command.handle(({ ctx }) => {}),
+	command.action(({ ctx }) => {}),
 );
 
 const app = parent.provide(logging(), auth()).add(deploy);

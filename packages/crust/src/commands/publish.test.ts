@@ -22,7 +22,7 @@ async function parsePublishArgs(argv: string[]) {
 		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };
 	};
 	await app.run(["publish", ...argv]);
-	if (!captured) throw new Error("publish handler did not run");
+	if (!captured) throw new Error("publish action did not run");
 	return captured;
 }
 

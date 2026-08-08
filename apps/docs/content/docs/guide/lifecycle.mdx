@@ -29,19 +29,19 @@ It requires explicit argv, honors injected writers, throws the original error, d
 1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions, including collisions with Context-owned flags (application and Context-only collisions are rejected earlier by `.flags()` or `.provide()`).
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
-4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, Contexts, and the Command Handler.
+4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, Contexts, and the Command Action.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
 7. **Construct Contexts** — create the Context values provided on the resolved path in topological order of their declared capability requirements (registration order among independent Contexts), passing each setup only its validated owned flags.
-8. **Run the Command Handler**.
+8. **Run the Command Action**.
 9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
 10. **Run `postRun` hooks** — invoke every Extension hook in reverse `.extend()` order with the completed, finished, or failed outcome. This is the invocation-level `finally` slot.
 
 ## Error flow
 
-Definition, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction or disposal, or the Command Handler still runs every `postRun` hook. The original failure wins over cleanup failures; after a successful or finished invocation, the first cleanup failure fails the invocation after remaining hooks run.
+Definition, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction or disposal, or the Command Action still runs every `postRun` hook. The original failure wins over cleanup failures; after a successful or finished invocation, the first cleanup failure fails the invocation after remaining hooks run.
 
-With `run()`, the original value is thrown to the caller. Handler and Context failures are never wrapped in `CrustError`.
+With `run()`, the original value is thrown to the caller. Action and Context failures are never wrapped in `CrustError`.
 
 With `execute()`, Crust first establishes a nonzero status, then invokes Extension `onError` hooks in `.extend()` order. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer. `onError` is presentation only and never runs for `run()`.
 
@@ -53,6 +53,6 @@ Choose the mechanism that matches the setup's scope:
 
 - use a Context for command-specific setup and native disposal
 - use Extension `preRun` and `postRun` for app-wide behavior around an invocation
-- keep ordinary local setup in the Command Handler when it is not reusable
+- keep ordinary local setup in the Command Action when it is not reusable
 
 This keeps dependency construction lazy and guarantees reverse-order cleanup.

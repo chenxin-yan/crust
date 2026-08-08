@@ -95,7 +95,7 @@ describe("walkCommandNode", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("mycli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 		const spec = walkCommandNode(snapshotCommand(app._node));
 		expect(spec.root.flags.map((flag) => flag.name)).toContain("api-key");

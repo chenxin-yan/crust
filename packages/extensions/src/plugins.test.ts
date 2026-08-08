@@ -73,10 +73,10 @@ function lateSkillExtension() {
 					.meta({ description: "Manage agent skills" })
 					.add(
 						defineCommand("update", (cmd) =>
-							cmd.meta({ description: "Update installed skills" }).handle(() => {}),
+							cmd.meta({ description: "Update installed skills" }).action(() => {}),
 						),
 					)
-					.handle(() => {}),
+					.action(() => {}),
 			),
 		],
 	});
@@ -211,7 +211,7 @@ describe("built-in plugins", () => {
 	it("help plugin renders generated help for no-run command", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -229,7 +229,7 @@ describe("built-in plugins", () => {
 			.extend(helpExtension())
 			.add(
 				defineCommand("group", (group) =>
-					group.add(defineCommand("build", (build) => build.handle(() => {}))),
+					group.add(defineCommand("build", (build) => build.action(() => {}))),
 				),
 			);
 
@@ -256,7 +256,7 @@ describe("built-in plugins", () => {
 		});
 		const app = new Crust("app")
 			.extend(rootOnly)
-			.add(defineCommand("build", (build) => build.handle(() => {})));
+			.add(defineCommand("build", (build) => build.action(() => {})));
 
 		await expect(app.run(["build", "--root"])).rejects.toMatchObject({ code: "PARSE" });
 	});
@@ -265,7 +265,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -313,7 +313,7 @@ describe("built-in plugins", () => {
 		process.env.NO_COLOR = "1";
 		let seenNoColor: string | undefined = "unset";
 
-		const app = new Crust("app").extend(noColorExtension()).handle(() => {
+		const app = new Crust("app").extend(noColorExtension()).action(() => {
 			seenNoColor = process.env.NO_COLOR;
 		});
 
@@ -334,8 +334,8 @@ describe("built-in plugins", () => {
 			releaseA = resolve;
 		});
 
-		const appA = new Crust("a").extend(noColorExtension()).handle(() => blockA);
-		const appB = new Crust("b").extend(noColorExtension()).handle(() => {});
+		const appA = new Crust("a").extend(noColorExtension()).action(() => blockA);
+		const appB = new Crust("b").extend(noColorExtension()).action(() => {});
 
 		// A (--color) starts and stays pending; B (--no-color) starts and
 		// finishes while A is mid-run, then A completes.
@@ -400,7 +400,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
 
 		await app.execute({ argv: ["build", "--help"] });
 
@@ -413,7 +413,7 @@ describe("built-in plugins", () => {
 			.extend(helpExtension())
 			.add(
 				defineCommand("create", (cmd) =>
-					cmd.args({ name: "name", type: "string", required: true }).handle(() => {}),
+					cmd.args({ name: "name", type: "string", required: true }).action(() => {}),
 				),
 			);
 
@@ -431,7 +431,7 @@ describe("built-in plugins", () => {
 			.extend(helpExtension())
 			.add(
 				defineCommand("deploy", (cmd) =>
-					cmd.flags({ name: "target", type: "string", required: true }).handle(() => {}),
+					cmd.flags({ name: "target", type: "string", required: true }).action(() => {}),
 				),
 			);
 
@@ -452,7 +452,7 @@ describe("built-in plugins", () => {
 			.extend(helpExtension())
 			.add(
 				defineCommand("build", (cmd) =>
-					cmd.handle((ctx) => {
+					cmd.action((ctx) => {
 						capturedRawArgs = [...ctx.rawArgs];
 					}),
 				),
@@ -473,7 +473,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.provide(auth())
 			.extend(helpExtension())
-			.add(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 		await app.run(["--help"]);
 		const rootHelp = stripAnsi(getStdout());
@@ -490,7 +490,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
 			.extend(lateSkillExtension())
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["skill", "--help"] });
 
@@ -504,7 +504,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
 			.extend(lateSkillExtension())
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["skill", "update", "--help"] });
 
@@ -518,7 +518,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(lateSkillExtension())
 			.extend(helpExtension())
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["skill", "--help"] });
 
@@ -529,7 +529,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin handles --version", async () => {
-		const app = new Crust("app").extend(versionExtension("1.2.3")).handle(() => {});
+		const app = new Crust("app").extend(versionExtension("1.2.3")).action(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -537,7 +537,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin handles -v alias", async () => {
-		const app = new Crust("app").extend(versionExtension("2.0.0")).handle(() => {});
+		const app = new Crust("app").extend(versionExtension("2.0.0")).action(() => {});
 
 		await app.execute({ argv: ["-v"] });
 
@@ -547,7 +547,7 @@ describe("built-in plugins", () => {
 	it("version plugin ignores --version after -- separator", async () => {
 		let ran = false;
 
-		const app = new Crust("app").extend(versionExtension("1.0.0")).handle(() => {
+		const app = new Crust("app").extend(versionExtension("1.0.0")).action(() => {
 			ran = true;
 		});
 
@@ -562,7 +562,7 @@ describe("built-in plugins", () => {
 
 		const app = new Crust("app").extend(versionExtension("1.0.0")).add(
 			defineCommand("build", (cmd) =>
-				cmd.handle(() => {
+				cmd.action(() => {
 					ran = true;
 				}),
 			),
@@ -579,7 +579,7 @@ describe("built-in plugins", () => {
 			.meta({ description: "Test app" })
 			.extend(versionExtension("1.0.0"))
 			.extend(helpExtension())
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["--help"] });
 
@@ -589,7 +589,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin with function value", async () => {
-		const app = new Crust("app").extend(versionExtension(() => "3.5.0")).handle(() => {});
+		const app = new Crust("app").extend(versionExtension(() => "3.5.0")).action(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -599,7 +599,7 @@ describe("built-in plugins", () => {
 	it("version plugin supports plain format", async () => {
 		const app = new Crust("app")
 			.extend(versionExtension("1.2.3", { format: "plain" }))
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -613,7 +613,7 @@ describe("built-in plugins", () => {
 					format: (version, context) => `${context.rootCommand.meta.name}/${version}`,
 				}),
 			)
-			.handle(() => {});
+			.action(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
@@ -632,7 +632,7 @@ describe("built-in plugins", () => {
 						description: "Manage issues",
 						aliases: ["issues", "i"],
 					})
-					.handle(() => {}),
+					.action(() => {}),
 			),
 		)._node;
 
@@ -645,7 +645,7 @@ describe("built-in plugins", () => {
 	it("renderHelp renders unchanged for a command without aliases", () => {
 		const command = new Crust("app").add(
 			defineCommand("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }).handle(() => {}),
+				cmd.meta({ description: "Build the project" }).action(() => {}),
 			),
 		)._node;
 
@@ -665,12 +665,12 @@ describe("built-in plugins", () => {
 							description: "Manage issues",
 							aliases: ["issues", "i"],
 						})
-						.handle(() => {}),
+						.action(() => {}),
 				),
 			)
 			.add(
 				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).handle(() => {}),
+					cmd.meta({ description: "Build the project" }).action(() => {}),
 				),
 			)._node;
 
@@ -692,7 +692,7 @@ describe("built-in plugins", () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).handle(() => {}),
+					cmd.meta({ description: "Build the project" }).action(() => {}),
 				),
 			)
 			.add(
@@ -702,7 +702,7 @@ describe("built-in plugins", () => {
 							description: "Internal completion entrypoint",
 							hidden: true,
 						})
-						.handle(() => {}),
+						.action(() => {}),
 				),
 			)._node;
 
@@ -717,23 +717,23 @@ describe("built-in plugins", () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+					cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
 				),
 			)
-			.handle(() => {})._node;
+			.action(() => {})._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
 	});
 
-	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no run handler", () => {
+	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no action", () => {
 		// Regression: formatUsage previously counted hidden subcommands when
 		// deciding whether to emit `<command>`, producing the incoherent
 		// `Usage: app <command>` with no COMMANDS section below it.
 		const command = new Crust("app").add(
 			defineCommand("__complete", (cmd) =>
-				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+				cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
 			),
 		)._node;
 
@@ -750,7 +750,7 @@ describe("built-in plugins", () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand("issue", (cmd) =>
-					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
+					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).action(() => {}),
 				),
 			)
 			.add(
@@ -761,7 +761,7 @@ describe("built-in plugins", () => {
 							aliases: ["__c"],
 							hidden: true,
 						})
-						.handle(() => {}),
+						.action(() => {}),
 				),
 			)._node;
 
@@ -778,12 +778,12 @@ describe("built-in plugins", () => {
 			.extend(helpExtension())
 			.add(
 				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).handle(() => {}),
+					cmd.meta({ description: "Build the project" }).action(() => {}),
 				),
 			)
 			.add(
 				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {
+					cmd.meta({ hidden: true, description: "Internal" }).action(() => {
 						didRun = true;
 					}),
 				),
@@ -806,7 +806,7 @@ describe("built-in plugins", () => {
 				choices: ["browser", "bun", "node"],
 				description: "Build target",
 			})
-			.handle(() => {})._node;
+			.action(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		expect(plain).toContain("--target");
 		expect(plain).toContain("Build target");
@@ -823,7 +823,7 @@ describe("built-in plugins", () => {
 				choices: ["dev", "staging", "prod"],
 				description: "Target environment",
 			})
-			.handle(() => {})._node;
+			.action(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		// The ARGS section heading is the marker the rest of the
 		// assertions hang off; without it the test would silently miss
@@ -842,7 +842,7 @@ describe("built-in plugins", () => {
 				default: "a",
 				description: "Build target",
 			})
-			.handle(() => {})._node;
+			.action(() => {})._node;
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
 		// Both suffixes appear on the same flag line, in this order, so the
 		// `[default: ...]` reads before `[choices: ...]`.

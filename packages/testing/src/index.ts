@@ -135,7 +135,7 @@ export function runInteractive(app: RunnableApp, argv: readonly string[]): Inter
 		}),
 	);
 
-	// Observe settlement so waitFor can stop polling; the handler also keeps an
+	// Observe settlement so waitFor can stop polling; the action also keeps an
 	// unawaited rejected `done` from surfacing as an unhandled rejection.
 	let settled = false;
 	let failed = false;

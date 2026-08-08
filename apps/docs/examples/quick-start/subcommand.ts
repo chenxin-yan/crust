@@ -7,6 +7,6 @@ export const app = new Crust("my-cli")
     defineCommand("build", (command) =>
       command
         .flags({ name: "minify", type: "boolean" })
-        .handle(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
+        .action(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
     ),
   );

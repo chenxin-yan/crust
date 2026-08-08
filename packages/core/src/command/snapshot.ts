@@ -36,7 +36,7 @@ export interface FlagSnapshot {
 
 /**
  * A readonly, serializable description of a command, exposed across public
- * API boundaries (Command Handler context, Extension hooks, and
+ * API boundaries (Command Action context, Extension hooks, and
  * `COMMAND_NOT_FOUND` error details) instead of internal command nodes.
  *
  * `flags` contains the effective (Context-owned + local merged) flags — the same
@@ -44,8 +44,8 @@ export interface FlagSnapshot {
  */
 export interface CommandSnapshot {
 	readonly meta: Readonly<CommandMeta>;
-	/** Whether the command defines a Command Handler */
-	readonly hasHandler: boolean;
+	/** Whether the command defines a Command Action */
+	readonly hasAction: boolean;
 	readonly args: readonly ArgSnapshot[];
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
 	readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
@@ -150,7 +150,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 			aliases: node.meta.aliases ? Object.freeze([...node.meta.aliases]) : undefined,
 			hidden: node.meta.hidden,
 		}),
-		hasHandler: node.run !== undefined,
+		hasAction: node.run !== undefined,
 		args: Object.freeze((node.args ?? []).map(snapshotArg)),
 		flags: Object.freeze(flags),
 		subCommands: Object.freeze(subCommands),

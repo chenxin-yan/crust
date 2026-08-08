@@ -176,7 +176,7 @@ function walkCommand(node: CommandSnapshot): CompletionCommand {
 /**
  * Build a `CompletionSpec` from a root `CommandSnapshot`.
  *
- * This is the single entry point used by the plugin's `run()` handler. It
+ * This is the single entry point used by the plugin's `run()` action. It
  * walks lazily — never at `setup()` time — so plugin order is irrelevant
  * (other plugins may add subcommands or inject flags after this plugin
  * registers; we only see the final tree when the user actually invokes the

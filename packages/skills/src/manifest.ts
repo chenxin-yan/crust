@@ -20,7 +20,7 @@ function buildNode(model: CommandDocumentation, source: CommandSnapshot): Manife
 		description: model.description,
 		usage: model.usage,
 		instructions: annotations?.instructions,
-		runnable: model.hasHandler,
+		runnable: model.hasAction,
 		args: model.args.map(normalizeArg),
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),
 		children: [...model.children]

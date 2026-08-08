@@ -10,7 +10,7 @@ Crust adds no environment-variable abstraction. Read runtime configuration from 
 ```ts
 import { Crust } from "@crustjs/core";
 
-const deploy = new Crust("deploy").handle(({ stdout }) => {
+const deploy = new Crust("deploy").action(({ stdout }) => {
   const token = process.env.API_TOKEN;
   if (!token) throw new Error("Missing API_TOKEN");
   stdout("Deploying");

@@ -326,7 +326,7 @@ describe("updateNotifierExtension post-run hook", () => {
 
 	/** Create a basic command node for testing. */
 	function makeCommandSnapshot(name = "test-cli") {
-		return snapshotCommand(new Crust(name).handle(() => {})._node);
+		return snapshotCommand(new Crust(name).action(() => {})._node);
 	}
 
 	/** Helper to invoke the extension post-run hook with a completed outcome. */
@@ -962,13 +962,13 @@ describe("updateNotifierExtension post-run hook", () => {
 	// ── Post-run ordering ─────────────────────────────────────────────────
 
 	describe("post-run ordering", () => {
-		it("runs after the command handler", async () => {
+		it("runs after the command action", async () => {
 			const pkgName = uniquePackageName("ordering");
 			mockRegistryResponse("2.0.0");
 			const executionOrder: string[] = [];
 			const app = new Crust(pkgName)
 				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
-				.handle(() => {
+				.action(() => {
 					executionOrder.push("command");
 				});
 
@@ -988,7 +988,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			});
 			const app = new Crust(pkgName)
 				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
-				.handle(() => {
+				.action(() => {
 					throw new Error("command failed");
 				});
 
@@ -1014,7 +1014,7 @@ describe("updateNotifierExtension post-run hook", () => {
 						packageName: pkgName,
 					}),
 				)
-				.handle(() => {
+				.action(() => {
 					commandExecuted = true;
 				});
 
@@ -1043,7 +1043,7 @@ describe("updateNotifierExtension post-run hook", () => {
 						packageName: pkgName,
 					}),
 				)
-				.handle(() => {
+				.action(() => {
 					commandExecuted = true;
 				});
 
@@ -1066,7 +1066,7 @@ describe("updateNotifierExtension post-run hook", () => {
 						packageName: pkgName,
 					}),
 				)
-				.handle(() => {
+				.action(() => {
 					commandExecuted = true;
 				});
 
@@ -1089,7 +1089,7 @@ describe("updateNotifierExtension post-run hook", () => {
 						packageName: pkgName,
 					}),
 				)
-				.handle(() => {});
+				.action(() => {});
 
 			await app.run([], { stderr: (text) => stderr.push(text) });
 

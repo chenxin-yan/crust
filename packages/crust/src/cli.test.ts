@@ -82,7 +82,7 @@ describe("crust CLI entry point", () => {
 		it("should use extensions for root behavior", async () => {
 			const app = makeCrustApp();
 			const root = await app.snapshot();
-			expect(root.hasHandler).toBe(false);
+			expect(root.hasAction).toBe(false);
 		});
 
 		it("should have build and publish as subcommands", async () => {

@@ -64,7 +64,7 @@ function buildCli() {
 				cmd
 					.meta({ description: "Build artifact" })
 					.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
-					.handle(() => {}),
+					.action(() => {}),
 			),
 			defineCommand("deploy", (cmd) =>
 				cmd
@@ -78,13 +78,13 @@ function buildCli() {
 									type: "string",
 									choices: ["dev", "staging", "prod"],
 								})
-								.handle(() => {}),
+								.action(() => {}),
 						),
 					)
-					.handle(() => {}),
+					.action(() => {}),
 			),
 		)
-		.handle(() => {});
+		.action(() => {});
 }
 
 describe("completionExtension", () => {
@@ -99,7 +99,7 @@ describe("completionExtension", () => {
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
 			.extend(completionExtension({ command: "shell-completion" }))
-			.handle(() => {});
+			.action(() => {});
 		const root = await app.snapshot();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
 	});
@@ -151,7 +151,7 @@ describe("completionExtension", () => {
 	it("rejects unsupported shell names with a clear stderr message", async () => {
 		// `choices` enforcement is wired into the parser, so the parser
 		// rejects unsupported shell names with a `CrustError("PARSE", …)`
-		// before the run handler ever sees the value. The error message names
+		// before the action ever sees the value. The error message names
 		// the offending value and the allowed set.
 		const app = buildCli();
 		await app.execute({ argv: ["completion", "powershell"] });
@@ -221,7 +221,7 @@ describe("completionExtension", () => {
 						shells: ["bash", "zsh"],
 					}),
 				)
-				.handle(() => {});
+				.action(() => {});
 			await app.execute({
 				argv: ["completion", "bash", "--output-dir", tmpDir],
 			});

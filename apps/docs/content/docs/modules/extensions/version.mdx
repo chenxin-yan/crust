@@ -10,7 +10,7 @@ import { Crust } from "@crustjs/core";
 import { version } from "@crustjs/extensions";
 import pkg from "../package.json";
 
-const app = new Crust("my-cli").extend(version(pkg.version)).handle(() => {});
+const app = new Crust("my-cli").extend(version(pkg.version)).action(() => {});
 
 await app.execute();
 ```
@@ -38,7 +38,7 @@ The default value is `"0.0.0"`. Pass a function to resolve the version only when
 const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? "dev"));
 ```
 
-`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Handler only for a root invocation with `--version` or `-v`; subcommands do not receive the flag.
+`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Action only for a root invocation with `--version` or `-v`; subcommands do not receive the flag.
 
 ## Options
 

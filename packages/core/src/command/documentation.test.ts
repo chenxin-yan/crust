@@ -14,7 +14,7 @@ describe("buildCommandDocumentation", () => {
 			new Crust("app")
 				.args({ name: "file", required: true }, { name: "rest", variadic: true })
 				.flags({ name: "verbose", type: "boolean" })
-				.handle(() => {}),
+				.action(() => {}),
 		);
 		expect(model.usage).toBe("app <file> [rest...] [options]");
 		expect(model.args.map((arg) => arg.token)).toEqual(["<file>", "[rest...]"]);
@@ -27,7 +27,7 @@ describe("buildCommandDocumentation", () => {
 	});
 
 	it("uses explicit usage unchanged", async () => {
-		const model = await docs(new Crust("app").meta({ usage: "app FILE" }).handle(() => {}));
+		const model = await docs(new Crust("app").meta({ usage: "app FILE" }).action(() => {}));
 		expect(model.usage).toBe("app FILE");
 		expect(model.usageSegments).toEqual([{ kind: "custom", text: "app FILE" }]);
 	});
@@ -37,10 +37,10 @@ describe("buildCommandDocumentation", () => {
 			new Crust("app")
 				.add(
 					defineCommand("visible", (command) =>
-						command.add(defineCommand("nested", (child) => child.handle(() => {}))),
+						command.add(defineCommand("nested", (child) => child.action(() => {}))),
 					),
 				)
-				.add(defineCommand("hidden", (command) => command.meta({ hidden: true }).handle(() => {}))),
+				.add(defineCommand("hidden", (command) => command.meta({ hidden: true }).action(() => {}))),
 		);
 		expect(model.children.map((child) => child.name)).toEqual(["visible"]);
 		expect(model.children[0]?.children[0]?.path).toEqual(["app", "visible", "nested"]);
@@ -60,7 +60,7 @@ describe("buildCommandDocumentation", () => {
 					},
 					{ name: "help", type: "boolean", noNegate: true },
 				)
-				.handle(() => {}),
+				.action(() => {}),
 		);
 		expect(model.flags[0]).toMatchObject({
 			name: "color",
@@ -74,7 +74,7 @@ describe("buildCommandDocumentation", () => {
 		const model = await docs(
 			new Crust("app")
 				.flags({ name: "target", type: "string", default: "bun", choices: ["bun", "node"] })
-				.handle(() => {}),
+				.action(() => {}),
 		);
 		expect(model.flags[0]).toMatchObject({ default: "bun", choices: ["bun", "node"] });
 	});

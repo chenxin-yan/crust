@@ -28,13 +28,13 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.add(defineCommand("two words" as string, (c) => c.handle(() => {})))
-			.handle(() => {});
+			.add(defineCommand("two words" as string, (c) => c.action(() => {})))
+			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" } as never).handle(() => {});
+		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" } as never).action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid flag name/);
 	});
 
@@ -45,21 +45,21 @@ describe("walker · validation", () => {
 				type: "string",
 				choices: ["a", "two words", "c"],
 			})
-			.handle(() => {});
+			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
 	});
 
 	it("rejects choice values containing single quotes", () => {
 		const cli = new Crust("bad")
 			.flags({ name: "target", type: "string", choices: ["a", "it's", "c"] })
-			.handle(() => {});
+			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", () => {
 		const cli = new Crust("safe")
 			.meta({ description: "first line\nsecond line\rstill same line" })
-			.handle(() => {});
+			.action(() => {});
 		const spec = walkCommandNode(snapshotCommand(cli._node));
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.root.description).toBe("first line second line still same line");
@@ -251,7 +251,7 @@ describe("completionExtension · --output-dir traversal", () => {
 		try {
 			const cli = new Crust("real")
 				.extend(completionExtension({ binName: "../pwn" }))
-				.handle(() => {});
+				.action(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
 			console.error = origError;
@@ -267,7 +267,7 @@ describe("completionExtension · --output-dir traversal", () => {
 		// and nothing escapes.
 		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
 		try {
-			const cli = new Crust("good").extend(completionExtension({ version: "1" })).handle(() => {});
+			const cli = new Crust("good").extend(completionExtension({ version: "1" })).action(() => {});
 			await cli.execute({
 				argv: ["completion", "bash", "--output-dir", tmp],
 			});

@@ -13,14 +13,14 @@ const command = new Crust("serve")
     { name: "port", type: "number", default: 3000, short: "p" },
     { name: "verbose", type: "boolean", short: "v" },
   )
-  .handle(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
+  .action(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
 ```
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. Duplicate names, short forms, or aliases throw a `DEFINITION` error at the call that introduces the collision.
 
-Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.meta()` shallow-merges fields, while `.handle()` is set once and throws if called again.
+Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.meta()` shallow-merges fields, while `.action()` is set once and throws if called again.
 
 ## Aliases and negation
 
@@ -41,7 +41,7 @@ Boolean flags support `--no-<spelling>` negation for the canonical name and ever
 )
 ```
 
-Both values are non-optional in the Command Handler. Other flags include `undefined` in their inferred type.
+Both values are non-optional in the Command Action. Other flags include `undefined` in their inferred type.
 
 ## Repeated values
 
@@ -77,7 +77,7 @@ This keeps one source of truth without adding the flag to commands that do not u
 
 ## Propagating flags with Contexts
 
-When one flag configures shared behavior for a command subtree, let a Context own and consume it. Handlers depend on the derived capability rather than the raw flag:
+When one flag configures shared behavior for a command subtree, let a Context own and consume it. Actions depend on the derived capability rather than the raw flag:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -90,17 +90,17 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
 }));
 
 const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.handle(({ ctx }) => ctx.logging.debug("deploying")),
+  command.action(({ ctx }) => ctx.logging.debug("deploying")),
 );
 
 const app = new Crust("app").provide(logging()).add(deploy);
 ```
 
-The Context declares, parses, and consumes `--verbose`, then wraps the invocation's injected `stderr` as behavior. Handlers call the logging capability without re-checking the flag. Renaming the flag or deriving log levels later changes the Context rather than every handler.
+The Context declares, parses, and consumes `--verbose`, then wraps the invocation's injected `stderr` as behavior. Actions call the logging capability without re-checking the flag. Renaming the flag or deriving log levels later changes the Context rather than every action.
 
 Context-owned flags are parsed and shown in help at the provider and later-added descendants. They can appear before, between, or after subcommand names. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 
-If a handler needs the raw value, expose it from the owning Context as part of that capability. Cross-command dependencies are always Context capabilities; raw flags are never injected into an added handler's types.
+If an action needs the raw value, expose it from the owning Context as part of that capability. Cross-command dependencies are always Context capabilities; raw flags are never injected into an added action's types.
 
 ## Standard Schemas
 
@@ -111,7 +111,7 @@ import { z } from "zod";
 
 new Crust("serve")
   .flags({ name: "port", type: "string", schema: z.coerce.number().int() })
-  .handle(({ flags }) => {
+  .action(({ flags }) => {
     flags.port; // number
   });
 ```

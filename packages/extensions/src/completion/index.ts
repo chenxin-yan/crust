@@ -79,7 +79,7 @@ function renderForShell(
  * Build an Extension that contributes a `completion <shell>` command
  * which emits a tab-completion script for bash, zsh, or fish.
  *
- * **Strategy: pure-static.** The handler walks the final root snapshot, so
+ * **Strategy: pure-static.** The action walks the final root snapshot, so
  * registration order is irrelevant — any commands or recursive flags added
  * by other Extensions are visible by the time we generate the script. The
  * walker projects the root snapshot to a small `CompletionSpec`; per-shell
@@ -120,7 +120,7 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 				description:
 					"Write all configured shells' scripts into this directory instead of printing to stdout",
 			})
-			.handle(async (context) => {
+			.action(async (context) => {
 				const rootCommand = context.rootCommand;
 				// Validate `binName` before emitting anything so misconfigured
 				// CLIs fail loudly. The walker also re-validates command/flag

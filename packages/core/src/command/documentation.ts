@@ -48,7 +48,7 @@ export interface CommandDocumentation {
 	/** Plain usage line: `usageSegments` texts joined with spaces. */
 	readonly usage: string;
 	readonly usageSegments: readonly UsageSegment[];
-	readonly hasHandler: boolean;
+	readonly hasAction: boolean;
 	readonly args: readonly DocumentationArg[];
 	readonly flags: readonly DocumentationFlag[];
 	/** Visible children only; hidden commands remain invocable but are not documentation. */
@@ -103,7 +103,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		? [{ kind: "custom", text: command.meta.usage }]
 		: [
 				{ kind: "path", text: path.join(" ") },
-				...(children.length > 0 && !command.hasHandler
+				...(children.length > 0 && !command.hasAction
 					? [{ kind: "command", text: "<command>" } as const]
 					: []),
 				...args.map((arg) => ({ kind: "arg", text: arg.token, required: arg.required }) as const),
@@ -118,7 +118,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		aliases: Object.freeze([...(command.meta.aliases ?? [])]),
 		usage,
 		usageSegments: Object.freeze(usageSegments.map((segment) => Object.freeze(segment))),
-		hasHandler: command.hasHandler,
+		hasAction: command.hasAction,
 		args: Object.freeze(args),
 		flags: Object.freeze(flags),
 		children: Object.freeze(children),

@@ -28,9 +28,9 @@ const port = () =>
 	});
 
 describe("Standard Schema on arg definitions", () => {
-	it("passes the raw string token to the schema and hands the output to the handler", async () => {
+	it("passes the raw string token to the schema and hands the output to the action", async () => {
 		let received: unknown;
-		const app = new Crust("cli").args({ name: "port", schema: port() }).handle(({ args }) => {
+		const app = new Crust("cli").args({ name: "port", schema: port() }).action(({ args }) => {
 			received = args.port;
 		});
 
@@ -39,7 +39,7 @@ describe("Standard Schema on arg definitions", () => {
 	});
 
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
-		const app = new Crust("cli").args({ name: "port", schema: port() }).handle(() => {});
+		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({
 			code: "VALIDATION",
@@ -55,7 +55,7 @@ describe("Standard Schema on arg definitions", () => {
 
 		const app = new Crust("cli")
 			.args({ name: "files", variadic: true, schema: upper })
-			.handle(({ args }) => {
+			.action(({ args }) => {
 				received = args.files;
 			});
 
@@ -76,7 +76,7 @@ describe("Standard Schema on arg definitions", () => {
 			},
 		};
 
-		const app = new Crust("cli").args({ name: "name", schema: asyncSchema }).handle(({ args }) => {
+		const app = new Crust("cli").args({ name: "name", schema: asyncSchema }).action(({ args }) => {
 			received = args.name;
 		});
 
@@ -90,7 +90,7 @@ describe("Standard Schema on flag definitions", () => {
 		let received: unknown;
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "string", schema: port() })
-			.handle(({ flags }) => {
+			.action(({ flags }) => {
 				received = flags.port;
 			});
 
@@ -105,7 +105,7 @@ describe("Standard Schema on flag definitions", () => {
 		}));
 		const app = new Crust("cli")
 			.flags({ name: "loud", type: "boolean", schema: onOff })
-			.handle(({ flags }) => {
+			.action(({ flags }) => {
 				received = flags.loud;
 			});
 
@@ -120,7 +120,7 @@ describe("Standard Schema on flag definitions", () => {
 		const app = new Crust("cli")
 			.args({ name: "input", schema: port() })
 			.flags({ name: "port", type: "string", schema: port() })
-			.handle(() => {});
+			.action(() => {});
 
 		try {
 			await app.run(["oops", "--port", "nope"]);
@@ -141,7 +141,7 @@ describe("Standard Schema on flag definitions", () => {
 		const probe = schema<boolean | undefined, string>((raw) => ({ value: String(raw) }));
 		const app = new Crust("cli")
 			.flags({ name: "loud", type: "boolean", schema: probe })
-			.handle(({ flags }) => {
+			.action(({ flags }) => {
 				received = flags.loud;
 			});
 
@@ -156,7 +156,7 @@ describe("Standard Schema on flag definitions", () => {
 		}));
 		const app = new Crust("cli")
 			.flags({ name: "tag", type: "string", multiple: true, schema: csv })
-			.handle(({ flags }) => {
+			.action(({ flags }) => {
 				received = flags.tag;
 			});
 
@@ -166,10 +166,10 @@ describe("Standard Schema on flag definitions", () => {
 });
 
 describe("schema interaction with Extensions", () => {
-	it("pre-run hooks observe raw values while the handler sees schema outputs", async () => {
+	it("pre-run hooks observe raw values while the action sees schema outputs", async () => {
 		const { defineExtension } = await import("../api/extension.ts");
 		let preRunSaw: unknown;
-		let handlerSaw: unknown;
+		let actionSaw: unknown;
 
 		const probe = defineExtension("probe", {
 			hooks: {
@@ -182,14 +182,14 @@ describe("schema interaction with Extensions", () => {
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "string", schema: port() })
 			.extend(probe)
-			.handle(({ flags }) => {
-				handlerSaw = flags.port;
+			.action(({ flags }) => {
+				actionSaw = flags.port;
 			});
 
 		await app.run(["--port", "8080"]);
 
 		expect(preRunSaw).toBe("8080"); // raw, pre-validation
-		expect(handlerSaw).toBe(8080); // schema output
+		expect(actionSaw).toBe(8080); // schema output
 	});
 
 	it("a pre-run finish skips schema validation entirely", async () => {
@@ -204,7 +204,7 @@ describe("schema interaction with Extensions", () => {
 		const app = new Crust("cli")
 			.flags({ name: "x", type: "string", schema: spy })
 			.extend(gate)
-			.handle(() => {});
+			.action(() => {});
 
 		await app.run(["--x", "whatever"]);
 		expect(validated).toBe(false);
@@ -216,11 +216,11 @@ describe("schema type inference", () => {
 	type Equal<A, B> =
 		(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-	it("the schema output type reaches the Command Handler", () => {
+	it("the schema output type reaches the Command Action", () => {
 		new Crust("cli")
 			.args({ name: "port", schema: port() })
 			.flags({ name: "tag", type: "string", schema: port() })
-			.handle((_ctx) => {
+			.action((_ctx) => {
 				type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
 				type _flagOutput = Expect<Equal<(typeof _ctx.flags)["tag"], number>>;
 			});
