@@ -37,7 +37,7 @@ export async function generateManPageFromEntry(
 		typeof (raw as { snapshot?: unknown }).snapshot !== "function"
 	) {
 		throw new Error(
-			`Man generation requires a Crust app exported as \`app\` or default export from ${options.entry}.`,
+			`Man generation requires a Crust app exported as \`app\` or default export from ${options.entry} (requires @crustjs/core with .snapshot()).`,
 		);
 	}
 	const app = raw as WriteManPageOptions["app"];

@@ -99,9 +99,11 @@ export function resolveTarget(input: string): BunTarget {
 		return input as BunTarget;
 	}
 
+	const canonical = SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === input);
+	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
 	const validTargets = SUPPORTED_TARGETS.join(", ");
 	throw new Error(
-		`Unknown target "${input}". Targets must use canonical Bun names.\n  Valid targets: ${validTargets}`,
+		`Unknown target "${input}". Targets must use canonical Bun names.${hint}\n  Valid targets: ${validTargets}`,
 	);
 }
 

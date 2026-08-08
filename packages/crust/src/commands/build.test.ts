@@ -19,6 +19,7 @@ import {
 	resolveBunBuildRunner,
 	resolveTarget,
 	SUPPORTED_TARGETS,
+	TARGET_INFO,
 } from "../../src/utils/build-helpers.ts";
 
 /**
@@ -209,11 +210,14 @@ describe("resolveTarget", () => {
 		}
 	});
 
-	it("rejects short target names with canonical-name guidance", () => {
-		expect(() => resolveTarget("linux-x64")).toThrow(
-			'Unknown target "linux-x64". Targets must use canonical Bun names.',
-		);
-		expect(() => resolveTarget("linux-x64")).toThrow(/Valid targets: bun-linux-x64-baseline/);
+	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
+		for (const target of SUPPORTED_TARGETS) {
+			const alias = TARGET_INFO[target].alias;
+			expect(() => resolveTarget(alias)).toThrow(
+				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
+			);
+			expect(() => resolveTarget(alias)).toThrow(/Valid targets: bun-linux-x64-baseline/);
+		}
 	});
 
 	it("throws on unknown target", () => {

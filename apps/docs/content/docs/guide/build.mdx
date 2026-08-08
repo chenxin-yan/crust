@@ -49,14 +49,14 @@ crust build --env-file .env.production
 
 ## Supported Targets
 
-| Canonical Bun Target       | Platform            |
-| -------------------------- | ------------------- |
-| `bun-linux-x64-baseline`   | Linux x86_64        |
-| `bun-linux-arm64`          | Linux ARM64         |
-| `bun-darwin-x64`           | macOS Intel         |
-| `bun-darwin-arm64`         | macOS Apple Silicon |
-| `bun-windows-x64-baseline` | Windows x86_64      |
-| `bun-windows-arm64`        | Windows ARM64       |
+| Canonical Bun Target       | Platform            | Package/dir suffix |
+| -------------------------- | ------------------- | ------------------ |
+| `bun-linux-x64-baseline`   | Linux x86_64        | `linux-x64`        |
+| `bun-linux-arm64`          | Linux ARM64         | `linux-arm64`      |
+| `bun-darwin-x64`           | macOS Intel         | `darwin-x64`       |
+| `bun-darwin-arm64`         | macOS Apple Silicon | `darwin-arm64`     |
+| `bun-windows-x64-baseline` | Windows x86_64      | `windows-x64`      |
+| `bun-windows-arm64`        | Windows ARM64       | `windows-arm64`    |
 
 ## Multi-Target Build (Default)
 
@@ -285,7 +285,7 @@ The publish command reads the `manifest.json` and publishes packages in dependen
 
 ### Distribution Package Names
 
-Per-platform packages are named by appending the platform alias to your package name:
+Per-platform packages are named by appending the platform suffix (see [Supported Targets](#supported-targets)) to your package name:
 
 | Root Package    | Platform Package                                              |
 | --------------- | ------------------------------------------------------------- |
