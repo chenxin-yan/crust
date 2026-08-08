@@ -190,16 +190,25 @@ describe("Crust .flags()", () => {
 
 	it("throws CrustError DEFINITION on flag collisions across .flags() calls", () => {
 		expect(() =>
-			new Crust("test")
-				.flags({ name: "verbose", type: "boolean" })
-				.flags({ name: "verbose", type: "string" }),
+			new Crust("test").flags({ name: "verbose", type: "boolean" }).flags(
+				// @ts-expect-error -- canonical name collides with a flag from an earlier call
+				{ name: "verbose", type: "string" },
+			),
 		).toThrow(/Flag "--verbose" is already defined/);
 
 		expect(() =>
-			new Crust("test")
-				.flags({ name: "verbose", type: "boolean", short: "v" })
-				.flags({ name: "version", type: "boolean", short: "v" }),
+			new Crust("test").flags({ name: "verbose", type: "boolean", short: "v" }).flags(
+				// @ts-expect-error -- short alias collides with a flag from an earlier call
+				{ name: "version", type: "boolean", short: "v" },
+			),
 		).toThrow(/spelling "v" collides with flag "--verbose"/);
+
+		expect(() =>
+			new Crust("test").flags({ name: "output", type: "string", aliases: ["out"] }).flags(
+				// @ts-expect-error -- long alias collides with a flag from an earlier call
+				{ name: "other", type: "string", aliases: ["out"] },
+			),
+		).toThrow(/spelling "out" collides with flag "--output"/);
 	});
 
 	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
@@ -303,13 +312,32 @@ describe("Crust .args()", () => {
 
 	it("throws CrustError DEFINITION on duplicate arg names", () => {
 		expect(() =>
-			new Crust("test")
-				.args({ name: "file", type: "string" })
-				.args({ name: "file", type: "string" }),
+			new Crust("test").args({ name: "file", type: "string" }).args(
+				// @ts-expect-error -- duplicate name from an earlier .args() call
+				{ name: "file", type: "string" },
+			),
 		).toThrow(/Argument "file" is already defined/);
 		expect(() =>
-			new Crust("test").args({ name: "file", type: "string" }, { name: "file", type: "string" }),
+			new Crust("test").args(
+				// @ts-expect-error -- duplicate names within one .args() call
+				{ name: "file", type: "string" },
+				{ name: "file", type: "string" },
+			),
 		).toThrow(/Argument "file" is already defined/);
+	});
+
+	it("rejects Promise-returning custom parsers at compile time", () => {
+		new Crust("test").args(
+			// @ts-expect-error -- positional argument parsers must be synchronous
+			{ name: "file", type: "string", parse: async (raw) => raw },
+		);
+		new Crust("test").flags(
+			// @ts-expect-error -- flag parsers must be synchronous
+			{ name: "file", type: "string", parse: async (raw) => raw },
+		);
+		new Crust("test")
+			.args({ name: "count", type: "string", parse: Number })
+			.flags({ name: "url", type: "string", parse: (raw) => new URL(raw) });
 	});
 
 	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {

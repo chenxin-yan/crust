@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef } from "../types.ts";
-import { validateIncomingFlag, type ValidateNamedFlagDefs } from "./flags.ts";
+import { type SpellingsOf, validateIncomingFlag, type ValidateNamedFlagDefs } from "./flags.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -47,6 +47,40 @@ describe("ValidateNamedFlagDefs", () => {
 		>;
 		type _checkSecond = Expect<
 			Equal<Result[1]["FIX_ALIAS_COLLISION"], 'Alias "v" collides with another flag name or alias'>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("extracts all literal spellings from an existing flags record", () => {
+		type Existing = {
+			verbose: { type: "boolean"; short: "v" };
+			output: { type: "string"; aliases: ["out", "destination"] };
+		};
+		type _check = Expect<
+			Equal<SpellingsOf<Existing>, "verbose" | "v" | "output" | "out" | "destination">
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands spellings that collide with an existing flags record", () => {
+		type Defs = readonly [{ name: "version"; type: "boolean"; short: "v" }];
+		type Result = ValidateNamedFlagDefs<Defs, "verbose" | "v">;
+		type _check = Expect<
+			Equal<Result[0]["FIX_ALIAS_COLLISION"], 'Flag spelling "v" collides with an existing flag'>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands Promise-returning custom parsers", () => {
+		type Defs = readonly [
+			{ name: "remote"; type: "string"; parse: (raw: string) => Promise<string> },
+		];
+		type Result = ValidateNamedFlagDefs<Defs>;
+		type _check = Expect<
+			Equal<Result[0]["FIX_ASYNC_PARSE"], "parse must be synchronous; do async work in run()">
 		>;
 
 		expect(true).toBe(true);

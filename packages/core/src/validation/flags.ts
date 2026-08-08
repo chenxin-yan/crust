@@ -11,20 +11,54 @@ type FlagDefBrand<Name, V> = Name extends keyof V
 	? Pick<V[Name], Extract<keyof V[Name], "FIX_ALIAS_COLLISION" | "FIX_NO_PREFIX">>
 	: {};
 
+/** Extract a narrowed canonical name from a named flag definition. */
+type ExtractName<F> = F extends { name: infer N extends string }
+	? string extends N
+		? never
+		: N
+	: never;
+
+/** Brand an incoming definition when one of its spellings is already claimed. */
+type ExistingFlagCollisionBrand<F, Existing extends string> = (
+	| ExtractName<F>
+	| ExtractAllAliases<F>
+) &
+	Existing extends infer Collision extends string
+	? [Collision] extends [never]
+		? {}
+		: {
+				readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
+			}
+	: never;
+
+/** Brand a custom parser whose return value cannot be consumed synchronously. */
+type AsyncParseBrand<F> = F extends { parse: (...args: never[]) => infer R }
+	? R extends Promise<unknown>
+		? {
+				readonly FIX_ASYNC_PARSE: "parse must be synchronous; do async work in run()";
+			}
+		: {}
+	: {};
+
 /**
  * Per-definition validation for the variadic `.flags(...defs)` call.
  *
  * Runs the record-based validators ({@link ValidateFlagAliases},
  * {@link ValidateNoPrefixedFlags}) against the derived record, then maps
  * each branded record value back onto the tuple element that declared it —
- * so alias collisions and `no-` prefixes error on the offending argument.
+ * so collisions, `no-` prefixes, and async parsers error on the offending argument.
  */
-export type ValidateNamedFlagDefs<Defs extends readonly NamedFlagDef[]> = {
+export type ValidateNamedFlagDefs<
+	Defs extends readonly NamedFlagDef[],
+	Existing extends string = never,
+> = {
 	[I in keyof Defs]: Defs[I] &
 		FlagDefBrand<
 			Defs[I]["name"],
 			ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
-		>;
+		> &
+		ExistingFlagCollisionBrand<Defs[I], Existing> &
+		AsyncParseBrand<Defs[I]>;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,6 +102,15 @@ type ExtractLongAliases<F> = F extends { aliases: infer A }
  * of causing false-positive collisions.
  */
 type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
+
+/** All narrowed canonical, short, and long-alias spellings in a flags record. */
+export type SpellingsOf<F extends FlagsDef> = string extends keyof F
+	? never
+	:
+			| (keyof F & string)
+			| {
+					[K in keyof F & string]: ExtractAllAliases<F[K]>;
+			  }[keyof F & string];
 
 /**
  * Collects aliases from every flag *except* flag K.
@@ -148,6 +191,30 @@ type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
 			: F[K] & {
 					readonly FIX_NO_PREFIX: `Alias "${NoPrefixedAliases<F[K]>}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`;
 				};
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Context-owned flag validation (compile-time, per-instance granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+type ContextOwnedFlags<C> = C extends {
+	readonly _requires?: { ownedFlags: infer OF extends FlagsDef };
+}
+	? OF
+	: {};
+
+type ContextFlagCollisionBrand<C, Existing extends string> = SpellingsOf<ContextOwnedFlags<C>> &
+	Existing extends infer Collision extends string
+	? [Collision] extends [never]
+		? {}
+		: {
+				readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
+			}
+	: never;
+
+/** Validate Context-owned flags against existing flags. */
+export type ProvideChecks<Eff extends FlagsDef, Cs extends readonly unknown[]> = {
+	[I in keyof Cs]: Cs[I] & ContextFlagCollisionBrand<Cs[I], SpellingsOf<Eff>>;
 };
 
 // ────────────────────────────────────────────────────────────────────────────

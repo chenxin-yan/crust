@@ -374,8 +374,18 @@ describe("Context-owned flags", () => {
 
 	it("rejects application and Context-owned collisions in both fluent orders", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		expect(() => new Crust("cli").flags(apiKey).provide(auth())).toThrow(/collides/);
-		expect(() => new Crust("cli").provide(auth()).flags(apiKey)).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").flags(apiKey).provide(
+				// @ts-expect-error -- provided Context flag collides with an existing local flag
+				auth(),
+			),
+		).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").provide(auth()).flags(
+				// @ts-expect-error -- local flag collides with an existing Context-owned flag
+				apiKey,
+			),
+		).toThrow(/collides/);
 	});
 
 	it("rejects collisions between different Contexts in one or separate provide calls", () => {
@@ -386,7 +396,12 @@ describe("Context-owned flags", () => {
 			() => ({}),
 		);
 		expect(() => new Crust("cli").provide(auth(), session())).toThrow(/collides/);
-		expect(() => new Crust("cli").provide(auth()).provide(session())).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").provide(auth()).provide(
+				// @ts-expect-error -- Context-owned short alias collides across provide calls
+				session(),
+			),
+		).toThrow(/collides/);
 	});
 
 	it("rejects Extension collisions regardless of fluent registration order", async () => {

@@ -29,7 +29,12 @@ import {
 	validateVariadicArgPosition,
 } from "../validation/args.ts";
 import { validateIncomingAliases } from "../validation/commands.ts";
-import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
+import {
+	type ProvideChecks,
+	type SpellingsOf,
+	validateIncomingFlag,
+	type ValidateNamedFlagDefs,
+} from "../validation/flags.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
@@ -271,7 +276,7 @@ export interface CommandDefinitionBuilder<
 	Ctx extends ContextMap = {},
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: ValidateNamedFlagDefs<Defs>
+		...defs: ValidateNamedFlagDefs<Defs, SpellingsOf<Eff>>
 	): CommandDefinitionBuilder<
 		MergeFlags<Local, NamedFlagsRecord<Defs>>,
 		Owned,
@@ -285,7 +290,7 @@ export interface CommandDefinitionBuilder<
 	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: Cs
+		...instances: ProvideChecks<Eff, Cs>
 	): CommandDefinitionBuilder<
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
@@ -448,18 +453,12 @@ export class Crust<
 	 * Repeated `.flags()` calls accumulate local flags. Returns a new builder
 	 * with the combined local flag types. The original builder is not mutated.
 	 *
-	 * NOTE: Compile-time ancestor-owned/local cross-collision checks are intentionally
-	 * omitted here to reduce TypeScript type-check cost in large projects; the same
-	 * applies to same-name flags across chained `.flags()` calls, where the type level
-	 * merges (later wins) while runtime throws. Runtime collision checks still run
-	 * during parsing and command-tree validation.
-	 *
 	 * @param defs - Named flag definitions
 	 * @returns A new `Crust` instance with the given flags
 	 * @throws {CrustError} `DEFINITION` on duplicate names or spellings, or schema-exclusivity violations
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: ValidateNamedFlagDefs<Defs>
+		...defs: ValidateNamedFlagDefs<Defs, SpellingsOf<Eff>>
 	): Crust<
 		MergeFlags<Local, NamedFlagsRecord<Defs>>,
 		Owned,
@@ -571,7 +570,7 @@ export class Crust<
 	 *                      this command path
 	 */
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: Cs
+		...instances: ProvideChecks<Eff, Cs>
 	): Crust<
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,

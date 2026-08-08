@@ -5,10 +5,39 @@ import type { ArgsDef } from "../types.ts";
 // Compile-time validation
 // ────────────────────────────────────────────────────────────────────────────
 
+type ArgName<A> = A extends { name: infer N extends string }
+	? string extends N
+		? never
+		: N
+	: never;
+
+type ArgNames<A extends readonly object[]> = ArgName<A[number]>;
+
+type DuplicateArgBrand<A, Existing extends string> = ArgName<A> &
+	Existing extends infer Duplicate extends string
+	? [Duplicate] extends [never]
+		? {}
+		: {
+				readonly FIX_DUPLICATE_ARG: `Argument name "${Duplicate}" is already defined`;
+			}
+	: never;
+
+type AsyncParseBrand<A> = A extends { parse: (...args: never[]) => infer R }
+	? R extends Promise<unknown>
+		? {
+				readonly FIX_ASYNC_PARSE: "parse must be synchronous; do async work in run()";
+			}
+		: {}
+	: {};
+
+type ArgChecks<A, Existing extends string> = A &
+	DuplicateArgBrand<A, Existing> &
+	AsyncParseBrand<A>;
+
 /**
- * Per-arg validation tuple type. Resolves to `A` when the constraint is
- * satisfied (only the last arg is variadic). For non-last args that have
- * `variadic: true`, adds a branded error property to the specific arg.
+ * Per-arg validation tuple type. Resolves to `A` when the constraints are
+ * satisfied: only the last arg is variadic, names are unique, and custom
+ * parsers are synchronous. Invalid definitions receive a branded property.
  *
  * Generalized to work with any ordered tuple of object-typed definitions.
  * Uses `readonly object[]` to avoid TypeScript's weak type detection
@@ -20,33 +49,38 @@ import type { ArgsDef } from "../types.ts";
  *     '{ readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic" }'.
  * ```
  */
-export type ValidateVariadicArgs<A extends readonly object[]> = A extends readonly [
-	infer Head,
-	...infer Tail extends readonly object[],
-]
+export type ValidateVariadicArgs<
+	A extends readonly object[],
+	Existing extends string = never,
+> = A extends readonly [infer Head, ...infer Tail extends readonly object[]]
 	? Tail extends readonly [unknown, ...unknown[]]
 		? Head extends { variadic: true }
 			? readonly [
-					Head & {
+					ArgChecks<Head, Existing> & {
 						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
 					},
-					...ValidateVariadicArgs<Tail>,
+					...ValidateVariadicArgs<Tail, Existing | ArgName<Head>>,
 				]
-			: readonly [Head, ...ValidateVariadicArgs<Tail>]
-		: readonly [Head]
+			: readonly [
+					ArgChecks<Head, Existing>,
+					...ValidateVariadicArgs<Tail, Existing | ArgName<Head>>,
+				]
+		: readonly [ArgChecks<Head, Existing>]
 	: A;
+
+type BrandVariadicPosition<A extends readonly object[]> = {
+	[I in keyof A]: A[I] & {
+		readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+	};
+};
 
 export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extends readonly [
 	...unknown[],
 	infer Last,
 ]
 	? Last extends { variadic: true }
-		? {
-				[I in keyof NewA]: NewA[I] & {
-					readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-				};
-			}
-		: ValidateVariadicArgs<NewA>
+		? BrandVariadicPosition<ValidateVariadicArgs<NewA, ArgNames<A>>>
+		: ValidateVariadicArgs<NewA, ArgNames<A>>
 	: ValidateVariadicArgs<NewA>;
 
 // ────────────────────────────────────────────────────────────────────────────
