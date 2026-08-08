@@ -70,7 +70,7 @@ describe("command definitions", () => {
 		expect(definition.name).toBe("build");
 		expect(renamed.name).toBe("compile");
 		expect(renamed).not.toBe(definition);
-		type _SameRequirements = Assert<IsEqual<typeof renamed, typeof definition>>;
+		type _PreservesRenamedLiteral = Assert<IsEqual<typeof renamed.name, "compile">>;
 
 		expect(() => definition.as("  ")).toThrow(/non-empty/);
 	});
@@ -218,13 +218,19 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(definition);
 
-		expect(() => app.add(definition)).toThrow(/already registered/);
-		expect(() => app.add(defineCommand("b", (command) => command))).toThrow(
-			/collides with alias of sibling "build"/,
-		);
-		expect(() =>
-			new Crust("cli").add(defineCommand("b", (command) => command)).add(definition),
-		).toThrow(/collides with sibling canonical name "b"/);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects duplicate definitions for plain-JS consumers
+			app.add(definition);
+		}).toThrow(/already registered/);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects a name colliding with a sibling alias
+			app.add(defineCommand("b", (command) => command));
+		}).toThrow(/collides with alias of sibling "build"/);
+		expect(() => {
+			const withB = new Crust("cli").add(defineCommand("b", (command) => command));
+			// @ts-expect-error -- runtime twin rejects an alias colliding with a sibling name
+			withB.add(definition);
+		}).toThrow(/collides with sibling canonical name "b"/);
 	});
 
 	it("rejects unrelated returned builders and nested Extensions", () => {
