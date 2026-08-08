@@ -3,7 +3,7 @@ title: "Skills"
 description: Agent skill generation for AI coding assistants.
 ---
 
-The `@crustjs/skills` package generates and installs agent skills from your CLI's readonly Command Snapshot. Skills provide structured documentation that AI coding assistants use to understand your CLI. Generated skills include the full visible command tree and omit commands marked `meta.hidden`. Snapshot preparation and documentation modeling use the explicitly unsupported `@crustjs/core/tooling` bridge internally; application code registers only the `skill()` Extension.
+The `@crustjs/skills` package generates and installs agent skills from your CLI's readonly Command Snapshot. Skills provide structured documentation that AI coding assistants use to understand your CLI. Generated skills include the full visible command tree and omit commands marked `meta.hidden`. Snapshots are prepared through `app.snapshot()`, and documentation modeling uses the lockstep first-party helpers from `@crustjs/core/tooling` internally; application code registers only the `skill()` Extension.
 
 ## Install
 

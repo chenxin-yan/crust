@@ -24,7 +24,8 @@ All exports on these pages come from `@crustjs/core`.
 See [Types](/docs/api/types) for command definitions, Command Snapshots, Command Handler contexts, Contexts, Extensions, and error detail types.
 
 <Callout type="warn">
-  `@crustjs/core/tooling` is an unsupported bridge for first-party build, man-page, and skill
-  tooling. It includes the presentation-neutral `buildCommandDocumentation()` model used by
-  first-party renderers. It is not part of the supported application-authoring API.
+  `@crustjs/core/tooling` exports the supported `CommandSnapshot` type consumed by
+  [`app.snapshot()`](/docs/api/crust#snapshot). Its remaining helpers — including the
+  presentation-neutral `buildCommandDocumentation()` model used by first-party renderers — are
+  lockstep first-party tooling, not part of the supported application-authoring API.
 </Callout>

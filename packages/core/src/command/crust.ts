@@ -699,6 +699,8 @@ export class Crust<
 	 *
 	 * Materializes Extension contributions and command definitions, then
 	 * validates the resulting command tree. Does not call Command Handlers.
+	 * Rejects with a `CrustError` of code `DEFINITION` when materialization
+	 * or validation fails.
 	 */
 	async snapshot(): Promise<CommandSnapshot> {
 		return prepareInvocationSnapshot(this._node, materializeCommandDefinition);

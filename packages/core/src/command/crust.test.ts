@@ -1969,6 +1969,32 @@ describe("Crust.snapshot", () => {
 		expect(a.meta.name).toBe("cli");
 		expect(b.meta.name).toBe("cli");
 	});
+
+	it("never calls Command Handlers", async () => {
+		let called = false;
+		const app = new Crust("cli").handle(() => {
+			called = true;
+		});
+		await app.snapshot();
+		expect(called).toBe(false);
+	});
+
+	it("rejects with CrustError DEFINITION on an invalid command tree", async () => {
+		const clash = defineExtension("clash", {
+			flags: { verbose: { type: "boolean", short: "v" } },
+		});
+		const app = new Crust("cli")
+			.flags({ name: "version", type: "boolean", short: "v" })
+			.extend(clash);
+
+		try {
+			await app.snapshot();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+		}
+	});
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
