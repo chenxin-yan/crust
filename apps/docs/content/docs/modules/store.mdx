@@ -337,86 +337,54 @@ await store.write({ port: 0, host: "localhost" });
 
 ### Schema-driven validation
 
-The built-in `field()` factory builds a `FieldDef` from any
-[Standard Schema v1](https://standardschema.dev/) object. Crust stores raw
-values; the schema validates and transforms them on read/write.
+Put any [Standard Schema v1](https://standardschema.dev/) object directly on a field definition's `schema` key. The schema exclusively owns validation, transformation, defaults, and optionality.
 
 ```ts
-import { configDir, createStore, field } from "@crustjs/store";
+import { configDir, createStore } from "@crustjs/store";
 import { z } from "zod";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: field(z.enum(["light", "dark"]).default("light")),
+    theme: { schema: z.enum(["light", "dark"]).default("light") },
     verbose: { type: "boolean", default: false },
   },
 });
 ```
 
-Effect users wrap their schema once with `Schema.standardSchemaV1(...)`
-before passing it to `field()`:
+Effect users wrap their schema with `Schema.standardSchemaV1(...)`:
 
 ```ts
 import * as Schema from "effect/Schema";
-import { configDir, createStore, field } from "@crustjs/store";
+import { configDir, createStore } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
   fields: {
-    theme: field(Schema.standardSchemaV1(Schema.Literal("light", "dark"))),
+    theme: { schema: Schema.standardSchemaV1(Schema.Literal("light", "dark")) },
   },
 });
 ```
 
-`validate` is called on `read`, `write`, `update`, and `patch` — never on
-`reset`. If a validator throws, the operation is aborted and a
-`CrustStoreError` with `VALIDATION` code is thrown with structured issues.
+Schemas run on `read`, `write`, `update`, and `patch` — never on `reset`. If a schema rejects a value, the operation aborts with `CrustStoreError("VALIDATION")` and structured issues.
 
-Schema transforms in fields built via `field()` are applied on `write`,
-`update`, and `patch` — never on `read`. The transformed output replaces
-the input before persistence and is then re-validated once: a transform
-whose output the schema would itself reject (e.g.
-`z.string().transform(Number)` — string in, number out) is rejected at
-write time with `CrustStoreError("VALIDATION")` and an issue message
-tagged `read-unstable transform`.
+Schema transforms are applied on `write`, `update`, and `patch`. The transformed output replaces the input before persistence and is re-validated once. A transform whose output the schema would itself reject (for example `z.string().transform(Number)`) fails with a `read-unstable transform` issue.
 
-On `read`, the schema still validates the persisted value but its
-transform output is discarded — the returned value matches what is on
-disk. Existing on-disk values for schema-using stores survive unchanged
-across upgrades; the first subsequent `write` / `update` / `patch`
-canonicalizes them through the transform.
+On `read`, schemas validate persisted values but transformed output is discarded so existing on-disk values remain unchanged. The exception is a missing value: Crust passes `undefined` to the schema and uses its output, allowing schema defaults and optionality to work naturally.
 
-Missing persisted values flow through the schema as `undefined`, so
-`field(z.string().default("x"))` materializes `"x"` on read,
-`field(z.string().optional())` returns `undefined`, and
-`field(z.string())` fails validation with a `VALIDATION` error.
+```ts
+const fields = {
+  withDefault: { schema: z.string().default("x") }, // string; missing → "x"
+  optional: { schema: z.string().optional() }, // string | undefined
+  required: { schema: z.string() }, // string; missing → VALIDATION
+};
+```
 
-Hand-rolled `validate: (v) => { ... }` callbacks that return `void` are
-unaffected — they remain validation-only (throw to reject, return `void`
-to accept) and cannot transform the persisted value.
+The inferred store type follows the schema's exact output type (`InferOutput`). A schema default therefore narrows automatically; no separate Crust default is needed or allowed. Mixing `schema` with `default` or a hand-written `validate` callback is rejected with `CrustStoreError("DEFINITION")`.
 
-#### Schema-derived defaults and TypeScript
+Optional `type` and `array` fields remain available as tooling metadata on schema definitions. They do not replace the schema as the source of value semantics.
 
-Standard Schema v1 has no spec-portable type-level access to schema
-defaults. Crust does not inspect schemas to populate runtime metadata;
-defaults are materialized on read by validating `undefined` through the
-schema. As a result:
-
-- `field(z.string().default("x"))` returns `"x"` on read when the field
-  is missing from disk, but the inferred config type is `string |
-undefined` (NOT narrowed).
-- `field(z.string(), { default: "x" })` keeps `"x"` as the Crust-level
-  default AND narrows the inferred config type to `string`.
-
-Prefer the explicit form when the field is required to always have a
-value at use sites.
-
-#### `field()` throws on invalid input
-
-`field()` throws `CrustStoreError("DEFINITION")` when handed a value that
-is not a Standard Schema v1 object. `type` is optional for schema-backed
-fields; include it in `opts` when tooling needs primitive-type metadata.
+Hand-written `validate` callbacks on non-schema definitions remain validation-only: throw to reject and return `void` to accept.
 
 ### Operation behavior
 
@@ -430,13 +398,13 @@ fields; include it in `opts` when tooling needs primitive-type metadata.
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                      | Details                 |
-| ------------ | --------------------------------------------------------- | ----------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform   | `{ path: string }`      |
-| `PARSE`      | Malformed JSON in persisted file                          | `{ path: string }`      |
-| `IO`         | Filesystem read, write, or delete failure                 | `{ path, operation }`   |
-| `VALIDATION` | One or more field validators rejected the state           | `{ operation, issues }` |
-| `DEFINITION` | `field()` received an invalid (non-Standard-Schema) input | `{}`                    |
+| Code         | When                                                    | Details                 |
+| ------------ | ------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
+| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
+| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }` |
+| `DEFINITION` | A field mixes `schema` with `default` or `validate`     | `{}`                    |
 
 ### Catching Errors
 
@@ -505,7 +473,6 @@ if (err instanceof CrustStoreError) {
 | Function      | Description                                           |
 | ------------- | ----------------------------------------------------- |
 | `createStore` | Create a typed async store backed by JSON             |
-| `field`       | Build a `FieldDef` from any Standard Schema v1 object |
 | `configDir`   | Resolve platform-standard config directory for an app |
 | `dataDir`     | Resolve platform-standard data directory for an app   |
 | `stateDir`    | Resolve platform-standard state directory for an app  |
@@ -513,15 +480,11 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-`FieldDef` accepts typed inline definitions and schema-backed definitions returned by `field()`. Inline fields declare their metadata and validation directly; the schema-backed branch carries the Standard Schema output type.
+`FieldDef` accepts core value definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly.
 
 #### `FieldDef`
 
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="FieldDef" />
-
-#### `FieldOptions`
-
-<auto-type-table path="../../../../../packages/store/src/field.ts" name="FieldOptions" />
 
 #### `Store`
 

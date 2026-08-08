@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
-import { field } from "./field.ts";
 import { createStore } from "./store.ts";
 import type { FieldsDef } from "./types.ts";
 
@@ -1169,9 +1168,52 @@ describe("schema transform persistence", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
+	it("materializes schema defaults from missing persisted values", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			fields: { name: { schema: z.string().default("x") } },
+		});
+
+		await expect(store.read()).resolves.toEqual({ name: "x" });
+	});
+
+	it("preserves optional schema output for missing persisted values", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			fields: { name: { schema: z.string().optional() } },
+		});
+
+		await expect(store.read()).resolves.toEqual({ name: undefined });
+	});
+
+	it("rejects missing values when the schema requires a value", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			fields: { name: { schema: z.string() } },
+		});
+
+		await expect(store.read()).rejects.toMatchObject({ code: "VALIDATION" });
+	});
+
+	it("rejects schema definitions mixed with defaults or validators", () => {
+		for (const field of [
+			{ schema: z.string(), default: "x" },
+			{ schema: z.string(), validate: () => {} },
+		]) {
+			let caught: unknown;
+			try {
+				createStore({ dirPath: tempDir, fields: { name: field } as unknown as FieldsDef });
+			} catch (error) {
+				caught = error;
+			}
+			expect(caught).toBeInstanceOf(CrustStoreError);
+			expect(caught).toMatchObject({ code: "DEFINITION" });
+		}
+	});
+
 	it("persists Zod transform output on write (trim example)", async () => {
 		const fields = {
-			name: field(z.string().transform((s) => s.trim())),
+			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1185,7 +1227,7 @@ describe("schema transform persistence", () => {
 
 	it("persists Zod transform output on update", async () => {
 		const fields = {
-			name: field(z.string().transform((s) => s.trim())),
+			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1199,7 +1241,7 @@ describe("schema transform persistence", () => {
 
 	it("persists Zod transform output on patch", async () => {
 		const fields = {
-			name: field(z.string().transform((s) => s.trim())),
+			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1219,7 +1261,7 @@ describe("schema transform persistence", () => {
 		await writeFile(filePath, JSON.stringify({ name: "  hi  " }));
 
 		const fields = {
-			name: field(z.string().transform((s) => s.trim())),
+			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1237,7 +1279,7 @@ describe("schema transform persistence", () => {
 	// disk.
 	it("rejects read-unstable cross-type transform at write time", async () => {
 		const fields = {
-			x: field(z.string().transform((s) => s.length)),
+			x: { schema: z.string().transform((s) => s.length) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1271,10 +1313,10 @@ describe("schema transform persistence", () => {
 	// Regression: the read-stability guard previously used reference
 	// identity (`Object.is`), so Standard Schema parsers that return fresh
 	// references for identical content (Zod arrays/objects) tripped the
-	// guard and made `field(z.array(...))` unwritable.
+	// guard and made array schemas unwritable.
 	it("writes array field without tripping read-stability guard", async () => {
 		const fields = {
-			tags: field(z.array(z.string())),
+			tags: { schema: z.array(z.string()) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });
@@ -1292,7 +1334,7 @@ describe("schema transform persistence", () => {
 	// recheck output as stable when contents match by value.
 	it("persists Zod array-of-transforms output on write", async () => {
 		const fields = {
-			tags: field(z.array(z.string().transform((s) => s.trim()))),
+			tags: { schema: z.array(z.string().transform((s) => s.trim())) },
 		} as const satisfies FieldsDef;
 
 		const store = createStore({ dirPath: tempDir, fields });

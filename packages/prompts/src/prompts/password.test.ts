@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
+import type { PromptIO } from "../core/renderer.ts";
 import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { password, type PasswordOptions } from "./password.ts";
 
@@ -12,7 +13,11 @@ import { password, type PasswordOptions } from "./password.ts";
 let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
 function start<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(password, options);
+	const runPassword = password as unknown as (
+		options: PasswordOptions<Output>,
+		io?: PromptIO,
+	) => Promise<Output | string>;
+	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(runPassword, options);
 	activePrompt = prompt;
 	return prompt.answer;
 }
@@ -428,7 +433,11 @@ describe("password — no message", () => {
 
 describe("password — non-TTY", () => {
 	function nonTTY<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-		return password(options, nonTTYIO());
+		const runPassword = password as unknown as (
+			options: PasswordOptions<Output>,
+			io?: PromptIO,
+		) => Promise<Output | string>;
+		return runPassword(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -450,10 +459,16 @@ describe("password — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — schema validation", () => {
+	it("rejects combining schema with a function validator", async () => {
+		await expect(password({ schema: z.string(), validate: () => {} } as any)).rejects.toThrow(
+			'password() cannot combine "schema" with "validate"',
+		);
+	});
+
 	it("resolves to string when a string schema accepts the input", async () => {
 		const promise = start({
 			message: "Password?",
-			validate: z.string().min(3),
+			schema: z.string().min(3),
 		});
 
 		await tick();
@@ -473,7 +488,7 @@ describe("password — schema validation", () => {
 	it("renders the first issue's message and waits for retry on failure", async () => {
 		const promise = start({
 			message: "Password?",
-			validate: z.string().min(3, "Too short"),
+			schema: z.string().min(3, "Too short"),
 		});
 
 		await tick();
@@ -497,7 +512,7 @@ describe("password — schema validation", () => {
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
 		const promise = start({
 			message: "PIN?",
-			validate: z.coerce.number().int().min(1000),
+			schema: z.coerce.number().int().min(1000),
 		});
 
 		await tick();
@@ -527,7 +542,7 @@ describe("password — schema validation", () => {
 
 		const promise = start({
 			message: "Passphrase?",
-			validate: asyncSchema,
+			schema: asyncSchema,
 		});
 
 		await tick();
@@ -569,7 +584,7 @@ describe("password — schema validation", () => {
 
 		const promise = start({
 			message: "Word?",
-			validate: emptyMessageSchema,
+			schema: emptyMessageSchema,
 		});
 
 		await tick();
@@ -597,7 +612,7 @@ describe("password — schema validation", () => {
 // Schema short-circuit (initial) soundness
 // ────────────────────────────────────────────────────────────────────────────
 //
-// When `validate` is a Standard Schema, `initial` must flow through it.
+// When `schema` is present, `initial` must flow through it.
 // Otherwise the `Promise<Output>` overload silently leaks a raw `string`.
 
 describe("password — schema short-circuit", () => {
@@ -605,7 +620,7 @@ describe("password — schema short-circuit", () => {
 		const result = await password({
 			message: "PIN?",
 			initial: "4242",
-			validate: z.coerce.number().int(),
+			schema: z.coerce.number().int(),
 		});
 
 		expect(result).toBe(4242);
@@ -617,7 +632,7 @@ describe("password — schema short-circuit", () => {
 			password({
 				message: "PIN?",
 				initial: "abc",
-				validate: z.coerce.number().int(),
+				schema: z.coerce.number().int(),
 			}),
 		).rejects.toThrow(/initial value rejected by schema/);
 	});
@@ -641,7 +656,7 @@ describe("password — schema short-circuit", () => {
 		const result = await password({
 			message: "Word?",
 			initial: "ok",
-			validate: emptyIssuesSchema,
+			schema: emptyIssuesSchema,
 		});
 
 		expect(result).toBe("ok");
@@ -678,7 +693,7 @@ describe("password — secrecy", () => {
 	it("never renders the raw value when schema validation rejects", async () => {
 		const promise = start({
 			message: "Password?",
-			validate: z.string().min(64, "too short"),
+			schema: z.string().min(64, "too short"),
 		});
 
 		await tick();
@@ -710,13 +725,18 @@ describe("password — secrecy", () => {
 // Type-level inference (compile-time only — never executed at runtime)
 // ────────────────────────────────────────────────────────────────────────────
 
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
 async function _passwordTypeInferenceTests() {
 	// Schema overload — resolves to the schema's transformed Output.
+	// Strict Equal so a regression to `any`/union cannot slip through.
 	const pin = await password({
 		message: "?",
-		validate: z.coerce.number(),
+		schema: z.coerce.number(),
 	});
-	const _pinIsNumber: number = pin;
+	type _PinIsNumber = Expect<Equal<typeof pin, number>>;
 
 	// Function-validator overload — resolves to string. Throw-on-fail contract.
 	const secret = await password({
@@ -725,9 +745,15 @@ async function _passwordTypeInferenceTests() {
 			if (v.length < 8) throw new Error("too short");
 		},
 	});
-	const _secretIsString: string = secret;
+	type _SecretIsString = Expect<Equal<typeof secret, string>>;
 
 	// No validate — resolves to string.
 	const raw = await password({ message: "?" });
-	const _rawIsString: string = raw;
+	type _RawIsString = Expect<Equal<typeof raw, string>>;
+
+	const schemaInWrongSlot = z.string();
+	// @ts-expect-error — Standard Schemas belong in `schema`, not `validate`
+	void password({ validate: schemaInWrongSlot });
+	// @ts-expect-error — schema and validate are exclusive
+	void password({ schema: z.string(), validate: () => {} });
 }

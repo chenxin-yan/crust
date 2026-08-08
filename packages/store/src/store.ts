@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
+import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
 import { CrustStoreError } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
@@ -18,7 +19,25 @@ import type {
 	StoreValidatorIssue,
 } from "./types.ts";
 
-/** Narrow a `FieldDef.validate` return to the exact transform-result shape. */
+type FieldValidator = (
+	value: unknown,
+) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
+
+function makeSchemaValidator(schema: StandardSchema): FieldValidator {
+	return async (value) => {
+		const result = await schema["~standard"].validate(value);
+		if (result.issues) {
+			const normalized = normalizeStandardIssues(result.issues);
+			const messages = normalized.map((issue) =>
+				issue.path ? `${issue.path}: ${issue.message}` : issue.message,
+			);
+			throw new Error(messages.join("; "));
+		}
+		return { value: result.value };
+	};
+}
+
+/** Narrow a field validator return to the exact transform-result shape. */
 function isFieldValueResult(r: unknown): r is { value: unknown } {
 	return (
 		typeof r === "object" && r !== null && Object.hasOwn(r, "value") && Object.keys(r).length === 1
@@ -40,9 +59,8 @@ function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): W
  * Creates a typed async config store backed by a local JSON file.
  *
  * The store resolves its file path once at creation time from `dirPath` and
- * optional `name`. Field definitions declare the config schema — each field's
- * `type` determines its TypeScript type, and the presence of `default`
- * determines whether the field is guaranteed or optional (`T | undefined`).
+ * optional `name`. Core field definitions infer from `type` and `default`;
+ * schema-backed fields use the Standard Schema's exact output type.
  *
  * @typeParam F - Field definitions record (inferred via `const` generic).
  * @param options - Store configuration options.
@@ -75,6 +93,24 @@ export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
 	const { dirPath, name, fields, pruneUnknown, access } = options;
+	const validators = new Map<string, FieldValidator>();
+
+	for (const [key, def] of Object.entries(fields)) {
+		if (def.schema !== undefined) {
+			for (const option of ["default", "validate"] as const) {
+				if (def[option] !== undefined) {
+					throw new CrustStoreError(
+						"DEFINITION",
+						`field "${key}" mixes "schema" with "${option}" — the schema exclusively owns validation, transformation, defaults, and optionality`,
+						{},
+					);
+				}
+			}
+			validators.set(key, makeSchemaValidator(def.schema));
+		} else if (def.validate !== undefined) {
+			validators.set(key, def.validate as FieldValidator);
+		}
+	}
 
 	// Resolve the config file path once at creation time (synchronous)
 	const filePath = resolveStorePath(dirPath, name);
@@ -107,7 +143,7 @@ export function createStore<const F extends FieldsDef>(
 		const normalized: Record<string, unknown> = { ...record };
 
 		for (const [key, def] of Object.entries(fields)) {
-			if (!(key in normalized)) continue;
+			if (!(key in normalized) || def.schema !== undefined) continue;
 
 			const value = normalized[key];
 
@@ -134,15 +170,16 @@ export function createStore<const F extends FieldsDef>(
 		const record = state as Record<string, unknown>;
 
 		for (const [key, def] of Object.entries(fields)) {
-			if (!def.validate) continue;
+			const validator = validators.get(key);
+			if (!validator) continue;
 
 			const value = record[key];
 
-			if (value === undefined && def.validateMissing !== true) continue;
+			if (value === undefined && def.schema === undefined) continue;
 
 			let result: unknown;
 			try {
-				result = await def.validate(value as never);
+				result = await validator(value);
 			} catch (cause) {
 				const message = cause instanceof Error ? cause.message : "Validation failed";
 				issues.push({ message, path: key });
@@ -172,7 +209,7 @@ export function createStore<const F extends FieldsDef>(
 				if (!Bun.deepEquals(transformed, value)) {
 					let recheck: unknown;
 					try {
-						recheck = await def.validate(transformed as never);
+						recheck = await validator(transformed);
 					} catch (cause) {
 						const message = cause instanceof Error ? cause.message : "re-validation failed";
 						issues.push({

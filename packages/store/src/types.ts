@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
+import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
@@ -19,6 +20,8 @@ export type ValueType = BaseValueType;
 interface FieldDefBase<V> {
 	/** Human-readable description for documentation and tooling. */
 	description?: string;
+	/** Standard Schemas are an exclusive definition mode. */
+	schema?: never;
 
 	/**
 	 * Optional per-field validation function.
@@ -45,9 +48,6 @@ interface FieldDefBase<V> {
 	 * @param value - The field value to validate.
 	 */
 	validate?: (value: V) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
-
-	/** Internal marker: validate missing values as `undefined` for schema-backed fields. */
-	validateMissing?: true;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────
@@ -108,26 +108,32 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 	default?: readonly boolean[];
 }
 
+/** A field whose Standard Schema exclusively owns its value semantics. */
+interface SchemaFieldDef {
+	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
+	schema: StandardSchema;
+	/** Human-readable description for documentation and tooling. */
+	description?: string;
+	/** Optional primitive metadata for tooling; the schema still owns coercion. */
+	type?: BaseValueType;
+	/** Optional array metadata for tooling; the schema's output type remains authoritative. */
+	array?: true;
+	default?: never;
+	validate?: never;
+}
+
 /**
  * Defines a single field in a store's config schema.
  *
- * Inline definitions are discriminated by `type` and `array` for type-safe
- * defaults. Schema-backed definitions returned by {@link field} use the raw
- * branches of this union and carry their Standard Schema output type through
- * an internal marker for config inference.
+ * Core definitions are discriminated by `type` and `array`. Schema-backed
+ * definitions use a `schema` key and cannot mix schema semantics with
+ * `default` or `validate`.
  *
  * @example
  * ```ts
  * const fields = {
  *   theme: { type: "string", default: "light" },
- *   verbose: { type: "boolean", default: false },
- *   tags: { type: "string", array: true, default: [] },
- *   token: { type: "string" },  // optional — no default
- *   port: {
- *     type: "number",
- *     default: 3000,
- *     validate: (v) => { if (v < 1 || v > 65535) throw new Error("invalid port"); },
- *   },
+ *   port: { schema: z.coerce.number().int().positive() },
  * } satisfies FieldsDef;
  * ```
  */
@@ -149,7 +155,8 @@ export type FieldDef =
 	| NumberArrayFieldDef
 	| BooleanArrayFieldDef
 	| RawScalarFieldDef
-	| RawArrayFieldDef;
+	| RawArrayFieldDef
+	| SchemaFieldDef;
 
 /** Record mapping field names to their definitions. */
 export type FieldsDef = Record<string, FieldDef>;
@@ -158,21 +165,18 @@ export type FieldsDef = Record<string, FieldDef>;
 // InferStoreConfig — Type inference from field definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-export declare const FIELD_SCHEMA_OUTPUT: unique symbol;
-
 /**
  * Infer the resolved type for a single field definition.
  *
+ * - **schema** → the schema's exact output type
  * - **array** → `primitive[]` (or `primitive[] | undefined` if no default)
  * - **has default** → `primitive` (guaranteed present)
  * - **no default** → `primitive | undefined` (optional)
  */
 type InferFieldValue<F extends FieldDef> = F extends {
-	readonly [FIELD_SCHEMA_OUTPUT]?: infer O;
+	schema: infer S extends StandardSchema;
 }
-	? F extends { default: infer D }
-		? D
-		: O | undefined
+	? InferOutput<S>
 	: F extends { type: ValueType }
 		? F extends { array: true }
 			? F extends { default: readonly ResolvePrimitive<F["type"]>[] }
@@ -282,9 +286,9 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	/**
 	 * Field definitions that declare the store's config schema.
 	 *
-	 * Each key maps to a {@link FieldDef}: either a typed inline definition or a
-	 * schema-backed definition returned by {@link field}. Fields without a Crust-level
-	 * `default` are optional (`T | undefined`) in the inferred config type.
+	 * Each key maps to a {@link FieldDef}: either a core definition or a
+	 * schema-backed definition. Core fields without `default` are optional;
+	 * schema fields use the schema's exact output type.
 	 */
 	fields: F;
 

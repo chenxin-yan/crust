@@ -93,8 +93,7 @@ export type Choice<T> =
  * is valid. May be synchronous or asynchronous.
  *
  * This matches the throw-on-fail contract used by `@crustjs/store`'s
- * `FieldDef.validate` and the schema-driven `parseValue()`/`field()`
- * helpers — one rule across the workspace.
+ * hand-written `FieldDef.validate` callbacks.
  *
  * @example
  * ```ts
@@ -106,24 +105,6 @@ export type Choice<T> =
  * ```
  */
 export type ValidateFn<T> = (value: T) => void | Promise<void>;
-
-/**
- * Polymorphic validate slot for text-input prompts.
- *
- * Accepts either:
- * - a {@link ValidateFn} (throw an `Error` to reject; return `void` on
- *   success), or
- * - a {@link StandardSchema} schema (e.g. Zod, Valibot, Effect Schema)
- *   that parses the raw `string` input into a transformed `Output`.
- *
- * When a schema is supplied, the prompt resolves to the schema's transformed
- * output type instead of the raw `string`.
- *
- * @internal Surfaced via the `validate` slot on `InputOptions` /
- * `PasswordOptions`; not re-exported from the package root because callers
- * can derive it from those option types when needed.
- */
-export type PromptValidate<Output> = ValidateFn<string> | StandardSchema<unknown, Output>;
 
 /** @internal Parse an initial/default value through a Standard Schema. */
 export async function parseShortCircuit<Output>(

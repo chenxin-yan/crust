@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { z } from "zod";
+
 import type {
 	CreateStoreOptions,
 	FieldDef,
@@ -23,6 +25,9 @@ type AssertAssignable<_A extends B, B> = true;
  * Compile-time assertion that A and B are exactly the same type.
  */
 type AssertExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferStoreConfig
@@ -90,6 +95,32 @@ describe("InferStoreConfig", () => {
 		expect(config.tags).toEqual(["a", "b"]);
 		expect(config.ids).toBeUndefined();
 	});
+
+	it("uses the exact Standard Schema output type", () => {
+		const fields = {
+			withDefault: { schema: z.string().default("x") },
+			optional: { schema: z.string().optional() },
+			required: { schema: z.string() },
+		} as const satisfies FieldsDef;
+
+		type Config = InferStoreConfig<typeof fields>;
+		type _WithDefault = Expect<Equal<Config["withDefault"], string>>;
+		type _Optional = Expect<Equal<Config["optional"], string | undefined>>;
+		type _Required = Expect<Equal<Config["required"], string>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("schema branch wins over tooling metadata in inference", () => {
+		const fields = {
+			tags: { schema: z.array(z.number()), type: "string", array: true },
+		} as const satisfies FieldsDef;
+
+		type Config = InferStoreConfig<typeof fields>;
+		type _SchemaWins = Expect<Equal<Config["tags"], number[]>>;
+
+		expect(true).toBe(true);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -146,6 +177,26 @@ describe("FieldDef", () => {
 			},
 		};
 		expect(typeof field.validate).toBe("function");
+	});
+
+	it("accepts schema definitions with optional tooling metadata", () => {
+		const field: FieldDef = {
+			schema: z.array(z.string()),
+			type: "string",
+			array: true,
+			description: "Tags",
+		};
+		expect(field.schema).toBeDefined();
+	});
+
+	it("rejects mixing schema with core value options", () => {
+		const fields: FieldsDef = {
+			// @ts-expect-error — schema exclusively owns defaults
+			withDefault: { schema: z.string(), default: "x" },
+			// @ts-expect-error — schema exclusively owns validation
+			withValidate: { schema: z.string(), validate: () => {} },
+		};
+		expect(fields).toBeDefined();
 	});
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
+import type { PromptIO } from "../core/renderer.ts";
 import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { input, type InputOptions } from "./input.ts";
 
@@ -12,7 +13,11 @@ import { input, type InputOptions } from "./input.ts";
 let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
 function start<Output>(options: InputOptions<Output>): Promise<Output | string> {
-	const prompt = renderPrompt<InputOptions<Output>, Output | string>(input, options);
+	const runInput = input as unknown as (
+		options: InputOptions<Output>,
+		io?: PromptIO,
+	) => Promise<Output | string>;
+	const prompt = renderPrompt<InputOptions<Output>, Output | string>(runInput, options);
 	activePrompt = prompt;
 	return prompt.answer;
 }
@@ -563,10 +568,16 @@ describe("input — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — schema validation", () => {
+	it("rejects combining schema with a function validator", async () => {
+		await expect(input({ schema: z.string(), validate: () => {} } as any)).rejects.toThrow(
+			'input() cannot combine "schema" with "validate"',
+		);
+	});
+
 	it("resolves to string when a string schema accepts the input", async () => {
 		const promise = start({
 			message: "Name?",
-			validate: z.string().min(3),
+			schema: z.string().min(3),
 		});
 
 		await tick();
@@ -586,7 +597,7 @@ describe("input — schema validation", () => {
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
 		const promise = start({
 			message: "Port?",
-			validate: z.coerce.number().int().min(1),
+			schema: z.coerce.number().int().min(1),
 		});
 
 		await tick();
@@ -604,7 +615,7 @@ describe("input — schema validation", () => {
 	it("renders the first issue's message and waits for retry on failure", async () => {
 		const promise = start({
 			message: "Name?",
-			validate: z.string().min(3, "Too short"),
+			schema: z.string().min(3, "Too short"),
 		});
 
 		await tick();
@@ -642,7 +653,7 @@ describe("input — schema validation", () => {
 
 		const promise = start({
 			message: "Word?",
-			validate: emptyMessageSchema,
+			schema: emptyMessageSchema,
 		});
 
 		await tick();
@@ -681,7 +692,7 @@ describe("input — schema validation", () => {
 			},
 		};
 
-		const promise = start({ message: "Word?", validate: emptyIssuesSchema });
+		const promise = start({ message: "Word?", schema: emptyIssuesSchema });
 
 		await tick();
 		pressKey("o");
@@ -704,7 +715,7 @@ describe("input — schema validation", () => {
 		const expectedMessage = schema.safeParse("a").error?.issues[0]?.message ?? "";
 		expect(expectedMessage).not.toBe("");
 
-		const promise = start({ message: "Code?", validate: schema });
+		const promise = start({ message: "Code?", schema: schema });
 
 		await tick();
 		pressKey("a");
@@ -733,7 +744,7 @@ describe("input — schema validation", () => {
 			{ message: "must be yes" },
 		);
 
-		const promise = start({ message: "Confirm?", validate: asyncSchema });
+		const promise = start({ message: "Confirm?", schema: asyncSchema });
 
 		await tick();
 		pressKey("n");
@@ -767,7 +778,7 @@ describe("input — schema validation", () => {
 // Schema short-circuit (initial / non-TTY default) soundness
 // ────────────────────────────────────────────────────────────────────────────
 //
-// When `validate` is a Standard Schema, `initial` and non-TTY `default` must
+// When `schema` is present, `initial` and non-TTY `default` must
 // flow through the schema before being returned. Otherwise the
 // `Promise<Output>` overload silently leaks a raw `string`.
 
@@ -776,7 +787,7 @@ describe("input — schema short-circuit", () => {
 		const result = await input({
 			message: "Port?",
 			initial: "8080",
-			validate: z.coerce.number().int(),
+			schema: z.coerce.number().int(),
 		});
 
 		expect(result).toBe(8080);
@@ -788,7 +799,7 @@ describe("input — schema short-circuit", () => {
 			input({
 				message: "Port?",
 				initial: "not-a-number",
-				validate: z.coerce.number().int(),
+				schema: z.coerce.number().int(),
 			}),
 		).rejects.toThrow(/initial value rejected by schema/);
 	});
@@ -798,7 +809,7 @@ describe("input — schema short-circuit", () => {
 			{
 				message: "Port?",
 				default: "3000",
-				validate: z.coerce.number().int(),
+				schema: z.coerce.number().int(),
 			},
 			nonTTYIO(),
 		);
@@ -813,7 +824,7 @@ describe("input — schema short-circuit", () => {
 				{
 					message: "Port?",
 					default: "abc",
-					validate: z.coerce.number().int(),
+					schema: z.coerce.number().int(),
 				},
 				nonTTYIO(),
 			),
@@ -826,7 +837,7 @@ describe("input — schema + interactive default", () => {
 		const promise = start({
 			message: "Port?",
 			default: "4000",
-			validate: z.coerce.number().int(),
+			schema: z.coerce.number().int(),
 		});
 
 		await tick();
@@ -862,7 +873,7 @@ describe("input — callable Standard Schema", () => {
 			},
 		});
 
-		const promise = start({ message: "Word?", validate: callable });
+		const promise = start({ message: "Word?", schema: callable });
 
 		await tick();
 		pressKey("", { name: "return" });
@@ -882,13 +893,18 @@ describe("input — callable Standard Schema", () => {
 // Type-level inference (compile-time only — never executed at runtime)
 // ────────────────────────────────────────────────────────────────────────────
 
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
 async function _inputTypeInferenceTests() {
 	// Schema overload — resolves to the schema's transformed Output.
+	// Strict Equal so a regression to `any`/union cannot slip through.
 	const port = await input({
 		message: "?",
-		validate: z.coerce.number(),
+		schema: z.coerce.number(),
 	});
-	const _portIsNumber: number = port;
+	type _PortIsNumber = Expect<Equal<typeof port, number>>;
 
 	// Function-validator overload — resolves to string. Throw-on-fail contract.
 	const name = await input({
@@ -897,9 +913,15 @@ async function _inputTypeInferenceTests() {
 			if (v.length === 0) throw new Error("required");
 		},
 	});
-	const _nameIsString: string = name;
+	type _NameIsString = Expect<Equal<typeof name, string>>;
 
 	// No validate — resolves to string.
 	const raw = await input({ message: "?" });
-	const _rawIsString: string = raw;
+	type _RawIsString = Expect<Equal<typeof raw, string>>;
+
+	const schemaInWrongSlot = z.string();
+	// @ts-expect-error — Standard Schemas belong in `schema`, not `validate`
+	void input({ validate: schemaInWrongSlot });
+	// @ts-expect-error — schema and validate are exclusive
+	void input({ schema: z.string(), validate: () => {} });
 }
