@@ -41,6 +41,14 @@ describe("Crust constructor", () => {
 		});
 	});
 
+	it("does not carry sibling-only metadata onto the root", async () => {
+		const snapshot = await new Crust("my-cli", {
+			// @ts-expect-error -- aliases belong to defineCommand() config
+			aliases: ["cli"],
+		}).snapshot();
+		expect(snapshot.meta.aliases).toBeUndefined();
+	});
+
 	it("throws CrustError DEFINITION on empty name", () => {
 		try {
 			new Crust("");
@@ -2104,10 +2112,18 @@ describe("Crust.snapshot", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("Crust .add() aliases", () => {
-	it("plumbs aliases from definition config into the registered subcommand snapshot", async () => {
+	it("routes aliases from definition config and includes them in the snapshot", async () => {
+		let calls = 0;
 		const app = new Crust("cli").add(
-			defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command.action(() => {})),
+			defineCommand("issue", { aliases: ["issues", "i"] }, (command) =>
+				command.action(() => {
+					calls++;
+				}),
+			),
 		);
+
+		await app.run(["issues"]);
+		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 

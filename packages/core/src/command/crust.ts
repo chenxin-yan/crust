@@ -412,7 +412,8 @@ export class Crust<
 			throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
 		}
 		this._node = createCommandNode(name);
-		this._node.meta = { name, ...meta };
+		if (meta.description !== undefined) this._node.meta.description = meta.description;
+		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		this._ancestorOwnedFlags = {};
 	}
 
