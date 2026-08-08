@@ -22,11 +22,11 @@ import {
 } from "./agents.ts";
 import { installSkillBundle } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
-import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
+import { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
 	CustomSkillConfig,
-	GenerateResult,
+	GenerateSkillResult,
 	Scope,
 	SkillMeta,
 	SkillOptions,
@@ -190,7 +190,7 @@ function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillOption
 
 /**
  * Reconciles a single hand-authored bundle entry for `autoUpdateSkills` and
- * `skill update`. Mirrors the main-skill loop body: per-scope `skillStatus`,
+ * `skill update`. Mirrors the main-skill loop body: per-scope `getSkillStatus`,
  * version diff, then a single `installSkillBundle` call for outdated agents.
  *
  * Per-scope `SkillConflictError`s are logged (including `kindMismatch`) and
@@ -213,7 +213,7 @@ async function autoUpdateCustomSkill(
 
 	for (const scope of scopes) {
 		const effectiveScope = resolveEffectiveScope(scope);
-		const status = await skillStatus({ name: entry.name, scope });
+		const status = await getSkillStatus({ name: entry.name, scope });
 		const needsUpdate = status.agents.filter((agent) => {
 			if (!agent.installed) return false;
 			const expectedOutputDir = resolveAgentPath(agent.agent, scope, entry.name);
@@ -291,7 +291,7 @@ async function updateGeneratedSkill(
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
 	const meta = deriveSkillMeta(rootCmd, options);
-	const status = await skillStatus({ name: meta.name, scope });
+	const status = await getSkillStatus({ name: meta.name, scope });
 	const needsUpdate = status.agents.filter((entry) => needsSkillReconciliation(meta, entry));
 
 	if (needsUpdate.length === 0) {
@@ -421,7 +421,7 @@ async function autoUpdateCustomSkillsLoop(
  *
  * For first-time installation, use the interactive command or build custom
  * auto-install logic with the exported primitives (`detectInstalledAgents`,
- * `skillStatus`, `generateSkill`).
+ * `getSkillStatus`, `generateSkill`).
  *
  * @param options - Plugin configuration with version and defaults
  * @returns The internal plugin behind the `skill()` Extension
@@ -473,14 +473,14 @@ async function reconcileSkillInteractively(opts: {
 	isInteractive: boolean;
 	labelSuffix: string;
 	installNoun: "skill" | "bundle";
-	install: (agents: AgentTarget[], force?: boolean) => Promise<GenerateResult>;
+	install: (agents: AgentTarget[], force?: boolean) => Promise<GenerateSkillResult>;
 }): Promise<void> {
 	const { name, version, scope, installAll, isInteractive, labelSuffix, installNoun, install } =
 		opts;
 	const detectedAgents = await detectInstalledAgents();
 	const universalAgents = getUniversalAgents();
 	const allAdditionalAgents = getAdditionalAgents();
-	const status = await skillStatus({ name, scope });
+	const status = await getSkillStatus({ name, scope });
 
 	const installedAgentSet = new Set<AgentTarget>(
 		status.agents.filter((entry) => entry.installed).map((entry) => entry.agent),

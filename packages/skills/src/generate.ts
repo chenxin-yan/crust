@@ -19,18 +19,18 @@ import { renderSkill } from "./render.ts";
 import type {
 	AgentResult,
 	AgentTarget,
-	GenerateOptions,
-	GenerateResult,
+	GenerateSkillOptions,
+	GenerateSkillResult,
 	InstallStatus,
 	RenderedFile,
 	Scope,
 	SkillInstallMode,
 	SkillKind,
 	SkillMeta,
-	StatusOptions,
-	StatusResult,
-	UninstallOptions,
-	UninstallResult,
+	SkillStatusOptions,
+	SkillStatusResult,
+	UninstallSkillOptions,
+	UninstallSkillResult,
 } from "./types.ts";
 import {
 	CRUST_MANIFEST,
@@ -112,7 +112,7 @@ export function isValidSkillName(name: string): boolean {
  * }
  * ```
  */
-export async function generateSkill(options: GenerateOptions): Promise<GenerateResult> {
+export async function generateSkill(options: GenerateSkillOptions): Promise<GenerateSkillResult> {
 	const {
 		command,
 		meta,
@@ -193,7 +193,9 @@ interface InstallRenderedSkillOptions {
  * The function does **not** validate the meta name — callers must do that
  * before invoking the core.
  */
-async function installRenderedSkill(options: InstallRenderedSkillOptions): Promise<GenerateResult> {
+async function installRenderedSkill(
+	options: InstallRenderedSkillOptions,
+): Promise<GenerateSkillResult> {
 	const { files, meta, agents, scope, clean, force, installMode, kind } = options;
 
 	const primaryAgent = agents[0];
@@ -347,11 +349,13 @@ export { installRenderedSkill };
  * @param options - Uninstall options specifying name, agents, and scope
  * @returns Per-agent uninstall results
  */
-export async function uninstallSkill(options: UninstallOptions): Promise<UninstallResult> {
+export async function uninstallSkill(
+	options: UninstallSkillOptions,
+): Promise<UninstallSkillResult> {
 	const { name, scope = "global" } = options;
 	const agents = options.agents ?? [...ALL_AGENTS];
 	const canonicalOutputDir = resolveCanonicalSkillPath(scope, name);
-	const results: UninstallResult["agents"] = [];
+	const results: UninstallSkillResult["agents"] = [];
 	const groups = groupAgentsByOutputDir(agents, scope, name);
 
 	for (const [outputDir, groupedAgents] of groups) {
@@ -376,7 +380,7 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Public API — skillStatus
+// Public API — getSkillStatus
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -385,10 +389,10 @@ export async function uninstallSkill(options: UninstallOptions): Promise<Uninsta
  * @param options - Status options specifying name, agents, and scope
  * @returns Per-agent status results
  */
-export async function skillStatus(options: StatusOptions): Promise<StatusResult> {
+export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const { name, scope = "global" } = options;
 	const agents = options.agents ?? [...ALL_AGENTS];
-	const results: StatusResult["agents"] = [];
+	const results: SkillStatusResult["agents"] = [];
 	const groups = groupAgentsByOutputDir(agents, scope, name);
 
 	for (const [outputDir, groupedAgents] of groups) {

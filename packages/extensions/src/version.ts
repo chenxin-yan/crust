@@ -2,7 +2,7 @@ import { type Extension, type ExtensionContext, defineExtension } from "@crustjs
 
 export type VersionValue = string | (() => string);
 
-export interface VersionExtensionOptions {
+export interface VersionOptions {
 	/**
 	 * Output format. `"plain"` prints the bare version (script-friendly:
 	 * `$(cli --version)`); a function receives the resolved version and the
@@ -15,7 +15,7 @@ export interface VersionExtensionOptions {
 
 export function versionExtension(
 	versionValue: VersionValue = "0.0.0",
-	options: VersionExtensionOptions = {},
+	options: VersionOptions = {},
 ): Extension {
 	const { format } = options;
 

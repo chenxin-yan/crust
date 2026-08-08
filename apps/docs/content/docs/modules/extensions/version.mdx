@@ -25,11 +25,11 @@ my-cli v1.2.3
 ```ts
 type VersionValue = string | (() => string);
 
-interface VersionExtensionOptions {
+interface VersionOptions {
   format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-function version(value?: VersionValue, options?: VersionExtensionOptions): Extension;
+function version(value?: VersionValue, options?: VersionOptions): Extension;
 ```
 
 The default value is `"0.0.0"`. Pass a function to resolve the version only when the flag is handled:

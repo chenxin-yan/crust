@@ -47,16 +47,16 @@ See [Contexts](/docs/guide/contexts#test-doubles-with-of).
 
 ## Test interactive commands
 
-Use `interactiveRun()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
+Use `runInteractive()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
 
 ```ts
 import { expect, test } from "bun:test";
-import { interactiveRun } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing";
 
 import { app } from "./cli.ts";
 
 test("collects a name", async () => {
-  const run = interactiveRun(app, []);
+  const run = runInteractive(app, []);
   await run.waitFor(/Name\?/);
 
   run.type("Ada");

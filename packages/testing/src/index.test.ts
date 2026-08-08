@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Crust, defineExtension } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 
-import { captureExecute, captureRun, interactiveRun, type RunnableApp } from "./index.ts";
+import { captureExecute, captureRun, runInteractive, type RunnableApp } from "./index.ts";
 
 describe("captureRun", () => {
 	it("captures output from a structural runnable as lines", async () => {
@@ -38,7 +38,7 @@ describe("captureRun", () => {
 	});
 });
 
-describe("interactiveRun", () => {
+describe("runInteractive", () => {
 	it("drives prompts from a structural runnable and merges stderr with prompt frames", async () => {
 		const app: RunnableApp = {
 			async run(_argv, io) {
@@ -48,7 +48,7 @@ describe("interactiveRun", () => {
 			},
 		};
 
-		const run = interactiveRun(app, []);
+		const run = runInteractive(app, []);
 		await run.waitFor(/Name\?/);
 		run.type("Ada");
 		run.keys("return");
@@ -66,7 +66,7 @@ describe("interactiveRun", () => {
 			},
 		};
 
-		const run = interactiveRun(app, []);
+		const run = runInteractive(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toBe(error);
 	});
 
@@ -77,7 +77,7 @@ describe("interactiveRun", () => {
 			},
 		};
 
-		const run = interactiveRun(app, []);
+		const run = runInteractive(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toThrow("already completed");
 		await run.done;
 	});

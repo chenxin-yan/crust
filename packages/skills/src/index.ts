@@ -24,7 +24,7 @@ export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } 
 export { SkillConflictError } from "./errors.ts";
 
 // Primitives
-export { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
+export { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
 
 // Extension
 export function skill(options: SkillOptions): Extension {
@@ -37,8 +37,8 @@ export type {
 	AgentResult,
 	AgentTarget,
 	CustomSkillConfig,
-	GenerateOptions,
-	GenerateResult,
+	GenerateSkillOptions,
+	GenerateSkillResult,
 	InstallSkillBundleOptions,
 	InstallSkillBundleResult,
 	InstallStatus,
@@ -47,9 +47,9 @@ export type {
 	SkillKind,
 	SkillMeta,
 	SkillOptions,
-	StatusOptions,
-	StatusResult,
-	UninstallOptions,
-	UninstallResult,
+	SkillStatusOptions,
+	SkillStatusResult,
+	UninstallSkillOptions,
+	UninstallSkillResult,
 	UninstallStatus,
 } from "./types.ts";

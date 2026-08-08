@@ -10,8 +10,8 @@ type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { ALL_AGENTS, getUniversalAgents } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
-import { generateSkill, isValidSkillName, skillStatus, uninstallSkill } from "./generate.ts";
-import type { AgentResult, UninstallResult } from "./types.ts";
+import { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
+import type { AgentResult, UninstallSkillResult } from "./types.ts";
 import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1671,7 +1671,7 @@ describe("uninstallSkill", () => {
 			}),
 		);
 
-		const agentResult = result.agents[0] as UninstallResult["agents"][number];
+		const agentResult = result.agents[0] as UninstallSkillResult["agents"][number];
 		expect(agentResult.status).toBe("removed");
 
 		// Verify directory is gone
@@ -1692,16 +1692,16 @@ describe("uninstallSkill", () => {
 			}),
 		);
 
-		const agentResult = result.agents[0] as UninstallResult["agents"][number];
+		const agentResult = result.agents[0] as UninstallSkillResult["agents"][number];
 		expect(agentResult.status).toBe("not-found");
 	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// skillStatus
+// getSkillStatus
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("skillStatus", () => {
+describe("getSkillStatus", () => {
 	it("reports installed with version for existing skill", async () => {
 		await withCwd(tmpDir, () =>
 			generateSkill({
@@ -1713,7 +1713,7 @@ describe("skillStatus", () => {
 		);
 
 		const status = await withCwd(tmpDir, () =>
-			skillStatus({
+			getSkillStatus({
 				name: "my-cli",
 				agents: ["claude-code"],
 				scope: "project",
@@ -1726,7 +1726,7 @@ describe("skillStatus", () => {
 
 	it("reports not installed for missing skill", async () => {
 		const status = await withCwd(tmpDir, () =>
-			skillStatus({
+			getSkillStatus({
 				name: "nonexistent",
 				agents: ["claude-code"],
 				scope: "project",
@@ -1749,7 +1749,7 @@ describe("skillStatus", () => {
 		);
 
 		const status = await withCwd(tmpDir, () =>
-			skillStatus({
+			getSkillStatus({
 				name: "my-cli",
 				agents: ["claude-code", "opencode"],
 				scope: "project",
@@ -1946,7 +1946,7 @@ describe("default agent resolution", () => {
 		});
 	});
 
-	describe("skillStatus", () => {
+	describe("getSkillStatus", () => {
 		it("defaults to all supported agents when `agents` is omitted", async () => {
 			await withCwd(tmpDir, () =>
 				generateSkill({
@@ -1962,7 +1962,7 @@ describe("default agent resolution", () => {
 			);
 
 			const status = await withCwd(tmpDir, () =>
-				skillStatus({
+				getSkillStatus({
 					name: "my-cli",
 					scope: "project",
 				}),
@@ -1984,7 +1984,7 @@ describe("default agent resolution", () => {
 
 		it("treats `agents: []` as no-op (does not trigger default)", async () => {
 			const status = await withCwd(tmpDir, () =>
-				skillStatus({
+				getSkillStatus({
 					name: "my-cli",
 					agents: [],
 					scope: "project",
