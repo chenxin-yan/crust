@@ -28,7 +28,7 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.mount(defineCommand("two words" as string, (c) => c.handle(() => {})))
+			.add(defineCommand("two words" as string, (c) => c.handle(() => {})))
 			.handle(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
 	});

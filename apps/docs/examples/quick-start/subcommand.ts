@@ -3,7 +3,7 @@ import { help } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli")
   .extend(help())
-  .mount(
+  .add(
     defineCommand("build", (command) =>
       command
         .flags({ name: "minify", type: "boolean" })

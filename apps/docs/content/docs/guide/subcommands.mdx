@@ -3,14 +3,14 @@ title: Subcommands
 description: Compose nested command trees from named command definitions.
 ---
 
-## Mounting commands
+## Adding commands
 
-`defineCommand(name, recipe)` creates an inert definition that carries its name; `.mount(...definitions)` materializes definitions as child commands:
+`defineCommand(name, recipe)` creates an inert definition that carries its name; `.add(...definitions)` materializes definitions as child commands:
 
 ```ts
 import { Crust, defineCommand } from "@crustjs/core";
 
-const app = new Crust("git").mount(
+const app = new Crust("git").add(
   defineCommand("clone", (command) =>
     command
       .args({ name: "url", type: "url", required: true })
@@ -19,7 +19,7 @@ const app = new Crust("git").mount(
 );
 ```
 
-Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command. Nest `.mount()` calls inside definitions to any depth.
+Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command. Nest `.add()` calls inside definitions to any depth.
 
 ## Requirements
 
@@ -45,23 +45,20 @@ const clone = defineCommand("clone", { requires: [logging, repository] }, (comma
   }),
 );
 
-const app = new Crust("git").provide(logging(), repository()).mount(clone);
+const app = new Crust("git").provide(logging(), repository()).add(clone);
 ```
 
-`.mount()` checks the requirements at each call and creates a fresh command node. Use `.as(name)` to mount one definition under different names:
+`.add()` checks the requirements at each call and creates a fresh command node. Use `.as(name)` to add one definition under different names:
 
 ```ts
-const git = new Crust("git")
-  .provide(logging())
-  .provide(repository())
-  .mount(clone, clone.as("copy"));
+const git = new Crust("git").provide(logging()).provide(repository()).add(clone, clone.as("copy"));
 ```
 
-Missing or incompatible Context capabilities are TypeScript errors on `.mount()`; missing capabilities are also runtime `DEFINITION` errors.
+Missing or incompatible Context capabilities are TypeScript errors on `.add()`; missing capabilities are also runtime `DEFINITION` errors.
 
 ## Nested definitions
 
-Definitions can mount other definitions. Nested requirements must be available at the exact nested `.mount()` call:
+Definitions can add other definitions. Nested requirements must be available at the exact nested `.add()` call:
 
 ```ts
 const environment = defineFlag("environment", { type: "string" });
@@ -74,17 +71,17 @@ const status = defineCommand("status", { requires: [logging, deployment] }, (com
 );
 
 const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.provide(deployment()).mount(status),
+  command.provide(deployment()).add(status),
 );
 
-const app = new Crust("app").provide(logging()).mount(deploy);
+const app = new Crust("app").provide(logging()).add(deploy);
 ```
 
 ## Context inheritance
 
-Mounting materializes a fresh command scope seeded with the parent's current Context path. The mounted handler and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the handler's types.
+Adding materializes a fresh command scope seeded with the parent's current Context path. The added handler and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the handler's types.
 
-Finalize `.provide()` calls on the parent builder before `.mount()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into later-mounted descendants. Later fluent calls return a new builder and do not backfill an earlier mount.
+Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
 
 ## Unknown commands
 

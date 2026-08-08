@@ -63,7 +63,7 @@ const expectedVersion = pkg.version;
 
 /** Build a fresh app from the production root builder for each test. */
 function makeCrustApp() {
-	return crustBase.mount(buildCommand, publishCommand);
+	return crustBase.add(buildCommand, publishCommand);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

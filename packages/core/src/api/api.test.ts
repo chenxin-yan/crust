@@ -7,7 +7,7 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("public beta API", () => {
-	it("passes typed command context into mounted definitions with requirements", async () => {
+	it("passes typed command context into added definitions with requirements", async () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const db = defineContext("db", ({ options }: { options: { url: string } }) => ({
@@ -37,14 +37,14 @@ describe("public beta API", () => {
 		const app = new Crust("my-cli")
 			.provide(logging())
 			.provide(db({ url: "memory://test" }))
-			.mount(deploy);
+			.add(deploy);
 
 		await app.execute({ argv: ["deploy", "api", "--verbose"] });
 
 		expect(calls).toEqual(["memory://test:api:prod:true"]);
 	});
 
-	it("mounts one definition twice via .as()", async () => {
+	it("adds one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
 		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
@@ -54,7 +54,7 @@ describe("public beta API", () => {
 				seen.push(`${ctx.auth.user}:${args.target}`);
 			}),
 		);
-		const app = new Crust("my-cli").provide(auth()).mount(deploy, deploy.as("ship"));
+		const app = new Crust("my-cli").provide(auth()).add(deploy, deploy.as("ship"));
 
 		await app.execute({ argv: ["deploy", "api"] });
 		await app.execute({ argv: ["ship", "web"] });

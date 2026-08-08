@@ -87,7 +87,7 @@ console.log(args.join(" ") || "resolver-ok");
 		),
 	);
 
-	const app = new Crust("test").mount(buildCommand);
+	const app = new Crust("test").add(buildCommand);
 	const originalCwd = process.cwd;
 	process.cwd = () => sampleDir;
 	try {
