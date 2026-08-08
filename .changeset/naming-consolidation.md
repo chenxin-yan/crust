@@ -4,8 +4,8 @@
 "@crustjs/testing": minor
 ---
 
-Consolidate public naming conventions (breaking renames):
+Consolidate public naming conventions:
 
-- `@crustjs/extensions`: `VersionExtensionOptions` → `VersionOptions` (matches `CompletionOptions`, `DidYouMeanOptions`, `UpdateNotifierOptions`).
-- `@crustjs/skills`: `skillStatus()` → `getSkillStatus()`; type renames `GenerateOptions`/`GenerateResult` → `GenerateSkillOptions`/`GenerateSkillResult`, `UninstallOptions`/`UninstallResult` → `UninstallSkillOptions`/`UninstallSkillResult`, `StatusOptions`/`StatusResult` → `SkillStatusOptions`/`SkillStatusResult` (domain-qualified, collision-safe names).
-- `@crustjs/testing`: `interactiveRun()` → `runInteractive()` (verb-first, consistent with `captureRun`/`captureExecute`).
+- `@crustjs/extensions`: Name the version extension options `VersionOptions` (matching `CompletionOptions`, `DidYouMeanOptions`, and `UpdateNotifierOptions`).
+- `@crustjs/skills`: Rename `skillStatus()` to `getSkillStatus()`; rename `GenerateOptions`/`GenerateResult` to `GenerateSkillOptions`/`GenerateSkillResult`, `UninstallOptions`/`UninstallResult` to `UninstallSkillOptions`/`UninstallSkillResult`, and `StatusOptions`/`StatusResult` to `SkillStatusOptions`/`SkillStatusResult` (domain-qualified, collision-safe names).
+- `@crustjs/testing`: Name the interactive runner `runInteractive()` (verb-first, consistent with `captureRun` and `captureExecute`).
