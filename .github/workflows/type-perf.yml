@@ -1,0 +1,77 @@
+name: Type Performance
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "packages/core/**"
+      - "package.json"
+      - "bun.lock"
+      - "scripts/type-perf-report.ts"
+      - "scripts/type-perf-report.test.ts"
+      - ".github/workflows/type-perf.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  type-performance:
+    # Bot-created release PRs cannot use GITHUB_TOKEN to start this workflow.
+    if: github.head_ref != 'changeset-release/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Measure head
+        run: |
+          bun ci
+          bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/head.json"
+
+      - name: Checkout base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Measure base
+        run: |
+          cd base
+          bun ci
+          cd ..
+          # Head's script measures both trees so old base refs need no copy of it.
+          bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
+
+      - name: Comment type performance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- type-perf-report -->'
+          {
+            echo "$marker"
+            echo '## 🧠 Type-check performance'
+            echo
+            bun scripts/type-perf-report.ts compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
+          } > "$RUNNER_TEMP/comment.md"
+          comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- type-perf-report -->")))][0].id // empty')
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/comment.md"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F "body=@$RUNNER_TEMP/comment.md"
+          fi
