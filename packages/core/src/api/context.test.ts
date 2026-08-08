@@ -3,7 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import type { NamedFlagDef } from "../types.ts";
-import { defineContext } from "./context.ts";
+import type { ContextDeps } from "../validation/contexts.ts";
+import { defineContext, type ContextInstance } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
@@ -416,6 +417,61 @@ describe("Context-owned flags", () => {
 		await expect(new Crust("cli").provide(auth()).extend(extension).run([])).rejects.toThrow(
 			/collides/,
 		);
+	});
+});
+
+describe("compile-time Context dependency cycles", () => {
+	it("rejects direct, self, and cross-call cycles without rejecting incomplete or acyclic graphs", () => {
+		const typecheckCycles = () => {
+			const a = null as unknown as ContextInstance<"a", unknown, { b: unknown }>;
+			const b = null as unknown as ContextInstance<"b", unknown, { a: unknown }>;
+			new Crust("cli").provide(
+				// @ts-expect-error -- both instances participate in the dependency cycle
+				a,
+				b,
+			);
+
+			const self = null as unknown as ContextInstance<"self", unknown, { self: unknown }>;
+			new Crust("cli").provide(
+				// @ts-expect-error -- a Context cannot require itself
+				self,
+			);
+
+			const first = null as unknown as ContextInstance<"first", unknown, { second: unknown }>;
+			const second = null as unknown as ContextInstance<"second", unknown, { third: unknown }>;
+			const third = null as unknown as ContextInstance<"third", unknown, { first: unknown }>;
+			new Crust("cli").provide(first).provide(second).provide(
+				// @ts-expect-error -- third closes the cycle across prior provide calls
+				third,
+			);
+
+			const base = null as unknown as ContextInstance<"base">;
+			const left = null as unknown as ContextInstance<"left", unknown, { base: unknown }>;
+			const right = null as unknown as ContextInstance<"right", unknown, { base: unknown }>;
+			const top = null as unknown as ContextInstance<
+				"top",
+				unknown,
+				{ left: unknown; right: unknown }
+			>;
+			// Order-free valid diamond: dependencies may follow their dependents.
+			new Crust("cli").provide(top, left, right, base);
+
+			const missing = null as unknown as ContextInstance<"client", unknown, { config: unknown }>;
+			// Missing dependencies remain a runtime concern so provide order stays free.
+			new Crust("cli").provide(missing);
+
+			const widened = null as unknown as ContextInstance<string, unknown, Record<string, unknown>>;
+			new Crust("cli").provide(widened);
+
+			const provideThroughGenericGraph = <Deps extends ContextDeps>(
+				app: Crust<any, any, any, any, any, any, Deps>,
+				instance: ContextInstance<"dynamic">,
+			) => app.provide(instance);
+			void provideThroughGenericGraph;
+		};
+
+		void typecheckCycles;
+		expect(true).toBe(true);
 	});
 });
 
