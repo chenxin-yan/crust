@@ -21,7 +21,7 @@ See the [Extensions module](/docs/modules/extensions) for each capability's opti
 Two consequences of the root-only model:
 
 - Added definitions are materialized into ordinary command nodes before root Extensions prepare the application, so Extensions apply to every added command, inline or file-split.
-- Extension-owned flags are runtime parser inputs, not typed command capabilities. Use a Context-owned flag when downstream handlers need a typed value.
+- Extension-owned flags are runtime parser inputs, not typed command capabilities. Use a Context-owned flag when downstream actions need a typed value.
 
 ## Author an Extension
 
@@ -35,7 +35,7 @@ Two consequences of the root-only model:
 
 Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 
-Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare Context capabilities under `requires`; a missing capability is a `DEFINITION` error when the application prepares. Their `.handle()` callbacks receive the same typed handler context as application commands, including `rootCommand`.
+Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare Context capabilities under `requires`; a missing capability is a `DEFINITION` error when the application prepares. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand`.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide with application flags, [Context-owned flags](/docs/guide/contexts#owned-flags), or other Extensions. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 
@@ -47,7 +47,7 @@ Hooks run after routing and syntax parsing. Where each hook sits in the invocati
 
 ### `preRun`
 
-`preRun(ctx)` runs before validation, Contexts, and the Command Handler, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
+`preRun(ctx)` runs before validation, Contexts, and the Command Action, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
 
 <include lang="ts">../../../examples/extensions/hooks.ts#cached</include>
 

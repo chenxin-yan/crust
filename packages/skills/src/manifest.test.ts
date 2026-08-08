@@ -62,7 +62,7 @@ describe("buildManifest", () => {
 			expect(node.path).toEqual(["my-cli"]);
 		});
 
-		it("sets runnable to true when command has a run handler", () => {
+		it("sets runnable to true when command has an action", () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
@@ -73,7 +73,7 @@ describe("buildManifest", () => {
 			expect(node.runnable).toBe(true);
 		});
 
-		it("sets runnable to false when command has no run handler", () => {
+		it("sets runnable to false when command has no action", () => {
 			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
@@ -628,7 +628,7 @@ describe("buildManifest", () => {
 				annotate(
 					command.meta({ description: "Deploy command" }),
 					"Read the environment carefully before execution.",
-				).handle(() => {}),
+				).action(() => {}),
 			);
 			const root = new Crust("app").add(deploy);
 

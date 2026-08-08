@@ -209,7 +209,7 @@ async function dispatch(
 		if (!resolvedNode.run) return;
 
 		// Standard Schemas on arg/flag definitions own value validation and
-		// transformation; the handler receives schema outputs.
+		// transformation; the action receives schema outputs.
 		const validated = await applySchemas(resolvedNode, parsed);
 
 		// Native resource protocol: Context values implementing
@@ -399,7 +399,7 @@ export async function executeInvocation(
 	}
 }
 
-/** Prepare a frozen, validated snapshot without invoking a command handler. */
+/** Prepare a frozen, validated snapshot without invoking a command action. */
 export async function prepareInvocationSnapshot(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,

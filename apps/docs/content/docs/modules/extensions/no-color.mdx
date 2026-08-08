@@ -7,7 +7,7 @@ description: Control terminal color with a recursive Extension flag.
 import { Crust } from "@crustjs/core";
 import { noColor } from "@crustjs/extensions";
 
-const app = new Crust("my-cli").extend(noColor()).handle(() => {});
+const app = new Crust("my-cli").extend(noColor()).action(() => {});
 
 await app.execute();
 ```

@@ -13,5 +13,5 @@ const target = defineArg("target", { type: "string", required: true });
 const app = new Crust("my-cli")
 	.flags(verbose, { name: "dry-run", type: "boolean" })
 	.args(target)
-	.handle(({ flags, args }) => {});
+	.action(({ flags, args }) => {});
 ```

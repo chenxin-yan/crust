@@ -3,7 +3,7 @@ title: "Core"
 description: Supported command-authoring runtime for Crust applications and Extensions.
 ---
 
-`@crustjs/core` defines commands, routes and validates argv, constructs Contexts, applies Extensions, and runs Command Handlers.
+`@crustjs/core` defines commands, routes and validates argv, constructs Contexts, applies Extensions, and runs Command Actions.
 
 ## Install
 
@@ -26,7 +26,7 @@ const app = new Crust("deploy")
   .extend(help())
   .flags({ name: "verbose", type: "boolean", short: "v" })
   .provide(config({ environment: "production" }))
-  .handle(({ flags, ctx, stdout }) => {
+  .action(({ flags, ctx, stdout }) => {
     stdout(`${ctx.config.environment}: verbose=${flags.verbose ?? false}`);
   });
 
@@ -54,7 +54,7 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 
 | Export                                | Description                                                                                                                                         |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.handle()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
 | `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                                            |
 | `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                   |
@@ -85,7 +85,7 @@ See [Types](/docs/api/types) for field-level definitions.
 
 | Type                  | Description                                                          |
 | --------------------- | -------------------------------------------------------------------- |
-| `CrustCommandContext` | Typed context passed to a Command Handler, including `rootCommand`   |
+| `CrustCommandContext` | Typed context passed to a Command Action, including `rootCommand`    |
 | `InvocationIO`        | Injectable `stdout` and `stderr` callbacks shared with Context setup |
 | `CommandSnapshot`     | Readonly, serializable command description                           |
 | `ArgSnapshot`         | Serializable argument projection                                     |
@@ -101,7 +101,7 @@ See [Types](/docs/api/types) for field-level definitions.
 | `ContextRequirements` | Context capabilities required from a command path                           |
 | `ContextConfig`       | Owned flags plus capability dependencies under `requires`                   |
 | `ContextSetup`        | Typed setup input: `options`, `flags`, dependency `ctx`, and invocation I/O |
-| `ContextMap`          | Record shape used for inferred Command Handler `ctx` values                 |
+| `ContextMap`          | Record shape used for inferred Command Action `ctx` values                  |
 
 ## Extension types
 
@@ -129,7 +129,7 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Tooling subpath
 
-Call `app.snapshot()` to prepare a frozen, validated Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions without calling Command Handlers.
+Call `app.snapshot()` to prepare a frozen, validated Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions without calling Command Actions.
 
 `@crustjs/core/tooling` exports the `CommandSnapshot` type plus `snapshotCommand`, `buildCommandDocumentation`, its documentation model types, and the validation environment constants for lockstep first-party tooling. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. Except for the `CommandSnapshot` type consumed by `app.snapshot()`, helpers on this subpath are intended for first-party tooling that moves in lockstep with core.
 

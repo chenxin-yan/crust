@@ -13,7 +13,7 @@ const command = new Crust("serve")
     { name: "port", type: "number", default: 3000 },
     { name: "host", type: "string", default: "localhost" },
   )
-  .handle(({ args, stdout }) => stdout(`${args.host}:${args.port}`));
+  .action(({ args, stdout }) => stdout(`${args.host}:${args.port}`));
 ```
 
 ## Required, optional, and defaulted
@@ -38,7 +38,7 @@ new Crust("copy")
     { name: "destination", type: "path", required: true },
     { name: "files", type: "path", variadic: true },
   )
-  .handle(({ args }) => {
+  .action(({ args }) => {
     args.files; // string[]
   });
 ```
@@ -57,14 +57,14 @@ Invalid choices produce a `PARSE` error.
 
 ## Standard Schemas
 
-A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Handler's output type:
+A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Action's output type:
 
 ```ts
 import { z } from "zod";
 
 new Crust("serve")
   .args({ name: "port", schema: z.coerce.number().int().positive() })
-  .handle(({ args }) => {
+  .action(({ args }) => {
     args.port; // number
   });
 ```
@@ -76,5 +76,5 @@ A schema cannot be combined with core value options — see [Schema-backed defin
 Tokens after `--` bypass argument and flag parsing and appear in `rawArgs`:
 
 ```ts
-new Crust("wrap").handle(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
+new Crust("wrap").action(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
 ```

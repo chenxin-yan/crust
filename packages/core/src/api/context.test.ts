@@ -52,7 +52,7 @@ describe("defineContext()", () => {
 		db.of({ wrong: true });
 
 		const seen: string[] = [];
-		const app = new Crust("cli").provide(fake).handle(({ ctx }) => {
+		const app = new Crust("cli").provide(fake).action(({ ctx }) => {
 			seen.push(ctx.db.url);
 		});
 		await app.run([]);
@@ -67,7 +67,7 @@ describe("Crust .provide()", () => {
 			url: options.url,
 		}));
 
-		const app = new Crust("cli").provide(db({ url: "memory://x" })).handle(({ ctx }) => {
+		const app = new Crust("cli").provide(db({ url: "memory://x" })).action(({ ctx }) => {
 			seen.push(ctx.db.url);
 		});
 
@@ -80,7 +80,7 @@ describe("Crust .provide()", () => {
 		const a = defineContext("a", () => "value-a");
 		const b = defineContext("b", () => "value-b");
 
-		const app = new Crust("cli").provide(a(), b()).handle(({ ctx }) => {
+		const app = new Crust("cli").provide(a(), b()).action(({ ctx }) => {
 			seen.push(`${ctx.a}:${ctx.b}`);
 			type _A = Assert<IsEqual<typeof ctx.a, string>>;
 			type _B = Assert<IsEqual<typeof ctx.b, string>>;
@@ -116,7 +116,7 @@ describe("Crust .provide()", () => {
 		expect(() =>
 			new Crust("cli")
 				.provide(parentDb())
-				.add(defineCommand("sub", (cmd) => cmd.provide(childDb()).handle(() => {}))),
+				.add(defineCommand("sub", (cmd) => cmd.provide(childDb()).action(() => {}))),
 		).toThrow(CrustError);
 	});
 
@@ -124,7 +124,7 @@ describe("Crust .provide()", () => {
 		const parentDb = defineContext("db", () => "parent");
 		const nestedDb = defineContext("db", () => "nested");
 		const sub = defineCommand("sub", { requires: [parentDb] }, (command) =>
-			command.add(defineCommand("g", (child) => child.provide(nestedDb()).handle(() => {}))),
+			command.add(defineCommand("g", (child) => child.provide(nestedDb()).action(() => {}))),
 		);
 
 		expect(() => new Crust("cli").provide(parentDb()).add(sub)).toThrow(CrustError);
@@ -136,7 +136,7 @@ describe("Crust .provide()", () => {
 		const sub = defineCommand("sub", { requires: [db] }, (command) =>
 			command.add(
 				defineCommand("g", { requires: [db] }, (child) =>
-					child.handle(({ ctx }) => {
+					child.action(({ ctx }) => {
 						seen.push(ctx.db);
 					}),
 				),
@@ -158,8 +158,8 @@ describe("Crust .provide()", () => {
 
 		const app = new Crust("cli")
 			.provide(lazy())
-			.add(defineCommand("a", (cmd) => cmd.handle(() => {})))
-			.add(defineCommand("b", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("a", (cmd) => cmd.action(() => {})))
+			.add(defineCommand("b", (cmd) => cmd.action(() => {})));
 
 		// Resolving "a" builds the inherited context once; "b" not executed
 		await app.run(["a"]);
@@ -173,7 +173,7 @@ describe("Crust .provide()", () => {
 			return "late";
 		});
 		const app = new Crust("cli")
-			.add(defineCommand("status", (command) => command.handle(() => {})))
+			.add(defineCommand("status", (command) => command.action(() => {})))
 			.provide(late());
 
 		await app.run(["status"]);
@@ -203,8 +203,8 @@ describe("Context-owned flags", () => {
 			aliases: ["token"],
 		});
 
-		const app = new Crust("cli").provide(instance).handle(({ flags, ctx }) => {
-			type _HandlerApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+		const app = new Crust("cli").provide(instance).action(({ flags, ctx }) => {
+			type _ActionApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
 			seen.push(ctx.auth.apiKey);
 		});
 		await app.run(["--api-key", "secret"]);
@@ -223,7 +223,7 @@ describe("Context-owned flags", () => {
 
 		await new Crust("cli")
 			.provide(server())
-			.handle(() => {})
+			.action(() => {})
 			.run(["--port", "8080"]);
 
 		expect(seen).toEqual([8080]);
@@ -243,13 +243,13 @@ describe("Context-owned flags", () => {
 
 		await new Crust("cli")
 			.provide(auth(), location())
-			.handle(() => {})
+			.action(() => {})
 			.run(["--api-key", "secret", "--region", "us"]);
 
 		expect(seen).toEqual([["api-key"], ["region"]]);
 	});
 
-	it("builds behavior capabilities with the handler's injected io", async () => {
+	it("builds behavior capabilities with the action's injected io", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		let setupStdout: ((text: string) => void) | undefined;
 		let setupStderr: ((text: string) => void) | undefined;
@@ -267,7 +267,7 @@ describe("Context-owned flags", () => {
 		const messages: string[] = [];
 		const stdout = (_message: string) => {};
 		const stderr = (message: string) => messages.push(message);
-		const app = new Crust("cli").provide(logging()).handle(({ ctx, stdout, stderr }) => {
+		const app = new Crust("cli").provide(logging()).action(({ ctx, stdout, stderr }) => {
 			expect(setupStdout).toBe(stdout);
 			expect(setupStderr).toBe(stderr);
 			ctx.logging.debug("debug");
@@ -283,7 +283,7 @@ describe("Context-owned flags", () => {
 			apiKey: flags["api-key"],
 		}));
 		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
-			command.handle(({ ctx }) => {
+			command.action(({ ctx }) => {
 				seen.push(String(ctx.auth.apiKey));
 			}),
 		);
@@ -312,7 +312,7 @@ describe("Context-owned flags", () => {
 		const app = new Crust("cli")
 			.provide(auth())
 			.flags({ name: "verbose", type: "boolean" })
-			.handle(({ flags }) => {
+			.action(({ flags }) => {
 				expect(flags["api-key"]).toBe("secret");
 				expect(flags.verbose).toBe(true);
 			});
@@ -327,7 +327,7 @@ describe("Context-owned flags", () => {
 		}));
 		const branch = (name: string) =>
 			defineCommand(name, (command) =>
-				command.provide(auth()).handle(({ ctx }) => {
+				command.provide(auth()).action(({ ctx }) => {
 					seen.push(`${name}:${ctx.auth.apiKey}`);
 				}),
 			);
@@ -346,7 +346,7 @@ describe("Context-owned flags", () => {
 
 		await new Crust("cli")
 			.provide(fake)
-			.handle(({ flags, ctx }) => {
+			.action(({ flags, ctx }) => {
 				expect(flags["api-key"]).toBe("fake-key");
 				expect(ctx.auth.real).toBe(false);
 			})
@@ -420,9 +420,9 @@ describe("Context capability requirements (topological construction)", () => {
 			return "crust";
 		});
 
-		const app = new Crust("cli").provide(config(), client(), workspace()).handle(({ ctx }) => {
+		const app = new Crust("cli").provide(config(), client(), workspace()).action(({ ctx }) => {
 			type _Workspace = Assert<IsEqual<typeof ctx.workspace, string>>;
-			order.push(`handler:${ctx.workspace}`);
+			order.push(`action:${ctx.workspace}`);
 		});
 
 		await app.run([]);
@@ -431,7 +431,7 @@ describe("Context capability requirements (topological construction)", () => {
 			"config",
 			"client:https://api.example.com",
 			"workspace:https://api.example.com",
-			"handler:crust",
+			"action:crust",
 		]);
 	});
 
@@ -449,12 +449,12 @@ describe("Context capability requirements (topological construction)", () => {
 		await new Crust("cli")
 			.provide(client())
 			.provide(config())
-			.handle(() => {
-				order.push("handler");
+			.action(() => {
+				order.push("action");
 			})
 			.run([]);
 
-		expect(order).toEqual(["config", "client", "handler"]);
+		expect(order).toEqual(["config", "client", "action"]);
 	});
 
 	it("types ctx in setup from the declared dependency factories", () => {
@@ -471,7 +471,7 @@ describe("Context capability requirements (topological construction)", () => {
 		const config = defineContext("config", () => ({}));
 		const client = defineContext("client", { requires: [config] }, () => ({}));
 
-		const app = new Crust("cli").provide(client()).handle(() => {});
+		const app = new Crust("cli").provide(client()).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({
 			code: "DEFINITION",
@@ -488,7 +488,7 @@ describe("Context capability requirements (topological construction)", () => {
 		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
 		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
 
-		const app = new Crust("cli").provide(a, b).handle(() => {});
+		const app = new Crust("cli").provide(a, b).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({
 			code: "DEFINITION",
@@ -502,7 +502,7 @@ describe("Context capability requirements (topological construction)", () => {
 			id: ctx.session.userId,
 		}));
 		const account = defineCommand("account", { requires: [session] }, (command) =>
-			command.provide(user()).handle(({ ctx }) => {
+			command.provide(user()).action(({ ctx }) => {
 				type _User = Assert<IsEqual<typeof ctx.user, { id: string }>>;
 				expect(ctx.user).toEqual({ id: "yan" });
 			}),
@@ -530,7 +530,7 @@ describe("Context disposal", () => {
 		const app = new Crust("cli")
 			.provide(first())
 			.provide(second())
-			.handle(() => {
+			.action(() => {
 				log.push("run");
 			});
 
@@ -555,7 +555,7 @@ describe("Context disposal", () => {
 		// derived provided first, but base constructs first — so base disposes last
 		await new Crust("cli")
 			.provide(derived(), base())
-			.handle(() => {
+			.action(() => {
 				log.push("run");
 			})
 			.run([]);
@@ -573,18 +573,18 @@ describe("Context disposal", () => {
 
 		await new Crust("cli")
 			.provide(sync())
-			.handle(() => {})
+			.action(() => {})
 			.run([]);
 
 		expect(log).toEqual(["dispose:sync"]);
 	});
 
-	it("disposes after a handler failure and rethrows the original error", async () => {
+	it("disposes after an action failure and rethrows the original error", async () => {
 		const log: string[] = [];
 		const res = disposableContext("res", log);
-		const boom = new Error("handler failed");
+		const boom = new Error("action failed");
 
-		const app = new Crust("cli").provide(res()).handle(() => {
+		const app = new Crust("cli").provide(res()).action(() => {
 			throw boom;
 		});
 
@@ -602,7 +602,7 @@ describe("Context disposal", () => {
 		const app = new Crust("cli")
 			.provide(ok())
 			.provide(bad())
-			.handle(() => {
+			.action(() => {
 				log.push("run");
 			});
 
@@ -610,7 +610,7 @@ describe("Context disposal", () => {
 		expect(log).toEqual(["dispose:ok"]);
 	});
 
-	it("disposes constructed dependencies when a dependent setup fails before the handler", async () => {
+	it("disposes constructed dependencies when a dependent setup fails before the action", async () => {
 		const events: string[] = [];
 		const resource = defineContext("resource", () => ({
 			[Symbol.dispose]() {
@@ -620,7 +620,7 @@ describe("Context disposal", () => {
 		const guard = defineContext("guard", { requires: [resource] }, () => {
 			throw new Error("Unauthenticated");
 		});
-		const app = new Crust("cli").provide(resource(), guard()).handle(() => {
+		const app = new Crust("cli").provide(resource(), guard()).action(() => {
 			events.push("handled");
 		});
 
@@ -630,7 +630,7 @@ describe("Context disposal", () => {
 
 	it("leaves non-disposable Context values alone", async () => {
 		const plain = defineContext("plain", () => ({ value: 42 }));
-		const app = new Crust("cli").provide(plain()).handle(({ ctx }) => {
+		const app = new Crust("cli").provide(plain()).action(({ ctx }) => {
 			expect(ctx.plain.value).toBe(42);
 		});
 

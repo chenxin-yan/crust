@@ -436,7 +436,7 @@ async function autoUpdateCustomSkillsLoop(
  *     version: "1.0.0",
  *     command: "skill", // registers "my-cli skill" subcommand
  *   }))
- *   .handle(() => { /* ... *�/ });
+ *   .action(() => { /* ... *�/ });
  *
  * await app.execute();
  * ```
@@ -675,7 +675,7 @@ function buildSkillCommandGrammar(
 							type: "string",
 							description: "Update scope (project or global)",
 						})
-						.handle(async (context) => {
+						.action(async (context) => {
 							await runSkillUpdateFlow(
 								context.rootCommand,
 								options,
@@ -685,7 +685,7 @@ function buildSkillCommandGrammar(
 						}),
 				),
 			)
-			.handle(async (context) => {
+			.action(async (context) => {
 				await runSkillInstallFlow(
 					context.rootCommand,
 					options,

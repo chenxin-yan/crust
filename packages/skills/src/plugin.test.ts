@@ -77,7 +77,7 @@ describe("skill extension auto-update", () => {
 	it("does not install skills that are not yet present", async () => {
 		const app = new Crust("no-auto-install")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -95,7 +95,7 @@ describe("skill extension auto-update", () => {
 	it("renders plugin-provided top-level instructions into SKILL.md", async () => {
 		const app = new Crust("instruction-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -133,7 +133,7 @@ describe("skill extension auto-update", () => {
 	it("renders plugin-provided markdown instructions into SKILL.md", async () => {
 		const app = new Crust("markdown-instruction-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -174,7 +174,7 @@ describe("skill extension auto-update", () => {
 	it("auto-updates already-installed skills when version changes", async () => {
 		const app = new Crust("update-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -205,7 +205,7 @@ describe("skill extension auto-update", () => {
 	it("prints auto-update message with Universal label", async () => {
 		const app = new Crust("update-message-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -249,7 +249,7 @@ describe("skill extension auto-update", () => {
 		// its auto-update work happens before any later short-circuit.
 		const app = new Crust("order-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -281,7 +281,7 @@ describe("skill extension auto-update", () => {
 
 		const app = new Crust("validation-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -318,7 +318,7 @@ describe("skill extension auto-update", () => {
 	it("does not auto-update when autoUpdate is false", async () => {
 		const app = new Crust("no-update-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -352,7 +352,7 @@ describe("skill extension auto-update", () => {
 	it("prints no changes when universal skills are already installed", async () => {
 		const app = new Crust("no-change-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -401,7 +401,7 @@ describe("skill extension auto-update", () => {
 	it("runs manual skill update command", async () => {
 		const app = new Crust("manual-update-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -434,7 +434,7 @@ describe("skill extension auto-update", () => {
 	it("reports global scope when updating from the home directory", async () => {
 		const app = new Crust("manual-home-update-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -481,7 +481,7 @@ describe("skill extension auto-update", () => {
 	it("reports no updates needed with global scope from the home directory", async () => {
 		const app = new Crust("manual-home-noop-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -523,7 +523,7 @@ describe("skill extension auto-update", () => {
 	it("renders top-level instructions when running manual skill update", async () => {
 		const app = new Crust("manual-update-instructions-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -568,7 +568,7 @@ describe("skill extension auto-update", () => {
 	it("defaults to global scope in non-interactive update when defaultScope is unset", async () => {
 		const app = new Crust("fallback-scope-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -652,7 +652,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an empty array", async () => {
 		const app = new Crust("empty-custom")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -685,7 +685,7 @@ describe("skillPlugin customSkills validation", () => {
 		// fall through to the plugin-level fallback.
 		const app = new Crust("empty-version-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -709,7 +709,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts a URL sourceDir", async () => {
 		const app = new Crust("url-custom")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -731,7 +731,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("accepts an absolute string sourceDir", async () => {
 		const app = new Crust("abs-custom")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -754,7 +754,7 @@ describe("skillPlugin customSkills validation", () => {
 		// Setup must not throw — resolution-time errors defer to installSkillBundle.
 		const app = new Crust("rel-custom")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -777,7 +777,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects a name that collides with the main skill", async () => {
 		const app = new Crust("collide-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -801,7 +801,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects duplicate names within the array", async () => {
 		const app = new Crust("dup-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -830,7 +830,7 @@ describe("skillPlugin customSkills validation", () => {
 	it("rejects an invalid skill name", async () => {
 		const app = new Crust("invalid-name-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -893,7 +893,7 @@ describe("skillPlugin customSkills name mismatch", () => {
 
 		const app = new Crust("name-mismatch-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -969,7 +969,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-update-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1010,7 +1010,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-noop-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1071,7 +1071,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("bundle-resilience-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1122,7 +1122,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("no-auto-update-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -1163,7 +1163,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("subcmd-skip-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1218,7 +1218,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		// asserts that no bundle directory is ever created.
 		const app = new Crust("identical-test")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -1267,7 +1267,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		// it should inherit and trigger a reinstall to 2.0.0.
 		const app = new Crust("inherit-version-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -1306,7 +1306,7 @@ describe("skillPlugin customSkills auto-update", () => {
 		// bundle whose cadence is independent of the consuming CLI.
 		const app = new Crust("override-version-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -1346,7 +1346,7 @@ describe("skillPlugin customSkills auto-update", () => {
 
 		const app = new Crust("inherit-noop-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1384,7 +1384,7 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all installs main + every bundle without prompting", async () => {
 		const app = new Crust("all-flag-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1432,7 +1432,7 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("prints sequential per-skill output (heading mentions bundle name)", async () => {
 		const app = new Crust("sequential-output-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1479,7 +1479,7 @@ describe("skillPlugin customSkills interactive command", () => {
 		// Bundle should land in the global scope, not the project scope.
 		const app = new Crust("all-scope-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1525,7 +1525,7 @@ describe("skillPlugin customSkills interactive command", () => {
 	it("--all isolates per-bundle failures and exits non-zero", async () => {
 		const app = new Crust("all-isolation-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1607,7 +1607,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 	it("updates main + every bundle in sequence", async () => {
 		const app = new Crust("update-loop-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "2.0.0",
@@ -1678,7 +1678,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 	it("reports per-skill 'No updates needed' when nothing is outdated", async () => {
 		const app = new Crust("update-noop-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",
@@ -1754,7 +1754,7 @@ describe("skillPlugin customSkills `skill update`", () => {
 
 		const app = new Crust("update-isolation-host")
 			.meta({ description: "test" })
-			.handle(() => {})
+			.action(() => {})
 			.extend(
 				skillExtension({
 					version: "1.0.0",

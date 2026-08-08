@@ -40,14 +40,14 @@ import { database } from "./contexts.ts";
 
 const app = new Crust("my-cli")
   .provide(database.of({ query: (sql) => `fake: ${sql}` }))
-  .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
+  .action(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
 See [Contexts](/docs/guide/contexts#test-doubles-with-of).
 
 ## Test interactive commands
 
-Use `runInteractive()` when a handler renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
+Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. Prompt frames and `ctx.stderr()` text share one stderr transcript, so `waitFor()` and `screen()` observe the same terminal output.
 
 ```ts
 import { expect, test } from "bun:test";

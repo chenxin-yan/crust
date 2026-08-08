@@ -46,8 +46,8 @@ export { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./invocation.ts"
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The runtime context object passed to the Command Handler defined with
- * `.handle()`.
+ * The runtime context object passed to the Command Action defined with
+ * `.action()`.
  *
  * Generic parameters:
  * - `A` — positional argument definitions tuple
@@ -287,8 +287,8 @@ export interface CommandDefinitionBuilder<
 		...definitions: AddChecks<Ctx, Ds>
 	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 
-	handle(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	action(
+		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 }
 
@@ -359,7 +359,7 @@ export function defineCommand(
  * const app = new Crust("my-cli")
  *   .flags({ name: "verbose", type: "boolean", short: "v" })
  *   .args({ name: "file", type: "string", required: true })
- *   .handle(({ args, flags }) => {
+ *   .action(({ args, flags }) => {
  *     console.log(args.file, flags.verbose);
  *   });
  * ```
@@ -437,7 +437,7 @@ export class Crust<
 	 * @example
 	 * ```ts
 	 * defineCommand("issue", (cmd) =>
-	 *   cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})
+	 *   cmd.meta({ aliases: ["issues", "i"] }).action(() => {})
 	 * )
 	 * ```
 	 */
@@ -569,7 +569,7 @@ export class Crust<
 	 *
 	 * Contexts are inherited by descendant commands, constructed
 	 * topologically (by declared capability requirements) only for the resolved
-	 * command path, and exposed to the Command Handler as `ctx`. Provide
+	 * command path, and exposed to the Command Action as `ctx`. Provide
 	 * order is free: dependencies may be provided after their dependents.
 	 * Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are
 	 * disposed in reverse construction order after success or failure.
@@ -638,31 +638,31 @@ export class Crust<
 	}
 
 	/**
-	 * Define the Command Handler — the function that implements this
+	 * Define the Command Action — the function that implements this
 	 * command's behavior after its inputs and Contexts are ready.
 	 *
-	 * The handler receives a {@link CrustCommandContext} with `args` typed from
+	 * The action receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed as `EffectiveFlags<Local, Owned>`.
 	 *
-	 * A handler is set once; calling `.handle()` again throws rather than
+	 * An action is set once; calling `.action()` again throws rather than
 	 * silently replacing command behavior. The original builder is not mutated.
 	 *
-	 * @param handler - The Command Handler function
-	 * @returns A new `Crust` instance with the handler registered
-	 * @throws {CrustError} `DEFINITION` when this command already has a handler
+	 * @param action - The Command Action function
+	 * @returns A new `Crust` instance with the action registered
+	 * @throws {CrustError} `DEFINITION` when this command already has an action
 	 */
-	handle(
-		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
+	action(
+		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): Crust<Local, Owned, A, Eff, Ctx> {
 		if (this._node.run) {
 			throw new CrustError(
 				"DEFINITION",
-				`Command "${this._node.meta.name}" already has a handler`,
-				{ subject: "command", name: this._node.meta.name, reason: "duplicate-handler" },
+				`Command "${this._node.meta.name}" already has an action`,
+				{ subject: "command", name: this._node.meta.name, reason: "duplicate-action" },
 			);
 		}
 		return this._clone({
-			run: handler as (ctx: unknown) => void | Promise<void>,
+			run: action as (ctx: unknown) => void | Promise<void>,
 		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
@@ -722,7 +722,7 @@ export class Crust<
 	 * man-page, skill, and build generators.
 	 *
 	 * Materializes Extension contributions and command definitions, then
-	 * validates the resulting command tree. Does not call Command Handlers.
+	 * validates the resulting command tree. Does not call Command Actions.
 	 * Rejects with a `CrustError` of code `DEFINITION` when materialization
 	 * or validation fails.
 	 */
@@ -732,10 +732,10 @@ export class Crust<
 
 	/**
 	 * Invoke this application programmatically: resolve, parse, run the
-	 * Extension hooks and the Command Handler for `argv`.
+	 * Extension hooks and the Command Action for `argv`.
 	 *
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
-	 * parse, Context, or handler failure without rendering it (Extension
+	 * parse, Context, or action failure without rendering it (Extension
 	 * `onError` hooks are a terminal presentation concern and never run
 	 * here) and without changing process status. It resolves with no value
 	 * after successful cleanup. Prompt cancellation surfaces as a standard
@@ -743,7 +743,7 @@ export class Crust<
 	 *
 	 * @param argv - Arguments to parse (no `process.argv` default — pass them explicitly)
 	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
-	 *             exposed to Command Handlers and Extensions
+	 *             exposed to Command Actions and Extensions
 	 */
 	async run(
 		argv: readonly string[],
@@ -758,7 +758,7 @@ export class Crust<
 
 	/**
 	 * Parse `process.argv`, resolve subcommands, run Extension hooks, and
-	 * execute the matched Command Handler.
+	 * execute the matched Command Action.
 	 *
 	 * This is the terminal CLI boundary — call it on the root builder. It
 	 * renders a failure once (through Extension `onError` hooks, ending in

@@ -129,7 +129,7 @@ const app = new Crust("my-cli")
       ],
     }),
   )
-  .handle(() => {});
+  .action(() => {});
 ```
 
 The `CustomSkillConfig` shape is generated from the exported type:
@@ -258,7 +258,7 @@ const deploy = defineCommand("deploy", (command) =>
   annotate(command.meta({ description: "Deploy the application" }), [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",
-  ]).handle(() => {
+  ]).action(() => {
     // ...
   }),
 );
@@ -397,7 +397,7 @@ import { Crust } from "@crustjs/core";
 
 export const rootCommand = new Crust("my-cli")
   .meta({ description: "My CLI tool" })
-  .handle(() => console.log("Hello from my-cli!"));
+  .action(() => console.log("Hello from my-cli!"));
 
 if (import.meta.main) await rootCommand.execute();
 ```

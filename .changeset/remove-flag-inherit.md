@@ -9,7 +9,7 @@ The public `FlagSnapshot.inherit` field and the internal `InheritableFlags` and 
 
 | Previous usage | Migration |
 | --- | --- |
-| `inherit: true` feeds behavior shared by a subtree | Move the flag into `defineContext(name, { flags: [...] }, setup)` and attach the instance with `.provide()` before adding descendants. Handlers should require the derived Context capability. |
+| `inherit: true` feeds behavior shared by a subtree | Move the flag into `defineContext(name, { flags: [...] }, setup)` and attach the instance with `.provide()` before adding descendants. Actions should require the derived Context capability. |
 | Each command reads the raw flag directly | Define the descriptor once with `defineFlag()` and attach it with `.flags()` to each command that parses it. |
 
 Cross-command dependencies are capability-only: list Context factories in `requires` and consume their derived values through `ctx`. Raw flag requirements are removed.

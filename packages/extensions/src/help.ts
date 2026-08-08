@@ -111,7 +111,7 @@ export function helpExtension(): Extension {
 		flags: { help: { type: "boolean", short: "h", noNegate: true, description: "Show help" } },
 		hooks: {
 			preRun(context) {
-				if (context.flags.help !== true && context.command.hasHandler) return;
+				if (context.flags.help !== true && context.command.hasAction) return;
 				context.stdout(renderHelp(context.command, context.commandPath));
 				return context.finish();
 			},

@@ -40,7 +40,7 @@ describe("command definitions", () => {
 				.flags({ name: "output", type: "string" })
 				.args({ name: "source", type: "string", required: true })
 				.args({ name: "destination", type: "string", required: true })
-				.handle(({ args, flags }) => {
+				.action(({ args, flags }) => {
 					type _Source = Assert<IsEqual<typeof args.source, string>>;
 					type _Output = Assert<IsEqual<typeof flags.output, string | undefined>>;
 					received = { args, flags };
@@ -56,15 +56,15 @@ describe("command definitions", () => {
 		});
 	});
 
-	it("rejects a second handler on the definition builder", () => {
+	it("rejects a second action on the definition builder", () => {
 		const definition = defineCommand("duplicate", (command) =>
-			command.handle(() => {}).handle(() => {}),
+			command.action(() => {}).action(() => {}),
 		);
-		expect(() => new Crust("cli").add(definition)).toThrow(/already has a handler/);
+		expect(() => new Crust("cli").add(definition)).toThrow(/already has an action/);
 	});
 
 	it(".as() renames without mutating the original definition", () => {
-		const definition = defineCommand("build", (command) => command.handle(() => {}));
+		const definition = defineCommand("build", (command) => command.action(() => {}));
 		const renamed = definition.as("compile");
 
 		expect(definition.name).toBe("build");
@@ -81,7 +81,7 @@ describe("command definitions", () => {
 	});
 
 	it("does not backfill nested definitions with later inheritable flags", async () => {
-		const nested = defineCommand("nested", (command) => command.handle(() => {}));
+		const nested = defineCommand("nested", (command) => command.action(() => {}));
 		const outer = defineCommand("outer", (command) =>
 			command.add(nested).flags({ name: "late", type: "boolean" }),
 		);
@@ -96,9 +96,9 @@ describe("command definitions", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
 		}));
-		const before = defineCommand("before", (command) => command.handle(() => {}));
+		const before = defineCommand("before", (command) => command.action(() => {}));
 		const after = defineCommand("after", { requires: [auth] }, (command) =>
-			command.handle(({ ctx }) => {
+			command.action(({ ctx }) => {
 				calls.push(String(ctx.auth.apiKey));
 			}),
 		);
@@ -122,7 +122,7 @@ describe("command definitions", () => {
 		}));
 		const db = defineContext("db", () => "database");
 		const status = defineCommand("status", { requires: [logging, db] }, (command) =>
-			command.handle(({ ctx }) => {
+			command.action(({ ctx }) => {
 				calls.push(`${ctx.db}:${String(ctx.logging.verbose)}`);
 			}),
 		);
@@ -166,7 +166,7 @@ describe("command definitions", () => {
 	});
 
 	it("excludes parent local flags from added commands", async () => {
-		const definition = defineCommand("users", (command) => command.handle(() => {}));
+		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
 		await expect(app.run(["users", "--secret", "value"])).rejects.toThrow(/Unknown flag/);
@@ -175,7 +175,7 @@ describe("command definitions", () => {
 	it("runs added definitions through run and execute", async () => {
 		let calls = 0;
 		const definition = defineCommand("build", (command) =>
-			command.handle(() => {
+			command.action(() => {
 				calls++;
 			}),
 		);
@@ -190,12 +190,12 @@ describe("command definitions", () => {
 	it("adds multiple definitions in one variadic call", async () => {
 		const ran: string[] = [];
 		const build = defineCommand("build", (command) =>
-			command.handle(() => {
+			command.action(() => {
 				ran.push("build");
 			}),
 		);
 		const publish = defineCommand("publish", (command) =>
-			command.handle(() => {
+			command.action(() => {
 				ran.push("publish");
 			}),
 		);
@@ -215,7 +215,7 @@ describe("command definitions", () => {
 
 	it("validates canonical names and aliases on every add", () => {
 		const definition = defineCommand("build", (command) =>
-			command.meta({ aliases: ["b"] }).handle(() => {}),
+			command.meta({ aliases: ["b"] }).action(() => {}),
 		);
 		const app = new Crust("cli").add(definition);
 
@@ -258,7 +258,7 @@ describe("command definitions", () => {
 	it("checks Context requirement names at runtime when added", () => {
 		const db = defineContext("db", () => "database");
 		const definition = defineCommand("users", { requires: [db] }, (command) =>
-			command.handle(() => {}),
+			command.action(() => {}),
 		);
 
 		expect(() => new Crust("cli").provide(db()).add(definition)).not.toThrow();
@@ -267,7 +267,7 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("checks requirements while preserving fluent handler types", () => {
+	it("checks requirements while preserving fluent action types", () => {
 		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const region = defineContext("region", () => "us-east-1");
 		const definition = defineCommand("deploy", { requires: [auth] }, (command) =>
@@ -275,7 +275,7 @@ describe("command definitions", () => {
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "force", type: "boolean", required: true })
 				.provide(region())
-				.handle(({ args, flags, ctx }) => {
+				.action(({ args, flags, ctx }) => {
 					type _Target = Assert<IsEqual<typeof args.target, string>>;
 					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
 					type _Auth = Assert<IsEqual<typeof ctx.auth, { user: string }>>;

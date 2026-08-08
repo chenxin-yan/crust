@@ -36,12 +36,12 @@ const serveCmd = defineCommand("serve", (command) =>
 	command
 		.args({ name: "dir", type: "string", default: "." })
 		.flags({ name: "port", type: "number", default: 3000, short: "p" })
-		.handle(({ args, flags }) => {
+		.action(({ args, flags }) => {
 			console.log(`serve ${args.dir} on ${flags.port}`);
 		}),
 );
 
-const rootCmd = rootBase.add(serveCmd).handle(({ flags }) => {
+const rootCmd = rootBase.add(serveCmd).action(({ flags }) => {
 	if (flags.help) {
 		console.log("help");
 	}
@@ -63,7 +63,7 @@ describe("integration: core APIs", () => {
 	});
 
 	it("execute() catches errors and sets exit code", async () => {
-		const failCmd = new Crust("fail").handle(() => {
+		const failCmd = new Crust("fail").action(() => {
 			throw new Error("boom");
 		});
 
@@ -129,7 +129,7 @@ describe("integration: .execute() full pipeline with argv override", () => {
 		const deployment = defineContext("deployment", { flags: [env, dryRun] }, ({ flags }) => flags);
 		const app = new Crust("deploy").provide(deployment()).add(
 			defineCommand("service", { requires: [deployment] }, (cmd) =>
-				cmd.args(defineArg("name", { type: "string", required: true })).handle(({ args, ctx }) => {
+				cmd.args(defineArg("name", { type: "string", required: true })).action(({ args, ctx }) => {
 					console.log(
 						`deploy service=${args.name} env=${ctx.deployment.env} dryRun=${ctx.deployment.dryRun}`,
 					);
@@ -148,7 +148,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		process.exitCode = 0;
 	});
 
-	it("routes before the subcommand and passes schema output to setup and handler", async () => {
+	it("routes before the subcommand and passes schema output to setup and action", async () => {
 		const schema: StandardSchema<string | undefined, number> = {
 			"~standard": {
 				version: 1,
@@ -166,7 +166,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			credential: flags["api-key"],
 		}));
 		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
-			command.handle(({ ctx }) => {
+			command.action(({ ctx }) => {
 				console.log(`${typeof ctx.auth.credential}:${ctx.auth.credential}`);
 			}),
 		);
@@ -189,7 +189,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 				defineCommand("group", { requires: [logging] }, (group) =>
 					group.add(
 						defineCommand("deploy", { requires: [logging] }, (deploy) =>
-							deploy.handle(({ ctx }) => console.log(`verbose=${ctx.logging.verbose}`)),
+							deploy.action(({ ctx }) => console.log(`verbose=${ctx.logging.verbose}`)),
 						),
 					),
 				),
@@ -208,7 +208,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const auth = defineContext("auth", { flags: [token] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 		const result = await executeCrust(app, ["deploy"]);
 		expect(result.exitCode).toBe(1);
@@ -222,7 +222,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			.provide(outputConfig())
 			.add(
 				defineCommand("render", { requires: [outputConfig] }, (command) =>
-					command.handle(({ ctx }) => console.log(`output=${ctx["output-config"].output}`)),
+					command.action(({ ctx }) => console.log(`output=${ctx["output-config"].output}`)),
 				),
 			);
 
@@ -232,19 +232,19 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 	});
 });
 
-describe("integration: Extension adds flag visible to subcommand handler", () => {
+describe("integration: Extension adds flag visible to subcommand action", () => {
 	beforeEach(() => {
 		process.exitCode = 0;
 	});
 
-	it("Extension flag on root is parsed and available to root handler", async () => {
+	it("Extension flag on root is parsed and available to root action", async () => {
 		const versionExtension = defineExtension("version-extension", {
 			flags: {
 				version: { type: "boolean", short: "V", recursive: false },
 			},
 		});
 
-		const app = new Crust("cli").extend(versionExtension).handle((ctx) => {
+		const app = new Crust("cli").extend(versionExtension).action((ctx) => {
 			if ((ctx.flags as Record<string, unknown>).version) {
 				console.log("v1.0.0");
 			} else {
@@ -271,7 +271,7 @@ describe("integration: Extension adds flag visible to subcommand handler", () =>
 		});
 		const app = new Crust("cli").extend(logging).add(
 			defineCommand("sub", (cmd) =>
-				cmd.handle(() => {
+				cmd.action(() => {
 					order.push("sub:run");
 				}),
 			),
@@ -296,7 +296,7 @@ describe("integration: nested added definitions end-to-end", () => {
 			defineCommand("remote", { requires: [logging] }, (cmd) =>
 				cmd.provide(remoteConfig()).add(
 					defineCommand("add", { requires: [logging, remoteConfig] }, (cmd2) =>
-						cmd2.args({ name: "name", type: "string", required: true }).handle(({ args, ctx }) => {
+						cmd2.args({ name: "name", type: "string", required: true }).action(({ args, ctx }) => {
 							console.log(
 								`add remote=${args.name} verbose=${ctx.logging.verbose} timeout=${ctx["remote-config"].timeout}`,
 							);
@@ -318,21 +318,21 @@ describe("integration: nested added definitions end-to-end", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("parent with run handler falls back when unknown subcommand given as positional", async () => {
+	it("parent with an action falls back when unknown subcommand given as positional", async () => {
 		const app = new Crust("cli")
 			.args({ name: "input", type: "string" })
-			.handle((ctx) => {
+			.action((ctx) => {
 				console.log(`root input=${ctx.args.input}`);
 			})
 			.add(
 				defineCommand("sub", (cmd) =>
-					cmd.handle(() => {
+					cmd.action(() => {
 						console.log("sub ran");
 					}),
 				),
 			);
 
-		// "unknown" is not a subcommand, so root handler runs with it as positional
+		// "unknown" is not a subcommand, so root action runs with it as positional
 		const result = await executeCrust(app, ["unknown"]);
 		expect(result.stdout).toContain("root input=unknown");
 		expect(result.exitCode).toBe(0);
@@ -350,7 +350,7 @@ describe("integration: split-file definitions end-to-end", () => {
 		command
 			.flags({ name: "format", type: "string", default: "table" })
 			.args({ name: "resource", type: "string", required: true })
-			.handle(({ args, flags, ctx }) => {
+			.action(({ args, flags, ctx }) => {
 				console.log(`list ${args.resource} format=${flags.format} verbose=${ctx.logging.verbose}`);
 			}),
 	);
@@ -360,7 +360,7 @@ describe("integration: split-file definitions end-to-end", () => {
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
 			)
-			.handle(({ args, ctx }) => {
+			.action(({ args, ctx }) => {
 				console.log(`get ${args.resource}/${args.id} verbose=${ctx.logging.verbose}`);
 			}),
 	);
@@ -403,7 +403,7 @@ describe("integration: added definitions", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const deployment = defineContext("deployment", { flags: [env] }, ({ flags }) => flags);
 		const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
-			command.handle(({ ctx }) => {
+			command.action(({ ctx }) => {
 				console.log(`verbose=${ctx.logging.verbose} env=${ctx.deployment.env}`);
 			}),
 		);
@@ -418,7 +418,7 @@ describe("integration: added definitions", () => {
 	});
 
 	it("excludes parent-local flags from added commands", async () => {
-		const sub = defineCommand("sub", (command) => command.handle(() => console.log("sub ran")));
+		const sub = defineCommand("sub", (command) => command.action(() => console.log("sub ran")));
 		const app = new Crust("cli").flags({ name: "rootOnly", type: "string" }).add(sub);
 
 		const result = await executeCrust(app, ["sub", "--rootOnly", "val"]);
@@ -429,10 +429,10 @@ describe("integration: added definitions", () => {
 	it("adds multiple definitions in one call", async () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-			command.handle(({ ctx }) => console.log(`deploy verbose=${ctx.logging.verbose}`)),
+			command.action(({ ctx }) => console.log(`deploy verbose=${ctx.logging.verbose}`)),
 		);
 		const status = defineCommand("status", { requires: [logging] }, (command) =>
-			command.handle(({ ctx }) => console.log(`status verbose=${ctx.logging.verbose}`)),
+			command.action(({ ctx }) => console.log(`status verbose=${ctx.logging.verbose}`)),
 		);
 		const app = new Crust("cli").provide(logging()).add(status, deploy);
 
@@ -455,7 +455,7 @@ describe("integration: Context-owned boolean flag negation", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", { requires: [logging] }, (cmd) =>
-				cmd.handle(({ ctx }) => {
+				cmd.action(({ ctx }) => {
 					console.log(`verbose=${ctx.logging.verbose}`);
 				}),
 			),
@@ -481,7 +481,7 @@ describe("integration: Context-owned multiple-value flag", () => {
 		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(tags()).add(
 			defineCommand("sub", { requires: [tags] }, (cmd) =>
-				cmd.handle(({ ctx }) => {
+				cmd.action(({ ctx }) => {
 					console.log(`tags=${JSON.stringify(ctx.tags.tag)}`);
 				}),
 			),
@@ -507,7 +507,7 @@ describe("integration: separator (--) with subcommand and Context-owned flags", 
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", { requires: [logging] }, (cmd) =>
-				cmd.handle(({ ctx, rawArgs }) => {
+				cmd.action(({ ctx, rawArgs }) => {
 					console.log(`verbose=${ctx.logging.verbose}`);
 					console.log(`rawArgs=${JSON.stringify(rawArgs)}`);
 				}),
@@ -550,7 +550,7 @@ describe("integration: complex real-world CLI scenario", () => {
 			.extend(auditExtension)
 			.add(
 				defineCommand("deploy", { requires: [settings] }, (cmd) =>
-					cmd.flags({ name: "env", type: "string", required: true }).handle(({ flags, ctx }) => {
+					cmd.flags({ name: "env", type: "string", required: true }).action(({ flags, ctx }) => {
 						order.push("deploy:run");
 						console.log(
 							`deploy env=${flags.env} verbose=${ctx.settings.verbose} config=${ctx.settings.config}`,
@@ -558,7 +558,7 @@ describe("integration: complex real-world CLI scenario", () => {
 					}),
 				),
 				defineCommand("status", { requires: [settings] }, (cmd) =>
-					cmd.handle(({ ctx }) => {
+					cmd.action(({ ctx }) => {
 						order.push("status:run");
 						console.log(`status verbose=${ctx.settings.verbose} config=${ctx.settings.config}`);
 					}),

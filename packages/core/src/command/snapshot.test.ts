@@ -36,7 +36,7 @@ describe("snapshotCommand", () => {
 
 		expect(snapshot.meta.name).toBe("cli");
 		expect(snapshot.meta.description).toBe("root cli");
-		expect(snapshot.hasHandler).toBe(true);
+		expect(snapshot.hasAction).toBe(true);
 		expect(snapshot.args).toEqual([{ name: "file", type: "string", required: true }]);
 		expect(snapshot.flags.verbose).toEqual({
 			type: "boolean",
@@ -45,7 +45,7 @@ describe("snapshotCommand", () => {
 		});
 		expect(snapshot.subCommands.build?.meta.aliases).toEqual(["b"]);
 		expect(snapshot.subCommands.build?.meta.hidden).toBe(true);
-		expect(snapshot.subCommands.build?.hasHandler).toBe(false);
+		expect(snapshot.subCommands.build?.hasAction).toBe(false);
 	});
 
 	it("is serializable: no functions, URL defaults become strings", () => {
@@ -65,7 +65,7 @@ describe("snapshotCommand", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.add(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 		const snapshot = await app.snapshot();
 		expect(snapshot.flags["api-key"]).toEqual({

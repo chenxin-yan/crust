@@ -13,9 +13,9 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) =>
 const app = new Crust("cli").provide(api()).add(deploy);
 ```
 
-Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. Required raw flags are not injected into downstream handler types; expose any needed value from its owning Context.
+Make requirements capability-only. `defineCommand(name, { requires: [logging, auth] }, recipe)` and `defineContext(name, { flags, requires: [config] }, setup)` accept a plain array of Context factories. Top-level `flags` means definitions the unit owns or parses; `requires` means Context capabilities supplied by the command path. Required raw flags are not injected into downstream action types; expose any needed value from its owning Context.
 
-Context setup now receives the invocation's injected `stdout` and `stderr` callbacks, shared with the Command Handler. Contexts can encapsulate output behavior instead of exposing flag state for every handler to interpret:
+Context setup now receives the invocation's injected `stdout` and `stderr` callbacks, shared with the Command Action. Contexts can encapsulate output behavior instead of exposing flag state for every action to interpret:
 
 ```ts
 const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({

@@ -291,7 +291,7 @@ export function sortContexts(
  * values on `disposal` so they are torn down in reverse construction order.
  *
  * @param flags - The validated parsed flags of the resolved invocation
- * @param io - The invocation output callbacks also passed to the handler
+ * @param io - The invocation output callbacks also passed to the action
  */
 export async function buildContexts(
 	contexts: readonly ContextInstance[],

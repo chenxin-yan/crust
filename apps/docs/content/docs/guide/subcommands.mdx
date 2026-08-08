@@ -14,7 +14,7 @@ const app = new Crust("git").add(
   defineCommand("clone", (command) =>
     command
       .args({ name: "url", type: "url", required: true })
-      .handle(({ args, stdout }) => stdout(`clone ${args.url}`)),
+      .action(({ args, stdout }) => stdout(`clone ${args.url}`)),
   ),
 );
 ```
@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition lists the Context capabilities it expects from its parent in the `requires` array. The recipe builder and handler's `ctx` are typed from those factories:
+A definition lists the Context capabilities it expects from its parent in the `requires` array. The recipe builder and action's `ctx` are typed from those factories:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -39,7 +39,7 @@ const repository = defineContext("repository", () => ({
 }));
 
 const clone = defineCommand("clone", { requires: [logging, repository] }, (command) =>
-  command.args({ name: "url", type: "url", required: true }).handle(({ args, ctx, stdout }) => {
+  command.args({ name: "url", type: "url", required: true }).action(({ args, ctx, stdout }) => {
     ctx.logging.debug(`cloning ${args.url}`);
     stdout(ctx.repository.defaultBranch);
   }),
@@ -65,7 +65,7 @@ const environment = defineFlag("environment", { type: "string" });
 const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
 const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
-  command.handle(({ ctx }) => {
+  command.action(({ ctx }) => {
     ctx.logging.debug(`environment: ${ctx.deployment.environment}`);
   }),
 );
@@ -79,7 +79,7 @@ const app = new Crust("app").provide(logging()).add(deploy);
 
 ## Context inheritance
 
-Adding materializes a fresh command scope seeded with the parent's current Context path. The added handler and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the handler's types.
+Adding materializes a fresh command scope seeded with the parent's current Context path. The added action and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the action's types.
 
 Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
 

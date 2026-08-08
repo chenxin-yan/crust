@@ -85,7 +85,7 @@ describe("runInteractive", () => {
 
 describe("captureExecute", () => {
 	it("captures exit code 0 and stdout on success", async () => {
-		const app = new Crust("test-cli").handle(({ stdout }) => {
+		const app = new Crust("test-cli").action(({ stdout }) => {
 			stdout("hello");
 		});
 
@@ -94,7 +94,7 @@ describe("captureExecute", () => {
 	});
 
 	it("captures exit code 1 and the rendered failure", async () => {
-		const app = new Crust("test-cli").handle(() => {
+		const app = new Crust("test-cli").action(() => {
 			throw new Error("boom");
 		});
 
@@ -104,7 +104,7 @@ describe("captureExecute", () => {
 	});
 
 	it("captures exit code 130 for AbortError cancellation", async () => {
-		const app = new Crust("test-cli").handle(() => {
+		const app = new Crust("test-cli").action(() => {
 			throw new DOMException("Prompt was cancelled.", "AbortError");
 		});
 
@@ -122,7 +122,7 @@ describe("captureExecute", () => {
 				},
 			},
 		});
-		const app = new Crust("test-cli").extend(renderer).handle(() => {
+		const app = new Crust("test-cli").extend(renderer).action(() => {
 			throw new Error("boom");
 		});
 
@@ -147,10 +147,10 @@ describe("captureExecute", () => {
 				releaseB = resolve;
 			});
 
-			const appA = new Crust("test-cli").handle(async () => {
+			const appA = new Crust("test-cli").action(async () => {
 				await gateA;
 			});
-			const appB = new Crust("test-cli").handle(async () => {
+			const appB = new Crust("test-cli").action(async () => {
 				await gateB;
 			});
 
@@ -171,7 +171,7 @@ describe("captureExecute", () => {
 
 	it("restores process.exitCode", async () => {
 		const before = process.exitCode;
-		const app = new Crust("test-cli").handle(() => {
+		const app = new Crust("test-cli").action(() => {
 			throw new Error("boom");
 		});
 

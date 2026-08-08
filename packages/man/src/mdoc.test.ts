@@ -11,7 +11,7 @@ describe("renderManPageMdoc", () => {
 			.meta({ description: "Demo CLI for tests." })
 			.extend(help())
 			.flags({ name: "verbose", type: "boolean", short: "v", description: "Verbose" })
-			.add(defineCommand("ping", (cmd) => cmd.meta({ description: "Ping" }).handle(() => {})));
+			.add(defineCommand("ping", (cmd) => cmd.meta({ description: "Ping" }).action(() => {})));
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -30,7 +30,7 @@ describe("renderManPageMdoc", () => {
 	it("escapes leading dots in descriptions and .Nd", async () => {
 		const app = new Crust("x")
 			.meta({ description: ".config is read automatically." })
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
@@ -40,7 +40,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("uses explicit date for .Dd", async () => {
-		const app = new Crust("x").handle(() => {});
+		const app = new Crust("x").action(() => {});
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({
 			root,
@@ -54,7 +54,7 @@ describe("renderManPageMdoc", () => {
 		const prev = process.env.SOURCE_DATE_EPOCH;
 		process.env.SOURCE_DATE_EPOCH = "86400";
 		try {
-			const app = new Crust("x").handle(() => {});
+			const app = new Crust("x").action(() => {});
 			const root = await app.snapshot();
 			const mdoc = renderManPageMdoc({ root, name: "x" });
 			expect(mdoc.startsWith(".Dd January 2, 1970\n")).toBe(true);
@@ -72,12 +72,12 @@ describe("renderManPageMdoc", () => {
 			.meta({ description: "Demo CLI for alias tests." })
 			.add(
 				defineCommand("issue", (cmd) =>
-					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
+					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).action(() => {}),
 				),
 			)
 			.add(
 				defineCommand("version", (cmd) =>
-					cmd.meta({ description: "Show version" }).handle(() => {}),
+					cmd.meta({ description: "Show version" }).action(() => {}),
 				),
 			);
 
@@ -105,14 +105,14 @@ describe("renderManPageMdoc", () => {
 			.meta({ description: "Demo." })
 			.add(
 				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).handle(() => {}),
+					cmd.meta({ description: "Build the project" }).action(() => {}),
 				),
 			)
 			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd
 						.meta({ description: "Internal completion entrypoint", hidden: true })
-						.handle(() => {}),
+						.action(() => {}),
 				),
 			);
 
@@ -127,10 +127,10 @@ describe("renderManPageMdoc", () => {
 		const app = new Crust("demo")
 			.add(
 				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
+					cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
 				),
 			)
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -148,7 +148,7 @@ describe("renderManPageMdoc", () => {
 				choices: ["browser", "bun", "node"],
 				description: "Build target",
 			})
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -168,7 +168,7 @@ describe("renderManPageMdoc", () => {
 				choices: ["dev", "staging", "prod"],
 				description: "Target environment",
 			})
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -188,7 +188,7 @@ describe("renderManPageMdoc", () => {
 				aliases: ["out"],
 				description: "Where to write",
 			})
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -206,7 +206,7 @@ describe("renderManPageMdoc", () => {
 				aliases: ["colour"],
 				description: "Use colour",
 			})
-			.handle(() => {});
+			.action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });

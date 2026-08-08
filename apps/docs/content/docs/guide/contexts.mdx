@@ -18,10 +18,10 @@ const database = defineContext("db", ({ options }: { options: { url: string } })
 
 const app = new Crust("app")
   .provide(database({ url: "postgres://localhost/app" }))
-  .handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
+  .action(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
 ```
 
-The setup receives one input object. `options` is the factory argument; `stdout` and `stderr` are the same injectable callbacks passed to the Command Handler. A zero-option factory is still a factory — invoke it with no argument:
+The setup receives one input object. `options` is the factory argument; `stdout` and `stderr` are the same injectable callbacks passed to the Command Action. A zero-option factory is still a factory — invoke it with no argument:
 
 ```ts
 const clock = defineContext("clock", () => ({ now: () => Date.now() }));
@@ -45,7 +45,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
 }));
 
 const deploy = defineCommand("deploy", { requires: [api] }, (command) =>
-  command.handle(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
+  command.action(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
 );
 
 const app = new Crust("app").provide(api()).add(deploy);
@@ -53,19 +53,19 @@ const app = new Crust("app").provide(api()).add(deploy);
 
 Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores a cloned definition in the Context-owned propagation channel; the original `apiKey` value is not mutated.
 
-The child requires `ctx.api`, not the raw flag. If a handler also needs the raw value, expose it from `api`; the owning Context remains the single boundary between CLI input and downstream capabilities.
+The child requires `ctx.api`, not the raw flag. If an action also needs the raw value, expose it from `api`; the owning Context remains the single boundary between CLI input and downstream capabilities.
 
 ## Lazy construction and inheritance
 
 Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only for the resolved command path. An Extension that returns `ctx.finish()` does not construct them.
 
-Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its handler:
+Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its action:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
 
 const status = defineCommand("status", { requires: [database] }, (command) =>
-  command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  command.action(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
 const app = new Crust("app").provide(database({ url: process.env.DATABASE_URL! })).add(status);
@@ -92,7 +92,7 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
   },
 }));
 const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.handle(({ ctx }) => ctx.logging.debug("deploying")),
+  command.action(({ ctx }) => ctx.logging.debug("deploying")),
 );
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
 
@@ -108,7 +108,7 @@ The setup input carries five fields:
 - `ctx` — the constructed values from `requires`
 - `stdout` and `stderr` — the invocation's injectable output callbacks
 
-Contexts receive the exact callbacks passed to the Command Handler, so capabilities can encapsulate output behavior such as verbose logging. Tests that inject capturing callbacks through `run()` or `execute()` observe Context output through those same callbacks.
+Contexts receive the exact callbacks passed to the Command Action, so capabilities can encapsulate output behavior such as verbose logging. Tests that inject capturing callbacks through `run()` or `execute()` observe Context output through those same callbacks.
 
 ### Requirements and construction order
 
@@ -129,7 +129,7 @@ Every factory carries `.of(value)`: it produces an instance whose setup returns 
 ```ts
 const fake = database.of({ query: (sql) => `fake: ${sql}` });
 
-const app = new Crust("app").provide(fake).handle(({ ctx, stdout }) => {
+const app = new Crust("app").provide(fake).action(({ ctx, stdout }) => {
   stdout(ctx.db.query("select 1"));
 });
 ```
@@ -151,7 +151,7 @@ const user = defineContext("user", { requires: [session] }, ({ ctx }) => {
 });
 
 const invoices = defineCommand("invoices", { requires: [user] }, (child) =>
-  child.handle(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
+  child.action(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
 );
 
 const billing = defineCommand("billing", { requires: [session] }, (command) =>
@@ -161,7 +161,7 @@ const billing = defineCommand("billing", { requires: [session] }, (command) =>
 const app = new Crust("app").provide(session()).add(billing);
 ```
 
-A throwing setup aborts the invocation before the Command Handler and disposes the values already constructed.
+A throwing setup aborts the invocation before the Command Action and disposes the values already constructed.
 
 ## Context requirements in definitions
 
@@ -169,7 +169,7 @@ A reusable command declares the Context factories it needs, and every `.add()` c
 
 ```ts
 const status = defineCommand("status", { requires: [database] }, (command) =>
-  command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
+  command.action(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
 const app = new Crust("app").provide(logging(), config(), database()).add(status);

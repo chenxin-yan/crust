@@ -351,7 +351,7 @@ export const buildCommand = defineCommand("build", (command) =>
 				default: false,
 			},
 		)
-		.handle(async ({ flags }) => {
+		.action(async ({ flags }) => {
 			const cwd = process.cwd();
 
 			// Resolve entry file path relative to cwd

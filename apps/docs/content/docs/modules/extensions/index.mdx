@@ -34,7 +34,7 @@ const app = new Crust("my-cli")
     completion({ version: pkg.version }),
     updateNotifier({ packageName: pkg.name, currentVersion: pkg.version }),
   )
-  .handle(({ stdout }) => stdout("Hello"));
+  .action(({ stdout }) => stdout("Hello"));
 
 await app.execute();
 ```
@@ -48,7 +48,7 @@ await app.execute();
 | [`completion(options?)`](/docs/modules/extensions/completion)         | Static bash, zsh, and fish completion command     |
 | [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)       | `COMMAND_NOT_FOUND` presentation                  |
 | [`noColor()`](/docs/modules/extensions/no-color)                      | Recursive `--color` / `--no-color` flag           |
-| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier) | Post-handler npm update notice                    |
+| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier) | Post-action npm update notice                     |
 
 These factories return plain `Extension` values. Contributions are application-wide. Extension-owned command, flag, short-name, or alias collisions with the application or another Extension are `DEFINITION` errors.
 

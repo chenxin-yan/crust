@@ -13,7 +13,7 @@ export const diagnostics = defineExtension("diagnostics", {
     defineCommand("doctor", (command) =>
       command
         .meta({ description: "Check the installation" })
-        .handle(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
+        .action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
     ),
   ],
   hooks: {

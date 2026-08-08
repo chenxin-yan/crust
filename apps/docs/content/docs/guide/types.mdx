@@ -11,7 +11,7 @@ Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `j
 new Crust("inspect")
   .args({ name: "file", type: "path", required: true })
   .flags({ name: "config", type: "json" })
-  .handle(({ args, flags }) => {
+  .action(({ args, flags }) => {
     args.file; // string
     flags.config; // unknown
   });
@@ -31,7 +31,7 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 })
 ```
 
-The Command Handler receives the return type. A parser must be synchronous.
+The Command Action receives the return type. A parser must be synchronous.
 
 ## Schema-backed definitions
 
@@ -48,7 +48,7 @@ const command = new Crust("serve")
     { name: "host", type: "string", schema: z.string().default("localhost") },
     { name: "secure", type: "boolean", schema: z.boolean().default(false) },
   )
-  .handle(({ args, flags }) => {
+  .action(({ args, flags }) => {
     args.port; // number
     flags.host; // string
     flags.secure; // boolean
@@ -91,7 +91,7 @@ import { z } from "zod";
 
 const Port = z.coerce.number().int().min(1).max(65535);
 
-new Crust("serve").flags({ name: "port", type: "string", schema: Port }).handle(({ flags }) => {
+new Crust("serve").flags({ name: "port", type: "string", schema: Port }).action(({ flags }) => {
   flags.port; // number
 });
 

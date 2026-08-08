@@ -19,7 +19,7 @@ const app = new Crust("{{name}}")
 		default: "Hello",
 		short: "g",
 	})
-	.handle(({ args, flags, stdout }) => {
+	.action(({ args, flags, stdout }) => {
 		stdout(`${flags.greet}, ${args.name}!`);
 	});
 

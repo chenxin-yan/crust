@@ -215,7 +215,7 @@ const app = new Crust("greet")
   .extend(help())
   .args({ name: "name", type: "string" })
   .flags({ name: "shout", type: "boolean", short: "s" })
-  .handle(({ args, flags, stdout }) => {
+  .action(({ args, flags, stdout }) => {
     const msg = \`Hello, \${args.name}!\`;
     stdout(flags.shout ? msg.toUpperCase() : msg);
   });

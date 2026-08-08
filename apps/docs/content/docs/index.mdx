@@ -33,7 +33,7 @@ $ greet --help
 ## Philosophy
 
 - **One way to do it.** One starter pattern. `defineCommand()` for every command; `new Crust()` appears exactly once, at the root.
-- **Inference over annotation.** Types flow from definitions to handlers. No decorators, no codegen, no manual generics.
+- **Inference over annotation.** Types flow from definitions to actions. No decorators, no codegen, no manual generics.
 - **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
 - **Fail loud at definition time.** Collisions and malformed definitions are `DEFINITION` errors at startup and in `crust build` — never warn-and-skip.
 - **Standards over lock-in.** Standard Schema for validation, `NO_COLOR`/`FORCE_COLOR` and OSC 8 conventions, native `Symbol.dispose` cleanup.
@@ -43,7 +43,7 @@ $ greet --help
 
 - **TypeScript-first** — Immutable, chainable builders with args and flags fully inferred from your definitions. No manual type annotations, just autocomplete that works.
 - **Compile-time validation** — Flag alias collisions and variadic arg mistakes are caught before your code runs
-- **Schema-first validation** — Place any Standard Schema on an argument or flag definition; the handler receives its output type
+- **Schema-first validation** — Place any Standard Schema on an argument or flag definition; the action receives its output type
 - **Composable, not monolithic** — Every capability ships as its own module with zero runtime dependencies in core. Install only what you need — `@crustjs/core` for the framework, `@crustjs/extensions` for official extensions, `@crustjs/crust` for build tooling.
 - **Extensions** — App-wide capabilities like help, version, completion, and update notices, attached once at the root
 - **Contexts** — Named command dependencies created lazily for the resolved command path

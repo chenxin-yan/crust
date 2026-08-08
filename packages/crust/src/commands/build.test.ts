@@ -44,7 +44,7 @@ async function parseBuildArgs(argv: string[]) {
 		captured = commandContext;
 	};
 	await app.run(["build", ...argv]);
-	if (!captured) throw new Error("build handler did not run");
+	if (!captured) throw new Error("build action did not run");
 	return captured;
 }
 

@@ -3,7 +3,7 @@
 "@crustjs/man": minor
 ---
 
-Add `Crust.snapshot()` as the supported API for preparing a frozen, validated Command Snapshot with Extension contributions and command definitions materialized without calling Command Handlers.
+Add `Crust.snapshot()` as the supported API for preparing a frozen, validated Command Snapshot with Extension contributions and command definitions materialized without calling Command Actions.
 
 Remove `prepareCommandSnapshot` from `@crustjs/core/tooling`. Tooling consumers should call `app.snapshot()` instead; the tooling subpath now exports the `CommandSnapshot` type for structural consumers.
 

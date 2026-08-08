@@ -1,11 +1,11 @@
 ---
 title: Commands
-description: Define immutable, typed commands and Command Handlers.
+description: Define immutable, typed commands and Command Actions.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-A command combines metadata, inputs, dependencies, and one Command Handler.
+A command combines metadata, inputs, dependencies, and one Command Action.
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -14,7 +14,7 @@ const app = new Crust("greet")
   .meta({ description: "Print a greeting", aliases: ["hello"] })
   .args({ name: "name", type: "string", required: true })
   .flags({ name: "loud", type: "boolean", short: "l" })
-  .handle(({ args, flags, stdout }) => {
+  .action(({ args, flags, stdout }) => {
     const text = `Hello, ${args.name}!`;
     stdout(flags.loud ? text.toUpperCase() : text);
   });
@@ -33,9 +33,9 @@ const described = base.meta({ description: "My app" });
 
 This permits safe composition and preserves input inference through the chain.
 
-## Command Handler context
+## Command Action context
 
-`.handle()` receives a typed `CrustCommandContext`:
+`.action()` receives a typed `CrustCommandContext`:
 
 <auto-type-table
   path="../../../../../packages/core/src/command/crust.ts"
@@ -43,12 +43,12 @@ This permits safe composition and preserves input inference through the chain.
 />
 
 ```ts
-const command = new Crust("inspect").handle(({ command, stdout }) => {
+const command = new Crust("inspect").action(({ command, stdout }) => {
   stdout(command.meta.name);
 });
 ```
 
-Throw ordinary errors from Command Handlers. Crust does not wrap them.
+Throw ordinary errors from Command Actions. Crust does not wrap them.
 
 ## Invocation
 
@@ -70,6 +70,6 @@ await app.run(["Ada"], {
 `run()` throws the original error. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
 
 <Callout type="info">
-  A command without a Command Handler is valid when it owns subcommands. Invoking it directly
+  A command without a Command Action is valid when it owns subcommands. Invoking it directly
   resolves without output; register the `help()` Extension to present the container's help instead.
 </Callout>

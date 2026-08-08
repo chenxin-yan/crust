@@ -243,7 +243,7 @@ export const publishCommand = defineCommand("publish", (command) =>
 				description: "Override the registry passed to bun publish",
 			},
 		)
-		.handle(async ({ flags }) => {
+		.action(async ({ flags }) => {
 			const stageDir = resolve(process.cwd(), flags["stage-dir"]);
 			const manifest = readPublishManifest(stageDir);
 

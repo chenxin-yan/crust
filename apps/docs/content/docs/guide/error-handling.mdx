@@ -32,11 +32,11 @@ A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code
 
 ## Application errors pass through
 
-Errors from Command Handlers and Context construction or disposal are not wrapped:
+Errors from Command Actions and Context construction or disposal are not wrapped:
 
 ```ts
 const failure = new Error("service unavailable");
-const app = new Crust("app").handle(() => {
+const app = new Crust("app").action(() => {
   throw failure;
 });
 

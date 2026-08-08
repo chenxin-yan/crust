@@ -26,11 +26,11 @@ Use the [Testing guide](/docs/guide/testing) for `captureRun()` and `runInteract
 crust build
 ```
 
-Build validation prepares the complete command graph, including Extension-owned flags and commands, before compilation. It catches collisions and malformed definitions without running Command Handlers. Use `--no-validate` only when the validation subprocess cannot run in your environment.
+Build validation prepares the complete command graph, including Extension-owned flags and commands, before compilation. It catches collisions and malformed definitions without running Command Actions. Use `--no-validate` only when the validation subprocess cannot run in your environment.
 
 ## Inspect input
 
-A Command Handler receives validated `args`, `flags`, Context values under `ctx`, forwarded `rawArgs`, a readonly `command` snapshot, and injectable writers. Extension hooks receive syntax-parsed invocation data and Command Snapshots.
+A Command Action receives validated `args`, `flags`, Context values under `ctx`, forwarded `rawArgs`, a readonly `command` snapshot, and injectable writers. Extension hooks receive syntax-parsed invocation data and Command Snapshots.
 
 ## Project structure
 
