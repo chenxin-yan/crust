@@ -268,184 +268,193 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
-export const buildCommand = defineCommand("build", (command) =>
-	command
-		.meta({ description: "Compile your CLI to a standalone executable" })
-		.flags(
-			{
-				name: "entry",
-				type: "string",
-				description: "Entry file path",
-				default: "src/cli.ts",
-				short: "e",
-			},
-			{
-				name: "outfile",
-				type: "string",
-				description: "Output file path (single-target builds only)",
-				short: "o",
-			},
-			{
-				name: "name",
-				type: "string",
-				description: "Binary name (defaults to package.json name or entry filename)",
-				short: "n",
-			},
-			{
-				name: "minify",
-				type: "boolean",
-				description: "Minify the output",
-				default: true,
-			},
-			{
-				name: "target",
-				type: "string",
-				multiple: true,
-				description:
-					"Canonical Bun target(s) to compile for (e.g. bun-linux-x64-baseline, bun-darwin-arm64). Omit to build all.",
-				short: "t",
-			},
-			{
-				name: "outdir",
-				type: "string",
-				description: "Output directory for compiled binaries",
-				default: "dist",
-				short: "d",
-			},
-			{
-				name: "resolver",
-				type: "string",
-				description: "Filename for the resolver script (multi-target builds, no extension)",
-				default: "cli",
-				short: "r",
-			},
-			{
-				name: "validate",
-				type: "boolean",
-				description: "Validate command runtime rules before compiling (disable with --no-validate)",
-				default: true,
-			},
-			{
-				name: "env-file",
-				type: "string",
-				multiple: true,
-				description: "Explicit env file(s) used for build-time constants; repeatable",
-			},
-			{
-				name: "package",
-				type: "boolean",
-				description: "Stage npm packages in dist/npm instead of raw binaries",
-				default: false,
-			},
-			{
-				name: "stage-dir",
-				type: "string",
-				description: "Directory to stage npm packages into when using --package",
-				default: "dist/npm",
-			},
-			{
-				name: "man",
-				type: "boolean",
-				description:
-					"Write an mdoc(7) page to <outdir>/man/<name>.1 (entry must export a Crust as `app` or default)",
-				default: false,
-			},
-		)
-		.action(async ({ flags }) => {
-			const cwd = process.cwd();
+export const buildCommand = defineCommand(
+	"build",
+	{ description: "Compile your CLI to a standalone executable" },
+	(command) =>
+		command
+			.flags(
+				{
+					name: "entry",
+					type: "string",
+					description: "Entry file path",
+					default: "src/cli.ts",
+					short: "e",
+				},
+				{
+					name: "outfile",
+					type: "string",
+					description: "Output file path (single-target builds only)",
+					short: "o",
+				},
+				{
+					name: "name",
+					type: "string",
+					description: "Binary name (defaults to package.json name or entry filename)",
+					short: "n",
+				},
+				{
+					name: "minify",
+					type: "boolean",
+					description: "Minify the output",
+					default: true,
+				},
+				{
+					name: "target",
+					type: "string",
+					multiple: true,
+					description:
+						"Canonical Bun target(s) to compile for (e.g. bun-linux-x64-baseline, bun-darwin-arm64). Omit to build all.",
+					short: "t",
+				},
+				{
+					name: "outdir",
+					type: "string",
+					description: "Output directory for compiled binaries",
+					default: "dist",
+					short: "d",
+				},
+				{
+					name: "resolver",
+					type: "string",
+					description: "Filename for the resolver script (multi-target builds, no extension)",
+					default: "cli",
+					short: "r",
+				},
+				{
+					name: "validate",
+					type: "boolean",
+					description:
+						"Validate command runtime rules before compiling (disable with --no-validate)",
+					default: true,
+				},
+				{
+					name: "env-file",
+					type: "string",
+					multiple: true,
+					description: "Explicit env file(s) used for build-time constants; repeatable",
+				},
+				{
+					name: "package",
+					type: "boolean",
+					description: "Stage npm packages in dist/npm instead of raw binaries",
+					default: false,
+				},
+				{
+					name: "stage-dir",
+					type: "string",
+					description: "Directory to stage npm packages into when using --package",
+					default: "dist/npm",
+				},
+				{
+					name: "man",
+					type: "boolean",
+					description:
+						"Write an mdoc(7) page to <outdir>/man/<name>.1 (entry must export a Crust as `app` or default)",
+					default: false,
+				},
+			)
+			.action(async ({ flags }) => {
+				const cwd = process.cwd();
 
-			// Resolve entry file path relative to cwd
-			const entryPath = resolve(cwd, flags.entry);
-			const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
+				// Resolve entry file path relative to cwd
+				const entryPath = resolve(cwd, flags.entry);
+				const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 
-			// Verify entry file exists
-			if (!existsSync(entryPath)) {
-				throw new Error(
-					`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-				);
-			}
-
-			if (flags.validate) {
-				await validateEntrypoint(entryPath, envFiles);
-			}
-
-			if (flags.package) {
-				if (flags.outfile) {
+				// Verify entry file exists
+				if (!existsSync(entryPath)) {
 					throw new Error(
-						"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
+						`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
 					);
 				}
 
-				const { runDistributeBuild } = await import("../utils/distribute.ts");
-				await runDistributeBuild({
-					cwd,
-					entry: flags.entry,
-					name: flags.name,
-					minify: flags.minify,
-					target: flags.target,
-					stageDir: flags["stage-dir"],
-					envFiles,
-					validate: false,
-					man: flags.man,
-					outdir: flags.outdir,
-				});
-				return;
-			}
-
-			if (flags.man) {
-				const baseName = resolveBaseName(flags.name, entryPath, cwd);
-				const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
-				console.log(`Writing man page ${dim(manPath)}...`);
-				await generateManPageFromEntry({
-					cwd,
-					entry: flags.entry,
-					name: flags.name,
-					outfile: manPath,
-				});
-				console.log(`${green("✓")} Man page: ${manPath}`);
-			}
-
-			// Resolve targets: default is all platforms, --target narrows to specific ones
-			const targets = resolveTargets(flags.target);
-
-			// --outfile is only allowed with exactly one target
-			if (flags.outfile && targets.length > 1) {
-				throw new Error(
-					"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
-				);
-			}
-
-			if (targets.length === 1) {
-				// Single-target build: one binary, no resolver
-				const outfilePath = resolveOutfile(flags.outfile, flags.name, entryPath, cwd, flags.outdir);
-
-				console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
-				await execBuild(entryPath, outfilePath, flags.minify, targets[0], envFiles);
-				console.log(`${green("✓")} Built successfully: ${outfilePath}`);
-			} else {
-				// Multi-target build: multiple binaries + shell/CMD resolvers
-				const baseName = resolveBaseName(flags.name, entryPath, cwd);
-
-				console.log(`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`);
-
-				const results: string[] = [];
-				for (const target of targets) {
-					const targetOutfile = resolveTargetOutfile(baseName, target, cwd, flags.outdir);
-
-					console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-					await execBuild(entryPath, targetOutfile, flags.minify, target, envFiles);
-					results.push(targetOutfile);
+				if (flags.validate) {
+					await validateEntrypoint(entryPath, envFiles);
 				}
 
-				// Generate resolver scripts
-				const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
-				writeResolver(resolverPath, baseName, targets);
+				if (flags.package) {
+					if (flags.outfile) {
+						throw new Error(
+							"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
+						);
+					}
 
-				console.log(`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`);
-				for (const r of results) {
-					console.log(`  ${r}`);
+					const { runDistributeBuild } = await import("../utils/distribute.ts");
+					await runDistributeBuild({
+						cwd,
+						entry: flags.entry,
+						name: flags.name,
+						minify: flags.minify,
+						target: flags.target,
+						stageDir: flags["stage-dir"],
+						envFiles,
+						validate: false,
+						man: flags.man,
+						outdir: flags.outdir,
+					});
+					return;
 				}
-				console.log(`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`);
-			}
-		}),
+
+				if (flags.man) {
+					const baseName = resolveBaseName(flags.name, entryPath, cwd);
+					const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
+					console.log(`Writing man page ${dim(manPath)}...`);
+					await generateManPageFromEntry({
+						cwd,
+						entry: flags.entry,
+						name: flags.name,
+						outfile: manPath,
+					});
+					console.log(`${green("✓")} Man page: ${manPath}`);
+				}
+
+				// Resolve targets: default is all platforms, --target narrows to specific ones
+				const targets = resolveTargets(flags.target);
+
+				// --outfile is only allowed with exactly one target
+				if (flags.outfile && targets.length > 1) {
+					throw new Error(
+						"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+					);
+				}
+
+				if (targets.length === 1) {
+					// Single-target build: one binary, no resolver
+					const outfilePath = resolveOutfile(
+						flags.outfile,
+						flags.name,
+						entryPath,
+						cwd,
+						flags.outdir,
+					);
+
+					console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
+					await execBuild(entryPath, outfilePath, flags.minify, targets[0], envFiles);
+					console.log(`${green("✓")} Built successfully: ${outfilePath}`);
+				} else {
+					// Multi-target build: multiple binaries + shell/CMD resolvers
+					const baseName = resolveBaseName(flags.name, entryPath, cwd);
+
+					console.log(`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`);
+
+					const results: string[] = [];
+					for (const target of targets) {
+						const targetOutfile = resolveTargetOutfile(baseName, target, cwd, flags.outdir);
+
+						console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
+						await execBuild(entryPath, targetOutfile, flags.minify, target, envFiles);
+						results.push(targetOutfile);
+					}
+
+					// Generate resolver scripts
+					const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
+					writeResolver(resolverPath, baseName, targets);
+
+					console.log(`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`);
+					for (const r of results) {
+						console.log(`  ${r}`);
+					}
+					console.log(`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`);
+				}
+			}),
 );

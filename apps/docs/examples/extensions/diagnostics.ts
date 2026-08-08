@@ -10,10 +10,8 @@ export const diagnostics = defineExtension("diagnostics", {
     },
   },
   commands: [
-    defineCommand("doctor", (command) =>
-      command
-        .meta({ description: "Check the installation" })
-        .action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
+    defineCommand("doctor", { description: "Check the installation" }, (command) =>
+      command.action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
     ),
   ],
   hooks: {

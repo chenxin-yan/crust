@@ -207,7 +207,7 @@ describe("scaffold", () => {
 		expect(cliContent).toContain("version(");
 		expect(cliContent).toContain("help()");
 		// Has proper structure: name, args, flags, run
-		expect(cliContent).toContain('new Crust("compile-test-cli")');
+		expect(cliContent).toContain('new Crust("compile-test-cli", {');
 		expect(cliContent).toContain(".args({");
 		expect(cliContent).toContain(".flags(");
 		expect(cliContent).toContain(".action(");

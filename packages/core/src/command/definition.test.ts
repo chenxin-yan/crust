@@ -138,11 +138,10 @@ describe("command definitions", () => {
 
 	it("clones annotations and isolates materializations across parents", async () => {
 		const annotation = Symbol("annotation");
-		const definition = defineCommand("one", (command) => {
-			const configured = command.meta({ description: "Reusable" });
-			((configured as unknown as Crust)._node as unknown as Record<symbol, unknown>)[annotation] =
+		const definition = defineCommand("one", { description: "Reusable" }, (command) => {
+			((command as unknown as Crust)._node as unknown as Record<symbol, unknown>)[annotation] =
 				"preserved";
-			return configured;
+			return command;
 		});
 
 		const first = await new Crust("first").add(definition).snapshot();
@@ -214,8 +213,8 @@ describe("command definitions", () => {
 	});
 
 	it("validates canonical names and aliases on every add", () => {
-		const definition = defineCommand("build", (command) =>
-			command.meta({ aliases: ["b"] }).action(() => {}),
+		const definition = defineCommand("build", { aliases: ["b"] }, (command) =>
+			command.action(() => {}),
 		);
 		const app = new Crust("cli").add(definition);
 

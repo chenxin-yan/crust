@@ -19,7 +19,7 @@ Add the `skill()` extension to your CLI. It reads `name` and `description` from 
 import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
 
-const app = new Crust("my-cli").meta({ description: "My CLI tool" }).extend(
+const app = new Crust("my-cli", { description: "My CLI tool" }).extend(
   skill({
     version: "1.0.0",
     instructions: `
@@ -112,8 +112,7 @@ import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
 import pkg from "./package.json" with { type: "json" };
 
-const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
+const app = new Crust("my-cli", { description: "My CLI" })
   .extend(
     skill({
       version: pkg.version,
@@ -254,8 +253,8 @@ command without extending the public `@crustjs/core` builder API.
 import { Crust, defineCommand } from "@crustjs/core";
 import { annotate } from "@crustjs/skills";
 
-const deploy = defineCommand("deploy", (command) =>
-  annotate(command.meta({ description: "Deploy the application" }), [
+const deploy = defineCommand("deploy", { description: "Deploy the application" }, (command) =>
+  annotate(command, [
     "Prefer preview modes before running destructive operations.",
     "Ask for confirmation before production changes.",
   ]).action(() => {
@@ -395,9 +394,9 @@ Guard execution with `import.meta.main` when a command module may also be import
 ```ts
 import { Crust } from "@crustjs/core";
 
-export const rootCommand = new Crust("my-cli")
-  .meta({ description: "My CLI tool" })
-  .action(() => console.log("Hello from my-cli!"));
+export const rootCommand = new Crust("my-cli", { description: "My CLI tool" }).action(() =>
+  console.log("Hello from my-cli!"),
+);
 
 if (import.meta.main) await rootCommand.execute();
 ```

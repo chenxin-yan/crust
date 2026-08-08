@@ -670,8 +670,8 @@ export interface CommandMeta {
 	 * Alternative names that resolve to the same command.
 	 *
 	 * Each entry is a sibling-level alternative for `name`. For example,
-	 * `meta: { name: "issue", aliases: ["issues", "i"] }` makes `cli issue`,
-	 * `cli issues`, and `cli i` all route to the same command node.
+	 * `defineCommand("issue", { aliases: ["issues", "i"] }, recipe)` makes
+	 * `cli issue`, `cli issues`, and `cli i` all route to the same command node.
 	 *
 	 * **Conflict policy.** Alias strings must not collide with this command's
 	 * own canonical `name`, with any sibling's `name`, or with any sibling's
@@ -686,7 +686,7 @@ export interface CommandMeta {
 	 * `didYouMeanPlugin` — it does not depend on which alias the user typed.
 	 *
 	 * @example
-	 * meta: { name: "issue", aliases: ["issues", "i"] }
+	 * defineCommand("issue", { aliases: ["issues", "i"] }, recipe)
 	 */
 	aliases?: readonly string[];
 	/**

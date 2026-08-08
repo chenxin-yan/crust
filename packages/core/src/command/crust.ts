@@ -81,7 +81,19 @@ export interface CommandRequirements {
 	readonly requires?: readonly AnyContextFactory[];
 }
 
+/** Static configuration for a reusable command definition. */
+export interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
+
+/** Static metadata accepted by the root command constructor. */
+export type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
+
 type RequirementContext<R extends CommandRequirements> = RequirementCtxOf<R>;
+
+type ConfigRequirements<C extends CommandConfig> = C extends {
+	readonly requires: infer R extends readonly AnyContextFactory[];
+}
+	? { readonly requires: R }
+	: {};
 
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any>;
 
@@ -93,6 +105,7 @@ const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefini
 
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
+	readonly meta: Omit<CommandMeta, "name">;
 	/** Requirement names, runtime-checked when the definition is added */
 	readonly requiredCtxNames: readonly string[];
 }
@@ -100,7 +113,7 @@ interface CommandDefinitionInternal {
 export interface CommandDefinition<R extends CommandRequirements = {}> {
 	/** The subcommand name this definition is added under */
 	readonly name: string;
-	/** The same definition under a different name (add one definition twice) */
+	/** The same definition under a different name; configured aliases travel with it. */
 	as(name: string): CommandDefinition<R>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
@@ -158,6 +171,12 @@ function materializeCommandDefinition(
 		}
 	}
 
+	validateIncomingAliases(
+		{ canonicalName: name, aliases: internal.meta.aliases },
+		parent.subCommands,
+		name,
+	);
+
 	const child = new Crust(name);
 	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
 	child._node.ownedFlags = { ...parent.ownedFlags };
@@ -202,14 +221,8 @@ function materializeCommandDefinition(
 		);
 	}
 
-	validateIncomingAliases(
-		{ canonicalName: name, aliases: configured._node.meta.aliases },
-		parent.subCommands,
-		name,
-	);
-
 	const childNode = cloneCommandNode(configured._node);
-	childNode.meta.name = name;
+	childNode.meta = { name, ...internal.meta };
 	return childNode;
 }
 
@@ -257,8 +270,6 @@ export interface CommandDefinitionBuilder<
 	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
 > {
-	meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
-
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs>
 	): CommandDefinitionBuilder<
@@ -298,21 +309,22 @@ export interface CommandDefinitionBuilder<
  * The recipe runs once per `.add()`, receiving a fresh builder typed by
  * the declared Context capabilities, which must be provided on the parent path.
  *
- * Use `.as(name)` to add one definition under a different name.
+ * Static metadata and Context requirements belong in `config`. Use `.as(name)`
+ * to add one definition under a different name; configured aliases travel with it.
  */
 export function defineCommand(name: string, recipe: CommandRecipe<{}>): CommandDefinition;
-export function defineCommand<const R extends CommandRequirements>(
+export function defineCommand<const C extends CommandConfig>(
 	name: string,
-	config: R,
-	recipe: CommandRecipe<R>,
-): CommandDefinition<R>;
+	config: C,
+	recipe: CommandRecipe<ConfigRequirements<C>>,
+): CommandDefinition<ConfigRequirements<C>>;
 export function defineCommand(
 	name: string,
-	configOrRecipe: CommandRequirements | CommandRecipe<CommandRequirements>,
+	configOrRecipe: CommandConfig | CommandRecipe<CommandRequirements>,
 	maybeRecipe?: CommandRecipe<CommandRequirements>,
 ): CommandDefinition<CommandRequirements> {
 	const hasConfig = typeof configOrRecipe !== "function";
-	const config = hasConfig ? configOrRecipe : {};
+	const config: CommandConfig = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	if (typeof recipe !== "function") {
 		throw new CrustError("DEFINITION", `Command definition "${name}" requires a recipe function`, {
@@ -321,9 +333,11 @@ export function defineCommand(
 			reason: "missing-recipe",
 		});
 	}
+	const { requires, ...meta } = config;
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
-		requiredCtxNames: (config.requires ?? []).map((dep) => dep.contextName),
+		meta: meta.aliases ? { ...meta, aliases: [...meta.aliases] } : meta,
+		requiredCtxNames: (requires ?? []).map((dep) => dep.contextName),
 	};
 	const named = (defName: string): CommandDefinition<CommandRequirements> => {
 		if (!defName.trim()) {
@@ -390,13 +404,16 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
+	 * @param meta - Optional root description and usage.
 	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
 	 */
-	constructor(name: string) {
+	constructor(name: string, meta: RootCommandMeta = {}) {
 		if (!name.trim()) {
 			throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
 		}
 		this._node = createCommandNode(name);
+		if (meta.description !== undefined) this._node.meta.description = meta.description;
+		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		this._ancestorOwnedFlags = {};
 	}
 
@@ -421,30 +438,6 @@ export class Crust<
 		(cloned as { _node: CommandNode })._node = newNode;
 		(cloned as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		return cloned;
-	}
-
-	/**
-	 * Set metadata (description, usage) for this command.
-	 *
-	 * The command name is already set by the constructor or add call.
-	 * Provide `description`, `usage`, and/or `aliases` here.
-	 *
-	 * Returns a new builder with updated metadata. The original builder
-	 * is not mutated.
-	 *
-	 * @param meta - Metadata fields to set (description, usage, aliases)
-	 * @returns A new `Crust` instance with updated metadata
-	 * @example
-	 * ```ts
-	 * defineCommand("issue", (cmd) =>
-	 *   cmd.meta({ aliases: ["issues", "i"] }).action(() => {})
-	 * )
-	 * ```
-	 */
-	meta(meta: Omit<CommandMeta, "name">): Crust<Local, Owned, A, Eff, Ctx> {
-		return this._clone({
-			meta: { ...this._node.meta, ...meta },
-		}) as Crust<Local, Owned, A, Eff, Ctx>;
 	}
 
 	/**

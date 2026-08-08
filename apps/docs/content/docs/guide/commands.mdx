@@ -10,8 +10,7 @@ A command combines metadata, inputs, dependencies, and one Command Action.
 ```ts
 import { Crust } from "@crustjs/core";
 
-const app = new Crust("greet")
-  .meta({ description: "Print a greeting", aliases: ["hello"] })
+const app = new Crust("greet", { description: "Print a greeting" })
   .args({ name: "name", type: "string", required: true })
   .flags({ name: "loud", type: "boolean", short: "l" })
   .action(({ args, flags, stdout }) => {
@@ -27,11 +26,23 @@ await app.execute();
 Every builder method returns a new `Crust` value. Keep the returned value:
 
 ```ts
-const base = new Crust("app");
-const described = base.meta({ description: "My app" });
+const base = new Crust("app", { description: "My app" });
+const withFlags = base.flags({ name: "verbose", type: "boolean" });
 ```
 
-This permits safe composition and preserves input inference through the chain.
+Static root metadata belongs in the constructor. Subcommand metadata belongs in `defineCommand()` config:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+
+const greet = defineCommand(
+  "greet",
+  { description: "Print a greeting", aliases: ["hello"] },
+  (command) => command.action(() => {}),
+);
+```
+
+Fluent methods remain immutable, permitting safe composition while preserving input inference.
 
 ## Command Action context
 

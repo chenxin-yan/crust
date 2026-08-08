@@ -9,10 +9,7 @@ description: Add help output to every command.
 import { Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
-const app = new Crust("my-cli")
-  .meta({ description: "My CLI" })
-  .extend(help())
-  .action(() => {});
+const app = new Crust("my-cli", { description: "My CLI" }).extend(help()).action(() => {});
 
 await app.execute();
 ```

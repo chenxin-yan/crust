@@ -38,8 +38,7 @@ function parseDistributionMode(value: string | undefined): DistributionMode | un
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
 
-const app = new Crust("create-crust")
-	.meta({ description: "Scaffold a new Crust CLI project" })
+const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI project" })
 	.flags(
 		{
 			name: "distribution",

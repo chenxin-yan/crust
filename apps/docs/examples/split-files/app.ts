@@ -3,7 +3,6 @@ import { help, version } from "@crustjs/extensions";
 
 import { logger } from "./shared.ts";
 
-export const app = new Crust("my-cli")
-  .meta({ description: "A split-file CLI" })
+export const app = new Crust("my-cli", { description: "A split-file CLI" })
   .extend(version("0.2.0"), help())
   .provide(logger());

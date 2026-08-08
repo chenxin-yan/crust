@@ -28,9 +28,11 @@ import { executeCrust } from "./helpers";
 // Shared fixtures
 // ────────────────────────────────────────────────────────────────────────────
 
-const rootBase = new Crust("myapp")
-	.meta({ description: "Integration test app" })
-	.flags({ name: "help", type: "boolean", short: "h" });
+const rootBase = new Crust("myapp", { description: "Integration test app" }).flags({
+	name: "help",
+	type: "boolean",
+	short: "h",
+});
 
 const serveCmd = defineCommand("serve", (command) =>
 	command

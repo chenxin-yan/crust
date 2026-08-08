@@ -102,72 +102,72 @@ export function completionExtension(options: CompletionOptions = {}): Extension 
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";
 
-	const completionCommand = defineCommand(subcommandName, (cmd) =>
-		cmd
-			.meta({
-				description: "Generate shell tab-completion scripts",
-			})
-			.args({
-				name: "shell",
-				type: "string",
-				required: true,
-				description: "Shell to generate completion for",
-				choices: SUPPORTED_SHELLS,
-			})
-			.flags({
-				name: "output-dir",
-				type: "string",
-				description:
-					"Write all configured shells' scripts into this directory instead of printing to stdout",
-			})
-			.action(async (context) => {
-				const rootCommand = context.rootCommand;
-				// Validate `binName` before emitting anything so misconfigured
-				// CLIs fail loudly. The walker also re-validates command/flag
-				// identifiers when it builds the spec.
-				const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
-				// `version` flows into header comments only; sanitise to drop
-				// control characters (newlines especially) so they cannot break
-				// out of the comment line in the emitted script.
-				const safeVersion = sanitizeFreeText(version);
+	const completionCommand = defineCommand(
+		subcommandName,
+		{ description: "Generate shell tab-completion scripts" },
+		(cmd) =>
+			cmd
+				.args({
+					name: "shell",
+					type: "string",
+					required: true,
+					description: "Shell to generate completion for",
+					choices: SUPPORTED_SHELLS,
+				})
+				.flags({
+					name: "output-dir",
+					type: "string",
+					description:
+						"Write all configured shells' scripts into this directory instead of printing to stdout",
+				})
+				.action(async (context) => {
+					const rootCommand = context.rootCommand;
+					// Validate `binName` before emitting anything so misconfigured
+					// CLIs fail loudly. The walker also re-validates command/flag
+					// identifiers when it builds the spec.
+					const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
+					// `version` flows into header comments only; sanitise to drop
+					// control characters (newlines especially) so they cannot break
+					// out of the comment line in the emitted script.
+					const safeVersion = sanitizeFreeText(version);
 
-				const { shell: requestedShell } = context.args;
-				const spec = walkCommandNode(rootCommand);
-				const outputDir = context.flags["output-dir"];
+					const { shell: requestedShell } = context.args;
+					const spec = walkCommandNode(rootCommand);
+					const outputDir = context.flags["output-dir"];
 
-				if (outputDir === undefined) {
-					const script = renderForShell(requestedShell, spec, binName, safeVersion);
-					context.stdout(script);
-					return;
-				}
-
-				// File path: write **all** configured shells. This matches
-				// the packaging-time use case — distributors generate every
-				// supported file in one invocation regardless of which
-				// shell they nominally requested.
-				const targetDir = resolvePath(outputDir);
-				await mkdir(targetDir, { recursive: true });
-				for (const shell of shells) {
-					const filename = filenameForShell(shell, binName);
-					const script = renderForShell(shell, spec, binName, safeVersion);
-					const targetPath = resolvePath(targetDir, filename);
-					// Defence-in-depth: even though `binName` is validated
-					// upstream (rejects path separators / `..`), verify the
-					// resolved path stays inside `targetDir`. This catches
-					// future regressions in the validator and platform-
-					// specific edge cases (e.g. Windows drive letters).
-					if (
-						targetPath !== targetDir &&
-						!targetPath.startsWith(`${targetDir}/`) &&
-						!targetPath.startsWith(`${targetDir}\\`)
-					) {
-						throw new Error(
-							`completion extension: refusing to write outside output dir (${targetPath})`,
-						);
+					if (outputDir === undefined) {
+						const script = renderForShell(requestedShell, spec, binName, safeVersion);
+						context.stdout(script);
+						return;
 					}
-					await writeFile(targetPath, script, "utf8");
-				}
-			}),
+
+					// File path: write **all** configured shells. This matches
+					// the packaging-time use case — distributors generate every
+					// supported file in one invocation regardless of which
+					// shell they nominally requested.
+					const targetDir = resolvePath(outputDir);
+					await mkdir(targetDir, { recursive: true });
+					for (const shell of shells) {
+						const filename = filenameForShell(shell, binName);
+						const script = renderForShell(shell, spec, binName, safeVersion);
+						const targetPath = resolvePath(targetDir, filename);
+						// Defence-in-depth: even though `binName` is validated
+						// upstream (rejects path separators / `..`), verify the
+						// resolved path stays inside `targetDir`. This catches
+						// future regressions in the validator and platform-
+						// specific edge cases (e.g. Windows drive letters).
+						if (
+							targetPath !== targetDir &&
+							!targetPath.startsWith(`${targetDir}/`) &&
+							!targetPath.startsWith(`${targetDir}\\`)
+						) {
+							throw new Error(
+								`completion extension: refusing to write outside output dir (${targetPath})`,
+							);
+						}
+						await writeFile(targetPath, script, "utf8");
+					}
+				}),
 	);
 
 	return defineExtension("completion", { commands: [completionCommand] });

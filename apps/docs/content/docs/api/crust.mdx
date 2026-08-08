@@ -11,10 +11,12 @@ import {
   defineCommand,
   defineContext,
   defineFlag,
+  type CommandConfig,
   type CommandDefinition,
   type CommandDefinitionBuilder,
   type CommandRequirements,
   type ContextConfig,
+  type RootCommandMeta,
 } from "@crustjs/core";
 ```
 
@@ -40,7 +42,6 @@ type ContextRequirements = readonly AnyContextFactory[];
 
 ```ts
 interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
-  meta(meta: Omit<CommandMeta, "name">): CommandDefinitionBuilder;
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
@@ -62,9 +63,9 @@ interface CommandDefinition<R extends CommandRequirements = {}> {
 }
 ```
 
-A `CommandDefinition<R>` is a frozen value carrying its name and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. It has no command node or execution methods.
+A `CommandDefinition<R>` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods.
 
-### `defineCommand(name, requirements?, recipe)`
+### `defineCommand(name, config?, recipe)`
 
 ```ts
 defineCommand(
@@ -72,14 +73,16 @@ defineCommand(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition;
 
-defineCommand<const R extends CommandRequirements>(
+interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
+
+defineCommand<const C extends CommandConfig>(
   name: string,
-  requirements: R,
+  config: C,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition<R>;
+): CommandDefinition;
 ```
 
-Creates an inert reusable definition under a required name. The recipe builder is typed from the requirement values:
+Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, `hidden`, and Context `requires` belong in `config`. The recipe builder is typed from the requirement values:
 
 ```ts
 const verbose = defineFlag("verbose", { type: "boolean" });
@@ -90,10 +93,13 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
 }));
 const auth = defineContext("auth", () => ({ user: "Ada" }));
 
-const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) =>
-  command.args({ name: "target", type: "string", required: true }).action(({ args, ctx }) => {
-    ctx.logging.debug(`${ctx.auth.user}:${args.target}`);
-  }),
+const deploy = defineCommand(
+  "deploy",
+  { description: "Deploy an application", aliases: ["ship"], requires: [logging, auth] },
+  (command) =>
+    command.args({ name: "target", type: "string", required: true }).action(({ args, ctx }) => {
+      ctx.logging.debug(`${ctx.auth.user}:${args.target}`);
+    }),
 );
 ```
 
@@ -102,35 +108,25 @@ The recipe does not execute when the definition is created. It executes once for
 ## Constructor
 
 ```ts
-new Crust(name: string)
+type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
+
+new Crust(name: string, meta?: RootCommandMeta)
 ```
 
-Creates a root command builder. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
+Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
 
 ```ts
-const app = new Crust("my-cli");
-```
-
-## `.meta(meta)`
-
-```ts
-meta(meta: Omit<CommandMeta, "name">): Crust
-```
-
-Sets `description`, `usage`, `aliases`, or `hidden`. The constructor or the added definition supplies the name.
-
-```ts
-const app = new Crust("issue").meta({
+const app = new Crust("my-cli", {
   description: "Manage issues",
-  aliases: ["issues", "i"],
+  usage: "my-cli <command>",
 });
 ```
 
-Aliases must be non-empty, contain no whitespace, not start with `-`, and not collide with sibling names or aliases.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, and not collide with sibling names or aliases.
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.meta()` shallow-merges fields. `.action()` is set once and throws `DEFINITION` if called again.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.action()` is set once and throws `DEFINITION` if called again.
 
 ## `.args(...defs)`
 

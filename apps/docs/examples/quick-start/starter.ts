@@ -3,8 +3,7 @@ import { help, version } from "@crustjs/extensions";
 
 import pkg from "../package.json";
 
-const app = new Crust("my-cli")
-  .meta({ description: "A CLI built with Crust" })
+const app = new Crust("my-cli", { description: "A CLI built with Crust" })
   .extend(version(pkg.version), help())
   .args({
     name: "name",

@@ -624,11 +624,8 @@ describe("buildManifest", () => {
 		});
 
 		it("preserves instructions across Crust builder cloning", () => {
-			const deploy = defineCommand("deploy", (command) =>
-				annotate(
-					command.meta({ description: "Deploy command" }),
-					"Read the environment carefully before execution.",
-				).action(() => {}),
+			const deploy = defineCommand("deploy", { description: "Deploy command" }, (command) =>
+				annotate(command, "Read the environment carefully before execution.").action(() => {}),
 			);
 			const root = new Crust("app").add(deploy);
 

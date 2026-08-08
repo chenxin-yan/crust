@@ -431,7 +431,7 @@ async function autoUpdateCustomSkillsLoop(
  * import { Crust } from "@crustjs/core";
  * import { skill } from "@crustjs/skills";
  *
- * const app = new Crust("my-cli").meta({ description: "My CLI" })
+ * const app = new Crust("my-cli", { description: "My CLI" })
  *   .extend(skill({
  *     version: "1.0.0",
  *     command: "skill", // registers "my-cli skill" subcommand
@@ -651,48 +651,52 @@ function buildSkillCommandGrammar(
 	options: SkillOptions,
 	getCustomSkills: (mainName: string) => readonly CustomSkillConfig[],
 ) {
-	return defineCommand(commandName, (command) =>
-		command
-			.meta({ description: "Manage agent skill installations" })
-			.flags(
-				{
-					name: "scope",
-					type: "string",
-					description: "Install scope (project or global)",
-				},
-				{
-					name: "all",
-					type: "boolean",
-					description: "Install for all detected agents non-interactively (universal + detected)",
-				},
-			)
-			.add(
-				defineCommand("update", (cmd) =>
-					cmd
-						.meta({ description: "Update installed skills to latest version" })
-						.flags({
-							name: "scope",
-							type: "string",
-							description: "Update scope (project or global)",
-						})
-						.action(async (context) => {
-							await runSkillUpdateFlow(
-								context.rootCommand,
-								options,
-								getCustomSkills(context.rootCommand.meta.name),
-								context.flags,
-							);
-						}),
-				),
-			)
-			.action(async (context) => {
-				await runSkillInstallFlow(
-					context.rootCommand,
-					options,
-					getCustomSkills(context.rootCommand.meta.name),
-					context.flags,
-				);
-			}),
+	return defineCommand(
+		commandName,
+		{ description: "Manage agent skill installations" },
+		(command) =>
+			command
+				.flags(
+					{
+						name: "scope",
+						type: "string",
+						description: "Install scope (project or global)",
+					},
+					{
+						name: "all",
+						type: "boolean",
+						description: "Install for all detected agents non-interactively (universal + detected)",
+					},
+				)
+				.add(
+					defineCommand(
+						"update",
+						{ description: "Update installed skills to latest version" },
+						(cmd) =>
+							cmd
+								.flags({
+									name: "scope",
+									type: "string",
+									description: "Update scope (project or global)",
+								})
+								.action(async (context) => {
+									await runSkillUpdateFlow(
+										context.rootCommand,
+										options,
+										getCustomSkills(context.rootCommand.meta.name),
+										context.flags,
+									);
+								}),
+					),
+				)
+				.action(async (context) => {
+					await runSkillInstallFlow(
+						context.rootCommand,
+						options,
+						getCustomSkills(context.rootCommand.meta.name),
+						context.flags,
+					);
+				}),
 	);
 }
 
