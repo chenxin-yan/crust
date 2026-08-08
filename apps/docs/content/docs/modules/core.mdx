@@ -52,15 +52,15 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 
 ## Runtime exports
 
-| Export                                | Description                                                                                                                    |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.mount()`, `.handle()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                              |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                       |
-| `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                              |
-| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                       |
-| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                        |
-| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                      |
+| Export                                | Description                                                                                                                                           |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.mount()`, `.handle()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                     |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                                              |
+| `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                     |
+| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                              |
+| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                               |
+| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                             |
 
 ## Definition types
 
@@ -129,6 +129,8 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Tooling subpath
 
-`@crustjs/core/tooling` exposes `prepareCommandSnapshot`, `snapshotCommand`, `buildCommandDocumentation`, its documentation model types, and the validation environment constants for lockstep first-party tooling. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. This subpath is explicitly unsupported and has no compatibility guarantee. Application code should use the root exports above.
+Call `app.snapshot()` to prepare a frozen, validated Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions without calling Command Handlers.
+
+`@crustjs/core/tooling` exports the `CommandSnapshot` type plus `snapshotCommand`, `buildCommandDocumentation`, its documentation model types, and the validation environment constants for lockstep first-party tooling. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. Except for the `CommandSnapshot` type consumed by `app.snapshot()`, helpers on this subpath are intended for first-party tooling that moves in lockstep with core.
 
 Use [`@crustjs/extensions`](/docs/modules/extensions) for the official Extensions and [`@crustjs/crust`](/docs/modules/crust) as a development dependency for build tooling.

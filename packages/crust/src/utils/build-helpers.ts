@@ -88,43 +88,23 @@ export const TARGET_INFO = {
 } as const satisfies Record<BunTarget, TargetInfo>;
 
 /**
- * Human-friendly target aliases that map to Bun compile targets.
+ * Resolve a canonical Bun target string to a supported compile target.
  *
- * Users can pass either the full Bun target string or these short aliases.
- *
- * @example
- * ```sh
- * crust build --target linux-x64    # same as --target bun-linux-x64-baseline
- * crust build --target darwin-arm64 # same as --target bun-darwin-arm64
- * ```
- */
-export const TARGET_ALIASES: Record<string, BunTarget> = Object.fromEntries(
-	SUPPORTED_TARGETS.map((t) => [TARGET_INFO[t].alias, t]),
-);
-
-/**
- * Resolve a user-provided target string to a valid Bun compile target.
- *
- * Accepts both full Bun target names and short aliases.
- *
- * @param input - User-provided target string (e.g. "linux-x64" or "bun-linux-x64-baseline")
+ * @param input - User-provided canonical Bun target string
  * @returns The resolved Bun compile target
  * @throws {Error} If the target is not recognized
  */
 export function resolveTarget(input: string): BunTarget {
-	// Direct match against supported targets
 	if ((SUPPORTED_TARGETS as readonly string[]).includes(input)) {
 		return input as BunTarget;
 	}
 
-	// Try alias lookup
-	const aliased = TARGET_ALIASES[input];
-	if (aliased) {
-		return aliased;
-	}
-
-	const validTargets = [...Object.keys(TARGET_ALIASES), ...SUPPORTED_TARGETS].join(", ");
-	throw new Error(`Unknown target "${input}"\n  Valid targets: ${validTargets}`);
+	const canonical = SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === input);
+	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
+	const validTargets = SUPPORTED_TARGETS.join(", ");
+	throw new Error(
+		`Unknown target "${input}". Targets must use canonical Bun names.${hint}\n  Valid targets: ${validTargets}`,
+	);
 }
 
 /**

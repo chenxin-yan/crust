@@ -10,7 +10,6 @@ import {
 	Crust,
 	defineCommand,
 	type CrustCommandContext,
-	prepareCommandSnapshot,
 	VALIDATION_FORCE_EXIT_ENV,
 	VALIDATION_MODE_ENV,
 } from "./crust.ts";
@@ -31,7 +30,7 @@ type Equal<A, B> =
 
 describe("Crust constructor", () => {
 	it("creates builder with string name", async () => {
-		const snapshot = await prepareCommandSnapshot(new Crust("my-cli"));
+		const snapshot = await new Crust("my-cli").snapshot();
 		expect(snapshot.meta.name).toBe("my-cli");
 	});
 
@@ -86,9 +85,9 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 
 	it.each(builderCases)("%s does not mutate the original builder", async (_name, apply) => {
 		const app = new Crust("test");
-		const before = await prepareCommandSnapshot(app);
+		const before = await app.snapshot();
 		apply(app);
-		expect(await prepareCommandSnapshot(app)).toEqual(before);
+		expect(await app.snapshot()).toEqual(before);
 	});
 });
 
@@ -104,7 +103,7 @@ describe("Crust .flags()", () => {
 			{ name: "port", type: "number", default: 3000 },
 		);
 
-		const snapshot = await prepareCommandSnapshot(withFlags);
+		const snapshot = await withFlags.snapshot();
 		expect(snapshot.flags).toEqual({
 			verbose: { type: "boolean", short: "v" },
 			port: { type: "number", default: 3000 },
@@ -118,14 +117,14 @@ describe("Crust .flags()", () => {
 
 		// Mutating the original def should not affect the builder
 		flagDef.short = "V";
-		expect((await prepareCommandSnapshot(app)).flags.verbose?.short).toBe("v");
+		expect((await app.snapshot()).flags.verbose?.short).toBe("v");
 	});
 
 	it("preserves meta from original builder", async () => {
 		const app = new Crust("my-cli").meta({ description: "desc" });
 		const withFlags = app.flags({ name: "verbose", type: "boolean" });
 
-		const snapshot = await prepareCommandSnapshot(withFlags);
+		const snapshot = await withFlags.snapshot();
 		expect(snapshot.meta.name).toBe("my-cli");
 		expect(snapshot.meta.description).toBe("desc");
 	});
@@ -161,7 +160,7 @@ describe("Crust .flags()", () => {
 			.flags({ name: "first", type: "boolean" })
 			.flags({ name: "second", type: "string" });
 
-		expect((await prepareCommandSnapshot(app)).flags).toEqual({
+		expect((await app.snapshot()).flags).toEqual({
 			second: { type: "string" },
 		});
 	});
@@ -209,7 +208,7 @@ describe("Crust .args()", () => {
 			{ name: "count", type: "number", default: 1 },
 		);
 
-		expect((await prepareCommandSnapshot(withArgs)).args).toEqual([
+		expect((await withArgs.snapshot()).args).toEqual([
 			{ name: "file", type: "string", required: true },
 			{ name: "count", type: "number", default: 1 },
 		]);
@@ -224,7 +223,7 @@ describe("Crust .args()", () => {
 		const app = new Crust("test").args(argDef);
 
 		argDef.description = "changed";
-		expect((await prepareCommandSnapshot(app)).args[0]?.description).toBe("orig");
+		expect((await app.snapshot()).args[0]?.description).toBe("orig");
 	});
 
 	it("preserves meta and flags from original builder", async () => {
@@ -233,7 +232,7 @@ describe("Crust .args()", () => {
 			.flags({ name: "verbose", type: "boolean" });
 		const withArgs = app.args({ name: "file", type: "string" });
 
-		const snapshot = await prepareCommandSnapshot(withArgs);
+		const snapshot = await withArgs.snapshot();
 		expect(snapshot.meta.name).toBe("my-cli");
 		expect(snapshot.meta.description).toBe("desc");
 		expect(snapshot.flags.verbose).toBeDefined();
@@ -253,7 +252,7 @@ describe("Crust chaining", () => {
 			)
 			.args({ name: "file", type: "string", required: true });
 
-		const snapshot = await prepareCommandSnapshot(app);
+		const snapshot = await app.snapshot();
 		expect(Object.keys(snapshot.flags)).toEqual(["verbose", "port"]);
 		expect(snapshot.args.map((arg) => arg.name)).toEqual(["file"]);
 	});
@@ -263,7 +262,7 @@ describe("Crust chaining", () => {
 			.args({ name: "file", type: "string" })
 			.flags({ name: "verbose", type: "boolean" });
 
-		const snapshot = await prepareCommandSnapshot(app);
+		const snapshot = await app.snapshot();
 		expect(snapshot.flags.verbose).toBeDefined();
 		expect(snapshot.args).toHaveLength(1);
 	});
@@ -273,12 +272,12 @@ describe("Crust chaining", () => {
 		const withFlags = base.flags({ name: "verbose", type: "boolean" });
 		const withArgs = withFlags.args({ name: "file", type: "string" });
 
-		expect(await prepareCommandSnapshot(base)).toMatchObject({ flags: {}, args: [] });
-		expect(await prepareCommandSnapshot(withFlags)).toMatchObject({
+		expect(await base.snapshot()).toMatchObject({ flags: {}, args: [] });
+		expect(await withFlags.snapshot()).toMatchObject({
 			flags: { verbose: { type: "boolean" } },
 			args: [],
 		});
-		expect(await prepareCommandSnapshot(withArgs)).toMatchObject({
+		expect(await withArgs.snapshot()).toMatchObject({
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
 		});
@@ -296,7 +295,7 @@ describe("Crust .meta()", () => {
 			.args({ name: "file", type: "string" })
 			.meta({ description: "A test command", usage: "test [options]" });
 
-		expect(await prepareCommandSnapshot(app)).toMatchObject({
+		expect(await app.snapshot()).toMatchObject({
 			meta: { name: "test", description: "A test command", usage: "test [options]" },
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
@@ -304,7 +303,7 @@ describe("Crust .meta()", () => {
 	});
 
 	it("sets only description when usage is omitted", async () => {
-		const snapshot = await prepareCommandSnapshot(new Crust("test").meta({ description: "desc" }));
+		const snapshot = await new Crust("test").meta({ description: "desc" }).snapshot();
 		expect(snapshot.meta).toEqual({ name: "test", description: "desc" });
 	});
 
@@ -315,7 +314,7 @@ describe("Crust .meta()", () => {
 			),
 		);
 
-		expect((await prepareCommandSnapshot(app)).subCommands.sub?.meta).toEqual({
+		expect((await app.snapshot()).subCommands.sub?.meta).toEqual({
 			name: "sub",
 			description: "A subcommand",
 			usage: "cli sub [options]",
@@ -413,7 +412,7 @@ describe("Crust .mount() with inline definitions", () => {
 			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
 		);
 
-		const subCommand = (await prepareCommandSnapshot(app)).subCommands.sub;
+		const subCommand = (await app.snapshot()).subCommands.sub;
 		expect(subCommand?.meta.name).toBe("sub");
 	});
 
@@ -422,7 +421,7 @@ describe("Crust .mount() with inline definitions", () => {
 			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
 		);
 
-		expect((await prepareCommandSnapshot(app)).subCommands.sub?.flags).toEqual({
+		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
 			output: { type: "string" },
 		});
 	});
@@ -435,7 +434,7 @@ describe("Crust .mount() with inline definitions", () => {
 			.provide(logging())
 			.mount(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
 
-		expect((await prepareCommandSnapshot(app)).subCommands.sub?.flags).toEqual({
+		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
 			verbose: { type: "boolean" },
 			output: { type: "string" },
 		});
@@ -489,7 +488,7 @@ describe("Crust .mount() with inline definitions", () => {
 		expect(receivedBuilder).toBeDefined();
 		expect(receivedBuilder).not.toBe(app);
 		const runtimeBuilder = receivedBuilder as unknown as Crust;
-		expect(await prepareCommandSnapshot(runtimeBuilder)).toMatchObject({
+		expect(await runtimeBuilder.snapshot()).toMatchObject({
 			meta: { name: "sub" },
 			flags: {},
 		});
@@ -519,7 +518,7 @@ describe("Crust .mount() with inline definitions", () => {
 			.mount(defineCommand("sub1", (cmd) => cmd.flags({ name: "a", type: "string" })))
 			.mount(defineCommand("sub2", (cmd) => cmd.flags({ name: "b", type: "number" })));
 
-		const subCommands = (await prepareCommandSnapshot(app)).subCommands;
+		const subCommands = (await app.snapshot()).subCommands;
 		expect(subCommands.sub1?.flags.a).toBeDefined();
 		expect(subCommands.sub2?.flags.b).toBeDefined();
 	});
@@ -530,7 +529,7 @@ describe("Crust .mount() with inline definitions", () => {
 			.args({ name: "file", type: "string" })
 			.mount(defineCommand("sub", (cmd) => cmd));
 
-		const snapshot = await prepareCommandSnapshot(app);
+		const snapshot = await app.snapshot();
 		expect(snapshot.flags.verbose).toBeDefined();
 		expect(snapshot.args.map((arg) => arg.name)).toEqual(["file"]);
 	});
@@ -599,7 +598,7 @@ describe("Crust .handle()", () => {
 			.mount(defineCommand("sub", (command) => command))
 			.handle(() => {});
 
-		expect(await prepareCommandSnapshot(app)).toMatchObject({
+		expect(await app.snapshot()).toMatchObject({
 			hasHandler: true,
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
@@ -748,7 +747,7 @@ describe("Crust .extend()", () => {
 			.handle(() => {})
 			.extend(defineExtension("test-extension"));
 
-		expect(await prepareCommandSnapshot(app)).toMatchObject({
+		expect(await app.snapshot()).toMatchObject({
 			hasHandler: true,
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
@@ -1945,7 +1944,7 @@ describe("Invocation pipeline internal seam — validation mode", () => {
 	});
 });
 
-describe("prepareCommandSnapshot (tooling)", () => {
+describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
 		const docs = defineExtension("doc-test", {
 			flags: {
@@ -1954,7 +1953,7 @@ describe("prepareCommandSnapshot (tooling)", () => {
 		});
 
 		const app = new Crust("cli").extend(docs).meta({ description: "Test" });
-		const root = await prepareCommandSnapshot(app);
+		const root = await app.snapshot();
 		expect(root.flags.extra).toMatchObject({
 			type: "boolean",
 			description: "Injected for docs",
@@ -1965,10 +1964,36 @@ describe("prepareCommandSnapshot (tooling)", () => {
 
 	it("can be called multiple times", async () => {
 		const app = new Crust("cli").handle(() => {});
-		const a = await prepareCommandSnapshot(app);
-		const b = await prepareCommandSnapshot(app);
+		const a = await app.snapshot();
+		const b = await app.snapshot();
 		expect(a.meta.name).toBe("cli");
 		expect(b.meta.name).toBe("cli");
+	});
+
+	it("never calls Command Handlers", async () => {
+		let called = false;
+		const app = new Crust("cli").handle(() => {
+			called = true;
+		});
+		await app.snapshot();
+		expect(called).toBe(false);
+	});
+
+	it("rejects with CrustError DEFINITION on an invalid command tree", async () => {
+		const clash = defineExtension("clash", {
+			flags: { verbose: { type: "boolean", short: "v" } },
+		});
+		const app = new Crust("cli")
+			.flags({ name: "version", type: "boolean", short: "v" })
+			.extend(clash);
+
+		try {
+			await app.snapshot();
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+		}
 	});
 });
 
@@ -1983,10 +2008,7 @@ describe("Crust .mount() aliases", () => {
 				command.meta({ aliases: ["issues", "i"] }).handle(() => {}),
 			),
 		);
-		expect((await prepareCommandSnapshot(app)).subCommands.issue?.meta.aliases).toEqual([
-			"issues",
-			"i",
-		]);
+		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 
 	it("registers without error when no sibling collides", () => {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import { defineCommand } from "../index.ts";
-import { Crust, prepareCommandSnapshot } from "./crust.ts";
+import { Crust } from "./crust.ts";
 import { buildCommandDocumentation } from "./documentation.ts";
 
 async function docs(app: Crust) {
-	return buildCommandDocumentation(await prepareCommandSnapshot(app));
+	return buildCommandDocumentation(await app.snapshot());
 }
 
 describe("buildCommandDocumentation", () => {

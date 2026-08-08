@@ -211,7 +211,7 @@ describe("runDistributeBuild", () => {
 		await runDistributeBuild({
 			entry: "src/cli.ts",
 			minify: true,
-			target: ["darwin-arm64"],
+			target: ["bun-darwin-arm64"],
 			stageDir: ".stage",
 			validate: false,
 		});
@@ -270,7 +270,7 @@ export const app = new Crust("x").handle(() => {});
 		await runDistributeBuild({
 			entry: "src/cli.ts",
 			minify: true,
-			target: ["darwin-arm64"],
+			target: ["bun-darwin-arm64"],
 			stageDir: ".stage-man",
 			validate: false,
 			man: true,

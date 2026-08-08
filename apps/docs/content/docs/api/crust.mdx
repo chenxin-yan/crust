@@ -298,6 +298,22 @@ A definition can mount other definitions. Nested requirements are checked agains
   do not backfill an existing mount.
 </Callout>
 
+## `.snapshot()`
+
+```ts
+snapshot(): Promise<CommandSnapshot>
+```
+
+Prepares a frozen, validated Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions, then validates the resulting command tree. It does not call Command Handlers. Rejects with a [`CrustError`](/docs/api/errors) of code `DEFINITION` when materialization or validation fails.
+
+```ts
+import type { CommandSnapshot } from "@crustjs/core/tooling";
+
+const snapshot: CommandSnapshot = await app.snapshot();
+```
+
+The `CommandSnapshot` type is exported from `@crustjs/core/tooling`; see the [core module reference](/docs/modules/core) for the tooling subpath.
+
 ## `.run(argv, io?)`
 
 ```ts
