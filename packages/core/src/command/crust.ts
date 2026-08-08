@@ -694,6 +694,17 @@ export class Crust<
 	}
 
 	/**
+	 * Prepare a frozen, validated Command Snapshot for tooling such as
+	 * man-page, skill, and build generators.
+	 *
+	 * Materializes Extension contributions and command definitions, then
+	 * validates the resulting command tree. Does not call Command Handlers.
+	 */
+	async snapshot(): Promise<CommandSnapshot> {
+		return prepareInvocationSnapshot(this._node, materializeCommandDefinition);
+	}
+
+	/**
 	 * Invoke this application programmatically: resolve, parse, run the
 	 * Extension hooks and the Command Handler for `argv`.
 	 *
@@ -739,18 +750,4 @@ export class Crust<
 		// Terminal calls render failures and set process exit status instead of throwing.
 		await executeInvocation(this._node, options, materializeCommandDefinition);
 	}
-}
-
-/**
- * Prepare a frozen, validated Command Snapshot of an application with all
- * Extension contributions applied. Does not call Command Handlers.
- *
- * Explicitly unsupported tooling bridge, exposed only via
- * `@crustjs/core/tooling` for man-page/skill generators and build tooling.
- * The parameter is structural so any `Crust` builder satisfies it.
- */
-export async function prepareCommandSnapshot(app: {
-	readonly _node: CommandNode;
-}): Promise<CommandSnapshot> {
-	return prepareInvocationSnapshot(app._node, materializeCommandDefinition);
 }

@@ -4,7 +4,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
-import { Crust, defineCommand, prepareCommandSnapshot } from "./crust.ts";
+import { Crust, defineCommand } from "./crust.ts";
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
@@ -22,7 +22,7 @@ describe("command definitions", () => {
 		const app = new Crust("cli").mount(definition, definition.as("compile"));
 
 		expect(configured).toBe(2);
-		const snapshot = await prepareCommandSnapshot(app);
+		const snapshot = await app.snapshot();
 		expect(snapshot.subCommands.build?.meta.name).toBe("build");
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
@@ -109,8 +109,8 @@ describe("command definitions", () => {
 			return configured;
 		});
 
-		const first = await prepareCommandSnapshot(new Crust("first").mount(definition));
-		const second = await prepareCommandSnapshot(new Crust("second").mount(definition.as("two")));
+		const first = await new Crust("first").mount(definition).snapshot();
+		const second = await new Crust("second").mount(definition.as("two")).snapshot();
 
 		expect((first.subCommands.one as unknown as Record<symbol, unknown>)[annotation]).toBe(
 			"preserved",

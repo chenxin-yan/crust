@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, prepareCommandSnapshot } from "../command/crust.ts";
+import { Crust } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 type Assert<T extends true> = T;
@@ -38,7 +38,7 @@ describe("defineFlag", () => {
 		type _Output = Assert<
 			IsEqual<Local["output"], { readonly type: "string"; readonly short: "o" }>
 		>;
-		expect((await prepareCommandSnapshot(app)).flags).toEqual({
+		expect((await app.snapshot()).flags).toEqual({
 			verbose: { type: "boolean" },
 			output: { type: "string", short: "o" },
 		});
@@ -89,9 +89,6 @@ describe("defineArg", () => {
 				]
 			>
 		>;
-		expect((await prepareCommandSnapshot(app)).args.map((def) => def.name)).toEqual([
-			"target",
-			"count",
-		]);
+		expect((await app.snapshot()).args.map((def) => def.name)).toEqual(["target", "count"]);
 	});
 });
