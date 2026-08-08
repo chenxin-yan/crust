@@ -30,39 +30,6 @@ export const defaultTheme: PromptTheme = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Theme Creation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a complete theme by merging partial overrides onto the default theme.
- *
- * Use this to build a reusable theme object, then apply it globally
- * with {@link setTheme}.
- *
- * @param overrides - Partial theme slots to override. Only specified slots
- *   are replaced; all others retain their default values.
- * @returns A complete `PromptTheme` with all slots defined.
- *
- * @example
- * ```ts
- * import { createTheme, setTheme } from "@crustjs/prompts";
- * import { magenta, cyan } from "@crustjs/style";
- *
- * const myTheme = createTheme({
- *   prefix: magenta,
- *   success: cyan,
- * });
- *
- * // Apply globally so all prompts use it
- * setTheme(myTheme);
- * ```
- */
-export function createTheme(overrides?: PartialPromptTheme): PromptTheme {
-	if (!overrides) return defaultTheme;
-	return { ...defaultTheme, ...overrides };
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Global Theme State
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -72,8 +39,7 @@ let globalOverrides: PartialPromptTheme | undefined;
 /**
  * Set the global theme applied to all prompts.
  *
- * Accepts either a complete `PromptTheme` (e.g., from {@link createTheme})
- * or a `PartialPromptTheme` with only the slots you want to override.
+ * Accepts a `PartialPromptTheme` with only the slots you want to override.
  * Unspecified slots fall back to {@link defaultTheme}.
  *
  * Call with no arguments or `undefined` to clear the global theme.

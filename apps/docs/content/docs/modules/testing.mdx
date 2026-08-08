@@ -55,16 +55,16 @@ expect(result.exitCode).toBe(1);
 expect(result.stderr).toContain("Unknown flag");
 ```
 
-## `interactiveRun(app, argv)`
+## `runInteractive(app, argv)`
 
 Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`.
 
 `waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application throws before the pattern matches, `waitFor()` rethrows that error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
 
 ```ts
-import { interactiveRun } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing";
 
-const run = interactiveRun(app, []);
+const run = runInteractive(app, []);
 await run.waitFor(/Project name/);
 run.type("my-app");
 run.keys("return");

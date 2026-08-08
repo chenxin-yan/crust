@@ -13,11 +13,6 @@ export const defaultTheme: ProgressTheme = {
 	error: red,
 };
 
-export function createTheme(overrides?: PartialProgressTheme): ProgressTheme {
-	if (!overrides) return defaultTheme;
-	return { ...defaultTheme, ...overrides };
-}
-
 let globalOverrides: PartialProgressTheme | undefined;
 
 export function setTheme(theme?: PartialProgressTheme): void {

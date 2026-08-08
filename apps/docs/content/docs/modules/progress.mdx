@@ -156,15 +156,14 @@ The default theme uses these styles:
 - `error`: `red`
 
 ```ts
-import { createTheme, setTheme, spinner } from "@crustjs/progress";
+import { setTheme, spinner } from "@crustjs/progress";
 import { cyan, green } from "@crustjs/style";
 
-setTheme(
-  createTheme({
-    spinner: cyan,
-    success: green,
-  }),
-);
+// Partial overrides; unspecified slots keep their defaults
+setTheme({
+  spinner: cyan,
+  success: green,
+});
 
 await spinner({
   message: "Working...",
@@ -172,7 +171,7 @@ await spinner({
 });
 ```
 
-The public theme exports are `defaultTheme`, `createTheme`, and `setTheme`. Individual spinners resolve global and per-spinner overrides internally.
+The public theme exports are `defaultTheme` and `setTheme`. Individual spinners resolve global and per-spinner overrides internally.
 
 ## Non-interactive behavior
 

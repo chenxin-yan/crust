@@ -8,7 +8,6 @@ import {
 	// Prompts
 	confirm,
 	// Theme
-	createTheme,
 	defaultTheme,
 	filter,
 	// Utilities
@@ -30,9 +29,9 @@ import {
 // Theme integration
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("createTheme integration", () => {
-	it("returns a valid theme with all slots defined", () => {
-		const theme = createTheme();
+describe("theme integration", () => {
+	it("getTheme returns a valid theme with all slots defined", () => {
+		const theme = getTheme();
 
 		const requiredSlots: (keyof PromptTheme)[] = [
 			"prefix",
@@ -53,8 +52,8 @@ describe("createTheme integration", () => {
 		}
 	});
 
-	it("returns a theme where every slot produces a string", () => {
-		const theme = createTheme();
+	it("every theme slot produces a string", () => {
+		const theme = getTheme();
 
 		for (const key of Object.keys(theme)) {
 			const fn = theme[key as keyof PromptTheme];

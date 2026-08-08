@@ -28,7 +28,7 @@ export interface SkillMeta {
 	/**
 	 * Skill name — the user-facing CLI name (e.g. `"my-cli"`).
 	 *
-	 * `generateSkill()`, `uninstallSkill()`, and `skillStatus()` treat this as
+	 * `generateSkill()`, `uninstallSkill()`, and `getSkillStatus()` treat this as
 	 * the canonical raw skill name for output directory paths, SKILL.md
 	 * frontmatter, and crust.json metadata. For example, `name: "my-cli"`
 	 * produces output under `my-cli/`.
@@ -292,7 +292,7 @@ export interface RenderedFile {
  * });
  * ```
  */
-export interface GenerateOptions {
+export interface GenerateSkillOptions {
 	/** Root command to generate the skill from */
 	command: CommandSnapshot;
 	/** Skill metadata for the generated bundle */
@@ -353,7 +353,7 @@ export interface GenerateOptions {
 /**
  * Top-level options for installing a hand-authored skill bundle.
  *
- * Unlike {@link GenerateOptions}, the bundle entrypoint does not render
+ * Unlike {@link GenerateSkillOptions}, the bundle entrypoint does not render
  * `SKILL.md` from a command tree — it copies a directory the caller has
  * already authored. The bundle's `SKILL.md` frontmatter is the source of
  * truth for `name` and `description`; Crust reads them but does not rewrite
@@ -400,7 +400,7 @@ export interface InstallSkillBundleOptions {
 	/**
 	 * Agent targets to install the bundle for.
 	 *
-	 * Required — unlike {@link GenerateOptions.agents}, the bundle entrypoint
+	 * Required — unlike {@link GenerateSkillOptions.agents}, the bundle entrypoint
 	 * does not auto-detect agents. Pass `[]` for a validated no-op: no install
 	 * is performed, but `sourceDir`, `SKILL.md`, bundle paths, frontmatter, and
 	 * skill name are still validated.
@@ -455,9 +455,9 @@ export interface InstallSkillBundleOptions {
 /**
  * Result returned by `installSkillBundle` after writing files to disk.
  *
- * Type alias of {@link GenerateResult} — the per-agent shape is identical.
+ * Type alias of {@link GenerateSkillResult} — the per-agent shape is identical.
  */
-export type InstallSkillBundleResult = GenerateResult;
+export type InstallSkillBundleResult = GenerateSkillResult;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Generation result — returned from generateSkill
@@ -486,7 +486,7 @@ export interface AgentResult {
 /**
  * Result returned by `generateSkill` after writing files to disk.
  */
-export interface GenerateResult {
+export interface GenerateSkillResult {
 	/** Per-agent installation results */
 	agents: AgentResult[];
 }
@@ -496,7 +496,7 @@ export interface GenerateResult {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Options for removing installed skills. */
-export interface UninstallOptions {
+export interface UninstallSkillOptions {
 	/** Skill name to uninstall */
 	name: string;
 	/**
@@ -521,7 +521,7 @@ export interface UninstallOptions {
 }
 
 /** Result returned by `uninstallSkill`. */
-export interface UninstallResult {
+export interface UninstallSkillResult {
 	/** Per-agent uninstall results */
 	agents: Array<{
 		agent: AgentTarget;
@@ -535,7 +535,7 @@ export interface UninstallResult {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Options for checking installed skill status. */
-export interface StatusOptions {
+export interface SkillStatusOptions {
 	/** Skill name to check */
 	name: string;
 	/**
@@ -559,8 +559,8 @@ export interface StatusOptions {
 	scope?: Scope;
 }
 
-/** Result returned by `skillStatus`. */
-export interface StatusResult {
+/** Result returned by `getSkillStatus`. */
+export interface SkillStatusResult {
 	/** Per-agent status results */
 	agents: Array<{
 		agent: AgentTarget;
@@ -679,7 +679,7 @@ export interface CustomSkillConfig extends Pick<
  *
  * For first-time installation, use the interactive `skill` subcommand or
  * build custom auto-install logic with the exported primitives
- * (`detectInstalledAgents`, `skillStatus`, `generateSkill`).
+ * (`detectInstalledAgents`, `getSkillStatus`, `generateSkill`).
  *
  * **Interactive command** (default): registers a `skill` subcommand (or the
  * custom `command` name) that

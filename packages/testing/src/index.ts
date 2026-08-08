@@ -122,7 +122,7 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function interactiveRun(app: RunnableApp, argv: readonly string[]): InteractiveRun {
+export function runInteractive(app: RunnableApp, argv: readonly string[]): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output!;
 	const done = withPromptIO(harness.io, () =>
