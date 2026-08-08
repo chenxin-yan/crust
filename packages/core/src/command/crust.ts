@@ -9,8 +9,6 @@ import type {
 } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { validateIncomingFlag } from "../parsing/flag-validation.ts";
-import { validateIncomingAliases } from "../parsing/validation.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -24,9 +22,14 @@ import type {
 	MergeFlags,
 	NamedFlagDef,
 	NamedFlagsRecord,
-	ValidateNamedFlagDefs,
-	ValidateVariadicArgs,
 } from "../types.ts";
+import {
+	type AppendArgsChecks,
+	validateSchemaExclusivity,
+	validateVariadicArgPosition,
+} from "../validation/args.ts";
+import { validateIncomingAliases } from "../validation/commands.ts";
+import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
@@ -67,32 +70,6 @@ export interface CrustCommandContext<
 	command: CommandSnapshot;
 	/** Readonly snapshot of the application root, including Extension contributions */
 	rootCommand: CommandSnapshot;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal helpers — runtime flag validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Runtime guard for untyped callers: schema mode is exclusive — the schema
- * owns coercion, defaults, requiredness, choices, and validation.
- * The type system already rejects mixing; this catches plain-JS misuse.
- */
-function validateSchemaExclusivity(
-	subject: "arg" | "flag",
-	name: string,
-	def: Record<string, unknown>,
-): void {
-	if (def.schema === undefined) return;
-	for (const key of ["default", "required", "choices", "parse"] as const) {
-		if (def[key] !== undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				`${subject} "${name}" mixes core option "${key}" with a schema — the schema exclusively owns coercion, defaults, requiredness, choices, and validation`,
-				{ subject, name, reason: "schema-exclusive" },
-			);
-		}
-	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -266,19 +243,6 @@ type DefinitionRequirements<D> = D extends CommandDefinition<infer R> ? R : neve
 type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
 	? NewA
 	: readonly [...A, ...NewA];
-
-type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extends readonly [
-	...unknown[],
-	infer Last,
-]
-	? Last extends { variadic: true }
-		? {
-				[I in keyof NewA]: NewA[I] & {
-					readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
-				};
-			}
-		: ValidateVariadicArgs<NewA>
-	: ValidateVariadicArgs<NewA>;
 
 /** Per-definition add-time checks (compile-time counterpart of the runtime attach checks). */
 type AddChecks<Ctx extends ContextMap, Ds extends readonly CommandDefinition<any>[]> = {
@@ -579,18 +543,6 @@ export class Crust<
 				);
 			}
 			validateSchemaExclusivity("arg", argName, record);
-			// Schema args receive raw strings: a parser `type` would coerce first
-			if (record.schema !== undefined && record.type !== undefined) {
-				throw new CrustError(
-					"DEFINITION",
-					`arg "${(def as ArgDef).name}" mixes core option "type" with a schema — schema args receive the raw string token`,
-					{
-						subject: "arg",
-						name: (def as ArgDef).name,
-						reason: "schema-exclusive",
-					},
-				);
-			}
 		}
 		// Deep copy new defs to decouple storage from the caller.
 		const copiedArgs = [...(this._node.args ?? []), ...defs.map((def) => ({ ...def }))] as ArgsDef;
@@ -604,13 +556,7 @@ export class Crust<
 				});
 			}
 			names.add(def.name);
-			if (def.variadic === true && index !== copiedArgs.length - 1) {
-				throw new CrustError(
-					"DEFINITION",
-					`Argument "${def.name}" is variadic, but only the last positional argument can be variadic`,
-					{ subject: "arg", name: def.name, reason: "variadic-position" },
-				);
-			}
+			validateVariadicArgPosition(def, index, copiedArgs.length);
 		}
 
 		return this._clone({

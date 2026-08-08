@@ -136,7 +136,7 @@ Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provi
 
 ```ts
 args<const NewA extends ArgsDef>(
-  ...defs: NewA & ValidateVariadicArgs<NewA>,
+  ...defs: NewA & AppendArgsChecks<A, NewA>,
 ): Crust
 ```
 

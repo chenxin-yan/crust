@@ -1,5 +1,4 @@
 import { CrustError } from "../errors.ts";
-import { validateIncomingFlag } from "../parsing/flag-validation.ts";
 import type {
 	FlagDef,
 	FlagsDef,
@@ -8,8 +7,8 @@ import type {
 	MergeFlags,
 	NamedFlagDef,
 	NamedFlagsRecord,
-	ValidateNamedFlagDefs,
 } from "../types.ts";
+import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;

@@ -1,0 +1,186 @@
+import { CrustError } from "../errors.ts";
+import { flagDefinitionSpellings } from "../parsing/spellings.ts";
+import type { FlagDef, FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Compile-time validation
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Extract only the branded error properties from a validated record value. */
+type FlagDefBrand<Name, V> = Name extends keyof V
+	? Pick<V[Name], Extract<keyof V[Name], "FIX_ALIAS_COLLISION" | "FIX_NO_PREFIX">>
+	: {};
+
+/**
+ * Per-definition validation for the variadic `.flags(...defs)` call.
+ *
+ * Runs the record-based validators ({@link ValidateFlagAliases},
+ * {@link ValidateNoPrefixedFlags}) against the derived record, then maps
+ * each branded record value back onto the tuple element that declared it —
+ * so alias collisions and `no-` prefixes error on the offending argument.
+ */
+export type ValidateNamedFlagDefs<Defs extends readonly NamedFlagDef[]> = {
+	[I in keyof Defs]: Defs[I] &
+		FlagDefBrand<
+			Defs[I]["name"],
+			ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
+		>;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flag alias collision detection (compile-time, per-flag granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Extract the `short` alias literal from a flag definition.
+ * Resolves to `never` when no `short` field exists or when the type
+ * is the broad `string` (not a narrowed literal).
+ */
+type ExtractShort<F> = F extends { short: infer S }
+	? S extends string
+		? string extends S
+			? never
+			: S
+		: never
+	: never;
+
+/**
+ * Extract alias string literals from the `aliases` array of a flag definition.
+ * Resolves to `never` when no `aliases` field exists or when the element type
+ * is the broad `string` (not narrowed literals).
+ */
+type ExtractLongAliases<F> = F extends { aliases: infer A }
+	? A extends readonly string[]
+		? string extends A[number]
+			? never
+			: A[number]
+		: never
+	: never;
+
+/**
+ * Extract all alias identifiers (short + long) from a flag definition.
+ *
+ * Generalized to work with any shape; values without `short`/`aliases`
+ * fields resolve to `never`.
+ *
+ * Includes `string extends ...` guards so non-narrowed types (e.g. the
+ * broad `string` type from a default generic) resolve to `never` instead
+ * of causing false-positive collisions.
+ */
+type ExtractAllAliases<F> = ExtractShort<F> | ExtractLongAliases<F>;
+
+/**
+ * Collects aliases from every flag *except* flag K.
+ * Used to detect alias→alias duplicates across different flags.
+ */
+type AliasesExcluding<F extends Record<string, unknown>, K extends keyof F & string> = {
+	[J in Exclude<keyof F & string, K>]: ExtractAllAliases<F[J]>;
+}[Exclude<keyof F & string, K>];
+
+/**
+ * Per-flag collision detection: resolves to the alias literal(s) of flag K
+ * that collide with another flag's name or another flag's alias,
+ * or `never` when K's aliases are all unique.
+ */
+type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & string> =
+	| (ExtractAllAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
+	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
+
+/**
+ * Per-flag validation mapped type. Resolves to `F` when no collisions exist.
+ * For flags with colliding aliases, adds a branded error property to the
+ * specific flag definition, causing a type error on that flag's value.
+ *
+ * ```
+ * Property 'FIX_ALIAS_COLLISION' is missing in type '{ type: "string"; short: "m" }'
+ *   but required in type
+ *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"m\" collides with another flag name or alias" }'.
+ * ```
+ */
+type ValidateFlagAliases<F extends Record<string, unknown>> = {
+	[K in keyof F & string]: CollidingAliases<F, K> extends never
+		? F[K]
+		: F[K] & {
+				readonly FIX_ALIAS_COLLISION: `Alias "${CollidingAliases<F, K>}" collides with another flag name or alias`;
+			};
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// "no-" prefix validation (compile-time, per-flag granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detects whether a single alias literal starts with `"no-"`.
+ * Resolves to the offending alias, or `never` when it is clean.
+ */
+type NoPrefixedAlias<A> = A extends `no-${string}` ? A : never;
+
+/**
+ * Collects all `"no-"`-prefixed alias literals from a flag definition.
+ * Checks both `short` and `aliases` fields.
+ * Non-narrowed `string` types resolve to `never` to avoid false positives.
+ */
+type NoPrefixedAliases<F> =
+	| NoPrefixedAlias<ExtractShort<F>>
+	| NoPrefixedAlias<ExtractLongAliases<F>>;
+
+/**
+ * Per-flag validation mapped type. Resolves to `F` when no `"no-"` prefixes
+ * exist on flag names, short aliases, or long aliases. For flags with offending values,
+ * adds a branded error property causing a compile-time type error.
+ *
+ * The `"no-"` prefix is reserved for boolean flag negation (`--no-flag`).
+ * Define only the positive form (e.g. `cache`) and use `--no-cache` at runtime.
+ *
+ * ```
+ * Property 'FIX_NO_PREFIX' is missing in type '{ type: "boolean" }'
+ *   but required in type
+ *     '{ readonly FIX_NO_PREFIX: "Flag name \"no-cache\" must not start with \"no-\"; define \"cache\" instead and use \"--no-cache\" at runtime" }'.
+ * ```
+ */
+type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
+	[K in keyof F & string]: K extends `no-${infer Base}`
+		? F[K] & {
+				readonly FIX_NO_PREFIX: `Flag name "${K}" must not start with "no-"; define "${Base}" instead and use "--no-${Base}" at runtime`;
+			}
+		: NoPrefixedAliases<F[K]> extends never
+			? F[K]
+			: F[K] & {
+					readonly FIX_NO_PREFIX: `Alias "${NoPrefixedAliases<F[K]>}" must not start with "no-"; the "no-" prefix is reserved for boolean negation`;
+				};
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Runtime validation
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Validate one flag against the complete canonical/short/alias namespace. */
+export function validateIncomingFlag(
+	incoming: { name: string; def: FlagDef },
+	existing: FlagsDef,
+	ownerLabel: string,
+): void {
+	const incomingSpellings = flagDefinitionSpellings(incoming.name, incoming.def);
+	const duplicate = incomingSpellings.find(
+		(spelling, index) => incomingSpellings.indexOf(spelling) !== index,
+	);
+	if (duplicate !== undefined) {
+		throw new CrustError(
+			"DEFINITION",
+			`${ownerLabel} flag "--${incoming.name}" repeats spelling "${duplicate}"`,
+			{ subject: "flag", name: incoming.name, reason: "flag-collision" },
+		);
+	}
+
+	for (const [existingName, existingDef] of Object.entries(existing)) {
+		const existingSpellings = new Set(flagDefinitionSpellings(existingName, existingDef));
+		const collision = incomingSpellings.find((spelling) => existingSpellings.has(spelling));
+		if (collision !== undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				`${ownerLabel} flag "--${incoming.name}" spelling "${collision}" collides with flag "--${existingName}"`,
+				{ subject: "flag", name: incoming.name, reason: "flag-collision" },
+			);
+		}
+	}
+}
