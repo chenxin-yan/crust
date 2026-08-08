@@ -310,7 +310,7 @@ const name = await p.input({
 });
 ```
 
-The bare exports (`input`, `select`, …) and the `prompts` singleton use `defaultTheme`.
+The bare exports (`input`, `select`, …) use `defaultTheme`.
 
 Theme resolution order, from lowest to highest priority:
 
@@ -403,11 +403,10 @@ Only one prompt can be active per input or output stream. Prompts on fully disti
 
 ### Theme
 
-| Export          | Description                                                      |
-| --------------- | ---------------------------------------------------------------- |
-| `defaultTheme`  | Default prompt theme                                             |
-| `createPrompts` | Create a themed instance exposing all prompt functions           |
-| `prompts`       | Default instance using `defaultTheme` (mirrors the bare exports) |
+| Export          | Description                                            |
+| --------------- | ------------------------------------------------------ |
+| `defaultTheme`  | Default prompt theme                                   |
+| `createPrompts` | Create a themed instance exposing all prompt functions |
 
 ### Renderer
 
@@ -451,6 +450,8 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 | `PromptOutput`            | Output stream contract composing `PromptIO`                                         |
 | `PromptTheme`             | Complete theme with all style slots                                                 |
 | `PartialPromptTheme`      | Partial theme for overrides                                                         |
+| `CreatePromptsOptions`    | Options for `createPrompts()`                                                       |
+| `PromptsInstance`         | Themed prompt functions returned by `createPrompts()`                               |
 | `Choice<T>`               | Choice item: string or `{ label, value, hint? }`                                    |
 | `ValidateFn<T>`           | Validation function type — `(value: T) => void \| Promise<void>`, throws on failure |
 | `KeypressEvent`           | Structured keypress event                                                           |

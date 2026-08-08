@@ -61,7 +61,9 @@ export interface PromptsInstance {
  * ```
  */
 export function createPrompts(options: CreatePromptsOptions = {}): PromptsInstance {
-	const overrides = options.theme;
+	// Snapshot so later mutation of the caller's object can't diverge
+	// rendering from the exposed `theme`.
+	const overrides = { ...options.theme };
 	// Layer instance overrides under per-call overrides; each prompt merges
 	// the combined partial onto defaultTheme itself.
 	const themed = <O extends { readonly theme?: PartialPromptTheme }>(opts: O): O => ({
@@ -81,6 +83,3 @@ export function createPrompts(options: CreatePromptsOptions = {}): PromptsInstan
 		multifilter: <T>(opts: MultifilterOptions<T>, io?: PromptIO) => multifilter(themed(opts), io),
 	};
 }
-
-/** Default prompts instance using `defaultTheme`, mirroring the bare exports. */
-export const prompts: PromptsInstance = createPrompts();

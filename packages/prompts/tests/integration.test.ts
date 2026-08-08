@@ -21,17 +21,17 @@ import {
 	NonInteractiveError,
 	normalizeChoices,
 	password,
-	prompts,
 	select,
 } from "../src/index.ts";
+import { renderPrompt } from "../src/testing.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme integration
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("theme integration", () => {
-	it("prompts singleton exposes a valid theme with all slots defined", () => {
-		const theme = prompts.theme;
+	it("createPrompts exposes a valid theme with all slots defined", () => {
+		const theme = createPrompts().theme;
 
 		const requiredSlots: (keyof PromptTheme)[] = [
 			"prefix",
@@ -53,7 +53,7 @@ describe("theme integration", () => {
 	});
 
 	it("every theme slot produces a string", () => {
-		const theme = prompts.theme;
+		const theme = createPrompts().theme;
 
 		for (const key of Object.keys(theme)) {
 			const fn = theme[key as keyof PromptTheme];
@@ -70,6 +70,15 @@ describe("theme integration", () => {
 		// Other slots retain defaults
 		expect(p.theme.message).toBe(defaultTheme.message);
 		expect(p.theme.cursor).toBe(defaultTheme.cursor);
+	});
+
+	it("bound prompt functions render with the instance theme", async () => {
+		const p = createPrompts({ theme: { prefix: () => "[INST]" } });
+		const prompt = renderPrompt(p.confirm, { message: "Continue?" });
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(prompt.screen()).toContain("[INST]");
+		prompt.keys("return");
+		await prompt.answer;
 	});
 });
 
@@ -210,9 +219,12 @@ describe("NonInteractiveError", () => {
 // and resolve correctly. If any type is removed from the barrel, this file
 // will fail to compile.
 
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type {
 	Choice,
 	ConfirmOptions,
+	CreatePromptsOptions,
 	FilterOptions,
 	FuzzyFilterResult,
 	FuzzyMatchResult,
@@ -225,6 +237,7 @@ import type {
 	PartialPromptTheme,
 	PasswordOptions,
 	PromptConfig,
+	PromptsInstance,
 	SelectOptions,
 	ValidateFn,
 } from "../src/index.ts";
@@ -305,6 +318,17 @@ describe("type exports", () => {
 		// accept type parameters
 		type _HKR = HandleKeyResult<{ value: string }, string>;
 		type _PC = PromptConfig<{ value: string }, string>;
+
+		// Factory types resolve, and bound prompts preserve the bare-export
+		// overloads: schema-aware input infers the schema output type.
+		const _createOpts: CreatePromptsOptions = { theme: {} };
+		const p: PromptsInstance = null as unknown as PromptsInstance;
+		const numberSchema = null as unknown as StandardSchema<unknown, number>;
+		const assertInput = (): Promise<number> => p.input({ message: "m", schema: numberSchema });
+		const assertInputPlain = (): Promise<string> => p.input({ message: "m" });
+		void assertInput;
+		void assertInputPlain;
+		void _createOpts;
 
 		// All type annotations above compiled successfully
 		expect(true).toBe(true);

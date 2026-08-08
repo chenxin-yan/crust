@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Theme — Default theme, global state, and resolution for @crustjs/prompts
+// Theme — Default theme and resolution for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, cyan, dim, green, red } from "@crustjs/style";

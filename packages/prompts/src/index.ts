@@ -16,7 +16,7 @@ export type { NormalizedChoice } from "./core/utils.ts";
 
 export { defaultTheme } from "./core/theme.ts";
 export type { CreatePromptsOptions, PromptsInstance } from "./create-prompts.ts";
-export { createPrompts, prompts } from "./create-prompts.ts";
+export { createPrompts } from "./create-prompts.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Renderer

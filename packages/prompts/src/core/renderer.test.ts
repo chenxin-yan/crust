@@ -226,6 +226,81 @@ describe("runPrompt", () => {
 		expect(output).toContain("prompt");
 	});
 
+	it("resolves an omitted theme to defaultTheme", async () => {
+		const input = new PassThrough() as PassThrough & {
+			isTTY: boolean;
+			isRaw: boolean;
+			setRawMode: (mode: boolean) => PassThrough;
+		};
+		input.isTTY = true;
+		input.isRaw = false;
+		input.setRawMode = (mode) => {
+			input.isRaw = mode;
+			return input;
+		};
+		const stream = new Writable({
+			write(_chunk, _encoding, callback) {
+				callback();
+			},
+		}) as Writable & { columns: number };
+		stream.columns = 80;
+
+		let seenTheme: unknown;
+		const answer = runPrompt<{ value: string }, string>(
+			{
+				render: (state, theme) => {
+					seenTheme = theme;
+					return state.value;
+				},
+				handleKey: () => submit("done"),
+				initialState: { value: "prompt" },
+			},
+			{ input, output: stream },
+		);
+		input.write("x");
+		expect(await answer).toBe("done");
+		expect(seenTheme).toEqual(defaultTheme);
+	});
+
+	it("merges a partial theme onto defaultTheme", async () => {
+		const input = new PassThrough() as PassThrough & {
+			isTTY: boolean;
+			isRaw: boolean;
+			setRawMode: (mode: boolean) => PassThrough;
+		};
+		input.isTTY = true;
+		input.isRaw = false;
+		input.setRawMode = (mode) => {
+			input.isRaw = mode;
+			return input;
+		};
+		const stream = new Writable({
+			write(_chunk, _encoding, callback) {
+				callback();
+			},
+		}) as Writable & { columns: number };
+		stream.columns = 80;
+
+		const prefix = (t: string) => `<P ${t}>`;
+		let seenTheme: { prefix: typeof prefix; message: unknown } | undefined;
+		const answer = runPrompt<{ value: string }, string>(
+			{
+				render: (state, theme) => {
+					seenTheme = theme;
+					return state.value;
+				},
+				handleKey: () => submit("done"),
+				initialState: { value: "prompt" },
+				theme: { prefix },
+			},
+			{ input, output: stream },
+		);
+		input.write("x");
+		expect(await answer).toBe("done");
+		expect(seenTheme?.prefix).toBe(prefix); // override applied
+		expect(seenTheme?.message).toBe(defaultTheme.message); // default preserved
+	});
+
 	it("disables raw mode on a fake input without isRaw", async () => {
 		const input = new PassThrough() as PassThrough & {
 			isTTY: boolean;

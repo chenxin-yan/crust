@@ -44,7 +44,9 @@ export interface ProgressInstance {
  * ```
  */
 export function createProgress(options: CreateProgressOptions = {}): ProgressInstance {
-	const overrides = options.theme;
+	// Snapshot so later mutation of the caller's object can't diverge
+	// rendering from the exposed `theme`.
+	const overrides = { ...options.theme };
 	const themed = <O extends { readonly theme?: PartialProgressTheme }>(opts: O): O => ({
 		...opts,
 		theme: { ...overrides, ...opts.theme },

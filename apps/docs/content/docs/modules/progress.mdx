@@ -170,7 +170,7 @@ await p.spinner({
 });
 ```
 
-The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `defaultTheme` ← instance theme ← per-call `theme` option. The public theme exports are `defaultTheme` and `createProgress`.
+The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `defaultTheme` ← instance theme ← per-call `theme` option. The public theme exports are `defaultTheme` and `createProgress`, with types `CreateProgressOptions` (factory options) and `ProgressInstance` (the returned themed `progress`/`spinner` pair plus its resolved `theme`).
 
 ## Non-interactive behavior
 

@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Theme — Default theme, global state, and resolution for @crustjs/progress
+// Theme — Default theme and resolution for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, green, magenta, red } from "@crustjs/style";
