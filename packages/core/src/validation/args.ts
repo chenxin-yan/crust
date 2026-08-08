@@ -1,19 +1,14 @@
 import { CrustError } from "../errors.ts";
 import type { ArgsDef } from "../types.ts";
+import type { AsyncParseBrand, DefName } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
 // ────────────────────────────────────────────────────────────────────────────
 
-type ArgName<A> = A extends { name: infer N extends string }
-	? string extends N
-		? never
-		: N
-	: never;
+type ArgNames<A extends readonly object[]> = DefName<A[number]>;
 
-type ArgNames<A extends readonly object[]> = ArgName<A[number]>;
-
-type DuplicateArgBrand<A, Existing extends string> = ArgName<A> &
+type DuplicateArgBrand<A, Existing extends string> = DefName<A> &
 	Existing extends infer Duplicate extends string
 	? [Duplicate] extends [never]
 		? {}
@@ -21,14 +16,6 @@ type DuplicateArgBrand<A, Existing extends string> = ArgName<A> &
 				readonly FIX_DUPLICATE_ARG: `Argument name "${Duplicate}" is already defined`;
 			}
 	: never;
-
-type AsyncParseBrand<A> = A extends { parse: (...args: never[]) => infer R }
-	? R extends Promise<unknown>
-		? {
-				readonly FIX_ASYNC_PARSE: "parse must be synchronous; do async work in run()";
-			}
-		: {}
-	: {};
 
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
@@ -59,11 +46,11 @@ export type ValidateVariadicArgs<
 					ArgChecks<Head, Existing> & {
 						readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
 					},
-					...ValidateVariadicArgs<Tail, Existing | ArgName<Head>>,
+					...ValidateVariadicArgs<Tail, Existing | DefName<Head>>,
 				]
 			: readonly [
 					ArgChecks<Head, Existing>,
-					...ValidateVariadicArgs<Tail, Existing | ArgName<Head>>,
+					...ValidateVariadicArgs<Tail, Existing | DefName<Head>>,
 				]
 		: readonly [ArgChecks<Head, Existing>]
 	: A;

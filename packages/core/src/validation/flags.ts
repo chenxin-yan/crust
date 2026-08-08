@@ -1,6 +1,7 @@
 import { CrustError } from "../errors.ts";
 import { flagDefinitionSpellings } from "../parsing/spellings.ts";
 import type { FlagDef, FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
+import type { AsyncParseBrand, DefName } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -11,18 +12,8 @@ type FlagDefBrand<Name, V> = Name extends keyof V
 	? Pick<V[Name], Extract<keyof V[Name], "FIX_ALIAS_COLLISION" | "FIX_NO_PREFIX">>
 	: {};
 
-/** Extract a narrowed canonical name from a named flag definition. */
-type ExtractName<F> = F extends { name: infer N extends string }
-	? string extends N
-		? never
-		: N
-	: never;
-
 /** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> = (
-	| ExtractName<F>
-	| ExtractAllAliases<F>
-) &
+type ExistingFlagCollisionBrand<F, Existing extends string> = (DefName<F> | ExtractAllAliases<F>) &
 	Existing extends infer Collision extends string
 	? [Collision] extends [never]
 		? {}
@@ -31,15 +22,6 @@ type ExistingFlagCollisionBrand<F, Existing extends string> = (
 			}
 	: never;
 
-/** Brand a custom parser whose return value cannot be consumed synchronously. */
-type AsyncParseBrand<F> = F extends { parse: (...args: never[]) => infer R }
-	? R extends Promise<unknown>
-		? {
-				readonly FIX_ASYNC_PARSE: "parse must be synchronous; do async work in run()";
-			}
-		: {}
-	: {};
-
 /**
  * Per-definition validation for the variadic `.flags(...defs)` call.
  *
@@ -47,6 +29,10 @@ type AsyncParseBrand<F> = F extends { parse: (...args: never[]) => infer R }
  * {@link ValidateNoPrefixedFlags}) against the derived record, then maps
  * each branded record value back onto the tuple element that declared it —
  * so collisions, `no-` prefixes, and async parsers error on the offending argument.
+ *
+ * Bounded-generic wrappers (e.g. `<E extends FlagsDef>(app: Crust<L, O, A, E, C>)`)
+ * keep `SpellingsOf<E>` deferred and will not typecheck against `Existing`;
+ * type wrapper parameters as `Crust<any, ...>` instead (see tests/helpers.ts).
  */
 export type ValidateNamedFlagDefs<
 	Defs extends readonly NamedFlagDef[],
@@ -212,7 +198,13 @@ type ContextFlagCollisionBrand<C, Existing extends string> = SpellingsOf<Context
 			}
 	: never;
 
-/** Validate Context-owned flags against existing flags. */
+/**
+ * Validate Context-owned flags against existing flags.
+ *
+ * Only compares each instance against `Eff`: collisions between two instances
+ * in the same `.provide(a(), b())` call stay runtime-only — a type-level
+ * pairwise check cost ~9k extra instantiations for a rare misuse.
+ */
 export type ProvideChecks<Eff extends FlagsDef, Cs extends readonly unknown[]> = {
 	[I in keyof Cs]: Cs[I] & ContextFlagCollisionBrand<Cs[I], SpellingsOf<Eff>>;
 };

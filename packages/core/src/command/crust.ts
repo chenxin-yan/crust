@@ -102,6 +102,9 @@ type ConfigRequirements<C extends CommandConfig> = C extends {
 
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any>;
 
+// Child builders start at `Eff = {}`: collisions with ancestor-owned flags
+// are runtime-only (caught by tree validation), since the parent's effective
+// flags are unknown until the definition is added.
 type CommandRecipe<R extends CommandRequirements> = (
 	command: CommandDefinitionBuilder<{}, {}, [], EffectiveFlags<{}>, RequirementContext<R>>,
 ) => AnyCommandDefinitionBuilder;
