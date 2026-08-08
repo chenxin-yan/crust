@@ -35,7 +35,9 @@ The Command Handler receives the return type. A parser must be synchronous.
 
 ## Schema-backed definitions
 
-Crust accepts any [Standard Schema](https://standardschema.dev/) directly on an argument or flag definition. The schema receives the raw parsed value and its output type flows into the Command Handler.
+Crust uses one Standard Schema contract across core, store, and prompts: put the schema on a plain definition's `schema` key. The schema receives the surface's raw value (including `undefined` when an argument or persisted field is missing), and the caller receives its exact output type. Any Standard Schema v1 vendor works, and validation may be synchronous or asynchronous.
+
+Standard Schema support adds no install-time dependency: Crust vendors the protocol types instead of requiring a separate specification package. Schema code runs only for definitions carrying `schema`.
 
 ```ts
 import { z } from "zod";
@@ -76,6 +78,45 @@ try {
 ```
 
 Issue paths identify inputs, for example `args.port` or `flags.host`.
+
+### The same shape across packages
+
+Define a schema once and attach it with the same `schema` key:
+
+```ts
+import { Crust } from "@crustjs/core";
+import { input } from "@crustjs/prompts";
+import { configDir, createStore } from "@crustjs/store";
+import { z } from "zod";
+
+const Port = z.coerce.number().int().min(1).max(65535);
+
+new Crust("serve").flags({ name: "port", type: "string", schema: Port }).handle(({ flags }) => {
+  flags.port; // number
+});
+
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  fields: { port: { schema: Port.default(3000) } },
+});
+const config = await store.read();
+config.port; // number
+
+const port = await input({ message: "Port?", schema: Port });
+//    ^? number
+```
+
+A schema exclusively owns validation, transformation, semantic defaults, and optionality. Do not combine `schema` with core value options or a hand-written `validate` callback. Invalid combinations fail at the definition or call boundary.
+
+### Where defaults live
+
+Put semantic defaults in the schema everywhere:
+
+```ts
+const Port = z.coerce.number().default(3000);
+```
+
+Core arguments and flags and store fields do not accept an outer `default` beside `schema`. Prompt `initial` and `default` remain raw UI fallback values rather than schema defaults; Crust passes either value through `schema` before returning it.
 
 ## Choosing an approach
 

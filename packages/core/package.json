@@ -48,9 +48,6 @@
 		"prepack": "cp ../../LICENSE LICENSE",
 		"postpack": "rm -f LICENSE"
 	},
-	"dependencies": {
-		"@standard-schema/spec": "^1.1.0"
-	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/utils": "workspace:*",

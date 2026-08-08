@@ -8,7 +8,9 @@ import { Callout } from "fumadocs-ui/components/callout";
 `@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
 
 <Callout>
-  Both `input()` and `password()` accept either a `(value: string) => void | Promise<void>` validator (throw an `Error` to reject) **or** any [Standard Schema v1](https://standardschema.dev/) object directly (Zod, Valibot, Effect Schema, ArkType, …). When a schema is supplied, the prompt resolves to the schema's *transformed output* type — see [Validation](#validation) below.
+  Both `input()` and `password()` accept a Standard Schema v1 through the `schema` option. The
+  prompt resolves to the schema's transformed output type. Use `validate` only for a
+  throw-on-failure function; the two options are mutually exclusive.
 </Callout>
 
 All prompt UI renders to **stderr** so it never pollutes piped stdout. Every prompt accepts an `initial` option to skip interactivity, which is useful for prefilling from CLI flags or CI environments.
@@ -131,14 +133,14 @@ const secret = await password({
 
 ## Validation
 
-The `validate` slot on `input()` and `password()` is **polymorphic**:
+`input()` and `password()` expose two exclusive validation modes:
 
-- a `(value: string) => void | Promise<void>` validator that **throws an `Error` to reject** the input (the error's `message` renders inline), or
-- any [Standard Schema v1](https://standardschema.dev/) object (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
+- `validate`: a `(value: string) => void | Promise<void>` function that throws to reject input; its message renders inline and the prompt returns `string`.
+- `schema`: any [Standard Schema v1](https://standardschema.dev/) object (Zod, Valibot, Effect Schema, ArkType, and others); the prompt returns the schema's exact output type.
 
-When a schema is supplied, the prompt parses the raw input on submit, renders the **first** issue's `message` inline on rejection (falling back to `"Validation failed"` for empty messages), and resolves to the schema's transformed `Output` type on success. There is no second-pass parse step.
+A schema parses the raw submitted string, renders its first issue inline on rejection (falling back to `"Validation failed"`), and returns its transformed output on success. Async schemas are supported. Passing both `schema` and `validate` throws at the call boundary.
 
-`initial` and non-TTY `default` are also parsed through the schema before being returned, so the `Promise<Output>` contract holds across every short-circuit path. A value the schema rejects throws.
+`initial` and non-TTY `default` are raw UI fallback values rather than semantic defaults. Crust parses them through `schema` before returning them, preserving the `Promise<Output>` contract. Put semantic defaults inside the schema.
 
 ```ts
 import { input } from "@crustjs/prompts";
@@ -146,7 +148,7 @@ import { z } from "zod";
 
 const port = await input({
   message: "Port?",
-  validate: z.coerce.number().int().min(1).max(65535),
+  schema: z.coerce.number().int().min(1).max(65535),
 });
 //    ^? number
 ```
@@ -157,7 +159,7 @@ import { Schema } from "effect";
 
 const Email = Schema.standardSchemaV1(Schema.String.pipe(Schema.pattern(/.+@.+/)));
 
-const email = await input({ message: "Email?", validate: Email });
+const email = await input({ message: "Email?", schema: Email });
 //    ^? string
 ```
 

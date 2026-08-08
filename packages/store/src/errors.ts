@@ -49,13 +49,7 @@ export interface ValidationErrorDetails {
 	issues: readonly StoreValidatorIssue[];
 }
 
-/**
- * Contextual details attached to a `DEFINITION` error.
- *
- * Returned when a `field()` call cannot produce a valid `FieldDef` from the
- * provided schema and options — e.g. the input is not a Standard Schema v1
- * object.
- */
+/** Contextual details attached to an invalid field definition. */
 export interface DefinitionErrorDetails {}
 
 /**
@@ -78,7 +72,7 @@ export interface StoreErrorDetailsMap {
  * - `PARSE` — Malformed JSON in persisted config file
  * - `IO` — Filesystem read, write, or delete failure
  * - `VALIDATION` — Config object rejected by a store validator
- * - `DEFINITION` — `field()` cannot produce a valid `FieldDef` from the given schema/options
+ * - `DEFINITION` — A field mixes mutually exclusive definition modes
  *
  * @example
  * ```ts

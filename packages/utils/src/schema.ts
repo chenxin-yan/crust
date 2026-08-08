@@ -1,4 +1,66 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec";
+// These structural types mirror @standard-schema/spec v1.1.0 per the
+// specification's recommendation that implementers copy the protocol types.
+
+/** The Standard Typed types interface. */
+interface StandardSchemaTypes<Input = unknown, Output = Input> {
+	/** The input type of the schema. */
+	readonly input: Input;
+	/** The output type of the schema. */
+	readonly output: Output;
+}
+
+interface StandardSchemaOptions {
+	/** Explicit support for additional vendor-specific parameters, if needed. */
+	readonly libraryOptions?: Record<string, unknown> | undefined;
+}
+
+/** The result interface if validation succeeds. */
+interface StandardSchemaSuccessResult<Output> {
+	/** The typed output value. */
+	readonly value: Output;
+	/** A falsy value for `issues` indicates success. */
+	readonly issues?: undefined;
+}
+
+/** The result interface if validation fails. */
+interface StandardSchemaFailureResult {
+	/** The issues of failed validation. */
+	readonly issues: ReadonlyArray<StandardSchemaIssue>;
+}
+
+/** The result interface of the validate function. */
+type StandardSchemaResult<Output> =
+	| StandardSchemaSuccessResult<Output>
+	| StandardSchemaFailureResult;
+
+/** The issue interface of the failure output. */
+interface StandardSchemaIssue {
+	/** The error message of the issue. */
+	readonly message: string;
+	/** The path of the issue, if any. */
+	readonly path?: ReadonlyArray<PropertyKey | StandardSchemaPathSegment> | undefined;
+}
+
+/** The path segment interface of the issue. */
+interface StandardSchemaPathSegment {
+	/** The key representing a path segment. */
+	readonly key: PropertyKey;
+}
+
+/** The Standard Schema properties interface. */
+interface StandardSchemaProps<Input = unknown, Output = Input> {
+	/** The version number of the standard. */
+	readonly version: 1;
+	/** The vendor name of the schema library. */
+	readonly vendor: string;
+	/** Inferred types associated with the schema. */
+	readonly types?: StandardSchemaTypes<Input, Output> | undefined;
+	/** Validates unknown input values. */
+	readonly validate: (
+		value: unknown,
+		options?: StandardSchemaOptions,
+	) => StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // @crustjs/utils/schema — low-level Standard Schema helpers
@@ -19,34 +81,13 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
  * Any schema library implementing the Standard Schema v1 spec
  * (Zod, Effect, Valibot, ArkType, etc.) produces objects matching this type.
  */
-export type StandardSchema<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output>;
+export type StandardSchema<Input = unknown, Output = Input> = {
+	/** The Standard Schema properties. */
+	readonly "~standard": StandardSchemaProps<Input, Output>;
+};
 
 /** Infer the output type produced by a Standard Schema on success. */
-export type InferOutput<S extends StandardSchema> = StandardSchemaV1.InferOutput<S>;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Type guard — detect Standard Schema v1 objects at runtime
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Check whether `value` conforms to the Standard Schema v1 interface.
- *
- * A valid Standard Schema object has a `"~standard"` property containing
- * at least `version: 1` and a `validate` function.
- */
-export function isStandardSchema(value: unknown): value is StandardSchema {
-	// Standard Schema v1 spec only requires the `~standard` shape; the host
-	// value may be an object (Zod, Valibot) or a function (Effect's wrapper
-	// extends a callable class). Accept both.
-	if ((typeof value !== "object" || value === null) && typeof value !== "function") {
-		return false;
-	}
-	const candidate = value as Record<string, unknown>;
-	const props = candidate["~standard"];
-	if (typeof props !== "object" || props === null) return false;
-	const p = props as Record<string, unknown>;
-	return p.version === 1 && typeof p.validate === "function";
-}
+export type InferOutput<S extends StandardSchema> = NonNullable<S["~standard"]["types"]>["output"];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Normalized validation issue
@@ -114,7 +155,7 @@ function formatPath(path: readonly PropertyKey[]): string {
  * (`undefined`).
  */
 function normalizeStandardPath(
-	path: ReadonlyArray<PropertyKey | StandardSchemaV1.PathSegment> | undefined,
+	path: ReadonlyArray<PropertyKey | StandardSchemaPathSegment> | undefined,
 ): PropertyKey[] {
 	if (!path) return [];
 	return path.map((segment) =>
@@ -136,7 +177,7 @@ function normalizeStandardPath(
  * @param prefix — Optional path segments prepended to each issue path
  */
 export function normalizeStandardIssues(
-	issues: ReadonlyArray<StandardSchemaV1.Issue>,
+	issues: ReadonlyArray<StandardSchemaIssue>,
 	prefix: readonly PropertyKey[] = [],
 ): ValidationIssue[] {
 	return issues.map((issue) => {

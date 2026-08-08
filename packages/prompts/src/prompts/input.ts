@@ -2,7 +2,7 @@
 // Input — Single-line text input prompt for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import { isStandardSchema, type StandardSchema } from "@crustjs/utils/schema";
+import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
@@ -13,7 +13,6 @@ import {
 	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
-	type PromptValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
@@ -25,15 +24,11 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 /**
  * Options for the {@link input} prompt.
  *
- * The `validate` slot is polymorphic: it accepts either a classic
- * {@link ValidateFn} (throws an `Error` to reject the input) or a
- * {@link StandardSchema} schema (Zod, Valibot, Effect Schema, …). When a
- * schema is supplied, the prompt resolves to the schema's transformed
- * `Output` type instead of the raw `string`.
+ * Use `schema` for Standard Schema validation and transformation, or
+ * `validate` for a throw-on-failure function. They are mutually exclusive.
  *
- * @typeParam Output - the resolved value type. Defaults to `string` (the
- * function-validate / no-validate case). Inferred automatically from the
- * shape of `validate` via the {@link input} overloads.
+ * @typeParam Output - the Standard Schema output type. Defaults to `string`
+ * when no schema is supplied.
  *
  * @example
  * ```ts
@@ -51,7 +46,7 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * // Schema shape — resolves to the schema's parsed output type
  * const port = await input({
  *   message: "Port?",
- *   validate: z.coerce.number().int().min(1),
+ *   schema: z.coerce.number().int().min(1),
  * });
  * // typeof port === "number"
  * ```
@@ -65,11 +60,10 @@ export interface InputOptions<Output = string> {
 	readonly default?: string;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
-	/**
-	 * Validation: either a `ValidateFn` (throw an `Error` to reject) or a
-	 * Standard Schema v1 object whose parsed output replaces the raw input.
-	 */
-	readonly validate?: PromptValidate<Output>;
+	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
+	readonly schema?: StandardSchema<unknown, Output>;
+	/** Throw-on-failure validation function. Cannot be combined with `schema`. */
+	readonly validate?: ValidateFn<string>;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
@@ -89,7 +83,8 @@ interface InputState {
 // ────────────────────────────────────────────────────────────────────────────
 
 function createHandleKey<Output>(
-	validate: PromptValidate<Output> | undefined,
+	schema: StandardSchema<unknown, Output> | undefined,
+	validate: ValidateFn<string> | undefined,
 	defaultValue: string | undefined,
 ): (
 	key: KeypressEvent,
@@ -104,26 +99,20 @@ function createHandleKey<Output>(
 			const submitValue =
 				state.value === "" && defaultValue !== undefined ? defaultValue : state.value;
 
-			if (validate) {
-				if (isStandardSchema(validate)) {
-					// Schema path — parse, render first issue on failure,
-					// submit the schema's transformed output on success.
-					// `issues?.length` (rather than just `issues`) defends against
-					// non-conformant schemas returning `{ issues: [] }`, which has
-					// no actual issue to surface and should pass through.
-					const result = await validate["~standard"].validate(submitValue);
-					if (result.issues?.length) {
-						return {
-							...state,
-							error: result.issues[0]?.message || "Validation failed",
-						};
-					}
-					return submit((result as { value: Output }).value);
+			if (schema) {
+				// `issues?.length` tolerates non-conformant `{ issues: [] }` results.
+				const result = await schema["~standard"].validate(submitValue);
+				if (result.issues?.length) {
+					return {
+						...state,
+						error: result.issues[0]?.message || "Validation failed",
+					};
 				}
+				return submit((result as { value: Output }).value);
+			}
 
-				// Function path — throw-on-fail contract. Catch the thrown
-				// `Error` and render its message inline (same as the schema
-				// path's first-issue rendering).
+			if (validate) {
+				// Function path — throw on failure and render the message inline.
 				try {
 					await validate(submitValue);
 				} catch (err) {
@@ -225,15 +214,11 @@ function renderSubmitted<Output>(
  * In non-interactive environments (no TTY), the `default` value is returned
  * automatically if provided.
  *
- * The `validate` slot is **polymorphic**:
- * - When omitted or given a `ValidateFn<string>`, the prompt resolves to the
- *   raw `string` input.
- * - When given a Standard Schema v1 object, the schema parses the raw input
- *   on submit; the prompt resolves to the schema's transformed `Output` type.
+ * Use `schema` for Standard Schema validation/transformation or `validate`
+ * for a throw-on-failure function. The two options are mutually exclusive.
  *
  * @param options - Input prompt configuration
- * @returns The user's entered text, or the schema-parsed output when a
- *          Standard Schema is supplied as `validate`.
+ * @returns The entered text, or the schema's output when `schema` is supplied.
  * @throws {NonInteractiveError} when stdin is not a TTY and no `initial` or `default` is provided
  *
  * @example
@@ -252,51 +237,41 @@ function renderSubmitted<Output>(
  * // Schema validation — returns the parsed/transformed value
  * const port = await input({
  *   message: "Port?",
- *   validate: z.coerce.number().int().min(1),
+ *   schema: z.coerce.number().int().min(1),
  * });
  * // typeof port === "number"
  * ```
  */
 export function input<Output>(
-	options: InputOptions<Output> & {
-		readonly validate: StandardSchema<unknown, Output>;
+	options: Omit<InputOptions<Output>, "schema" | "validate"> & {
+		readonly schema: StandardSchema<unknown, Output>;
+		readonly validate?: never;
 	},
 	io?: PromptIO,
 ): Promise<Output>;
 export function input(
-	options?: Omit<InputOptions, "validate"> & {
-		readonly validate?: ValidateFn<string>;
-	},
+	options?: Omit<InputOptions, "schema"> & { readonly schema?: never },
 	io?: PromptIO,
 ): Promise<string>;
-export function input<Output>(
-	options: InputOptions<Output>,
-	io?: PromptIO,
-): Promise<Output | string>;
 export async function input<Output>(
 	options: InputOptions<Output> = {},
 	io?: PromptIO,
 ): Promise<Output | string> {
-	// Short-circuit: return initial value immediately without rendering.
-	// When `validate` is a Standard Schema we MUST parse the short-circuit
-	// value through it so the `Promise<Output>` overload stays sound — a raw
-	// string would otherwise leak where the caller is statically promised the
-	// schema's transformed output type.
+	if (options.schema !== undefined && options.validate !== undefined) {
+		throw new Error('input() cannot combine "schema" with "validate"');
+	}
+
+	// Schema short-circuits must preserve the promised output type.
 	if (options.initial !== undefined) {
-		if (isStandardSchema(options.validate)) {
-			return parseShortCircuit(options.validate, options.initial, "initial");
-		}
+		if (options.schema) return parseShortCircuit(options.schema, options.initial, "initial");
 		return options.initial;
 	}
 
 	const promptIO = resolvePromptIO(io);
 
-	// Non-interactive fallback: return default value when stdin is not a TTY.
-	// Same schema-soundness rule as above.
+	// Non-interactive defaults also flow through the schema.
 	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		if (isStandardSchema(options.validate)) {
-			return parseShortCircuit(options.validate, options.default, "default");
-		}
+		if (options.schema) return parseShortCircuit(options.schema, options.default, "default");
 		return options.default;
 	}
 
@@ -314,7 +289,7 @@ export async function input<Output>(
 			theme,
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
-			handleKey: createHandleKey<Output>(options.validate, options.default),
+			handleKey: createHandleKey<Output>(options.schema, options.validate, options.default),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
 		},
 		promptIO,
