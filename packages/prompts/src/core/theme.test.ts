@@ -1,13 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import { bold, cyan, dim, green, magenta, red, yellow } from "@crustjs/style";
 
-import { defaultTheme, getTheme, resolveTheme, setTheme } from "./theme.ts";
-
-// Reset global theme after each test to prevent state leakage
-afterEach(() => {
-	setTheme();
-});
+import { defaultTheme, resolveTheme } from "./theme.ts";
 
 describe("defaultTheme", () => {
 	it("uses expected default colors", () => {
@@ -34,101 +29,23 @@ describe("defaultTheme", () => {
 	});
 });
 
-describe("setTheme / getTheme", () => {
-	it("getTheme returns defaultTheme when no global theme is set", () => {
-		const theme = getTheme();
-		expect(theme).toBe(defaultTheme);
+describe("resolveTheme", () => {
+	it("returns defaultTheme when no overrides", () => {
+		expect(resolveTheme()).toBe(defaultTheme);
 	});
 
-	it("setTheme applies global overrides", () => {
-		setTheme({ prefix: magenta });
-		const theme = getTheme();
-		expect(theme.prefix).toBe(magenta);
-		expect(theme.message).toBe(bold); // default preserved
-	});
-
-	it("setTheme with multiple slots", () => {
-		setTheme({ prefix: magenta, error: yellow, success: cyan });
-		const theme = getTheme();
+	it("merges partial overrides onto default theme", () => {
+		const theme = resolveTheme({ prefix: magenta, error: yellow });
 		expect(theme.prefix).toBe(magenta);
 		expect(theme.error).toBe(yellow);
-		expect(theme.success).toBe(cyan);
+		// Untouched slots remain default
 		expect(theme.message).toBe(bold);
+		expect(theme.success).toBe(green);
 	});
 
 	it("accepts custom style functions", () => {
 		const customStyle = (text: string) => `[${text}]`;
-		setTheme({ prefix: customStyle });
-		expect(getTheme().prefix("test")).toBe("[test]");
-	});
-
-	it("setTheme with no arguments clears the global theme", () => {
-		setTheme({ prefix: magenta });
-		expect(getTheme().prefix).toBe(magenta);
-
-		setTheme();
-		expect(getTheme()).toBe(defaultTheme);
-	});
-
-	it("setTheme with undefined clears the global theme", () => {
-		setTheme({ prefix: magenta });
-		setTheme(undefined);
-		expect(getTheme()).toBe(defaultTheme);
-	});
-
-	it("later setTheme calls replace previous global theme", () => {
-		setTheme({ prefix: magenta });
-		setTheme({ prefix: red, error: yellow });
-		const theme = getTheme();
-		expect(theme.prefix).toBe(red);
-		expect(theme.error).toBe(yellow);
-		// magenta prefix is gone — replaced, not merged
-		expect(theme.filterMatch).toBe(cyan); // default
-	});
-});
-
-describe("resolveTheme", () => {
-	it("returns defaultTheme when no global or prompt overrides", () => {
-		const theme = resolveTheme();
-		expect(theme).toBe(defaultTheme);
-	});
-
-	it("applies global theme overrides", () => {
-		setTheme({ prefix: magenta });
-		const theme = resolveTheme();
-		expect(theme.prefix).toBe(magenta);
-		expect(theme.message).toBe(bold);
-	});
-
-	it("applies per-prompt overrides", () => {
-		const theme = resolveTheme({ error: yellow });
-		expect(theme.error).toBe(yellow);
-		expect(theme.message).toBe(bold);
-	});
-
-	it("per-prompt overrides take priority over global overrides", () => {
-		setTheme({ prefix: magenta, error: yellow });
-		const theme = resolveTheme({ prefix: green });
-		// Per-prompt wins for prefix
-		expect(theme.prefix).toBe(green);
-		// Global wins for error (no per-prompt override)
-		expect(theme.error).toBe(yellow);
-		// Default for everything else
-		expect(theme.message).toBe(bold);
-	});
-
-	it("layers all three levels correctly", () => {
-		setTheme({ prefix: magenta, cursor: red });
-		const theme = resolveTheme({ cursor: green, success: yellow });
-
-		// Global override (no prompt override for this slot)
-		expect(theme.prefix).toBe(magenta);
-		// Per-prompt override wins over global
-		expect(theme.cursor).toBe(green);
-		// Per-prompt override (no global for this slot)
-		expect(theme.success).toBe(yellow);
-		// Default (no overrides)
-		expect(theme.message).toBe(bold);
-		expect(theme.error).toBe(red);
+		const theme = resolveTheme({ prefix: customStyle });
+		expect(theme.prefix("test")).toBe("[test]");
 	});
 });

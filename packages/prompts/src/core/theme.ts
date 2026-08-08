@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Theme — Default theme, global state, and resolution for @crustjs/prompts
+// Theme — Default theme and resolution for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, cyan, dim, green, red } from "@crustjs/style";
@@ -30,80 +30,20 @@ export const defaultTheme: PromptTheme = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Global Theme State
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Module-level global theme overrides, applied to all prompts. */
-let globalOverrides: PartialPromptTheme | undefined;
-
-/**
- * Set the global theme applied to all prompts.
- *
- * Accepts a `PartialPromptTheme` with only the slots you want to override.
- * Unspecified slots fall back to {@link defaultTheme}.
- *
- * Call with no arguments or `undefined` to clear the global theme.
- *
- * @param theme - Theme or partial overrides to apply globally.
- *
- * @example
- * ```ts
- * import { setTheme } from "@crustjs/prompts";
- * import { magenta, cyan } from "@crustjs/style";
- *
- * // Set once at app bootstrap
- * setTheme({ prefix: magenta, success: cyan });
- *
- * // Clear the global theme
- * setTheme();
- * ```
- */
-export function setTheme(theme?: PartialPromptTheme): void {
-	globalOverrides = theme;
-}
-
-/**
- * Get the current global theme with all slots resolved.
- *
- * Returns {@link defaultTheme} if no global theme has been set.
- *
- * @returns The complete resolved global `PromptTheme`.
- *
- * @example
- * ```ts
- * import { getTheme, setTheme } from "@crustjs/prompts";
- *
- * setTheme({ prefix: magenta });
- * const theme = getTheme();
- * // theme.prefix === magenta
- * // theme.message === bold (default)
- * ```
- */
-export const getTheme = (): PromptTheme => resolveTheme();
-
-// ────────────────────────────────────────────────────────────────────────────
 // Theme Resolution (internal)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resolve the effective theme for a single prompt by layering global
- * and per-prompt overrides.
- *
- * Resolution order (later wins):
- * 1. {@link defaultTheme} (base)
- * 2. Global overrides (set via {@link setTheme})
- * 3. Per-prompt overrides (passed to individual prompt options)
+ * Resolve a complete theme by merging partial overrides onto
+ * {@link defaultTheme}. Instance themes from `createPrompts` are
+ * pre-merged into the per-prompt overrides before this runs.
  *
  * @internal — Prompt implementations call this; users do not need to.
  *
- * @param promptTheme - Per-prompt theme overrides (highest priority)
+ * @param promptTheme - Partial theme overrides
  * @returns A complete `PromptTheme` with all slots defined.
  */
 export function resolveTheme(promptTheme?: PartialPromptTheme): PromptTheme {
-	if (!globalOverrides && !promptTheme) return defaultTheme;
-	return {
-		...defaultTheme,
-		...globalOverrides,
-		...promptTheme,
-	};
+	if (!promptTheme) return defaultTheme;
+	return { ...defaultTheme, ...promptTheme };
 }

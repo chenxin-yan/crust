@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 // ────────────────────────────────────────────────────────────────────────────
 // Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────
@@ -8,12 +8,12 @@ import {
 	// Prompts
 	confirm,
 	// Theme
+	createPrompts,
 	defaultTheme,
 	filter,
 	// Utilities
 	fuzzyFilter,
 	fuzzyMatch,
-	getTheme,
 	input,
 	multifilter,
 	multiselect,
@@ -22,16 +22,16 @@ import {
 	normalizeChoices,
 	password,
 	select,
-	setTheme,
 } from "../src/index.ts";
+import { renderPrompt } from "../src/testing.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme integration
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("theme integration", () => {
-	it("getTheme returns a valid theme with all slots defined", () => {
-		const theme = getTheme();
+	it("createPrompts exposes a valid theme with all slots defined", () => {
+		const theme = createPrompts().theme;
 
 		const requiredSlots: (keyof PromptTheme)[] = [
 			"prefix",
@@ -53,7 +53,7 @@ describe("theme integration", () => {
 	});
 
 	it("every theme slot produces a string", () => {
-		const theme = getTheme();
+		const theme = createPrompts().theme;
 
 		for (const key of Object.keys(theme)) {
 			const fn = theme[key as keyof PromptTheme];
@@ -62,20 +62,23 @@ describe("theme integration", () => {
 		}
 	});
 
-	afterEach(() => {
-		setTheme();
+	it("createPrompts applies instance overrides through the barrel", () => {
+		const instanceFn = (text: string) => `(${text})`;
+		const p = createPrompts({ theme: { prefix: instanceFn } });
+
+		expect(p.theme.prefix("x")).toBe("(x)");
+		// Other slots retain defaults
+		expect(p.theme.message).toBe(defaultTheme.message);
+		expect(p.theme.cursor).toBe(defaultTheme.cursor);
 	});
 
-	it("setTheme applies global overrides via getTheme", () => {
-		const globalFn = (text: string) => `(${text})`;
-		setTheme({ prefix: globalFn });
-
-		const theme = getTheme();
-
-		expect(theme.prefix("x")).toBe("(x)");
-		// Other slots retain defaults
-		expect(theme.message).toBe(defaultTheme.message);
-		expect(theme.cursor).toBe(defaultTheme.cursor);
+	it("bound prompt functions render with the instance theme", async () => {
+		const p = createPrompts({ theme: { prefix: () => "[INST]" } });
+		const prompt = renderPrompt(p.confirm, { message: "Continue?" });
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(prompt.screen()).toContain("[INST]");
+		prompt.keys("return");
+		await prompt.answer;
 	});
 });
 
@@ -216,9 +219,12 @@ describe("NonInteractiveError", () => {
 // and resolve correctly. If any type is removed from the barrel, this file
 // will fail to compile.
 
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type {
 	Choice,
 	ConfirmOptions,
+	CreatePromptsOptions,
 	FilterOptions,
 	FuzzyFilterResult,
 	FuzzyMatchResult,
@@ -231,6 +237,7 @@ import type {
 	PartialPromptTheme,
 	PasswordOptions,
 	PromptConfig,
+	PromptsInstance,
 	SelectOptions,
 	ValidateFn,
 } from "../src/index.ts";
@@ -311,6 +318,17 @@ describe("type exports", () => {
 		// accept type parameters
 		type _HKR = HandleKeyResult<{ value: string }, string>;
 		type _PC = PromptConfig<{ value: string }, string>;
+
+		// Factory types resolve, and bound prompts preserve the bare-export
+		// overloads: schema-aware input infers the schema output type.
+		const _createOpts: CreatePromptsOptions = { theme: {} };
+		const p: PromptsInstance = null as unknown as PromptsInstance;
+		const numberSchema = null as unknown as StandardSchema<unknown, number>;
+		const assertInput = (): Promise<number> => p.input({ message: "m", schema: numberSchema });
+		const assertInputPlain = (): Promise<string> => p.input({ message: "m" });
+		void assertInput;
+		void assertInputPlain;
+		void _createOpts;
 
 		// All type annotations above compiled successfully
 		expect(true).toBe(true);

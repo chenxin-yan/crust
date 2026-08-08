@@ -6,7 +6,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as readline from "node:readline";
 import type { Readable, Writable } from "node:stream";
 
-import type { PromptTheme } from "./types.ts";
+import { resolveTheme } from "./theme.ts";
+import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -113,8 +114,8 @@ export interface PromptConfig<S, T> {
 	) => HandleKeyResult<S, T> | Promise<HandleKeyResult<S, T>>;
 	/** Initial state for the prompt */
 	readonly initialState: S;
-	/** Resolved theme for this prompt */
-	readonly theme: PromptTheme;
+	/** Optional partial theme; merged onto `defaultTheme`. */
+	readonly theme?: PartialPromptTheme;
 	/**
 	 * Optional: render the final submitted state.
 	 * Called after submit with the final state and submitted value.
@@ -223,7 +224,6 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * ```ts
  * const value = await runPrompt({
  *   initialState: { value: "", submitted: false },
- *   theme: resolveTheme(),
  *   render: (state, theme) => `${theme.prefix("?")} Enter value: ${state.value}`,
  *   handleKey: (key, state) => {
  *     if (key.name === "return") return { submit: state.value };
@@ -233,7 +233,8 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * ```
  */
 export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Promise<T> {
-	const { render, handleKey, initialState, theme, renderSubmitted } = config;
+	const { render, handleKey, initialState, renderSubmitted } = config;
+	const theme = resolveTheme(config.theme);
 	const { input: stdin, output } = resolvePromptIO(io);
 
 	return new Promise<T>((resolve, reject) => {

@@ -155,23 +155,22 @@ The default theme uses these styles:
 - `success`: `green`
 - `error`: `red`
 
+There is no global theme state. Create a themed instance with `createProgress`, or pass per-call `theme` overrides:
+
 ```ts
-import { setTheme, spinner } from "@crustjs/progress";
+import { createProgress } from "@crustjs/progress";
 import { cyan, green } from "@crustjs/style";
 
 // Partial overrides; unspecified slots keep their defaults
-setTheme({
-  spinner: cyan,
-  success: green,
-});
+const p = createProgress({ theme: { spinner: cyan, success: green } });
 
-await spinner({
+await p.spinner({
   message: "Working...",
   task: async () => doWork(),
 });
 ```
 
-The public theme exports are `defaultTheme` and `setTheme`. Individual spinners resolve global and per-spinner overrides internally.
+The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `defaultTheme` ← instance theme ← per-call `theme` option. The public theme exports are `defaultTheme` and `createProgress`, with types `CreateProgressOptions` (factory options) and `ProgressInstance` (the returned themed `progress`/`spinner` pair plus its resolved `theme`).
 
 ## Non-interactive behavior
 
