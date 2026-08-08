@@ -19,9 +19,7 @@ import type {
 	StoreValidatorIssue,
 } from "./types.ts";
 
-type FieldValidator = (
-	value: unknown,
-) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
+type FieldValidator = (value: unknown) => ReturnType<NonNullable<FieldDef["validate"]>>;
 
 function makeSchemaValidator(schema: StandardSchema): FieldValidator {
 	return async (value) => {
