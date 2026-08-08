@@ -10,10 +10,9 @@ import type { ArgsDef } from "../types.ts";
  * satisfied (only the last arg is variadic). For non-last args that have
  * `variadic: true`, adds a branded error property to the specific arg.
  *
- * Generalized to work with any ordered tuple of object-typed definitions —
- * core uses it with `ArgsDef`, the validate package uses it with
- * `ArgSpec[]`, etc. Uses `readonly object[]` to avoid TypeScript's weak
- * type detection (all-optional constraint rejection).
+ * Generalized to work with any ordered tuple of object-typed definitions.
+ * Uses `readonly object[]` to avoid TypeScript's weak type detection
+ * (all-optional constraint rejection).
  *
  * ```
  * Property 'FIX_VARIADIC_POSITION' is missing in type '{ name: "files"; ... variadic: true }'
@@ -74,5 +73,27 @@ export function validateSchemaExclusivity(
 				{ subject, name, reason: "schema-exclusive" },
 			);
 		}
+	}
+	if (subject === "arg" && def.type !== undefined) {
+		throw new CrustError(
+			"DEFINITION",
+			`arg "${name}" mixes core option "type" with a schema — schema args receive the raw string token`,
+			{ subject, name, reason: "schema-exclusive" },
+		);
+	}
+}
+
+/** Validate that a variadic argument is the final positional argument. */
+export function validateVariadicArgPosition(
+	def: ArgsDef[number],
+	index: number,
+	count: number,
+): void {
+	if (def.variadic === true && index !== count - 1) {
+		throw new CrustError(
+			"DEFINITION",
+			`Argument "${def.name}" is variadic, but only the last positional argument can be variadic`,
+			{ subject: "arg", name: def.name, reason: "variadic-position" },
+		);
 	}
 }

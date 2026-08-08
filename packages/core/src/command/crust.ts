@@ -23,7 +23,11 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { type AppendArgsChecks, validateSchemaExclusivity } from "../validation/args.ts";
+import {
+	type AppendArgsChecks,
+	validateSchemaExclusivity,
+	validateVariadicArgPosition,
+} from "../validation/args.ts";
 import { validateIncomingAliases } from "../validation/commands.ts";
 import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 import {
@@ -539,18 +543,6 @@ export class Crust<
 				);
 			}
 			validateSchemaExclusivity("arg", argName, record);
-			// Schema args receive raw strings: a parser `type` would coerce first
-			if (record.schema !== undefined && record.type !== undefined) {
-				throw new CrustError(
-					"DEFINITION",
-					`arg "${(def as ArgDef).name}" mixes core option "type" with a schema — schema args receive the raw string token`,
-					{
-						subject: "arg",
-						name: (def as ArgDef).name,
-						reason: "schema-exclusive",
-					},
-				);
-			}
 		}
 		// Deep copy new defs to decouple storage from the caller.
 		const copiedArgs = [...(this._node.args ?? []), ...defs.map((def) => ({ ...def }))] as ArgsDef;
@@ -564,13 +556,7 @@ export class Crust<
 				});
 			}
 			names.add(def.name);
-			if (def.variadic === true && index !== copiedArgs.length - 1) {
-				throw new CrustError(
-					"DEFINITION",
-					`Argument "${def.name}" is variadic, but only the last positional argument can be variadic`,
-					{ subject: "arg", name: def.name, reason: "variadic-position" },
-				);
-			}
+			validateVariadicArgPosition(def, index, copiedArgs.length);
 		}
 
 		return this._clone({

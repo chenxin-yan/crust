@@ -54,4 +54,10 @@ describe("validateIncomingAliases", () => {
 			validateIncomingAliases({ canonicalName: "issue", aliases: ["my issue"] }, {}, "issue"),
 		).toThrow(/must not contain whitespace/);
 	});
+
+	it('rejects aliases beginning with "-"', () => {
+		expect(() =>
+			validateIncomingAliases({ canonicalName: "issue", aliases: ["--issues"] }, {}, "issue"),
+		).toThrow('alias "--issues" must not start with "-" (reserved for flags)');
+	});
 });

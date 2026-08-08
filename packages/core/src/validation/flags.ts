@@ -60,8 +60,8 @@ type ExtractLongAliases<F> = F extends { aliases: infer A }
 /**
  * Extract all alias identifiers (short + long) from a flag definition.
  *
- * Generalized to work with any shape (`FlagDef`, `FlagSpec`, etc.) —
- * values without `short`/`aliases` fields resolve to `never`.
+ * Generalized to work with any shape; values without `short`/`aliases`
+ * fields resolve to `never`.
  *
  * Includes `string extends ...` guards so non-narrowed types (e.g. the
  * broad `string` type from a default generic) resolve to `never` instead
