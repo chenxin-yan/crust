@@ -38,6 +38,7 @@ jobs:
       - name: Measure head
         run: |
           bun ci
+          cd packages/core && bun run build && cd ../..
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/head.json"
 
       - name: Checkout base
@@ -51,7 +52,7 @@ jobs:
         run: |
           cd base
           bun ci
-          cd ..
+          cd packages/core && bun run build && cd ../../..
           # Head's script measures both trees so old base refs need no copy of it.
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
 
