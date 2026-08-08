@@ -5,11 +5,11 @@ import {
 	type ExtensionContext,
 	type InvocationOutcome,
 } from "../api/extension.ts";
-import { validateIncomingFlag } from "../parsing/flag-validation.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { validateCommandTree } from "../parsing/validation.ts";
 import type { FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import { validateIncomingFlag } from "../validation/flags.ts";
+import { validateCommandTree } from "../validation/tree.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
