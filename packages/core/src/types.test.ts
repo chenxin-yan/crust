@@ -127,6 +127,24 @@ describe("InferArgs type inference", () => {
 		type _check = Expect<Equal<Result, Record<string, never>>>;
 		expect(true).toBe(true);
 	});
+
+	it("resolves a widened non-tuple ArgsDef to {} (not a string-indexed record)", () => {
+		type Result = InferArgs<ArgsDef>;
+		type _check = Expect<Equal<Result, {}>>;
+		expect(true).toBe(true);
+	});
+
+	it("turns duplicate arg names with conflicting types into never", () => {
+		// No runtime duplicate-name check exists for positional args; the
+		// intersection-produced `never` is the only conflict signal.
+		type Args = readonly [
+			{ name: "x"; type: "string"; required: true },
+			{ name: "x"; type: "number"; required: true },
+		];
+		type Result = InferArgs<Args>;
+		type _check = Expect<Equal<Result["x"], never>>;
+		expect(true).toBe(true);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

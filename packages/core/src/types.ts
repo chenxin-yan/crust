@@ -1,4 +1,4 @@
-import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
+import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { Simplify } from "./api/context.ts";
@@ -28,22 +28,15 @@ export interface InvocationIO {
  */
 export type ValueType = BaseValueType | "url" | "path" | "json";
 
-/**
- * Resolve a {@link ValueType} literal to its runtime TypeScript type.
- *
- * Delegates to `ResolvePrimitive<T>` for the three base types; maps the
- * three formatted types (`"url"`, `"path"`, `"json"`) to `URL`, `string`,
- * and `unknown` respectively.
- */
-type Resolve<T extends ValueType> = T extends BaseValueType
-	? ResolvePrimitive<T>
-	: T extends "url"
-		? URL
-		: T extends "path"
-			? string
-			: T extends "json"
-				? unknown
-				: never;
+/** Resolve a {@link ValueType} literal to its runtime TypeScript type. */
+type Resolve<T extends ValueType> = {
+	string: string;
+	number: number;
+	boolean: boolean;
+	url: URL;
+	path: string;
+	json: unknown;
+}[T];
 
 /**
  * Resolve the inferred runtime type for a flag/arg definition.
@@ -425,13 +418,7 @@ interface JsonMultiFlagDef extends MultiFlagBase {
 }
 
 /** Shared fields for schema-backed flags (exclusive mode) */
-interface SchemaFlagBase {
-	/** Human-readable description for help text */
-	description?: string;
-	/** Single-character short alias (e.g. `"v"` → `-v`) */
-	short?: string;
-	/** Additional long aliases (e.g. `["out"]` → `--out`) */
-	aliases?: string[];
+interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	required?: never;
@@ -765,15 +752,19 @@ type InferArgValue<A extends ArgDef> = A extends {
 					: ResolveBaseType<A> | undefined
 		: A extends { variadic: true }
 			? unknown[]
-			: A extends { required: true } | { default: unknown }
-				? unknown
-				: unknown;
+			: unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
  *
  * Each element's `name` literal becomes a key, and its value is resolved
  * via {@link InferArgValue}. Uses intersection + `Simplify` to flatten.
+ *
+ * Deliberately recursive rather than key-remapped over `A[number]`:
+ * intersection turns duplicate arg names with conflicting types into
+ * `never` (a conflict signal — there is no runtime duplicate-name check
+ * for positional args), and a widened non-tuple `ArgsDef` resolves to
+ * `{}` instead of a string-indexed record.
  */
 type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	infer Head extends ArgDef,
