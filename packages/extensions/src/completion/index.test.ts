@@ -56,23 +56,19 @@ function getProcessStdout(): string {
 }
 
 function buildCli() {
-	return new Crust("mycli")
-		.meta({ description: "Test CLI" })
+	return new Crust("mycli", { description: "Test CLI" })
 		.extend(completionExtension({ version: "1.2.3" }))
 		.add(
-			defineCommand("build", (cmd) =>
+			defineCommand("build", { description: "Build artifact" }, (cmd) =>
 				cmd
-					.meta({ description: "Build artifact" })
 					.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
 					.action(() => {}),
 			),
-			defineCommand("deploy", (cmd) =>
+			defineCommand("deploy", { description: "Deploy", aliases: ["dep"] }, (cmd) =>
 				cmd
-					.meta({ description: "Deploy", aliases: ["dep"] })
 					.add(
-						defineCommand("prod", (sub) =>
+						defineCommand("prod", { description: "Production deploy" }, (sub) =>
 							sub
-								.meta({ description: "Production deploy" })
 								.flags({
 									name: "env",
 									type: "string",

@@ -29,9 +29,16 @@ type Equal<A, B> =
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Crust constructor", () => {
-	it("creates builder with string name", async () => {
-		const snapshot = await new Crust("my-cli").snapshot();
-		expect(snapshot.meta.name).toBe("my-cli");
+	it("creates builder with name and optional metadata", async () => {
+		const snapshot = await new Crust("my-cli", {
+			description: "A test CLI",
+			usage: "my-cli [options]",
+		}).snapshot();
+		expect(snapshot.meta).toEqual({
+			name: "my-cli",
+			description: "A test CLI",
+			usage: "my-cli [options]",
+		});
 	});
 
 	it("throws CrustError DEFINITION on empty name", () => {
@@ -73,7 +80,6 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 					defineContext("auth", { flags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
 				) as Crust,
 		],
-		[".meta()", (app) => app.meta({ description: "desc" }) as Crust],
 		[".add()", (app) => app.add(defineCommand("sub", (command) => command)) as Crust],
 		[".action()", (app) => app.action(() => {}) as Crust],
 	];
@@ -121,7 +127,7 @@ describe("Crust .flags()", () => {
 	});
 
 	it("preserves meta from original builder", async () => {
-		const app = new Crust("my-cli").meta({ description: "desc" });
+		const app = new Crust("my-cli", { description: "desc" });
 		const withFlags = app.flags({ name: "verbose", type: "boolean" });
 
 		const snapshot = await withFlags.snapshot();
@@ -250,9 +256,10 @@ describe("Crust .args()", () => {
 	});
 
 	it("preserves meta and flags from original builder", async () => {
-		const app = new Crust("my-cli")
-			.meta({ description: "desc" })
-			.flags({ name: "verbose", type: "boolean" });
+		const app = new Crust("my-cli", { description: "desc" }).flags({
+			name: "verbose",
+			type: "boolean",
+		});
 		const withArgs = app.args({ name: "file", type: "string" });
 
 		const snapshot = await withArgs.snapshot();
@@ -354,15 +361,17 @@ describe("Crust chaining", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .meta()
+// Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .meta()", () => {
-	it("sets metadata while preserving the existing command definition", async () => {
-		const app = new Crust("test")
+describe("command metadata", () => {
+	it("preserves root metadata through builder calls", async () => {
+		const app = new Crust("test", {
+			description: "A test command",
+			usage: "test [options]",
+		})
 			.flags({ name: "verbose", type: "boolean" })
-			.args({ name: "file", type: "string" })
-			.meta({ description: "A test command", usage: "test [options]" });
+			.args({ name: "file", type: "string" });
 
 		expect(await app.snapshot()).toMatchObject({
 			meta: { name: "test", description: "A test command", usage: "test [options]" },
@@ -371,15 +380,12 @@ describe("Crust .meta()", () => {
 		});
 	});
 
-	it("sets only description when usage is omitted", async () => {
-		const snapshot = await new Crust("test").meta({ description: "desc" }).snapshot();
-		expect(snapshot.meta).toEqual({ name: "test", description: "desc" });
-	});
-
-	it("works in subcommand callbacks", async () => {
+	it("applies definition metadata from config", async () => {
 		const app = new Crust("cli").add(
-			defineCommand("sub", (command) =>
-				command.meta({ description: "A subcommand", usage: "cli sub [options]" }),
+			defineCommand(
+				"sub",
+				{ description: "A subcommand", usage: "cli sub [options]" },
+				(command) => command,
 			),
 		);
 
@@ -2048,7 +2054,7 @@ describe("Crust.snapshot", () => {
 			},
 		});
 
-		const app = new Crust("cli").extend(docs).meta({ description: "Test" });
+		const app = new Crust("cli", { description: "Test" }).extend(docs);
 		const root = await app.snapshot();
 		expect(root.flags.extra).toMatchObject({
 			type: "boolean",
@@ -2098,11 +2104,9 @@ describe("Crust.snapshot", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("Crust .add() aliases", () => {
-	it("plumbs aliases from meta() into the registered subcommand snapshot", async () => {
+	it("plumbs aliases from definition config into the registered subcommand snapshot", async () => {
 		const app = new Crust("cli").add(
-			defineCommand("issue", (command) =>
-				command.meta({ aliases: ["issues", "i"] }).action(() => {}),
-			),
+			defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command.action(() => {})),
 		);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
@@ -2110,9 +2114,7 @@ describe("Crust .add() aliases", () => {
 	it("registers without error when no sibling collides", () => {
 		expect(() =>
 			new Crust("cli")
-				.add(
-					defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).action(() => {})),
-				)
+				.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})))
 				.add(defineCommand("version", (cmd) => cmd.action(() => {}))),
 		).not.toThrow();
 	});
@@ -2120,22 +2122,22 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
 		const app = new Crust("cli").add(defineCommand("build", (cmd) => cmd.action(() => {})));
 		expect(() =>
-			app.add(defineCommand("compile", (cmd) => cmd.meta({ aliases: ["build"] }).action(() => {}))),
+			app.add(defineCommand("compile", { aliases: ["build"] }, (cmd) => cmd.action(() => {}))),
 		).toThrow(/collides with sibling canonical name "build"/);
 	});
 
 	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
 		const app = new Crust("cli").add(
-			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).action(() => {})),
+			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
 		);
 		expect(() =>
-			app.add(defineCommand("info", (cmd) => cmd.meta({ aliases: ["i"] }).action(() => {}))),
+			app.add(defineCommand("info", { aliases: ["i"] }, (cmd) => cmd.action(() => {}))),
 		).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
 		const app = new Crust("cli").add(
-			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).action(() => {})),
+			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
 		);
 		// Now try to register a *new* command whose canonical name == existing alias.
 		expect(() => app.add(defineCommand("i", (cmd) => cmd.action(() => {})))).toThrow(
@@ -2146,7 +2148,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
 		expect(() =>
 			new Crust("cli").add(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i", "i"] }).action(() => {})),
+				defineCommand("issue", { aliases: ["i", "i"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/lists alias "i" more than once/);
 	});
@@ -2154,7 +2156,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias equal to its own canonical name", () => {
 		expect(() =>
 			new Crust("cli").add(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issue"] }).action(() => {})),
+				defineCommand("issue", { aliases: ["issue"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not equal its own canonical name/);
 	});
@@ -2162,7 +2164,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an empty alias", () => {
 		expect(() =>
 			new Crust("cli").add(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: [""] }).action(() => {})),
+				defineCommand("issue", { aliases: [""] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must be a non-empty string/);
 	});
@@ -2170,7 +2172,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias containing whitespace", () => {
 		expect(() =>
 			new Crust("cli").add(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["my issue"] }).action(() => {})),
+				defineCommand("issue", { aliases: ["my issue"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not contain whitespace/);
 	});
@@ -2178,35 +2180,38 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias starting with '-'", () => {
 		expect(() =>
 			new Crust("cli").add(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["-i"] }).action(() => {})),
+				defineCommand("issue", { aliases: ["-i"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not start with "-"/);
 	});
 
 	it("applies the same checks on the .add() path", () => {
-		const issue = defineCommand("issue", (command) =>
-			command.meta({ aliases: ["i"] }).action(() => {}),
-		);
-		const conflicting = defineCommand("info", (command) =>
-			command.meta({ aliases: ["i"] }).action(() => {}),
+		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
+		const conflicting = defineCommand("info", { aliases: ["i"] }, (command) =>
+			command.action(() => {}),
 		);
 		const app = new Crust("cli").add(issue);
 
 		expect(() => app.add(conflicting)).toThrow(/collides with alias of sibling "issue"/);
 	});
 
+	it("keeps configured aliases when a definition is renamed with .as()", () => {
+		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
+		const app = new Crust("cli").add(issue);
+
+		expect(() => app.add(issue.as("ticket"))).toThrow(/collides with alias of sibling "issue"/);
+	});
+
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
 		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
 		const rogue = defineExtension("rogue", {
-			commands: [
-				defineCommand("info", (command) => command.meta({ aliases: ["i"] }).action(() => {})),
-			],
+			commands: [defineCommand("info", { aliases: ["i"] }, (command) => command.action(() => {}))],
 		});
 
 		const app = new Crust("cli")
 			.extend(rogue)
-			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).action(() => {})));
+			.add(defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})));
 
 		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});

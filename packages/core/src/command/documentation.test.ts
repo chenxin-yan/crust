@@ -27,7 +27,7 @@ describe("buildCommandDocumentation", () => {
 	});
 
 	it("uses explicit usage unchanged", async () => {
-		const model = await docs(new Crust("app").meta({ usage: "app FILE" }).action(() => {}));
+		const model = await docs(new Crust("app", { usage: "app FILE" }).action(() => {}));
 		expect(model.usage).toBe("app FILE");
 		expect(model.usageSegments).toEqual([{ kind: "custom", text: "app FILE" }]);
 	});
@@ -40,7 +40,7 @@ describe("buildCommandDocumentation", () => {
 						command.add(defineCommand("nested", (child) => child.action(() => {}))),
 					),
 				)
-				.add(defineCommand("hidden", (command) => command.meta({ hidden: true }).action(() => {}))),
+				.add(defineCommand("hidden", { hidden: true }, (command) => command.action(() => {}))),
 		);
 		expect(model.children.map((child) => child.name)).toEqual(["visible"]);
 		expect(model.children[0]?.children[0]?.path).toEqual(["app", "visible", "nested"]);

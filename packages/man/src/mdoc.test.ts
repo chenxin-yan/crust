@@ -7,11 +7,10 @@ import { renderManPageMdoc } from "./mdoc.ts";
 
 describe("renderManPageMdoc", () => {
 	it("includes NAME SYNOPSIS SUBCOMMANDS OPTIONS", async () => {
-		const app = new Crust("demo")
-			.meta({ description: "Demo CLI for tests." })
+		const app = new Crust("demo", { description: "Demo CLI for tests." })
 			.extend(help())
 			.flags({ name: "verbose", type: "boolean", short: "v", description: "Verbose" })
-			.add(defineCommand("ping", (cmd) => cmd.meta({ description: "Ping" }).action(() => {})));
+			.add(defineCommand("ping", { description: "Ping" }, (cmd) => cmd.action(() => {})));
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
@@ -28,9 +27,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("escapes leading dots in descriptions and .Nd", async () => {
-		const app = new Crust("x")
-			.meta({ description: ".config is read automatically." })
-			.action(() => {});
+		const app = new Crust("x", { description: ".config is read automatically." }).action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
@@ -68,17 +65,14 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("renders subcommand aliases inline next to the canonical name", async () => {
-		const app = new Crust("demo")
-			.meta({ description: "Demo CLI for alias tests." })
+		const app = new Crust("demo", { description: "Demo CLI for alias tests." })
 			.add(
-				defineCommand("issue", (cmd) =>
-					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).action(() => {}),
+				defineCommand("issue", { description: "Manage issues", aliases: ["issues", "i"] }, (cmd) =>
+					cmd.action(() => {}),
 				),
 			)
 			.add(
-				defineCommand("version", (cmd) =>
-					cmd.meta({ description: "Show version" }).action(() => {}),
-				),
+				defineCommand("version", { description: "Show version" }, (cmd) => cmd.action(() => {})),
 			);
 
 		const root = await app.snapshot();
@@ -101,18 +95,15 @@ describe("renderManPageMdoc", () => {
 	it("omits `meta.hidden: true` subcommands from the SUBCOMMANDS section", async () => {
 		// Mirrors the helpPlugin contract: hidden commands stay invocable
 		// but never appear in published man pages.
-		const app = new Crust("demo")
-			.meta({ description: "Demo." })
+		const app = new Crust("demo", { description: "Demo." })
 			.add(
-				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).action(() => {}),
-				),
+				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
 			)
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd
-						.meta({ description: "Internal completion entrypoint", hidden: true })
-						.action(() => {}),
+				defineCommand(
+					"__complete",
+					{ description: "Internal completion entrypoint", hidden: true },
+					(cmd) => cmd.action(() => {}),
 				),
 			);
 
@@ -126,8 +117,8 @@ describe("renderManPageMdoc", () => {
 	it("omits the SUBCOMMANDS section entirely when every subcommand is hidden", async () => {
 		const app = new Crust("demo")
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
+				defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
+					cmd.action(() => {}),
 				),
 			)
 			.action(() => {});
@@ -140,8 +131,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("renders flag `choices` as `[choices: ...]` after the description", async () => {
-		const app = new Crust("demo")
-			.meta({ description: "Demo." })
+		const app = new Crust("demo", { description: "Demo." })
 			.flags({
 				name: "target",
 				type: "string",
@@ -159,8 +149,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
-		const app = new Crust("demo")
-			.meta({ description: "Demo." })
+		const app = new Crust("demo", { description: "Demo." })
 			.args({
 				name: "env",
 				type: "string",
@@ -179,8 +168,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("includes long flag aliases (`def.aliases`) alongside the canonical spelling", async () => {
-		const app = new Crust("demo")
-			.meta({ description: "Demo." })
+		const app = new Crust("demo", { description: "Demo." })
 			.flags({
 				name: "output",
 				type: "string",

@@ -27,10 +27,12 @@ export type { UnnamedArgDef } from "./api/flags.ts";
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
 // Command definitions and context
 export type {
+	CommandConfig,
 	CommandDefinition,
 	CommandDefinitionBuilder,
 	CommandRequirements,
 	CrustCommandContext,
+	RootCommandMeta,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
 // Errors

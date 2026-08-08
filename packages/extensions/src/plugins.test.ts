@@ -68,12 +68,11 @@ const stripAnsi = stripVTControlCharacters;
 function lateSkillExtension() {
 	return defineExtension("late-skill", {
 		commands: [
-			defineCommand("skill", (command) =>
+			defineCommand("skill", { description: "Manage agent skills" }, (command) =>
 				command
-					.meta({ description: "Manage agent skills" })
 					.add(
-						defineCommand("update", (cmd) =>
-							cmd.meta({ description: "Update installed skills" }).action(() => {}),
+						defineCommand("update", { description: "Update installed skills" }, (cmd) =>
+							cmd.action(() => {}),
 						),
 					)
 					.action(() => {}),
@@ -88,8 +87,7 @@ describe("built-in plugins", () => {
 		// test environments (e.g. CI). Reset via afterEach.
 		process.env.FORCE_COLOR = "3";
 
-		const command = new Crust("app")
-			.meta({ description: "Test app" })
+		const command = new Crust("app", { description: "Test app" })
 			.flags(
 				{
 					name: "verbose",
@@ -111,7 +109,7 @@ describe("built-in plugins", () => {
 				description: "Output directory",
 				default: ".",
 			})
-			.add(defineCommand("build", (cmd) => cmd.meta({ description: "Build the project" })))._node;
+			.add(defineCommand("build", { description: "Build the project" }, (cmd) => cmd))._node;
 
 		const output = renderHelp(snapshotCommand(command));
 		const plain = stripAnsi(output);
@@ -447,16 +445,13 @@ describe("built-in plugins", () => {
 	it("help plugin ignores help-like args after --", async () => {
 		let capturedRawArgs: string[] = [];
 
-		const app = new Crust("app")
-			.meta({ description: "Test app" })
-			.extend(helpExtension())
-			.add(
-				defineCommand("build", (cmd) =>
-					cmd.action((ctx) => {
-						capturedRawArgs = [...ctx.rawArgs];
-					}),
-				),
-			);
+		const app = new Crust("app", { description: "Test app" }).extend(helpExtension()).add(
+			defineCommand("build", (cmd) =>
+				cmd.action((ctx) => {
+					capturedRawArgs = [...ctx.rawArgs];
+				}),
+			),
+		);
 
 		await app.execute({ argv: ["build", "--", "--help"] });
 
@@ -575,8 +570,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("version plugin flag appears in help output", async () => {
-		const app = new Crust("app")
-			.meta({ description: "Test app" })
+		const app = new Crust("app", { description: "Test app" })
 			.extend(versionExtension("1.0.0"))
 			.extend(helpExtension())
 			.action(() => {});
@@ -626,13 +620,13 @@ describe("built-in plugins", () => {
 
 	it("renderHelp renders aliases inline next to the canonical command name", () => {
 		const command = new Crust("app").add(
-			defineCommand("issue", (cmd) =>
-				cmd
-					.meta({
-						description: "Manage issues",
-						aliases: ["issues", "i"],
-					})
-					.action(() => {}),
+			defineCommand(
+				"issue",
+				{
+					description: "Manage issues",
+					aliases: ["issues", "i"],
+				},
+				(cmd) => cmd.action(() => {}),
 			),
 		)._node;
 
@@ -644,9 +638,7 @@ describe("built-in plugins", () => {
 
 	it("renderHelp renders unchanged for a command without aliases", () => {
 		const command = new Crust("app").add(
-			defineCommand("build", (cmd) =>
-				cmd.meta({ description: "Build the project" }).action(() => {}),
-			),
+			defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
 		)._node;
 
 		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
@@ -659,19 +651,17 @@ describe("built-in plugins", () => {
 	it("renderHelp keeps description column aligned when aliases overflow the column", () => {
 		const command = new Crust("app")
 			.add(
-				defineCommand("issue", (cmd) =>
-					cmd
-						.meta({
-							description: "Manage issues",
-							aliases: ["issues", "i"],
-						})
-						.action(() => {}),
+				defineCommand(
+					"issue",
+					{
+						description: "Manage issues",
+						aliases: ["issues", "i"],
+					},
+					(cmd) => cmd.action(() => {}),
 				),
 			)
 			.add(
-				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).action(() => {}),
-				),
+				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
 			)._node;
 
 		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
@@ -691,18 +681,16 @@ describe("built-in plugins", () => {
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
 		const command = new Crust("app")
 			.add(
-				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).action(() => {}),
-				),
+				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
 			)
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd
-						.meta({
-							description: "Internal completion entrypoint",
-							hidden: true,
-						})
-						.action(() => {}),
+				defineCommand(
+					"__complete",
+					{
+						description: "Internal completion entrypoint",
+						hidden: true,
+					},
+					(cmd) => cmd.action(() => {}),
 				),
 			)._node;
 
@@ -716,8 +704,8 @@ describe("built-in plugins", () => {
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", () => {
 		const command = new Crust("app")
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
+				defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
+					cmd.action(() => {}),
 				),
 			)
 			.action(() => {})._node;
@@ -732,8 +720,8 @@ describe("built-in plugins", () => {
 		// deciding whether to emit `<command>`, producing the incoherent
 		// `Usage: app <command>` with no COMMANDS section below it.
 		const command = new Crust("app").add(
-			defineCommand("__complete", (cmd) =>
-				cmd.meta({ hidden: true, description: "Internal" }).action(() => {}),
+			defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
+				cmd.action(() => {}),
 			),
 		)._node;
 
@@ -749,19 +737,19 @@ describe("built-in plugins", () => {
 		// subcommand with aliases should still render `name (a, b)`.
 		const command = new Crust("app")
 			.add(
-				defineCommand("issue", (cmd) =>
-					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).action(() => {}),
+				defineCommand("issue", { description: "Manage issues", aliases: ["issues", "i"] }, (cmd) =>
+					cmd.action(() => {}),
 				),
 			)
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd
-						.meta({
-							description: "Internal",
-							aliases: ["__c"],
-							hidden: true,
-						})
-						.action(() => {}),
+				defineCommand(
+					"__complete",
+					{
+						description: "Internal",
+						aliases: ["__c"],
+						hidden: true,
+					},
+					(cmd) => cmd.action(() => {}),
 				),
 			)._node;
 
@@ -777,13 +765,11 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
 			.add(
-				defineCommand("build", (cmd) =>
-					cmd.meta({ description: "Build the project" }).action(() => {}),
-				),
+				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
 			)
 			.add(
-				defineCommand("__complete", (cmd) =>
-					cmd.meta({ hidden: true, description: "Internal" }).action(() => {
+				defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
+					cmd.action(() => {
 						didRun = true;
 					}),
 				),
@@ -798,8 +784,7 @@ describe("built-in plugins", () => {
 		// `helpExtension` must surface it so users can discover the valid
 		// values from `--help` without resorting to shell completion or
 		// reading the source.
-		const command = new Crust("app")
-			.meta({ description: "Build artifact" })
+		const command = new Crust("app", { description: "Build artifact" })
 			.flags({
 				name: "target",
 				type: "string",
@@ -814,8 +799,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("renderHelp surfaces positional-arg `choices` in the ARGS section", () => {
-		const command = new Crust("app")
-			.meta({ description: "Deploy to an env" })
+		const command = new Crust("app", { description: "Deploy to an env" })
 			.args({
 				name: "env",
 				type: "string",

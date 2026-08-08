@@ -20,7 +20,7 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. Duplicate names, short forms, or aliases throw a `DEFINITION` error at the call that introduces the collision.
 
-Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.meta()` shallow-merges fields, while `.action()` is set once and throws if called again.
+Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.action()` is set once and throws if called again.
 
 ## Aliases and negation
 

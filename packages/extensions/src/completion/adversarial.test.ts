@@ -57,9 +57,9 @@ describe("walker · validation", () => {
 	});
 
 	it("strips control characters from descriptions instead of throwing", () => {
-		const cli = new Crust("safe")
-			.meta({ description: "first line\nsecond line\rstill same line" })
-			.action(() => {});
+		const cli = new Crust("safe", {
+			description: "first line\nsecond line\rstill same line",
+		}).action(() => {});
 		const spec = walkCommandNode(snapshotCommand(cli._node));
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.root.description).toBe("first line second line still same line");

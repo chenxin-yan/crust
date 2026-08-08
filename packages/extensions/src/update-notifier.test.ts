@@ -1006,8 +1006,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
-			const app = new Crust(pkgName)
-				.meta({ description: "Test" })
+			const app = new Crust(pkgName, { description: "Test" })
 				.extend(
 					updateNotifierExtension({
 						currentVersion: "1.0.0",
@@ -1034,8 +1033,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			// Combine with a custom no-op extension
 			const otherPlugin = defineExtension("test-other");
 
-			const app = new Crust(pkgName)
-				.meta({ description: "Test" })
+			const app = new Crust(pkgName, { description: "Test" })
 				.extend(otherPlugin)
 				.extend(
 					updateNotifierExtension({
@@ -1058,8 +1056,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			mockRegistryFailure();
 
 			let commandExecuted = false;
-			const app = new Crust(pkgName)
-				.meta({ description: "Test" })
+			const app = new Crust(pkgName, { description: "Test" })
 				.extend(
 					updateNotifierExtension({
 						currentVersion: "1.0.0",
