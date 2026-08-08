@@ -755,6 +755,25 @@ type InferArgValue<A extends ArgDef> = A extends {
 			: unknown;
 
 /**
+ * Recursively converts an ArgsDef tuple into a named object type.
+ *
+ * Each element's `name` literal becomes a key, and its value is resolved
+ * via {@link InferArgValue}. Uses intersection + `Simplify` to flatten.
+ *
+ * Deliberately recursive rather than key-remapped over `A[number]`:
+ * intersection turns duplicate arg names with conflicting types into
+ * `never` (a conflict signal — there is no runtime duplicate-name check
+ * for positional args), and a widened non-tuple `ArgsDef` resolves to
+ * `{}` instead of a string-indexed record.
+ */
+type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
+	infer Head extends ArgDef,
+	...infer Tail extends readonly ArgDef[],
+]
+	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
+	: {};
+
+/**
  * Maps an ArgsDef tuple to resolved arg types keyed by each arg's `name`.
  *
  * @example
@@ -767,9 +786,7 @@ type InferArgValue<A extends ArgDef> = A extends {
  * // Result = { port: number; name: string; files: string[] }
  * ```
  */
-export type InferArgs<A> = A extends ArgsDef
-	? Simplify<{ [D in A[number] as D["name"]]: InferArgValue<D> }>
-	: Record<string, never>;
+export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Record<string, never>;
 
 /**
  * Infer the resolved type for a single FlagDef:
