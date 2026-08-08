@@ -1,8 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
-import type { StandardSchemaV1 } from "@standard-schema/spec";
+import {
+	type InferOutput,
+	isStandardSchema,
+	normalizeStandardIssues,
+	type StandardSchema,
+} from "./schema.ts";
 
-import { isStandardSchema, normalizeStandardIssues } from "./schema.ts";
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
 
 describe("schema detection", () => {
 	it("accepts Standard Schema v1 objects", () => {
@@ -14,6 +21,21 @@ describe("schema detection", () => {
 		};
 
 		expect(isStandardSchema(schema)).toBe(true);
+	});
+
+	it("preserves structural compatibility and output inference", () => {
+		const schema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "crust-test",
+				types: undefined as { input: string; output: number } | undefined,
+				validate: (value: unknown) => ({ value: Number(value) }),
+			},
+		};
+		const compatible: StandardSchema<string, number> = schema;
+		type _Output = Expect<Equal<InferOutput<typeof schema>, number>>;
+
+		expect(isStandardSchema(compatible)).toBe(true);
 	});
 
 	it("accepts callable Standard Schema wrappers", () => {
@@ -40,7 +62,7 @@ describe("schema issue normalization", () => {
 			{ message: "Expected string", path: [{ key: "name" }] },
 			{ message: "Expected item", path: [0] },
 			{ message: "Required" },
-		] satisfies StandardSchemaV1.Issue[];
+		] satisfies Parameters<typeof normalizeStandardIssues>[0];
 
 		expect(normalizeStandardIssues(issues, ["flags"])).toEqual([
 			{ message: "Expected string", path: "flags.name" },

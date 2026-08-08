@@ -15,8 +15,7 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
-		"@crustjs/config": "workspace:*",
-		"@standard-schema/spec": "^1.1.0"
+		"@crustjs/config": "workspace:*"
 	},
 	"engines": {
 		"bun": ">=1.3.14"
