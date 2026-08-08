@@ -74,7 +74,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 				) as Crust,
 		],
 		[".meta()", (app) => app.meta({ description: "desc" }) as Crust],
-		[".mount()", (app) => app.mount(defineCommand("sub", (command) => command)) as Crust],
+		[".add()", (app) => app.add(defineCommand("sub", (command) => command)) as Crust],
 		[".handle()", (app) => app.handle(() => {}) as Crust],
 	];
 
@@ -308,7 +308,7 @@ describe("Crust .meta()", () => {
 	});
 
 	it("works in subcommand callbacks", async () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("sub", (command) =>
 				command.meta({ description: "A subcommand", usage: "cli sub [options]" }),
 			),
@@ -403,12 +403,12 @@ describe("Crust type-level tests", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .mount() — Runtime tests
+// .add() — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .mount() with inline definitions", () => {
+describe("Crust .add() with inline definitions", () => {
 	it("registers a subcommand in the public snapshot", async () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
 		);
 
@@ -417,7 +417,7 @@ describe("Crust .mount() with inline definitions", () => {
 	});
 
 	it("subcommand exposes its flags", async () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })),
 		);
 
@@ -432,7 +432,7 @@ describe("Crust .mount() with inline definitions", () => {
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "number" })
 			.provide(logging())
-			.mount(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
+			.add(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
 
 		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
 			verbose: { type: "boolean" },
@@ -443,7 +443,7 @@ describe("Crust .mount() with inline definitions", () => {
 	it("throws CrustError DEFINITION on empty subcommand name", () => {
 		const app = new Crust("cli");
 		try {
-			app.mount(defineCommand("", (cmd) => cmd));
+			app.add(defineCommand("", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -455,7 +455,7 @@ describe("Crust .mount() with inline definitions", () => {
 	it("throws CrustError DEFINITION on whitespace-only subcommand name", () => {
 		const app = new Crust("cli");
 		try {
-			app.mount(defineCommand("   ", (cmd) => cmd));
+			app.add(defineCommand("   ", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -464,9 +464,9 @@ describe("Crust .mount() with inline definitions", () => {
 	});
 
 	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
-		const app = new Crust("cli").mount(defineCommand("sub", (cmd) => cmd));
+		const app = new Crust("cli").add(defineCommand("sub", (cmd) => cmd));
 		try {
-			app.mount(defineCommand("sub", (cmd) => cmd));
+			app.add(defineCommand("sub", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -478,7 +478,7 @@ describe("Crust .mount() with inline definitions", () => {
 	it("callback receives a fresh child builder (not the parent)", async () => {
 		let receivedBuilder: CommandDefinitionBuilder | undefined;
 
-		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).mount(
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).add(
 			defineCommand("sub", (cmd) => {
 				receivedBuilder = cmd;
 				return cmd;
@@ -502,7 +502,7 @@ describe("Crust .mount() with inline definitions", () => {
 		new Crust("cli")
 			.flags({ name: "port", type: "number" })
 			.provide(logging())
-			.mount(
+			.add(
 				defineCommand("sub", (cmd) => {
 					childOwned = (cmd as unknown as Crust)._ancestorOwnedFlags;
 					return cmd;
@@ -515,8 +515,8 @@ describe("Crust .mount() with inline definitions", () => {
 
 	it("multiple subcommands can be registered", async () => {
 		const app = new Crust("cli")
-			.mount(defineCommand("sub1", (cmd) => cmd.flags({ name: "a", type: "string" })))
-			.mount(defineCommand("sub2", (cmd) => cmd.flags({ name: "b", type: "number" })));
+			.add(defineCommand("sub1", (cmd) => cmd.flags({ name: "a", type: "string" })))
+			.add(defineCommand("sub2", (cmd) => cmd.flags({ name: "b", type: "number" })));
 
 		const subCommands = (await app.snapshot()).subCommands;
 		expect(subCommands.sub1?.flags.a).toBeDefined();
@@ -527,7 +527,7 @@ describe("Crust .mount() with inline definitions", () => {
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean" })
 			.args({ name: "file", type: "string" })
-			.mount(defineCommand("sub", (cmd) => cmd));
+			.add(defineCommand("sub", (cmd) => cmd));
 
 		const snapshot = await app.snapshot();
 		expect(snapshot.flags.verbose).toBeDefined();
@@ -536,10 +536,10 @@ describe("Crust .mount() with inline definitions", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .mount() — Type-level tests
+// .add() — Type-level tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .mount() type-level tests", () => {
+describe("Crust .add() type-level tests", () => {
 	it("types required capabilities and local values in handlers", () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
@@ -548,9 +548,9 @@ describe("Crust .mount() type-level tests", () => {
 		new Crust("cli")
 			.flags({ name: "rootOnly", type: "string" })
 			.provide(logging())
-			.mount(
+			.add(
 				defineCommand("level1", { requires: [logging] }, (command) =>
-					command.mount(
+					command.add(
 						defineCommand("level2", { requires: [logging] }, (child) =>
 							child
 								.args({ name: "target", type: "string", required: true })
@@ -591,11 +591,11 @@ describe("Crust .handle()", () => {
 		});
 	});
 
-	it("preserves the definition and can follow .mount()", async () => {
+	it("preserves the definition and can follow .add()", async () => {
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean" })
 			.args({ name: "file", type: "string" })
-			.mount(defineCommand("sub", (command) => command))
+			.add(defineCommand("sub", (command) => command))
 			.handle(() => {});
 
 		expect(await app.snapshot()).toMatchObject({
@@ -630,7 +630,7 @@ describe("Crust .handle() type-level tests", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		new Crust("cli").provide(logging()).mount(
+		new Crust("cli").provide(logging()).add(
 			defineCommand("sub", { requires: [logging] }, (cmd) =>
 				cmd.flags({ name: "output", type: "string", required: true }).handle((_ctx) => {
 					type _checkOutput = Expect<Equal<typeof _ctx.flags.output, string>>;
@@ -743,7 +743,7 @@ describe("Crust .extend()", () => {
 		const app = new Crust("test")
 			.flags({ name: "verbose", type: "boolean" })
 			.args({ name: "file", type: "string" })
-			.mount(defineCommand("sub", (command) => command))
+			.add(defineCommand("sub", (command) => command))
 			.handle(() => {})
 			.extend(defineExtension("test-extension"));
 
@@ -783,7 +783,7 @@ describe("Extension application at prepare time", () => {
 			flags: { debug: { type: "boolean" } },
 		});
 
-		const app = new Crust("cli").extend(debug).mount(
+		const app = new Crust("cli").extend(debug).add(
 			defineCommand("sub", (cmd) =>
 				cmd.handle(({ flags }) => {
 					seen.push(flags);
@@ -803,7 +803,7 @@ describe("Extension application at prepare time", () => {
 
 		const app = new Crust("cli")
 			.extend(version)
-			.mount(defineCommand("sub", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("sub", (cmd) => cmd.handle(() => {})));
 
 		// --version is unknown on the subcommand → PARSE error
 		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({ code: "PARSE" });
@@ -888,7 +888,7 @@ describe("Extension application at prepare time", () => {
 			commands: [defineCommand("sub", (command) => command.handle(() => {}))],
 		});
 		const app = new Crust("cli")
-			.mount(defineCommand("sub", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("sub", (cmd) => cmd.handle(() => {})))
 			.extend(clash);
 
 		await expect(app.run(["sub"])).rejects.toMatchObject({ code: "DEFINITION" });
@@ -1076,7 +1076,7 @@ describe("Extension named hooks", () => {
 		});
 		const app = new Crust("cli")
 			.extend(probe)
-			.mount(defineCommand("known", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("known", (cmd) => cmd.handle(() => {})));
 
 		await app.run(["known"], { stdout: (line) => lines.push(line) });
 		expect(lines).toEqual(["probe:known"]);
@@ -1391,7 +1391,7 @@ describe("Crust .execute()", () => {
 			.handle(() => {
 				handlerRan = "root";
 			})
-			.mount(
+			.add(
 				defineCommand("sub", (cmd) =>
 					cmd.handle(() => {
 						handlerRan = "sub";
@@ -1412,7 +1412,7 @@ describe("Crust .execute()", () => {
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "number", default: 3000 })
 			.provide(logging())
-			.mount(
+			.add(
 				defineCommand("sub", (cmd) =>
 					cmd.handle((ctx) => {
 						subFlags = ctx.flags;
@@ -1579,7 +1579,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("command not found error with no run on parent", async () => {
-		const app = new Crust("cli").mount(defineCommand("sub", (cmd) => cmd.handle(() => {})));
+		const app = new Crust("cli").add(defineCommand("sub", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["unknown-sub"] });
 
@@ -1621,7 +1621,7 @@ describe("Crust .execute()", () => {
 		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
 				defineCommand("skill", (command) =>
-					command.mount(
+					command.add(
 						defineCommand("update", (cmd) =>
 							cmd.handle((runCtx) => {
 								receivedFlags = runCtx.flags as Record<string, unknown>;
@@ -1645,11 +1645,11 @@ describe("Crust .execute()", () => {
 	it("deeply nested subcommand routing works", async () => {
 		let handlerRan = "";
 
-		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).mount(
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).add(
 			defineCommand("level1", (cmd) =>
-				cmd.mount(
+				cmd.add(
 					defineCommand("level2", (cmd2) =>
-						cmd2.mount(
+						cmd2.add(
 							defineCommand("level3", (cmd3) =>
 								cmd3.handle(() => {
 									handlerRan = "level3";
@@ -1693,7 +1693,7 @@ describe("Crust .execute()", () => {
 
 		const app = new Crust("cli")
 			.extend(inspect)
-			.mount(
+			.add(
 				defineCommand("sub", (cmd) =>
 					cmd.flags({ name: "output", type: "string", default: "stdout" }).handle(() => {}),
 				),
@@ -1729,7 +1729,7 @@ describe("Crust .execute()", () => {
 				receivedVerbose = ctx.logging.verbose;
 			}),
 		);
-		const app = new Crust("cli").provide(logging()).mount(sub);
+		const app = new Crust("cli").provide(logging()).add(sub);
 
 		await app.execute({ argv: ["sub", "--verbose"] });
 
@@ -1743,7 +1743,7 @@ describe("Crust .execute()", () => {
 		const ports = defineContext("ports", { flags: [port] }, ({ flags }) => ({
 			port: flags.port,
 		}));
-		const app = new Crust("cli").provide(ports()).mount(
+		const app = new Crust("cli").provide(ports()).add(
 			defineCommand("sub", { requires: [ports] }, (cmd) =>
 				cmd.handle(({ ctx }) => {
 					receivedPort = ctx.ports.port;
@@ -1763,7 +1763,7 @@ describe("Crust .execute()", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose,
 		}));
-		const app = new Crust("cli").provide(logging()).mount(
+		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", { requires: [logging] }, (cmd) =>
 				cmd.handle(({ ctx }) => {
 					receivedVerbose = ctx.logging.verbose;
@@ -1972,12 +1972,12 @@ describe("Crust.snapshot", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// .mount() aliases
+// .add() aliases
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe("Crust .mount() aliases", () => {
+describe("Crust .add() aliases", () => {
 	it("plumbs aliases from meta() into the registered subcommand snapshot", async () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("issue", (command) =>
 				command.meta({ aliases: ["issues", "i"] }).handle(() => {}),
 			),
@@ -1988,44 +1988,42 @@ describe("Crust .mount() aliases", () => {
 	it("registers without error when no sibling collides", () => {
 		expect(() =>
 			new Crust("cli")
-				.mount(
+				.add(
 					defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
 				)
-				.mount(defineCommand("version", (cmd) => cmd.handle(() => {}))),
+				.add(defineCommand("version", (cmd) => cmd.handle(() => {}))),
 		).not.toThrow();
 	});
 
 	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
-		const app = new Crust("cli").mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
+		const app = new Crust("cli").add(defineCommand("build", (cmd) => cmd.handle(() => {})));
 		expect(() =>
-			app.mount(
-				defineCommand("compile", (cmd) => cmd.meta({ aliases: ["build"] }).handle(() => {})),
-			),
+			app.add(defineCommand("compile", (cmd) => cmd.meta({ aliases: ["build"] }).handle(() => {}))),
 		).toThrow(/collides with sibling canonical name "build"/);
 	});
 
 	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})),
 		);
 		expect(() =>
-			app.mount(defineCommand("info", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}))),
+			app.add(defineCommand("info", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {}))),
 		).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
-		const app = new Crust("cli").mount(
+		const app = new Crust("cli").add(
 			defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})),
 		);
 		// Now try to register a *new* command whose canonical name == existing alias.
-		expect(() => app.mount(defineCommand("i", (cmd) => cmd.handle(() => {})))).toThrow(
+		expect(() => app.add(defineCommand("i", (cmd) => cmd.handle(() => {})))).toThrow(
 			/canonical name "i" collides with alias of sibling "issue"/,
 		);
 	});
 
 	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
 		expect(() =>
-			new Crust("cli").mount(
+			new Crust("cli").add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i", "i"] }).handle(() => {})),
 			),
 		).toThrow(/lists alias "i" more than once/);
@@ -2033,7 +2031,7 @@ describe("Crust .mount() aliases", () => {
 
 	it("throws DEFINITION on an alias equal to its own canonical name", () => {
 		expect(() =>
-			new Crust("cli").mount(
+			new Crust("cli").add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issue"] }).handle(() => {})),
 			),
 		).toThrow(/must not equal its own canonical name/);
@@ -2041,7 +2039,7 @@ describe("Crust .mount() aliases", () => {
 
 	it("throws DEFINITION on an empty alias", () => {
 		expect(() =>
-			new Crust("cli").mount(
+			new Crust("cli").add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: [""] }).handle(() => {})),
 			),
 		).toThrow(/must be a non-empty string/);
@@ -2049,7 +2047,7 @@ describe("Crust .mount() aliases", () => {
 
 	it("throws DEFINITION on an alias containing whitespace", () => {
 		expect(() =>
-			new Crust("cli").mount(
+			new Crust("cli").add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["my issue"] }).handle(() => {})),
 			),
 		).toThrow(/must not contain whitespace/);
@@ -2057,22 +2055,22 @@ describe("Crust .mount() aliases", () => {
 
 	it("throws DEFINITION on an alias starting with '-'", () => {
 		expect(() =>
-			new Crust("cli").mount(
+			new Crust("cli").add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["-i"] }).handle(() => {})),
 			),
 		).toThrow(/must not start with "-"/);
 	});
 
-	it("applies the same checks on the .mount() path", () => {
+	it("applies the same checks on the .add() path", () => {
 		const issue = defineCommand("issue", (command) =>
 			command.meta({ aliases: ["i"] }).handle(() => {}),
 		);
 		const conflicting = defineCommand("info", (command) =>
 			command.meta({ aliases: ["i"] }).handle(() => {}),
 		);
-		const app = new Crust("cli").mount(issue);
+		const app = new Crust("cli").add(issue);
 
-		expect(() => app.mount(conflicting)).toThrow(/collides with alias of sibling "issue"/);
+		expect(() => app.add(conflicting)).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
@@ -2086,7 +2084,7 @@ describe("Crust .mount() aliases", () => {
 
 		const app = new Crust("cli")
 			.extend(rogue)
-			.mount(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})));
+			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})));
 
 		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});

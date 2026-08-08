@@ -34,8 +34,8 @@ describe("didYouMeanExtension", () => {
 	it("suggests the closest command on a typo (smoke test)", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
-			.mount(defineCommand("test", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("test", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["buld"] });
 
@@ -52,10 +52,8 @@ describe("didYouMeanExtension", () => {
 	it("suggests the canonical name when the input matches an alias", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
-			)
-			.mount(defineCommand("version", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})))
+			.add(defineCommand("version", (cmd) => cmd.handle(() => {})));
 
 		// "issuess" is closest to the alias "issues" (distance 1) than to
 		// "issue" (distance 2). The plugin must report the canonical name
@@ -72,7 +70,7 @@ describe("didYouMeanExtension", () => {
 	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(
+			.add(
 				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
 			);
 
@@ -88,8 +86,8 @@ describe("didYouMeanExtension", () => {
 		// because it is a prefix of the input.
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})))
-			.mount(defineCommand("install", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["i"] }).handle(() => {})))
+			.add(defineCommand("install", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["insall"] });
 
@@ -101,10 +99,8 @@ describe("didYouMeanExtension", () => {
 	it("lists only canonical names under 'Available commands'", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(
-				defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})),
-			)
-			.mount(defineCommand("version", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues", "i"] }).handle(() => {})))
+			.add(defineCommand("version", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["completely-unknown"] });
 
@@ -116,7 +112,7 @@ describe("didYouMeanExtension", () => {
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension({ mode: "help" }))
-			.mount(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).handle(() => {})));
+			.add(defineCommand("issue", (cmd) => cmd.meta({ aliases: ["issues"] }).handle(() => {})));
 
 		// Both the canonical "issue" and the alias "issues" are within
 		// Levenshtein distance 3 of "issuee". The first suggestion line
@@ -135,8 +131,8 @@ describe("didYouMeanExtension", () => {
 		// error output. A close typo of it must not produce a suggestion.
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
-			.mount(defineCommand("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {})));
 
 		// Typo distance(__complet -> __complete) = 1, well within the
 		// threshold. Distance(__complet -> build) is > 3, so without the
@@ -154,8 +150,8 @@ describe("didYouMeanExtension", () => {
 		// the typo, it still must not leak.
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
-			.mount(
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd.meta({ hidden: true, aliases: ["__comp"] }).handle(() => {}),
 				),
@@ -172,9 +168,9 @@ describe("didYouMeanExtension", () => {
 	it("omits hidden commands from the 'Available commands' fallback list", async () => {
 		const app = new Crust("app")
 			.extend(didYouMeanExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
-			.mount(defineCommand("test", (cmd) => cmd.handle(() => {})))
-			.mount(defineCommand("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("test", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("__complete", (cmd) => cmd.meta({ hidden: true }).handle(() => {})));
 
 		// No close match — we want the "Available commands" line.
 		await app.execute({ argv: ["zzzzz"] });

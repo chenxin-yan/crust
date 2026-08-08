@@ -65,7 +65,7 @@ describe("snapshotCommand", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
-			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.handle(() => {})));
 
 		const snapshot = await app.snapshot();
 		expect(snapshot.flags["api-key"]).toEqual({

@@ -13,10 +13,10 @@ import {
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
-/** Parse argv against the mounted publish command's grammar. */
+/** Parse argv against the added publish command's grammar. */
 async function parsePublishArgs(argv: string[]) {
 	let captured: { flags: Record<string, unknown> } | undefined;
-	const app = new Crust("test").mount(publishCommand);
+	const app = new Crust("test").add(publishCommand);
 	const node = app._node.subCommands.publish!;
 	node.run = (ctx) => {
 		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };

@@ -666,7 +666,7 @@ function buildSkillCommandGrammar(
 					description: "Install for all detected agents non-interactively (universal + detected)",
 				},
 			)
-			.mount(
+			.add(
 				defineCommand("update", (cmd) =>
 					cmd
 						.meta({ description: "Update installed skills to latest version" })

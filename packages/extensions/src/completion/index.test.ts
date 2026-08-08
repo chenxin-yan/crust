@@ -59,7 +59,7 @@ function buildCli() {
 	return new Crust("mycli")
 		.meta({ description: "Test CLI" })
 		.extend(completionExtension({ version: "1.2.3" }))
-		.mount(
+		.add(
 			defineCommand("build", (cmd) =>
 				cmd
 					.meta({ description: "Build artifact" })
@@ -69,7 +69,7 @@ function buildCli() {
 			defineCommand("deploy", (cmd) =>
 				cmd
 					.meta({ description: "Deploy", aliases: ["dep"] })
-					.mount(
+					.add(
 						defineCommand("prod", (sub) =>
 							sub
 								.meta({ description: "Production deploy" })

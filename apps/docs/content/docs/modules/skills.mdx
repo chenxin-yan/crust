@@ -263,7 +263,7 @@ const deploy = defineCommand("deploy", (command) =>
   }),
 );
 
-const app = new Crust("my-cli").mount(deploy);
+const app = new Crust("my-cli").add(deploy);
 ```
 
 ## Name Validation

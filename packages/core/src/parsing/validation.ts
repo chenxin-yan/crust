@@ -11,7 +11,7 @@ import { parseArgs, validateParsed } from "./parser.ts";
 // Both registration time (`crust.ts`) and tree-walk validation
 // (`validateCommandTree`) reuse these helpers so the policy lives in one
 // place and surfaces as the same `DEFINITION` error shape regardless of
-// how a subcommand was installed (`.mount()` vs. plugin-installed via
+// how a subcommand was installed (`.add()` vs. plugin-installed via
 // the `addCommand` action / direct `node.subCommands` mutation).
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ export function validateCommandTree(root: CommandNode): void {
 		}
 
 		// Detect alias collisions among children. Catches plugin-installed
-		// subcommands that bypassed `.mount()` (where collision detection
+		// subcommands that bypassed `.add()` (where collision detection
 		// already runs eagerly). We re-run the full check by walking the
 		// children and validating each one against the children registered
 		// before it in iteration order.
