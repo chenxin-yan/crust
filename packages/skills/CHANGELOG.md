@@ -1,5 +1,54 @@
 # @crustjs/skills
 
+## 0.2.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/0001`–`0009`):
+
+  - Extensions replace plugins: `@crustjs/extensions` package, `defineExtension(name, config)` plain frozen configs with `intercept(ctx, next)` and `handleError` presentation chain; `.use()` removed.
+  - Contexts are command dependencies: `defineContext(name, config?, setup)` always returns a factory, attached with the variadic `.provide(...)`, constructed topologically by declared `requires` dependencies (values arrive via `ctx`), and disposed via native `Symbol.dispose`/`Symbol.asyncDispose` in reverse construction order.
+  - `.handle(handler)` defines the Command Handler; `.run(argv, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. `preRun`/`postRun` removed.
+  - `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` removed; handler and Context errors pass through unwrapped.
+  - Standard Schema supported directly on arg/flag definitions; `@crustjs/validate` removed.
+  - Public `CommandNode`/`prepareCommandTree()` removed; serializable Command Snapshots cross public boundaries; man/crust/skills consume the unsupported `@crustjs/core/tooling` subpath.
+  - `create-crust` ships a single minimal template.
+
+  This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed above.
+
+- [#164](https://github.com/chenxin-yan/crust/pull/164) [`2a3250e`](https://github.com/chenxin-yan/crust/commit/2a3250e3e78fc780b873ae9a1b4069997b1f0235) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add a shared presentation-neutral command documentation model to `@crustjs/core/tooling` and use it for help, mdoc, and Agent Skill rendering.
+
+  Help headings now follow conventional title case and list negation for every long alias. Man pages use semantic mdoc flag and argument macros. Generated skills omit hidden commands.
+
+- [#149](https://github.com/chenxin-yan/crust/pull/149) [`db943af`](https://github.com/chenxin-yan/crust/commit/db943af22e3d7e8766b396edd845487368040435) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `ExtensionConfig.commands` now accepts only `defineCommand()` definitions. Migrate extension-owned `new Crust("name")` builders to `defineCommand("name", (command) => ...)`; `ExtensionCommand` is removed. Definition Context requirements are checked when the application prepares and report `DEFINITION` errors.
+
+- [#146](https://github.com/chenxin-yan/crust/pull/146) [`eb0add9`](https://github.com/chenxin-yan/crust/commit/eb0add9272d93f734ecf321e0b481a0aaf6da57e) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace Extension `intercept(ctx, next)` and `handleError(error, ctx, next)` with named `hooks`: `preRun(ctx)`, `postRun(ctx, outcome)`, and `onError(error, ctx)`. `preRun` returns `ctx.finish()` to short-circuit successfully; `postRun` runs in reverse extension order after every settled invocation; `onError` returns `true` after rendering an `execute()` failure.
+
+  Command Handlers now receive `rootCommand`, including handlers for Extension-owned commands. Migrate Extension-owned routing work into real `.handle()` callbacks.
+
+- [#169](https://github.com/chenxin-yan/crust/pull/169) [`048edf2`](https://github.com/chenxin-yan/crust/commit/048edf27d71b05e89426010064bf7c5be37fc0c6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Consolidate public naming conventions:
+
+  - `@crustjs/extensions`: Name the version extension options `VersionOptions` (matching `CompletionOptions`, `DidYouMeanOptions`, and `UpdateNotifierOptions`).
+  - `@crustjs/skills`: Rename `skillStatus()` to `getSkillStatus()`; rename `GenerateOptions`/`GenerateResult` to `GenerateSkillOptions`/`GenerateSkillResult`, `UninstallOptions`/`UninstallResult` to `UninstallSkillOptions`/`UninstallSkillResult`, and `StatusOptions`/`StatusResult` to `SkillStatusOptions`/`SkillStatusResult` (domain-qualified, collision-safe names).
+  - `@crustjs/testing`: Name the interactive runner `runInteractive()` (verb-first, consistent with `captureRun` and `captureExecute`).
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the identity `resolveSkillName` export and simplify skill detection, rendering, installation, and reconciliation internals. Bundle `SKILL.md` frontmatter is now parsed with a real YAML parser: frontmatter without a closing `---` fence is rejected (previously partially tolerated), and frontmatter longer than 50 lines now parses correctly.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove compatibility for legacy `use-*` skill install paths, manifests without a `kind`, unknown future manifest kinds, the string form of `detectInstalledAgents()`, and its unused `scope` and `home` options.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [`c962196`](https://github.com/chenxin-yan/crust/commit/c962196c777401f9627ab70bc4453ac5a62a8233) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Bundle the shared internal utilities into each consumer so `@crustjs/utils` is no longer installed as a runtime dependency.
+
+- Updated dependencies [[`30a75dd`](https://github.com/chenxin-yan/crust/commit/30a75dddf9256c102a1ead7165cc81ef1c4ec0f5), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`048edf2`](https://github.com/chenxin-yan/crust/commit/048edf27d71b05e89426010064bf7c5be37fc0c6), [`555b150`](https://github.com/chenxin-yan/crust/commit/555b1506b4eb0670bb82f8fddb5ec41118d7c257), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`ff01466`](https://github.com/chenxin-yan/crust/commit/ff01466931a7f0616ac01e9ea6be2285f702344f), [`d535dbb`](https://github.com/chenxin-yan/crust/commit/d535dbb64dd0e0a16efb7ed4e6c3c4371484c4a9), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`26c65bf`](https://github.com/chenxin-yan/crust/commit/26c65bf4be897e715974381a6be1c0367dc38e43), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`49b5d75`](https://github.com/chenxin-yan/crust/commit/49b5d75850ce6c4deb52384f5ad4c240f27f36a7), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2), [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8), [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8)]:
+  - @crustjs/style@0.3.0
+  - @crustjs/progress@0.1.0
+  - @crustjs/prompts@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes

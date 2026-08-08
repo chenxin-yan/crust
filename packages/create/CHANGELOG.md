@@ -1,5 +1,19 @@
 # @crustjs/create
 
+## 0.1.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the unused `isGitInstalled` API and simplify scaffolding, build, path, and persistence internals.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [`c962196`](https://github.com/chenxin-yan/crust/commit/c962196c777401f9627ab70bc4453ac5a62a8233) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Bundle the shared internal utilities into each consumer so `@crustjs/utils` is no longer installed as a runtime dependency.
+
 ## 0.0.7
 
 ### Patch Changes

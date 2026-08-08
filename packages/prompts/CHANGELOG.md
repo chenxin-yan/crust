@@ -1,5 +1,46 @@
 # @crustjs/prompts
 
+## 0.2.0
+
+### Minor Changes
+
+- [#169](https://github.com/chenxin-yan/crust/pull/169) [`048edf2`](https://github.com/chenxin-yan/crust/commit/048edf27d71b05e89426010064bf7c5be37fc0c6) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove `createTheme` from `@crustjs/prompts` and `@crustjs/progress`. It was a redundant wrapper: partial theme overrides already merge onto `defaultTheme` themselves. Replace `createTheme({...})` with a plain partial theme passed to `createPrompts({ theme: {...} })` / `createProgress({ theme: {...} })` or a per-call `theme` option. To read the fully resolved theme (e.g. for custom `runPrompt` renderers), use the `theme` property on a `createPrompts` instance.
+
+- [#170](https://github.com/chenxin-yan/crust/pull/170) [`555b150`](https://github.com/chenxin-yan/crust/commit/555b1506b4eb0670bb82f8fddb5ec41118d7c257) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Replace global theme state with explicit themed instances (breaking):
+
+  - Removed `setTheme` from both packages and `getTheme` from `@crustjs/prompts`. There is no module-global theme anymore.
+  - New `createPrompts({ theme })` in `@crustjs/prompts` returns all prompt functions bound to a theme, plus the resolved `theme` for custom `runPrompt` renderers.
+  - New `createProgress({ theme })` in `@crustjs/progress` returns themed `progress`/`spinner`.
+  - `runPrompt`'s `theme` config is now an optional partial merged onto `defaultTheme`.
+  - Resolution order everywhere: `defaultTheme` ← instance theme ← per-call `theme` option.
+
+  Migration: `setTheme({...})` → `const p = createPrompts({ theme: {...} })` and call `p.input(...)` etc.; `getTheme()` → `p.theme`.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Prompt cancellation (Ctrl+C) now rejects with a standard `DOMException` named `"AbortError"` instead of the removed `CancelledError` class. Check `err.name === "AbortError"` to detect cancellation.
+
+- [#141](https://github.com/chenxin-yan/crust/pull/141) [`26c65bf`](https://github.com/chenxin-yan/crust/commit/26c65bf4be897e715974381a6be1c0367dc38e43) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add injectable prompt IO through optional `io` parameters and `withPromptIO()`, plus `@crustjs/prompts/testing` helpers for fake TTY prompt tests.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Remove the deprecated spinner exports; import spinner APIs from `@crustjs/progress`. Validator functions now follow the `void` return contract without checking for legacy return values.
+
+- [`49b5d75`](https://github.com/chenxin-yan/crust/commit/49b5d75850ce6c4deb52384f5ad4c240f27f36a7) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Removed the `stripAnsi` re-export from `@crustjs/prompts/testing`. It was a one-line wrapper around Node's `stripVTControlCharacters`; import that from `node:util` (or use `Bun.stripANSI()`) instead.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Require Bun 1.3.14 or newer across all published packages and remove the obsolete sync-disposal workaround now that `AsyncDisposableStack.use()` supports `Symbol.dispose`.
+
+- [#168](https://github.com/chenxin-yan/crust/pull/168) [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Standardize Standard Schema usage on the dedicated `schema` option for `input()` and `password()`.
+
+  This is a breaking API change. Migrate `input({ validate: schema })` to `input({ schema })` (and likewise for `password`). The `validate` option is function-only again, and cannot be combined with `schema`.
+
+### Patch Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Documentation consolidation: package READMEs are now concise stubs linking to the docs site (crustjs.com), unique README content moved into the docs, and public option/type TSDoc was enriched (descriptions, `@default` tags) to back generated API reference tables. No runtime behavior changes.
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Deduplicate prompt internals, remove the unused progress `getTheme` export, and simplify spinner and man-page rendering.
+
+- [#168](https://github.com/chenxin-yan/crust/pull/168) [`275d6a7`](https://github.com/chenxin-yan/crust/commit/275d6a74dc0095089a5f1769b37a1dbd35b656c8) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Vendor the Standard Schema protocol types, as recommended by the specification, and remove `@standard-schema/spec` from runtime dependencies. This does not change the public API or runtime behavior, and published declarations no longer reference the spec package.
+
+- Updated dependencies [[`30a75dd`](https://github.com/chenxin-yan/crust/commit/30a75dddf9256c102a1ead7165cc81ef1c4ec0f5), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2), [`40fb8bd`](https://github.com/chenxin-yan/crust/commit/40fb8bd8346a2d248a454104f580b88231377bf2)]:
+  - @crustjs/style@0.3.0
+
 ## 0.1.0
 
 ### Minor Changes
@@ -9,6 +50,7 @@
   The `validate` option on `input()` and `password()` is now polymorphic. In addition to the existing function shape — `(value: string) => true | string | Promise<true | string>` — you can pass any [Standard Schema v1](https://standardschema.dev/) object directly (Zod 4, Valibot, Effect Schema's `Schema.standardSchemaV1(...)`, ArkType, …).
 
   When a schema is supplied, the prompt:
+
   1. Parses the raw input on submit by `await`ing `schema['~standard'].validate(submitValue)` (so async schemas like Zod's `refine(async ...)` are supported).
   2. Renders the **first** issue's `message` inline on rejection, falling back to `"Validation failed"` when the issue message is empty.
   3. Resolves to the schema's **transformed output** type on success — no second-pass parse step.
@@ -19,8 +61,8 @@
   import { z } from "zod";
 
   const port = await input({
-  	message: "Port?",
-  	validate: z.coerce.number().int().min(1),
+    message: "Port?",
+    validate: z.coerce.number().int().min(1),
   });
   //    ^? number
   ```
@@ -53,16 +95,16 @@
   ```ts
   // Before
   input({
-  	message: "Email?",
-  	validate: (v) => v.includes("@") || "Must contain @",
+    message: "Email?",
+    validate: (v) => v.includes("@") || "Must contain @",
   });
 
   // After
   input({
-  	message: "Email?",
-  	validate: (v) => {
-  		if (!v.includes("@")) throw new Error("Must contain @");
-  	},
+    message: "Email?",
+    validate: (v) => {
+      if (!v.includes("@")) throw new Error("Must contain @");
+    },
   });
   ```
 
