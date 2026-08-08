@@ -79,7 +79,7 @@ export function buildSiteJsonLd(): HeadScript[] {
       children: JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Organization",
-        name: "CrustJS",
+        name: siteConfig.name,
         url: siteConfig.siteUrl,
         logo: absoluteUrl("/favicon-96x96.png"),
         sameAs: [siteConfig.githubUrl, siteConfig.npmUrl, siteConfig.discordUrl],
@@ -100,7 +100,7 @@ export function buildSiteJsonLd(): HeadScript[] {
       children: JSON.stringify({
         "@context": "https://schema.org",
         "@type": "SoftwareSourceCode",
-        name: "CrustJS",
+        name: siteConfig.name,
         description: siteConfig.defaultDescription,
         url: siteConfig.siteUrl,
         codeRepository: siteConfig.githubUrl,

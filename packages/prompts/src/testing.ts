@@ -3,11 +3,6 @@ import { stripVTControlCharacters } from "node:util";
 
 import type { PromptIO } from "./core/renderer.ts";
 
-/** Remove ANSI control sequences from terminal output. */
-export function stripAnsi(text: string): string {
-	return stripVTControlCharacters(text);
-}
-
 const namedKeys: Record<string, string> = {
 	return: "\r",
 	enter: "\r",
@@ -151,7 +146,7 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 		keys: (...keys) => {
 			for (const key of keys) input.write(encodeKey(key));
 		},
-		screen: () => stripAnsi(terminal.screen()),
+		screen: () => stripVTControlCharacters(terminal.screen()),
 		output: () => transcript,
 	};
 }
