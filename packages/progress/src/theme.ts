@@ -13,17 +13,14 @@ export const defaultTheme: ProgressTheme = {
 	error: red,
 };
 
-let globalOverrides: PartialProgressTheme | undefined;
-
-export function setTheme(theme?: PartialProgressTheme): void {
-	globalOverrides = theme;
-}
-
+/**
+ * Resolve a complete theme by merging partial overrides onto
+ * {@link defaultTheme}. Instance themes from `createProgress` are
+ * pre-merged into the per-call overrides before this runs.
+ *
+ * @internal — Indicator implementations call this; users do not need to.
+ */
 export function resolveTheme(progressTheme?: PartialProgressTheme): ProgressTheme {
-	if (!globalOverrides && !progressTheme) return defaultTheme;
-	return {
-		...defaultTheme,
-		...globalOverrides,
-		...progressTheme,
-	};
+	if (!progressTheme) return defaultTheme;
+	return { ...defaultTheme, ...progressTheme };
 }

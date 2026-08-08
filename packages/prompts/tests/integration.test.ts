@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 // ────────────────────────────────────────────────────────────────────────────
 // Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────
@@ -8,12 +8,12 @@ import {
 	// Prompts
 	confirm,
 	// Theme
+	createPrompts,
 	defaultTheme,
 	filter,
 	// Utilities
 	fuzzyFilter,
 	fuzzyMatch,
-	getTheme,
 	input,
 	multifilter,
 	multiselect,
@@ -21,8 +21,8 @@ import {
 	NonInteractiveError,
 	normalizeChoices,
 	password,
+	prompts,
 	select,
-	setTheme,
 } from "../src/index.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -30,8 +30,8 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("theme integration", () => {
-	it("getTheme returns a valid theme with all slots defined", () => {
-		const theme = getTheme();
+	it("prompts singleton exposes a valid theme with all slots defined", () => {
+		const theme = prompts.theme;
 
 		const requiredSlots: (keyof PromptTheme)[] = [
 			"prefix",
@@ -53,7 +53,7 @@ describe("theme integration", () => {
 	});
 
 	it("every theme slot produces a string", () => {
-		const theme = getTheme();
+		const theme = prompts.theme;
 
 		for (const key of Object.keys(theme)) {
 			const fn = theme[key as keyof PromptTheme];
@@ -62,20 +62,14 @@ describe("theme integration", () => {
 		}
 	});
 
-	afterEach(() => {
-		setTheme();
-	});
+	it("createPrompts applies instance overrides through the barrel", () => {
+		const instanceFn = (text: string) => `(${text})`;
+		const p = createPrompts({ theme: { prefix: instanceFn } });
 
-	it("setTheme applies global overrides via getTheme", () => {
-		const globalFn = (text: string) => `(${text})`;
-		setTheme({ prefix: globalFn });
-
-		const theme = getTheme();
-
-		expect(theme.prefix("x")).toBe("(x)");
+		expect(p.theme.prefix("x")).toBe("(x)");
 		// Other slots retain defaults
-		expect(theme.message).toBe(defaultTheme.message);
-		expect(theme.cursor).toBe(defaultTheme.cursor);
+		expect(p.theme.message).toBe(defaultTheme.message);
+		expect(p.theme.cursor).toBe(defaultTheme.cursor);
 	});
 });
 

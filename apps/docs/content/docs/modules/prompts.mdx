@@ -295,23 +295,27 @@ All prompts share a theming system with 10 style slots. Each slot is a `StyleFn`
 
 ### Custom Themes
 
+There is no global theme state. Create a themed instance with `createPrompts` — it exposes the same prompt functions bound to your theme:
+
 ```ts
-import { setTheme, input } from "@crustjs/prompts";
+import { createPrompts } from "@crustjs/prompts";
 import { magenta, cyan, italic } from "@crustjs/style";
 
 // Partial overrides; unspecified slots keep their defaults
-setTheme({ prefix: magenta, success: cyan });
+const p = createPrompts({ theme: { prefix: magenta, success: cyan } });
 
-const name = await input({
+const name = await p.input({
   message: "Name?",
   theme: { message: italic },
 });
 ```
 
+The bare exports (`input`, `select`, …) and the `prompts` singleton use `defaultTheme`.
+
 Theme resolution order, from lowest to highest priority:
 
 1. `defaultTheme`
-2. Global overrides from `setTheme()`
+2. Instance theme from `createPrompts()`
 3. Per-prompt overrides from the `theme` option
 
 ## Non-Interactive Environments
@@ -345,7 +349,6 @@ The low-level `runPrompt(config, io?)` API lets you build custom interactive pro
 ```ts
 import { runPrompt, submit } from "@crustjs/prompts";
 import type { KeypressEvent } from "@crustjs/prompts";
-import { getTheme } from "@crustjs/prompts";
 
 interface CounterState {
   count: number;
@@ -353,7 +356,8 @@ interface CounterState {
 
 const result = await runPrompt<CounterState, number>({
   initialState: { count: 0 },
-  theme: getTheme(),
+  // theme is optional: partial overrides merge onto defaultTheme.
+  // Pass an instance theme (createPrompts().theme) to match themed prompts.
   render: (state, theme) => `${theme.prefix("○")} Count: ${state.count}`,
   handleKey: (key, state) => {
     if (key.name === "return") return submit(state.count);
@@ -399,11 +403,11 @@ Only one prompt can be active per input or output stream. Prompts on fully disti
 
 ### Theme
 
-| Export         | Description                                                                                          |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| `defaultTheme` | Default prompt theme                                                                                 |
-| `setTheme`     | Set the global theme for all prompts                                                                 |
-| `getTheme`     | Get the current resolved global theme (equivalent to prompt resolution without per-prompt overrides) |
+| Export          | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `defaultTheme`  | Default prompt theme                                             |
+| `createPrompts` | Create a themed instance exposing all prompt functions           |
+| `prompts`       | Default instance using `defaultTheme` (mirrors the bare exports) |
 
 ### Renderer
 
