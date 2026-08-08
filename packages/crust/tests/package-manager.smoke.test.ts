@@ -16,22 +16,22 @@ const packDir = join(testRoot, "packs");
 
 function resolveHostTarget(): string {
 	if (process.platform === "darwin" && process.arch === "arm64") {
-		return "darwin-arm64";
+		return "bun-darwin-arm64";
 	}
 	if (process.platform === "darwin" && process.arch === "x64") {
-		return "darwin-x64";
+		return "bun-darwin-x64";
 	}
 	if (process.platform === "linux" && process.arch === "arm64") {
-		return "linux-arm64";
+		return "bun-linux-arm64";
 	}
 	if (process.platform === "linux" && process.arch === "x64") {
-		return "linux-x64";
+		return "bun-linux-x64-baseline";
 	}
 	if (process.platform === "win32" && process.arch === "arm64") {
-		return "windows-arm64";
+		return "bun-windows-arm64";
 	}
 	if (process.platform === "win32" && process.arch === "x64") {
-		return "windows-x64";
+		return "bun-windows-x64-baseline";
 	}
 
 	throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);

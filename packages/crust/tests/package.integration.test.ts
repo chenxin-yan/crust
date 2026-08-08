@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Crust } from "@crustjs/core";
 
 import { buildCommand } from "../src/commands/build.ts";
+import { SUPPORTED_TARGETS, TARGET_INFO } from "../src/utils/build-helpers.ts";
 
 const tmpDir = join(import.meta.dir, ".tmp-stage");
 const originalCwd = process.cwd;
@@ -77,9 +78,9 @@ describe("crust build --package integration", () => {
 		await runBuild([
 			"--package",
 			"--target",
-			"linux-x64",
+			"bun-linux-x64-baseline",
 			"--target",
-			"darwin-arm64",
+			"bun-darwin-arm64",
 			"--stage-dir",
 			".stage",
 			"--no-validate",
@@ -110,7 +111,7 @@ describe("crust build --package integration", () => {
 		await runBuild([
 			"--package",
 			"--target",
-			"linux-x64",
+			"bun-linux-x64-baseline",
 			"--stage-dir",
 			".subset",
 			"--no-validate",
@@ -125,13 +126,16 @@ describe("crust build --package integration", () => {
 		"executes the staged JS resolver through Node on the host platform",
 		async () => {
 			const hostTarget = getHostTarget();
+			const hostBunTarget = SUPPORTED_TARGETS.find(
+				(target) => TARGET_INFO[target].alias === hostTarget,
+			);
 			const nodePath = Bun.which("node");
-			if (!hostTarget || !nodePath) return;
+			if (!hostTarget || !hostBunTarget || !nodePath) return;
 
 			await runBuild([
 				"--package",
 				"--target",
-				hostTarget,
+				hostBunTarget,
 				"--stage-dir",
 				".host",
 				"--no-validate",

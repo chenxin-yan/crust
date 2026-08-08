@@ -1,10 +1,10 @@
-import { prepareCommandSnapshot } from "@crustjs/core/tooling";
+import type { CommandSnapshot } from "@crustjs/core/tooling";
 
 import { renderManPageMdoc } from "./mdoc.ts";
 
 export interface WriteManPageOptions {
-	/** Root Crust builder for your CLI. */
-	app: Parameters<typeof prepareCommandSnapshot>[0];
+	/** Root Crust builder for your CLI, typed structurally across bundled entry points. */
+	app: { snapshot(): Promise<CommandSnapshot> };
 	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
 	name: string;
 	/** Output path (e.g. `man/mycli.1`). Parent directories are created. */
@@ -26,7 +26,7 @@ export interface WriteManPageOptions {
 export async function writeManPage(options: WriteManPageOptions): Promise<void> {
 	const { app, name, outfile, section = 1, date } = options;
 
-	const root = await prepareCommandSnapshot(app);
+	const root = await app.snapshot();
 
 	const mdoc = renderManPageMdoc({ root, name, section, date });
 	await Bun.write(outfile, mdoc);

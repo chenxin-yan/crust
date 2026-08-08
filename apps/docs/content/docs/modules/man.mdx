@@ -64,7 +64,7 @@ const source = renderManPageMdoc({
 
 The renderer uses semantic mdoc(7) flag and argument macros. It intentionally summarizes only the root command's immediate visible subcommands; nested commands remain available in the shared full-tree documentation model.
 
-The package uses the explicitly unsupported `prepareCommandSnapshot()` and `buildCommandDocumentation()` bridge from `@crustjs/core/tooling` internally. That bridge is for lockstep first-party tooling, not application code.
+The package prepares the command tree through the supported `app.snapshot()` method. It uses `buildCommandDocumentation()` from `@crustjs/core/tooling` internally for its lockstep first-party rendering model.
 
 ## Package script
 

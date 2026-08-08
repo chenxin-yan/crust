@@ -1,16 +1,11 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/core/tooling — explicitly unsupported tooling bridge
+// @crustjs/core/tooling — shared tooling models and utilities
 //
-// Limited to serializable Command Snapshot preparation and the
-// build-validation protocol. No stability guarantees: first-party tooling
-// (man pages, skills, crust build) moves in lockstep with core.
+// Crust.snapshot() is the supported Command Snapshot preparation API. This
+// subpath provides the snapshot type plus lockstep first-party tooling helpers.
 // ────────────────────────────────────────────────────────────────────────────
 
-export {
-	prepareCommandSnapshot,
-	VALIDATION_FORCE_EXIT_ENV,
-	VALIDATION_MODE_ENV,
-} from "./command/crust.ts";
+export { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";
 export { buildCommandDocumentation } from "./command/documentation.ts";
 export type {
 	CommandDocumentation,
@@ -19,3 +14,4 @@ export type {
 	UsageSegment,
 } from "./command/documentation.ts";
 export { snapshotCommand } from "./command/snapshot.ts";
+export type { CommandSnapshot } from "./command/snapshot.ts";

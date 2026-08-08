@@ -19,7 +19,6 @@ import {
 	resolveBunBuildRunner,
 	resolveTarget,
 	SUPPORTED_TARGETS,
-	TARGET_ALIASES,
 } from "../../src/utils/build-helpers.ts";
 
 /**
@@ -125,13 +124,18 @@ describe("buildCommand definition", () => {
 	});
 
 	it("defines --target/-t as repeatable string flag", async () => {
-		const result = await parseBuildArgs(["--target", "linux-x64", "--target", "darwin-arm64"]);
-		expect(result.flags.target).toEqual(["linux-x64", "darwin-arm64"]);
+		const result = await parseBuildArgs([
+			"--target",
+			"bun-linux-x64-baseline",
+			"--target",
+			"bun-darwin-arm64",
+		]);
+		expect(result.flags.target).toEqual(["bun-linux-x64-baseline", "bun-darwin-arm64"]);
 	});
 
 	it("supports -t alias for --target", async () => {
-		const result = await parseBuildArgs(["-t", "linux-x64"]);
-		expect(result.flags.target).toEqual(["linux-x64"]);
+		const result = await parseBuildArgs(["-t", "bun-linux-x64-baseline"]);
+		expect(result.flags.target).toEqual(["bun-linux-x64-baseline"]);
 	});
 
 	it("has a run function", () => {
@@ -199,19 +203,17 @@ describe("resolveBunBuildRunner", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("resolveTarget", () => {
-	it("resolves short alias to full Bun target", () => {
-		expect(resolveTarget("linux-x64")).toBe("bun-linux-x64-baseline");
-		expect(resolveTarget("linux-arm64")).toBe("bun-linux-arm64");
-		expect(resolveTarget("darwin-x64")).toBe("bun-darwin-x64");
-		expect(resolveTarget("darwin-arm64")).toBe("bun-darwin-arm64");
-		expect(resolveTarget("windows-x64")).toBe("bun-windows-x64-baseline");
-		expect(resolveTarget("windows-arm64")).toBe("bun-windows-arm64");
-	});
-
 	it("accepts full Bun target names directly", () => {
 		for (const target of SUPPORTED_TARGETS) {
 			expect(resolveTarget(target)).toBe(target);
 		}
+	});
+
+	it("rejects short target names with canonical-name guidance", () => {
+		expect(() => resolveTarget("linux-x64")).toThrow(
+			'Unknown target "linux-x64". Targets must use canonical Bun names.',
+		);
+		expect(() => resolveTarget("linux-x64")).toThrow(/Valid targets: bun-linux-x64-baseline/);
 	});
 
 	it("throws on unknown target", () => {
@@ -220,13 +222,6 @@ describe("resolveTarget", () => {
 
 	it("error message includes valid targets", () => {
 		expect(() => resolveTarget("nope")).toThrow(/Valid targets/);
-	});
-
-	it("all aliases map to supported targets", () => {
-		for (const [alias, target] of Object.entries(TARGET_ALIASES)) {
-			expect(SUPPORTED_TARGETS).toContain(target);
-			expect(resolveTarget(alias)).toBe(target);
-		}
 	});
 });
 
@@ -578,7 +573,7 @@ describe("buildCommand error handling", () => {
 			const app = new Crust("test").mount(buildCommand);
 
 			await app.execute({
-				argv: ["build", "--entry", "nonexistent.ts", "--target", "linux-x64"],
+				argv: ["build", "--entry", "nonexistent.ts", "--target", "bun-linux-x64-baseline"],
 			});
 
 			expect(process.exitCode).toBe(1);

@@ -34,6 +34,6 @@ The default `crust build` output is a raw binary and resolver script. Use it for
 
 ## Generated man pages
 
-`crust build --man` loads the exported root `Crust` builder, prepares its Command Snapshot through the unsupported tooling bridge, and writes `<outdir>/man/<name>.1`. See [`@crustjs/man`](/docs/modules/man).
+`crust build --man` loads the exported root `Crust` builder, prepares its Command Snapshot through `app.snapshot()`, and writes `<outdir>/man/<name>.1`. See [`@crustjs/man`](/docs/modules/man).
 
 Install this package only as a development dependency; generated applications do not need it at runtime.

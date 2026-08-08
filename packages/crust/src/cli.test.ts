@@ -9,8 +9,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { prepareCommandSnapshot } from "@crustjs/core/tooling";
-
 import pkg from "../package.json";
 import { crustBase } from "./app.ts";
 import { buildCommand } from "./commands/build.ts";
@@ -76,20 +74,20 @@ describe("crust CLI entry point", () => {
 	describe("root command", () => {
 		it("should have correct meta", async () => {
 			const app = makeCrustApp();
-			const root = await prepareCommandSnapshot(app);
+			const root = await app.snapshot();
 			expect(root.meta.name).toBe("crust");
 			expect(root.meta.description).toBe("CLI tooling for the Crust framework");
 		});
 
 		it("should use extensions for root behavior", async () => {
 			const app = makeCrustApp();
-			const root = await prepareCommandSnapshot(app);
+			const root = await app.snapshot();
 			expect(root.hasHandler).toBe(false);
 		});
 
 		it("should have build and publish as subcommands", async () => {
 			const app = makeCrustApp();
-			const root = await prepareCommandSnapshot(app);
+			const root = await app.snapshot();
 			expect(root.subCommands).toBeDefined();
 			expect(root.subCommands.build).toBeDefined();
 			expect(root.subCommands.publish).toBeDefined();
@@ -179,7 +177,7 @@ describe("crust CLI entry point", () => {
 	describe("self-hosting verification", () => {
 		it("should use the cli builder from @crustjs/core (dogfooding)", async () => {
 			const app = makeCrustApp();
-			const root = await prepareCommandSnapshot(app);
+			const root = await app.snapshot();
 			expect(root.meta).toBeDefined();
 			expect(root.subCommands).toBeDefined();
 		});

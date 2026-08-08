@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 
 import { buildCommand } from "../../src/commands/build.ts";
+import { SUPPORTED_TARGETS, TARGET_INFO } from "../../src/utils/build-helpers.ts";
 
 function getHostTarget(): string | null {
 	if (process.platform === "darwin" && process.arch === "arm64") {
@@ -32,6 +33,11 @@ function getHostTarget(): string | null {
 	}
 
 	return null;
+}
+
+function getHostBunTarget(): string | null {
+	const hostTarget = getHostTarget();
+	return SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === hostTarget) ?? null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -87,7 +93,7 @@ console.log("hello from crust build test");
 					"--outfile",
 					join(tmpDir, "dist", "test-cli"),
 					"--target",
-					"darwin-arm64",
+					"bun-darwin-arm64",
 				],
 			});
 		} finally {
@@ -149,7 +155,7 @@ console.log("hello from crust build test");
 					outPath,
 					"--no-minify",
 					"--target",
-					"darwin-arm64",
+					"bun-darwin-arm64",
 				],
 			});
 		} finally {
@@ -173,7 +179,7 @@ console.log("hello from crust build test");
 		try {
 			const app = new Crust("test").mount(buildCommand);
 			await app.execute({
-				argv: ["build", "--entry", "src/cli.ts", "--target", "darwin-arm64"],
+				argv: ["build", "--entry", "src/cli.ts", "--target", "bun-darwin-arm64"],
 			});
 		} finally {
 			console.log = originalLog;
@@ -185,10 +191,10 @@ console.log("hello from crust build test");
 		expect(logs.some((l) => l.includes(expectedOut))).toBe(true);
 	});
 
-	it.skipIf(getHostTarget() === null)(
+	it.skipIf(getHostBunTarget() === null)(
 		"applies --env-file to validation and embeds PUBLIC_ constants only",
 		async () => {
-			const hostTarget = getHostTarget();
+			const hostTarget = getHostBunTarget();
 			if (!hostTarget) return;
 
 			const prevCwd = process.cwd;
@@ -257,10 +263,10 @@ console.log(JSON.stringify({
 		},
 	);
 
-	it.skipIf(getHostTarget() === null)(
+	it.skipIf(getHostBunTarget() === null)(
 		"uses Bun auto-loaded cwd env to embed PUBLIC_ constants when --env-file is omitted",
 		async () => {
-			const hostTarget = getHostTarget();
+			const hostTarget = getHostBunTarget();
 			if (!hostTarget) return;
 
 			const autoloadDir = join(tmpDir, "autoload-workspace");

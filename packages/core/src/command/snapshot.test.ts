@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
 import { defineFlag } from "../api/flags.ts";
-import { Crust, defineCommand, prepareCommandSnapshot } from "./crust.ts";
+import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -67,7 +67,7 @@ describe("snapshotCommand", () => {
 			.provide(auth())
 			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
 
-		const snapshot = await prepareCommandSnapshot(app);
+		const snapshot = await app.snapshot();
 		expect(snapshot.flags["api-key"]).toEqual({
 			type: "string",
 			short: "k",
