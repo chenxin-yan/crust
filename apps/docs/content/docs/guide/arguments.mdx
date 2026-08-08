@@ -3,7 +3,7 @@ title: Arguments
 description: Define typed positional inputs for a command.
 ---
 
-`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Pass values from `defineArg(name, def)` or inline literals:
+`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Repeated `.args()` calls append in call order, and a duplicate name throws a `DEFINITION` error. Pass values from `defineArg(name, def)` or inline literals:
 
 ```ts
 import { Crust } from "@crustjs/core";

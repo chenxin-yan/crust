@@ -277,6 +277,15 @@ describe("Crust .args()", () => {
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
 	});
 
+	it("throws CrustError DEFINITION on an arg definition without a name", () => {
+		expect(() =>
+			new Crust("test").args(
+				// @ts-expect-error -- missing name is also guarded at runtime
+				{ type: "string" },
+			),
+		).toThrow(/Every argument definition must carry a non-empty name/);
+	});
+
 	it("throws CrustError DEFINITION on duplicate arg names", () => {
 		expect(() =>
 			new Crust("test")

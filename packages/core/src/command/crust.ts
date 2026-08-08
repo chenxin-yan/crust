@@ -260,8 +260,9 @@ type ContextRequirementErrors<Ctx extends ContextMap, Required extends ContextMa
 
 type DefinitionRequirements<D> = D extends CommandDefinition<infer R> ? R : never;
 
-// Bare `Crust` uses broad `ArgsDef` for structural consumers; its first concrete
-// `.args()` call establishes the tuple, while already-refined builders append.
+// Bare `Crust` uses broad `ArgsDef` for structural consumers; a `.args()` call on
+// that broad type only reflects the new defs (runtime still appends to any args a
+// widened builder already carries), while already-refined builders append in-type.
 type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
 	? NewA
 	: readonly [...A, ...NewA];
@@ -491,8 +492,10 @@ export class Crust<
 	 * with the combined local flag types. The original builder is not mutated.
 	 *
 	 * NOTE: Compile-time ancestor-owned/local cross-collision checks are intentionally
-	 * omitted here to reduce TypeScript type-check cost in large projects.
-	 * Runtime collision checks still run during parsing and command-tree validation.
+	 * omitted here to reduce TypeScript type-check cost in large projects; the same
+	 * applies to same-name flags across chained `.flags()` calls, where the type level
+	 * merges (later wins) while runtime throws. Runtime collision checks still run
+	 * during parsing and command-tree validation.
 	 *
 	 * @param defs - Named flag definitions
 	 * @returns A new `Crust` instance with the given flags
@@ -517,7 +520,7 @@ export class Crust<
 					reason: "missing-name",
 				});
 			}
-			if (name in copiedFlags) {
+			if (Object.hasOwn(copiedFlags, name)) {
 				throw new CrustError("DEFINITION", `Flag "--${name}" is already defined`, {
 					subject: "flag",
 					name,
@@ -564,7 +567,18 @@ export class Crust<
 	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
-			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
+			const argName = (def as ArgDef).name;
+			if (typeof argName !== "string" || argName.length === 0) {
+				throw new CrustError(
+					"DEFINITION",
+					"Every argument definition must carry a non-empty name",
+					{
+						subject: "arg",
+						reason: "missing-name",
+					},
+				);
+			}
+			validateSchemaExclusivity("arg", argName, record);
 			// Schema args receive raw strings: a parser `type` would coerce first
 			if (record.schema !== undefined && record.type !== undefined) {
 				throw new CrustError(
