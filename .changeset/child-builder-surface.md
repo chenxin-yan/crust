@@ -5,7 +5,7 @@
 
 Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked attachment with the variadic `.add(...definitions)`.
 
-A definition carries its own name and lists the Context capabilities it needs from its attach site in a plain `requires` array. Every requirement is checked at the `.add()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every `.add()` materializes a fresh command under the definition's carried name; use `.as(newName)` to add one definition under multiple names or parents, and definitions can `.add()` other definitions.
+A definition carries its own name and lists the Context capabilities it needs from its parent in a plain `requires` array. Every requirement is checked at the `.add()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every `.add()` materializes a fresh command under the definition's carried name; use `.as(newName)` to add one definition under multiple names or parents, and definitions can `.add()` other definitions.
 
 Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.add(defineCommand("up", (command) => ...))`.
 

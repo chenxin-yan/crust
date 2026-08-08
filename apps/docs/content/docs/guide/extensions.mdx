@@ -20,7 +20,7 @@ See the [Extensions module](/docs/modules/extensions) for each capability's opti
 
 Two consequences of the root-only model:
 
-- Added definitions are materialized into ordinary command nodes before root Extensions prepare the application, so Extensions apply to added and inline commands alike.
+- Added definitions are materialized into ordinary command nodes before root Extensions prepare the application, so Extensions apply to every added command, inline or file-split.
 - Extension-owned flags are runtime parser inputs, not typed command capabilities. Use a Context-owned flag when downstream handlers need a typed value.
 
 ## Author an Extension
