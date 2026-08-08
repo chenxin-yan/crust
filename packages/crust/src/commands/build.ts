@@ -262,9 +262,9 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --entry src/main.ts             # Custom entry point
  * crust build --name my-tool                  # Output as dist/my-tool-*
  * crust build --no-minify                     # Disable minification
- * crust build --target linux-x64              # Build only for Linux x64
- * crust build --target linux-x64 --target darwin-arm64  # Specific platforms only
- * crust build --target linux-x64 --outfile ./my-cli     # Single target with custom output
+ * crust build --target bun-linux-x64-baseline              # Build only for Linux x64
+ * crust build --target bun-linux-x64-baseline --target bun-darwin-arm64  # Specific platforms only
+ * crust build --target bun-linux-x64-baseline --outfile ./my-cli     # Single target with custom output
  * crust build --outdir out                              # Output binaries to out/ directory
  * ```
  */
@@ -302,7 +302,7 @@ export const buildCommand = defineCommand("build", (command) =>
 				type: "string",
 				multiple: true,
 				description:
-					"Target platform(s) to compile for (e.g. linux-x64, darwin-arm64). Omit to build all.",
+					"Canonical Bun target(s) to compile for (e.g. bun-linux-x64-baseline, bun-darwin-arm64). Omit to build all.",
 				short: "t",
 			},
 			{
