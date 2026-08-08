@@ -762,9 +762,9 @@ type InferArgValue<A extends ArgDef> = A extends {
  *
  * Deliberately recursive rather than key-remapped over `A[number]`:
  * intersection turns duplicate arg names with conflicting types into
- * `never` (a conflict signal — there is no runtime duplicate-name check
- * for positional args), and a widened non-tuple `ArgsDef` resolves to
- * `{}` instead of a string-indexed record.
+ * `never`; builder registration also rejects duplicate positional names at
+ * runtime. A widened non-tuple `ArgsDef` resolves to `{}` instead of a
+ * string-indexed record.
  */
 type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
 	infer Head extends ArgDef,

@@ -307,7 +307,7 @@ describe("Context-owned flags", () => {
 		>;
 	});
 
-	it("keeps owned flags when later .flags() calls replace local flags", async () => {
+	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())

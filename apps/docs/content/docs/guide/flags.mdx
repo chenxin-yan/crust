@@ -3,8 +3,6 @@ title: Flags
 description: Define typed named inputs, aliases, repeated values, and shared flag capabilities.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
 `.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
 
 ```ts
@@ -20,11 +18,9 @@ const command = new Crust("serve")
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition. A duplicate name within one call is a `DEFINITION` error.
 
-<Callout type="warn">
-  Repeated `.flags()` calls **replace** the local flags — they do not merge. `.flags(a).flags(b)`
-  leaves only `b`. Pass all definitions in a single `.flags()` call. This differs from
-  Commander/yargs `.option()`, which is additive.
-</Callout>
+Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. Duplicate names, short forms, or aliases throw a `DEFINITION` error at the call that introduces the collision.
+
+Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.meta()` shallow-merges fields, while `.handle()` is set once and throws if called again.
 
 ## Aliases and negation
 

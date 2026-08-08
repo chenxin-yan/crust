@@ -27,6 +27,42 @@ describe("command definitions", () => {
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
 
+	it("accumulates chained flags and args on the definition builder", async () => {
+		let received:
+			| {
+					args: { source: string; destination: string };
+					flags: { verbose: boolean | undefined; output: string | undefined };
+			  }
+			| undefined;
+		const definition = defineCommand("copy", (command) =>
+			command
+				.flags({ name: "verbose", type: "boolean" })
+				.flags({ name: "output", type: "string" })
+				.args({ name: "source", type: "string", required: true })
+				.args({ name: "destination", type: "string", required: true })
+				.handle(({ args, flags }) => {
+					type _Source = Assert<IsEqual<typeof args.source, string>>;
+					type _Output = Assert<IsEqual<typeof flags.output, string | undefined>>;
+					received = { args, flags };
+				}),
+		);
+
+		await new Crust("cli")
+			.add(definition)
+			.run(["copy", "from", "to", "--verbose", "--output", "dist"]);
+		expect(received).toEqual({
+			args: { source: "from", destination: "to" },
+			flags: { verbose: true, output: "dist" },
+		});
+	});
+
+	it("rejects a second handler on the definition builder", () => {
+		const definition = defineCommand("duplicate", (command) =>
+			command.handle(() => {}).handle(() => {}),
+		);
+		expect(() => new Crust("cli").add(definition)).toThrow(/already has a handler/);
+	});
+
 	it(".as() renames without mutating the original definition", () => {
 		const definition = defineCommand("build", (command) => command.handle(() => {}));
 		const renamed = definition.as("compile");

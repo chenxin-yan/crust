@@ -135,8 +135,8 @@ describe("InferArgs type inference", () => {
 	});
 
 	it("turns duplicate arg names with conflicting types into never", () => {
-		// No runtime duplicate-name check exists for positional args; the
-		// intersection-produced `never` is the only conflict signal.
+		// The inferred conflict signal complements the builder's runtime
+		// duplicate-name check.
 		type Args = readonly [
 			{ name: "x"; type: "string"; required: true },
 			{ name: "x"; type: "number"; required: true },

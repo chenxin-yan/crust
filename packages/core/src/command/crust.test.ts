@@ -155,14 +155,37 @@ describe("Crust .flags()", () => {
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
-	it("repeated .flags() calls replace local flags", async () => {
+	it("repeated .flags() calls accumulate runtime and handler types", async () => {
+		let received: { first: boolean | undefined; second: string | undefined } | undefined;
 		const app = new Crust("test")
 			.flags({ name: "first", type: "boolean" })
-			.flags({ name: "second", type: "string" });
+			.flags({ name: "second", type: "string" })
+			.handle(({ flags }) => {
+				type _First = Expect<Equal<typeof flags.first, boolean | undefined>>;
+				type _Second = Expect<Equal<typeof flags.second, string | undefined>>;
+				received = flags;
+			});
 
+		await app.run(["--first", "--second", "value"]);
+		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
+			first: { type: "boolean" },
 			second: { type: "string" },
 		});
+	});
+
+	it("throws CrustError DEFINITION on flag collisions across .flags() calls", () => {
+		expect(() =>
+			new Crust("test")
+				.flags({ name: "verbose", type: "boolean" })
+				.flags({ name: "verbose", type: "string" }),
+		).toThrow(/Flag "--verbose" is already defined/);
+
+		expect(() =>
+			new Crust("test")
+				.flags({ name: "verbose", type: "boolean", short: "v" })
+				.flags({ name: "version", type: "boolean", short: "v" }),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
 	});
 
 	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
@@ -171,7 +194,7 @@ describe("Crust .flags()", () => {
 				{ name: "verbose", type: "boolean" },
 				{ name: "verbose", type: "string" },
 			),
-		).toThrow(/defined more than once/);
+		).toThrow(/already defined/);
 	});
 
 	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
@@ -236,6 +259,43 @@ describe("Crust .args()", () => {
 		expect(snapshot.meta.name).toBe("my-cli");
 		expect(snapshot.meta.description).toBe("desc");
 		expect(snapshot.flags.verbose).toBeDefined();
+	});
+
+	it("repeated .args() calls append in positional order and preserve handler types", async () => {
+		let received: { source: string; destination: string } | undefined;
+		const app = new Crust("copy")
+			.args({ name: "source", type: "string", required: true })
+			.args({ name: "destination", type: "string", required: true })
+			.handle(({ args }) => {
+				type _Source = Expect<Equal<typeof args.source, string>>;
+				type _Destination = Expect<Equal<typeof args.destination, string>>;
+				received = args;
+			});
+
+		await app.run(["from", "to"]);
+		expect(received).toEqual({ source: "from", destination: "to" });
+		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
+	});
+
+	it("throws CrustError DEFINITION on duplicate arg names", () => {
+		expect(() =>
+			new Crust("test")
+				.args({ name: "file", type: "string" })
+				.args({ name: "file", type: "string" }),
+		).toThrow(/Argument "file" is already defined/);
+		expect(() =>
+			new Crust("test").args({ name: "file", type: "string" }, { name: "file", type: "string" }),
+		).toThrow(/Argument "file" is already defined/);
+	});
+
+	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {
+		const app = new Crust("test").args({ name: "files", type: "string", variadic: true });
+		expect(() =>
+			app.args(
+				// @ts-expect-error -- the variadic position is also guarded at runtime
+				{ name: "destination", type: "string" },
+			),
+		).toThrow(/only the last positional argument can be variadic/);
 	});
 });
 
@@ -591,6 +651,11 @@ describe("Crust .handle()", () => {
 		});
 	});
 
+	it("throws CrustError DEFINITION instead of replacing an existing handler", () => {
+		const app = new Crust("test").handle(() => {});
+		expect(() => app.handle(() => {})).toThrow(/Command "test" already has a handler/);
+	});
+
 	it("preserves the definition and can follow .add()", async () => {
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean" })
@@ -725,6 +790,18 @@ describe("Crust .extend()", () => {
 
 		await app.run([]);
 		expect(calls).toEqual(["one", "two", "three"]);
+	});
+
+	it("throws CrustError DEFINITION on duplicate Extension names", () => {
+		const first = defineExtension("duplicate");
+		const second = defineExtension("duplicate");
+
+		expect(() => new Crust("test").extend(first).extend(second)).toThrow(
+			/Extension "duplicate" is already registered/,
+		);
+		expect(() => new Crust("test").extend(first, second)).toThrow(
+			/Extension "duplicate" is already registered/,
+		);
 	});
 
 	it("defineExtension() returns a frozen plain config", () => {
