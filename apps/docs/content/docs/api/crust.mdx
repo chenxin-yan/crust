@@ -128,6 +128,10 @@ const app = new Crust("issue").meta({
 
 Aliases must be non-empty, contain no whitespace, not start with `-`, and not collide with sibling names or aliases.
 
+## Chaining semantics
+
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.meta()` shallow-merges fields. `.handle()` is set once and throws `DEFINITION` if called again.
+
 ## `.args(...defs)`
 
 ```ts
@@ -136,7 +140,7 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; the order they are passed is the positional order. Pass values from `defineArg(name, def)` or inline literals. Only the last argument may be variadic.
+Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. Duplicate names throw `DEFINITION`, and only the final argument across all calls may be variadic.
 
 ```ts
 const app = new Crust("copy").args(
@@ -169,7 +173,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls **replace** the local flags — they do not merge; pass all definitions in one call. A duplicate name within one call throws `DEFINITION`.
+Repeated `.flags()` calls accumulate local flags. Duplicate names, short forms, or aliases across or within calls throw `DEFINITION`.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -226,7 +230,7 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
+Registers application-wide Extensions. Repeated calls accumulate in registration order; duplicate Extension names across or within calls throw `DEFINITION`. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
@@ -248,7 +252,7 @@ handle(
 ): Crust
 ```
 
-Defines the Command Handler. It runs after routing, parsing, `preRun` hooks, validation, and Context construction.
+Defines the Command Handler once. A second `.handle()` call throws `DEFINITION` instead of replacing existing behavior. The handler runs after routing, parsing, `preRun` hooks, validation, and Context construction.
 
 ```ts
 const app = new Crust("greet")

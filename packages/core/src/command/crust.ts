@@ -260,6 +260,26 @@ type ContextRequirementErrors<Ctx extends ContextMap, Required extends ContextMa
 
 type DefinitionRequirements<D> = D extends CommandDefinition<infer R> ? R : never;
 
+// Bare `Crust` uses broad `ArgsDef` for structural consumers; a `.args()` call on
+// that broad type only reflects the new defs (runtime still appends to any args a
+// widened builder already carries), while already-refined builders append in-type.
+type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
+	? NewA
+	: readonly [...A, ...NewA];
+
+type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extends readonly [
+	...unknown[],
+	infer Last,
+]
+	? Last extends { variadic: true }
+		? {
+				[I in keyof NewA]: NewA[I] & {
+					readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+				};
+			}
+		: ValidateVariadicArgs<NewA>
+	: ValidateVariadicArgs<NewA>;
+
 /** Per-definition add-time checks (compile-time counterpart of the runtime attach checks). */
 type AddChecks<Ctx extends ContextMap, Ds extends readonly CommandDefinition<any>[]> = {
 	[I in keyof Ds]: Ds[I] &
@@ -278,16 +298,16 @@ export interface CommandDefinitionBuilder<
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs>
 	): CommandDefinitionBuilder<
-		NamedFlagsRecord<Defs>,
+		MergeFlags<Local, NamedFlagsRecord<Defs>>,
 		Owned,
 		A,
-		EffectiveFlags<NamedFlagsRecord<Defs>, Owned>,
+		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 		Ctx
 	>;
 
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & ValidateVariadicArgs<NewA>
-	): CommandDefinitionBuilder<Local, Owned, NewA, Eff, Ctx>;
+		...defs: NewA & AppendArgsChecks<A, NewA>
+	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: Cs
@@ -468,22 +488,29 @@ export class Crust<
 	 * (created with `defineFlag(name, def)` or written inline as
 	 * `{ name: "dry-run", type: "boolean" }`).
 	 *
-	 * Repeated `.flags()` calls replace the local flags. Returns a new
-	 * builder with updated local flag types. The original builder is not
-	 * mutated.
+	 * Repeated `.flags()` calls accumulate local flags. Returns a new builder
+	 * with the combined local flag types. The original builder is not mutated.
 	 *
 	 * NOTE: Compile-time ancestor-owned/local cross-collision checks are intentionally
-	 * omitted here to reduce TypeScript type-check cost in large projects.
-	 * Runtime collision checks still run during parsing and command-tree validation.
+	 * omitted here to reduce TypeScript type-check cost in large projects; the same
+	 * applies to same-name flags across chained `.flags()` calls, where the type level
+	 * merges (later wins) while runtime throws. Runtime collision checks still run
+	 * during parsing and command-tree validation.
 	 *
 	 * @param defs - Named flag definitions
 	 * @returns A new `Crust` instance with the given flags
-	 * @throws {CrustError} `DEFINITION` on duplicate names or schema-exclusivity violations
+	 * @throws {CrustError} `DEFINITION` on duplicate names or spellings, or schema-exclusivity violations
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs>
-	): Crust<NamedFlagsRecord<Defs>, Owned, A, EffectiveFlags<NamedFlagsRecord<Defs>, Owned>, Ctx> {
-		const copiedFlags: FlagsDef = {};
+	): Crust<
+		MergeFlags<Local, NamedFlagsRecord<Defs>>,
+		Owned,
+		A,
+		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
+		Ctx
+	> {
+		const copiedFlags: FlagsDef = { ...this._node.localFlags };
 		for (const def of defs) {
 			// Destructuring also decouples the stored def from the caller's object
 			const { name, ...rest } = def as NamedFlagDef;
@@ -493,17 +520,16 @@ export class Crust<
 					reason: "missing-name",
 				});
 			}
-			if (name in copiedFlags) {
-				throw new CrustError(
-					"DEFINITION",
-					`Flag "--${name}" is defined more than once in one .flags() call`,
-					{ subject: "flag", name, reason: "duplicate-flag" },
-				);
+			if (Object.hasOwn(copiedFlags, name)) {
+				throw new CrustError("DEFINITION", `Flag "--${name}" is already defined`, {
+					subject: "flag",
+					name,
+					reason: "duplicate-flag",
+				});
 			}
 			validateSchemaExclusivity("flag", name, rest as Record<string, unknown>);
-			// Include same-call siblings so short/alias collisions between two
-			// definitions in one .flags() call fail here (DEFINITION errors throw
-			// at the definition site), not at first run() via validateCommandTree.
+			// Include flags from earlier calls and same-call siblings so spelling
+			// collisions fail at the definition site, not at first run().
 			validateIncomingFlag(
 				{ name, def: rest as FlagDef },
 				{ ...this._node.ownedFlags, ...copiedFlags },
@@ -516,10 +542,10 @@ export class Crust<
 			localFlags: copiedFlags,
 			effectiveFlags: computeEffectiveFlags(this._node.ownedFlags, copiedFlags),
 		}) as unknown as Crust<
-			NamedFlagsRecord<Defs>,
+			MergeFlags<Local, NamedFlagsRecord<Defs>>,
 			Owned,
 			A,
-			EffectiveFlags<NamedFlagsRecord<Defs>, Owned>,
+			EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 			Ctx
 		>;
 	}
@@ -529,18 +555,30 @@ export class Crust<
 	 * order they are passed (created with `defineArg(name, def)` or written
 	 * inline).
 	 *
-	 * Returns a new builder with updated args types. The original
-	 * builder is not mutated.
+	 * Repeated `.args()` calls append in call order. Returns a new builder with
+	 * the combined args types. The original builder is not mutated.
 	 *
 	 * @param defs - Positional argument definitions, in positional order
-	 * @returns A new `Crust` instance with the given args
+	 * @returns A new `Crust` instance with the combined args
+	 * @throws {CrustError} `DEFINITION` on duplicate names, a non-final variadic arg, or schema-exclusivity violations
 	 */
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & ValidateVariadicArgs<NewA>
-	): Crust<Local, Owned, NewA, Eff, Ctx> {
+		...defs: NewA & AppendArgsChecks<A, NewA>
+	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
-			validateSchemaExclusivity("arg", (def as ArgDef).name, record);
+			const argName = (def as ArgDef).name;
+			if (typeof argName !== "string" || argName.length === 0) {
+				throw new CrustError(
+					"DEFINITION",
+					"Every argument definition must carry a non-empty name",
+					{
+						subject: "arg",
+						reason: "missing-name",
+					},
+				);
+			}
+			validateSchemaExclusivity("arg", argName, record);
 			// Schema args receive raw strings: a parser `type` would coerce first
 			if (record.schema !== undefined && record.type !== undefined) {
 				throw new CrustError(
@@ -554,12 +592,30 @@ export class Crust<
 				);
 			}
 		}
-		// Deep copy arg defs to decouple from caller
-		const copiedArgs = defs.map((def) => ({ ...def })) as unknown as ArgsDef;
+		// Deep copy new defs to decouple storage from the caller.
+		const copiedArgs = [...(this._node.args ?? []), ...defs.map((def) => ({ ...def }))] as ArgsDef;
+		const names = new Set<string>();
+		for (const [index, def] of copiedArgs.entries()) {
+			if (names.has(def.name)) {
+				throw new CrustError("DEFINITION", `Argument "${def.name}" is already defined`, {
+					subject: "arg",
+					name: def.name,
+					reason: "duplicate-arg",
+				});
+			}
+			names.add(def.name);
+			if (def.variadic === true && index !== copiedArgs.length - 1) {
+				throw new CrustError(
+					"DEFINITION",
+					`Argument "${def.name}" is variadic, but only the last positional argument can be variadic`,
+					{ subject: "arg", name: def.name, reason: "variadic-position" },
+				);
+			}
+		}
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Local, Owned, NewA, Eff, Ctx>;
+		}) as unknown as Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx>;
 	}
 
 	/**
@@ -642,15 +698,23 @@ export class Crust<
 	 * The handler receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed as `EffectiveFlags<Local, Owned>`.
 	 *
-	 * Returns a new builder with the handler stored. The original builder is
-	 * not mutated.
+	 * A handler is set once; calling `.handle()` again throws rather than
+	 * silently replacing command behavior. The original builder is not mutated.
 	 *
 	 * @param handler - The Command Handler function
 	 * @returns A new `Crust` instance with the handler registered
+	 * @throws {CrustError} `DEFINITION` when this command already has a handler
 	 */
 	handle(
 		handler: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
 	): Crust<Local, Owned, A, Eff, Ctx> {
+		if (this._node.run) {
+			throw new CrustError(
+				"DEFINITION",
+				`Command "${this._node.meta.name}" already has a handler`,
+				{ subject: "command", name: this._node.meta.name, reason: "duplicate-handler" },
+			);
+		}
 		return this._clone({
 			run: handler as (ctx: unknown) => void | Promise<void>,
 		}) as Crust<Local, Owned, A, Eff, Ctx>;
@@ -660,9 +724,23 @@ export class Crust<
 	 * Register one or more CLI Extensions on the application root.
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
-	 * contribute. Command definition builders do not expose this method.
+	 * contribute. Repeated calls accumulate Extensions in registration order;
+	 * duplicate names throw. Command definition builders do not expose this method.
+	 *
+	 * @throws {CrustError} `DEFINITION` when an Extension name is already registered
 	 */
 	extend(...extensions: readonly Extension[]): Crust<Local, Owned, A, Eff, Ctx> {
+		const names = new Set(this._node.extensions.map((extension) => extension.name));
+		for (const extension of extensions) {
+			if (names.has(extension.name)) {
+				throw new CrustError("DEFINITION", `Extension "${extension.name}" is already registered`, {
+					subject: "extension",
+					name: extension.name,
+					reason: "duplicate-extension",
+				});
+			}
+			names.add(extension.name);
+		}
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
 		}) as Crust<Local, Owned, A, Eff, Ctx>;
