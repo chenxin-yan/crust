@@ -18,7 +18,7 @@ const command = new Crust("serve")
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
-Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. Duplicate names, short forms, or aliases throw a `DEFINITION` error at the call that introduces the collision.
+Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. For TypeScript consumers, a statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it. Runtime validation throws a `DEFINITION` error for plain-JS consumers, dynamically built definitions, and collisions hidden from the type system.
 
 Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.action()` is set once and throws if called again.
 
@@ -30,7 +30,7 @@ Builder chaining follows the same rule for every variadic method: `.flags()`, `.
 .flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
 ```
 
-Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved; violations are `DEFINITION` errors.
+Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved. TypeScript reports statically known violations as `FIX_ALIAS_COLLISION` or `FIX_NO_PREFIX`; runtime validation throws a `DEFINITION` error for plain-JS consumers or dynamically built definitions.
 
 ## Required and defaulted values
 

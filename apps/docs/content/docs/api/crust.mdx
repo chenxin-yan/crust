@@ -57,9 +57,13 @@ This is the configure-only builder passed to a `defineCommand()` recipe. Its flu
 ### `CommandDefinition`
 
 ```ts
-interface CommandDefinition<R extends CommandRequirements = {}> {
-  readonly name: string;
-  as(name: string): CommandDefinition<R>;
+interface CommandDefinition<
+  R extends CommandRequirements = {},
+  Name extends string = string,
+  Aliases extends readonly string[] = readonly string[],
+> {
+  readonly name: Name;
+  as<const N extends string>(name: N): CommandDefinition<R, N, Aliases>;
 }
 ```
 
@@ -68,18 +72,18 @@ A `CommandDefinition<R>` is a frozen value carrying its name, static config, and
 ### `defineCommand(name, config?, recipe)`
 
 ```ts
-defineCommand(
-  name: string,
+defineCommand<const Name extends string>(
+  name: Name,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition;
+): CommandDefinition<{}, Name>;
 
 interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
 
-defineCommand<const C extends CommandConfig>(
-  name: string,
-  config: C,
+defineCommand<const Name extends string, const C extends CommandConfig>(
+  name: Name,
+  config: C & ValidateCommandConfig<Name, C>,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition;
+): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>>;
 ```
 
 Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, `hidden`, and Context `requires` belong in `config`. The recipe builder is typed from the requirement values:
@@ -122,11 +126,11 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, and not collide with sibling names or aliases.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. For TypeScript consumers, known empty, space- or tab-containing, dash-prefixed, and self-equal aliases fail at `defineCommand()` with `FIX_ALIAS_SHAPE`, while sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`. Runtime validation throws `DEFINITION` for plain-JS consumers and cases hidden from the type system, including other whitespace, duplicate aliases within one definition, widened definitions, and `.as()` renaming a definition to one of its own aliases.
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and throw `DEFINITION` on duplicate names or spellings. `.action()` is set once and throws `DEFINITION` if called again.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and reject duplicate names or spellings. TypeScript reports the statically known flag, argument, and sibling-command collisions described below; runtime validation throws `DEFINITION` for plain-JS consumers, dynamically built definitions, and runtime-only cases. `.action()` is set once and throws `DEFINITION` if called again.
 
 ## `.args(...defs)`
 
@@ -136,7 +140,7 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. Duplicate names throw `DEFINITION`, and only the final argument across all calls may be variadic.
+Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. For TypeScript consumers, duplicate names fail typecheck with `FIX_DUPLICATE_ARG`; runtime validation throws `DEFINITION` for duplicates from plain-JS consumers or dynamically built definitions. A Promise-returning custom `parse` fails typecheck with `FIX_ASYNC_PARSE`, while runtime validation rejects declared `async` functions for plain-JS consumers. Only the final argument across all calls may be variadic.
 
 ```ts
 const app = new Crust("copy").args(
@@ -155,7 +159,7 @@ const app = new Crust("serve").args({ name: "port", schema: z.coerce.number().in
 
 ```ts
 flags<const Defs extends readonly NamedFlagDef[]>(
-  ...defs: ValidateNamedFlagDefs<Defs>,
+  ...defs: ValidateNamedFlagDefs<Defs, SpellingsOf<Eff>>,
 ): Crust
 ```
 
@@ -169,7 +173,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags. Duplicate names, short forms, or aliases across or within calls throw `DEFINITION`.
+Repeated `.flags()` calls accumulate local flags. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -187,13 +191,15 @@ const app = new Crust("serve").flags({
 
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
-  ...instances: Cs,
+  ...instances: ProvideChecks<Eff, Cs> & ValidateContextCycles<Deps, Cs>,
 ): Crust<
   Local,
   MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
   A,
   EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
-  MergeContext<Ctx, ContextsOutput<Cs>>
+  MergeContext<Ctx, ContextsOutput<Cs>>,
+  Sibs,
+  MergeContextDeps<Deps, Cs>
 >
 ```
 
@@ -214,11 +220,11 @@ const app = new Crust("my-cli")
   });
 ```
 
-Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared capability requirements, with registration order preserved among independent Contexts. A missing capability dependency or a dependency cycle throws `DEFINITION` at dispatch (and during `crust build` validation).
+Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared capability requirements, with registration order preserved among independent Contexts. A missing capability dependency throws `DEFINITION` at dispatch (and during `crust build` validation). For TypeScript consumers, dependency cycles whose members are provided with literal types fail with `FIX_CONTEXT_CYCLE`; cycles through inherited parent Contexts and dynamically built graphs remain runtime-only. Runtime validation reports every cycle as `DEFINITION`.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Its `requires` capabilities are resolved topologically at invocation.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name, passing a factory instead of an instance, or a Context-owned flag spelling collision throws `DEFINITION`.
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. Context-owned flag collisions with existing effective flags fail typecheck with `FIX_ALIAS_COLLISION` for TypeScript consumers; collisions between instances in the same `.provide()` call remain runtime-only. A duplicate Context name, passing a factory instead of an instance, or any runtime-detected flag collision throws `DEFINITION`.
 
 ## `.extend(...extensions)`
 
@@ -264,8 +270,16 @@ The context contains typed `args`, typed effective `flags`, typed Context values
 
 ```ts
 add<const Ds extends readonly CommandDefinition<any>[]>(
-  ...definitions: AddChecks<Ctx, Ds>,
-): Crust
+  ...definitions: Ds & AddChecks<Ctx, Sibs, Ds>,
+): Crust<
+  Local,
+  Owned,
+  A,
+  Eff,
+  Ctx,
+  Sibs | CommandDefinitionSpellings<Ds[number]>,
+  Deps
+>
 ```
 
 Materializes inert definitions as fresh child commands, each under its carried name. `.as(name)` renames a definition, so the same definition can route under different names:
@@ -289,7 +303,7 @@ const app = new Crust("my-cli").add(
 
 Compatibility compares provided and required Context value types in the provided-to-required assignability direction.
 
-At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided Context names, required Context names not provided on the parent path, unrelated recipe returns, values that are not `defineCommand()` definitions, and Extensions registered inside definitions throw `CrustError` code `DEFINITION`.
+For TypeScript consumers, statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; the statically checked alias shape violations listed above fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Runtime validation throws `CrustError` code `DEFINITION` for the same misuse from plain JavaScript or dynamically built definitions, and for runtime-only cases: empty names, duplicate provided Context names, required Context names not provided on the parent path, unrelated recipe returns, values that are not `defineCommand()` definitions, Extensions registered inside definitions, and `.as()` renaming a definition to one of its own aliases.
 
 A definition can add other definitions. Nested requirements are checked against the enclosing definition builder at that exact point.
 
