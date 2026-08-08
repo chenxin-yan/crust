@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { bold, cyan, green, magenta, red, yellow } from "@crustjs/style";
 
-import { createTheme, defaultTheme, resolveTheme, setTheme } from "./theme.ts";
+import { defaultTheme, resolveTheme, setTheme } from "./theme.ts";
 
 afterEach(() => {
 	setTheme();
@@ -14,20 +14,6 @@ describe("defaultTheme", () => {
 		expect(defaultTheme.message).toBe(bold);
 		expect(defaultTheme.success).toBe(green);
 		expect(defaultTheme.error).toBe(red);
-	});
-});
-
-describe("createTheme", () => {
-	it("returns defaultTheme when called with no arguments", () => {
-		expect(createTheme()).toBe(defaultTheme);
-	});
-
-	it("merges partial overrides onto default theme", () => {
-		const theme = createTheme({ spinner: cyan, error: yellow });
-		expect(theme.spinner).toBe(cyan);
-		expect(theme.error).toBe(yellow);
-		expect(theme.message).toBe(bold);
-		expect(theme.success).toBe(green);
 	});
 });
 

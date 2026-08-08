@@ -14,7 +14,7 @@ export type { NormalizedChoice } from "./core/utils.ts";
 // Theme
 // ────────────────────────────────────────────────────────────────────────────
 
-export { createTheme, defaultTheme, getTheme, setTheme } from "./core/theme.ts";
+export { defaultTheme, getTheme, setTheme } from "./core/theme.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Renderer

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { bold, cyan, dim, green, magenta, red, yellow } from "@crustjs/style";
 
-import { createTheme, defaultTheme, getTheme, resolveTheme, setTheme } from "./theme.ts";
+import { defaultTheme, getTheme, resolveTheme, setTheme } from "./theme.ts";
 
 // Reset global theme after each test to prevent state leakage
 afterEach(() => {
@@ -34,47 +34,6 @@ describe("defaultTheme", () => {
 	});
 });
 
-describe("createTheme", () => {
-	it("returns defaultTheme when called with no arguments", () => {
-		const theme = createTheme();
-		expect(theme).toBe(defaultTheme);
-	});
-
-	it("returns defaultTheme when called with undefined", () => {
-		const theme = createTheme(undefined);
-		expect(theme).toBe(defaultTheme);
-	});
-
-	it("merges partial overrides onto default theme", () => {
-		const theme = createTheme({ prefix: magenta });
-		expect(theme.prefix).toBe(magenta);
-		// Other slots retain defaults
-		expect(theme.message).toBe(bold);
-		expect(theme.error).toBe(red);
-		expect(theme.success).toBe(green);
-	});
-
-	it("overrides multiple slots at once", () => {
-		const theme = createTheme({
-			prefix: magenta,
-			success: cyan,
-			error: yellow,
-		});
-		expect(theme.prefix).toBe(magenta);
-		expect(theme.success).toBe(cyan);
-		expect(theme.error).toBe(yellow);
-		// Untouched slots remain default
-		expect(theme.message).toBe(bold);
-		expect(theme.cursor).toBe(cyan);
-	});
-
-	it("accepts custom style functions", () => {
-		const customStyle = (text: string) => `[${text}]`;
-		const theme = createTheme({ prefix: customStyle });
-		expect(theme.prefix("test")).toBe("[test]");
-	});
-});
-
 describe("setTheme / getTheme", () => {
 	it("getTheme returns defaultTheme when no global theme is set", () => {
 		const theme = getTheme();
@@ -97,13 +56,10 @@ describe("setTheme / getTheme", () => {
 		expect(theme.message).toBe(bold);
 	});
 
-	it("setTheme accepts a full PromptTheme from createTheme", () => {
-		const custom = createTheme({ prefix: magenta, cursor: red });
-		setTheme(custom);
-		const theme = getTheme();
-		expect(theme.prefix).toBe(magenta);
-		expect(theme.cursor).toBe(red);
-		expect(theme.message).toBe(bold);
+	it("accepts custom style functions", () => {
+		const customStyle = (text: string) => `[${text}]`;
+		setTheme({ prefix: customStyle });
+		expect(getTheme().prefix("test")).toBe("[test]");
 	});
 
 	it("setTheme with no arguments clears the global theme", () => {

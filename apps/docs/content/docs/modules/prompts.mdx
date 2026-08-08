@@ -296,13 +296,11 @@ All prompts share a theming system with 10 style slots. Each slot is a `StyleFn`
 ### Custom Themes
 
 ```ts
-import { setTheme, createTheme, input } from "@crustjs/prompts";
+import { setTheme, input } from "@crustjs/prompts";
 import { magenta, cyan, italic } from "@crustjs/style";
 
+// Partial overrides; unspecified slots keep their defaults
 setTheme({ prefix: magenta, success: cyan });
-
-const myTheme = createTheme({ prefix: magenta, success: cyan });
-setTheme(myTheme);
 
 const name = await input({
   message: "Name?",
@@ -404,7 +402,6 @@ Only one prompt can be active per input or output stream. Prompts on fully disti
 | Export         | Description                                                                                          |
 | -------------- | ---------------------------------------------------------------------------------------------------- |
 | `defaultTheme` | Default prompt theme                                                                                 |
-| `createTheme`  | Create a theme with partial overrides                                                                |
 | `setTheme`     | Set the global theme for all prompts                                                                 |
 | `getTheme`     | Get the current resolved global theme (equivalent to prompt resolution without per-prompt overrides) |
 

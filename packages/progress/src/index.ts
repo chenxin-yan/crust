@@ -14,5 +14,5 @@ export type {
 	SpinnerType,
 } from "./spinner.ts";
 export { spinner } from "./spinner.ts";
-export { createTheme, defaultTheme, setTheme } from "./theme.ts";
+export { defaultTheme, setTheme } from "./theme.ts";
 export type { PartialProgressTheme, ProgressTheme } from "./types.ts";
