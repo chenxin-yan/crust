@@ -35,14 +35,12 @@ describe("buildCommandDocumentation", () => {
 	it("omits hidden commands while traversing the full visible tree", async () => {
 		const model = await docs(
 			new Crust("app")
-				.mount(
+				.add(
 					defineCommand("visible", (command) =>
-						command.mount(defineCommand("nested", (child) => child.handle(() => {}))),
+						command.add(defineCommand("nested", (child) => child.handle(() => {}))),
 					),
 				)
-				.mount(
-					defineCommand("hidden", (command) => command.meta({ hidden: true }).handle(() => {})),
-				),
+				.add(defineCommand("hidden", (command) => command.meta({ hidden: true }).handle(() => {}))),
 		);
 		expect(model.children.map((child) => child.name)).toEqual(["visible"]);
 		expect(model.children[0]?.children[0]?.path).toEqual(["app", "visible", "nested"]);

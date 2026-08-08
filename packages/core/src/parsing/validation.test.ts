@@ -335,7 +335,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 // validateCommandTree — alias collisions
 //
-// Catches plugin-installed subcommands that bypass `.mount()` (where
+// Catches plugin-installed subcommands that bypass `.add()` (where
 // collision detection runs eagerly).
 // ──────────────────────────────────────────────────────────────────────────────
 

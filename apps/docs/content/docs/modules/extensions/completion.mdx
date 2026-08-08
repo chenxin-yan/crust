@@ -14,7 +14,7 @@ import pkg from "../package.json";
 
 const app = new Crust("my-cli")
   .extend(completion({ version: pkg.version }))
-  .mount(
+  .add(
     defineCommand("build", (command) =>
       command
         .flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })

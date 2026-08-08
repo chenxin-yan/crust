@@ -116,25 +116,25 @@ describe("Crust .provide()", () => {
 		expect(() =>
 			new Crust("cli")
 				.provide(parentDb())
-				.mount(defineCommand("sub", (cmd) => cmd.provide(childDb()).handle(() => {}))),
+				.add(defineCommand("sub", (cmd) => cmd.provide(childDb()).handle(() => {}))),
 		).toThrow(CrustError);
 	});
 
-	it("throws DEFINITION when a mounted subtree re-provides a path name", () => {
+	it("throws DEFINITION when an added subtree re-provides a path name", () => {
 		const parentDb = defineContext("db", () => "parent");
 		const nestedDb = defineContext("db", () => "nested");
 		const sub = defineCommand("sub", { requires: [parentDb] }, (command) =>
-			command.mount(defineCommand("g", (child) => child.provide(nestedDb()).handle(() => {}))),
+			command.add(defineCommand("g", (child) => child.provide(nestedDb()).handle(() => {}))),
 		);
 
-		expect(() => new Crust("cli").provide(parentDb()).mount(sub)).toThrow(CrustError);
+		expect(() => new Crust("cli").provide(parentDb()).add(sub)).toThrow(CrustError);
 	});
 
-	it("seeds mounted descendants with the parent Context path", async () => {
+	it("seeds added descendants with the parent Context path", async () => {
 		const seen: string[] = [];
 		const db = defineContext("db", () => "root-db");
 		const sub = defineCommand("sub", { requires: [db] }, (command) =>
-			command.mount(
+			command.add(
 				defineCommand("g", { requires: [db] }, (child) =>
 					child.handle(({ ctx }) => {
 						seen.push(ctx.db);
@@ -142,7 +142,7 @@ describe("Crust .provide()", () => {
 				),
 			),
 		);
-		const root = new Crust("cli").provide(db()).mount(sub);
+		const root = new Crust("cli").provide(db()).add(sub);
 
 		await root.run(["sub", "g"]);
 
@@ -158,22 +158,22 @@ describe("Crust .provide()", () => {
 
 		const app = new Crust("cli")
 			.provide(lazy())
-			.mount(defineCommand("a", (cmd) => cmd.handle(() => {})))
-			.mount(defineCommand("b", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("a", (cmd) => cmd.handle(() => {})))
+			.add(defineCommand("b", (cmd) => cmd.handle(() => {})));
 
 		// Resolving "a" builds the inherited context once; "b" not executed
 		await app.run(["a"]);
 		expect(built).toBe(1);
 	});
 
-	it("does not backfill mounted children with later parent provides", async () => {
+	it("does not backfill added children with later parent provides", async () => {
 		let lateProvided = false;
 		const late = defineContext("late", () => {
 			lateProvided = true;
 			return "late";
 		});
 		const app = new Crust("cli")
-			.mount(defineCommand("status", (command) => command.handle(() => {})))
+			.add(defineCommand("status", (command) => command.handle(() => {})))
 			.provide(late());
 
 		await app.run(["status"]);
@@ -277,7 +277,7 @@ describe("Context-owned flags", () => {
 		expect(messages).toEqual(["debug"]);
 	});
 
-	it("exposes a provided capability to later mounted commands", async () => {
+	it("exposes a provided capability to later added commands", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
@@ -288,7 +288,7 @@ describe("Context-owned flags", () => {
 			}),
 		);
 
-		await new Crust("cli").provide(auth()).mount(deploy).run(["--api-key", "secret", "deploy"]);
+		await new Crust("cli").provide(auth()).add(deploy).run(["--api-key", "secret", "deploy"]);
 		expect(seen).toEqual(["secret"]);
 	});
 
@@ -331,7 +331,7 @@ describe("Context-owned flags", () => {
 					seen.push(`${name}:${ctx.auth.apiKey}`);
 				}),
 			);
-		const app = new Crust("cli").mount(branch("first"), branch("second"));
+		const app = new Crust("cli").add(branch("first"), branch("second"));
 
 		await app.run(["first", "--api-key", "one"]);
 		await app.run(["second", "--api-key", "two"]);
@@ -496,7 +496,7 @@ describe("Context capability requirements (topological construction)", () => {
 		});
 	});
 
-	it("satisfies a mounted definition's Context requirement before its dependents construct", async () => {
+	it("satisfies an added definition's Context requirement before its dependents construct", async () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
 		const user = defineContext("user", { requires: [session] }, ({ ctx }) => ({
 			id: ctx.session.userId,
@@ -508,7 +508,7 @@ describe("Context capability requirements (topological construction)", () => {
 			}),
 		);
 
-		await new Crust("cli").provide(session()).mount(account).run(["account"]);
+		await new Crust("cli").provide(session()).add(account).run(["account"]);
 	});
 });
 

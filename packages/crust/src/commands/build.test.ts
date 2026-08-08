@@ -26,15 +26,15 @@ import {
  * Helper to extract the build command's internal node for definition checks.
  */
 function makeBuildNode() {
-	const buildNode = new Crust("test").mount(buildCommand)._node.subCommands.build;
+	const buildNode = new Crust("test").add(buildCommand)._node.subCommands.build;
 	if (!buildNode) throw new Error("build subcommand not found");
 	return buildNode;
 }
 
-/** Parse argv against the mounted build command's grammar. */
+/** Parse argv against the added build command's grammar. */
 async function parseBuildArgs(argv: string[]) {
 	let captured: { args: Record<string, unknown>; flags: Record<string, unknown> } | undefined;
-	const app = new Crust("test").mount(buildCommand);
+	const app = new Crust("test").add(buildCommand);
 	const node = app._node.subCommands.build!;
 	node.run = (ctx) => {
 		const commandContext = ctx as {
@@ -574,7 +574,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").mount(buildCommand);
+			const app = new Crust("test").add(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--entry", "nonexistent.ts", "--target", "bun-linux-x64-baseline"],
@@ -609,7 +609,7 @@ describe("buildCommand error handling", () => {
 
 		try {
 			process.exitCode = 0;
-			const app = new Crust("test").mount(buildCommand);
+			const app = new Crust("test").add(buildCommand);
 
 			await app.execute({
 				argv: ["build", "--outfile", "./out"],

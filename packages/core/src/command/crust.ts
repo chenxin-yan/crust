@@ -99,7 +99,7 @@ function validateSchemaExclusivity(
 // Reusable command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Context capabilities a command definition requires from its mount path. */
+/** Context capabilities a command definition requires from its parent path. */
 export interface CommandRequirements {
 	readonly requires?: readonly AnyContextFactory[];
 }
@@ -116,18 +116,18 @@ const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefini
 
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
-	/** Requirement names, runtime-checked at each mount site */
+	/** Requirement names, runtime-checked when the definition is added */
 	readonly requiredCtxNames: readonly string[];
 }
 
 export interface CommandDefinition<R extends CommandRequirements = {}> {
-	/** The subcommand name this definition mounts under */
+	/** The subcommand name this definition is added under */
 	readonly name: string;
-	/** The same definition under a different name (mount one definition twice) */
+	/** The same definition under a different name (add one definition twice) */
 	as(name: string): CommandDefinition<R>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
-	/** @internal — phantom carrying the requirements for mount-site checks */
+	/** @internal — phantom carrying the requirements for add-time checks */
 	readonly _requirements?: R;
 }
 
@@ -151,7 +151,7 @@ function materializeCommandDefinition(
 		}
 		throw new CrustError(
 			"DEFINITION",
-			"mount() requires a command definition created by defineCommand()",
+			"add() requires a command definition created by defineCommand()",
 		);
 	}
 
@@ -172,7 +172,7 @@ function materializeCommandDefinition(
 		if (!providedNames.has(ctxName)) {
 			const message = extensionName
 				? `Extension "${extensionName}" command "${name}" requires Context "${ctxName}", which is not provided on application root "${parent.meta.name}"`
-				: `Command "${name}" requires Context "${ctxName}", which is not provided on "${parent.meta.name}" — call .provide() before .mount()`;
+				: `Command "${name}" requires Context "${ctxName}", which is not provided on "${parent.meta.name}" — call .provide() before .add()`;
 			throw new CrustError("DEFINITION", message, {
 				subject: "context",
 				name: ctxName,
@@ -260,8 +260,8 @@ type ContextRequirementErrors<Ctx extends ContextMap, Required extends ContextMa
 
 type DefinitionRequirements<D> = D extends CommandDefinition<infer R> ? R : never;
 
-/** Per-definition mount checks (compile-time counterpart of the runtime attach checks). */
-type MountChecks<Ctx extends ContextMap, Ds extends readonly CommandDefinition<any>[]> = {
+/** Per-definition add-time checks (compile-time counterpart of the runtime attach checks). */
+type AddChecks<Ctx extends ContextMap, Ds extends readonly CommandDefinition<any>[]> = {
 	[I in keyof Ds]: Ds[I] &
 		ContextRequirementErrors<Ctx, RequirementContext<DefinitionRequirements<Ds[I]>>>;
 };
@@ -299,8 +299,8 @@ export interface CommandDefinitionBuilder<
 		MergeContext<Ctx, ContextsOutput<Cs>>
 	>;
 
-	mount<const Ds extends readonly CommandDefinition<any>[]>(
-		...definitions: MountChecks<Ctx, Ds>
+	add<const Ds extends readonly CommandDefinition<any>[]>(
+		...definitions: AddChecks<Ctx, Ds>
 	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx>;
 
 	handle(
@@ -311,10 +311,10 @@ export interface CommandDefinitionBuilder<
 /**
  * Define a reusable, inert command under a required name.
  *
- * The recipe runs once per `.mount()`, receiving a fresh builder typed by
- * the declared Context capabilities, which must be provided on the mount path.
+ * The recipe runs once per `.add()`, receiving a fresh builder typed by
+ * the declared Context capabilities, which must be provided on the parent path.
  *
- * Use `.as(name)` to mount one definition under a different name.
+ * Use `.as(name)` to add one definition under a different name.
  */
 export function defineCommand(name: string, recipe: CommandRecipe<{}>): CommandDefinition;
 export function defineCommand<const R extends CommandRequirements>(
@@ -442,7 +442,7 @@ export class Crust<
 	/**
 	 * Set metadata (description, usage) for this command.
 	 *
-	 * The command name is already set by the constructor or mount call.
+	 * The command name is already set by the constructor or add call.
 	 * Provide `description`, `usage`, and/or `aliases` here.
 	 *
 	 * Returns a new builder with updated metadata. The original builder
@@ -673,19 +673,19 @@ export class Crust<
 	 * under its own carried name (use `.as(name)` to rename).
 	 *
 	 * Each definition's Context requirement names must already be provided
-	 * on this builder's path — call `.provide()` before `.mount()`.
+	 * on this builder's path — call `.provide()` before `.add()`.
 	 */
-	mount<const Ds extends readonly CommandDefinition<any>[]>(
-		...definitions: MountChecks<Ctx, Ds>
+	add<const Ds extends readonly CommandDefinition<any>[]>(
+		...definitions: AddChecks<Ctx, Ds>
 	): Crust<Local, Owned, A, Eff, Ctx> {
 		let result = this as Crust<Local, Owned, A, Eff, Ctx>;
 		for (const definition of definitions) {
-			result = result._mountDefinition(definition as CommandDefinition);
+			result = result._addDefinition(definition as CommandDefinition);
 		}
 		return result;
 	}
 
-	private _mountDefinition(definition: CommandDefinition): Crust<Local, Owned, A, Eff, Ctx> {
+	private _addDefinition(definition: CommandDefinition): Crust<Local, Owned, A, Eff, Ctx> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({

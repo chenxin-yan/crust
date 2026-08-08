@@ -44,8 +44,8 @@ export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
 	.provide(auth())
-	.mount(defineCommand("build", (cmd) => cmd.handle(() => {})))
-	.mount(deploy);
+	.add(defineCommand("build", (cmd) => cmd.handle(() => {})))
+	.add(deploy);
 `;
 
 let fixtureDir: string;

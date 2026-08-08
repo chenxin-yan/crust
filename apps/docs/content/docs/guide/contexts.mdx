@@ -30,7 +30,7 @@ const app = new Crust("app").provide(clock());
 
 ## Owned flags
 
-A Context can own the flags used to construct its value. Declare each flag once in its top-level `flags`; attaching the Context installs those flags on the provider command and its later-mounted descendants:
+A Context can own the flags used to construct its value. Declare each flag once in its top-level `flags`; attaching the Context installs those flags on the provider command and its later-added descendants:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -48,7 +48,7 @@ const deploy = defineCommand("deploy", { requires: [api] }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
 );
 
-const app = new Crust("app").provide(api()).mount(deploy);
+const app = new Crust("app").provide(api()).add(deploy);
 ```
 
 Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores a cloned definition in the Context-owned propagation channel; the original `apiKey` value is not mutated.
@@ -59,7 +59,7 @@ The child requires `ctx.api`, not the raw flag. If a handler also needs the raw 
 
 Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only for the resolved command path. An Extension that returns `ctx.finish()` does not construct them.
 
-Contexts are inherited by descendant commands. A mounted command lists the factories it depends on in `requires`, which types `ctx` in its handler:
+Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its handler:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
@@ -68,7 +68,7 @@ const status = defineCommand("status", { requires: [database] }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
-const app = new Crust("app").provide(database({ url: process.env.DATABASE_URL! })).mount(status);
+const app = new Crust("app").provide(database({ url: process.env.DATABASE_URL! })).add(status);
 ```
 
 Setups may be synchronous or asynchronous.
@@ -155,33 +155,33 @@ const invoices = defineCommand("invoices", { requires: [user] }, (child) =>
 );
 
 const billing = defineCommand("billing", { requires: [session] }, (command) =>
-  command.provide(user()).mount(invoices),
+  command.provide(user()).add(invoices),
 );
 
-const app = new Crust("app").provide(session()).mount(billing);
+const app = new Crust("app").provide(session()).add(billing);
 ```
 
 A throwing setup aborts the invocation before the Command Handler and disposes the values already constructed.
 
 ## Context requirements in definitions
 
-A reusable command declares the Context factories it needs, and every `.mount()` checks them — compile-time against the parent's provided value types, and at runtime by name:
+A reusable command declares the Context factories it needs, and every `.add()` checks them — compile-time against the parent's provided value types, and at runtime by name:
 
 ```ts
 const status = defineCommand("status", { requires: [database] }, (command) =>
   command.handle(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
 );
 
-const app = new Crust("app").provide(logging(), config(), database()).mount(status);
+const app = new Crust("app").provide(logging(), config(), database()).add(status);
 ```
 
-Call `.provide()` before `.mount()`: a missing requirement name is a `DEFINITION` error at the mount. Contexts and their owned flags do not backfill children mounted on an earlier builder. The general mount-checking and finalize-before-mounting rules live in [Subcommands](/docs/guide/subcommands).
+Call `.provide()` before `.add()`: a missing requirement name is a `DEFINITION` error at the `.add()` call. Contexts and their owned flags do not backfill children added on an earlier builder. The general add-time checks and finalize-before-adding rules live in [Subcommands](/docs/guide/subcommands).
 
 ## Name and flag collisions
 
 Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited.
 
-Mounted definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.mount()`.
+Added definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.add()`.
 
 Owned flag names, short forms, and aliases must be unique across application flags, other Contexts, and Extensions. Application and Context collisions fail while building; Extension collisions fail when `run()`, `execute()`, or `crust build` prepares the complete graph. Every case uses `CrustError` code `DEFINITION` rather than shadowing a definition.
 
