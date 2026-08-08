@@ -115,25 +115,25 @@ function resolveInstalledCrustCli(projectDir: string): string {
 }
 
 /** Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts). */
-function hostCrustBuildTargetAlias(): string {
+function hostCrustBuildTarget(): string {
 	const { platform, arch } = process;
 	if (platform === "win32") {
-		return arch === "arm64" ? "windows-arm64" : "windows-x64";
+		return arch === "arm64" ? "bun-windows-arm64" : "bun-windows-x64-baseline";
 	}
 	if (platform === "darwin") {
-		return arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+		return arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
 	}
 	if (platform === "linux") {
-		return arch === "arm64" ? "linux-arm64" : "linux-x64";
+		return arch === "arm64" ? "bun-linux-arm64" : "bun-linux-x64-baseline";
 	}
-	return "linux-x64";
+	return "bun-linux-x64-baseline";
 }
 
 function crustBuildArgv(crustCli: string): string[] {
 	const normalized = crustCli.replaceAll("\\", "/");
 	const useBun = normalized.endsWith("dist/cli.js");
 	const runner = useBun ? process.execPath : "node";
-	return [runner, crustCli, "build", "--target", hostCrustBuildTargetAlias()];
+	return [runner, crustCli, "build", "--target", hostCrustBuildTarget()];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
