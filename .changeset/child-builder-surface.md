@@ -3,11 +3,11 @@
 "@crustjs/crust": patch
 ---
 
-Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked mounting with the variadic `.mount(...definitions)`.
+Add inert reusable command definitions with `defineCommand(name, requirements?, recipe)` and checked attachment with the variadic `.add(...definitions)`.
 
-A definition carries its own name and lists the Context capabilities it needs from its mount site in a plain `requires` array. Every requirement is checked at the `.mount()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every mount materializes a fresh command under the definition's carried name; use `.as(newName)` to mount one definition under multiple names or parents, and definitions can `.mount()` other definitions.
+A definition carries its own name and lists the Context capabilities it needs from its parent in a plain `requires` array. Every requirement is checked at the `.add()` call — compile-time for missing or incompatible Context values, and at runtime for required Context names missing from the parent path. Every `.add()` materializes a fresh command under the definition's carried name; use `.as(newName)` to add one definition under multiple names or parents, and definitions can `.add()` other definitions.
 
-Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.mount(defineCommand("up", (command) => ...))`.
+Remove `.sub()`, `.command(name, callback)`, `.command(builder)`, and the exported `ChildCrust` type. One-off inline commands are `.add(defineCommand("up", (command) => ...))`.
 
 Migration:
 
@@ -25,8 +25,8 @@ const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) 
 	command.handle(({ ctx }) => {}),
 );
 
-const app = parent.provide(logging(), auth()).mount(deploy);
-const shipToo = parent.mount(deploy.as("ship"));
+const app = parent.provide(logging(), auth()).add(deploy);
+const shipToo = parent.add(deploy.as("ship"));
 ```
 
-Provide required Context capabilities with `.provide()` on the parent builder before `.mount()`. Extension-contributed commands are unchanged.
+Provide required Context capabilities with `.provide()` on the parent builder before `.add()`. Extension-contributed commands are unchanged.

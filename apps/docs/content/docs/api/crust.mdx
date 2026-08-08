@@ -18,7 +18,7 @@ import {
 } from "@crustjs/core";
 ```
 
-`Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that become commands only when mounted. Every fluent method returns a new builder; the original is unchanged.
+`Crust` builds an executable application root. `defineCommand()` builds inert reusable definitions that become commands only when added. Every fluent method returns a new builder; the original is unchanged.
 
 ## Reusable command definitions
 
@@ -32,7 +32,7 @@ interface CommandRequirements {
 type ContextRequirements = readonly AnyContextFactory[];
 ```
 
-`requires` lists Context factories whose capabilities the mount path must provide. It types the recipe builder's `ctx` and is checked at every `.mount()`: compile-time for missing or incompatible values, plus a runtime check for missing Context names.
+`requires` lists Context factories whose capabilities the parent path must provide. It types the recipe builder's `ctx` and is checked at every `.add()` call: compile-time for missing or incompatible values, plus a runtime check for missing Context names.
 
 `defineContext()` accepts `ContextConfig`, where top-level `flags` are owned and activated by `.provide()`, while `requires` is the same plain capability array. The grammar is: `flags` means definitions this unit owns or parses; `requires` means capabilities supplied by the command path.
 
@@ -44,7 +44,7 @@ interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
-  mount(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
+  add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   handle(
     handler: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
@@ -62,7 +62,7 @@ interface CommandDefinition<R extends CommandRequirements = {}> {
 }
 ```
 
-A `CommandDefinition<R>` is a frozen value carrying its name and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be mounted twice. It has no command node or execution methods.
+A `CommandDefinition<R>` is a frozen value carrying its name and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. It has no command node or execution methods.
 
 ### `defineCommand(name, requirements?, recipe)`
 
@@ -97,7 +97,7 @@ const deploy = defineCommand("deploy", { requires: [logging, auth] }, (command) 
 );
 ```
 
-The recipe does not execute when the definition is created. It executes once for each `.mount()`, so keep configuration side-effect-free. An empty name or a missing recipe throws `DEFINITION`.
+The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. An empty name or a missing recipe throws `DEFINITION`.
 
 ## Constructor
 
@@ -117,7 +117,7 @@ const app = new Crust("my-cli");
 meta(meta: Omit<CommandMeta, "name">): Crust
 ```
 
-Sets `description`, `usage`, `aliases`, or `hidden`. The constructor or the mounted definition supplies the name.
+Sets `description`, `usage`, `aliases`, or `hidden`. The constructor or the added definition supplies the name.
 
 ```ts
 const app = new Crust("issue").meta({
@@ -216,7 +216,7 @@ const app = new Crust("my-cli")
 
 Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared capability requirements, with registration order preserved among independent Contexts. A missing capability dependency or a dependency cycle throws `DEFINITION` at dispatch (and during `crust build` validation).
 
-A Context's top-level `flags` are installed as propagating flags on this builder and later-mounted descendants, without mutating the original definitions. Its `requires` capabilities are resolved topologically at invocation.
+A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Its `requires` capabilities are resolved topologically at invocation.
 
 Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. A duplicate Context name, passing a factory instead of an instance, or a Context-owned flag spelling collision throws `DEFINITION`.
 
@@ -234,7 +234,7 @@ import { help, version } from "@crustjs/extensions";
 const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 ```
 
-Mounted definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
+Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
 Extension-owned command or flag name and alias collisions throw `DEFINITION` when the application is prepared.
 
@@ -260,29 +260,29 @@ const app = new Crust("greet")
 
 The context contains typed `args`, typed effective `flags`, typed Context values in `ctx`, `rawArgs` after `--`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
 
-## `.mount(...definitions)`
+## `.add(...definitions)`
 
 ```ts
-mount<const Ds extends readonly CommandDefinition<any>[]>(
-  ...definitions: MountChecks<Ctx, Ds>,
+add<const Ds extends readonly CommandDefinition<any>[]>(
+  ...definitions: AddChecks<Ctx, Ds>,
 ): Crust
 ```
 
 Materializes inert definitions as fresh child commands, each under its carried name. `.as(name)` renames a definition, so the same definition can route under different names:
 
 ```ts
-const app = new Crust("git").provide(logging()).provide(auth()).mount(deploy, deploy.as("ship"));
+const app = new Crust("git").provide(logging()).provide(auth()).add(deploy, deploy.as("ship"));
 ```
 
-Inline one-off commands are mounted the same way:
+Inline one-off commands are added the same way:
 
 ```ts
-const app = new Crust("my-cli").mount(
+const app = new Crust("my-cli").add(
   defineCommand("up", (command) => command.handle(({ stdout }) => stdout("up"))),
 );
 ```
 
-`MountChecks` is internal declaration machinery that checks each definition's requirements against the parent builder. On failure, TypeScript reports one or more readable structural properties at the `.mount()` call:
+`AddChecks` is internal declaration machinery that checks each definition's requirements against the parent builder. On failure, TypeScript reports one or more readable structural properties at the `.add()` call:
 
 - `"missing Contexts"`
 - `"incompatible Contexts"`
@@ -291,11 +291,11 @@ Compatibility compares provided and required Context value types in the provided
 
 At runtime, empty names, duplicate sibling names, alias collisions, duplicate provided Context names, required Context names not provided on the parent path, unrelated recipe returns, values that are not `defineCommand()` definitions, and Extensions registered inside definitions throw `CrustError` code `DEFINITION`.
 
-A definition can mount other definitions. Nested requirements are checked against the enclosing definition builder at that exact point.
+A definition can add other definitions. Nested requirements are checked against the enclosing definition builder at that exact point.
 
 <Callout type="info">
-  Finalize Contexts on the builder used for `.mount()`. Later fluent calls create a new builder and
-  do not backfill an existing mount.
+  Finalize Contexts on the builder used for `.add()`. Later fluent calls create a new builder and do
+  not backfill a definition that was already added.
 </Callout>
 
 ## `.snapshot()`

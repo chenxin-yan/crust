@@ -35,7 +35,7 @@ await app.execute();
 
 ## Context-owned flags
 
-Use top-level `ContextConfig.flags` when a flag exists to construct a dependency. The Context defines and consumes the flag once; `.provide()` installs it on the current command and later-mounted descendants:
+Use top-level `ContextConfig.flags` when a flag exists to construct a dependency. The Context defines and consumes the flag once; `.provide()` installs it on the current command and later-added descendants:
 
 ```ts
 import { Crust, defineContext, defineFlag } from "@crustjs/core";
@@ -52,15 +52,15 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 
 ## Runtime exports
 
-| Export                                | Description                                                                                                                                           |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.mount()`, `.handle()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                     |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                                              |
-| `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                     |
-| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                              |
-| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                               |
-| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                             |
+| Export                                | Description                                                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.handle()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                                            |
+| `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                   |
+| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
+| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
+| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                           |
 
 ## Definition types
 
@@ -71,7 +71,7 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
 | `CommandMeta`                                 | Name, description, usage, aliases, and visibility                                |
-| [`CommandRequirements`](/docs/api/crust)      | Context capability requirements checked at mount time                            |
+| [`CommandRequirements`](/docs/api/crust)      | Context capability requirements checked at add time                              |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |
 | `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |

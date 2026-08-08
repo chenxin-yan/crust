@@ -11,7 +11,7 @@ import { didYouMean } from "@crustjs/extensions";
 
 const app = new Crust("my-cli")
   .extend(didYouMean())
-  .mount(defineCommand("deploy", (command) => command.handle(() => {})));
+  .add(defineCommand("deploy", (command) => command.handle(() => {})));
 
 await app.execute();
 ```

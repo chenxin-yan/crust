@@ -705,7 +705,7 @@ describe("renderSkill", () => {
 			const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 			const app = new Crust("test-cli")
 				.provide(auth())
-				.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+				.add(defineCommand("deploy", (command) => command.handle(() => {})));
 			const files = renderSkill(buildManifest(snapshotCommand(app._node)), baseMeta);
 			const deploy = findFile(files, "commands/deploy.md");
 

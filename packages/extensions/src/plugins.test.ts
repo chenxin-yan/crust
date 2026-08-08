@@ -71,7 +71,7 @@ function lateSkillExtension() {
 			defineCommand("skill", (command) =>
 				command
 					.meta({ description: "Manage agent skills" })
-					.mount(
+					.add(
 						defineCommand("update", (cmd) =>
 							cmd.meta({ description: "Update installed skills" }).handle(() => {}),
 						),
@@ -111,7 +111,7 @@ describe("built-in plugins", () => {
 				description: "Output directory",
 				default: ".",
 			})
-			.mount(defineCommand("build", (cmd) => cmd.meta({ description: "Build the project" })))._node;
+			.add(defineCommand("build", (cmd) => cmd.meta({ description: "Build the project" })))._node;
 
 		const output = renderHelp(snapshotCommand(command));
 		const plain = stripAnsi(output);
@@ -211,7 +211,7 @@ describe("built-in plugins", () => {
 	it("help plugin renders generated help for no-run command", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -227,9 +227,9 @@ describe("built-in plugins", () => {
 	it("help reaches nested subcommands", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.mount(
+			.add(
 				defineCommand("group", (group) =>
-					group.mount(defineCommand("build", (build) => build.handle(() => {}))),
+					group.add(defineCommand("build", (build) => build.handle(() => {}))),
 				),
 			);
 
@@ -256,7 +256,7 @@ describe("built-in plugins", () => {
 		});
 		const app = new Crust("app")
 			.extend(rootOnly)
-			.mount(defineCommand("build", (build) => build.handle(() => {})));
+			.add(defineCommand("build", (build) => build.handle(() => {})));
 
 		await expect(app.run(["build", "--root"])).rejects.toMatchObject({ code: "PARSE" });
 	});
@@ -265,7 +265,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["--help"] });
 
@@ -400,7 +400,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.extend(noColorExtension())
 			.extend(helpExtension())
-			.mount(defineCommand("build", (cmd) => cmd.handle(() => {})));
+			.add(defineCommand("build", (cmd) => cmd.handle(() => {})));
 
 		await app.execute({ argv: ["build", "--help"] });
 
@@ -411,7 +411,7 @@ describe("built-in plugins", () => {
 	it("help plugin shows help instead of error when --help is used with missing required arg", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.mount(
+			.add(
 				defineCommand("create", (cmd) =>
 					cmd.args({ name: "name", type: "string", required: true }).handle(() => {}),
 				),
@@ -429,7 +429,7 @@ describe("built-in plugins", () => {
 	it("help plugin shows help instead of error when --help is used with missing required flag", async () => {
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.mount(
+			.add(
 				defineCommand("deploy", (cmd) =>
 					cmd.flags({ name: "target", type: "string", required: true }).handle(() => {}),
 				),
@@ -450,7 +450,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.meta({ description: "Test app" })
 			.extend(helpExtension())
-			.mount(
+			.add(
 				defineCommand("build", (cmd) =>
 					cmd.handle((ctx) => {
 						capturedRawArgs = [...ctx.rawArgs];
@@ -473,7 +473,7 @@ describe("built-in plugins", () => {
 		const app = new Crust("app")
 			.provide(auth())
 			.extend(helpExtension())
-			.mount(defineCommand("deploy", (command) => command.handle(() => {})));
+			.add(defineCommand("deploy", (command) => command.handle(() => {})));
 
 		await app.run(["--help"]);
 		const rootHelp = stripAnsi(getStdout());
@@ -560,7 +560,7 @@ describe("built-in plugins", () => {
 	it("version plugin only triggers on root command", async () => {
 		let ran = false;
 
-		const app = new Crust("app").extend(versionExtension("1.0.0")).mount(
+		const app = new Crust("app").extend(versionExtension("1.0.0")).add(
 			defineCommand("build", (cmd) =>
 				cmd.handle(() => {
 					ran = true;
@@ -625,7 +625,7 @@ describe("built-in plugins", () => {
 	// ──────────────────────────────────────────────────────────────────────────────
 
 	it("renderHelp renders aliases inline next to the canonical command name", () => {
-		const command = new Crust("app").mount(
+		const command = new Crust("app").add(
 			defineCommand("issue", (cmd) =>
 				cmd
 					.meta({
@@ -643,7 +643,7 @@ describe("built-in plugins", () => {
 	});
 
 	it("renderHelp renders unchanged for a command without aliases", () => {
-		const command = new Crust("app").mount(
+		const command = new Crust("app").add(
 			defineCommand("build", (cmd) =>
 				cmd.meta({ description: "Build the project" }).handle(() => {}),
 			),
@@ -658,7 +658,7 @@ describe("built-in plugins", () => {
 
 	it("renderHelp keeps description column aligned when aliases overflow the column", () => {
 		const command = new Crust("app")
-			.mount(
+			.add(
 				defineCommand("issue", (cmd) =>
 					cmd
 						.meta({
@@ -668,7 +668,7 @@ describe("built-in plugins", () => {
 						.handle(() => {}),
 				),
 			)
-			.mount(
+			.add(
 				defineCommand("build", (cmd) =>
 					cmd.meta({ description: "Build the project" }).handle(() => {}),
 				),
@@ -690,12 +690,12 @@ describe("built-in plugins", () => {
 
 	it("renderHelp omits subcommands marked meta.hidden: true", () => {
 		const command = new Crust("app")
-			.mount(
+			.add(
 				defineCommand("build", (cmd) =>
 					cmd.meta({ description: "Build the project" }).handle(() => {}),
 				),
 			)
-			.mount(
+			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd
 						.meta({
@@ -715,7 +715,7 @@ describe("built-in plugins", () => {
 
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", () => {
 		const command = new Crust("app")
-			.mount(
+			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
 				),
@@ -731,7 +731,7 @@ describe("built-in plugins", () => {
 		// Regression: formatUsage previously counted hidden subcommands when
 		// deciding whether to emit `<command>`, producing the incoherent
 		// `Usage: app <command>` with no COMMANDS section below it.
-		const command = new Crust("app").mount(
+		const command = new Crust("app").add(
 			defineCommand("__complete", (cmd) =>
 				cmd.meta({ hidden: true, description: "Internal" }).handle(() => {}),
 			),
@@ -748,12 +748,12 @@ describe("built-in plugins", () => {
 		// A hidden subcommand with aliases should be entirely absent. A visible
 		// subcommand with aliases should still render `name (a, b)`.
 		const command = new Crust("app")
-			.mount(
+			.add(
 				defineCommand("issue", (cmd) =>
 					cmd.meta({ description: "Manage issues", aliases: ["issues", "i"] }).handle(() => {}),
 				),
 			)
-			.mount(
+			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd
 						.meta({
@@ -776,12 +776,12 @@ describe("built-in plugins", () => {
 		let didRun = false;
 		const app = new Crust("app")
 			.extend(helpExtension())
-			.mount(
+			.add(
 				defineCommand("build", (cmd) =>
 					cmd.meta({ description: "Build the project" }).handle(() => {}),
 				),
 			)
-			.mount(
+			.add(
 				defineCommand("__complete", (cmd) =>
 					cmd.meta({ hidden: true, description: "Internal" }).handle(() => {
 						didRun = true;

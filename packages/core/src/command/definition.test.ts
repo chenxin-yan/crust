@@ -11,7 +11,7 @@ type IsEqual<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("command definitions", () => {
-	it("stays inert and materializes each mount", async () => {
+	it("stays inert and materializes each time it is added", async () => {
 		let configured = 0;
 		const definition = defineCommand("build", (command) => {
 			configured++;
@@ -19,7 +19,7 @@ describe("command definitions", () => {
 		});
 
 		expect(configured).toBe(0);
-		const app = new Crust("cli").mount(definition, definition.as("compile"));
+		const app = new Crust("cli").add(definition, definition.as("compile"));
 
 		expect(configured).toBe(2);
 		const snapshot = await app.snapshot();
@@ -47,14 +47,14 @@ describe("command definitions", () => {
 	it("does not backfill nested definitions with later inheritable flags", async () => {
 		const nested = defineCommand("nested", (command) => command.handle(() => {}));
 		const outer = defineCommand("outer", (command) =>
-			command.mount(nested).flags({ name: "late", type: "boolean" }),
+			command.add(nested).flags({ name: "late", type: "boolean" }),
 		);
-		const app = new Crust("cli").mount(outer);
+		const app = new Crust("cli").add(outer);
 
 		await expect(app.run(["outer", "nested", "--late"])).rejects.toThrow(/Unknown flag/);
 	});
 
-	it("propagates Context-owned flags only to definitions mounted after provide()", async () => {
+	it("propagates Context-owned flags only to definitions added after provide()", async () => {
 		const calls: string[] = [];
 		const apiKey = defineFlag("api-key", { type: "string" });
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
@@ -67,9 +67,9 @@ describe("command definitions", () => {
 			}),
 		);
 		const outer = defineCommand("outer", (command) =>
-			command.mount(before).provide(auth()).mount(after),
+			command.add(before).provide(auth()).add(after),
 		);
-		const app = new Crust("cli").mount(outer);
+		const app = new Crust("cli").add(outer);
 
 		await expect(app.run(["outer", "before", "--api-key", "secret"])).rejects.toThrow(
 			/Unknown flag/,
@@ -91,16 +91,16 @@ describe("command definitions", () => {
 			}),
 		);
 		const deploy = defineCommand("deploy", { requires: [logging, db] }, (command) =>
-			command.mount(status),
+			command.add(status),
 		);
-		const app = new Crust("cli").provide(logging(), db()).mount(deploy);
+		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
 		await app.run(["deploy", "status", "--verbose"]);
 
 		expect(calls).toEqual(["database:true"]);
 	});
 
-	it("clones annotations and isolates mounts across parents", async () => {
+	it("clones annotations and isolates materializations across parents", async () => {
 		const annotation = Symbol("annotation");
 		const definition = defineCommand("one", (command) => {
 			const configured = command.meta({ description: "Reusable" });
@@ -109,8 +109,8 @@ describe("command definitions", () => {
 			return configured;
 		});
 
-		const first = await new Crust("first").mount(definition).snapshot();
-		const second = await new Crust("second").mount(definition.as("two")).snapshot();
+		const first = await new Crust("first").add(definition).snapshot();
+		const second = await new Crust("second").add(definition.as("two")).snapshot();
 
 		expect((first.subCommands.one as unknown as Record<symbol, unknown>)[annotation]).toBe(
 			"preserved",
@@ -124,26 +124,26 @@ describe("command definitions", () => {
 		const db = defineContext("db", () => "database");
 		const definition = defineCommand("users", (command) => command.provide(db()));
 
-		expect(() => new Crust("cli").provide(db()).mount(definition)).toThrow(
+		expect(() => new Crust("cli").provide(db()).add(definition)).toThrow(
 			/Context "db" is already provided/,
 		);
 	});
 
-	it("excludes parent local flags from mounted commands", async () => {
+	it("excludes parent local flags from added commands", async () => {
 		const definition = defineCommand("users", (command) => command.handle(() => {}));
-		const app = new Crust("cli").flags({ name: "secret", type: "string" }).mount(definition);
+		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
 		await expect(app.run(["users", "--secret", "value"])).rejects.toThrow(/Unknown flag/);
 	});
 
-	it("runs mounted definitions through run and execute", async () => {
+	it("runs added definitions through run and execute", async () => {
 		let calls = 0;
 		const definition = defineCommand("build", (command) =>
 			command.handle(() => {
 				calls++;
 			}),
 		);
-		const app = new Crust("cli").mount(definition);
+		const app = new Crust("cli").add(definition);
 
 		await app.run(["build"]);
 		await app.execute({ argv: ["build"] });
@@ -151,7 +151,7 @@ describe("command definitions", () => {
 		expect(calls).toBe(2);
 	});
 
-	it("mounts multiple definitions in one variadic call", async () => {
+	it("adds multiple definitions in one variadic call", async () => {
 		const ran: string[] = [];
 		const build = defineCommand("build", (command) =>
 			command.handle(() => {
@@ -163,7 +163,7 @@ describe("command definitions", () => {
 				ran.push("publish");
 			}),
 		);
-		const app = new Crust("cli").mount(build, publish);
+		const app = new Crust("cli").add(build, publish);
 
 		await app.run(["build"]);
 		await app.run(["publish"]);
@@ -173,41 +173,41 @@ describe("command definitions", () => {
 
 	it("uses the same lineage checks for inline definitions", () => {
 		expect(() =>
-			new Crust("cli").mount(defineCommand("bad", () => new Crust("foreign") as never)),
+			new Crust("cli").add(defineCommand("bad", () => new Crust("foreign") as never)),
 		).toThrow(/same command builder/);
 	});
 
-	it("validates canonical names and aliases on every mount", () => {
+	it("validates canonical names and aliases on every add", () => {
 		const definition = defineCommand("build", (command) =>
 			command.meta({ aliases: ["b"] }).handle(() => {}),
 		);
-		const app = new Crust("cli").mount(definition);
+		const app = new Crust("cli").add(definition);
 
-		expect(() => app.mount(definition)).toThrow(/already registered/);
-		expect(() => app.mount(defineCommand("b", (command) => command))).toThrow(
+		expect(() => app.add(definition)).toThrow(/already registered/);
+		expect(() => app.add(defineCommand("b", (command) => command))).toThrow(
 			/collides with alias of sibling "build"/,
 		);
 		expect(() =>
-			new Crust("cli").mount(defineCommand("b", (command) => command)).mount(definition),
+			new Crust("cli").add(defineCommand("b", (command) => command)).add(definition),
 		).toThrow(/collides with sibling canonical name "b"/);
 	});
 
 	it("rejects unrelated returned builders and nested Extensions", () => {
 		const unrelated = defineCommand("bad", () => new Crust("other") as never);
-		expect(() => new Crust("cli").mount(unrelated)).toThrow(/same command builder/);
+		expect(() => new Crust("cli").add(unrelated)).toThrow(/same command builder/);
 
 		const nestedExtension = defineCommand(
 			"bad",
 			(command) => (command as unknown as Crust).extend(defineExtension("nested")) as never,
 		);
-		expect(() => new Crust("cli").mount(nestedExtension)).toThrow(
+		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
 			/Extensions cannot be registered inside command definitions/,
 		);
 	});
 
 	it("rejects values that are not command definitions", () => {
 		for (const bad of [{}, null, undefined, "definition"]) {
-			expect(() => new Crust("cli").mount(bad as never)).toThrow(
+			expect(() => new Crust("cli").add(bad as never)).toThrow(
 				/requires a command definition created by defineCommand/,
 			);
 		}
@@ -219,14 +219,14 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("checks Context requirement names at the mount call at runtime", () => {
+	it("checks Context requirement names at runtime when added", () => {
 		const db = defineContext("db", () => "database");
 		const definition = defineCommand("users", { requires: [db] }, (command) =>
 			command.handle(() => {}),
 		);
 
-		expect(() => new Crust("cli").provide(db()).mount(definition)).not.toThrow();
-		expect(() => new Crust("cli").mount(definition as never)).toThrow(
+		expect(() => new Crust("cli").provide(db()).add(definition)).not.toThrow();
+		expect(() => new Crust("cli").add(definition as never)).toThrow(
 			/Command "users" requires Context "db"/,
 		);
 	});
@@ -247,15 +247,15 @@ describe("command definitions", () => {
 				}),
 		);
 
-		new Crust("cli").provide(auth()).mount(definition);
+		new Crust("cli").provide(auth()).add(definition);
 		expect(() =>
 			// @ts-expect-error -- missing Contexts: auth
-			new Crust("cli").mount(definition),
+			new Crust("cli").add(definition),
 		).toThrow(/requires Context "auth"/);
 		new Crust("cli")
 			.provide(defineContext("auth", () => "wrong")())
 			// @ts-expect-error -- incompatible Contexts: auth
-			.mount(definition);
+			.add(definition);
 	});
 
 	it("keeps root-only methods off the definition builder", () => {
@@ -283,14 +283,14 @@ describe("command definitions", () => {
 		});
 	});
 
-	it("checks nested requirements at the enclosing mount point", () => {
+	it("checks nested requirements at the enclosing add point", () => {
 		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const nested = defineCommand("nested", { requires: [auth] }, (command) => command);
 
-		defineCommand("outer", { requires: [auth] }, (command) => command.mount(nested));
+		defineCommand("outer", { requires: [auth] }, (command) => command.add(nested));
 		defineCommand("outer", (command) => {
 			// @ts-expect-error -- missing Contexts: auth
-			return command.mount(nested);
+			return command.add(nested);
 		});
 	});
 });

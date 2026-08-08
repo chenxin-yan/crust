@@ -630,7 +630,7 @@ describe("buildManifest", () => {
 					"Read the environment carefully before execution.",
 				).handle(() => {}),
 			);
-			const root = new Crust("app").mount(deploy);
+			const root = new Crust("app").add(deploy);
 
 			const node = buildManifest(snapshotCommand(root._node));
 			const child = node.children[0];
