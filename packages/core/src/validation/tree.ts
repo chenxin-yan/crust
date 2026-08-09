@@ -1,87 +1,28 @@
 import { sortContexts } from "../api/context.ts";
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import { parseArgs, validateParsed } from "../parsing/parser.ts";
-import type { ArgDef, FlagDef } from "../types.ts";
+import { validateDefinition } from "../parsing/parser.ts";
 import { validateIncomingAliases } from "./commands.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Returns a synthetic token that satisfies `parseArgs` for the given type. */
-function sampleToken(def: ArgDef | FlagDef): string {
-	// When `choices` is declared, picking any value outside the list now
-	// throws at parse time. Use the first declared choice so the
-	// synthetic argv always passes the choices gate.
-	const choices = (def as { choices?: readonly string[] }).choices;
-	if (choices !== undefined && choices.length > 0) return choices[0] as string;
-	switch (def.type) {
-		case "number":
-			return "1";
-		case "boolean":
-			return "true";
-		case "url":
-			return "https://example.com";
-		case "json":
-			return "null";
-		default:
-			return "sample";
-	}
-}
-
-/**
- * Build a synthetic argv that satisfies `parseArgs` for the given command.
- *
- * Uses `effectiveFlags` so propagated required flags are included in the
- * synthetic argv.
- */
-function createValidationArgv(command: CommandNode): string[] {
-	const argv: string[] = [];
-
-	const flags = command.effectiveFlags;
-
-	for (const [name, def] of Object.entries(flags as Record<string, FlagDef>)) {
-		// Skip flags that are optional or have defaults — parseArgs won't
-		// complain about them being absent.
-		if (def.required !== true || def.default !== undefined) continue;
-
-		argv.push(`--${name}`);
-		if (def.type !== "boolean") {
-			argv.push(sampleToken(def));
-		}
-	}
-
-	const args = command.args;
-
-	if (args) {
-		for (const def of args) {
-			// Skip args that are optional or have defaults.
-			if (def.required !== true || def.default !== undefined) continue;
-
-			argv.push(sampleToken(def));
-		}
-	}
-
-	return argv;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // validateCommandTree — Tree validation
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Validate an entire command tree by walking each node and calling `parseArgs`
- * with a synthetic argv derived from the node's flag/arg definitions.
+ * Validate an entire command tree by walking each node and running the
+ * definition-class checks the runtime parser itself uses
+ * (`validateDefinition`), plus Context dependency resolution.
  *
  * This catches:
- * - Alias collisions (including between Context-owned and local flags)
- * - `no-` prefix violations
- * - Required flag/arg validation
+ * - Flag alias collisions (including between Context-owned and local flags,
+ *   via `effectiveFlags`)
+ * - `no-` prefix violations and invalid flag types
+ * - Async `parse` functions
  * - Variadic arg position violations
+ * - Missing/cyclic Context dependencies
  *
- * Uses `effectiveFlags` (Context-owned + local merged) so alias collisions
- * between a Context-owned flag and a local flag are caught.
+ * The rules themselves live in `validateDefinition` and `sortContexts` —
+ * this walk only provides tree coverage and path-labelled errors.
  *
  * @param root - The root command node to validate
  * @throws {CrustError} `DEFINITION` with the full command path on failure
@@ -101,8 +42,7 @@ export function validateCommandTree(root: CommandNode): void {
 		visited.add(command);
 
 		try {
-			const parsed = parseArgs(command, createValidationArgv(command));
-			validateParsed(command, parsed);
+			validateDefinition(command);
 			// Context dependency resolution (missing deps, cycles) fails at
 			// build validation, not first dispatch.
 			sortContexts(command.contexts, `the "${path.join(" ")}" command path`);
