@@ -44,6 +44,26 @@ This gives you:
 - **Auto-update**: when a user runs any command, the extension silently updates installed skills if the version has changed.
 - **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents. A `skill update` subcommand is also available for update-only flows.
 
+## Build API
+
+Use `writeSkills()` during your package build to create a read-only **skill source** that versions with your CLI. It snapshots the app, renders the generated command-reference skill, copies each **authored skill** bundle, and writes one self-describing directory per skill under `outDir`:
+
+```ts
+import { writeSkills } from "@crustjs/skills";
+import { app } from "./cli.ts";
+import pkg from "./package.json" with { type: "json" };
+
+await writeSkills(app, {
+  outDir: "dist/skills",
+  version: pkg.version,
+  bundles: ["skills/deployment-guide"],
+});
+```
+
+The generated skill defaults to the root command's name and description; pass `name` or `description` to override them. Every output directory contains `SKILL.md`, its supporting files, and a `crust.json` recording its name, description, version, and kind (`"generated"` or `"bundle"`). The API only writes below `outDir`; it does not install into the canonical store or any **agent directory**.
+
+<auto-type-table path="../../../../../packages/skills/src/build.ts" name="WriteSkillsOptions" />
+
 ## Extension Options
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />

@@ -2,6 +2,10 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
+// Build
+export { writeSkills } from "./build.ts";
+export type { WriteSkillsOptions } from "./build.ts";
+
 // Agent detection
 export {
 	detectInstalledAgents,
