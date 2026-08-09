@@ -58,8 +58,14 @@ export type ValidateNamedFlagDefs<
 	Existing extends string = never,
 	// Hoisted out of the per-element map below: both are invariant w.r.t. `I`,
 	// so computing them once as defaulted params avoids re-instantiating them
-	// for every definition in the call.
-	Validated = ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>,
+	// for every definition in the call. The always-true distributive conditional
+	// on the naked `Defs` param exists purely for perf: it defers instantiating
+	// the validation pipeline until `Defs` is concrete instead of speculatively
+	// re-instantiating it during inference (measured −52k instantiations on core;
+	// the non-distributive `[Defs] extends [Defs]` form recovers only −18k).
+	Validated = Defs extends Defs
+		? ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
+		: never,
 	Dups extends string = DuplicateNames<Defs>,
 > = {
 	[I in keyof Defs]: Defs[I] &
