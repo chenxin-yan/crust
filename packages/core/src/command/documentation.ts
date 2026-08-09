@@ -1,29 +1,77 @@
 import { flagSpellings } from "../parsing/spellings.ts";
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
+/**
+ * Presentation-ready view of one positional argument.
+ *
+ * Same data as {@link ArgSnapshot} but normalized for renderers: booleans are
+ * always present (never `undefined`) and the display token is pre-formatted.
+ */
 export interface DocumentationArg {
+	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
+	/**
+	 * Pre-formatted usage token: `<name>` if required, `[name]` if optional,
+	 * with `...` appended when variadic — e.g. `"<file>"`, `"[files...]"`.
+	 */
 	readonly token: string;
+	/** Value type (`"string"`, `"number"`, …); `undefined` for schema/raw args. */
 	readonly type?: CommandSnapshot["args"][number]["type"];
+	/** Human-readable description from the arg definition. */
 	readonly description?: string;
+	/** `true` when parsing fails if the argument is missing. */
 	readonly required: boolean;
+	/** `true` when the argument collects all remaining positionals into an array. */
 	readonly variadic: boolean;
+	/** Static enum of accepted values, e.g. `["json", "text"]`, if declared. */
 	readonly choices?: readonly string[];
+	/** Default value used when the argument is omitted, e.g. `3000`. */
 	readonly default?: unknown;
 }
 
+/**
+ * Presentation-ready view of one flag.
+ *
+ * @example
+ * For `{ output: { type: "string", short: "o", aliases: ["out"] } }`:
+ * ```ts
+ * {
+ *   name: "output",
+ *   spellings: ["-o", "--output", "--out"],
+ *   short: "o",
+ *   aliases: ["out"],
+ *   negatable: false,
+ *   type: "string",
+ *   required: false,
+ *   multiple: false,
+ * }
+ * ```
+ */
 export interface DocumentationFlag {
+	/** Canonical flag name (the key in the flags definition), e.g. `"output"`. */
 	readonly name: string;
-	/** All accepted CLI spellings, ordered short, canonical, aliases, then negations. */
+	/**
+	 * All accepted CLI spellings with dashes, ordered short, canonical, aliases,
+	 * then negations — e.g. `["-v", "--verbose", "--no-verbose"]`.
+	 */
 	readonly spellings: readonly string[];
+	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
 	readonly short?: string;
+	/** Additional long aliases without dashes, e.g. `["out"]` for `--out`. */
 	readonly aliases: readonly string[];
+	/** `true` for boolean flags that also accept `--no-<name>` (i.e. `noNegate` unset). */
 	readonly negatable: boolean;
+	/** Value type, e.g. `"boolean"`, `"string"`, `"number"`. */
 	readonly type: FlagSnapshot["type"];
+	/** Human-readable description from the flag definition. */
 	readonly description?: string;
+	/** `true` when parsing fails if the flag is not provided. */
 	readonly required: boolean;
+	/** `true` when the flag can repeat and collects values into an array. */
 	readonly multiple: boolean;
+	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`, if declared. */
 	readonly choices?: readonly string[];
+	/** Default value used when the flag is omitted, e.g. `false`. */
 	readonly default?: unknown;
 }
 
@@ -40,16 +88,32 @@ export type UsageSegment =
 	| { readonly kind: "options"; readonly text: "[options]" }
 	| { readonly kind: "custom"; readonly text: string };
 
+/**
+ * Presentation-neutral documentation model for one command (and, via
+ * `children`, its visible subtree). Renderers (help, man pages, …) consume
+ * this instead of re-deriving usage/spelling policy from raw definitions.
+ */
 export interface CommandDocumentation {
+	/** Canonical command name, e.g. `"add"`. */
 	readonly name: string;
+	/** Full invocation path from the root CLI, e.g. `["mycli", "remote", "add"]`. */
 	readonly path: readonly string[];
+	/** Human-readable description from `meta.description`. */
 	readonly description?: string;
+	/** Alternative names that route to this command, e.g. `["i"]` for `install`. */
 	readonly aliases: readonly string[];
-	/** Plain usage line: `usageSegments` texts joined with spaces. */
+	/**
+	 * Plain usage line: `usageSegments` texts joined with spaces —
+	 * e.g. `"mycli remote add <name> [url] [options]"`.
+	 */
 	readonly usage: string;
+	/** Structured pieces of `usage` so renderers can color parts individually. */
 	readonly usageSegments: readonly UsageSegment[];
+	/** `true` when the command has its own action (not just a subcommand container). */
 	readonly hasAction: boolean;
+	/** Positional arguments in declaration order. */
 	readonly args: readonly DocumentationArg[];
+	/** Effective flags (Context-owned + local), in definition order. */
 	readonly flags: readonly DocumentationFlag[];
 	/** Visible children only; hidden commands remain invocable but are not documentation. */
 	readonly children: readonly CommandDocumentation[];

@@ -10,27 +10,63 @@ import type { CommandNode } from "./node.ts";
  *
  * Carries everything help/man/tooling surfaces need; `parse` functions and
  * schemas never cross the boundary.
+ *
+ * Fields with `undefined` values are dropped entirely (see `freezeCompact`),
+ * so absent means "not declared".
+ *
+ * @example
+ * For `{ name: "port", type: "number", default: 3000 }`:
+ * ```ts
+ * { name: "port", type: "number", default: 3000 }
+ * // `required`/`variadic` keys absent — not declared on the def
+ * ```
  */
 export interface ArgSnapshot {
+	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
+	/** Value type (`"string"`, `"number"`, …); absent for schema/raw args. */
 	readonly type?: ValueType;
+	/** Human-readable description for help text. */
 	readonly description?: string;
+	/** `true` when parsing fails if the argument is missing. */
 	readonly required?: boolean;
+	/** `true` when the argument collects all remaining positionals into an array. */
 	readonly variadic?: boolean;
+	/** Static enum of accepted values, e.g. `["json", "text"]`. */
 	readonly choices?: readonly string[];
+	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
 }
 
-/** Serializable projection of a flag definition. */
+/**
+ * Serializable projection of a flag definition. The flag's canonical name is
+ * the key it sits under in {@link CommandSnapshot.flags}, not a field here.
+ *
+ * @example
+ * For `{ verbose: { type: "boolean", short: "v", default: false } }`:
+ * ```ts
+ * snapshot.flags.verbose
+ * // => { type: "boolean", short: "v", default: false }
+ * ```
+ */
 export interface FlagSnapshot {
+	/** Value type, e.g. `"boolean"`, `"string"`, `"number"`. */
 	readonly type: ValueType;
+	/** Human-readable description for help text. */
 	readonly description?: string;
+	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
 	readonly short?: string;
+	/** Additional long aliases without dashes, e.g. `["out"]` for `--out`. */
 	readonly aliases?: readonly string[];
+	/** `true` when parsing fails if the flag is not provided. */
 	readonly required?: boolean;
+	/** `true` when the flag can repeat and collects values into an array. */
 	readonly multiple?: boolean;
+	/** `true` when a boolean flag opted out of the `--no-<name>` spelling. */
 	readonly noNegate?: boolean;
+	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`. */
 	readonly choices?: readonly string[];
+	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
 }
 
@@ -41,13 +77,35 @@ export interface FlagSnapshot {
  *
  * `flags` contains the effective (Context-owned + local merged) flags — the same
  * set the parser accepts for the command.
+ *
+ * @example
+ * ```ts
+ * defineCommand("add", (cmd) =>
+ *   cmd
+ *     .args({ name: "name", type: "string", required: true })
+ *     .flags({ name: "force", type: "boolean", short: "f" })
+ *     .action(() => {}),
+ * );
+ * // snapshots to:
+ * // {
+ * //   meta: { name: "add" },
+ * //   hasAction: true,
+ * //   args: [{ name: "name", type: "string", required: true }],
+ * //   flags: { force: { type: "boolean", short: "f" } },
+ * //   subCommands: {},
+ * // }
+ * ```
  */
 export interface CommandSnapshot {
+	/** Command metadata: `name`, `description`, `usage`, `aliases`, `hidden`. */
 	readonly meta: Readonly<CommandMeta>;
 	/** Whether the command defines a Command Action */
 	readonly hasAction: boolean;
+	/** Positional argument snapshots in declaration order. */
 	readonly args: readonly ArgSnapshot[];
+	/** Effective flags keyed by canonical flag name. */
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
+	/** Direct subcommand snapshots keyed by canonical name (includes hidden ones). */
 	readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
 }
 
