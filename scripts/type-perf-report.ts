@@ -66,8 +66,6 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 		`| Types${warns.types} | ${number.format(base.types)} | ${number.format(head.types)} | ${delta(base.types, head.types)} |`,
 		`| Check time (informational — noisy on shared runners) | ${base.checkTimeSeconds.toFixed(3)}s | ${head.checkTimeSeconds.toFixed(3)}s | ${delta(base.checkTimeSeconds, head.checkTimeSeconds, 3)} |`,
 		"",
-		`TypeScript ${head.typescriptVersion} · \`packages/core/tsconfig.json\` · ⚠️ marks compiler-work increases above 10%.`,
-		"",
 		"### Consumer scaling (synthetic app vs dist)",
 		"",
 		"| Commands | Base instantiations | Head instantiations | Δ |",
@@ -77,8 +75,6 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 				`| ${size} | ${number.format(base.scaling[size].instantiations)} | ${number.format(head.scaling[size].instantiations)} | ${delta(base.scaling[size].instantiations, head.scaling[size].instantiations)} |`,
 		),
 		`| 100/10 scaling ratio${ratioWarning} | ${baseRatio.toFixed(2)}× | ${headRatio.toFixed(2)}× | ${delta(baseRatio, headRatio, 2)} |`,
-		"",
-		"Fixtures consume built `@crustjs/core` declarations. The ratio highlights superlinear growth; ⚠️ appears when it worsens by more than 10%.",
 	].join("\n");
 }
 

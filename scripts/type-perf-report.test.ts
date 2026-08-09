@@ -109,6 +109,5 @@ describe("type performance report", () => {
 		expect(output).toContain("### Consumer scaling (synthetic app vs dist)");
 		expect(output).toContain("| 50 | 25,000 | 27,000 | +2,000 (+8.0%) |");
 		expect(output).toContain("| 100/10 scaling ratio ⚠️ | 5.00× | 6.00× | +1.00 (+20.0%) |");
-		expect(output).toContain("TypeScript 7.0.2 · `packages/core/tsconfig.json`");
 	});
 });
