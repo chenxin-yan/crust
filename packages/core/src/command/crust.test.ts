@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
@@ -1011,6 +1013,12 @@ describe("Crust .extend()", () => {
 				verbose: { type: "boolean", default: false },
 				rootPort: { type: "number", default: 3000, recursive: false },
 				token: { type: "string", required: true },
+				endpoint: { type: "string", schema: {} as StandardSchema<string | undefined, URL> },
+				tags: {
+					type: "string",
+					multiple: true,
+					schema: {} as StandardSchema<string[], string[]>,
+				},
 			},
 			hooks: {
 				preRun(ctx) {
@@ -1018,6 +1026,9 @@ describe("Crust .extend()", () => {
 					type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
 					// Hooks run before validation, so a required flag may still be absent.
 					type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
+					// Schema flags reflect the raw syntax token, not the schema output.
+					type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
+					type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
 					type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
 					const commandFlag: unknown = ctx.flags.commandFlag;
 					void commandFlag;

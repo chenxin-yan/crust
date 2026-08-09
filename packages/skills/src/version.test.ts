@@ -120,6 +120,12 @@ describe("inspectInstalledManifest", () => {
 		expect(result).toEqual({ status: "malformed", reason: "parse-error" });
 	});
 
+	it("returns status: 'malformed' with reason 'not-an-object' for an array root", async () => {
+		await writeFile(join(tmpDir, CRUST_MANIFEST), "[]");
+		const result = await inspectInstalledManifest(tmpDir);
+		expect(result).toEqual({ status: "malformed", reason: "not-an-object" });
+	});
+
 	it("returns status: 'malformed' with reason 'missing-version' when version is absent", async () => {
 		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
 		const result = await inspectInstalledManifest(tmpDir);

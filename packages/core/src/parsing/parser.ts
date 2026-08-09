@@ -329,6 +329,8 @@ function resolveFlags<F extends FlagsDef>(
 	}
 
 	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferFlags<F>.
+	// The asserted type is also ahead of runtime here: required-without-default flags may still be
+	// `undefined` until validateParsed, and schema-backed flags hold raw tokens until applySchemas.
 	return resolved as InferFlags<F>;
 }
 
@@ -397,6 +399,8 @@ function resolveArgs<A extends ArgsDef>(
 	}
 
 	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferArgs<A>.
+	// The asserted type is also ahead of runtime here: required-without-default args may still be
+	// `undefined` until validateParsed, and schema-backed args hold raw tokens until applySchemas.
 	return resolved as InferArgs<A>;
 }
 

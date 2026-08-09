@@ -152,7 +152,8 @@ export function createStore<const F extends FieldsDef>(
 		return value;
 	}
 
-	function normalizeStateTypes(state: Config): Config {
+	// Returns the mutable working copy so validators can write transforms without lying about readonly.
+	function normalizeStateTypes(state: Config): MutableConfig {
 		const normalized: MutableConfig = { ...state };
 
 		for (const [key, def] of Object.entries(fields)) {
@@ -181,11 +182,10 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function runFieldValidators(
-		state: Config,
+		mutableState: MutableConfig,
 		operation: "read" | "write" | "update" | "patch",
 	): Promise<void> {
 		const issues: StoreValidatorIssue[] = [];
-		const mutableState: MutableConfig = state;
 
 		for (const [key, def] of Object.entries(fields)) {
 			const validator = validators.get(key);
@@ -274,7 +274,7 @@ export function createStore<const F extends FieldsDef>(
 	// readRaw — Load persisted config, apply field defaults (no validation)
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function readRaw(): Promise<Config> {
+	async function readRaw(): Promise<MutableConfig> {
 		const persisted = await readJson(filePath);
 		const persistedObject = asJsonObject(persisted);
 		if (persisted !== undefined && persistedObject === undefined) {

@@ -36,7 +36,7 @@ async function runSchema(
  * @throws {CrustError} `VALIDATION` aggregating every schema issue
  */
 export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	node: CommandNode,
+	node: CommandNode & { args: A | undefined; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
 ): Promise<{ args: InferArgs<A>; flags: InferFlags<F> }> {
 	const issues: ValidationIssue[] = [];
