@@ -32,22 +32,72 @@ export type InvocationOutcome =
  *
  * Commands cross this boundary as readonly, serializable
  * {@link CommandSnapshot}s — never as internal command nodes.
+ *
+ * Examples below assume the `tool deploy api --trace -- --dry-run` invocation.
  */
 export interface ExtensionContext<
 	F extends Record<string, ExtensionFlagDef> = {},
 > extends Readonly<InvocationIO> {
+	/**
+	 * Complete argv passed to the application, including routed command names.
+	 *
+	 * @example `["deploy", "api", "--trace", "--", "--dry-run"]`
+	 */
 	readonly argv: readonly string[];
-	/** Snapshot of the application root, including Extension-contributed flags/commands */
+	/**
+	 * Snapshot of the application root, including Extension-contributed flags/commands.
+	 *
+	 * @example
+	 * ```ts
+	 * ctx.rootCommand.meta.name; // "tool"
+	 * Object.keys(ctx.rootCommand.subCommands); // ["deploy"]
+	 * ```
+	 */
 	readonly rootCommand: CommandSnapshot;
-	/** Snapshot of the resolved command (the root when routing failed) */
+	/**
+	 * Snapshot of the resolved command (the root when routing failed).
+	 *
+	 * @example
+	 * ```ts
+	 * ctx.command.meta.name; // "deploy"
+	 * ctx.command.args; // [{ name: "target", type: "string", required: true }]
+	 * ```
+	 */
 	readonly command: CommandSnapshot;
+	/**
+	 * Canonical names from the application root through the resolved command.
+	 *
+	 * @example `["tool", "deploy"]`
+	 */
 	readonly commandPath: readonly string[];
-	/** Syntax-parsed positional values for the resolved command */
+	/**
+	 * Syntax-parsed positional values for the resolved command, before validation.
+	 *
+	 * @example `{ target: "api" }`
+	 */
 	readonly args: Readonly<Record<string, unknown>>;
-	/** Syntax-parsed own flags plus unknown flags from the resolved command */
+	/**
+	 * Syntax-parsed own flags plus unknown flags from the resolved command, before validation.
+	 *
+	 * @example `{ trace: true }`
+	 */
 	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, unknown>>;
+	/**
+	 * Positional values that appeared after the `--` separator.
+	 *
+	 * @example `["--dry-run"]`
+	 */
 	readonly rawArgs: readonly string[];
-	/** End the invocation successfully before validation, Context construction, and the action. */
+	/**
+	 * End the invocation successfully before validation, Context construction, and the action.
+	 *
+	 * @example
+	 * ```ts
+	 * preRun(ctx) {
+	 *   if (ctx.flags.help === true) return ctx.finish();
+	 * }
+	 * ```
+	 */
 	readonly finish: () => Finished;
 }
 
