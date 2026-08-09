@@ -1,22 +1,13 @@
 import { readdirSync, realpathSync, statSync } from "node:fs";
-import { readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { readInstalledManifest, readInstalledManifestSync } from "./version.ts";
+import { readInstalledManifestSync } from "./version.ts";
 
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
-}
-
-async function directoryPath(path: string): Promise<string | null> {
-	try {
-		return (await stat(path)).isDirectory() ? await realpath(path) : null;
-	} catch {
-		return null;
-	}
 }
 
 function fallbackName(source: string | URL): string {
@@ -63,24 +54,7 @@ export function resolveSkillSourceSync(source: string | URL): string {
 
 /** Resolves a packaged skill-source root, including compiled executable staging. */
 export async function resolveSkillSource(source: string | URL): Promise<string> {
-	let primary: string | undefined;
-	try {
-		primary = resolveSourceDir(source);
-	} catch {
-		// Relative paths may not have a package entrypoint in compiled executables.
-	}
-	if (primary) {
-		const resolved = await directoryPath(primary);
-		if (resolved) return resolved;
-	}
-
-	const fallback = join(dirname(process.execPath), fallbackName(source));
-	const resolvedFallback = await directoryPath(fallback);
-	if (resolvedFallback) return resolvedFallback;
-
-	throw new SkillSourceUnavailableError(
-		`Could not resolve skill source${primary ? ` at "${primary}"` : ""} or executable-relative fallback "${fallback}".`,
-	);
+	return resolveSkillSourceSync(source);
 }
 
 export interface PackagedSkill {
@@ -121,29 +95,5 @@ export function loadPackagedSkillsSync(source: string | URL): readonly PackagedS
 
 /** Reads every self-describing skill directory in a packaged skill source. */
 export async function loadPackagedSkills(source: string | URL): Promise<readonly PackagedSkill[]> {
-	const root = await resolveSkillSource(source);
-	const skills: PackagedSkill[] = [];
-	for (const entry of await readdir(root, { withFileTypes: true })) {
-		if (!entry.isDirectory()) continue;
-		const sourceDir = join(root, entry.name);
-		const manifest = await readInstalledManifest(sourceDir);
-		if (!manifest) {
-			throw new Error(`Skill source directory "${sourceDir}" has no valid crust.json.`);
-		}
-		if (manifest.name !== entry.name) {
-			throw new Error(
-				`Skill source directory "${sourceDir}" declares name "${manifest.name}" in crust.json.`,
-			);
-		}
-		skills.push({
-			sourceDir,
-			name: manifest.name,
-			description: manifest.description,
-			version: manifest.version,
-		});
-	}
-	if (skills.length === 0) {
-		throw new Error(`Skill source "${root}" does not contain any skill directories.`);
-	}
-	return skills.sort((a, b) => a.name.localeCompare(b.name));
+	return loadPackagedSkillsSync(source);
 }

@@ -151,6 +151,8 @@ export function skill(options: SkillOptions): Extension {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
 	}
 	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
+	// writeSkills emits every source entry with the package build version.
+	const version = packagedSkills[0]?.version ?? null;
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
 		documentation: (snapshot) => [
@@ -161,7 +163,7 @@ export function skill(options: SkillOptions): Extension {
 			},
 		],
 		metadata: {
-			version: packagedSkills[0]?.version ?? null,
+			version,
 			command: commandName,
 			source,
 		},

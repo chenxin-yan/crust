@@ -72,7 +72,7 @@ my-cli skill --all --scope project
 my-cli skill update
 ```
 
-If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, which supports compiled distributions staged with their skills. When neither path resolves, the Agent skills section omits a source path and points to the `skill` command instead. The explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available.
+If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, which supports compiled distributions staged with their skills. When neither path resolves, the Agent skills section shows a fallback message pointing to the `skill` command instead. The explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
