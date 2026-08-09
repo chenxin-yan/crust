@@ -36,9 +36,12 @@ type ValidateContextConfig<R extends ContextConfig> = {
 };
 
 /** The runtime input every Context setup receives (typed per-factory by `defineContext`). */
-interface ContextSetupInput extends InvocationIO {
-	readonly flags: Record<string, unknown>;
-	readonly ctx: Readonly<ContextMap>;
+interface ContextSetupInput<
+	OF extends FlagsDef = FlagsDef,
+	RC extends ContextMap = ContextMap,
+> extends InvocationIO {
+	readonly flags: InferFlags<OF>;
+	readonly ctx: Readonly<RC>;
 }
 
 /**
@@ -62,7 +65,7 @@ export interface ContextInstance<
 	/** @internal — flags installed by this Context at its provide site */
 	readonly ownedFlags: FlagsDef;
 	/** @internal */
-	setup(input: ContextSetupInput): Awaitable<Value>;
+	setup(input: ContextSetupInput<OF, RC>): Awaitable<Value>;
 	/** @internal — phantom carrying requirement and ownership types */
 	readonly _requires?: { ctx: RC; ownedFlags: OF };
 }
