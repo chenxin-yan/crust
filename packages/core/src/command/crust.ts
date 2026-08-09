@@ -803,13 +803,7 @@ export class Crust<
 	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
 	 *             exposed to Command Actions and Extensions
 	 */
-	async run(
-		argv: readonly string[],
-		io?: {
-			stdout?: (text: string) => void;
-			stderr?: (text: string) => void;
-		},
-	): Promise<void> {
+	async run(argv: readonly string[], io?: Partial<InvocationIO>): Promise<void> {
 		// Programmatic calls preserve raw failures and never change process status.
 		await runInvocation(this._node, argv, io, materializeCommandDefinition);
 	}
@@ -827,10 +821,7 @@ export class Crust<
 	 *                   `io` for in-process testing of exit codes and
 	 *                   rendered failures)
 	 */
-	async execute(options?: {
-		argv?: string[];
-		io?: { stdout?: (text: string) => void; stderr?: (text: string) => void };
-	}): Promise<void> {
+	async execute(options?: { argv?: string[]; io?: Partial<InvocationIO> }): Promise<void> {
 		// Terminal calls render failures and set process exit status instead of throwing.
 		await executeInvocation(this._node, options, materializeCommandDefinition);
 	}

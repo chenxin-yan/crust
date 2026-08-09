@@ -322,7 +322,7 @@ async function renderFailure(
 export async function runInvocation(
 	node: CommandNode,
 	argv: readonly string[],
-	io: { stdout?: (text: string) => void; stderr?: (text: string) => void } | undefined,
+	io: Partial<InvocationIO> | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<void> {
 	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
@@ -336,7 +336,7 @@ export async function executeInvocation(
 	options:
 		| {
 				argv?: string[];
-				io?: { stdout?: (text: string) => void; stderr?: (text: string) => void };
+				io?: Partial<InvocationIO>;
 		  }
 		| undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
