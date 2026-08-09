@@ -15,13 +15,11 @@ export type DefName<T> = T extends { name: infer N extends string }
 
 /**
  * The members of union `S` that overlap with `Existing`, or `never` when
- * disjoint. Encapsulates the precedence subtlety shared by every collision
- * brand: the intersection binds tighter than the conditional, so `S & Existing`
- * reduces to the overlapping literals before the `infer` pattern-matches them.
+ * disjoint. Callers pattern-match the result with their own
+ * `extends infer C extends string` to embed the colliding literal(s) in a
+ * brand message.
  */
-export type Overlap<S, Existing extends string> = S & Existing extends infer C extends string
-	? C
-	: never;
+export type Overlap<S, Existing extends string> = S & Existing;
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results

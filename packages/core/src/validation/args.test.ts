@@ -128,6 +128,17 @@ describe("ValidateVariadicArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("opts widened definitions out of compile-time checks", () => {
+		// Widened names fall back to runtime validation instead of
+		// false-positive duplicate branding.
+		type Defs = readonly [{ name: string; type: "string" }, { name: string; type: "string" }];
+		type Result = ValidateVariadicArgs<Defs, "file">;
+		type _first = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
+		type _second = Expect<Equal<Extract<keyof Result[1], `FIX_${string}`>, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("resolves to identity for a single arg", () => {
 		type Args = readonly [{ name: "file"; type: "string"; variadic: true }];
 		type Result = ValidateVariadicArgs<Args>;

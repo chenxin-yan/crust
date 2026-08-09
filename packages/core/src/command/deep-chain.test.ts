@@ -129,6 +129,48 @@ describe("deep builder chains", () => {
 		expect(seen).toEqual([true, true]);
 	});
 
+	it("supports 30 chained .args() calls with intact inference", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("deep-args")
+			.args({ name: "a01", type: "string", required: true })
+			.args({ name: "a02", type: "string", required: true })
+			.args({ name: "a03", type: "string", required: true })
+			.args({ name: "a04", type: "string", required: true })
+			.args({ name: "a05", type: "string", required: true })
+			.args({ name: "a06", type: "string", required: true })
+			.args({ name: "a07", type: "string", required: true })
+			.args({ name: "a08", type: "string", required: true })
+			.args({ name: "a09", type: "string", required: true })
+			.args({ name: "a10", type: "string", required: true })
+			.args({ name: "a11", type: "string", required: true })
+			.args({ name: "a12", type: "string", required: true })
+			.args({ name: "a13", type: "string", required: true })
+			.args({ name: "a14", type: "string", required: true })
+			.args({ name: "a15", type: "string", required: true })
+			.args({ name: "a16", type: "string", required: true })
+			.args({ name: "a17", type: "string", required: true })
+			.args({ name: "a18", type: "string", required: true })
+			.args({ name: "a19", type: "string", required: true })
+			.args({ name: "a20", type: "string", required: true })
+			.args({ name: "a21", type: "string", required: true })
+			.args({ name: "a22", type: "string", required: true })
+			.args({ name: "a23", type: "string", required: true })
+			.args({ name: "a24", type: "string", required: true })
+			.args({ name: "a25", type: "string", required: true })
+			.args({ name: "a26", type: "string", required: true })
+			.args({ name: "a27", type: "string", required: true })
+			.args({ name: "a28", type: "string", required: true })
+			.args({ name: "a29", type: "string", required: true })
+			.args({ name: "a30", type: "string", required: true })
+			.action(({ args }) => {
+				type _First = Expect<Equal<typeof args.a01, string>>;
+				type _Last = Expect<Equal<typeof args.a30, string>>;
+				seen.push(args.a01, args.a30);
+			});
+		await app.run(Array.from({ length: 30 }, (_, i) => `v${i + 1}`));
+		expect(seen).toEqual(["v1", "v30"]);
+	});
+
 	it("supports 40 chained .provide() calls with intact ctx inference", async () => {
 		const seen: unknown[] = [];
 		const app = new Crust("deep-ctx")

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef } from "../types.ts";
-import { type SpellingsOf, validateIncomingFlag, type ValidateNamedFlagDefs } from "./flags.ts";
+import {
+	type ProvideChecks,
+	type SpellingsOf,
+	validateIncomingFlag,
+	type ValidateNamedFlagDefs,
+} from "./flags.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -139,6 +144,26 @@ describe("ValidateNamedFlagDefs", () => {
 				'Flag name "no-cache" must not start with "no-"; define "cache" instead and use "--no-cache" at runtime'
 			>
 		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("opts widened definitions out of compile-time checks", () => {
+		// Widened records have no statically knowable spellings.
+		type _widenedRecord = Expect<Equal<SpellingsOf<FlagsDef>, never>>;
+
+		// Widened names/aliases fall back to runtime validation instead of
+		// false-positive branding against existing spellings.
+		type Defs = readonly [{ name: string; type: "string"; short: string; aliases: string[] }];
+		type Result = ValidateNamedFlagDefs<Defs, "verbose" | "v">;
+		type _noBrands = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
+
+		// Context instances with widened owned flags opt out of provide-site checks.
+		type Provided = ProvideChecks<
+			{ verbose: { type: "boolean"; short: "v" } },
+			readonly [{ readonly _requires?: { ownedFlags: FlagsDef } }]
+		>;
+		type _noProvideBrand = Expect<Equal<Extract<keyof Provided[0], `FIX_${string}`>, never>>;
 
 		expect(true).toBe(true);
 	});

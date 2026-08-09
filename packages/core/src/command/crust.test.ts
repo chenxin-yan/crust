@@ -221,6 +221,16 @@ describe("Crust .flags()", () => {
 		).toThrow(/already defined/);
 	});
 
+	it("falls back to runtime validation for widened flag names", () => {
+		// No @ts-expect-error: widened names opt out of compile-time checks,
+		// so the duplicate must be caught by the runtime twin instead.
+		const dynamic = "verbose" as string;
+		const app = new Crust("test").flags({ name: dynamic, type: "boolean" });
+		expect(() => app.flags({ name: dynamic, type: "string" })).toThrow(
+			/Flag "--verbose" is already defined/,
+		);
+	});
+
 	it("rejects Promise-returning custom flag parsers at compile time", () => {
 		new Crust("test").flags(
 			// @ts-expect-error -- flag parsers must be synchronous
@@ -335,6 +345,16 @@ describe("Crust .args()", () => {
 				{ name: "file", type: "string" },
 			),
 		).toThrow(/Argument "file" is already defined/);
+	});
+
+	it("falls back to runtime validation for widened arg names", () => {
+		// No @ts-expect-error: widened names opt out of compile-time checks,
+		// so the duplicate must be caught by the runtime twin instead.
+		const dynamic = "file" as string;
+		const app = new Crust("test").args({ name: dynamic, type: "string" });
+		expect(() => app.args({ name: dynamic, type: "string" })).toThrow(
+			/Argument "file" is already defined/,
+		);
 	});
 
 	it("rejects Promise-returning custom arg parsers at compile time", () => {
