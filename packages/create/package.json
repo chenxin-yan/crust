@@ -50,7 +50,7 @@
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"typescript": "^7.0.2"
+		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {
 		"typescript": {

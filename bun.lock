@@ -60,7 +60,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -75,7 +75,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -125,7 +125,7 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -142,7 +142,7 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -159,7 +159,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -178,7 +178,7 @@
         "zod": "^4.0.0",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -200,7 +200,7 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -216,7 +216,7 @@
         "zod": "^4.0.0",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -230,7 +230,7 @@
         "bunup": "catalog:",
       },
       "peerDependencies": {
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -248,7 +248,7 @@
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
         "@crustjs/prompts": "workspace:0.x",
-        "typescript": "^7.0.2",
+        "typescript": "^7.0.0",
       },
       "optionalPeers": [
         "typescript",
@@ -267,7 +267,7 @@
   },
   "catalog": {
     "bunup": "^0.16.32",
-    "typescript": "^7.0.2",
+    "typescript": "^7.0.0",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.27.1", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.27.1", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg=="],
