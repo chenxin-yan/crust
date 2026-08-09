@@ -11,9 +11,9 @@ import {
 	getBinaryFilename,
 	resolveTargets,
 	TARGET_INFO,
-	validateEntrypoint,
+	snapshotEntrypoint,
 } from "../utils/build-helpers.ts";
-import { generateManPageFromEntry } from "../utils/generate-man.ts";
+import { generateManPage } from "../utils/generate-man.ts";
 
 /**
  * Resolve the output file path for a single-target build.
@@ -350,7 +350,7 @@ export const buildCommand = defineCommand(
 					name: "man",
 					type: "boolean",
 					description:
-						"Write an mdoc(7) page to <outdir>/man/<name>.1 (entry must export a Crust as `app` or default)",
+						"Write an mdoc(7) page to <outdir>/man/<name>.1 (requires snapshot preparation even with --no-validate)",
 					default: false,
 				},
 			)
@@ -368,9 +368,8 @@ export const buildCommand = defineCommand(
 					);
 				}
 
-				if (flags.validate) {
-					await validateEntrypoint(entryPath, envFiles);
-				}
+				const root =
+					flags.validate || flags.man ? await snapshotEntrypoint(entryPath, envFiles) : undefined;
 
 				if (flags.package) {
 					if (flags.outfile) {
@@ -389,6 +388,7 @@ export const buildCommand = defineCommand(
 						stageDir: flags["stage-dir"],
 						envFiles,
 						validate: false,
+						root,
 						man: flags.man,
 						outdir: flags.outdir,
 					});
@@ -399,8 +399,9 @@ export const buildCommand = defineCommand(
 					const baseName = resolveBaseName(flags.name, entryPath, cwd);
 					const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
 					console.log(`Writing man page ${dim(manPath)}...`);
-					await generateManPageFromEntry({
+					await generateManPage({
 						cwd,
+						root: root!,
 						entry: flags.entry,
 						name: flags.name,
 						outfile: manPath,

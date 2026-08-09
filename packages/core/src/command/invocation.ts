@@ -34,33 +34,13 @@ type MaterializeCommandDefinition = (
 ) => CommandNode;
 
 /**
- * Build-time validation protocol.
+ * Snapshot subprocess protocol used by first-party build tooling.
  *
- * `crust build` spawns the user's entrypoint as a subprocess with
- * `CRUST_INTERNAL_VALIDATE_ONLY=1` (and the companion
- * {@link VALIDATION_FORCE_EXIT_ENV}=`1`). When `.execute()` detects
- * `VALIDATION_MODE_ENV` it runs the validation pipeline and surfaces errors
- * via stderr and `process.exitCode`.
- *
- * Process termination is opt-in via {@link VALIDATION_FORCE_EXIT_ENV} so
- * that in-process callers (tests, embedders) that set only this env get
- * the validation result without having their host process killed.
+ * When set to a non-empty file path, `.execute()` prepares and validates the
+ * command tree, writes its JSON snapshot to that path, and exits without
+ * dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  */
-export const VALIDATION_MODE_ENV = "CRUST_INTERNAL_VALIDATE_ONLY";
-
-/**
- * Companion to {@link VALIDATION_MODE_ENV}. When set to `"1"` _alongside_
- * `VALIDATION_MODE_ENV`, `.execute()` calls `process.exit()` after the
- * validation pipeline completes — ensuring any code that follows
- * `await app.execute()` in the user's entrypoint does not run during
- * `crust build`'s pre-compile validation subprocess.
- *
- * Without this flag, `.execute()` only sets `process.exitCode` and returns,
- * matching the rest of `.execute()`'s error handling. This is the path
- * in-process callers (tests that toggle `VALIDATION_MODE_ENV`, programmatic
- * embedders) take so the host event loop is not terminated.
- */
-export const VALIDATION_FORCE_EXIT_ENV = "CRUST_INTERNAL_VALIDATE_FORCE_EXIT";
+export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: unknown): boolean {
@@ -343,6 +323,19 @@ export async function executeInvocation(
 ): Promise<void> {
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
+	const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
+
+	if (snapshotPath) {
+		try {
+			const snapshot = await prepareInvocationSnapshot(node, materializeCommandDefinition);
+			await Bun.write(snapshotPath, JSON.stringify(snapshot));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(message);
+			return process.exit(1);
+		}
+		return process.exit(0);
+	}
 
 	let prepared: PreparedInvocation;
 	try {
@@ -357,23 +350,6 @@ export async function executeInvocation(
 		const message = error instanceof Error ? error.message : String(error);
 		io.stderr(`Error: ${message}`);
 		process.exitCode = 1;
-		return;
-	}
-
-	if (process.env[VALIDATION_MODE_ENV] === "1") {
-		try {
-			validateCommandTree(prepared.rootNode);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			console.error(message);
-			process.exitCode = 1;
-		}
-
-		// Build validation subprocesses opt in to force-exit so user code
-		// after `await app.execute()` is skipped (see VALIDATION_FORCE_EXIT_ENV).
-		if (process.env[VALIDATION_FORCE_EXIT_ENV] === "1") {
-			return process.exit(process.exitCode ?? 0);
-		}
 		return;
 	}
 

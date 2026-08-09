@@ -1,11 +1,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 // @crustjs/core/tooling — shared tooling models and utilities
 //
-// Crust.snapshot() is the supported Command Snapshot preparation API. This
-// subpath provides the snapshot type plus lockstep first-party tooling helpers.
+// Crust.snapshot() is the supported in-process Command Snapshot API. This
+// subpath provides its models plus the lockstep first-party subprocess protocol.
 // ────────────────────────────────────────────────────────────────────────────
 
-export { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./command/crust.ts";
+export { SNAPSHOT_PATH_ENV } from "./command/crust.ts";
 export { buildCommandDocumentation } from "./command/documentation.ts";
 export type {
 	CommandDocumentation,

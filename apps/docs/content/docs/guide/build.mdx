@@ -45,7 +45,7 @@ crust build --env-file .env.production
 | `--validate`  | —     | `"boolean"`             | `true`        | Pre-compile validation of command definitions              |
 | `--package`   | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
 | `--stage-dir` | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`      |
-| `--man`       | —     | `"boolean"`             | `false`       | Write an mdoc(7) page; entry must export `app` or default  |
+| `--man`       | —     | `"boolean"`             | `false`       | Write an mdoc(7) page from the prepared Command Snapshot   |
 
 ## Supported Targets
 
@@ -167,9 +167,11 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 ## Pre-compile Validation
 
-Before compiling, `crust build` validates your CLI's command definitions by running your entry file in a special validation mode. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
+Before compiling, `crust build` prepares your CLI's Command Snapshot by running the entry file in a subprocess. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
-The validation subprocess asks `.execute()` to prepare and validate the full command graph, including subcommands and Extension-owned flags and commands, without executing any Command Actions. It then exits before code after `await app.execute()` can run.
+The subprocess sets `CRUST_INTERNAL_SNAPSHOT_PATH` to a temporary file. `.execute()` prepares and validates the full command graph, including subcommands and Extension-owned flags and commands, writes its JSON snapshot to that file, and exits without executing Command Actions or code after `await app.execute()`.
+
+When `--man` is enabled, the same subprocess supplies both validation and man generation; the entry point does not need to export its `Crust` builder. `--man --no-validate` still prepares a snapshot because the manual renderer requires it.
 
 If you pass `--env-file`, the validation subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
@@ -194,7 +196,7 @@ Validation is enabled by default. To skip it:
 crust build --no-validate
 ```
 
-This can be useful if the validation subprocess cannot resolve your project's dependencies in a particular environment (e.g., non-standard module resolution setups).
+This can be useful if the snapshot subprocess cannot resolve your project's dependencies in a particular environment (e.g., non-standard module resolution setups). It does not skip snapshot preparation when `--man` is enabled.
 
 ## Per-OS Distribution with `--package`
 

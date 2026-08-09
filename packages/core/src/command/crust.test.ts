@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
@@ -12,8 +15,7 @@ import {
 	Crust,
 	defineCommand,
 	type CrustCommandContext,
-	VALIDATION_FORCE_EXIT_ENV,
-	VALIDATION_MODE_ENV,
+	SNAPSHOT_PATH_ENV,
 } from "./crust.ts";
 import { executeInvocation } from "./invocation.ts";
 import { createCommandNode } from "./node.ts";
@@ -2293,92 +2295,73 @@ describe("Crust .execute()", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Invocation pipeline internal seam — build-time validation mode
+// Invocation pipeline internal seam — snapshot subprocess protocol
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("Invocation pipeline internal seam — validation mode", () => {
-	// `process.exit` would terminate the bun test runner if it ever fires
-	// during these tests — stub it so we can observe the call instead, and
-	// fail loudly if anything tries to exit when it should not.
+describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	const originalExit = process.exit;
+	const originalConsoleError = console.error;
 	let exitCalls: Array<number | undefined>;
+	let errorCalls: string[];
+	let tempDirs: string[];
 
 	beforeEach(() => {
 		exitCalls = [];
-		// Force a clean numeric baseline. `process.exitCode = undefined` is a
-		// no-op on Bun, so the validation-failure tests below would otherwise
-		// leak `exitCode = 1` into sibling tests — and into the test runner's
-		// own exit status, making `bun test` exit 1 even when every test passes.
-		process.exitCode = 0;
+		errorCalls = [];
+		tempDirs = [];
 		process.exit = ((code?: number) => {
 			exitCalls.push(code);
-			// Throw instead of exiting so the test can see the call.
-			throw new Error(`process.exit(${code ?? "undefined"}) was called during validation`);
+			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
 		}) as typeof process.exit;
+		console.error = (...values: unknown[]) => errorCalls.push(values.map(String).join(" "));
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
 		process.exit = originalExit;
-		process.exitCode = 0;
-		delete process.env[VALIDATION_MODE_ENV];
-		delete process.env[VALIDATION_FORCE_EXIT_ENV];
+		console.error = originalConsoleError;
+		delete process.env[SNAPSHOT_PATH_ENV];
+		await Promise.all(tempDirs.map((path) => rm(path, { recursive: true, force: true })));
 	});
 
-	it("does not call process.exit when only VALIDATION_MODE_ENV is set", async () => {
-		process.env[VALIDATION_MODE_ENV] = "1";
-		delete process.env[VALIDATION_FORCE_EXIT_ENV];
+	async function snapshotPath(): Promise<string> {
+		const directory = await mkdtemp(join(tmpdir(), "crust-core-snapshot-test-"));
+		tempDirs.push(directory);
+		return join(directory, "command.json");
+	}
 
+	it("writes a snapshot, exits zero, and skips dispatch", async () => {
+		const path = await snapshotPath();
+		process.env[SNAPSHOT_PATH_ENV] = path;
 		let actionRan = false;
-		const app = new Crust("in-process-validation").action(() => {
+		const app = new Crust("build-subprocess", { description: "Snapshot test" }).action(() => {
 			actionRan = true;
 		});
 
-		await app.execute({ argv: [] });
-
-		expect(exitCalls).toEqual([]);
-		// Validation runs *instead of* the action.
-		expect(actionRan).toBe(false);
-		// Successful validation leaves exitCode at the baseline (0).
-		expect(process.exitCode).toBe(0);
-	});
-
-	it("sets process.exitCode = 1 on validation failure without exiting in-process", async () => {
-		process.env[VALIDATION_MODE_ENV] = "1";
-		delete process.env[VALIDATION_FORCE_EXIT_ENV];
-
-		const node = createCommandNode("cli");
-		node.effectiveFlags["no-verbose"] = { type: "boolean" };
-		await executeInvocation(node, { argv: [] }, () => {
-			throw new Error("no command definitions");
-		});
-
-		expect(exitCalls).toEqual([]);
-		expect(process.exitCode).toBe(1);
-	});
-
-	it("force-exits when VALIDATION_FORCE_EXIT_ENV is also set (build subprocess path)", async () => {
-		process.env[VALIDATION_MODE_ENV] = "1";
-		process.env[VALIDATION_FORCE_EXIT_ENV] = "1";
-
-		const app = new Crust("build-subprocess").action(() => {});
-
-		// Stubbed process.exit throws; the rejection confirms it fired.
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+
 		expect(exitCalls).toEqual([0]);
+		expect(actionRan).toBe(false);
+		expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+			meta: { name: "build-subprocess", description: "Snapshot test" },
+			hasAction: true,
+		});
 	});
 
-	it("force-exits with code 1 on validation failure when both envs are set", async () => {
-		process.env[VALIDATION_MODE_ENV] = "1";
-		process.env[VALIDATION_FORCE_EXIT_ENV] = "1";
-
+	it("prints validation errors and exits one without writing a snapshot", async () => {
+		const path = await snapshotPath();
+		process.env[SNAPSHOT_PATH_ENV] = path;
 		const node = createCommandNode("cli");
 		node.effectiveFlags["no-verbose"] = { type: "boolean" };
+
 		await expect(
 			executeInvocation(node, { argv: [] }, () => {
 				throw new Error("no command definitions");
 			}),
 		).rejects.toThrow("process.exit(1) was called");
+
 		expect(exitCalls).toEqual([1]);
+		expect(errorCalls.join("\n")).toContain("failed definition validation");
+		await expect(readFile(path, "utf8")).rejects.toThrow();
 	});
 });
 

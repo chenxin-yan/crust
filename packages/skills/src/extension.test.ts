@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Crust, defineExtension } from "@crustjs/core";
-import { snapshotCommand, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
+import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { installSkillBundle } from "./bundle.ts";
 import { skill } from "./extension.ts";
@@ -268,44 +268,6 @@ describe("skill extension auto-update", () => {
 		await withCwd(tmpDir, () => app.execute({ argv: [] }));
 
 		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("2.0.0");
-	});
-
-	it("does not auto-update during validation mode", async () => {
-		process.env[VALIDATION_MODE_ENV] = "1";
-
-		const app = new Crust("validation-test", { description: "test" })
-			.action(() => {})
-			.extend(
-				skill({
-					version: "2.0.0",
-					defaultScope: "project",
-				}),
-			);
-
-		// Pre-install v1.0.0
-		await withCwd(tmpDir, () =>
-			generateSkill({
-				command: snapshotCommand(app._node),
-				meta: {
-					name: "validation-test",
-					description: "test",
-					version: "1.0.0",
-				},
-				agents: ["opencode"],
-				scope: "project",
-			}),
-		);
-
-		const skillDir = join(tmpDir, ".agents", "skills", "validation-test");
-
-		try {
-			await withCwd(tmpDir, () => app.execute({ argv: [] }));
-		} finally {
-			delete process.env[VALIDATION_MODE_ENV];
-		}
-
-		// Should still be v1.0.0 — validation mode skips auto-update
-		expect((await readInstalledManifest(skillDir))?.version ?? null).toBe("1.0.0");
 	});
 
 	it("does not auto-update when autoUpdate is false", async () => {

@@ -57,7 +57,7 @@ import {
 import { type CommandNode, computeEffectiveFlags, createCommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
-export { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "./invocation.ts";
+export { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks

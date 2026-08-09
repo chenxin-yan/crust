@@ -47,6 +47,7 @@ function getHostBunTarget(): string | null {
 describe("crust build integration — single target", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-build-integration");
 	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
+	const corePath = resolve(import.meta.dir, "../../../core/src/index.ts");
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {
@@ -90,6 +91,7 @@ console.log("hello from crust build test");
 					"build",
 					"--entry",
 					"src/cli.ts",
+					"--no-validate",
 					"--outfile",
 					join(tmpDir, "dist", "test-cli"),
 					"--target",
@@ -153,6 +155,7 @@ console.log("hello from crust build test");
 					"src/cli.ts",
 					"--outfile",
 					outPath,
+					"--no-validate",
 					"--no-minify",
 					"--target",
 					"bun-darwin-arm64",
@@ -179,7 +182,7 @@ console.log("hello from crust build test");
 		try {
 			const app = new Crust("test").add(buildCommand);
 			await app.execute({
-				argv: ["build", "--entry", "src/cli.ts", "--target", "bun-darwin-arm64"],
+				argv: ["build", "--entry", "src/cli.ts", "--no-validate", "--target", "bun-darwin-arm64"],
 			});
 		} finally {
 			console.log = originalLog;
@@ -203,16 +206,15 @@ console.log("hello from crust build test");
 				writeFileSync(
 					join(tmpDir, "src", "env-cli.ts"),
 					`#!/usr/bin/env bun
-if (
-  process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
-  !process.env.REQUIRED_BUILD_VAR
-) {
+import { Crust } from ${JSON.stringify(corePath)};
+if (process.env.CRUST_INTERNAL_SNAPSHOT_PATH && !process.env.REQUIRED_BUILD_VAR) {
   throw new Error("Missing REQUIRED_BUILD_VAR");
 }
-console.log(JSON.stringify({
+const app = new Crust("env-cli").action(() => console.log(JSON.stringify({
   publicValue: process.env.PUBLIC_MESSAGE,
   secretValue: process.env.SECRET_TOKEN ?? null,
-}));
+})));
+await app.execute();
 `,
 				);
 				writeFileSync(
@@ -275,16 +277,15 @@ console.log(JSON.stringify({
 			writeFileSync(
 				join(autoloadDir, "src", "autoload-cli.ts"),
 				`#!/usr/bin/env bun
-if (
-  process.env.CRUST_INTERNAL_VALIDATE_ONLY === "1" &&
-  !process.env.REQUIRED_BUILD_VAR
-) {
+import { Crust } from ${JSON.stringify(corePath)};
+if (process.env.CRUST_INTERNAL_SNAPSHOT_PATH && !process.env.REQUIRED_BUILD_VAR) {
   throw new Error("Missing REQUIRED_BUILD_VAR");
 }
-console.log(JSON.stringify({
+const app = new Crust("autoload-cli").action(() => console.log(JSON.stringify({
   publicValue: process.env.PUBLIC_MESSAGE,
   secretValue: process.env.SECRET_TOKEN ?? null,
-}));
+})));
+await app.execute();
 `,
 			);
 			writeFileSync(
