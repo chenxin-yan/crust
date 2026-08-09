@@ -41,7 +41,7 @@ type ContextRequirements = readonly AnyContextFactory[];
 ### `CommandDefinitionBuilder`
 
 ```ts
-interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
+interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Sibs, Deps> {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
@@ -52,7 +52,7 @@ interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx> {
 }
 ```
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Deps` accumulates the Context dependency edges declared through `.provide()`; both power the compile-time collision and cycle checks and default to empty, so existing annotations keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -173,7 +173,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
+Repeated `.flags()` calls accumulate local flags. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<E extends FlagsDef>(app: Crust<Local, Owned, A, E, Ctx>)`) defer the collision check and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead — runtime validation still applies. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 

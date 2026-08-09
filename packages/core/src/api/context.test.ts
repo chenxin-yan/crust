@@ -567,6 +567,23 @@ describe("Context capability requirements (topological construction)", () => {
 		});
 	});
 
+	it("throws DEFINITION at dispatch on a cycle split across parent and child provide sites", async () => {
+		// Deliberately runtime-only: the child recipe's Deps graph does not see
+		// Contexts inherited from the parent path, so this cycle compiles clean.
+		const a = defineContext("a", () => "a")();
+		const b = defineContext("b", () => "b")();
+		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
+		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
+
+		const child = defineCommand("child", (command) => command.provide(b).action(() => {}));
+		const app = new Crust("cli").provide(a).add(child);
+
+		await expect(app.run(["child"])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: expect.stringMatching(/dependency cycle/),
+		});
+	});
+
 	it("satisfies an added definition's Context requirement before its dependents construct", async () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
 		const user = defineContext("user", { requires: [session] }, ({ ctx }) => ({

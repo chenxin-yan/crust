@@ -1,6 +1,6 @@
 import { CrustError } from "../errors.ts";
 import type { ArgsDef } from "../types.ts";
-import type { AsyncParseBrand, DefName } from "./shared.ts";
+import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -8,14 +8,14 @@ import type { AsyncParseBrand, DefName } from "./shared.ts";
 
 type ArgNames<A extends readonly object[]> = DefName<A[number]>;
 
-type DuplicateArgBrand<A, Existing extends string> = DefName<A> &
-	Existing extends infer Duplicate extends string
-	? [Duplicate] extends [never]
-		? {}
-		: {
-				readonly FIX_DUPLICATE_ARG: `Argument name "${Duplicate}" is already defined`;
-			}
-	: never;
+type DuplicateArgBrand<A, Existing extends string> =
+	Overlap<DefName<A>, Existing> extends infer Duplicate extends string
+		? [Duplicate] extends [never]
+			? {}
+			: {
+					readonly FIX_DUPLICATE_ARG: `Argument name "${Duplicate}" is already defined`;
+				}
+		: never;
 
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &

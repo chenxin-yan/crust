@@ -1,6 +1,6 @@
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { DefName } from "./shared.ts";
+import type { DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -51,19 +51,20 @@ export type CommandDefinitionSpellings<D> =
 			: Name | NarrowAliases<DefinitionAliases<D>>
 		: never;
 
-type CommandCollisionBrand<D, Existing extends string> = CommandDefinitionSpellings<D> &
-	Existing extends infer Collision extends string
-	? [Collision] extends [never]
-		? {}
-		: {
-				readonly FIX_COMMAND_COLLISION: `Command name or alias "${Collision}" collides with a sibling command`;
-			}
-	: never;
+type CommandCollisionBrand<D, Existing extends string> =
+	Overlap<CommandDefinitionSpellings<D>, Existing> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_COMMAND_COLLISION: `Command name or alias "${Collision}" collides with a sibling command`;
+				}
+		: never;
 
 /**
  * Validate definitions against existing siblings and definitions earlier in
  * the same `.add()` call. Widened names opt out because their spellings are
- * not statically knowable.
+ * not statically knowable; their literal aliases opt out with them
+ * (see {@link CommandDefinitionSpellings}).
  */
 export type ValidateCommandDefinitions<
 	Ds extends readonly unknown[],

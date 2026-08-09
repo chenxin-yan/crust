@@ -1,7 +1,7 @@
 import { CrustError } from "../errors.ts";
 import { flagDefinitionSpellings } from "../parsing/spellings.ts";
 import type { FlagDef, FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
-import type { AsyncParseBrand, DefName } from "./shared.ts";
+import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -13,14 +13,32 @@ type FlagDefBrand<Name, V> = Name extends keyof V
 	: {};
 
 /** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> = (DefName<F> | ExtractAllAliases<F>) &
-	Existing extends infer Collision extends string
-	? [Collision] extends [never]
-		? {}
-		: {
-				readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
-			}
+type ExistingFlagCollisionBrand<F, Existing extends string> =
+	Overlap<DefName<F> | ExtractAllAliases<F>, Existing> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
+				}
+		: never;
+
+/** Canonical names claimed by more than one definition in the same call. */
+type DuplicateNames<
+	Defs extends readonly NamedFlagDef[],
+	Seen extends string = never,
+> = Defs extends readonly [infer Head, ...infer Tail extends readonly NamedFlagDef[]]
+	? (DefName<Head> & Seen) | DuplicateNames<Tail, Seen | DefName<Head>>
 	: never;
+
+/** Brand every occurrence of a name repeated within one `.flags()` call. */
+type DuplicateNameBrand<F, Dups extends string> =
+	Overlap<DefName<F>, Dups> extends infer Duplicate extends string
+		? [Duplicate] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_COLLISION: `Flag "${Duplicate}" is already defined`;
+				}
+		: never;
 
 /**
  * Per-definition validation for the variadic `.flags(...defs)` call.
@@ -44,6 +62,7 @@ export type ValidateNamedFlagDefs<
 			ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
 		> &
 		ExistingFlagCollisionBrand<Defs[I], Existing> &
+		DuplicateNameBrand<Defs[I], DuplicateNames<Defs>> &
 		AsyncParseBrand<Defs[I]>;
 };
 
@@ -108,11 +127,11 @@ type AliasesExcluding<F extends Record<string, unknown>, K extends keyof F & str
 
 /**
  * Per-flag collision detection: resolves to the alias literal(s) of flag K
- * that collide with another flag's name or another flag's alias,
+ * that collide with a flag name (including K's own) or another flag's alias,
  * or `never` when K's aliases are all unique.
  */
 type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & string> =
-	| (ExtractAllAliases<F[K]> & Exclude<keyof F & string, K>) // alias→name
+	| (ExtractAllAliases<F[K]> & (keyof F & string)) // alias→name (self included)
 	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
 /**
@@ -189,14 +208,14 @@ type ContextOwnedFlags<C> = C extends {
 	? OF
 	: {};
 
-type ContextFlagCollisionBrand<C, Existing extends string> = SpellingsOf<ContextOwnedFlags<C>> &
-	Existing extends infer Collision extends string
-	? [Collision] extends [never]
-		? {}
-		: {
-				readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
-			}
-	: never;
+type ContextFlagCollisionBrand<C, Existing extends string> =
+	Overlap<SpellingsOf<ContextOwnedFlags<C>>, Existing> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
+				}
+		: never;
 
 /**
  * Validate Context-owned flags against existing flags.

@@ -214,10 +214,21 @@ describe("Crust .flags()", () => {
 	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
 		expect(() =>
 			new Crust("test").flags(
+				// @ts-expect-error -- canonical name repeated within one call
 				{ name: "verbose", type: "boolean" },
 				{ name: "verbose", type: "string" },
 			),
 		).toThrow(/already defined/);
+	});
+
+	it("rejects Promise-returning custom flag parsers at compile time", () => {
+		new Crust("test").flags(
+			// @ts-expect-error -- flag parsers must be synchronous
+			{ name: "file", type: "string", parse: async (raw) => raw },
+		);
+		new Crust("test").flags({ name: "url", type: "string", parse: (raw) => new URL(raw) });
+
+		expect(true).toBe(true);
 	});
 
 	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
@@ -326,18 +337,14 @@ describe("Crust .args()", () => {
 		).toThrow(/Argument "file" is already defined/);
 	});
 
-	it("rejects Promise-returning custom parsers at compile time", () => {
+	it("rejects Promise-returning custom arg parsers at compile time", () => {
 		new Crust("test").args(
 			// @ts-expect-error -- positional argument parsers must be synchronous
 			{ name: "file", type: "string", parse: async (raw) => raw },
 		);
-		new Crust("test").flags(
-			// @ts-expect-error -- flag parsers must be synchronous
-			{ name: "file", type: "string", parse: async (raw) => raw },
-		);
-		new Crust("test")
-			.args({ name: "count", type: "string", parse: Number })
-			.flags({ name: "url", type: "string", parse: (raw) => new URL(raw) });
+		new Crust("test").args({ name: "count", type: "string", parse: Number });
+
+		expect(true).toBe(true);
 	});
 
 	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {
@@ -2304,6 +2311,16 @@ describe("Crust .add() aliases", () => {
 			// @ts-expect-error -- .as() preserves configured aliases in the sibling spelling set
 			app.add(issue.as("ticket"));
 		}).toThrow(/collides with alias of sibling "issue"/);
+	});
+
+	it("throws DEFINITION when .as() renames a definition to one of its own aliases", () => {
+		// Deliberately runtime-only: the rename target is compared against the
+		// definition's own aliases, which the type level does not cross-check.
+		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
+
+		expect(() => new Crust("cli").add(issue.as("i"))).toThrow(
+			/must not equal its own canonical name/,
+		);
 	});
 
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {

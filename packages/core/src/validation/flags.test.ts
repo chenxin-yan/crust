@@ -52,6 +52,29 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands both occurrences of a canonical name repeated within one call", () => {
+		type Defs = readonly [{ name: "mode"; type: "string" }, { name: "mode"; type: "number" }];
+		type Result = ValidateNamedFlagDefs<Defs>;
+		type _checkFirst = Expect<
+			Equal<Result[0]["FIX_ALIAS_COLLISION"], 'Flag "mode" is already defined'>
+		>;
+		type _checkSecond = Expect<
+			Equal<Result[1]["FIX_ALIAS_COLLISION"], 'Flag "mode" is already defined'>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands a short alias equal to its own flag name", () => {
+		type Defs = readonly [{ name: "m"; type: "string"; short: "m" }];
+		type Result = ValidateNamedFlagDefs<Defs>;
+		type _check = Expect<
+			Equal<Result[0]["FIX_ALIAS_COLLISION"], 'Alias "m" collides with another flag name or alias'>
+		>;
+
+		expect(true).toBe(true);
+	});
+
 	it("extracts all literal spellings from an existing flags record", () => {
 		type Existing = {
 			verbose: { type: "boolean"; short: "v" };

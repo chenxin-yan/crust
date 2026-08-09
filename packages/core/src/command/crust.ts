@@ -445,7 +445,6 @@ export class Crust<
 		args: A;
 		effective: Eff;
 		ctx: Ctx;
-		deps: Deps;
 	};
 
 	/** @internal */
