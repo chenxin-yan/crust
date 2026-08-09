@@ -1,4 +1,5 @@
 import type { ContextInstance, ContextMap } from "../api/context.ts";
+import { CrustError } from "../errors.ts";
 import type { DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -129,3 +130,38 @@ export type ValidateContextCycles<
 > = {
 	[I in keyof Cs]: Cs[I] & ContextCycleBrand<Cs[I], Merged>;
 };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Runtime validation
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Validate one incoming Context instance against those already provided on
+ * the command path. The type system already rejects both misuses; this
+ * catches plain-JS callers.
+ */
+export function validateIncomingContext(
+	instance: ContextInstance,
+	existing: readonly ContextInstance[],
+): void {
+	// Catches plain-JS misuse, most commonly passing the factory instead
+	// of an instance (.provide(db) instead of .provide(db())).
+	if ((instance as Partial<ContextInstance> | null)?.kind !== "context") {
+		throw new CrustError(
+			"DEFINITION",
+			"provide() requires Context instances — invoke the factory returned by defineContext() (e.g. .provide(db(options)))",
+			{ subject: "context", reason: "not-a-context" },
+		);
+	}
+	if (existing.some((entry) => entry.name === instance.name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Context "${instance.name}" is already provided on this command path`,
+			{
+				subject: "context",
+				name: instance.name,
+				reason: "duplicate-context",
+			},
+		);
+	}
+}
