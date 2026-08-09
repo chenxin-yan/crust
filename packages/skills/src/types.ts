@@ -165,7 +165,7 @@ export type SkillKind = "generated" | "bundle";
 /**
  * Describes a single positional argument in the canonical manifest.
  *
- * Normalized from `ArgSnapshot` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `DocumentationArg` in `@crustjs/core/tooling` to a flat, serializable shape.
  */
 export interface ManifestArg {
 	/** Argument name (from `ArgDef.name`) */
@@ -185,11 +185,13 @@ export interface ManifestArg {
 /**
  * Describes a single named flag in the canonical manifest.
  *
- * Normalized from `FlagSnapshot` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `DocumentationFlag` in `@crustjs/core/tooling` to a flat, serializable shape.
  */
 export interface ManifestFlag {
 	/** Flag name (the key from `FlagsDef`) */
 	name: string;
+	/** All accepted CLI spellings in documentation order — the sole source for rendered flag labels */
+	spellings: readonly string[];
 	/** Value type: "string", "number", or "boolean" */
 	type: "string" | "number" | "boolean";
 	/** Human-readable description */
@@ -221,8 +223,9 @@ export interface ManifestFlag {
  *   path: ["git", "remote", "add"],
  *   description: "Add a new remote",
  *   runnable: true,
+ *   usage: "git remote add <name>",
  *   args: [{ name: "name", type: "string", required: true, variadic: false }],
- *   flags: [{ name: "fetch", type: "boolean", required: false, multiple: false, aliases: ["f"] }],
+ *   flags: [{ name: "fetch", spellings: ["--fetch", "--no-fetch"], type: "boolean", required: false, multiple: false, aliases: [] }],
  *   children: [],
  * };
  * ```

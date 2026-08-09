@@ -713,7 +713,7 @@ describe("renderSkill", () => {
 			expect(deploy?.content).toContain("API credential");
 		});
 
-		it("renders a flags table with aliases and defaults", () => {
+		it("renders a flags table with doc-model spellings and defaults", () => {
 			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
@@ -721,6 +721,7 @@ describe("renderSkill", () => {
 						type: "boolean",
 						description: "Enable verbose output",
 						short: "v",
+						aliases: ["debug"],
 					},
 					output: {
 						type: "string",
@@ -747,8 +748,10 @@ describe("renderSkill", () => {
 			const build = findFile(files, "commands/build.md");
 
 			expect(build?.content).toContain("## Flags");
-			expect(build?.content).toContain("`--output`, `-o`");
-			expect(build?.content).toContain("`--verbose`, `-v`");
+			expect(build?.content).toContain("`-o`, `--output`");
+			expect(build?.content).toContain(
+				"`-v`, `--verbose`, `--debug`, `--no-verbose`, `--no-debug`",
+			);
 			expect(build?.content).toContain("`--target`");
 			expect(build?.content).toContain("Default: `dist`");
 			expect(build?.content).toContain("| Yes |");
@@ -973,7 +976,7 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const test = findFile(files, "commands/test.md");
 
-			expect(test?.content).toContain("| `--quiet` | boolean | No | - |");
+			expect(test?.content).toContain("| `--quiet`, `--no-quiet` | boolean | No | - |");
 		});
 	});
 
@@ -1349,7 +1352,7 @@ describe("renderSkill", () => {
 			expect(cloneFile?.content).toContain("# `git clone`");
 			expect(cloneFile?.content).toContain("## Arguments");
 			expect(cloneFile?.content).toContain("## Flags");
-			expect(cloneFile?.content).toContain("`--branch`, `-b`");
+			expect(cloneFile?.content).toContain("`-b`, `--branch`");
 			expect(cloneFile?.content).toContain("git clone <url> [directory] [options]");
 
 			// Verify remote is rendered as group (has children) but also runnable

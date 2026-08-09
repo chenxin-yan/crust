@@ -287,6 +287,7 @@ describe("buildManifest", () => {
 			expect(node.flags).toEqual([
 				{
 					name: "verbose",
+					spellings: ["--verbose", "--no-verbose"],
 					type: "boolean",
 					description: "Enable verbose output",
 					required: false,
@@ -294,6 +295,20 @@ describe("buildManifest", () => {
 					aliases: [],
 				},
 			]);
+		});
+
+		it("omits negation spellings for a noNegate boolean flag", () => {
+			const cmd = makeCommand({
+				meta: { name: "test" },
+				flags: {
+					quiet: { type: "boolean", noNegate: true },
+				},
+				run() {},
+			});
+
+			const node = buildManifest(snapshotCommand(cmd));
+
+			expect(node.flags[0]?.spellings).toEqual(["--quiet"]);
 		});
 
 		it("normalizes a required string flag with short alias", () => {
@@ -337,6 +352,7 @@ describe("buildManifest", () => {
 
 			expect(flag?.short).toBe("o");
 			expect(flag?.aliases).toEqual(["dest", "out"]);
+			expect(flag?.spellings).toEqual(["-o", "--output", "--out", "--dest"]);
 		});
 
 		it("normalizes a multiple flag", () => {
