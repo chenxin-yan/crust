@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// @crustjs/extensions — Update notifier plugin
+// @crustjs/extensions — Update notifier extension
 // ────────────────────────────────────────────────────────────────────────────
 
 import { basename, isAbsolute, relative, resolve } from "node:path";
@@ -22,7 +22,7 @@ export interface UpdateNotifierCacheAdapter {
 }
 
 /**
- * Cache configuration for the update notifier plugin.
+ * Cache configuration for the update notifier extension.
  *
  * Wraps a {@link UpdateNotifierCacheAdapter} with cache-specific settings.
  */
@@ -47,7 +47,7 @@ export interface UpdateNotifierCacheConfig {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Configuration options for the update notifier plugin.
+ * Configuration options for the update notifier extension.
  *
  * @example
  * ```ts
@@ -229,7 +229,7 @@ export async function fetchLatestVersion(
 // Cache state — notifier persistence fields
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Key used in plugin state for process-level dedupe. */
+/** Key used in extension state for process-level dedupe. */
 const EMPTY_NOTIFIER_STATE: UpdateNotifierState = { lastCheckedAt: 0 };
 
 function normalizeNotifierState(
@@ -415,11 +415,11 @@ function resolveUpdateCommand(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Plugin factory
+// Extension factory
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates an update notifier plugin that performs background version checks
+ * Creates an update notifier extension that performs background version checks
  * against the npm registry and displays a concise notice when a newer
  * version is available.
  *
@@ -431,7 +431,7 @@ function resolveUpdateCommand(
  * - The update notice is emitted *after* the command action completes.
  * - Duplicate notifications for the same version are suppressed.
  *
- * @param options - Plugin configuration. `currentVersion` and `packageName` are required.
+ * @param options - Extension configuration. `currentVersion` and `packageName` are required.
  * @returns An Extension registered with `.extend()`.
  *
  * @example
@@ -449,7 +449,7 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export function updateNotifierExtension(options: UpdateNotifierOptions): Extension {
+export function updateNotifier(options: UpdateNotifierOptions): Extension {
 	const {
 		currentVersion,
 		packageName,

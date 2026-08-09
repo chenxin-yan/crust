@@ -93,7 +93,7 @@ interface StringArgDef extends ArgDefBase {
 	 *
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
-	 * is applied. Also consumed by shell-completion plugins
+	 * is applied. Also consumed by shell-completion extensions
 	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed args; not supported on number/boolean.
@@ -256,7 +256,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 *
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
-	 * is applied. Also consumed by shell-completion plugins
+	 * is applied. Also consumed by shell-completion extensions
 	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed flags; not supported on number/boolean.
@@ -354,7 +354,7 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * Each element is validated at parse time before `parse` runs. Passing
 	 * a value outside `choices` throws `CrustError("PARSE", …)` before any
 	 * `parse` transform is applied. Also consumed by shell-completion
-	 * plugins (e.g. `@crustjs/extensions/completion`) to emit value candidates.
+	 * extensions (e.g. `@crustjs/extensions/completion`) to emit value candidates.
 	 *
 	 * Only available on string-typed multi-flags; not supported on number/boolean.
 	 *
@@ -667,14 +667,14 @@ export interface CommandMeta {
 	 * **Conflict policy.** Alias strings must not collide with this command's
 	 * own canonical `name`, with any sibling's `name`, or with any sibling's
 	 * own alias. Collisions throw a `CrustError("DEFINITION", …)` at
-	 * registration time (or during `validateCommandTree` for plugin-installed
+	 * registration time (or during `validateCommandTree` for extension-installed
 	 * subcommands). Each alias must also be a non-empty string with no
 	 * whitespace and must not start with `-`.
 	 *
 	 * **Display contract.** Help output renders the canonical name with
 	 * aliases inline as `name (a, b, c)`. The canonical `name` is what
 	 * appears in `commandPath`, error messages, and suggestions from
-	 * `didYouMeanPlugin` — it does not depend on which alias the user typed.
+	 * `didYouMean` — it does not depend on which alias the user typed.
 	 *
 	 * @example
 	 * defineCommand("issue", { aliases: ["issues", "i"] }, recipe)
@@ -684,14 +684,14 @@ export interface CommandMeta {
 	 * When `true`, omit this command from every tooling surface that
 	 * enumerates the command tree for users:
 	 *
-	 * - `helpPlugin` rendered output (subcommand list + USAGE token)
+	 * - `help` rendered output (subcommand list + USAGE token)
 	 * - `@crustjs/man` generated man pages (`SUBCOMMANDS` section)
-	 * - `completionPlugin` candidate lists (recursively — hidden
+	 * - `completion` candidate lists (recursively — hidden
 	 *   subcommands and their descendants never appear in generated
 	 *   bash/zsh/fish scripts)
-	 * - `didYouMeanPlugin` typo suggestions and "Available commands"
+	 * - `didYouMean` typo suggestions and "Available commands"
 	 *   list (so internal names never surface in error UX)
-	 * - `skillPlugin` manifests
+	 * - `skill` manifests
 	 *
 	 * The command is **only hidden from listings**: routing in
 	 * `@crustjs/core` does not consult `meta.hidden`, so it stays fully
@@ -704,7 +704,7 @@ export interface CommandMeta {
 	 * `FlagDef` or `ArgDef`; flags and positional arguments always surface
 	 * in help, completion, and man output. If you need a flag that does
 	 * not advertise itself, the workaround is to register it through a
-	 * plugin's `setup()` hook without describing it (omit `description`),
+	 * extension's `setup()` hook without describing it (omit `description`),
 	 * which suppresses its description body but still lists the spelling
 	 * — there is intentionally no full hide mechanism at the flag layer.
 	 *

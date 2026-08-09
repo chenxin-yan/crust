@@ -106,7 +106,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	return lines.join("\n");
 }
 
-export function helpExtension(): Extension {
+export function help(): Extension {
 	return defineExtension("help", {
 		flags: { help: { type: "boolean", short: "h", noNegate: true, description: "Show help" } },
 		hooks: {

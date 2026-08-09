@@ -93,7 +93,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("omits `meta.hidden: true` subcommands from the SUBCOMMANDS section", async () => {
-		// Mirrors the helpPlugin contract: hidden commands stay invocable
+		// Mirrors the help contract: hidden commands stay invocable
 		// but never appear in published man pages.
 		const app = new Crust("demo", { description: "Demo." })
 			.add(

@@ -275,7 +275,7 @@ export async function validateEntrypoint(
 				proc.kill();
 				reject(
 					new Error(
-						`Pre-compile validation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  A plugin setup() hook may be hanging. Use --no-validate to skip.`,
+						`Pre-compile validation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip.`,
 					),
 				);
 			}, VALIDATE_TIMEOUT_MS);

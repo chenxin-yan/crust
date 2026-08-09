@@ -206,7 +206,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 
-		it("should coexist with all other plugins during command execution", async () => {
+		it("should coexist with all other extensions during command execution", async () => {
 			// Run without arguments — should show help (no crash)
 			await makeCrustApp().execute({ argv: [] });
 			const output = getStdout();

@@ -1,5 +1,5 @@
 /**
- * Internal data shape produced by the completion-plugin walker.
+ * Internal data shape produced by the completion-extension walker.
  *
  * The walker traverses the live `CommandNode` tree (built by the user's
  * `Crust` builder) and projects it down to a small, serialisable description
@@ -151,6 +151,6 @@ export interface CompletionCommand {
  * emit a self-contained completion script.
  */
 export interface CompletionSpec {
-	/** The root command (`rootCommand` from the plugin context). */
+	/** The root command (`rootCommand` from the extension context). */
 	root: CompletionCommand;
 }

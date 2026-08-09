@@ -285,7 +285,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 // validateCommandTree — alias collisions
 //
-// Catches plugin-installed subcommands that bypass `.add()` (where
+// Catches extension-installed subcommands that bypass `.add()` (where
 // collision detection runs eagerly).
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -308,7 +308,7 @@ describe("validateCommandTree — alias collisions", () => {
 
 	it("detects an alias colliding with a sibling's canonical name", () => {
 		const root = createCommandNode("app");
-		// Simulate a plugin that installed both subcommands directly.
+		// Simulate an extension that installed both subcommands directly.
 		root.subCommands = {
 			build: makeRunnable("build"),
 			compile: makeRunnable("compile", ["build"]),

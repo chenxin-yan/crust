@@ -1,6 +1,6 @@
 /**
  * Per-shell quoting and validation helpers used by the completion
- * templates and by the plugin's output-path handling.
+ * templates and by the extension's output-path handling.
  *
  * Why this exists: the completion templates inline a lot of CLI-author
  * provided text — command names, flag names, descriptions, choice values,
@@ -48,7 +48,7 @@ const CHOICE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/;
 export function assertSafeChoiceValue(value: string): string {
 	if (!CHOICE_VALUE_PATTERN.test(value)) {
 		throw new Error(
-			`completion plugin: unsupported choice value ${JSON.stringify(value)} — ` +
+			`completion extension: unsupported choice value ${JSON.stringify(value)} — ` +
 				`must match /^[A-Za-z0-9_.+:@/-]+$/. ` +
 				`Whitespace and shell metacharacters are not supported in v1.`,
 		);
@@ -76,7 +76,7 @@ const IDENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*)?$/;
 export function assertSafeIdentifier(name: string, kind: string): string {
 	if (!IDENT_PATTERN.test(name)) {
 		throw new Error(
-			`completion plugin: invalid ${kind} ${JSON.stringify(name)} — ` +
+			`completion extension: invalid ${kind} ${JSON.stringify(name)} — ` +
 				`must match /^[A-Za-z0-9][A-Za-z0-9._-]*$/. ` +
 				`Whitespace, quotes, and shell metacharacters are not supported.`,
 		);
@@ -94,11 +94,11 @@ export function assertSafeIdentifier(name: string, kind: string): string {
  */
 export function assertSafeBinName(binName: string): string {
 	if (binName.length === 0) {
-		throw new Error("completion plugin: binName must not be empty");
+		throw new Error("completion extension: binName must not be empty");
 	}
 	if (binName.includes("/") || binName.includes("\\") || binName === ".." || binName === ".") {
 		throw new Error(
-			`completion plugin: invalid binName ${JSON.stringify(binName)} — ` +
+			`completion extension: invalid binName ${JSON.stringify(binName)} — ` +
 				`path separators and "."/".." are not allowed (used as a filename in --output-dir mode).`,
 		);
 	}

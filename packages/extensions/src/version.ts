@@ -13,7 +13,7 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-export function versionExtension(
+export function version(
 	versionValue: VersionValue = "0.0.0",
 	options: VersionOptions = {},
 ): Extension {
@@ -34,13 +34,13 @@ export function versionExtension(
 				// Root invocation with --version only
 				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 
-				const version = typeof versionValue === "function" ? versionValue() : versionValue;
+				const resolvedVersion = typeof versionValue === "function" ? versionValue() : versionValue;
 				const line =
 					format === "plain"
-						? version
+						? resolvedVersion
 						: format
-							? format(version, context)
-							: `${context.rootCommand.meta.name} v${version}`;
+							? format(resolvedVersion, context)
+							: `${context.rootCommand.meta.name} v${resolvedVersion}`;
 				context.stdout(line);
 				return context.finish();
 			},

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { completionExtension } from "./index.ts";
+import { completion } from "./index.ts";
 
 let stdoutBuf: Buffer[];
 let processStdoutBuf: Buffer[];
@@ -57,7 +57,7 @@ function getProcessStdout(): string {
 
 function buildCli() {
 	return new Crust("mycli", { description: "Test CLI" })
-		.extend(completionExtension({ version: "1.2.3" }))
+		.extend(completion({ version: "1.2.3" }))
 		.add(
 			defineCommand("build", { description: "Build artifact" }, (cmd) =>
 				cmd
@@ -83,7 +83,7 @@ function buildCli() {
 		.action(() => {});
 }
 
-describe("completionExtension", () => {
+describe("completion", () => {
 	it("registers a `completion` subcommand on the root command (after setup)", async () => {
 		const app = buildCli();
 		const root = await app.snapshot();
@@ -94,7 +94,7 @@ describe("completionExtension", () => {
 
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
-			.extend(completionExtension({ command: "shell-completion" }))
+			.extend(completion({ command: "shell-completion" }))
 			.action(() => {});
 		const root = await app.snapshot();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
@@ -212,7 +212,7 @@ describe("completionExtension", () => {
 		it("respects the `shells` option to limit which files are written", async () => {
 			const app = new Crust("tinycli")
 				.extend(
-					completionExtension({
+					completion({
 						version: "0.1.0",
 						shells: ["bash", "zsh"],
 					}),

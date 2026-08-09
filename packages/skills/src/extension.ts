@@ -116,7 +116,7 @@ function formatInstallOutput(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Derives a {@link SkillMeta} from a command's `meta` and plugin options.
+ * Derives a {@link SkillMeta} from a command's `meta` and extension options.
  *
  * The returned `name` is the canonical raw CLI name (e.g. `"my-cli"`).
  */
@@ -166,7 +166,7 @@ function validateCustomSkillsConfig(
 		if (entry.version !== undefined && entry.version.length === 0) {
 			throw new Error(
 				`skill: customSkills[${index}].version (for "${entry.name}") ` +
-					`must be a non-empty string when set, or omitted to inherit the plugin's \`version\`.`,
+					`must be a non-empty string when set, or omitted to inherit the extension's \`version\`.`,
 			);
 		}
 	}
@@ -177,7 +177,7 @@ function validateCustomSkillsConfig(
 /** Resolves the effective scope for a custom-skill auto-update sweep. */
 function resolveCustomSkillScopes(entry: CustomSkillConfig, options: SkillOptions): Scope[] {
 	// When the entry declares an explicit scope, only that scope is checked.
-	// Otherwise, fall through to plugin defaultScope, else mirror main-skill
+	// Otherwise, fall through to extension defaultScope, else mirror main-skill
 	// behavior (check both project + global, deduped via resolveEffectiveScope).
 	const explicit = entry.scope ?? options.defaultScope;
 	if (explicit !== undefined) {
@@ -344,7 +344,7 @@ async function updateGeneratedSkill(
  * Performs automatic updates for already-installed skills when the version
  * has changed.
  *
- * Runs during plugin setup so behavior is independent of middleware ordering.
+ * Runs during extension setup so behavior is independent of middleware ordering.
  * Only updates skills that are already installed — first-time installation
  * should be done via the interactive command or programmatically by the user.
  */
@@ -395,11 +395,11 @@ async function autoUpdateCustomSkillsLoop(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Skill plugin
+// Skill extension
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Plugin that manages agent skills for a Crust CLI application.
+ * Extension that manages agent skills for a Crust CLI application.
  *
  * `name` and `description` are read from the root command's `meta` at setup
  * time — only `version` needs to be supplied in the options.
@@ -423,8 +423,8 @@ async function autoUpdateCustomSkillsLoop(
  * auto-install logic with the exported primitives (`detectInstalledAgents`,
  * `getSkillStatus`, `generateSkill`).
  *
- * @param options - Plugin configuration with version and defaults
- * @returns The internal plugin behind the `skill()` Extension
+ * @param options - Extension configuration with version and defaults
+ * @returns The internal extension behind the `skill()` Extension
  *
  * @example
  * ```ts
@@ -441,7 +441,7 @@ async function autoUpdateCustomSkillsLoop(
  * await app.execute();
  * ```
  */
-export function skillExtension(options: SkillOptions): Extension {
+export function skill(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 	let customSkills: readonly CustomSkillConfig[] | undefined;
 	const getCustomSkills = (mainName: string) =>
