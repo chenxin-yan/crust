@@ -66,8 +66,11 @@ export interface ExtensionHooks<F extends Record<string, ExtensionFlagDef> = {}>
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then Core's renderer.
+	 *
+	 * Receives the base context: routing or syntax-parse failures render with a
+	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
 	 */
-	readonly onError?: (error: unknown, ctx: ExtensionContext<F>) => Awaitable<boolean | void>;
+	readonly onError?: (error: unknown, ctx: ExtensionContext) => Awaitable<boolean | void>;
 }
 
 /**
@@ -84,7 +87,12 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends { schem
 		: F extends { type: "boolean" }
 			? boolean | undefined
 			: string | undefined
-	: InferFlags<{ value: F }>["value"];
+	: F extends { required: true }
+		? F extends { default: unknown }
+			? InferFlags<{ value: F }>["value"]
+			: // Hooks run before validation enforces `required`, so the value may be absent.
+					InferFlags<{ value: F }>["value"] | undefined
+		: InferFlags<{ value: F }>["value"];
 
 /** Infer the syntax-parsed values visible to an Extension's hooks. */
 export type InferExtensionFlags<F extends Record<string, ExtensionFlagDef>> = {

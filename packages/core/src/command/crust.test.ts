@@ -1010,11 +1010,14 @@ describe("Crust .extend()", () => {
 			flags: {
 				verbose: { type: "boolean", default: false },
 				rootPort: { type: "number", default: 3000, recursive: false },
+				token: { type: "string", required: true },
 			},
 			hooks: {
 				preRun(ctx) {
 					type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
 					type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
+					// Hooks run before validation, so a required flag may still be absent.
+					type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
 					type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
 					const commandFlag: unknown = ctx.flags.commandFlag;
 					void commandFlag;

@@ -74,6 +74,8 @@ Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook
 
 Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow).
 
+Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so its `ctx.flags` stays `Record<string, unknown>`.
+
 ## Extension context
 
 Hooks receive a readonly `ExtensionContext`. The values are invocation data, not mutable command definitions:
