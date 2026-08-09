@@ -1000,26 +1000,31 @@ describe("Crust .extend()", () => {
 	});
 
 	it("defineExtension() returns a frozen plain config", () => {
-		const ext = defineExtension("frozen", { flags: { x: { type: "boolean" } } });
+		const ext = defineExtension("frozen", { flags: [{ name: "x", type: "boolean" }] });
 
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
-		expect(ext.flags?.x?.type).toBe("boolean");
+		expect(ext.flags).toEqual({ x: { type: "boolean" } });
 	});
 
 	it("infers Extension-owned flags in hook contexts", () => {
 		const ext = defineExtension("typed-flags", {
-			flags: {
-				verbose: { type: "boolean", default: false },
-				rootPort: { type: "number", default: 3000, recursive: false },
-				token: { type: "string", required: true },
-				endpoint: { type: "string", schema: {} as StandardSchema<string | undefined, URL> },
-				tags: {
+			flags: [
+				{ name: "verbose", type: "boolean", default: false },
+				{ name: "rootPort", type: "number", default: 3000, recursive: false },
+				{ name: "token", type: "string", required: true },
+				{
+					name: "endpoint",
+					type: "string",
+					schema: {} as StandardSchema<string | undefined, URL>,
+				},
+				{
+					name: "tags",
 					type: "string",
 					multiple: true,
 					schema: {} as StandardSchema<string[], string[]>,
 				},
-			},
+			],
 			hooks: {
 				preRun(ctx) {
 					type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
@@ -1037,6 +1042,26 @@ describe("Crust .extend()", () => {
 		});
 
 		expect(ext.name).toBe("typed-flags");
+	});
+
+	it("defineExtension() accepts only the named array authoring shape", () => {
+		const typecheckRecordShape = () => {
+			// @ts-expect-error -- Extension flags no longer accept the internal record shape
+			defineExtension("record-flags", { flags: { mode: { type: "string" } } });
+		};
+		void typecheckRecordShape;
+		expect(true).toBe(true);
+	});
+
+	it("defineExtension() rejects duplicate owned flag names", () => {
+		const flags = [
+			{ name: "mode", type: "string" },
+			{ name: "mode", type: "number" },
+		] as const;
+
+		expect(() => defineExtension("duplicate-flags", { flags: flags as never })).toThrow(
+			'Extension "duplicate-flags" flag "--mode" is already defined',
+		);
 	});
 
 	it("defineExtension() rejects an empty name", () => {
@@ -1084,7 +1109,7 @@ describe("Extension application at prepare time", () => {
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
 		const debug = defineExtension("debug", {
-			flags: { debug: { type: "boolean" } },
+			flags: [{ name: "debug", type: "boolean" }],
 		});
 
 		const app = new Crust("cli").extend(debug).add(
@@ -1102,7 +1127,7 @@ describe("Extension application at prepare time", () => {
 
 	it("non-recursive Extension flags stay on the root", async () => {
 		const version = defineExtension("version", {
-			flags: { version: { type: "boolean", recursive: false } },
+			flags: [{ name: "version", type: "boolean", recursive: false }],
 		});
 
 		const app = new Crust("cli")
@@ -1114,7 +1139,9 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
-		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", {
+			flags: [{ name: "verbose", type: "boolean" }],
+		});
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean" })
 			.extend(clash)
@@ -1125,7 +1152,7 @@ describe("Extension application at prepare time", () => {
 
 	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
 		const clash = defineExtension("clash", {
-			flags: { loud: { type: "boolean", short: "v" } },
+			flags: [{ name: "loud", type: "boolean", short: "v" }],
 		});
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean", short: "v" })
@@ -1136,8 +1163,8 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = defineExtension("a", { flags: { shared: { type: "boolean" } } });
-		const b = defineExtension("b", { flags: { shared: { type: "boolean" } } });
+		const a = defineExtension("a", { flags: [{ name: "shared", type: "boolean" }] });
+		const b = defineExtension("b", { flags: [{ name: "shared", type: "boolean" }] });
 		const app = new Crust("cli").extend(a, b).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
@@ -1159,7 +1186,7 @@ describe("Extension application at prepare time", () => {
 			],
 		});
 		const verbose = defineExtension("verbose", {
-			flags: { verbose: { type: "boolean" } },
+			flags: [{ name: "verbose", type: "boolean" }],
 		});
 
 		const app = new Crust("cli").extend(completion, verbose).action(() => {});
@@ -1249,7 +1276,9 @@ describe("Extension application at prepare time", () => {
 
 	it("does not mutate the source builder across executions", async () => {
 		let runCount = 0;
-		const debug = defineExtension("debug", { flags: { debug: { type: "boolean" } } });
+		const debug = defineExtension("debug", {
+			flags: [{ name: "debug", type: "boolean" }],
+		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) runCount++;
 		});
@@ -1904,7 +1933,7 @@ describe("Crust .execute()", () => {
 		let receivedFlags: Record<string, unknown> = {};
 
 		const version = defineExtension("version", {
-			flags: { version: { type: "boolean", short: "V" } },
+			flags: [{ name: "version", type: "boolean", short: "V" }],
 		});
 
 		const app = new Crust("test").extend(version).action((ctx) => {
@@ -1920,7 +1949,7 @@ describe("Crust .execute()", () => {
 		let receivedFlags: Record<string, unknown> = {};
 
 		const helpLike = defineExtension("help-like", {
-			flags: { help: { type: "boolean" } },
+			flags: [{ name: "help", type: "boolean" }],
 		});
 		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
@@ -2081,7 +2110,9 @@ describe("Crust .execute()", () => {
 	});
 
 	it("Extension apply error is rendered and sets exitCode", async () => {
-		const clash = defineExtension("clash", { flags: { verbose: { type: "boolean" } } });
+		const clash = defineExtension("clash", {
+			flags: [{ name: "verbose", type: "boolean" }],
+		});
 		const app = new Crust("test")
 			.flags({ name: "verbose", type: "boolean" })
 			.extend(clash)
@@ -2251,9 +2282,7 @@ describe("Invocation pipeline internal seam — validation mode", () => {
 describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
 		const docs = defineExtension("doc-test", {
-			flags: {
-				extra: { type: "boolean", description: "Injected for docs" },
-			},
+			flags: [{ name: "extra", type: "boolean", description: "Injected for docs" }],
 		});
 
 		const app = new Crust("cli", { description: "Test" }).extend(docs);
@@ -2285,7 +2314,7 @@ describe("Crust.snapshot", () => {
 
 	it("rejects with CrustError DEFINITION on an invalid command tree", async () => {
 		const clash = defineExtension("clash", {
-			flags: { verbose: { type: "boolean", short: "v" } },
+			flags: [{ name: "verbose", type: "boolean", short: "v" }],
 		});
 		const app = new Crust("cli")
 			.flags({ name: "version", type: "boolean", short: "v" })

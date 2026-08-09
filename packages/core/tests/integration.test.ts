@@ -241,9 +241,7 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 
 	it("Extension flag on root is parsed and available to root action", async () => {
 		const versionFlag = defineExtension("version-extension", {
-			flags: {
-				version: { type: "boolean", short: "V", recursive: false },
-			},
+			flags: [{ name: "version", type: "boolean", short: "V", recursive: false }],
 		});
 
 		const app = new Crust("cli").extend(versionFlag).action((ctx) => {

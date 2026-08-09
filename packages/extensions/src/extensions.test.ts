@@ -250,7 +250,7 @@ describe("built-in extensions", () => {
 
 	it("recursive false Extension flags stay root-only", async () => {
 		const rootOnly = defineExtension("root-only", {
-			flags: { root: { type: "boolean", recursive: false } },
+			flags: [{ name: "root", type: "boolean", recursive: false }],
 		});
 		const app = new Crust("app")
 			.extend(rootOnly)

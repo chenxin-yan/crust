@@ -1,7 +1,15 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
-import type { FlagDef, InferFlags, InvocationIO } from "../types.ts";
+import type {
+	FlagDef,
+	FlagsDef,
+	InferFlags,
+	InvocationIO,
+	NamedFlagDef,
+	NamedFlagsRecord,
+} from "../types.ts";
+import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 import type { Awaitable } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -36,7 +44,7 @@ export type InvocationOutcome =
  * Examples below assume the `tool deploy api --trace -- --dry-run` invocation.
  */
 export interface ExtensionContext<
-	F extends Record<string, ExtensionFlagDef> = {},
+	Defs extends readonly NamedExtensionFlagDef[] = [],
 > extends Readonly<InvocationIO> {
 	/**
 	 * Complete argv passed to the application, including routed command names.
@@ -81,7 +89,7 @@ export interface ExtensionContext<
 	 *
 	 * @example `{ trace: true }`
 	 */
-	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, unknown>>;
+	readonly flags: Readonly<InferExtensionFlags<Defs> & Record<string, unknown>>;
 	/**
 	 * Positional values that appeared after the `--` separator.
 	 *
@@ -101,18 +109,18 @@ export interface ExtensionContext<
 	readonly finish: () => Finished;
 }
 
-export interface ExtensionHooks<F extends Record<string, ExtensionFlagDef> = {}> {
+export interface ExtensionHooks<Defs extends readonly NamedExtensionFlagDef[] = []> {
 	/**
 	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<F>) => Awaitable<void | Finished>;
+	readonly preRun?: (ctx: ExtensionContext<Defs>) => Awaitable<void | Finished>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
-	readonly postRun?: (ctx: ExtensionContext<F>, outcome: InvocationOutcome) => Awaitable<void>;
+	readonly postRun?: (ctx: ExtensionContext<Defs>, outcome: InvocationOutcome) => Awaitable<void>;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then Core's renderer.
@@ -129,6 +137,9 @@ export interface ExtensionHooks<F extends Record<string, ExtensionFlagDef> = {}>
  */
 export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
+/** A named flag definition accepted by {@link defineExtension}. */
+export type NamedExtensionFlagDef = NamedFlagDef & { readonly recursive?: boolean };
+
 type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends { schema: unknown }
 	? F extends { multiple: true }
 		? F extends { type: "boolean" }
@@ -144,19 +155,25 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends { schem
 					InferFlags<{ value: F }>["value"] | undefined
 		: InferFlags<{ value: F }>["value"];
 
+type InferExtensionFlag<F> = F extends ExtensionFlagDef
+	? F extends { recursive: false }
+		? InferPreSchemaExtensionFlag<F> | undefined
+		: InferPreSchemaExtensionFlag<F>
+	: never;
+
 /** Infer the syntax-parsed values visible to an Extension's hooks. */
-export type InferExtensionFlags<F extends Record<string, ExtensionFlagDef>> = {
-	[K in keyof F]: F[K] extends { recursive: false }
-		? InferPreSchemaExtensionFlag<F[K]> | undefined
-		: InferPreSchemaExtensionFlag<F[K]>;
+export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> = {
+	[K in keyof NamedFlagsRecord<Defs>]: InferExtensionFlag<NamedFlagsRecord<Defs>[K]>;
 };
 
-export interface ExtensionConfig<F extends Record<string, ExtensionFlagDef> = {}> {
+export interface ExtensionConfig<
+	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+> {
 	/** Flags this Extension owns and contributes to the application */
-	readonly flags?: Readonly<F>;
+	readonly flags?: ValidateNamedFlagDefs<Defs>;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly hooks?: ExtensionHooks<F>;
+	readonly hooks?: ExtensionHooks<Defs>;
 }
 
 /**
@@ -178,9 +195,9 @@ export interface Extension {
  * other Extension definitions (collisions are definition errors, surfaced
  * when the application runs).
  */
-export function defineExtension<const F extends Record<string, ExtensionFlagDef> = {}>(
+export function defineExtension<const Defs extends readonly NamedExtensionFlagDef[] = []>(
 	name: string,
-	config: ExtensionConfig<F> = {},
+	config: ExtensionConfig<Defs> = {},
 ): Extension {
 	if (!name.trim()) {
 		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
@@ -188,6 +205,29 @@ export function defineExtension<const F extends Record<string, ExtensionFlagDef>
 			reason: "empty-name",
 		});
 	}
-	// The runtime registry erases F after defineExtension contextually types its own hooks.
-	return Object.freeze({ ...config, name }) as Extension;
+
+	const ownedFlags: FlagsDef = {};
+	for (const def of config.flags ?? []) {
+		const { name: flagName, ...rest } = def;
+		if (flagName in ownedFlags) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${name}" flag "--${flagName}" is already defined`,
+				{ subject: "flag", name: flagName, reason: "flag-collision" },
+			);
+		}
+		validateIncomingFlag(
+			{ name: flagName, def: rest as FlagDef },
+			ownedFlags,
+			`Extension "${name}"`,
+		);
+		ownedFlags[flagName] = rest as ExtensionFlagDef;
+	}
+
+	// The runtime registry erases Defs after defineExtension contextually types its own hooks.
+	return Object.freeze({
+		...config,
+		...(config.flags === undefined ? {} : { flags: ownedFlags }),
+		name,
+	}) as Extension;
 }

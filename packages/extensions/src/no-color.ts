@@ -30,12 +30,13 @@ const colorRuns = new WeakMap<ExtensionContext, true>();
 
 export function noColor(): Extension {
 	return defineExtension("no-color", {
-		flags: {
-			color: {
+		flags: [
+			{
+				name: "color",
 				type: "boolean",
 				description: "Enable colored output",
 			},
-		},
+		],
 		hooks: {
 			preRun(context) {
 				const flagValue = context.flags.color;

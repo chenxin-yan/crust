@@ -3,12 +3,13 @@ import { type ExtensionContext, defineCommand, defineExtension } from "@crustjs/
 const timers = new WeakMap<ExtensionContext, number>();
 
 export const diagnostics = defineExtension("diagnostics", {
-  flags: {
-    trace: {
+  flags: [
+    {
+      name: "trace",
       type: "boolean",
       description: "Print diagnostic timing",
     },
-  },
+  ],
   commands: [
     defineCommand("doctor", { description: "Check the installation" }, (command) =>
       command.action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
