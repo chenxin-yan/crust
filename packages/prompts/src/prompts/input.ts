@@ -7,11 +7,12 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
+import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
 	parseShortCircuit,
 	type PartialPromptTheme,
+	validateSubmitValue,
 	type PromptTheme,
 	type ValidateFn,
 } from "../core/types.ts";
@@ -99,32 +100,8 @@ function createHandleKey<Output>(
 			const submitValue =
 				state.value === "" && defaultValue !== undefined ? defaultValue : state.value;
 
-			if (schema) {
-				// `issues?.length` tolerates non-conformant `{ issues: [] }` results.
-				const result = await schema["~standard"].validate(submitValue);
-				if (result.issues?.length) {
-					return {
-						...state,
-						error: result.issues[0]?.message || "Validation failed",
-					};
-				}
-				return submit((result as { value: Output }).value);
-			}
-
-			if (validate) {
-				// Function path — throw on failure and render the message inline.
-				try {
-					await validate(submitValue);
-				} catch (err) {
-					return {
-						...state,
-						error: err instanceof Error ? err.message : "Validation failed",
-					};
-				}
-				return submit(submitValue);
-			}
-
-			return submit(submitValue);
+			const result = await validateSubmitValue(submitValue, schema, validate);
+			return result.ok ? submit(result.value) : { ...state, error: result.error };
 		}
 
 		// Delegate to shared text-editing handler
@@ -161,21 +138,7 @@ function renderInput(
 			? ` ${theme.hint(`(${defaultValue})`)}`
 			: "";
 
-	let valueLine: string;
-
-	if (state.value === "") {
-		// Show placeholder when input is empty
-		if (effectivePlaceholder) {
-			valueLine = theme.placeholder(effectivePlaceholder);
-		} else {
-			valueLine = theme.cursor(CURSOR_CHAR);
-		}
-	} else {
-		// Show value with cursor
-		const before = state.value.slice(0, state.cursorPos);
-		const after = state.value.slice(state.cursorPos);
-		valueLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
-	}
+	const valueLine = renderTextWithCursor(state.value, state.cursorPos, theme, effectivePlaceholder);
 
 	let output = formatPromptLine(prefix, msg, valueLine, defaultHint);
 

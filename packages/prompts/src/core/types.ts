@@ -106,6 +106,28 @@ export type Choice<T> =
  */
 export type ValidateFn<T> = (value: T) => void | Promise<void>;
 
+export async function validateSubmitValue<Output>(
+	value: string,
+	schema: StandardSchema<unknown, Output> | undefined,
+	validate: ValidateFn<string> | undefined,
+): Promise<{ ok: true; value: Output | string } | { ok: false; error: string }> {
+	if (schema) {
+		const result = await schema["~standard"].validate(value);
+		if (result.issues?.length) {
+			return { ok: false, error: result.issues[0]?.message || "Validation failed" };
+		}
+		return { ok: true, value: (result as { value: Output }).value };
+	}
+	if (validate) {
+		try {
+			await validate(value);
+		} catch (err) {
+			return { ok: false, error: err instanceof Error ? err.message : "Validation failed" };
+		}
+	}
+	return { ok: true, value };
+}
+
 /** @internal Parse an initial/default value through a Standard Schema. */
 export async function parseShortCircuit<Output>(
 	schema: StandardSchema<unknown, Output>,

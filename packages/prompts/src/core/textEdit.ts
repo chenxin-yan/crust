@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { KeypressEvent } from "./renderer.ts";
+import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -10,6 +11,18 @@ import type { KeypressEvent } from "./renderer.ts";
 
 /** Thin vertical bar used as cursor indicator in text inputs */
 export const CURSOR_CHAR = "\u2502"; // │
+
+export function renderTextWithCursor(
+	text: string,
+	cursorPos: number,
+	theme: PromptTheme,
+	placeholder?: string,
+): string {
+	if (text === "") {
+		return placeholder ? theme.placeholder(placeholder) : theme.cursor(CURSOR_CHAR);
+	}
+	return `${text.slice(0, cursorPos)}${theme.cursor(CURSOR_CHAR)}${text.slice(cursorPos)}`;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
