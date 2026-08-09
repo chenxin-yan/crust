@@ -61,6 +61,12 @@ interface CommandDefinitionBuilder<
 }
 ```
 
+<Callout type="info">
+  These signatures are simplified for readability. The exported interface uses const generics,
+  validation intersections, and refined return types; use your editor's `@crustjs/core` type hints
+  for the exact signatures.
+</Callout>
+
 This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Deps` accumulates the Context dependency edges declared through `.provide()`, `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. All three are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`

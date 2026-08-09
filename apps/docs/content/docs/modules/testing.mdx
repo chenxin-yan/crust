@@ -11,23 +11,30 @@ description: Test Crust applications with captured output and fake interactive t
 bun add -d @crustjs/testing
 ```
 
-## `RunnableApp`
+## Application contracts
 
-Both helpers accept the exported structural contract:
+`captureRun()` and `runInteractive()` accept the exported `RunnableApp` structural contract:
 
 ```ts
+interface CaptureIO {
+  readonly stdout?: (text: string) => void;
+  readonly stderr?: (text: string) => void;
+}
+
 interface RunnableApp {
-  run(
-    argv: readonly string[],
-    io?: {
-      stdout?: (text: string) => void;
-      stderr?: (text: string) => void;
-    },
-  ): Promise<void>;
+  run(argv: readonly string[], io?: CaptureIO): Promise<void>;
 }
 ```
 
-Any application that implements this `run()` shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` does not implement `run()` and must first be added to a runnable application.
+`captureExecute()` instead accepts an `ExecutableApp`:
+
+```ts
+interface ExecutableApp {
+  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<void>;
+}
+```
+
+Any application that implements the required shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` implements neither contract and must first be added to an application.
 
 ## `captureRun(app, argv)`
 
@@ -42,6 +49,10 @@ if (result.error) throw result.error;
 console.log(result.stdout);
 ```
 
+The return type is `CapturedRun`:
+
+<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedRun" />
+
 ## `captureExecute(app, argv)`
 
 Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. `process.exitCode` is restored afterwards.
@@ -54,6 +65,10 @@ const result = await captureExecute(app, ["deploy", "--bad-flag"]);
 expect(result.exitCode).toBe(1);
 expect(result.stderr).toContain("Unknown flag");
 ```
+
+The return type is `CapturedExecute`:
+
+<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
 ## `runInteractive(app, argv)`
 
@@ -72,6 +87,10 @@ await run.done;
 ```
 
 `screen()` returns the ANSI-stripped terminal screen. Prompt frames and `ctx.stderr()` output share that screen and the transcript scanned by `waitFor()`.
+
+The return type is `InteractiveRun`:
+
+<auto-type-table path="../../../../../packages/testing/src/index.ts" name="InteractiveRun" />
 
 ## Custom prompts
 

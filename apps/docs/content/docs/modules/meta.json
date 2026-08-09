@@ -5,6 +5,7 @@
     "core",
     "extensions",
     "crust",
+    "create-crust",
     "man",
     "skills",
     "create",

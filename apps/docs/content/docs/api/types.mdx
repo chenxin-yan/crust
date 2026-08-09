@@ -224,6 +224,10 @@ type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
 An Extension owns contributed flags. `recursive` defaults to `true`; `false` contributes the flag only to the root.
 
+### `InferExtensionFlags<F>`
+
+Infers the syntax-parsed values of the flags contributed by an Extension and exposed to its hooks. A flag with `recursive: false` may be `undefined` when a descendant command is invoked because that flag is contributed only to the root.
+
 ### `ExtensionContext`
 
 <auto-type-table

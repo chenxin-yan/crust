@@ -21,7 +21,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 - `.changeset/`: release metadata used by Changesets
 - `scripts/`: release and maintenance scripts
 
-Most package source files live in `packages/*/src`. Unit tests are usually colocated as `*.test.ts`, and broader integration or smoke tests live in `tests/`.
+Most package source files live in `packages/*/src`. Unit tests are usually colocated as `packages/*/src/*.test.ts`, and broader integration or smoke tests live in package-local `packages/<pkg>/tests/` directories.
 
 ## Local Setup
 
@@ -86,7 +86,7 @@ bun run dev:docs
 bun run build:docs
 bun run lint apps/docs
 bun run format apps/docs
-bun run check apps/docs
+bun run build:docs
 bun run check:types --filter=./apps/docs
 ```
 
@@ -111,8 +111,8 @@ Add tests for bug fixes and new behavior whenever practical.
 
 Preferred patterns in this repo:
 
-- colocated unit tests in `src/*.test.ts`
-- integration and smoke tests in `tests/`
+- colocated unit tests in `packages/*/src/*.test.ts`
+- integration and smoke tests in package-local `packages/<pkg>/tests/` directories
 
 When fixing a bug, add a test that fails before the fix and passes after it.
 

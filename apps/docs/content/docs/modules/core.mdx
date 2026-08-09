@@ -70,8 +70,10 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 | `ArgsDef`                                     | Readonly ordered argument definitions                                            |
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
+| [`CommandConfig`](/docs/api/crust)            | Static metadata and Context requirements for a reusable definition               |
 | `CommandMeta`                                 | Name, description, usage, aliases, and visibility                                |
 | [`CommandRequirements`](/docs/api/crust)      | Context capability requirements checked at add time                              |
+| [`RootCommandMeta`](/docs/api/crust)          | Root description and usage accepted by the `Crust` constructor                   |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |
 | `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |
@@ -105,15 +107,16 @@ See [Types](/docs/api/types) for field-level definitions.
 
 ## Extension types
 
-| Type                | Description                                                                 |
-| ------------------- | --------------------------------------------------------------------------- |
-| `Extension`         | Named frozen Extension value                                                |
-| `ExtensionConfig`   | Owned flags, `CommandDefinition` commands, and named hooks                  |
-| `ExtensionFlagDef`  | Extension-owned flag with optional `recursive` scope                        |
-| `ExtensionContext`  | Readonly invocation view with inferred Extension-owned flags and `finish()` |
-| `ExtensionHooks`    | Typed `preRun`, `postRun`, and `onError` hook slots                         |
-| `Finished`          | Opaque token returned by `ExtensionContext.finish()`                        |
-| `InvocationOutcome` | Completed, short-circuited, or failed invocation result                     |
+| Type                  | Description                                                                 |
+| --------------------- | --------------------------------------------------------------------------- |
+| `Extension`           | Named frozen Extension value                                                |
+| `ExtensionConfig`     | Owned flags, `CommandDefinition` commands, and named hooks                  |
+| `ExtensionFlagDef`    | Extension-owned flag with optional `recursive` scope                        |
+| `ExtensionContext`    | Readonly invocation view with inferred Extension-owned flags and `finish()` |
+| `ExtensionHooks`      | Typed `preRun`, `postRun`, and `onError` hook slots                         |
+| `InferExtensionFlags` | Syntax-parsed values inferred from an Extension's contributed flags         |
+| `Finished`            | Opaque token returned by `ExtensionContext.finish()`                        |
+| `InvocationOutcome`   | Completed, short-circuited, or failed invocation result                     |
 
 ## Error types
 

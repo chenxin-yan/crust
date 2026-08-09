@@ -30,6 +30,25 @@ test("greets a name", async () => {
 });
 ```
 
+## Capture terminal execution
+
+Use `captureExecute()` to exercise the terminal `execute()` path, including Extension error rendering and the exit code established through `process.exitCode`. It captures stdout and stderr, restores the previous process exit code afterward, and reports cancellation as exit code `130`.
+
+```ts
+import { expect, test } from "bun:test";
+import { captureExecute } from "@crustjs/testing";
+
+import { app } from "./cli.ts";
+
+test("renders invalid input", async () => {
+  const result = await captureExecute(app, ["--unknown"]);
+
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toContain("Unknown flag");
+  expect(result.exitCode).toBe(1);
+});
+```
+
 ## Fake a Context
 
 Every `defineContext()` factory carries `.of(value)`, which produces an instance returning the precomputed value with requirements considered satisfied. Provide it in place of the real Context when composing an application for a test:

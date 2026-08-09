@@ -5,6 +5,8 @@ Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
 ## Usage
 
 ```sh
+bunx create-crust my-cli
+# or
 bun create crust my-cli
 ```
 
@@ -13,14 +15,14 @@ This prompts for the project directory, distribution mode (standalone binaries r
 ## Options
 
 ```text
-create-crust [directory] [--distribution binary|runtime] [--install|--no-install] [--git|--no-git] [--overwrite]
+create-crust [directory] [--distribution binary|runtime] [--install|--no-install] [--git|--no-git] [--overwrite|--no-overwrite]
 ```
 
 - `directory` sets the destination; omit it to be prompted.
-- `--distribution` selects standalone binaries or a Bun runtime package; omit it to choose interactively (default: `binary`).
-- `--install` / `--no-install` controls dependency installation without prompting.
-- `--git` / `--no-git` controls repository initialization without prompting when the destination is not already inside a Git repository.
-- `--overwrite` allows scaffolding into an existing destination without prompting.
+- `--distribution` preselects standalone binaries or a Bun runtime package in the interactive prompt (default: `binary`).
+- `--install` / `--no-install` sets the initial answer to the dependency installation prompt (default: install).
+- `--git` / `--no-git` sets the initial answer to the repository initialization prompt (default: initialize) when the destination is not already inside a Git repository.
+- `--overwrite` / `--no-overwrite` set the initial answer when confirming an existing destination; confirmation is still required (default: do not overwrite).
 
 Generated projects use the single-file starter (`src/cli.ts`).
 

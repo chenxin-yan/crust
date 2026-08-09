@@ -2,7 +2,7 @@
 
 - `bun:test`: `import { describe, expect, it, beforeEach, afterEach } from "bun:test"`
 - Unit tests: co-located (`src/foo.test.ts` beside `src/foo.ts`)
-- Integration/smoke tests: `tests/`
+- Integration/smoke tests: package-local `packages/<pkg>/tests/`
 
 ## Documentation
 

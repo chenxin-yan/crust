@@ -67,7 +67,7 @@ if (failed) {
 }
 ```
 
-`stop()` is idempotent; the default outcome is `"success"`.
+`stop()` is idempotent; the default outcome is `"success"`. `SpinnerOutcome` is the union `"success" | "error"`.
 
 <auto-type-table
   path="../../../../../packages/progress/src/spinner.ts"
@@ -95,9 +95,16 @@ bar.stop("success", "All files translated");
   name="ProgressOptions"
 />
 
+`progress()` returns a `ProgressHandle`:
+
+<auto-type-table
+  path="../../../../../packages/progress/src/progress.ts"
+  name="ProgressHandle"
+/>
+
 ### SIGINT policy
 
-By default an interactive spinner installs a `SIGINT` handler that restores the cursor and exits with code 130. Applications that own SIGINT (cleanup, log flushing) can opt out with `sigint: false` — the spinner then installs no handler, and the application's cleanup should call `stop()` to restore the cursor:
+`SpinnerSigintPolicy` is `"exit" | false`. By default an interactive spinner uses `"exit"`: it installs a `SIGINT` handler that restores the cursor and exits with code 130. Applications that own SIGINT (cleanup, log flushing) can opt out with `sigint: false` — the spinner then installs no handler, and the application's cleanup should call `stop()` to restore the cursor:
 
 ```ts
 const handle = spinner({ message: "Working...", sigint: false });
@@ -147,6 +154,8 @@ const custom = { frames: ["⊶", "⊷"], interval: 150 };
 - `error`
 
 <auto-type-table path="../../../../../packages/progress/src/types.ts" name="ProgressTheme" />
+
+`PartialProgressTheme` is `Partial<ProgressTheme>` and is accepted for theme overrides.
 
 The default theme uses these styles:
 
