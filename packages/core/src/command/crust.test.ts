@@ -190,25 +190,55 @@ describe("Crust .flags()", () => {
 
 	it("throws CrustError DEFINITION on flag collisions across .flags() calls", () => {
 		expect(() =>
-			new Crust("test")
-				.flags({ name: "verbose", type: "boolean" })
-				.flags({ name: "verbose", type: "string" }),
+			new Crust("test").flags({ name: "verbose", type: "boolean" }).flags(
+				// @ts-expect-error -- canonical name collides with a flag from an earlier call
+				{ name: "verbose", type: "string" },
+			),
 		).toThrow(/Flag "--verbose" is already defined/);
 
 		expect(() =>
-			new Crust("test")
-				.flags({ name: "verbose", type: "boolean", short: "v" })
-				.flags({ name: "version", type: "boolean", short: "v" }),
+			new Crust("test").flags({ name: "verbose", type: "boolean", short: "v" }).flags(
+				// @ts-expect-error -- short alias collides with a flag from an earlier call
+				{ name: "version", type: "boolean", short: "v" },
+			),
 		).toThrow(/spelling "v" collides with flag "--verbose"/);
+
+		expect(() =>
+			new Crust("test").flags({ name: "output", type: "string", aliases: ["out"] }).flags(
+				// @ts-expect-error -- long alias collides with a flag from an earlier call
+				{ name: "other", type: "string", aliases: ["out"] },
+			),
+		).toThrow(/spelling "out" collides with flag "--output"/);
 	});
 
 	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
 		expect(() =>
 			new Crust("test").flags(
+				// @ts-expect-error -- canonical name repeated within one call
 				{ name: "verbose", type: "boolean" },
 				{ name: "verbose", type: "string" },
 			),
 		).toThrow(/already defined/);
+	});
+
+	it("falls back to runtime validation for widened flag names", () => {
+		// No @ts-expect-error: widened names opt out of compile-time checks,
+		// so the duplicate must be caught by the runtime twin instead.
+		const dynamic = "verbose" as string;
+		const app = new Crust("test").flags({ name: dynamic, type: "boolean" });
+		expect(() => app.flags({ name: dynamic, type: "string" })).toThrow(
+			/Flag "--verbose" is already defined/,
+		);
+	});
+
+	it("rejects Promise-returning custom flag parsers at compile time", () => {
+		new Crust("test").flags(
+			// @ts-expect-error -- flag parsers must be synchronous
+			{ name: "file", type: "string", parse: async (raw) => raw },
+		);
+		new Crust("test").flags({ name: "url", type: "string", parse: (raw) => new URL(raw) });
+
+		expect(true).toBe(true);
 	});
 
 	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
@@ -303,13 +333,38 @@ describe("Crust .args()", () => {
 
 	it("throws CrustError DEFINITION on duplicate arg names", () => {
 		expect(() =>
-			new Crust("test")
-				.args({ name: "file", type: "string" })
-				.args({ name: "file", type: "string" }),
+			new Crust("test").args({ name: "file", type: "string" }).args(
+				// @ts-expect-error -- duplicate name from an earlier .args() call
+				{ name: "file", type: "string" },
+			),
 		).toThrow(/Argument "file" is already defined/);
 		expect(() =>
-			new Crust("test").args({ name: "file", type: "string" }, { name: "file", type: "string" }),
+			new Crust("test").args(
+				// @ts-expect-error -- duplicate names within one .args() call
+				{ name: "file", type: "string" },
+				{ name: "file", type: "string" },
+			),
 		).toThrow(/Argument "file" is already defined/);
+	});
+
+	it("falls back to runtime validation for widened arg names", () => {
+		// No @ts-expect-error: widened names opt out of compile-time checks,
+		// so the duplicate must be caught by the runtime twin instead.
+		const dynamic = "file" as string;
+		const app = new Crust("test").args({ name: dynamic, type: "string" });
+		expect(() => app.args({ name: dynamic, type: "string" })).toThrow(
+			/Argument "file" is already defined/,
+		);
+	});
+
+	it("rejects Promise-returning custom arg parsers at compile time", () => {
+		new Crust("test").args(
+			// @ts-expect-error -- positional argument parsers must be synchronous
+			{ name: "file", type: "string", parse: async (raw) => raw },
+		);
+		new Crust("test").args({ name: "count", type: "string", parse: Number });
+
+		expect(true).toBe(true);
 	});
 
 	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {
@@ -549,6 +604,7 @@ describe("Crust .add() with inline definitions", () => {
 	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
 		const app = new Crust("cli").add(defineCommand("sub", (cmd) => cmd));
 		try {
+			// @ts-expect-error -- runtime twin rejects duplicate sibling names for plain-JS consumers
 			app.add(defineCommand("sub", (cmd) => cmd));
 			expect.unreachable("should have thrown");
 		} catch (err) {
@@ -623,6 +679,52 @@ describe("Crust .add() with inline definitions", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Crust .add() type-level tests", () => {
+	it("rejects sibling command spelling collisions at the call site", () => {
+		const issue = defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command);
+		const app = new Crust("cli").add(issue);
+
+		const typecheckCollisions = () => {
+			// @ts-expect-error -- duplicate sibling canonical name across .add() calls
+			app.add(defineCommand("issue", (command) => command));
+			// @ts-expect-error -- alias collides with a sibling canonical name
+			app.add(defineCommand("info", { aliases: ["issue"] }, (command) => command));
+			// @ts-expect-error -- canonical name collides with a sibling alias
+			app.add(defineCommand("i", (command) => command));
+			// @ts-expect-error -- .as() preserves aliases, including their collisions
+			app.add(issue.as("ticket"));
+			new Crust("cli").add(
+				// @ts-expect-error -- collisions are checked against earlier definitions in the batch
+				defineCommand("build", { aliases: ["b"] }, (command) => command),
+				defineCommand("b", (command) => command),
+			);
+		};
+		void typecheckCollisions;
+
+		const dynamicName = "dynamic" as string;
+		const dynamic = defineCommand(dynamicName, (command) => command);
+		new Crust("cli").add(dynamic).add(defineCommand("static", (command) => command));
+
+		expect(true).toBe(true);
+	});
+
+	it("rejects invalid command alias shapes at defineCommand()", () => {
+		const typecheckAliasShapes = () => {
+			// @ts-expect-error -- aliases must be non-empty
+			defineCommand("issue", { aliases: [""] }, (command) => command);
+			// @ts-expect-error -- aliases must not start with a dash
+			defineCommand("issue", { aliases: ["-i"] }, (command) => command);
+			// @ts-expect-error -- aliases must not contain spaces
+			defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
+			// @ts-expect-error -- aliases must not contain tabs
+			defineCommand("issue", { aliases: ["my\tissue"] }, (command) => command);
+			// @ts-expect-error -- aliases must differ from their own canonical name
+			defineCommand("issue", { aliases: ["issue"] }, (command) => command);
+		};
+		void typecheckAliasShapes;
+
+		expect(true).toBe(true);
+	});
+
 	it("types required capabilities and local values in actions", () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
@@ -2137,18 +2239,20 @@ describe("Crust .add() aliases", () => {
 
 	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
 		const app = new Crust("cli").add(defineCommand("build", (cmd) => cmd.action(() => {})));
-		expect(() =>
-			app.add(defineCommand("compile", { aliases: ["build"] }, (cmd) => cmd.action(() => {}))),
-		).toThrow(/collides with sibling canonical name "build"/);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects aliases colliding with sibling names
+			app.add(defineCommand("compile", { aliases: ["build"] }, (cmd) => cmd.action(() => {})));
+		}).toThrow(/collides with sibling canonical name "build"/);
 	});
 
 	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
 		const app = new Crust("cli").add(
 			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
 		);
-		expect(() =>
-			app.add(defineCommand("info", { aliases: ["i"] }, (cmd) => cmd.action(() => {}))),
-		).toThrow(/collides with alias of sibling "issue"/);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects aliases colliding across siblings
+			app.add(defineCommand("info", { aliases: ["i"] }, (cmd) => cmd.action(() => {})));
+		}).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
@@ -2156,9 +2260,10 @@ describe("Crust .add() aliases", () => {
 			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
 		);
 		// Now try to register a *new* command whose canonical name == existing alias.
-		expect(() => app.add(defineCommand("i", (cmd) => cmd.action(() => {})))).toThrow(
-			/canonical name "i" collides with alias of sibling "issue"/,
-		);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects names colliding with sibling aliases
+			app.add(defineCommand("i", (cmd) => cmd.action(() => {})));
+		}).toThrow(/canonical name "i" collides with alias of sibling "issue"/);
 	});
 
 	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
@@ -2172,6 +2277,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias equal to its own canonical name", () => {
 		expect(() =>
 			new Crust("cli").add(
+				// @ts-expect-error -- runtime twin rejects aliases equal to their canonical name
 				defineCommand("issue", { aliases: ["issue"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not equal its own canonical name/);
@@ -2180,6 +2286,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an empty alias", () => {
 		expect(() =>
 			new Crust("cli").add(
+				// @ts-expect-error -- runtime twin rejects empty aliases
 				defineCommand("issue", { aliases: [""] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must be a non-empty string/);
@@ -2188,6 +2295,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias containing whitespace", () => {
 		expect(() =>
 			new Crust("cli").add(
+				// @ts-expect-error -- runtime twin rejects whitespace in aliases
 				defineCommand("issue", { aliases: ["my issue"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not contain whitespace/);
@@ -2196,6 +2304,7 @@ describe("Crust .add() aliases", () => {
 	it("throws DEFINITION on an alias starting with '-'", () => {
 		expect(() =>
 			new Crust("cli").add(
+				// @ts-expect-error -- runtime twin rejects aliases starting with a dash
 				defineCommand("issue", { aliases: ["-i"] }, (cmd) => cmd.action(() => {})),
 			),
 		).toThrow(/must not start with "-"/);
@@ -2208,14 +2317,30 @@ describe("Crust .add() aliases", () => {
 		);
 		const app = new Crust("cli").add(issue);
 
-		expect(() => app.add(conflicting)).toThrow(/collides with alias of sibling "issue"/);
+		expect(() => {
+			// @ts-expect-error -- runtime twin rejects collisions for reusable definitions
+			app.add(conflicting);
+		}).toThrow(/collides with alias of sibling "issue"/);
 	});
 
 	it("keeps configured aliases when a definition is renamed with .as()", () => {
 		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
 		const app = new Crust("cli").add(issue);
 
-		expect(() => app.add(issue.as("ticket"))).toThrow(/collides with alias of sibling "issue"/);
+		expect(() => {
+			// @ts-expect-error -- .as() preserves configured aliases in the sibling spelling set
+			app.add(issue.as("ticket"));
+		}).toThrow(/collides with alias of sibling "issue"/);
+	});
+
+	it("throws DEFINITION when .as() renames a definition to one of its own aliases", () => {
+		// Deliberately runtime-only: the rename target is compared against the
+		// definition's own aliases, which the type level does not cross-check.
+		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
+
+		expect(() => new Crust("cli").add(issue.as("i"))).toThrow(
+			/must not equal its own canonical name/,
+		);
 	});
 
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {

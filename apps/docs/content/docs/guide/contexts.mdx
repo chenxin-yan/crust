@@ -120,7 +120,7 @@ new Crust("app").provide(config(), database());
 new Crust("app").provide(database(), config());
 ```
 
-A ctx dependency that is not provided on the path, or a dependency cycle, is a `CrustError` with code `DEFINITION`, raised at dispatch and also caught by [`crust build`](/docs/guide/build)'s command-tree validation.
+A ctx dependency that is not provided on the path is a `CrustError` with code `DEFINITION`, raised at dispatch and also caught by [`crust build`](/docs/guide/build)'s command-tree validation. For TypeScript consumers, a dependency cycle whose members are provided with literal types fails typecheck with `FIX_CONTEXT_CYCLE`; cycles through inherited parent Contexts and dynamically built graphs remain runtime-only. Runtime validation reports every cycle as `DEFINITION`.
 
 ## Test doubles with `.of()`
 
@@ -179,11 +179,11 @@ Call `.provide()` before `.add()`: a missing requirement name is a `DEFINITION` 
 
 ## Name and flag collisions
 
-Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited.
+Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited. For TypeScript consumers, statically known duplicates — a name repeated within one `.provide()` call, provided again in a later call on the same builder, or re-provided by a definition that also declares it in `requires` — fail typecheck with `FIX_DUPLICATE_CONTEXT`. Re-providing an inherited name the definition does not require, and dynamically built instances, remain runtime-only.
 
 Added definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.add()`.
 
-Owned flag names, short forms, and aliases must be unique across application flags, other Contexts, and Extensions. Application and Context collisions fail while building; Extension collisions fail when `run()`, `execute()`, or `crust build` prepares the complete graph. Every case uses `CrustError` code `DEFINITION` rather than shadowing a definition.
+Owned flag names, short forms, and aliases must be unique across application flags, other Contexts, and Extensions. For TypeScript consumers, statically known application and Context collisions fail typecheck with `FIX_ALIAS_COLLISION`. Collisions between Contexts in the same `.provide()` call, inherited ancestor flags in child commands, dynamically built definitions, and Extension contributions remain runtime-only. Runtime validation reports every collision as `CrustError` code `DEFINITION` rather than shadowing a definition.
 
 ## Native disposal
 

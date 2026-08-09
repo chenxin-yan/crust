@@ -517,23 +517,20 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Merges two flag sets, where `Override` keys win over `Base` keys.
+ * Merges two flag sets as a flat intersection.
  *
- * @example
- * ```ts
- * type Base = { verbose: { type: "boolean" }; port: { type: "number" } };
- * type Override = { port: { type: "string" } };
- * type Result = MergeFlags<Base, Override>;
- * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
- * ```
+ * Override-wins semantics are unnecessary: a shared key across the two sets
+ * is branded at compile time (`DuplicateNameBrand`,
+ * `ExistingFlagCollisionBrand`, `ProvideChecks`) and throws at runtime, so
+ * valid programs never merge overlapping records. A plain intersection stays
+ * flat in the checker — chained `.flags()`/`.provide()` calls cost constant
+ * instantiation depth, where per-call merge layers (mapped type or
+ * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.
  */
-export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Simplify<
-	Omit<Base, keyof Override> & Override
->;
+export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
 
 /** Computes a command's action-visible flags from local and Context-owned definitions. */
-export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
-	MergeFlags<Local, Owned> extends infer R extends FlagsDef ? R : never;
+export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> = Local & Owned;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities

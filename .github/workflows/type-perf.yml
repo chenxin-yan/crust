@@ -10,6 +10,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "scripts/type-perf-report.ts"
+      - "scripts/editor-latency.ts"
       - ".github/workflows/type-perf.yml"
 
 concurrency:

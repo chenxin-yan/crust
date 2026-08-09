@@ -3,7 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import type { NamedFlagDef } from "../types.ts";
-import { defineContext } from "./context.ts";
+import type { ContextDeps } from "../validation/contexts.ts";
+import { defineContext, type ContextInstance } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
@@ -94,9 +95,12 @@ describe("Crust .provide()", () => {
 		const a = defineContext("db", () => 1);
 		const b = defineContext("db", () => 2);
 
+		// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
 		expect(() => new Crust("cli").provide(a()).provide(b())).toThrow(CrustError);
+		// @ts-expect-error -- name repeated within one call (FIX_DUPLICATE_CONTEXT)
 		expect(() => new Crust("cli").provide(a(), b())).toThrow(/Context "db" is already provided/);
 		try {
+			// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
 			new Crust("cli").provide(a()).provide(b());
 		} catch (error) {
 			expect((error as CrustError).is("DEFINITION")).toBe(true);
@@ -374,8 +378,18 @@ describe("Context-owned flags", () => {
 
 	it("rejects application and Context-owned collisions in both fluent orders", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		expect(() => new Crust("cli").flags(apiKey).provide(auth())).toThrow(/collides/);
-		expect(() => new Crust("cli").provide(auth()).flags(apiKey)).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").flags(apiKey).provide(
+				// @ts-expect-error -- provided Context flag collides with an existing local flag
+				auth(),
+			),
+		).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").provide(auth()).flags(
+				// @ts-expect-error -- local flag collides with an existing Context-owned flag
+				apiKey,
+			),
+		).toThrow(/collides/);
 	});
 
 	it("rejects collisions between different Contexts in one or separate provide calls", () => {
@@ -386,7 +400,12 @@ describe("Context-owned flags", () => {
 			() => ({}),
 		);
 		expect(() => new Crust("cli").provide(auth(), session())).toThrow(/collides/);
-		expect(() => new Crust("cli").provide(auth()).provide(session())).toThrow(/collides/);
+		expect(() =>
+			new Crust("cli").provide(auth()).provide(
+				// @ts-expect-error -- Context-owned short alias collides across provide calls
+				session(),
+			),
+		).toThrow(/collides/);
 	});
 
 	it("rejects Extension collisions regardless of fluent registration order", async () => {
@@ -401,6 +420,61 @@ describe("Context-owned flags", () => {
 		await expect(new Crust("cli").provide(auth()).extend(extension).run([])).rejects.toThrow(
 			/collides/,
 		);
+	});
+});
+
+describe("compile-time Context dependency cycles", () => {
+	it("rejects direct, self, and cross-call cycles without rejecting incomplete or acyclic graphs", () => {
+		const typecheckCycles = () => {
+			const a = null as unknown as ContextInstance<"a", unknown, { b: unknown }>;
+			const b = null as unknown as ContextInstance<"b", unknown, { a: unknown }>;
+			new Crust("cli").provide(
+				// @ts-expect-error -- both instances participate in the dependency cycle
+				a,
+				b,
+			);
+
+			const self = null as unknown as ContextInstance<"self", unknown, { self: unknown }>;
+			new Crust("cli").provide(
+				// @ts-expect-error -- a Context cannot require itself
+				self,
+			);
+
+			const first = null as unknown as ContextInstance<"first", unknown, { second: unknown }>;
+			const second = null as unknown as ContextInstance<"second", unknown, { third: unknown }>;
+			const third = null as unknown as ContextInstance<"third", unknown, { first: unknown }>;
+			new Crust("cli").provide(first).provide(second).provide(
+				// @ts-expect-error -- third closes the cycle across prior provide calls
+				third,
+			);
+
+			const base = null as unknown as ContextInstance<"base">;
+			const left = null as unknown as ContextInstance<"left", unknown, { base: unknown }>;
+			const right = null as unknown as ContextInstance<"right", unknown, { base: unknown }>;
+			const top = null as unknown as ContextInstance<
+				"top",
+				unknown,
+				{ left: unknown; right: unknown }
+			>;
+			// Order-free valid diamond: dependencies may follow their dependents.
+			new Crust("cli").provide(top, left, right, base);
+
+			const missing = null as unknown as ContextInstance<"client", unknown, { config: unknown }>;
+			// Missing dependencies remain a runtime concern so provide order stays free.
+			new Crust("cli").provide(missing);
+
+			const widened = null as unknown as ContextInstance<string, unknown, Record<string, unknown>>;
+			new Crust("cli").provide(widened);
+
+			const provideThroughGenericGraph = <Deps extends ContextDeps>(
+				app: Crust<any, any, any, any, any, any, Deps>,
+				instance: ContextInstance<"dynamic">,
+			) => app.provide(instance);
+			void provideThroughGenericGraph;
+		};
+
+		void typecheckCycles;
+		expect(true).toBe(true);
 	});
 });
 
@@ -491,6 +565,23 @@ describe("Context capability requirements (topological construction)", () => {
 		const app = new Crust("cli").provide(a, b).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: expect.stringMatching(/dependency cycle/),
+		});
+	});
+
+	it("throws DEFINITION at dispatch on a cycle split across parent and child provide sites", async () => {
+		// Deliberately runtime-only: the child recipe's Deps graph does not see
+		// Contexts inherited from the parent path, so this cycle compiles clean.
+		const a = defineContext("a", () => "a")();
+		const b = defineContext("b", () => "b")();
+		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
+		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
+
+		const child = defineCommand("child", (command) => command.provide(b).action(() => {}));
+		const app = new Crust("cli").provide(a).add(child);
+
+		await expect(app.run(["child"])).rejects.toMatchObject({
 			code: "DEFINITION",
 			message: expect.stringMatching(/dependency cycle/),
 		});

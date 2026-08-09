@@ -13,7 +13,12 @@ import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
-export type MergeContext<A, B> = Simplify<A & B>;
+// Flat intersection — same rationale as MergeFlags: duplicate context names
+// are branded at compile time (FIX_DUPLICATE_CONTEXT) and throw at .provide()
+// time, so operands never overlap in valid programs, and
+// the intersection keeps chained .provide() calls at constant instantiation
+// depth (Simplify<A & B> and mapped merges nested a layer per call).
+export type MergeContext<A, B> = A & B;
 
 /** Context capabilities required from the command path. */
 export type ContextRequirements = readonly AnyContextFactory[];

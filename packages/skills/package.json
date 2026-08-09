@@ -56,7 +56,13 @@
 		"bunup": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:0.x"
+		"@crustjs/core": "workspace:0.x",
+		"typescript": "^7.0.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
 	},
 	"engines": {
 		"bun": ">=1.3.14"

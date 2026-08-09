@@ -46,6 +46,14 @@
 	"dependencies": {
 		"@crustjs/style": "workspace:^"
 	},
+	"peerDependencies": {
+		"typescript": "^7.0.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"bunup": "catalog:"

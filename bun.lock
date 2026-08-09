@@ -59,6 +59,12 @@
         "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/create": {
       "name": "@crustjs/create",
@@ -68,6 +74,12 @@
         "@crustjs/utils": "workspace:*",
         "bunup": "catalog:",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/create-crust": {
       "name": "create-crust",
@@ -113,7 +125,11 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
+        "typescript": "^7.0.0",
       },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/man": {
       "name": "@crustjs/man",
@@ -126,7 +142,11 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
+        "typescript": "^7.0.0",
       },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/progress": {
       "name": "@crustjs/progress",
@@ -138,6 +158,12 @@
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
@@ -151,6 +177,12 @@
         "bunup": "catalog:",
         "zod": "^4.0.0",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/skills": {
       "name": "@crustjs/skills",
@@ -168,7 +200,11 @@
       },
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
+        "typescript": "^7.0.0",
       },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/store": {
       "name": "@crustjs/store",
@@ -179,6 +215,12 @@
         "bunup": "catalog:",
         "zod": "^4.0.0",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/style": {
       "name": "@crustjs/style",
@@ -187,6 +229,12 @@
         "@crustjs/config": "workspace:*",
         "bunup": "catalog:",
       },
+      "peerDependencies": {
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/testing": {
       "name": "@crustjs/testing",
@@ -200,7 +248,11 @@
       "peerDependencies": {
         "@crustjs/core": "workspace:0.x",
         "@crustjs/prompts": "workspace:0.x",
+        "typescript": "^7.0.0",
       },
+      "optionalPeers": [
+        "typescript",
+      ],
     },
     "packages/utils": {
       "name": "@crustjs/utils",
@@ -215,7 +267,7 @@
   },
   "catalog": {
     "bunup": "^0.16.32",
-    "typescript": "^7.0.2",
+    "typescript": "^7.0.0",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.27.1", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.27.1", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg=="],
