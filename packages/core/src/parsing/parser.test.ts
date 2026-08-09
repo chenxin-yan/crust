@@ -9,13 +9,13 @@ import { parseArgs, validateParsed } from "./parser.ts";
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.
  */
-function makeNode(config: {
+function makeNode<const A extends ArgsDef = ArgsDef, const F extends FlagsDef = FlagsDef>(config: {
 	meta: string | CommandMeta;
-	args?: ArgsDef;
-	flags?: FlagsDef;
+	args?: A;
+	flags?: F;
 	subCommands?: Record<string, CommandNode>;
 	run?: (ctx: unknown) => void | Promise<void>;
-}): CommandNode {
+}): CommandNode & { args: A | undefined; effectiveFlags: F } {
 	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
@@ -33,7 +33,7 @@ function makeNode(config: {
 	if (config.run) {
 		node.run = config.run;
 	}
-	return node;
+	return node as CommandNode & { args: A | undefined; effectiveFlags: F };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -422,7 +422,7 @@ describe("parseArgs — default values", () => {
 			args: [{ name: "file", type: "string", default: "index.ts" }],
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).file).toBe("index.ts");
+		expect(result.args.file).toBe("index.ts");
 	});
 
 	it("overrides default when value is provided", () => {
@@ -458,7 +458,7 @@ describe("parseArgs — default values", () => {
 			},
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).file).toBe("src/cli.ts");
+		expect(result.args.file).toBe("src/cli.ts");
 		expect(result.flags.port).toBe(3000);
 		expect(result.flags.verbose).toBe(false);
 		expect(result.flags.output).toBe("./dist");
@@ -477,12 +477,12 @@ describe("parseArgs — required args", () => {
 
 	it("succeeds when required arg is provided", () => {
 		const result = parseArgs(cmd, ["input.ts"]);
-		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
+		expect(result.args.file).toBe("input.ts");
 	});
 
 	it("returns undefined for missing required arg (no validation)", () => {
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).file).toBeUndefined();
+		expect(result.args.file).toBeUndefined();
 	});
 
 	it("required arg with a default does not throw when missing", () => {
@@ -493,7 +493,7 @@ describe("parseArgs — required args", () => {
 		// When default is present, it should be applied even if required
 		// (the default satisfies the requirement)
 		const result = parseArgs(cmdWithDefault, []);
-		expect((result.args as Record<string, unknown>).file).toBe("index.ts");
+		expect(result.args.file).toBe("index.ts");
 	});
 });
 
@@ -531,7 +531,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts", "c.ts"]);
-		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts", "c.ts"]);
+		expect(result.args.files).toEqual(["a.ts", "b.ts", "c.ts"]);
 	});
 
 	it("variadic with preceding regular arg", () => {
@@ -543,8 +543,8 @@ describe("parseArgs — variadic args", () => {
 			],
 		});
 		const result = parseArgs(cmd, ["build", "a.ts", "b.ts"]);
-		expect((result.args as Record<string, unknown>).target).toBe("build");
-		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts"]);
+		expect(result.args.target).toBe("build");
+		expect(result.args.files).toEqual(["a.ts", "b.ts"]);
 	});
 
 	it("variadic with no remaining args produces empty array", () => {
@@ -553,7 +553,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "files", type: "string", variadic: true }],
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).files).toEqual([]);
+		expect(result.args.files).toEqual([]);
 	});
 
 	it("variadic with number coercion", () => {
@@ -562,7 +562,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "numbers", type: "number", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["1", "2", "3"]);
-		expect((result.args as Record<string, unknown>).numbers).toEqual([1, 2, 3]);
+		expect(result.args.numbers).toEqual([1, 2, 3]);
 	});
 
 	it("throws CrustError with PARSE code on variadic non-numeric value", () => {
@@ -586,7 +586,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).files).toEqual([]);
+		expect(result.args.files).toEqual([]);
 	});
 
 	it("required variadic succeeds when at least one value is provided", () => {
@@ -595,7 +595,7 @@ describe("parseArgs — variadic args", () => {
 			args: [{ name: "files", type: "string", variadic: true, required: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts"]);
-		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts"]);
+		expect(result.args.files).toEqual(["a.ts"]);
 	});
 });
 
@@ -650,7 +650,7 @@ describe("parseArgs — '--' separator", () => {
 			args: [{ name: "file", type: "string", required: true }],
 		});
 		const result = parseArgs(cmd, ["input.ts", "--", "--extra"]);
-		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
+		expect(result.args.file).toBe("input.ts");
 		expect(result.rawArgs).toEqual(["--extra"]);
 	});
 });
@@ -718,7 +718,7 @@ describe("parseArgs — empty argv", () => {
 			},
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).file).toBeUndefined();
+		expect(result.args.file).toBeUndefined();
 		expect(result.flags.verbose).toBeUndefined();
 	});
 });
@@ -738,7 +738,7 @@ describe("parseArgs — complex scenarios", () => {
 			},
 		});
 		const result = parseArgs(cmd, ["src/cli.ts", "-p", "8080", "-v"]);
-		expect((result.args as Record<string, unknown>).entry).toBe("src/cli.ts");
+		expect(result.args.entry).toBe("src/cli.ts");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.verbose).toBe(true);
 	});
@@ -753,7 +753,7 @@ describe("parseArgs — complex scenarios", () => {
 		});
 		// Flags before positionals
 		const result = parseArgs(cmd, ["--output", "./build", "input.ts"]);
-		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
+		expect(result.args.file).toBe("input.ts");
 		expect(result.flags.output).toBe("./build");
 	});
 
@@ -763,7 +763,7 @@ describe("parseArgs — complex scenarios", () => {
 			args: [{ name: "count", type: "number", required: true }],
 		});
 		const result = parseArgs(cmd, ["42"]);
-		expect((result.args as Record<string, unknown>).count).toBe(42);
+		expect(result.args.count).toBe(42);
 	});
 
 	it("boolean arg coercion", () => {
@@ -772,7 +772,7 @@ describe("parseArgs — complex scenarios", () => {
 			args: [{ name: "force", type: "boolean" }],
 		});
 		const result = parseArgs(cmd, ["true"]);
-		expect((result.args as Record<string, unknown>).force).toBe(true);
+		expect(result.args.force).toBe(true);
 	});
 
 	it("full complex command with all features", () => {
@@ -801,8 +801,8 @@ describe("parseArgs — complex scenarios", () => {
 			"--",
 			"--some-extra-flag",
 		]);
-		expect((result.args as Record<string, unknown>).entry).toBe("main.ts");
-		expect((result.args as Record<string, unknown>).extras).toEqual(["extra1.ts", "extra2.ts"]);
+		expect(result.args.entry).toBe("main.ts");
+		expect(result.args.extras).toEqual(["extra1.ts", "extra2.ts"]);
 		expect(result.flags.output).toBe("./build");
 		expect(result.flags.port).toBe(8080);
 		expect(result.flags.minify).toBe(false);
@@ -819,8 +819,8 @@ describe("parseArgs — complex scenarios", () => {
 			],
 		});
 		const result = parseArgs(cmd, ["./src", "./dest"]);
-		expect((result.args as Record<string, unknown>).source).toBe("./src");
-		expect((result.args as Record<string, unknown>).destination).toBe("./dest");
+		expect(result.args.source).toBe("./src");
+		expect(result.args.destination).toBe("./dest");
 	});
 });
 
@@ -1125,13 +1125,14 @@ describe("parseArgs — CommandNode with effective flags", () => {
 	});
 
 	it("CommandNode with args parses positionals correctly", () => {
-		const node = createCommandNode("child");
-		node.args = [{ name: "file", type: "string", required: true }];
+		const node = Object.assign(createCommandNode("child"), {
+			args: [{ name: "file", type: "string", required: true }] as const,
+		});
 		node.effectiveFlags = computeEffectiveFlags({ verbose: { type: "boolean" as const } }, {});
 
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
 		expect(result.flags.verbose).toBe(true);
-		expect((result.args as Record<string, unknown>).file).toBe("input.ts");
+		expect(result.args.file).toBe("input.ts");
 	});
 
 	it("ancestor-owned boolean negation works on subcommand", () => {
@@ -1263,7 +1264,7 @@ describe("parseArgs — raw schema-backed args", () => {
 			args: [{ name: "port" }],
 		});
 		const result = parseArgs(cmd, ["3000"]);
-		expect((result.args as Record<string, unknown>).port).toBe("3000");
+		expect(result.args.port).toBe("3000");
 	});
 
 	it("keeps untyped variadic args as raw string arrays", () => {
@@ -1272,7 +1273,7 @@ describe("parseArgs — raw schema-backed args", () => {
 			args: [{ name: "files", variadic: true }],
 		});
 		const result = parseArgs(cmd, ["a.ts", "b.ts"]);
-		expect((result.args as Record<string, unknown>).files).toEqual(["a.ts", "b.ts"]);
+		expect(result.args.files).toEqual(["a.ts", "b.ts"]);
 	});
 });
 
@@ -1550,7 +1551,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 			args: [{ name: "out", type: "path", default: "./dist" }],
 		});
 		const result = parseArgs(cmd, []);
-		expect((result.args as Record<string, unknown>).out).toBe(`${process.cwd()}/dist`);
+		expect(result.args.out).toBe(`${process.cwd()}/dist`);
 	});
 
 	it("validates a non-parse `default` against `choices` when present", () => {

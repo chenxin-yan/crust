@@ -6,7 +6,7 @@ import {
 
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ParseResult } from "../types.ts";
+import type { ArgsDef, FlagsDef, InferArgs, InferFlags, ParseResult } from "../types.ts";
 
 async function runSchema(
 	schema: StandardSchema,
@@ -35,24 +35,29 @@ async function runSchema(
  *
  * @throws {CrustError} `VALIDATION` aggregating every schema issue
  */
-export async function applySchemas(
+export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	node: CommandNode,
-	parsed: ParseResult,
-): Promise<{ args: Record<string, unknown>; flags: Record<string, unknown> }> {
+	parsed: ParseResult<A, F>,
+): Promise<{ args: InferArgs<A>; flags: InferFlags<F> }> {
 	const issues: ValidationIssue[] = [];
-	const args: Record<string, unknown> = { ...(parsed.args as Record<string, unknown>) };
-	const flags: Record<string, unknown> = { ...(parsed.flags as Record<string, unknown>) };
+	const args: InferArgs<A> = { ...parsed.args };
+	const flags: InferFlags<F> = { ...parsed.flags };
 
 	for (const def of node.args ?? []) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, args[def.name], ["args", def.name], issues);
-		if (result.ok) args[def.name] = result.value;
+		const result = await runSchema(
+			def.schema,
+			Reflect.get(args, def.name),
+			["args", def.name],
+			issues,
+		);
+		if (result.ok) Reflect.set(args, def.name, result.value);
 	}
 
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, flags[name], ["flags", name], issues);
-		if (result.ok) flags[name] = result.value;
+		const result = await runSchema(def.schema, Reflect.get(flags, name), ["flags", name], issues);
+		if (result.ok) Reflect.set(flags, name, result.value);
 	}
 
 	if (issues.length > 0) {
