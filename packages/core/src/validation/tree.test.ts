@@ -29,7 +29,7 @@ describe("validateCommandTree", () => {
 		};
 		node.effectiveFlags = { ...node.localFlags };
 
-		expect(() => validateCommandTree(node)).toThrow('Command "root" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow('Command "root" failed definition validation');
 	});
 
 	it("validates nested subcommands", () => {
@@ -47,8 +47,35 @@ describe("validateCommandTree", () => {
 		root.subCommands = { generate };
 
 		expect(() => validateCommandTree(root)).toThrow(
-			'Command "root generate leaf" failed runtime validation',
+			'Command "root generate leaf" failed definition validation',
 		);
+	});
+
+	it("rejects a variadic arg that is not last on a dynamically installed command", () => {
+		// Installed via subCommands mutation, bypassing the builder's own
+		// position check — the walk must still catch it, with the path label.
+		const sub = createCommandNode("sub");
+		sub.args = [
+			{ name: "files", type: "string", variadic: true },
+			{ name: "dest", type: "string" },
+		];
+
+		const root = createCommandNode("root");
+		root.subCommands = { sub };
+
+		expect(() => validateCommandTree(root)).toThrow(
+			'Command "root sub" failed definition validation',
+		);
+	});
+
+	it("rejects a flag default that is outside its choices", () => {
+		const node = createCommandNode("root");
+		node.localFlags = {
+			mode: { type: "string", choices: ["a", "b"], default: "z" },
+		};
+		node.effectiveFlags = { ...node.localFlags };
+
+		expect(() => validateCommandTree(node)).toThrow('Invalid value "z" for --mode');
 	});
 
 	it("throws when a Context dependency is missing from a node's path", () => {
@@ -148,7 +175,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.ownedFlags = { version: { type: "boolean", short: "v" } };
 		node.effectiveFlags = computeEffectiveFlags(node.ownedFlags, node.localFlags);
 
-		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed definition validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
@@ -163,7 +190,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed definition validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
@@ -178,7 +205,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed definition validation');
 		expect(() => validateCommandTree(node)).toThrow("Alias collision");
 	});
 
@@ -190,7 +217,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 			"no-verbose": { type: "boolean" },
 		};
 
-		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed runtime validation');
+		expect(() => validateCommandTree(node)).toThrow('Command "sub" failed definition validation');
 		expect(() => validateCommandTree(node)).toThrow("no-");
 	});
 
@@ -209,7 +236,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		root.subCommands = { child };
 
 		expect(() => validateCommandTree(root)).toThrow(
-			'Command "root child grandchild" failed runtime validation',
+			'Command "root child grandchild" failed definition validation',
 		);
 	});
 
@@ -230,7 +257,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		root.subCommands = { l1: level1 };
 
 		expect(() => validateCommandTree(root)).toThrow(
-			'Command "root l1 l2 l3" failed runtime validation',
+			'Command "root l1 l2 l3" failed definition validation',
 		);
 	});
 

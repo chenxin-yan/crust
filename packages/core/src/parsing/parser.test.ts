@@ -597,6 +597,21 @@ describe("parseArgs — variadic args", () => {
 		const result = parseArgs(cmd, ["a.ts"]);
 		expect(result.args.files).toEqual(["a.ts"]);
 	});
+
+	it("rejects a variadic arg that is not the last positional (DEFINITION)", () => {
+		// Externally-installed nodes bypass the builder's position check;
+		// parseArgs must fail fast instead of silently mis-parsing.
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [
+				{ name: "files", type: "string", variadic: true },
+				{ name: "dest", type: "string" },
+			],
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(
+			'Argument "files" is variadic, but only the last positional argument can be variadic',
+		);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

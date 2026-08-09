@@ -120,11 +120,12 @@ function invokeParse(
  * Resolve a flag/arg default to its runtime value, mirroring the argv-side
  * coercion pipeline so omitted-flag behavior matches user-supplied behavior:
  *
- *   raw default → choices validation → parse | coerce → result
+ *   raw default → parse | coerce → result
  *
- * Without this, `{ choices: ["a","b"], default: "z" }` silently returns "z"
- * while `--flag z` throws, and `{ type: "path", default: "./dist" }` returns
- * the raw relative string while `--out ./dist` returns an absolute path.
+ * Without this, `{ type: "path", default: "./dist" }` returns the raw
+ * relative string while `--out ./dist` returns an absolute path. Defaults
+ * violating `choices` are a definition error, rejected up front by
+ * {@link validateDefinition} before any resolution runs.
  *
  * `parse` is preferred when present (matches the escape-hatch contract).
  * `type: "path"` defaults are coerced through `coercePath` because their
@@ -136,21 +137,12 @@ function resolveDefault(
 	def: {
 		type: ValueType;
 		default?: unknown;
-		choices?: readonly string[];
 		parse?: (raw: string) => unknown;
 	},
 	label: string,
 ): unknown {
-	const { default: defaultValue, choices, parse } = def;
+	const { default: defaultValue, parse } = def;
 	if (defaultValue === undefined) return undefined;
-
-	if (choices) {
-		if (Array.isArray(defaultValue)) {
-			for (const v of defaultValue) validateChoice(String(v), choices, label);
-		} else {
-			validateChoice(String(defaultValue), choices, label);
-		}
-	}
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
@@ -438,6 +430,24 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Validate a flag/arg `default` against its own `choices` list. A default
+ * outside its choices can never resolve to a valid value, so this is a
+ * definition error; `resolveDefault` trusts it and skips re-checking.
+ */
+function validateDefaultChoices(
+	def: { default?: unknown; choices?: readonly string[] },
+	label: string,
+): void {
+	const { default: defaultValue, choices } = def;
+	if (defaultValue === undefined || choices === undefined) return;
+	if (Array.isArray(defaultValue)) {
+		for (const v of defaultValue) validateChoice(String(v), choices, label);
+	} else {
+		validateChoice(String(defaultValue), choices, label);
+	}
+}
+
+/**
  * Validate a command's arg/flag *definitions* — checks that are pure
  * functions of the definitions and involve no argv:
  *
@@ -446,23 +456,42 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
  * - Reserved `no-` prefix violations and invalid flag types
  * - Async `parse` functions
  * - Variadic arg position (only the last positional may be variadic)
+ * - Defaults that violate their own `choices` list
  *
  * Called at the top of {@link parseArgs} so runtime parsing fails fast on
  * misconfigured commands, and directly by `validateCommandTree` so build
- * validation exercises the exact same rules. Definition rules live only
- * here — add new ones to this function, never to the tree walk.
+ * validation exercises the exact same rules. Argv-free rules shared by the
+ * parser and the tree walk live only here — add new ones to this function,
+ * never to the tree walk. (Builder-only checks, e.g. schema exclusivity and
+ * duplicate names, run at `.args()`/`.flags()` time in the builder.)
  *
- * @throws {CrustError} `DEFINITION` on violation
+ * Returns the flag spelling table built along the way so {@link parseArgs}
+ * doesn't rebuild it.
+ *
+ * @throws {CrustError} `DEFINITION` on violation (`PARSE` for a default
+ *   outside its `choices`, matching the argv-side choices error)
  */
-export function validateDefinition(command: CommandNode): void {
+export function validateDefinition(command: CommandNode): Map<string, FlagSpelling> {
 	const argsDef = command.args;
 	const flagsDef = command.effectiveFlags;
 
 	validateAsyncParse(flagsDef, argsDef);
 	// Building the spelling table throws on collisions / no- prefix / bad types.
-	flagSpellings(flagsDef);
+	const spellings = flagSpellings(flagsDef);
 
-	argsDef?.forEach((def, index) => validateVariadicArgPosition(def, index, argsDef.length));
+	for (const [name, def] of Object.entries(flagsDef ?? {})) {
+		validateDefaultChoices(def as { default?: unknown; choices?: readonly string[] }, `--${name}`);
+	}
+
+	argsDef?.forEach((def, index) => {
+		validateVariadicArgPosition(def, index, argsDef.length);
+		validateDefaultChoices(
+			def as { default?: unknown; choices?: readonly string[] },
+			`<${def.name}>`,
+		);
+	});
+
+	return spellings;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -493,10 +522,9 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const flagsDef = command.effectiveFlags;
 
 	// Definition-class validation up-front so misconfigured commands fail
-	// fast, through the same gate build validation uses.
-	validateDefinition(command);
-
-	const spellings = flagSpellings(flagsDef);
+	// fast, through the same gate build validation uses. Also yields the
+	// spelling table so we don't build it twice.
+	const spellings = validateDefinition(command);
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);
 
 	validateNoNegateUsage(argv, spellings);

@@ -19,6 +19,7 @@ import { validateIncomingAliases } from "./commands.ts";
  * - `no-` prefix violations and invalid flag types
  * - Async `parse` functions
  * - Variadic arg position violations
+ * - Defaults that violate their own `choices` list
  * - Missing/cyclic Context dependencies
  *
  * The rules themselves live in `validateDefinition` and `sortContexts` —
@@ -50,7 +51,7 @@ export function validateCommandTree(root: CommandNode): void {
 			const message = error instanceof Error ? error.message : "Unknown validation error";
 			throw new CrustError(
 				"DEFINITION",
-				`Command "${path.join(" ")}" failed runtime validation: ${message}`,
+				`Command "${path.join(" ")}" failed definition validation: ${message}`,
 			).withCause(error);
 		}
 
