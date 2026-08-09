@@ -13,7 +13,11 @@ import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
-export type MergeContext<A, B> = Simplify<A & B>;
+// Mapped merge instead of Simplify<A & B> — same rationale as MergeFlags:
+// cheaper per chained .provide() layer, higher TS2589 ceiling.
+export type MergeContext<A, B> = {
+	[K in keyof A | keyof B]: K extends keyof B ? B[K] : K extends keyof A ? A[K] : never;
+};
 
 /** Context capabilities required from the command path. */
 export type ContextRequirements = readonly AnyContextFactory[];

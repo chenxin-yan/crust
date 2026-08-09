@@ -55,14 +55,16 @@ type DuplicateNameBrand<F, Dups extends string> =
 export type ValidateNamedFlagDefs<
 	Defs extends readonly NamedFlagDef[],
 	Existing extends string = never,
+	// Hoisted out of the per-element map below: both are invariant w.r.t. `I`,
+	// so computing them once as defaulted params avoids re-instantiating them
+	// for every definition in the call.
+	Validated = ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>,
+	Dups extends string = DuplicateNames<Defs>,
 > = {
 	[I in keyof Defs]: Defs[I] &
-		FlagDefBrand<
-			Defs[I]["name"],
-			ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
-		> &
+		FlagDefBrand<Defs[I]["name"], Validated> &
 		ExistingFlagCollisionBrand<Defs[I], Existing> &
-		DuplicateNameBrand<Defs[I], DuplicateNames<Defs>> &
+		DuplicateNameBrand<Defs[I], Dups> &
 		AsyncParseBrand<Defs[I]>;
 };
 

@@ -527,9 +527,22 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
  * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
  * ```
  */
-export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Simplify<
-	Omit<Base, keyof Override> & Override
->;
+// Single mapped pass instead of Simplify<Omit<Base> & Override>: each merge
+// layer costs less instantiation depth, raising the ceiling on long fluent
+// chains before TS2589. Non-homomorphic on purpose — FlagsDef values carry no
+// `readonly`/`?` modifiers to preserve.
+// The `extends infer R extends FlagsDef` step defers evaluation so the
+// result satisfies `FlagsDef` in generic positions (same trick as
+// NamedFlagsRecord / EffectiveFlags).
+export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = {
+	[K in keyof Base | keyof Override]: K extends keyof Override
+		? Override[K]
+		: K extends keyof Base
+			? Base[K]
+			: never;
+} extends infer R extends FlagsDef
+	? R
+	: never;
 
 /** Computes a command's action-visible flags from local and Context-owned definitions. */
 export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
