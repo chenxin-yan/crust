@@ -1005,6 +1005,26 @@ describe("Crust .extend()", () => {
 		expect(ext.flags?.x?.type).toBe("boolean");
 	});
 
+	it("infers Extension-owned flags in hook contexts", () => {
+		const ext = defineExtension("typed-flags", {
+			flags: {
+				verbose: { type: "boolean", default: false },
+				rootPort: { type: "number", default: 3000, recursive: false },
+			},
+			hooks: {
+				preRun(ctx) {
+					type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
+					type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
+					type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
+					const commandFlag: unknown = ctx.flags.commandFlag;
+					void commandFlag;
+				},
+			},
+		});
+
+		expect(ext.name).toBe("typed-flags");
+	});
+
 	it("defineExtension() rejects an empty name", () => {
 		expect(() => defineExtension("  ")).toThrow(CrustError);
 	});
