@@ -8,7 +8,7 @@ import {
 	isNewerVersion,
 	type UpdateNotifierCacheAdapter,
 	type UpdateNotifierState,
-	updateNotifierExtension,
+	updateNotifier,
 } from "./update-notifier.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -239,10 +239,10 @@ describe("fetchLatestVersion", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// updateNotifierExtension — post-run integration tests
+// updateNotifier — post-run integration tests
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("updateNotifierExtension post-run hook", () => {
+describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
 	const originalProcessArgv = [...process.argv];
 	const originalUserAgent = process.env.npm_config_user_agent;
@@ -330,7 +330,7 @@ describe("updateNotifierExtension post-run hook", () => {
 	}
 
 	/** Helper to invoke the extension post-run hook with a completed outcome. */
-	async function runPluginMiddleware(
+	async function runExtensionMiddleware(
 		options: {
 			currentVersion: string;
 			packageName: string;
@@ -357,11 +357,11 @@ describe("updateNotifierExtension post-run hook", () => {
 		const resolvedAdapter = overrides?.disableDefaultCache
 			? cacheAdapter
 			: (cacheAdapter ?? memoryCache);
-		const pluginOptions = {
+		const extensionOptions = {
 			...rest,
 			...(resolvedAdapter ? { cache: { adapter: resolvedAdapter, intervalMs } } : {}),
 		};
-		const plugin = updateNotifierExtension(pluginOptions);
+		const extension = updateNotifier(extensionOptions);
 
 		const rootCommand = makeCommandSnapshot(overrides?.commandName ?? options.packageName);
 
@@ -378,11 +378,11 @@ describe("updateNotifierExtension post-run hook", () => {
 			stderr: (text: string) => stderrChunks.push(text),
 		};
 
-		const postRun = plugin.hooks?.postRun;
+		const postRun = extension.hooks?.postRun;
 		if (!postRun) throw new Error("update notifier must define a post-run hook");
 		await postRun(context, { status: "completed" });
 
-		return { plugin };
+		return { extension };
 	}
 
 	// ── Update available flow ─────────────────────────────────────────────
@@ -392,7 +392,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("update-avail");
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -406,7 +406,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("upgrade-instr");
 			mockRegistryResponse("3.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
@@ -424,7 +424,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("no-update-eq");
 			mockRegistryResponse("1.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -436,7 +436,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("no-update-newer");
 			mockRegistryResponse("0.9.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -468,7 +468,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			);
 			mockFetch(fetchFn);
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -490,7 +490,7 @@ describe("updateNotifierExtension post-run hook", () => {
 
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -518,7 +518,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			);
 			mockFetch(fetchFn);
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				intervalMs: 1000,
@@ -542,7 +542,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			// With intervalMs=1000, 2000ms ago is stale — should refetch
 			mockRegistryResponse("3.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				intervalMs: 1000,
@@ -560,7 +560,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("fail-no-notice");
 			mockRegistryFailure();
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -572,7 +572,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("fail-exitcode");
 			mockRegistryFailure();
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -585,7 +585,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			mockRegistryFailure();
 
 			const beforeRun = Date.now();
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -603,7 +603,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				throw new TypeError("Cannot read properties of undefined");
 			});
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -631,14 +631,14 @@ describe("updateNotifierExtension post-run hook", () => {
 			);
 
 			const start = Date.now();
-			const result = await runPluginMiddleware({
+			const result = await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				timeoutMs: 100, // Very short timeout
 			});
 			const elapsed = Date.now() - start;
 
-			expect(result.plugin.hooks?.postRun).toBeDefined();
+			expect(result.extension.hooks?.postRun).toBeDefined();
 			// Should complete quickly (timeout + overhead), not hang
 			expect(elapsed).toBeLessThan(5000);
 			// No notice on timeout
@@ -659,7 +659,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			);
 
 			const start = Date.now();
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				timeoutMs: 50,
@@ -679,7 +679,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			mockRegistryResponse("2.0.0");
 
 			// First invocation — should emit notice
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -690,7 +690,7 @@ describe("updateNotifierExtension post-run hook", () => {
 
 			// Second invocation against the same cache adapter — deduped via
 			// the persisted lastNotifiedVersion (process-level state is gone)
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -709,7 +709,7 @@ describe("updateNotifierExtension post-run hook", () => {
 
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -731,7 +731,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			// New version 3.0.0 is available
 			mockRegistryResponse("3.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -748,7 +748,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("explicit-global");
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "bun",
@@ -762,7 +762,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("explicit-local");
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
@@ -779,7 +779,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			process.env.npm_config_global = "true";
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -798,7 +798,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			process.env.npm_execpath = "/opt/homebrew/bin/bun";
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -818,7 +818,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			];
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 			});
@@ -842,7 +842,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			];
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "bun",
@@ -856,7 +856,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			process.env.npm_config_global = "true";
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				packageManager: "npm",
@@ -878,7 +878,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				);
 			});
 
-			await runPluginMiddleware(
+			await runExtensionMiddleware(
 				{
 					currentVersion: "1.0.0",
 					packageName: pkgName,
@@ -887,7 +887,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				{ disableDefaultCache: true },
 			);
 
-			await runPluginMiddleware(
+			await runExtensionMiddleware(
 				{
 					currentVersion: "1.0.0",
 					packageName: pkgName,
@@ -911,7 +911,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				);
 			});
 
-			await runPluginMiddleware(
+			await runExtensionMiddleware(
 				{
 					currentVersion: "1.0.0",
 					packageName: pkgName,
@@ -936,7 +936,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				);
 			});
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				registryUrl: "https://custom-registry.example.com",
@@ -949,7 +949,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const pkgName = uniquePackageName("custom-update-cmd");
 			mockRegistryResponse("2.0.0");
 
-			await runPluginMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				updateCommand: "brew upgrade my-cli",
@@ -967,7 +967,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			mockRegistryResponse("2.0.0");
 			const executionOrder: string[] = [];
 			const app = new Crust(pkgName)
-				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
+				.extend(updateNotifier({ currentVersion: "1.0.0", packageName: pkgName }))
 				.action(() => {
 					executionOrder.push("command");
 				});
@@ -987,7 +987,7 @@ describe("updateNotifierExtension post-run hook", () => {
 				);
 			});
 			const app = new Crust(pkgName)
-				.extend(updateNotifierExtension({ currentVersion: "1.0.0", packageName: pkgName }))
+				.extend(updateNotifier({ currentVersion: "1.0.0", packageName: pkgName }))
 				.action(() => {
 					throw new Error("command failed");
 				});
@@ -1001,14 +1001,14 @@ describe("updateNotifierExtension post-run hook", () => {
 	// ── Integration with Crust ──────────────────────────────────────────
 
 	describe("Crust.execute() integration", () => {
-		it("works as a plugin passed to Crust.execute()", async () => {
+		it("works as an extension passed to Crust.execute()", async () => {
 			const pkgName = uniquePackageName("runcommand");
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
 			const app = new Crust(pkgName, { description: "Test" })
 				.extend(
-					updateNotifierExtension({
+					updateNotifier({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
@@ -1024,19 +1024,19 @@ describe("updateNotifierExtension post-run hook", () => {
 			expect(getOutput()).toContain("5.0.0");
 		});
 
-		it("does not interfere with other plugins", async () => {
-			const pkgName = uniquePackageName("other-plugins");
+		it("does not interfere with other extensions", async () => {
+			const pkgName = uniquePackageName("other-extensions");
 			mockRegistryResponse("2.0.0");
 
 			let commandExecuted = false;
 
 			// Combine with a custom no-op extension
-			const otherPlugin = defineExtension("test-other");
+			const otherExtension = defineExtension("test-other");
 
 			const app = new Crust(pkgName, { description: "Test" })
-				.extend(otherPlugin)
+				.extend(otherExtension)
 				.extend(
-					updateNotifierExtension({
+					updateNotifier({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
@@ -1058,7 +1058,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			let commandExecuted = false;
 			const app = new Crust(pkgName, { description: "Test" })
 				.extend(
-					updateNotifierExtension({
+					updateNotifier({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),
@@ -1081,7 +1081,7 @@ describe("updateNotifierExtension post-run hook", () => {
 			const stderr: string[] = [];
 			const app = new Crust(pkgName)
 				.extend(
-					updateNotifierExtension({
+					updateNotifier({
 						currentVersion: "1.0.0",
 						packageName: pkgName,
 					}),

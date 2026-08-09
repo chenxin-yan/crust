@@ -240,13 +240,13 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 	});
 
 	it("Extension flag on root is parsed and available to root action", async () => {
-		const versionExtension = defineExtension("version-extension", {
+		const versionFlag = defineExtension("version-extension", {
 			flags: {
 				version: { type: "boolean", short: "V", recursive: false },
 			},
 		});
 
-		const app = new Crust("cli").extend(versionExtension).action((ctx) => {
+		const app = new Crust("cli").extend(versionFlag).action((ctx) => {
 			if ((ctx.flags as Record<string, unknown>).version) {
 				console.log("v1.0.0");
 			} else {
@@ -532,7 +532,7 @@ describe("integration: complex real-world CLI scenario", () => {
 		process.exitCode = 0;
 	});
 
-	it("full CLI with global flags, multiple subcommands, plugins, and lifecycle hooks", async () => {
+	it("full CLI with global flags, multiple subcommands, extensions, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
 		const auditExtension = defineExtension("audit", {

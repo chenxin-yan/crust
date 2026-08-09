@@ -9,7 +9,7 @@ import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
 import { walkCommandNode } from "./walker.ts";
 
-/** The set of shells supported by the v1 completion plugin. */
+/** The set of shells supported by the v1 completion extension. */
 export type CompletionShell = "bash" | "zsh" | "fish";
 
 const SUPPORTED_SHELLS: readonly CompletionShell[] = ["bash", "zsh", "fish"] as const;
@@ -40,7 +40,7 @@ export interface CompletionOptions {
 	/**
 	 * Free-form version string embedded in generated script headers. The
 	 * walker does not parse it. Pass your `package.json` version when wiring
-	 * the plugin.
+	 * the extension.
 	 *
 	 * @default "0.0.0"
 	 */
@@ -97,7 +97,7 @@ function renderForShell(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-export function completionExtension(options: CompletionOptions = {}): Extension {
+export function completion(options: CompletionOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
 	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";

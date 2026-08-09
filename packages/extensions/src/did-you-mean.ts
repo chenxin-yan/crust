@@ -92,7 +92,7 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export function didYouMeanExtension(options: DidYouMeanOptions = {}): Extension {
+export function didYouMean(options: DidYouMeanOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
 	return defineExtension("did-you-mean", {

@@ -114,7 +114,7 @@ export function validateCommandTree(root: CommandNode): void {
 			).withCause(error);
 		}
 
-		// Detect alias collisions among children. Catches plugin-installed
+		// Detect alias collisions among children. Catches extension-installed
 		// subcommands that bypassed `.add()` (where collision detection
 		// already runs eagerly). We re-run the full check by walking the
 		// children and validating each one against the children registered

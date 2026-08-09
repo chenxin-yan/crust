@@ -526,7 +526,7 @@ describe("resolveCommand — aliases", () => {
 		}
 		// `available` lists canonical sibling names in insertion order. Aliases
 		// stay reachable via `details.parentCommand.subCommands[name].meta.aliases`
-		// for consumers (e.g. didYouMeanPlugin) that want alias-aware matching.
+		// for consumers (e.g. didYouMean) that want alias-aware matching.
 		expect(caught.details.available).toEqual(["issue", "pull-request", "version"]);
 		expect(caught.details.parentCommand.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});

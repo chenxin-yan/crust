@@ -28,7 +28,7 @@ let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
 const colorRuns = new WeakMap<ExtensionContext, true>();
 
-export function noColorExtension(): Extension {
+export function noColor(): Extension {
 	return defineExtension("no-color", {
 		flags: {
 			color: {

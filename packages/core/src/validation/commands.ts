@@ -86,7 +86,7 @@ export type ValidateCommandDefinitions<
 // Both registration time (`crust.ts`) and tree-walk validation
 // (`validateCommandTree`) reuse these helpers so the policy lives in one
 // place and surfaces as the same `DEFINITION` error shape regardless of
-// how a subcommand was installed (`.add()` vs. plugin-installed via
+// how a subcommand was installed (`.add()` vs. extension-installed via
 // the `addCommand` action / direct `node.subCommands` mutation).
 
 /**

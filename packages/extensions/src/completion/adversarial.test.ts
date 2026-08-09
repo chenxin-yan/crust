@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Crust, defineCommand } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
-import { completionExtension } from "./index.ts";
+import { completion } from "./index.ts";
 import type { CompletionSpec } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
@@ -210,7 +210,7 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 
 // ── --output-dir traversal ───────────────────────────────────────────────
 
-describe("completionExtension · --output-dir traversal", () => {
+describe("completion · --output-dir traversal", () => {
 	let stdoutBuf: Buffer[];
 	let originalWrite: typeof process.stdout.write;
 	let originalError: typeof console.error;
@@ -239,7 +239,7 @@ describe("completionExtension · --output-dir traversal", () => {
 	});
 
 	it("rejects a binName containing path separators at setup time", async () => {
-		// `binName` validation runs during the plugin's `setup()`. Crust
+		// `binName` validation runs during the extension's `setup()`. Crust
 		// catches setup errors and reports them via stderr + exitCode=1,
 		// rather than rethrowing, so we observe both side-effects to
 		// confirm the error fired before any file could be written.
@@ -249,9 +249,7 @@ describe("completionExtension · --output-dir traversal", () => {
 			stderrChunks.push(args.map((a) => String(a)).join(" "));
 		};
 		try {
-			const cli = new Crust("real")
-				.extend(completionExtension({ binName: "../pwn" }))
-				.action(() => {});
+			const cli = new Crust("real").extend(completion({ binName: "../pwn" })).action(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
 			console.error = origError;
@@ -261,13 +259,13 @@ describe("completionExtension · --output-dir traversal", () => {
 	});
 
 	it("does not write outside --output-dir", async () => {
-		// Even if validation were bypassed, the plugin's resolved-path
+		// Even if validation were bypassed, the extension's resolved-path
 		// check would refuse to write outside `targetDir`. We test the
 		// happy path here: a normal binName lands inside the target dir
 		// and nothing escapes.
 		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
 		try {
-			const cli = new Crust("good").extend(completionExtension({ version: "1" })).action(() => {});
+			const cli = new Crust("good").extend(completion({ version: "1" })).action(() => {});
 			await cli.execute({
 				argv: ["completion", "bash", "--output-dir", tmp],
 			});

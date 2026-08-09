@@ -32,7 +32,7 @@ export interface CommandRoute {
  *
  * Resolution intentionally records the **canonical** key on the
  * `CommandRoute.commandPath`, never the alias the user typed. This is
- * load-bearing: error messages, help titles, and downstream plugins read
+ * load-bearing: error messages, help titles, and downstream extensions read
  * `commandPath` and assume canonical names.
  */
 function findAliasMatch(
@@ -162,7 +162,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 		// Otherwise scan siblings for an alias match. We record the canonical
 		// sibling key on the path, NOT the alias the user typed — downstream
-		// help/plugins assume `commandPath` only ever contains canonical names.
+		// help/extensions assume `commandPath` only ever contains canonical names.
 		const aliasMatch = findAliasMatch(subCommands, candidate);
 		if (aliasMatch) {
 			current = aliasMatch.node;
@@ -179,7 +179,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 		// Parent has no run() — this is an unknown subcommand error.
 		// `details.available` lists canonical sibling names only; consumers
-		// that want alias-aware matching (e.g. didYouMeanPlugin) read aliases
+		// that want alias-aware matching (e.g. didYouMean) read aliases
 		// directly from `details.parentCommand.subCommands`.
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,

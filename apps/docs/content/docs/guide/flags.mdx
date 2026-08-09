@@ -172,4 +172,4 @@ await app.execute({ argv: normalizeArgv(process.argv.slice(2)) });
 
 For optional-valued flags, split them into a boolean flag plus a value-taking flag (e.g. `--tag` and `--tag-name v1.2`), or normalize `--tag <value>` to `--tag-name=<value>` in the same pass.
 
-What migrators no longer need to normalize: propagating flags before a subcommand (`app --quiet translate`) route correctly, and bare version output is covered by [`versionExtension`'s `format` option](/docs/modules/extensions/version#options).
+What migrators no longer need to normalize: propagating flags before a subcommand (`app --quiet translate`) route correctly, and bare version output is covered by [`version`'s `format` option](/docs/modules/extensions/version#options).

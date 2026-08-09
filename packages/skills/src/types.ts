@@ -79,7 +79,7 @@ export interface SkillMeta {
 	/**
 	 * Additional top-level instructions rendered into `SKILL.md`.
 	 *
-	 * Use this for plugin- or product-specific guidance that should be visible
+	 * Use this for extension- or product-specific guidance that should be visible
 	 * before agents inspect individual command documentation files.
 	 *
 	 * **Note:** When a `string` value contains markdown headings (e.g. `## Foo`),
@@ -571,7 +571,7 @@ export interface SkillStatusResult {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Plugin option types
+// Extension option types
 // ────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -582,18 +582,18 @@ export interface SkillStatusResult {
  * Configuration for a single hand-authored skill bundle managed by
  * `skill()` alongside the auto-generated command-reference skill.
  *
- * Each entry is reconciled through the same plugin lifecycle as the main
+ * Each entry is reconciled through the same extension lifecycle as the main
  * skill — auto-update on version change, surfaced in the interactive `skill`
  * subcommand multiselect, supports uninstall via the same toggle UX, and
  * respects `autoUpdate: false` and `--all` non-interactive mode. Bundles
- * inherit `version`, `defaultScope`, and `installMode` from the plugin
+ * inherit `version`, `defaultScope`, and `installMode` from the extension
  * unless overridden per-entry.
  *
  * The bundle's `SKILL.md` frontmatter remains the source of truth for the
  * display `name` and `description` (validated by {@link installSkillBundle}
  * at install time). The duplicated `name` field on this config is what the
- * plugin uses for cheap collision-detection, status lookups, and uninstall
- * paths without having to read the bundle's frontmatter at plugin setup.
+ * extension uses for cheap collision-detection, status lookups, and uninstall
+ * paths without having to read the bundle's frontmatter at extension setup.
  *
  * @example
  * ```ts
@@ -603,7 +603,7 @@ export interface SkillStatusResult {
  * skill({
  *   version: pkg.version,
  *   customSkills: [
- *     // Inherits `version: pkg.version` from the plugin.
+ *     // Inherits `version: pkg.version` from the extension.
  *     { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
  *     // Explicit override for an independently-versioned bundle.
  *     {
@@ -620,7 +620,7 @@ export interface CustomSkillConfig extends Pick<
 	"sourceDir" | "scope" | "installMode"
 > {
 	/**
-	 * Skill name used by the plugin for collision detection, status lookups,
+	 * Skill name used by the extension for collision detection, status lookups,
 	 * and uninstall paths.
 	 *
 	 * Must satisfy `isValidSkillName` (1–64 lowercase alphanumeric characters
@@ -629,24 +629,24 @@ export interface CustomSkillConfig extends Pick<
 	 * skill's name (derived from the root command's `meta`).
 	 *
 	 * The bundle's `SKILL.md` frontmatter `name:` must match this value —
-	 * mismatches are rejected at install time so plugin status / uninstall
+	 * mismatches are rejected at install time so extension status / uninstall
 	 * paths can never drift from the canonical install location.
 	 */
 	name: string;
 	/**
-	 * Version override. When omitted, the bundle inherits the plugin's
+	 * Version override. When omitted, the bundle inherits the extension's
 	 * top-level {@link SkillOptions.version}. Drives auto-update
 	 * detection: a bundle is reinstalled when its recorded `crust.json`
-	 * version differs from the effective (entry-or-plugin) version.
+	 * version differs from the effective (entry-or-extension) version.
 	 *
-	 * Inheriting from the plugin matches the typical case where the bundle
+	 * Inheriting from the extension matches the typical case where the bundle
 	 * ships in the same package as the consuming CLI — one `pkg.version`
 	 * drives the main skill and every bundle. Pass an explicit value when a
 	 * bundle's release cadence is independent of the consuming CLI (for
 	 * example, vendored from another package).
 	 *
 	 * The bundle's `SKILL.md` frontmatter `version:` / `metadata.version`,
-	 * if any, is intentionally not read — this option (or its plugin-level
+	 * if any, is intentionally not read — this option (or its extension-level
 	 * fallback) is the sole source of truth.
 	 */
 	version?: InstallSkillBundleOptions["version"];
@@ -665,9 +665,9 @@ export interface CustomSkillConfig extends Pick<
 }
 
 /**
- * Options for the skill plugin.
+ * Options for the skill extension.
  *
- * The plugin reads `name` and `description` from the root command's `meta`
+ * The extension reads `name` and `description` from the root command's `meta`
  * at setup time, so only `version` is required here.
  *
  * Installed agents are detected automatically.
@@ -706,7 +706,7 @@ export interface SkillOptions {
 	 */
 	defaultScope?: Scope;
 	/**
-	 * Installation strategy used when the plugin calls `generateSkill()`.
+	 * Installation strategy used when the extension calls `generateSkill()`.
 	 * @default "auto"
 	 */
 	installMode?: SkillInstallMode;
@@ -743,7 +743,7 @@ export interface SkillOptions {
 	 * Hand-authored skill bundles to manage alongside the auto-generated
 	 * command-reference skill.
 	 *
-	 * Each entry is reconciled through the same plugin lifecycle as the main
+	 * Each entry is reconciled through the same extension lifecycle as the main
 	 * skill — auto-update on version change, surfaced in the interactive
 	 * `skill` subcommand multiselect (one prompt per bundle, in array order,
 	 * after the main-skill prompt), supports uninstall via the same toggle
@@ -755,7 +755,7 @@ export interface SkillOptions {
 	 *
 	 * Each entry's effective `version` drives auto-update detection (compared
 	 * against the recorded `crust.json` version). When the entry omits
-	 * `version`, the plugin's top-level {@link SkillOptions.version} is
+	 * `version`, the extension's top-level {@link SkillOptions.version} is
 	 * used — the typical case when the bundle ships in the same package as
 	 * the consuming CLI.
 	 *
@@ -771,7 +771,7 @@ export interface SkillOptions {
 	 * `installSkillBundle` invocation and surface there with descriptive
 	 * messages.
 	 *
-	 * When omitted or empty, plugin behavior is byte-identical to running
+	 * When omitted or empty, extension behavior is byte-identical to running
 	 * without the option — only the auto-generated main skill is managed.
 	 *
 	 * @default []

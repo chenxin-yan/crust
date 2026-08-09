@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { didYouMeanExtension } from "./did-you-mean.ts";
+import { didYouMean } from "./did-you-mean.ts";
 
 let stderrChunks: string[];
 let stdoutChunks: string[];
@@ -30,10 +30,10 @@ afterEach(() => {
 	process.exitCode = originalExitCode;
 });
 
-describe("didYouMeanExtension", () => {
+describe("didYouMean", () => {
 	it("suggests the closest command on a typo (smoke test)", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 			.add(defineCommand("test", (cmd) => cmd.action(() => {})));
 
@@ -51,12 +51,12 @@ describe("didYouMeanExtension", () => {
 
 	it("suggests the canonical name when the input matches an alias", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("version", (cmd) => cmd.action(() => {})));
 
 		// "issuess" is closest to the alias "issues" (distance 1) than to
-		// "issue" (distance 2). The plugin must report the canonical name
+		// "issue" (distance 2). The extension must report the canonical name
 		// regardless of which spelling triggered the match.
 		await app.execute({ argv: ["issuess"] });
 
@@ -69,7 +69,7 @@ describe("didYouMeanExtension", () => {
 
 	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})));
 
 		await app.execute({ argv: ["isue"] });
@@ -83,7 +83,7 @@ describe("didYouMeanExtension", () => {
 		// "issue" via its 1-char alias "i". A short alias must not win simply
 		// because it is a prefix of the input.
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("install", (cmd) => cmd.action(() => {})));
 
@@ -96,7 +96,7 @@ describe("didYouMeanExtension", () => {
 
 	it("lists only canonical names under 'Available commands'", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})))
 			.add(defineCommand("version", (cmd) => cmd.action(() => {})));
 
@@ -109,7 +109,7 @@ describe("didYouMeanExtension", () => {
 
 	it("deduplicates suggestions when an alias and its canonical both match", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension({ mode: "help" }))
+			.extend(didYouMean({ mode: "help" }))
 			.add(defineCommand("issue", { aliases: ["issues"] }, (cmd) => cmd.action(() => {})));
 
 		// Both the canonical "issue" and the alias "issues" are within
@@ -128,7 +128,7 @@ describe("didYouMeanExtension", () => {
 		// real, invocable command but should not surface in user-facing
 		// error output. A close typo of it must not produce a suggestion.
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 			.add(defineCommand("__complete", { hidden: true }, (cmd) => cmd.action(() => {})));
 
@@ -147,7 +147,7 @@ describe("didYouMeanExtension", () => {
 		// canonical name. If a hidden command has an alias that's close to
 		// the typo, it still must not leak.
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 			.add(
 				defineCommand("__complete", { hidden: true, aliases: ["__comp"] }, (cmd) =>
@@ -165,7 +165,7 @@ describe("didYouMeanExtension", () => {
 
 	it("omits hidden commands from the 'Available commands' fallback list", async () => {
 		const app = new Crust("app")
-			.extend(didYouMeanExtension())
+			.extend(didYouMean())
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 			.add(defineCommand("test", (cmd) => cmd.action(() => {})))
 			.add(defineCommand("__complete", { hidden: true }, (cmd) => cmd.action(() => {})));
