@@ -5,8 +5,10 @@ import { Crust } from "./crust.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Deep fluent chains — regression guards for the type-instantiation-depth
-// ceiling (TS2589). Before the mapped-type MergeFlags/MergeContext and the
-// Spell accumulator, ~31 chained .flags() calls failed to compile at all.
+// ceiling (TS2589). Flag/context records accumulate as flat intersections;
+// nesting a merge layer per call capped chains at ~31 (Simplify<Omit & …>)
+// or ~47 (mapped merge) .flags() calls and silently degraded ctx inference
+// on long .provide() chains.
 // ────────────────────────────────────────────────────────────────────────────
 
 type Expect<T extends true> = T;
@@ -33,9 +35,29 @@ const c17 = defineContext("c17", () => 17);
 const c18 = defineContext("c18", () => 18);
 const c19 = defineContext("c19", () => 19);
 const c20 = defineContext("c20", () => 20);
+const c21 = defineContext("c21", () => 21);
+const c22 = defineContext("c22", () => 22);
+const c23 = defineContext("c23", () => 23);
+const c24 = defineContext("c24", () => 24);
+const c25 = defineContext("c25", () => 25);
+const c26 = defineContext("c26", () => 26);
+const c27 = defineContext("c27", () => 27);
+const c28 = defineContext("c28", () => 28);
+const c29 = defineContext("c29", () => 29);
+const c30 = defineContext("c30", () => 30);
+const c31 = defineContext("c31", () => 31);
+const c32 = defineContext("c32", () => 32);
+const c33 = defineContext("c33", () => 33);
+const c34 = defineContext("c34", () => 34);
+const c35 = defineContext("c35", () => 35);
+const c36 = defineContext("c36", () => 36);
+const c37 = defineContext("c37", () => 37);
+const c38 = defineContext("c38", () => 38);
+const c39 = defineContext("c39", () => 39);
+const c40 = defineContext("c40", () => 40);
 
 describe("deep builder chains", () => {
-	it("supports 40 chained .flags() calls with intact inference", async () => {
+	it("supports 60 chained .flags() calls with intact inference", async () => {
 		const seen: unknown[] = [];
 		const app = new Crust("deep-flags")
 			.flags({ name: "f01", type: "boolean" })
@@ -78,16 +100,36 @@ describe("deep builder chains", () => {
 			.flags({ name: "f38", type: "boolean" })
 			.flags({ name: "f39", type: "boolean" })
 			.flags({ name: "f40", type: "boolean" })
+			.flags({ name: "f41", type: "boolean" })
+			.flags({ name: "f42", type: "boolean" })
+			.flags({ name: "f43", type: "boolean" })
+			.flags({ name: "f44", type: "boolean" })
+			.flags({ name: "f45", type: "boolean" })
+			.flags({ name: "f46", type: "boolean" })
+			.flags({ name: "f47", type: "boolean" })
+			.flags({ name: "f48", type: "boolean" })
+			.flags({ name: "f49", type: "boolean" })
+			.flags({ name: "f50", type: "boolean" })
+			.flags({ name: "f51", type: "boolean" })
+			.flags({ name: "f52", type: "boolean" })
+			.flags({ name: "f53", type: "boolean" })
+			.flags({ name: "f54", type: "boolean" })
+			.flags({ name: "f55", type: "boolean" })
+			.flags({ name: "f56", type: "boolean" })
+			.flags({ name: "f57", type: "boolean" })
+			.flags({ name: "f58", type: "boolean" })
+			.flags({ name: "f59", type: "boolean" })
+			.flags({ name: "f60", type: "boolean" })
 			.action(({ flags }) => {
 				type _First = Expect<Equal<typeof flags.f01, boolean | undefined>>;
-				type _Last = Expect<Equal<typeof flags.f40, boolean | undefined>>;
-				seen.push(flags.f01, flags.f40);
+				type _Last = Expect<Equal<typeof flags.f60, boolean | undefined>>;
+				seen.push(flags.f01, flags.f60);
 			});
-		await app.run(["--f01", "--f40"]);
+		await app.run(["--f01", "--f60"]);
 		expect(seen).toEqual([true, true]);
 	});
 
-	it("supports 20 chained .provide() calls with intact ctx inference", async () => {
+	it("supports 40 chained .provide() calls with intact ctx inference", async () => {
 		const seen: unknown[] = [];
 		const app = new Crust("deep-ctx")
 			.provide(c01())
@@ -110,12 +152,32 @@ describe("deep builder chains", () => {
 			.provide(c18())
 			.provide(c19())
 			.provide(c20())
+			.provide(c21())
+			.provide(c22())
+			.provide(c23())
+			.provide(c24())
+			.provide(c25())
+			.provide(c26())
+			.provide(c27())
+			.provide(c28())
+			.provide(c29())
+			.provide(c30())
+			.provide(c31())
+			.provide(c32())
+			.provide(c33())
+			.provide(c34())
+			.provide(c35())
+			.provide(c36())
+			.provide(c37())
+			.provide(c38())
+			.provide(c39())
+			.provide(c40())
 			.action(({ ctx }) => {
 				type _First = Expect<Equal<typeof ctx.c01, number>>;
-				type _Last = Expect<Equal<typeof ctx.c20, number>>;
-				seen.push(ctx.c01, ctx.c20);
+				type _Last = Expect<Equal<typeof ctx.c40, number>>;
+				seen.push(ctx.c01, ctx.c40);
 			});
 		await app.run([]);
-		expect(seen).toEqual([1, 20]);
+		expect(seen).toEqual([1, 40]);
 	});
 });

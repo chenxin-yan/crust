@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Simplify } from "./api/context.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -644,9 +645,11 @@ describe("EffectiveFlags type inference", () => {
 			{ output: { type: "string" } },
 			{ apiKey: { type: "string"; short: "k" } }
 		>;
+		// Simplify flattens the intersection: assert the merged keys and value
+		// types, not the representation.
 		type _check = Expect<
 			Equal<
-				Result,
+				Simplify<Result>,
 				{
 					output: { type: "string" };
 					apiKey: { type: "string"; short: "k" };

@@ -517,36 +517,20 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Merges two flag sets, where `Override` keys win over `Base` keys.
+ * Merges two flag sets as a flat intersection.
  *
- * @example
- * ```ts
- * type Base = { verbose: { type: "boolean" }; port: { type: "number" } };
- * type Override = { port: { type: "string" } };
- * type Result = MergeFlags<Base, Override>;
- * // Result = { verbose: { type: "boolean" }; port: { type: "string" } }
- * ```
+ * Override-wins semantics are unnecessary: a shared key across the two sets
+ * is branded at compile time (`DuplicateNameBrand`,
+ * `ExistingFlagCollisionBrand`, `ProvideChecks`) and throws at runtime, so
+ * valid programs never merge overlapping records. A plain intersection stays
+ * flat in the checker — chained `.flags()`/`.provide()` calls cost constant
+ * instantiation depth, where per-call merge layers (mapped type or
+ * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.
  */
-// Single mapped pass instead of Simplify<Omit<Base> & Override>: each merge
-// layer costs less instantiation depth, raising the ceiling on long fluent
-// chains before TS2589. Non-homomorphic on purpose — FlagsDef values carry no
-// `readonly`/`?` modifiers to preserve.
-// The `extends infer R extends FlagsDef` step defers evaluation so the
-// result satisfies `FlagsDef` in generic positions (same trick as
-// NamedFlagsRecord / EffectiveFlags).
-export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = {
-	[K in keyof Base | keyof Override]: K extends keyof Override
-		? Override[K]
-		: K extends keyof Base
-			? Base[K]
-			: never;
-} extends infer R extends FlagsDef
-	? R
-	: never;
+export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
 
 /** Computes a command's action-visible flags from local and Context-owned definitions. */
-export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> =
-	MergeFlags<Local, Owned> extends infer R extends FlagsDef ? R : never;
+export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> = Local & Owned;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
