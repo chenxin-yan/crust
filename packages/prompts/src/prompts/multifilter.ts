@@ -14,7 +14,7 @@ import {
 	PREFIX_SYMBOL,
 	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
-import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
+import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
@@ -188,18 +188,7 @@ function renderMultifilter<T>(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Search and select");
 
-	let queryLine: string;
-	if (state.query === "") {
-		if (placeholder) {
-			queryLine = theme.placeholder(placeholder);
-		} else {
-			queryLine = theme.cursor(CURSOR_CHAR);
-		}
-	} else {
-		const before = state.query.slice(0, state.cursorPos);
-		const after = state.query.slice(state.cursorPos);
-		queryLine = `${before}${theme.cursor(CURSOR_CHAR)}${after}`;
-	}
+	const queryLine = renderTextWithCursor(state.query, state.cursorPos, theme, placeholder);
 
 	const lines: string[] = [formatPromptLine(prefix, msg, queryLine), theme.hint(HINT_LINE)];
 

@@ -12,6 +12,7 @@ import { resolveTheme } from "../core/theme.ts";
 import {
 	parseShortCircuit,
 	type PartialPromptTheme,
+	validateSubmitValue,
 	type PromptTheme,
 	type ValidateFn,
 } from "../core/types.ts";
@@ -83,32 +84,8 @@ function createHandleKey<Output>(
 	return async (key, state) => {
 		// Enter — submit
 		if (key.name === "return") {
-			if (schema) {
-				// `issues?.length` tolerates non-conformant `{ issues: [] }` results.
-				const result = await schema["~standard"].validate(state.value);
-				if (result.issues?.length) {
-					return {
-						...state,
-						error: result.issues[0]?.message || "Validation failed",
-					};
-				}
-				return submit((result as { value: Output }).value);
-			}
-
-			if (validate) {
-				// Function path — throw on failure and render the message inline.
-				try {
-					await validate(state.value);
-				} catch (err) {
-					return {
-						...state,
-						error: err instanceof Error ? err.message : "Validation failed",
-					};
-				}
-				return submit(state.value);
-			}
-
-			return submit(state.value);
+			const result = await validateSubmitValue(state.value, schema, validate);
+			return result.ok ? submit(result.value) : { ...state, error: result.error };
 		}
 
 		// Delegate to shared text-editing handler

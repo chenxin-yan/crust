@@ -566,18 +566,22 @@ async function reconcileSkillInteractively(opts: {
 	const agentsToInstall = [...toInstall, ...toUpdate];
 
 	if (agentsToInstall.length > 0) {
-		try {
-			const result = await spinner({
-				message: `Installing skills${labelSuffix}...`,
-				task: async () => install(agentsToInstall),
-			});
-
+		const logInstalled = (result: GenerateSkillResult) => {
 			console.log(
 				`\n${bold(`Installed ${installNoun === "bundle" ? "bundle " : ""}"${name}" v${version}`)}`,
 			);
 			for (const line of formatInstallOutput(result.agents)) {
 				console.log(dim(`  ${line.label} → ${line.outputDir}`));
 			}
+		};
+
+		try {
+			const result = await spinner({
+				message: `Installing skills${labelSuffix}...`,
+				task: async () => install(agentsToInstall),
+			});
+
+			logInstalled(result);
 		} catch (err) {
 			if (err instanceof SkillConflictError) {
 				const kindMismatchSuffix = err.details.kindMismatch
@@ -596,12 +600,7 @@ async function reconcileSkillInteractively(opts: {
 						task: async () => install([err.details.agent], true),
 					});
 
-					console.log(
-						`\n${bold(`Installed ${installNoun === "bundle" ? "bundle " : ""}"${name}" v${version}`)}`,
-					);
-					for (const line of formatInstallOutput(result.agents)) {
-						console.log(dim(`  ${line.label} → ${line.outputDir}`));
-					}
+					logInstalled(result);
 				} else {
 					console.log(dim(`\nSkipped ${AGENT_LABELS[err.details.agent]}${labelSuffix}`));
 				}
