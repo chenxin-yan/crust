@@ -305,8 +305,8 @@ export interface CommandDefinitionBuilder<
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
-	Sibs extends string = never,
 	Deps extends ContextDeps = {},
+	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Eff>,
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
@@ -317,14 +317,14 @@ export interface CommandDefinitionBuilder<
 		A,
 		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 		Ctx,
-		Sibs,
 		Deps,
+		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>
 	>;
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Deps, Sp>;
+	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Deps, Sibs, Sp>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> &
@@ -336,8 +336,8 @@ export interface CommandDefinitionBuilder<
 		A,
 		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>,
-		Sibs,
 		MergeContextDeps<Deps, Cs>,
+		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 	>;
 
@@ -349,14 +349,14 @@ export interface CommandDefinitionBuilder<
 		A,
 		Eff,
 		Ctx,
-		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Deps,
+		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp
 	>;
 
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp>;
 }
 
 /**
@@ -429,8 +429,8 @@ export function defineCommand(
  * - `A` — positional argument definitions
  * - `Eff` — effective flags (merged local + owned flags)
  * - `Ctx` — provided Context values
- * - `Sibs` — sibling command names and aliases already registered
  * - `Deps` — provided Context dependency edges used for cycle detection
+ * - `Sibs` — sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
  *
  * @example
@@ -449,8 +449,8 @@ export class Crust<
 	A extends ArgsDef = ArgsDef,
 	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
-	Sibs extends string = never,
 	Deps extends ContextDeps = {},
+	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Eff>,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
@@ -531,8 +531,8 @@ export class Crust<
 		A,
 		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 		Ctx,
-		Sibs,
 		Deps,
+		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>
 	> {
 		const copiedFlags: FlagsDef = { ...this._node.localFlags };
@@ -572,8 +572,8 @@ export class Crust<
 			A,
 			EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 			Ctx,
-			Sibs,
 			Deps,
+			Sibs,
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>
 		>;
 	}
@@ -592,7 +592,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Deps, Sp> {
+	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Deps, Sibs, Sp> {
 		for (const def of defs) {
 			const record = def as unknown as Record<string, unknown>;
 			const argName = (def as ArgDef).name;
@@ -625,7 +625,7 @@ export class Crust<
 
 		return this._clone({
 			args: copiedArgs,
-		}) as unknown as Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as unknown as Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Deps, Sibs, Sp>;
 	}
 
 	/**
@@ -651,8 +651,8 @@ export class Crust<
 		A,
 		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>,
-		Sibs,
 		MergeContextDeps<Deps, Cs>,
+		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 	> {
 		const contexts = [...this._node.contexts];
@@ -677,8 +677,8 @@ export class Crust<
 			A,
 			EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 			MergeContext<Ctx, ContextsOutput<Cs>>,
-			Sibs,
 			MergeContextDeps<Deps, Cs>,
+			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 		>;
 	}
@@ -725,7 +725,7 @@ export class Crust<
 	 */
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp> {
+	): Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp> {
 		if (this._node.run) {
 			throw new CrustError(
 				"DEFINITION",
@@ -735,7 +735,7 @@ export class Crust<
 		}
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp>;
 	}
 
 	/**
@@ -747,7 +747,7 @@ export class Crust<
 	 *
 	 * @throws {CrustError} `DEFINITION` when an Extension name is already registered
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp> {
+	extend(...extensions: readonly Extension[]): Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp> {
 		const names = new Set(this._node.extensions.map((extension) => extension.name));
 		for (const extension of extensions) {
 			if (names.has(extension.name)) {
@@ -761,7 +761,7 @@ export class Crust<
 		}
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp>;
 	}
 
 	/**
@@ -773,8 +773,8 @@ export class Crust<
 	 */
 	add<const Ds extends readonly CommandDefinition<any>[]>(
 		...definitions: Ds & AddChecks<Ctx, Sibs, Ds>
-	): Crust<Local, Owned, A, Eff, Ctx, Sibs | CommandDefinitionSpellings<Ds[number]>, Deps, Sp> {
-		let result = this as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+	): Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs | CommandDefinitionSpellings<Ds[number]>, Sp> {
+		let result = this as Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -784,20 +784,20 @@ export class Crust<
 			A,
 			Eff,
 			Ctx,
-			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Deps,
+			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Sp
 		>;
 	}
 
 	private _addDefinition(
 		definition: CommandDefinition,
-	): Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp> {
+	): Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Deps, Sibs, Sp>;
 	}
 
 	/**

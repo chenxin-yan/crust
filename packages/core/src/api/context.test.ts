@@ -467,7 +467,7 @@ describe("compile-time Context dependency cycles", () => {
 			new Crust("cli").provide(widened);
 
 			const provideThroughGenericGraph = <Deps extends ContextDeps>(
-				app: Crust<any, any, any, any, any, any, Deps>,
+				app: Crust<any, any, any, any, any, Deps, any>,
 				instance: ContextInstance<"dynamic">,
 			) => app.provide(instance);
 			void provideThroughGenericGraph;
