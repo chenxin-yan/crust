@@ -277,7 +277,7 @@ export async function snapshotEntrypoint(
 					proc.kill();
 					reject(
 						new Error(
-							`Pre-compile validation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip.`,
+							`Command Snapshot preparation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
 						),
 					);
 				}, VALIDATE_TIMEOUT_MS);
@@ -308,8 +308,20 @@ export async function snapshotEntrypoint(
 			process.stderr.write(`${styled}\n`);
 		}
 
-		return JSON.parse(await readFile(snapshotPath, "utf8")) as CommandSnapshot;
+		let serialized: string;
+		try {
+			serialized = await readFile(snapshotPath, "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				throw new Error(
+					`Entry exited without producing a Command Snapshot.\n  Ensure ${absoluteEntry} calls await app.execute() and uses a compatible @crustjs/core version.`,
+					{ cause: error },
+				);
+			}
+			throw error;
+		}
+		return JSON.parse(serialized) as CommandSnapshot;
 	} finally {
-		await rm(snapshotDir, { recursive: true, force: true });
+		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
 }

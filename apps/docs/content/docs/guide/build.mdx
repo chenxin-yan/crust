@@ -173,7 +173,7 @@ The subprocess sets `CRUST_INTERNAL_SNAPSHOT_PATH` to a temporary file. `.execut
 
 When `--man` is enabled, the same subprocess supplies both validation and man generation; the entry point does not need to export its `Crust` builder. `--man --no-validate` still prepares a snapshot because the manual renderer requires it.
 
-If you pass `--env-file`, the validation subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
+If you pass `--env-file`, the snapshot subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
 ### What it catches
 

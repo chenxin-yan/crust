@@ -33,4 +33,15 @@ describe("snapshotEntrypoint", () => {
 		expect(root.hasAction).toBe(true);
 		await expect(access(trailingMarker)).rejects.toThrow();
 	});
+
+	it("explains when an entry exits without producing a snapshot", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(entry, "export {};\n");
+
+		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
+			"Entry exited without producing a Command Snapshot",
+		);
+	});
 });
