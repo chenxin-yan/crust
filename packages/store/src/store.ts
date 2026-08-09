@@ -48,13 +48,6 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
 	);
 }
 
-function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): WriteJsonOptions {
-	if (access === "private") return { fileMode: 0o600, directoryMode: 0o700 };
-	if (access === undefined || access === "default") return {};
-
-	return { fileMode: access.file, directoryMode: access.directory };
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — Public factory
 // ────────────────────────────────────────────────────────────────────────────
@@ -133,7 +126,12 @@ export function createStore<const F extends FieldsDef>(
 	const shouldPrune = pruneUnknown ?? true;
 
 	// Permission bits forwarded to every write (default → platform behavior).
-	const writeOptions = resolveWriteOptions(access);
+	const writeOptions: WriteJsonOptions =
+		access === "private"
+			? { fileMode: 0o600, directoryMode: 0o700 }
+			: access === undefined || access === "default"
+				? {}
+				: { fileMode: access.file, directoryMode: access.directory };
 
 	// ──────────────────────────────────────────────────────────────────────
 	// normalizeStateTypes — Coerce values by field `type`

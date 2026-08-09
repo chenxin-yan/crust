@@ -16,16 +16,3 @@ export function normalizeInstructionList(input: string | string[] | undefined): 
 		.map((value) => value.trim())
 		.filter((value) => value.length > 0);
 }
-
-/**
- * Normalizes a raw markdown block while preserving internal structure.
- */
-export function normalizeMarkdownBlock(input: string | undefined): string[] {
-	const content = input?.trim();
-
-	if (!content) {
-		return [];
-	}
-
-	return content.split(/\r?\n/);
-}

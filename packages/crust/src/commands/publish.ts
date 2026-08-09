@@ -25,10 +25,6 @@ type PublishOptions = {
 	spawnPublish?: (dir: string, command: string[]) => Promise<number>;
 };
 
-function readJsonFile<T>(path: string): T {
-	return JSON.parse(readFileSync(path, "utf-8")) as T;
-}
-
 export function readPublishManifest(stageDir: string): DistributionManifest {
 	const manifestPath = join(stageDir, "manifest.json");
 	if (!existsSync(manifestPath)) {
@@ -37,7 +33,7 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 		);
 	}
 
-	return readJsonFile<DistributionManifest>(manifestPath);
+	return JSON.parse(readFileSync(manifestPath, "utf-8")) as DistributionManifest;
 }
 
 function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJson {
@@ -46,7 +42,7 @@ function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJso
 		throw new Error(`Missing staged package.json: ${packageJsonPath}`);
 	}
 
-	return readJsonFile<PublishPackageJson>(packageJsonPath);
+	return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as PublishPackageJson;
 }
 
 function assertUniqueDirs(dirs: string[]): void {
