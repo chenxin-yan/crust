@@ -10,7 +10,6 @@ on:
       - "package.json"
       - "bun.lock"
       - "scripts/type-perf-report.ts"
-      - "scripts/type-perf-report.test.ts"
       - ".github/workflows/type-perf.yml"
 
 concurrency:
@@ -62,6 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           marker='<!-- type-perf-report -->'
           {
@@ -70,8 +70,14 @@ jobs:
             echo
             bun scripts/type-perf-report.ts compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
           } > "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          # Fork PRs get a read-only GITHUB_TOKEN; the step summary above is their report.
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "Fork PR: skipping PR comment (read-only token)."
+            exit 0
+          fi
           comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- type-perf-report -->")))][0].id // empty')
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty")
           if [ -n "$comment_id" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/comment.md"
           else
