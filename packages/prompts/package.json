@@ -50,6 +50,14 @@
 	"dependencies": {
 		"@crustjs/style": "workspace:^"
 	},
+	"peerDependencies": {
+		"typescript": "^7.0.2"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/utils": "workspace:*",
