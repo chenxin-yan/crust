@@ -743,6 +743,13 @@ async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boo
 // Distribution metadata renderers
 // ────────────────────────────────────────────────────────────────────────────
 
+type DistributionMetadata = {
+	name: string;
+	description: string;
+	version: string;
+	kind: SkillKind;
+};
+
 /**
  * Renders the Crust-specific metadata file (`crust.json`) that stores
  * version information for subsequent version checks and serves as an
@@ -753,12 +760,12 @@ async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boo
  * @returns The crust.json rendered file
  */
 function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile {
-	const obj: Record<string, unknown> = {
+	const obj = {
 		name: meta.name,
 		description: meta.description,
 		version: meta.version,
 		kind,
-	};
+	} satisfies DistributionMetadata;
 
 	return {
 		path: CRUST_MANIFEST,

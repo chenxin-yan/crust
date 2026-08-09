@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { CrustError } from "../errors.ts";
+import type { ArgDef } from "../types.ts";
 import {
 	type AppendArgsChecks,
 	type ValidateVariadicArgs,
@@ -25,7 +26,10 @@ function thrownBy(run: () => void): CrustError {
 describe("argument runtime validation", () => {
 	it("rejects combining an argument schema with a parser type", () => {
 		const error = thrownBy(() =>
-			validateSchemaExclusivity("arg", "input", { schema: {}, type: "string" }),
+			validateSchemaExclusivity("arg", "input", {
+				schema: {},
+				type: "string",
+			} as unknown as ArgDef),
 		);
 
 		expect(error.toJSON()).toEqual({

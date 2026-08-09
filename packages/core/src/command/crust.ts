@@ -552,7 +552,7 @@ export class Crust<
 					reason: "duplicate-flag",
 				});
 			}
-			validateSchemaExclusivity("flag", name, rest as Record<string, unknown>);
+			validateSchemaExclusivity("flag", name, rest as FlagDef);
 			// Include flags from earlier calls and same-call siblings so spelling
 			// collisions fail at the definition site, not at first run().
 			validateIncomingFlag(
@@ -594,8 +594,8 @@ export class Crust<
 		...defs: NewA & AppendArgsChecks<A, NewA>
 	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Deps, Sibs, Sp> {
 		for (const def of defs) {
-			const record = def as unknown as Record<string, unknown>;
-			const argName = (def as ArgDef).name;
+			const argDef = def as ArgDef;
+			const argName = argDef.name;
 			if (typeof argName !== "string" || argName.length === 0) {
 				throw new CrustError(
 					"DEFINITION",
@@ -606,7 +606,7 @@ export class Crust<
 					},
 				);
 			}
-			validateSchemaExclusivity("arg", argName, record);
+			validateSchemaExclusivity("arg", argName, argDef);
 		}
 		// Deep copy new defs to decouple storage from the caller.
 		const copiedArgs = [...(this._node.args ?? []), ...defs.map((def) => ({ ...def }))] as ArgsDef;
