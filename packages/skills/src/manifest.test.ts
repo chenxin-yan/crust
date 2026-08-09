@@ -297,6 +297,20 @@ describe("buildManifest", () => {
 			]);
 		});
 
+		it("omits negation spellings for a noNegate boolean flag", () => {
+			const cmd = makeCommand({
+				meta: { name: "test" },
+				flags: {
+					quiet: { type: "boolean", noNegate: true },
+				},
+				run() {},
+			});
+
+			const node = buildManifest(snapshotCommand(cmd));
+
+			expect(node.flags[0]?.spellings).toEqual(["--quiet"]);
+		});
+
 		it("normalizes a required string flag with short alias", () => {
 			const cmd = makeCommand({
 				meta: { name: "deploy" },
