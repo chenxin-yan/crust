@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "packages/core/**"
+      - "packages/config/**"
       - "package.json"
       - "bun.lock"
       - "scripts/type-perf-report.ts"
