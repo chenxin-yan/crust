@@ -33,7 +33,7 @@ Two consequences of the root-only model:
 
 ## Owned flags and commands
 
-Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. For a root-only flag, use an inline definition because `recursive` is Extension-specific and is not accepted by `defineFlag()`:
+Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
 
 ```ts
 const rootOnlyVersion = defineExtension("version", {

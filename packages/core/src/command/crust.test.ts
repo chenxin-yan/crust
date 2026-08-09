@@ -1044,6 +1044,20 @@ describe("Crust .extend()", () => {
 		expect(ext.name).toBe("typed-flags");
 	});
 
+	it("infers defineFlag() values attached to an Extension", () => {
+		const trace = defineFlag("trace", { type: "boolean", default: false });
+		const ext = defineExtension("defined-flags", {
+			flags: [trace],
+			hooks: {
+				preRun(ctx) {
+					type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
+				},
+			},
+		});
+
+		expect(ext.flags?.trace).toEqual({ type: "boolean", default: false });
+	});
+
 	it("defineExtension() accepts only the named array authoring shape", () => {
 		const typecheckRecordShape = () => {
 			// @ts-expect-error -- Extension flags no longer accept the internal record shape

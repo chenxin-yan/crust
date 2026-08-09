@@ -209,7 +209,7 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		if (flagName in ownedFlags) {
+		if (Object.hasOwn(ownedFlags, flagName)) {
 			throw new CrustError(
 				"DEFINITION",
 				`Extension "${name}" flag "--${flagName}" is already defined`,

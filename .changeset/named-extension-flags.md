@@ -4,4 +4,4 @@
 "@crustjs/skills": patch
 ---
 
-Change `defineExtension()` flag authoring to a readonly array of named definitions, matching `.flags()` and `defineContext()`. Replace extension flag records such as `{ verbose: { type: "boolean" } }` with `[{ name: "verbose", type: "boolean" }]`; use an inline definition to set the Extension-only `recursive` option.
+Change `defineExtension()` flag authoring to a readonly array of named definitions, matching `.flags()` and `defineContext()`. Replace extension flag records such as `{ verbose: { type: "boolean" } }` with `[{ name: "verbose", type: "boolean" }]`; an inline definition is the documented way to set the Extension-only `recursive` option. Intra-extension flag spelling collisions now surface when `defineExtension()` is called instead of during application preparation.

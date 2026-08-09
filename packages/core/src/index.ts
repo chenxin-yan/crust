@@ -18,8 +18,8 @@ export type {
 	ExtensionHooks,
 	Finished,
 	InferExtensionFlags,
-	NamedExtensionFlagDef,
 	InvocationOutcome,
+	NamedExtensionFlagDef,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export { defineArg, defineFlag } from "./api/flags.ts";
