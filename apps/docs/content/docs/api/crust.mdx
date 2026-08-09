@@ -359,13 +359,9 @@ The `CommandSnapshot` type is exported from `@crustjs/core/tooling`; see the [co
 ## `.run(argv, io?)`
 
 ```ts
-run(
-  argv: readonly string[],
-  io?: {
-    stdout?: (text: string) => void;
-    stderr?: (text: string) => void;
-  },
-): Promise<void>
+import type { InvocationIO } from "@crustjs/core";
+
+run(argv: readonly string[], io?: Partial<InvocationIO>): Promise<void>
 ```
 
 Invokes an application programmatically. `argv` is required and does not include the executable name.
@@ -383,12 +379,11 @@ await app.run(["Ada"], {
 ## `.execute(options?)`
 
 ```ts
+import type { InvocationIO } from "@crustjs/core";
+
 execute(options?: {
   argv?: string[];
-  io?: {
-    stdout?: (text: string) => void;
-    stderr?: (text: string) => void;
-  };
+  io?: Partial<InvocationIO>;
 }): Promise<void>
 ```
 

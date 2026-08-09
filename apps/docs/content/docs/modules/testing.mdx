@@ -16,10 +16,9 @@ bun add -d @crustjs/testing
 `captureRun()` and `runInteractive()` accept the exported `RunnableApp` structural contract:
 
 ```ts
-interface CaptureIO {
-  readonly stdout?: (text: string) => void;
-  readonly stderr?: (text: string) => void;
-}
+import type { InvocationIO } from "@crustjs/core";
+
+type CaptureIO = Partial<InvocationIO>;
 
 interface RunnableApp {
   run(argv: readonly string[], io?: CaptureIO): Promise<void>;

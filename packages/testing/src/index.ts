@@ -1,11 +1,9 @@
+import type { InvocationIO } from "@crustjs/core";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 
 /** Structural io shape shared by `run()` and `execute()` captures. */
-export interface CaptureIO {
-	readonly stdout?: (text: string) => void;
-	readonly stderr?: (text: string) => void;
-}
+export type CaptureIO = Partial<InvocationIO>;
 
 /** Minimal structural surface invoked by the testing helpers. */
 export interface RunnableApp {
