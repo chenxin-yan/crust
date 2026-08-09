@@ -35,11 +35,12 @@ import {
 	type ValidateCommandConfig,
 	type ValidateCommandDefinitions,
 } from "../validation/commands.ts";
-import type {
-	ContextDeps,
-	MergeContextDeps,
-	ValidateContextCycles,
-	ValidateContextNames,
+import {
+	type ContextDeps,
+	type MergeContextDeps,
+	validateIncomingContext,
+	type ValidateContextCycles,
+	type ValidateContextNames,
 } from "../validation/contexts.ts";
 import {
 	type ProvideChecks,
@@ -659,7 +660,7 @@ export class Crust<
 		const ownedFlags = { ...this._node.ownedFlags };
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		for (const instance of instances) {
-			this._assertContextProvidable(instance as ContextInstance, contexts);
+			validateIncomingContext(instance as ContextInstance, contexts);
 			for (const [name, def] of Object.entries(instance.ownedFlags)) {
 				validateIncomingFlag({ name, def }, effectiveFlags, `Context "${instance.name}"`);
 				ownedFlags[name] = def;
@@ -681,32 +682,6 @@ export class Crust<
 			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 		>;
-	}
-
-	private _assertContextProvidable(
-		instance: ContextInstance,
-		existing: readonly ContextInstance[],
-	): void {
-		// Catches plain-JS misuse, most commonly passing the factory instead
-		// of an instance (.provide(db) instead of .provide(db())).
-		if ((instance as Partial<ContextInstance> | null)?.kind !== "context") {
-			throw new CrustError(
-				"DEFINITION",
-				"provide() requires Context instances — invoke the factory returned by defineContext() (e.g. .provide(db(options)))",
-				{ subject: "context", reason: "not-a-context" },
-			);
-		}
-		if (existing.some((entry) => entry.name === instance.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Context "${instance.name}" is already provided on this command path`,
-				{
-					subject: "context",
-					name: instance.name,
-					reason: "duplicate-context",
-				},
-			);
-		}
 	}
 
 	/**
