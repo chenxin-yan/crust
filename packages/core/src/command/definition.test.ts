@@ -58,10 +58,14 @@ describe("command definitions", () => {
 
 	it("accumulates flag spellings across builder calls for compile-time collision checks", () => {
 		// The CommandDefinitionBuilder interface mirrors Crust's Sp accumulator
-		// type-only; this pins the recipe path so the mirror cannot drift.
+		// type-only; this pins the recipe path so the mirror cannot drift. The
+		// widened call in between proves Sp retains earlier literals instead of
+		// recomputing from the (now-widened) Eff.
+		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
 		const definition = defineCommand("serve", (command) =>
 			command
 				.flags({ name: "verbose", type: "boolean", short: "v" })
+				.flags(...dynamicDefs)
 				.args({ name: "file", type: "string" })
 				.flags(
 					// @ts-expect-error -- "v" collides with the earlier .flags() call
@@ -71,6 +75,26 @@ describe("command definitions", () => {
 		);
 		expect(() => new Crust("cli").add(definition)).toThrow(
 			/spelling "v" collides with flag "--verbose"/,
+		);
+	});
+
+	it("accumulates Context-owned spellings for later .flags() calls on the builder", () => {
+		const owner = defineContext(
+			"owner",
+			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
+			() => ({}),
+		);
+		const definition = defineCommand("serve", (command) =>
+			command
+				.provide(owner())
+				.flags(
+					// @ts-expect-error -- short "v" collides with the Context-owned flag provided earlier
+					{ name: "version", type: "boolean", short: "v" },
+				)
+				.action(() => {}),
+		);
+		expect(() => new Crust("cli").add(definition)).toThrow(
+			/spelling "v" collides with flag "--vv"/,
 		);
 	});
 

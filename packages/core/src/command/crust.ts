@@ -735,7 +735,7 @@ export class Crust<
 		}
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as unknown as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
 	}
 
 	/**
@@ -761,7 +761,7 @@ export class Crust<
 		}
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as unknown as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
 	}
 
 	/**
@@ -778,7 +778,7 @@ export class Crust<
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
-		return result as unknown as Crust<
+		return result as Crust<
 			Local,
 			Owned,
 			A,
@@ -797,7 +797,7 @@ export class Crust<
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as unknown as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
+		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Deps, Sp>;
 	}
 
 	/**

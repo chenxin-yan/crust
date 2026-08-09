@@ -274,6 +274,21 @@ describe("Crust .flags()", () => {
 		).toThrow(/spelling "v" collides with flag "--verbose"/);
 	});
 
+	it("accumulates Context-owned spellings for later .flags() collision checks", () => {
+		const owner = defineContext(
+			"owner",
+			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
+			() => ({}),
+		);
+		const app = new Crust("test").provide(owner());
+		expect(() =>
+			app.flags(
+				// @ts-expect-error -- short "v" collides with the Context-owned flag provided earlier
+				{ name: "version", type: "boolean", short: "v" },
+			),
+		).toThrow(/spelling "v" collides with flag "--vv"/);
+	});
+
 	it("rejects Promise-returning custom flag parsers at compile time", () => {
 		new Crust("test").flags(
 			// @ts-expect-error -- flag parsers must be synchronous
