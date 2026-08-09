@@ -45,6 +45,7 @@ function normalizeArg(arg: DocumentationArg): ManifestArg {
 function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 	const result: ManifestFlag = {
 		name: flag.name,
+		spellings: flag.spellings,
 		type: manifestType(flag.type),
 		required: flag.required,
 		multiple: flag.multiple,

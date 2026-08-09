@@ -426,29 +426,13 @@ function renderFlagsTable(flags: ManifestFlag[]): string[] {
 	lines.push("| ---- | ---- | -------- | ----------- |");
 
 	for (const flag of flags) {
-		const name = formatFlagName(flag);
+		const name = flag.spellings.map((spelling) => `\`${spelling}\``).join(", ");
 		const required = flag.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFlagDescription(flag));
 		lines.push(`| ${name} | ${flag.type} | ${required} | ${desc} |`);
 	}
 
 	return lines;
-}
-
-/**
- * Formats the flag name cell with aliases.
- *
- * Example: `--verbose`, `-v` or `--output`, `-o`, `-O`
- */
-function formatFlagName(flag: ManifestFlag): string {
-	const parts = [`\`--${flag.name}\``];
-	if (flag.short) {
-		parts.push(`\`-${flag.short}\``);
-	}
-	for (const alias of flag.aliases) {
-		parts.push(`\`--${alias}\``);
-	}
-	return parts.join(", ");
 }
 
 /**

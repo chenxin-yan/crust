@@ -287,6 +287,7 @@ describe("buildManifest", () => {
 			expect(node.flags).toEqual([
 				{
 					name: "verbose",
+					spellings: ["--verbose", "--no-verbose"],
 					type: "boolean",
 					description: "Enable verbose output",
 					required: false,
@@ -337,6 +338,7 @@ describe("buildManifest", () => {
 
 			expect(flag?.short).toBe("o");
 			expect(flag?.aliases).toEqual(["dest", "out"]);
+			expect(flag?.spellings).toEqual(["-o", "--output", "--out", "--dest"]);
 		});
 
 		it("normalizes a multiple flag", () => {

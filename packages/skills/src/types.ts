@@ -185,11 +185,13 @@ export interface ManifestArg {
 /**
  * Describes a single named flag in the canonical manifest.
  *
- * Normalized from `FlagSnapshot` in `@crustjs/core` to a flat, serializable shape.
+ * Normalized from `DocumentationFlag` in `@crustjs/core/tooling` to a flat, serializable shape.
  */
 export interface ManifestFlag {
 	/** Flag name (the key from `FlagsDef`) */
 	name: string;
+	/** All accepted CLI spellings in documentation order */
+	spellings: readonly string[];
 	/** Value type: "string", "number", or "boolean" */
 	type: "string" | "number" | "boolean";
 	/** Human-readable description */
@@ -222,7 +224,7 @@ export interface ManifestFlag {
  *   description: "Add a new remote",
  *   runnable: true,
  *   args: [{ name: "name", type: "string", required: true, variadic: false }],
- *   flags: [{ name: "fetch", type: "boolean", required: false, multiple: false, aliases: ["f"] }],
+ *   flags: [{ name: "fetch", spellings: ["--fetch", "--no-fetch"], type: "boolean", required: false, multiple: false, aliases: [] }],
  *   children: [],
  * };
  * ```
